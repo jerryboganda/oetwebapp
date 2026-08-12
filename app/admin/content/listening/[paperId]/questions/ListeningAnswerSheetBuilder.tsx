@@ -24,8 +24,8 @@ import {
 // answer key (correct option letter) + an optional rationale per item. The stem
 // is stored as "See PDF" — the real question text lives on the question paper.
 //
-// Difference from Reading (rulebook-driven): Listening Part B is a 3-option
-// MCQ (A/B/C) and Part C is a 4-option MCQ (A/B/C/D). Counts also differ
+// Difference from Reading (rulebook-driven): Listening Part B AND Part C are
+// 3-option MCQ (A/B/C), whereas Reading Part C is 4-option. Counts also differ
 // (Listening B = 6×1, C = 2×6 = 12).
 
 export type ListeningBuilderPart = 'B' | 'C';
@@ -48,9 +48,9 @@ interface BuilderRow {
   number: number;
   /** The question stem, shown inline on the learner card. Blank → "See PDF". */
   stem: string;
-  /** Part B has A/B/C and Part C has A/B/C/D option texts. */
+  /** The three option texts (A/B/C). Blank slot → "Option {A|B|C}". */
   options: string[];
-  /** Letter of the correct option: A/B/C or A/B/C/D (empty until chosen). */
+  /** Letter of the correct option: 'A' | 'B' | 'C' (empty until chosen). */
   correctAnswer: string;
   /** Optional admin rationale → stored as `explanation`; learner-visible on review. */
   rationale: string;
@@ -65,11 +65,10 @@ const SUB_SECTION_NUMBER_RANGES: Record<ListeningSubSectionCode, [number, number
   C1: [31, 36], C2: [37, 42],
 };
 
-const MCQ_LETTERS = ['A', 'B', 'C', 'D'] as const;
+const MCQ_LETTERS = ['A', 'B', 'C'] as const;
 // Fallback placeholders used ONLY when a field is left blank. Authors now type
 // the real stem + option prose, which renders inline on the learner card.
 const MCQ3_OPTIONS = ['Option A', 'Option B', 'Option C'];
-const MCQ4_OPTIONS = ['Option A', 'Option B', 'Option C', 'Option D'];
 const SEE_PDF_SENTINEL = 'See PDF';
 
 // A field is a "placeholder" when it is blank or still the generic
@@ -78,17 +77,9 @@ const SEE_PDF_SENTINEL = 'See PDF';
 function isSentinelStem(stem: string | undefined): boolean {
   return (stem ?? '').trim().toLowerCase() === SEE_PDF_SENTINEL.toLowerCase();
 }
-function isPlaceholderOption(text: string | undefined, index: number, placeholders: readonly string[]): boolean {
+function isPlaceholderOption(text: string | undefined, index: number): boolean {
   const trimmed = (text ?? '').trim();
-  return trimmed.length === 0 || trimmed.toLowerCase() === placeholders[index].toLowerCase();
-}
-
-function optionLetters(section: ListeningSubSectionCode): readonly string[] {
-  return section.startsWith('C') ? MCQ_LETTERS : MCQ_LETTERS.slice(0, 3);
-}
-
-function optionPlaceholders(section: ListeningSubSectionCode): readonly string[] {
-  return section.startsWith('C') ? MCQ4_OPTIONS : MCQ3_OPTIONS;
+  return trimmed.length === 0 || trimmed.toLowerCase() === MCQ3_OPTIONS[index].toLowerCase();
 }
 
 function rangeFor(section: ListeningSubSectionCode): number[] {
@@ -102,17 +93,16 @@ function normalizeCode(code: string): string {
   return code.trim().toUpperCase();
 }
 
-/** Resolve an existing question's stored correct answer to its option letter. */
+/** Resolve an existing question's stored correct answer to a letter A/B/C. */
 function correctLetterOf(q: ListeningAuthoredQuestion): string {
   const raw = (q.correctAnswer ?? '').trim();
-  const letters = optionLetters(normalizeCode(q.partCode) as ListeningSubSectionCode);
   if (!raw) return '';
   const upper = raw.toUpperCase();
-  if (letters.includes(upper)) return upper;
+  if (MCQ_LETTERS.includes(upper as (typeof MCQ_LETTERS)[number])) return upper;
   // Legacy papers store the option *text* as the correct answer — map it back
   // to a letter by position so the builder seeds correctly.
   const index = (q.options ?? []).findIndex((opt) => opt.trim() === raw);
-  return index >= 0 ? letters[index] ?? '' : '';
+  return index >= 0 ? MCQ_LETTERS[index] ?? '' : '';
 }
 
 function buildRows(
@@ -124,11 +114,9 @@ function buildRows(
     // Seed real authored text so re-saving never clobbers content typed here or
     // in the advanced editor; a sentinel/placeholder seeds as blank.
     const seededStem = existing && !isSentinelStem(existing.stem) ? (existing.stem ?? '') : '';
-    const letters = optionLetters(section);
-    const placeholders = optionPlaceholders(section);
-    const seededOptions = letters.map((_, i) => {
+    const seededOptions = MCQ_LETTERS.map((_, i) => {
       const opt = existing?.options?.[i];
-      return isPlaceholderOption(opt, i, placeholders) ? '' : (opt ?? '');
+      return isPlaceholderOption(opt, i) ? '' : (opt ?? '');
     });
     return {
       id: existing?.id ?? null,
@@ -154,13 +142,12 @@ export function ListeningAnswerSheetBuilder({
     () => allQuestions.filter((q) => normalizeCode(q.partCode) === activeSection),
     [allQuestions, activeSection],
   );
-  const activeLetters = optionLetters(activeSection);
 
   // Any item in this section authored as something other than MCQ-3 was made
   // with the advanced form; the builder must not silently overwrite it.
   const blocked = useMemo(
-    () => sectionQuestions.some((q) => q.type !== (activeSection.startsWith('C') ? 'multiple_choice_4' : 'multiple_choice_3')),
-    [activeSection, sectionQuestions],
+    () => sectionQuestions.some((q) => q.type !== 'multiple_choice_3'),
+    [sectionQuestions],
   );
 
   const signature = useMemo(
@@ -234,11 +221,8 @@ export function ListeningAnswerSheetBuilder({
 
     setSaving(true);
     try {
-      // Build the section's governed MCQ questions and merge them into the full list,
+      // Build the section's MCQ-3 questions and merge them into the full list,
       // leaving every other sub-section untouched, then persist in one call.
-      const isPartC = activeSection.startsWith('C');
-      const letters = optionLetters(activeSection);
-      const placeholders = optionPlaceholders(activeSection);
       const built: ListeningAuthoredQuestion[] = rows.map((row) => {
         const previous = row.id ? sectionQuestions.find((q) => q.id === row.id) ?? null : null;
         return {
@@ -246,9 +230,9 @@ export function ListeningAnswerSheetBuilder({
           id: row.id ?? `lq-${row.number}`,
           number: row.number,
           partCode: activeSection as ListeningAuthoredQuestion['partCode'],
-          type: isPartC ? 'multiple_choice_4' : 'multiple_choice_3',
+          type: 'multiple_choice_3',
           stem: row.stem.trim() || SEE_PDF_SENTINEL,
-          options: letters.map((_, i) => row.options[i]?.trim() || placeholders[i]),
+          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() || MCQ3_OPTIONS[i]),
           correctAnswer: row.correctAnswer,
           acceptedAnswers: [],
           explanation: row.rationale.trim() ? row.rationale.trim() : null,
@@ -285,7 +269,7 @@ export function ListeningAnswerSheetBuilder({
         <div className="min-w-0">
           <CardTitle className="text-sm">Answer sheet — Part {partCode} {activeSection}</CardTitle>
           <CardDescription>
-            Type each question&apos;s stem and its governed options, then mark the correct one. They render inline on the learner card. Leave a field blank to keep the PDF-backed placeholder.
+            Type each question&apos;s stem and three options, then mark the correct one. They render inline on the learner card. Leave a field blank to keep the PDF-backed placeholder.
           </CardDescription>
         </div>
         {shown && !blocked ? (
@@ -328,12 +312,12 @@ export function ListeningAnswerSheetBuilder({
                 >
                   <div className="flex items-center gap-3">
                     <span className="w-10 shrink-0 text-xs font-mono font-semibold text-admin-fg-muted">Q{row.number}</span>
-                    <Badge variant="muted" size="sm" className="shrink-0">MCQ ({activeLetters.length})</Badge>
+                    <Badge variant="muted" size="sm" className="shrink-0">MCQ (3)</Badge>
                     <div className="flex-1 min-w-0">
                       <Select
                         aria-label={`Correct answer for question ${row.number}`}
                         placeholder="Mark correct option"
-                        options={activeLetters.map((letter, i) => ({
+                        options={MCQ_LETTERS.map((letter, i) => ({
                           value: letter,
                           label: row.options[i]?.trim() ? `${letter}. ${row.options[i].trim()}` : `Option ${letter}`,
                         }))}
@@ -360,7 +344,7 @@ export function ListeningAnswerSheetBuilder({
                     placeholder="Question text — shown as the heading on the learner card"
                   />
                   <div className="grid gap-2">
-                    {activeLetters.map((letter, i) => (
+                    {MCQ_LETTERS.map((letter, i) => (
                       <div key={letter} className="flex items-center gap-2">
                         <span className="w-5 shrink-0 text-center text-xs font-black text-admin-fg-muted">{letter}</span>
                         <Input

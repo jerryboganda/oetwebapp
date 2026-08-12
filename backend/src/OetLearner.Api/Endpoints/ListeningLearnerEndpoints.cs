@@ -96,7 +96,7 @@ public static class ListeningLearnerEndpoints
                 durationMinutes = 40,
                 partA = new { items = 24, extracts = 2, itemType = "short-answer" },
                 partB = new { items = 6, extracts = 6, itemType = "mcq-3-option" },
-                partC = new { items = 12, extracts = 2, itemType = "mcq-4-option" },
+                partC = new { items = 12, extracts = 2, itemType = "mcq-3-option" },
                 passRawAnchor = passingRow?.RawScore,
                 passScaledAnchor = passingRow?.ConvertedScore,
                 scaledMax = AssessmentScoreTableValidator.ConvertedMaximum,

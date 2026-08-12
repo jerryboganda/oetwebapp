@@ -12,7 +12,7 @@ export interface BCQuestionRendererProps {
   prompt: string;
   options: string[];
   /**
-   * Positional option keys (A/B/C or A/B/C/D) parallel to `options`. The selected `value`
+   * Positional option keys (A/B/C) parallel to `options`. The selected `value`
    * and `onChange` payload are the KEY, not the display text, so authoring real
    * option prose never changes a score. Falls back to the derived letter when a
    * (cached) session DTO predates this field.
@@ -108,7 +108,7 @@ export function BCQuestionRenderer({
     setStruckOptionsForOption(option);
   };
 
-  // The learner submits the option KEY (the positional letter A/B/C/D supplied by
+  // The learner submits the option KEY (the positional letter A/B/C supplied by
   // the backend), never the display text — so grading is unaffected by option
   // prose. Falls back to the derived letter when a cached DTO lacks optionKeys.
   const keyFor = (index: number) => optionKeys?.[index] ?? String.fromCharCode(65 + index);

@@ -11,8 +11,8 @@ namespace OetLearner.Api.Tests;
 /// Unit tests for <see cref="ListeningStructureService"/> — the publish-gate
 /// validator that enforces the canonical OET Listening shape
 /// (Part A = 24, Part B = 6 across six independent sub-sections B1..B6 with one
-/// item each, Part C = 12 → 42 items). Part A uses typed responses, Part B uses
-/// three-option MCQs, and Part C uses four-option MCQs; audio for a
+/// item each, Part C = 12 → 42 items). Part A uses typed responses and Parts B/C
+/// typed responses in Part A and three-option MCQs in Parts B/C; audio for a
 /// sub-section comes from an uploaded ContentPaperAsset
 /// (Role=Audio, Part=&lt;code&gt;) or a TTS-synthesised extract.
 /// </summary>
@@ -98,12 +98,12 @@ public class ListeningStructureServiceTests
                 validationStatus = "published",
                 optionDistractorCategory = Enumerable.Range(0, partBOptionCount).Select(index => index == 0 ? null : "reused_keyword").ToArray() });
         for (var i = 0; i < partC; i++)
-            list.Add(new { id = $"c-{i}", number = num++, partCode = i < partC / 2 ? "C1" : "C2", type = "multiple_choice_4", text = "q",
-                options = new[] { "1", "2", "3", "4" }, correctAnswer = "1", skillTag = "attitude",
+            list.Add(new { id = $"c-{i}", number = num++, partCode = i < partC / 2 ? "C1" : "C2", type = "multiple_choice_3", text = "q",
+                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude",
                 transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000,
                 transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3,
                 validationStatus = "published",
-                optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning", "out_of_scope" } });
+                optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         // One extract per sub-section, each with a non-overlapping audio window.
         // A1/A2 carry a note-completion body whose gap count matches that
         // sub-part's authored question count, so listening_part_a_gap_count passes.
@@ -331,26 +331,6 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
-    public async Task PartC_WithThreeOptionPayload_BlocksPublish()
-    {
-        var (db, svc) = Build();
-        using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
-        var questions = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(
-            doc.RootElement.GetProperty("listeningQuestions").GetRawText())!;
-        var extracts = doc.RootElement.GetProperty("listeningExtracts").Clone();
-        questions[30]["type"] = "multiple_choice_3";
-        questions[30]["options"] = new[] { "1", "2", "3" };
-        questions[30]["optionDistractorCategory"] = new string?[] { null, "too_weak", "opposite_meaning" };
-        var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new { listeningQuestions = questions, listeningExtracts = extracts }));
-
-        var report = await svc.ValidatePaperAsync(paper.Id, default);
-
-        Assert.False(report.IsPublishReady);
-        Assert.Contains(report.Issues, i => i.Code == "listening_part_question_type" && i.Severity == "error");
-        Assert.Contains(report.Issues, i => i.Code == "listening_mcq_shape" && i.Severity == "error");
-    }
-
-    [Fact]
     public async Task LegacyPartCodes_A_And_C_AreCountedCorrectly()
     {
         var (db, svc) = Build();
@@ -364,7 +344,7 @@ public class ListeningStructureServiceTests
             list.Add(new { id = $"b-{i}", number = num++, partCode = PartBCodes[i], type = "multiple_choice_3", text = "q",
                 options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "detail", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" } });
         for (var i = 0; i < 12; i++)
-            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_4", text = "q", options = new[] { "1", "2", "3", "4" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning", "out_of_scope" } });
+            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         var extracts = new List<object>
         {
             new { partCode = "A", displayOrder = 1, kind = "consultation", title = "A", audioStartMs = 0, audioEndMs = 120_000, difficultyRating = 3 },
@@ -395,7 +375,7 @@ public class ListeningStructureServiceTests
         for (var i = 0; i < 6; i++)
             list.Add(new { id = $"b-{i}", number = num++, partCode = PartBCodes[i], type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1" });
         for (var i = 0; i < 12; i++)
-            list.Add(new { id = $"c-{i}", number = num++, partCode = i < 6 ? "C1" : "C2", type = "multiple_choice_4", text = "q", options = new[] { "1", "2", "3", "4" }, correctAnswer = "1" });
+            list.Add(new { id = $"c-{i}", number = num++, partCode = i < 6 ? "C1" : "C2", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1" });
         var paper = await AddPaperAsync(db, JsonSerializer.Serialize(new { listeningQuestions = list }));
 
         var report = await svc.ValidatePaperAsync(paper.Id, default);
@@ -950,8 +930,8 @@ public class ListeningStructureServiceTests
                     Points = 1,
                     QuestionType = qType,
                     Stem = "stem",
-                    CorrectAnswerJson = qType is ListeningQuestionType.MultipleChoice3 or ListeningQuestionType.MultipleChoice4 ? "\"A\"" : "\"x\"",
-                    SkillTag = qType is ListeningQuestionType.MultipleChoice3 or ListeningQuestionType.MultipleChoice4 ? "detail" : "note_completion",
+                    CorrectAnswerJson = qType == ListeningQuestionType.MultipleChoice3 ? "\"A\"" : "\"x\"",
+                    SkillTag = qType == ListeningQuestionType.MultipleChoice3 ? "detail" : "note_completion",
                     TranscriptEvidenceText = "evidence",
                     TranscriptEvidenceStartMs = qNum * 1000,
                     TranscriptEvidenceEndMs = qNum * 1000 + 500,
@@ -962,10 +942,9 @@ public class ListeningStructureServiceTests
                 };
                 db.Set<ListeningQuestion>().Add(q);
                 questions.Add(q);
-                if (qType is ListeningQuestionType.MultipleChoice3 or ListeningQuestionType.MultipleChoice4)
+                if (qType == ListeningQuestionType.MultipleChoice3)
                 {
-                    var optionCount = qType == ListeningQuestionType.MultipleChoice4 ? 4 : 3;
-                    for (var k = 0; k < optionCount; k++)
+                    for (var k = 0; k < 3; k++)
                     {
                         db.Set<ListeningQuestionOption>().Add(new ListeningQuestionOption
                         {
@@ -990,8 +969,8 @@ public class ListeningStructureServiceTests
         AddQuestions(ListeningPartCode.B4, 1, ListeningQuestionType.MultipleChoice3);
         AddQuestions(ListeningPartCode.B5, 1, ListeningQuestionType.MultipleChoice3);
         AddQuestions(ListeningPartCode.B6, 1, ListeningQuestionType.MultipleChoice3);
-        AddQuestions(ListeningPartCode.C1, 6, ListeningQuestionType.MultipleChoice4);
-        AddQuestions(ListeningPartCode.C2, 6, ListeningQuestionType.MultipleChoice4);
+        AddQuestions(ListeningPartCode.C1, 6, ListeningQuestionType.MultipleChoice3);
+        AddQuestions(ListeningPartCode.C2, 6, ListeningQuestionType.MultipleChoice3);
 
         return new RelationalSeed(paper, parts, extracts, questions);
     }

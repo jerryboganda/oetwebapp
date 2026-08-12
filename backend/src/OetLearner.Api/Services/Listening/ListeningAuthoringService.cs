@@ -175,7 +175,7 @@ public sealed record ListeningAuthoredQuestion(
     string Id,
     int Number,
     string PartCode,           // A1 | A2 | B | C1 | C2  (also accepts legacy A / C)
-    string Type,               // "short_answer" | "multiple_choice_3" | "multiple_choice_4"
+    string Type,               // "short_answer" | "multiple_choice_3"
     string Stem,
     IReadOnlyList<string>? Options,
     string CorrectAnswer,
@@ -289,10 +289,10 @@ public sealed record ListeningTranscriptSegmentManifest(
 
 public sealed record ListeningQuestionManifest(
     int Number,
-    string? Type,                                      // gap_fill | short_answer | multiple_choice_3 | multiple_choice_4
+    string? Type,                                      // gap_fill | short_answer | multiple_choice_3
     string? NoteTextBeforeGap,                         // Part A note-completion lead-in
     string? Stem,                                      // Part B/C question stem
-    ListeningOptionsManifest? Options,                 // Part B/C A/B/C/D options
+    ListeningOptionsManifest? Options,                 // Part B/C A/B/C options
     string? CorrectAnswer,
     IReadOnlyList<string>? AcceptedAnswers,
     string? Explanation,
@@ -308,8 +308,7 @@ public sealed record ListeningQuestionManifest(
 public sealed record ListeningOptionsManifest(
     string? A,
     string? B,
-    string? C,
-    string? D = null);
+    string? C);
 
 public sealed record ListeningStructureImportResult(
     ListeningAuthoredQuestionList Structure,
@@ -723,8 +722,8 @@ public sealed class ListeningAuthoringService(
     /// Flatten a §19 manifest into the authored question + extract lists the
     /// existing replace paths consume. Part A note-completion gaps fold their
     /// <c>noteTextBeforeGap</c> into the stem with a trailing <c>____</c> marker;
-    /// Part B options A/B/C and Part C options A/B/C/D become an option list;
-    /// the correct answer is normalised to a single letter.
+    /// Part B/C options A/B/C become a 3-element option list and the correct
+    /// answer is normalised to a single letter.
     /// </summary>
     private static (List<ListeningAuthoredQuestion> Questions, List<ListeningAuthoredExtract> Extracts)
         NormalizeManifest(ListeningStructureManifest manifest)
@@ -785,7 +784,7 @@ public sealed class ListeningAuthoringService(
         ListeningQuestionManifest qm, string partCode, string? speakerAttitude)
     {
         var isMcq = partCode.StartsWith('B') || partCode.StartsWith('C');
-        var type = NormalizeManifestQuestionType(qm.Type, isMcq, partCode);
+        var type = NormalizeManifestQuestionType(qm.Type, isMcq);
 
         // Part A: fold the note lead-in into the stem with a gap marker so the
         // note-completion player has a renderable prompt. Part B/C: use the stem.
@@ -808,7 +807,6 @@ public sealed class ListeningAuthoringService(
                 qm.Options.A ?? string.Empty,
                 qm.Options.B ?? string.Empty,
                 qm.Options.C ?? string.Empty,
-                qm.Options.D ?? string.Empty,
             }
             : new List<string>();
 
@@ -899,20 +897,19 @@ public sealed class ListeningAuthoringService(
         return string.Join("\n", lines);
     }
 
-    private static string NormalizeManifestQuestionType(string? raw, bool isMcq, string partCode)
+    private static string NormalizeManifestQuestionType(string? raw, bool isMcq)
     {
         var n = (raw ?? string.Empty).Trim().ToLowerInvariant();
         if (n is "multiple_choice_3" or "mcq" or "mcq3") return "multiple_choice_3";
-        if (n is "multiple_choice_4" or "mcq4") return "multiple_choice_4";
         if (n is "short_answer" or "gap_fill" or "gapfill" or "note_completion") return "short_answer";
-        return isMcq ? (partCode.StartsWith('C') ? "multiple_choice_4" : "multiple_choice_3") : "short_answer";
+        return isMcq ? "multiple_choice_3" : "short_answer";
     }
 
     private static string NormalizeManifestCorrectAnswer(string? raw, bool isMcq)
     {
         var value = (raw ?? string.Empty).Trim();
         if (!isMcq) return value;
-        // Part B/C answers are an option letter; uppercase a single A/B/C/D.
+        // Part B/C answers are an option letter; uppercase a single A/B/C.
         return value.Length == 1 ? value.ToUpperInvariant() : value;
     }
 
@@ -941,8 +938,7 @@ public sealed class ListeningAuthoringService(
     /// Rebuild a §19 manifest from the authored question + extract documents.
     /// Questions group under their extract by part code (A1/A2 → partA,
     /// B → partB, C1/C2 → partC); Part A questions emit <c>noteTextBeforeGap</c>,
-    /// Part B emits the stem + A/B/C options; Part C emits the stem + A/B/C/D
-    /// options.
+    /// Part B/C emit the stem + A/B/C options.
     /// </summary>
     private static ListeningStructureManifest BuildManifest(
         string? testTitle,
@@ -1019,8 +1015,7 @@ public sealed class ListeningAuthoringService(
             ? new ListeningOptionsManifest(
                 q.Options.ElementAtOrDefault(0),
                 q.Options.ElementAtOrDefault(1),
-                q.Options.ElementAtOrDefault(2),
-                q.Options.ElementAtOrDefault(3))
+                q.Options.ElementAtOrDefault(2))
             : null;
 
         return new ListeningQuestionManifest(
@@ -1429,13 +1424,12 @@ public sealed class ListeningAuthoringService(
     {
         var partCode = NormalizePartCode(q.PartCode);
         var type = string.IsNullOrWhiteSpace(q.Type)
-            ? (partCode.StartsWith('A') ? "short_answer" : partCode.StartsWith('C') ? "multiple_choice_4" : "multiple_choice_3")
+            ? (partCode.StartsWith('A') ? "short_answer" : "multiple_choice_3")
             : q.Type.Trim();
 
-        // Part B is MCQ-3 and Part C is MCQ-4; trim excess payload before projection.
+        // Part B/C are MCQ-3; trim any excess option payload before relational projection.
         var options = (q.Options ?? []).Select(o => o ?? string.Empty).ToList();
         if (type == "multiple_choice_3" && options.Count > 3) options = options.Take(3).ToList();
-        if (type == "multiple_choice_4" && options.Count > 4) options = options.Take(4).ToList();
 
         var accepted = (q.AcceptedAnswers ?? [])
             .Where(a => !string.IsNullOrWhiteSpace(a))

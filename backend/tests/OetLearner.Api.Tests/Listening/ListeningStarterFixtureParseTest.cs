@@ -65,12 +65,12 @@ public class ListeningStarterFixtureParseTest
             Assert.Equal(6,  byPart["C1"]);
             Assert.Equal(6,  byPart["C2"]);
 
-            // Part B carries exactly 3 options and Part C exactly 4, each with
-            // a correct-answer that appears in that option list.
-            foreach (var q in doc.Questions.Where(q => q.Type is "multiple_choice_3" or "multiple_choice_4"))
+            // Every MCQ row carries exactly 3 options + a correct-answer that
+            // appears in that option list. (Catches typos in hand-edits.)
+            foreach (var q in doc.Questions.Where(q => q.Type == "multiple_choice_3"))
             {
                 Assert.NotNull(q.Options);
-                Assert.Equal(q.Type == "multiple_choice_4" ? 4 : 3, q.Options!.Count);
+                Assert.Equal(3, q.Options!.Count);
                 Assert.Contains(q.CorrectAnswer, q.Options);
             }
         }

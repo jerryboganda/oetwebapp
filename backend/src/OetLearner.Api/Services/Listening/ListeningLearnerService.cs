@@ -2231,12 +2231,7 @@ public sealed class ListeningLearnerService(
             // FillInBlank surfaces to the learner as a text-input gap-fill —
             // identical wire type to ShortAnswer so the answer never leaks via
             // option text and the player renders a free-text box.
-            Type: question.QuestionType switch
-            {
-                ListeningQuestionType.MultipleChoice3 => "multiple_choice_3",
-                ListeningQuestionType.MultipleChoice4 => "multiple_choice_4",
-                _ => "short_answer",
-            },
+            Type: question.QuestionType == ListeningQuestionType.MultipleChoice3 ? "multiple_choice_3" : "short_answer",
             Options: optionTexts,
             CorrectAnswer: correctDisplay,
             AcceptedAnswers: accepted,
@@ -2906,7 +2901,7 @@ public sealed class ListeningLearnerService(
             // option's display prose is grading-neutral (replacing "Option A/B/C"
             // with real text can never change a score).
             var normalizedType = type.Trim().ToLowerInvariant();
-            var isMcq = normalizedType is "multiple_choice_3" or "multiple_choice_4" or "mcq" or "mcq3" or "mcq4";
+            var isMcq = normalizedType is "multiple_choice_3" or "mcq" or "mcq3";
             if (isMcq && options.Count > 0 && !string.IsNullOrWhiteSpace(correct))
             {
                 var trimmedCorrect = correct.Trim();
@@ -2978,7 +2973,7 @@ public sealed class ListeningLearnerService(
     };
 
     /// <summary>Map an authored question type to the learner-facing wire type.
-    /// MCQ stays <c>multiple_choice_3</c> or <c>multiple_choice_4</c>; every text-input type (short_answer /
+    /// MCQ stays <c>multiple_choice_3</c>; every text-input type (short_answer /
     /// fill_in_blank / gap_fill / note_completion) collapses to
     /// <c>short_answer</c> so the player renders a single free-text input and no
     /// answer detail ever leaks.</summary>
@@ -2988,7 +2983,6 @@ public sealed class ListeningLearnerService(
         return normalized switch
         {
             "multiple_choice_3" or "mcq" or "mcq3" => "multiple_choice_3",
-            "multiple_choice_4" or "mcq4" => "multiple_choice_4",
             _ => "short_answer",
         };
     }
