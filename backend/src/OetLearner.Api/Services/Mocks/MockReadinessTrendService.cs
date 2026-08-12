@@ -10,7 +10,9 @@ namespace OetLearner.Api.Services.Mocks;
 /// Phase 3 of the OET Mocks Module: trend-based readiness.
 ///
 /// "Consistent green" semantics (canonical OET Grade B threshold):
-///   - At least the last 2 completed mocks reach scaled overall &gt;= 350.
+///   - At least the last 2 eligible completed mocks reach scaled overall
+///     &gt;= 350. Reports containing governed Reading/Listening sections are
+///     excluded until their owner conversion evidence is available.
 ///   - Two consecutive Grade-B+ overalls = exam-ready signal.
 ///   - Anything mixed = remediation before booking.
 ///
@@ -63,6 +65,7 @@ public sealed class MockReadinessTrendService(LearnerDbContext db)
             .ToListAsync(ct);
 
         var scores = reports
+            .Where(r => !MockAssessmentEvidenceGuard.ContainsGovernedScore(r.PayloadJson))
             .Select(r => TryReadOverallScore(r.PayloadJson))
             .Where(s => s.HasValue)
             .Select(s => s!.Value)

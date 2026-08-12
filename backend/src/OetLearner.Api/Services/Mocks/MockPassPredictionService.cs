@@ -63,6 +63,14 @@ public sealed class MockPassPredictionService(LearnerDbContext db)
                 Rationale: "Complete the mock to receive a pass-prediction signal.");
         }
 
+        if (MockAssessmentEvidenceGuard.ContainsGovernedScore(report.PayloadJson))
+        {
+            return new MockPassPrediction(
+                ConfidenceBand: ConfidenceLow,
+                Verdict: "conversion_pending",
+                Rationale: "This report contains Reading or Listening evidence. An owner-approved conversion decision is required before a mock-wide pass prediction can be shown.");
+        }
+
         var overall = TryReadOverallScore(report.PayloadJson);
         if (overall is null)
         {
