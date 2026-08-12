@@ -148,6 +148,18 @@ public sealed class ReadingExplanationService(
         if (attempt.Status != ReadingAttemptStatus.Submitted)
             throw new InvalidOperationException("Grounded explanations are available only after submission.");
 
+        var currentPaperRevision = await db.ContentPapers.AsNoTracking()
+            .Where(p => p.Id == attempt.PaperId && p.SubtestCode == "reading")
+            .Select(p => p.PublishedRevisionId)
+            .SingleOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(attempt.PaperRevisionId)
+            || string.IsNullOrWhiteSpace(currentPaperRevision)
+            || !string.Equals(attempt.PaperRevisionId, currentPaperRevision, StringComparison.Ordinal))
+        {
+            throw new ReadingGroundedExplanationUnavailableException(
+                "The submitted attempt is not pinned to the current published Reading revision.");
+        }
+
         var answer = attempt.Answers.FirstOrDefault(a => a.ReadingQuestionId == questionId)
             ?? throw new KeyNotFoundException("The question has no stored answer on this attempt.");
         var question = await db.ReadingQuestions.AsNoTracking()

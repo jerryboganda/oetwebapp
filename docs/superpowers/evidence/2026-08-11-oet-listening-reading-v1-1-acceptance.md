@@ -213,6 +213,12 @@ an owner-controlled value that must not be invented in code.
   remains available and the existing frontend error state reports the advisory
   explanation as unavailable. Focused failure regressions now assert this
   boundary; fresh backend execution remains pending by request.
+- Grounded Listening and Reading explanations now also fail closed when the
+  submitted attempt is missing or no longer matches its pinned published paper
+  revision. Listening additionally requires the submitted question-version
+  snapshot to match the current authored question before rationale, transcript,
+  or answer-key evidence can reach the gateway. Focused drift regressions were
+  added; fresh backend execution remains pending by request.
 - Listening authoring now validates processed uploaded-audio duration and
   authored per-section timing (including legacy JSON extracts), and the shared
   publish path hard-blocks missing audio, duration, cue-window, and section

@@ -59,12 +59,32 @@ public sealed class ListeningExplanationService(
         if (attempt.Status != ListeningAttemptStatus.Submitted)
             throw new InvalidOperationException("Grounded explanations are available only after submission.");
 
+        var currentPaperRevision = await db.ContentPapers.AsNoTracking()
+            .Where(p => p.Id == attempt.PaperId && p.SubtestCode == "listening")
+            .Select(p => p.PublishedRevisionId)
+            .SingleOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(attempt.PaperRevisionId)
+            || string.IsNullOrWhiteSpace(currentPaperRevision)
+            || !string.Equals(attempt.PaperRevisionId, currentPaperRevision, StringComparison.Ordinal))
+        {
+            throw new ListeningGroundedExplanationUnavailableException(
+                "The submitted attempt is not pinned to the current published Listening revision.");
+        }
+
         var answer = attempt.Answers.FirstOrDefault(a => a.ListeningQuestionId == questionId)
             ?? throw new KeyNotFoundException("The question has no stored answer on this attempt.");
         var question = await db.ListeningQuestions.AsNoTracking()
             .Include(q => q.Options)
             .FirstOrDefaultAsync(q => q.Id == questionId && q.PaperId == attempt.PaperId, ct)
             ?? throw new KeyNotFoundException("Listening question not found for this attempt.");
+
+        var questionVersionSnapshot = answer.QuestionVersionSnapshot
+            ?? ResolveQuestionVersionSnapshot(attempt.LastQuestionVersionMapJson, questionId);
+        if (!questionVersionSnapshot.HasValue || questionVersionSnapshot.Value != question.Version)
+        {
+            throw new ListeningGroundedExplanationUnavailableException(
+                "The submitted attempt is not pinned to the current authored Listening question revision.");
+        }
 
         var approvedRationale = await db.AssessmentRationales.AsNoTracking()
             .Where(r => r.Assessment == "listening"
@@ -202,6 +222,28 @@ public sealed class ListeningExplanationService(
         catch (JsonException)
         {
             return raw;
+        }
+    }
+
+    private static int? ResolveQuestionVersionSnapshot(string? versionMapJson, string questionId)
+    {
+        if (string.IsNullOrWhiteSpace(versionMapJson)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(versionMapJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty(questionId, out var version)
+                || !version.TryGetInt32(out var parsedVersion)
+                || parsedVersion < 1)
+            {
+                return null;
+            }
+
+            return parsedVersion;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
