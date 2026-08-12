@@ -27,10 +27,11 @@ export function ScoreBandGraph({
   const hasConversion = scaledScore !== null && tableVersion != null;
   const boundedScore = hasConversion
     ? Math.min(500, Math.max(0, scaledScore ?? 0))
-    : maxRawScore > 0
-      ? Math.min(500, Math.max(0, (rawScore / maxRawScore) * 500))
-      : 0;
-  const position = `${boundedScore / 5}%`;
+    : 0;
+  const rawPosition = maxRawScore > 0
+    ? Math.min(100, Math.max(0, (rawScore / maxRawScore) * 100))
+    : 0;
+  const position = hasConversion ? `${boundedScore / 5}%` : `${rawPosition}%`;
 
   return (
     <section
@@ -66,8 +67,8 @@ export function ScoreBandGraph({
         </div>
         <div className="mt-2 flex justify-between text-[10px] font-black uppercase tracking-widest text-muted">
           <span>0</span>
-          <span>350 reference</span>
-          <span>500</span>
+          <span>{hasConversion ? '350 reference' : `Raw scale · ${maxRawScore}`}</span>
+          <span>{hasConversion ? '500' : maxRawScore}</span>
         </div>
       </div>
 

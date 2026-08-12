@@ -189,6 +189,10 @@ an owner-controlled value that must not be invented in code.
   non-programmatic seek snaps to the last known playhead, and playback-rate
   changes are reset to normal speed. The focused audio-integrity regression
   passed 9 tests; deployed browser acceptance remains separate.
+- The branded practice score graph now keeps raw-only results on a raw-score
+  scale and hides the 350 reference marker until an owner-approved conversion
+  exists; no client formula represents an unapproved scaled result. The
+  focused graph regression covers both approved and raw-only states.
 - Reading paper presentation is now fail-closed at the policy service and
   database default. Existing persisted enablement is reset by the migration;
   the admin control and learner preview now report computer-based delivery

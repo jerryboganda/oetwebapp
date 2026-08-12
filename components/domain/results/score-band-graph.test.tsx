@@ -25,6 +25,8 @@ describe('ScoreBandGraph', () => {
 
     expect(screen.getByTestId('score-band-graph')).toHaveTextContent('Scaled score unavailable');
     expect(screen.getByTestId('score-band-graph')).toHaveTextContent('Owner-approved table required');
+    expect(screen.getByTestId('score-band-graph')).toHaveTextContent('Raw scale · 42');
+    expect(screen.getByTestId('score-band-graph')).not.toHaveTextContent('350 reference');
     expect(screen.getByRole('img', { name: /raw practice score 25 out of 42/i })).toBeInTheDocument();
   });
 });
