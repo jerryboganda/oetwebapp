@@ -207,12 +207,10 @@ export function CheckoutSuccessPoller({
               <Hourglass className="mt-0.5 h-6 w-6 flex-none text-warning" aria-hidden="true" />
               <div>
                 <h2 className="text-lg font-semibold text-warning">
-                  Payment received — pending manual fulfilment
+                  Payment recorded — Pending admin approval
                 </h2>
                 <p className="mt-1 text-sm text-navy">
-                  Thanks for your purchase. This package is delivered by hand, so it is not
-                  unlocked yet. Our team will verify your payment proof and provide your access -
-                  you will be notified as soon as it is ready.
+                  Thanks for your purchase. Your payment record has been captured and is pending verification. Our team will review your order details and activate your access as soon as approval is complete.
                 </p>
               </div>
             </div>

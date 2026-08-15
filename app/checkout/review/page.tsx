@@ -403,7 +403,7 @@ function CheckoutReviewContent() {
               <Wallet className="h-5 w-5 text-primary" /> How would you like to pay?
             </h2>
             <p className="mt-1 text-sm text-muted">
-              Every option is secure — your access unlocks as soon as we confirm the payment.
+              Every option is secure — access unlocks as soon as your payment is verified and confirmed.
             </p>
 
             <div className="mt-5">
