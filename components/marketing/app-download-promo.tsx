@@ -42,7 +42,7 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
     return (
       <section
         aria-labelledby="app-download-strip-title"
-        className="rounded-2xl border border-primary/20 bg-surface px-4 py-4 shadow-sm sm:px-5"
+        className="rounded-2xl border border-primary/20 bg-surface px-4 py-5 shadow-sm sm:px-6"
       >
         <div className="mx-auto flex max-w-6xl flex-col gap-4">
           <div className="min-w-0 text-center">
@@ -50,12 +50,15 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
               <span className="flex h-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 px-2 text-primary">
                 <PlatformIconCluster />
               </span>
-              <h2 id="app-download-strip-title" className="text-sm font-bold text-navy">
-                Study anywhere with the official OET apps
+              <h2 id="app-download-strip-title" className="text-base font-bold text-navy sm:text-lg">
+                Study anywhere with the official Candidates App
               </h2>
             </div>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Keep your account in sync across desktop and mobile, with secure video access and offline study.
+            <p className="mt-1.5 text-xs leading-relaxed text-muted sm:text-sm">
+              Keep your candidate account in sync across desktop and mobile, with secure video access and offline study.
+            </p>
+            <p className="mt-1 text-xs font-medium text-primary">
+              All prices are in GBP (£). Checkout happens securely inside the Candidates App.
             </p>
           </div>
           <AppDownloadGrid links={APP_DOWNLOAD_LINKS} compact />
@@ -75,13 +78,13 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
           <PlatformIconCluster />
         </div>
         <div>
-          <h3 className="font-bold text-foreground">Official OET Applications</h3>
+          <h3 className="font-bold text-foreground">Official Candidates App</h3>
           <p className="text-xs text-muted-foreground">Available for Windows, macOS, Android &amp; iOS</p>
         </div>
       </div>
 
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        Course videos are available exclusively through our official applications. Download the app to enjoy uninterrupted video streaming, offline practice, and instant updates.
+        Course videos and interactive practice tools are available through our official Candidates App. All prices are in GBP (£). Checkout happens securely inside the Candidates App, with full access activated upon payment verification.
       </p>
 
       <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-4" />
@@ -123,9 +126,9 @@ function PostLoginAppModalContent({ onClose }: { onClose?: () => void }) {
               <PlatformIconCluster className="gap-2" />
             </div>
 
-            <h3 id="app-download-modal-title" className="text-xl font-bold text-white">Get the OET with Dr Hesham App</h3>
+            <h3 id="app-download-modal-title" className="text-xl font-bold text-white">Get the Candidates App — OET with Dr Hesham</h3>
             <p className="mt-2 max-w-prose text-sm leading-6 text-slate-300">
-              Course videos are available exclusively through our official applications. Download the app on your preferred platform for secure video playback and offline study.
+              Course videos and interactive practice tools are available through our official Candidates App. Download the app on your preferred platform for secure video playback, live sync, and offline study.
             </p>
 
             <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-6 grid-cols-1 min-[400px]:grid-cols-2" />
