@@ -55,9 +55,13 @@ const PROFESSION_LABEL: Record<string, string> = {
   nursing: 'Nursing',
   pharmacy: 'Pharmacy',
   physiotherapy: 'Physiotherapy',
-  'other-allied-health': 'Other Allied health profession',
+  'other-allied-health': 'Modified Allied Health Profession',
+  'modified-allied-health': 'Modified Allied Health Profession',
+  allied_health: 'Modified Allied Health Profession',
+  'allied-health': 'Modified Allied Health Profession',
+  'Allied Health Profession': 'Modified Allied Health Profession',
+  'Modified Allied Health Profession': 'Modified Allied Health Profession',
   radiography: 'Radiography',
-  allied_health: 'Allied health',
 };
 
 function buildPriceMap(
@@ -302,8 +306,17 @@ export function SubscriptionsCatalog() {
       if (pkg.section !== 'full-recorded') continue;
       const prof = priceMap.get(pkg.code)?.profession;
       if (prof) present.add(prof);
+      if (pkg.code === 'full-allied-health') present.add('other-allied-health');
     }
-    return PROFESSION_ORDER.filter((p) => p === 'all' || present.has(p));
+    const order = [
+      'all',
+      'medicine',
+      'nursing',
+      'pharmacy',
+      'physiotherapy',
+      'other-allied-health',
+    ];
+    return order.filter((p) => p === 'all' || present.has(p));
   }, [priceMap]);
 
   const packagesBySection = useMemo(() => {
@@ -315,7 +328,26 @@ export function SubscriptionsCatalog() {
       // section is discipline-agnostic (all "All disciplines") and always shown.
       if (pkg.section === 'full-recorded' && activeProfession !== 'all') {
         const prof = priceMap.get(pkg.code)?.profession;
-        if (prof && prof !== 'all' && prof !== activeProfession) continue;
+        const matchesProfession =
+          prof === activeProfession ||
+          (activeProfession === 'other-allied-health' &&
+            (prof === 'other-allied-health' || prof === 'allied_health' || pkg.code === 'full-allied-health')) ||
+          (activeProfession === 'physiotherapy' &&
+            (prof === 'physiotherapy' || pkg.code === 'full-physiotherapy')) ||
+          (activeProfession === 'pharmacy' &&
+            (prof === 'pharmacy' || pkg.code === 'full-pharmacy')) ||
+          (activeProfession === 'nursing' &&
+            (prof === 'nursing' || pkg.code === 'full-nursing')) ||
+          (activeProfession === 'medicine' &&
+            (prof === 'medicine' ||
+              pkg.code === 'full-condensed-medicine' ||
+              pkg.code === 'full-condensed-medicine-tbook' ||
+              pkg.code === 'full-recorded-intensive' ||
+              pkg.code === 'full-recorded-vip' ||
+              pkg.code === 'full-recorded-pass-guarantee' ||
+              pkg.code === 'full-condensed-medicine-crash' ||
+              pkg.code === 'basic-english'));
+        if (prof && prof !== 'all' && !matchesProfession) continue;
       }
       const overlay = websitePackages?.byCode?.[pkg.code];
       grouped.get(pkg.section)?.push(applyWebsitePackageOverlay(pkg, overlay));

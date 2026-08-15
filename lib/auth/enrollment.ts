@@ -86,10 +86,10 @@ export const PROFESSION_CATALOG: Profession[] = [
   },
   {
     id: "other-allied-health",
-    label: "Other Allied health profession",
+    label: "Modified Allied Health Profession",
     countryTargets: [...TARGET_COUNTRY_OPTIONS],
     examTypeIds: ["oet"],
-    description: "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, etc.).",
+    description: "Modified allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, etc.).",
     isActive: true,
   },
   {

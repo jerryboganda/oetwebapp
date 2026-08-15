@@ -81,9 +81,19 @@ export function CatalogStorefront({ variant }: CatalogStorefrontProps) {
   const addOns = useMemo(() => sortAddOns(data?.addOns ?? []), [data]);
 
   const professions = useMemo(() => {
-    const set = new Set<string>(['all']);
-    for (const plan of plans) set.add(plan.profession);
-    return Array.from(set);
+    const canonicalOrder = [
+      'all',
+      'medicine',
+      'nursing',
+      'pharmacy',
+      'physiotherapy',
+      'other-allied-health',
+      'radiography',
+      'allied_health',
+    ];
+    const present = new Set<string>(['all']);
+    for (const plan of plans) present.add(plan.profession);
+    return canonicalOrder.filter((p) => present.has(p));
   }, [plans]);
 
   const filteredPlans = useMemo(() => {

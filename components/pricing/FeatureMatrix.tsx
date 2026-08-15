@@ -15,6 +15,10 @@ const PROFESSION_LABEL: Record<string, string> = {
   medicine: 'Medicine',
   nursing: 'Nursing',
   pharmacy: 'Pharmacy',
+  physiotherapy: 'Physiotherapy',
+  'other-allied-health': 'Modified Allied Health Profession',
+  'modified-allied-health': 'Modified Allied Health Profession',
+  allied_health: 'Modified Allied Health Profession',
 };
 
 const CATEGORY_LABELS: Record<string, string> = {

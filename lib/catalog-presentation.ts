@@ -205,7 +205,7 @@ export const DEFAULT_PROFESSION_LABELS: Record<string, string> = {
   // Pre-migration alias: plans authored before 20260729091000_UnifyProfessionTaxonomy
   // remapped `allied_health` → `other-allied-health`. Kept so a stale row labels
   // rather than showing a raw id during a blue/green rollover.
-  allied_health: 'Allied health professions',
+  allied_health: 'Modified Allied Health Profession',
 };
 
 export const DEFAULT_CATALOG_STOREFRONT: CatalogStorefrontConfig = {
