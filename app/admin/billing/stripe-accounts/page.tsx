@@ -11,6 +11,7 @@ import { DataTable } from '@/components/admin/ui/data-table';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -90,7 +91,7 @@ export default function AdminStripeAccountsPage() {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function handleSave() {
+  async function handleSave(testAfterSave = false) {
     if (!editing) return;
     if (!editing.label.trim()) {
       setError('Label is required.');
@@ -112,12 +113,27 @@ export default function AdminStripeAccountsPage() {
         isActive: editing.isActive,
         isDefault: editing.isDefault,
       };
+      let savedId = editing.id;
       if (editing.id === null) {
-        await createStripeAccount(payload);
+        const created = await createStripeAccount(payload);
+        savedId = created.id;
       } else {
         await updateStripeAccount(editing.id, payload);
       }
-      toast.success('Stripe account saved.');
+      if (testAfterSave && savedId) {
+        try {
+          const tested = await testStripeAccountConnection(savedId);
+          if (tested.lastTestResult === 'ok') {
+            toast.success(`Stripe account saved and verified (${tested.stripeAccountId ?? 'Connection OK'}).`);
+          } else {
+            toast.warning(`Saved, but connection test failed: ${tested.lastTestResult ?? 'Check credentials'}.`);
+          }
+        } catch {
+          toast.warning('Account saved, but connection test could not reach Stripe.');
+        }
+      } else {
+        toast.success('Stripe account saved.');
+      }
       setEditing(null);
       setError(null);
       await load();
@@ -346,6 +362,9 @@ export default function AdminStripeAccountsPage() {
         <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>{editing?.id ? 'Edit Stripe account' : 'New Stripe account'}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Configure Stripe credential profile, test live connection, and manage routing.
+            </DialogDescription>
           </DialogHeader>
           {editing && (
             <div className="space-y-3">
@@ -384,7 +403,7 @@ export default function AdminStripeAccountsPage() {
                 onChange={(e) => update('secretKey', e.target.value)}
                 placeholder={
                   editing.id && editing.hasSecretKey
-                    ? 'Leave blank to keep the current key'
+                    ? 'Configured - masked (enter new key to replace / rotate)'
                     : 'sk_live_…'
                 }
               />
@@ -403,7 +422,7 @@ export default function AdminStripeAccountsPage() {
                 }}
                 placeholder={
                   editing.id && editing.hasWebhookSecret
-                    ? 'Leave blank to keep the current secret'
+                    ? 'Configured - masked (enter new secret to replace / rotate)'
                     : 'whsec_…'
                 }
               />
@@ -433,18 +452,23 @@ export default function AdminStripeAccountsPage() {
               </div>
               <p className="text-xs text-muted-foreground">
                 Secrets are encrypted at rest and never shown again — only a masked hint is
-                displayed. After saving, use <strong>Test</strong> to verify the key against
-                Stripe before switching the default.
+                displayed. Use <strong>Save &amp; Test Connection</strong> to verify the key against
+                Stripe and store the connected account identifier immediately.
               </p>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex flex-wrap items-center justify-between gap-2 sm:justify-between">
             <Button variant="ghost" onClick={() => setEditing(null)}>
               Cancel
             </Button>
-            <Button onClick={handleSave} startIcon={<Save className="h-4 w-4" />}>
-              Save
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" onClick={() => void handleSave(false)} startIcon={<Save className="h-4 w-4" />}>
+                Save
+              </Button>
+              <Button onClick={() => void handleSave(true)} startIcon={<Plug className="h-4 w-4" />}>
+                Save &amp; Test Connection
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
