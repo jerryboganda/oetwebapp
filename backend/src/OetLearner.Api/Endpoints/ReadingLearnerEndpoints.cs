@@ -796,22 +796,14 @@ public static class ReadingLearnerEndpoints
                     };
                 })
                 .ToList();
-            int? recordedTotalElapsedMs;
-            if (attempt.TotalElapsedMs is > 0)
-            {
-                recordedTotalElapsedMs = attempt.TotalElapsedMs;
-            }
-            else
-            {
-                var summedPartTime = recordedPartTimes
-                    .Select(part => part.totalElapsedMs)
-                    .Where(value => value is > 0)
-                    .Select(value => value!.Value)
-                    .Sum(value => (long)value);
-                recordedTotalElapsedMs = summedPartTime > int.MaxValue
-                    ? int.MaxValue
-                    : summedPartTime > 0 ? (int?)summedPartTime : null;
-            }
+            var summedPartTime = recordedPartTimes
+                .Select(part => part.totalElapsedMs)
+                .Where(value => value is > 0)
+                .Select(value => value!.Value)
+                .Sum(value => (long)value);
+            var recordedTotalElapsedMs = summedPartTime > int.MaxValue
+                ? int.MaxValue
+                : summedPartTime > 0 ? (int?)summedPartTime : null;
 
             var skillBreakdown = items
                 .GroupBy(i => string.IsNullOrWhiteSpace(i.SkillTag) ? i.QuestionType : i.SkillTag)

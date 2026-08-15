@@ -1806,6 +1806,7 @@ public partial class LearnerService(
                 evaluation.AttemptId,
                 evaluation.SubtestCode,
                 evaluation.ScoreRange,
+                evaluation.ScaledScore,
                 evaluation.ScoreConversionTableVersionKey,
                 evaluation.ScoreConversionPassed))
             .ToListAsync(cancellationToken);

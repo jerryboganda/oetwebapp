@@ -2939,13 +2939,13 @@ public sealed class MockService(
             subtest = StringValue(st, "name") ?? StringValue(st, "subtest") ?? "Mock",
             rawScore = StringValue(st, "rawScore") ?? "N/A",
             scaledScore = IsGovernedSubtest(st)
-                ? sections.FirstOrDefault(x => string.Equals(x.SubtestCode, StringValue(st, "name") ?? StringValue(st, "subtest"), StringComparison.OrdinalIgnoreCase)) is { } section && IsOwnerConvertedSection(section)
-                    ? section.ScaledScore
+                ? sections.FirstOrDefault(x => string.Equals(x.SubtestCode, StringValue(st, "name") ?? StringValue(st, "subtest"), StringComparison.OrdinalIgnoreCase)) is { } scaledSection && IsOwnerConvertedSection(scaledSection)
+                    ? scaledSection.ScaledScore
                     : null
                 : IntValue(st, "scaledScore"),
             grade = IsGovernedSubtest(st)
-                ? sections.FirstOrDefault(x => string.Equals(x.SubtestCode, StringValue(st, "name") ?? StringValue(st, "subtest"), StringComparison.OrdinalIgnoreCase)) is { } section && IsOwnerConvertedSection(section)
-                    ? section.Grade
+                ? sections.FirstOrDefault(x => string.Equals(x.SubtestCode, StringValue(st, "name") ?? StringValue(st, "subtest"), StringComparison.OrdinalIgnoreCase)) is { } gradeSection && IsOwnerConvertedSection(gradeSection)
+                    ? gradeSection.Grade
                     : null
                 : StringValue(st, "grade"),
             state = StringValue(st, "state") ?? "completed"

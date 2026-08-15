@@ -2198,9 +2198,9 @@ public sealed class ListeningLearnerService(
                 .Where(attempt => attempt.UserId == userId
                     && attempt.PaperId == source.Id
                     && attempt.Status != ListeningAttemptStatus.Abandoned
-                    && (attempt.Mode is ListeningAttemptMode.Exam
-                        or ListeningAttemptMode.Home
-                        or ListeningAttemptMode.Diagnostic))
+                    && (attempt.Mode == ListeningAttemptMode.Exam
+                        || attempt.Mode == ListeningAttemptMode.Home
+                        || attempt.Mode == ListeningAttemptMode.Diagnostic))
                 .Select(attempt => new AttemptEligibilityRow(
                     attempt.StartedAt,
                     attempt.SubmittedAt,
@@ -3402,7 +3402,7 @@ public sealed class ListeningLearnerService(
         ListeningAnswer? deterministicAnswer = null,
         bool transcriptEvidenceAllowed = false)
     {
-        var isInvalid = q.QuestionType == ListeningQuestionType.MultipleChoice3
+        var isInvalid = IsMultipleChoiceQuestionType(q.Type)
             && deterministicAnswer is not null
             && deterministicAnswer.IsCorrect is null;
         var authoredMatch = q.AcceptedAnswers.Any(answer => MatchesObjectiveAnswer(learnerAnswer, answer));

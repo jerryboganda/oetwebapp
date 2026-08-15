@@ -483,18 +483,14 @@ public sealed class ListeningAnalyticsService(LearnerDbContext db) : IListeningA
             .FirstOrDefaultAsync(attempt => attempt.Id == attemptId && attempt.SubtestCode == Subtest, ct)
             ?? throw new KeyNotFoundException($"Listening attempt {attemptId} not found.");
         var legacyEvaluations = await LoadEvaluationExportsAsync(attemptId, ct);
-        var scaledScore = legacyEvaluations
+        var scaledScore = (await db.Evaluations.AsNoTracking()
+                .Where(evaluation => evaluation.AttemptId == attemptId)
+                .ToListAsync(ct))
             .Where(_ => !legacyAttempt.RequiresAdminReview)
             .Where(HasApprovedConversion)
-            .Select(evaluation => new
-            {
-                evaluation.GeneratedAt,
-                Scaled = TryReadScaled(evaluation.CriterionScoresJson),
-            })
-            .Where(item => item.Scaled.HasValue)
-            .OrderByDescending(item => item.GeneratedAt)
-            .FirstOrDefault()
-            ?.Scaled;
+            .OrderByDescending(evaluation => evaluation.GeneratedAt)
+            .Select(TryReadScaled)
+            .FirstOrDefault();
 
         return new ListeningAttemptExportDto(
             Source: "legacy",

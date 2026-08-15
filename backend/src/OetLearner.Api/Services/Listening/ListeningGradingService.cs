@@ -652,7 +652,7 @@ public sealed class ListeningGradingService
             {
                 var user = TryReadString(ans.UserAnswerJson) ?? string.Empty;
                 var canonical = TryReadString(q.CorrectAnswerJson);
-                var accepted = acceptSynonyms ? ParseAccepted(q.AcceptedSynonymsJson).ToList() : Array.Empty<string>();
+                var accepted = acceptSynonyms ? ParseAccepted(q.AcceptedSynonymsJson).ToList() : new List<string>();
                 var candidates = (canonical is null ? Enumerable.Empty<string>() : new[] { canonical })
                     .Concat(accepted)
                     .Where(c => !string.IsNullOrWhiteSpace(c))

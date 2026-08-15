@@ -77,7 +77,7 @@ public sealed class ListeningPathwayService(LearnerDbContext db) : IListeningPat
                 && a.State == AttemptState.Completed)
             .OrderByDescending(a => a.SubmittedAt ?? a.CompletedAt)
             .Take(50)
-            .Select(a => new { a.Id, a.SubmittedAt, a.MaxRawScore, a.RequiresAdminReview })
+            .Select(a => new { a.Id, a.SubmittedAt, a.RequiresAdminReview })
             .ToListAsync(ct);
 
         var relationalAttempts = await db.ListeningAttempts.AsNoTracking()
