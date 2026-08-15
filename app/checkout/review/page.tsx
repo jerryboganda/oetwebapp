@@ -214,9 +214,13 @@ function CheckoutReviewContent() {
       let options: PaymentMethodOption[];
       try {
         const res = await fetchAvailablePaymentGateways();
-        options = res.methods && res.methods.length > 0
+        const rawOptions = res.methods && res.methods.length > 0
           ? res.methods
           : (res.gateways ?? []).map(deriveMethod);
+        // EasyCash is removed from customer-facing checkout (CHANGE 6)
+        options = rawOptions.filter(
+          (opt) => !['easykash', 'easy_cash', 'easycash'].includes(opt.name.toLowerCase()),
+        );
       } catch {
         options = [deriveMethod('stripe')];
       }
@@ -666,15 +670,13 @@ function methodBrand(method: PaymentMethodOption): { title: string; subtitle: st
       return { title: 'Stripe', subtitle: 'Credit or debit card — Visa, Mastercard, Amex' };
     case 'checkoutcom':
       return { title: 'Checkout.com', subtitle: 'Credit or debit card' };
-    case 'easykash':
-      return { title: 'EasyKash', subtitle: 'Cards, wallets, Fawry & instalments' };
     case 'paymob':
       return { title: 'Paymob', subtitle: 'Card & local wallets' };
     case 'paytabs':
       return { title: 'PayTabs', subtitle: 'Card & local payment methods' };
     default:
       return {
-        title: method.label,
+        title: method.label || method.name,
         subtitle: method.mode === 'embedded' ? 'Pay on this page' : 'Secure hosted checkout',
       };
   }

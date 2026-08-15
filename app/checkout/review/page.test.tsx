@@ -117,4 +117,12 @@ describe('Checkout review page', () => {
     expect(cta.getAttribute('href')).toContain('/billing/manual-payment');
     expect(cta.getAttribute('href')).toContain('region=egypt');
   });
+
+  it('excludes EasyCash from customer checkout while supporting other enabled payment methods', async () => {
+    renderWithRouter(<CheckoutReviewPage />, { searchParams });
+
+    expect(await screen.findByText('Nursing Complete')).toBeInTheDocument();
+    expect(screen.queryByText(/easycash/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/easykash/i)).not.toBeInTheDocument();
+  });
 });
