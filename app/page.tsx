@@ -141,11 +141,13 @@ function DashboardSubscriptionStrip({
   entitlement,
   isLoading,
   hasError,
+  onReloadPaymentStatus,
 }: {
   subscription: SubscriptionMe | null;
   entitlement: MyEntitlementSnapshot | null;
   isLoading: boolean;
   hasError: boolean;
+  onReloadPaymentStatus?: () => void;
 }) {
   const expiryDate = entitlement?.expiresAt ?? subscription?.nextRenewalAt ?? null;
   const planName = subscription?.planName ?? 'No active subscription';
@@ -180,8 +182,17 @@ function DashboardSubscriptionStrip({
           <CreditCard className="h-4 w-4" aria-hidden="true" />
         </span>
         <span className="min-w-0 flex-1 truncate text-[13px] font-bold text-navy">
-          {isLoading ? 'Loading subscriptionâ€¦' : hasError ? 'Subscription details unavailable' : planName}
+          {isLoading ? 'Loading subscription…' : hasError ? 'Payment & subscription status unavailable' : planName}
         </span>
+        {hasError && onReloadPaymentStatus ? (
+          <button
+            type="button"
+            onClick={onReloadPaymentStatus}
+            className="shrink-0 rounded-md bg-lavender/60 px-2 py-0.5 text-[11px] font-semibold text-primary transition-colors hover:bg-lavender"
+          >
+            Reload payment status
+          </button>
+        ) : null}
         {!isLoading && !hasError ? (
           <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${subscriptionStatusClass(subscription, entitlement)}`}>
             {statusLabel}
@@ -377,6 +388,7 @@ export default function Dashboard() {
                 entitlement={entitlement}
                 isLoading={subscriptionLoading}
                 hasError={subscriptionError}
+                onReloadPaymentStatus={() => void subscriptionQuery.refetch()}
               />
             )}
           />
@@ -387,7 +399,7 @@ export default function Dashboard() {
           onRetry={reload}
           errorMessage={error ?? undefined}
           initial={false}
-          partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
+          partialMessage={error ?? 'Some dashboard data could not be loaded right now. Your course access is active — tap Retry to reload.'}
           loadingContent={(
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <LearnerDashboardLoadingCard />

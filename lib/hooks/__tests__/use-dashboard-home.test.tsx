@@ -160,7 +160,7 @@ describe('useDashboardHome', () => {
       expect(result.current.status).toBe('partial');
     }, { timeout: 2_500 });
 
-    expect(result.current.error).toBe('summary temporarily unavailable');
+    expect(result.current.error).toContain('Dashboard Highlights: summary temporarily unavailable');
     expect(result.current.data.tasks).toHaveLength(1);
   });
 

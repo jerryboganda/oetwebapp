@@ -43,22 +43,24 @@ const emptyData: DashboardHomeData = {
   loadedAt: null,
 };
 
-function toErrorMessage(error: unknown): string {
+function toErrorMessage(error: unknown, fallbackArea = 'dashboard data'): string {
   if (isApiError(error)) {
-    return error.userMessage;
+    if (error.userMessage && !error.userMessage.toLowerCase().includes('something went wrong')) {
+      return error.userMessage;
+    }
   }
 
   if (error && typeof error === 'object') {
-    if ('userMessage' in error && typeof error.userMessage === 'string') {
+    if ('userMessage' in error && typeof error.userMessage === 'string' && !error.userMessage.toLowerCase().includes('something went wrong')) {
       return error.userMessage;
     }
 
-    if ('message' in error && typeof error.message === 'string') {
+    if ('message' in error && typeof error.message === 'string' && !error.message.toLowerCase().includes('something went wrong')) {
       return error.message;
     }
   }
 
-  return 'Something went wrong. Please try again.';
+  return `Unable to load ${fallbackArea}. Please tap Retry or check your connection.`;
 }
 
 function isAuthFailure(error: unknown): error is ApiError {
@@ -70,18 +72,14 @@ function describeQueryError(queries: Array<{ name: string; error: unknown }>): s
   if (failed.length === 0) return null;
 
   const failureNames = failed.map((q) => q.name);
-  const primaryError = failed[0]?.error;
-  const rawMessage = toErrorMessage(primaryError);
+  const primary = failed[0]!;
+  const rawMessage = toErrorMessage(primary.error, primary.name.toLowerCase());
 
-  if (rawMessage && rawMessage !== 'Something went wrong. Please try again.') {
-    return `${failureNames.join(', ')}: ${rawMessage}`;
+  if (failed.length === 1) {
+    return `${primary.name}: ${rawMessage}`;
   }
 
-  if (failureNames.length === 1) {
-    return `Could not load your ${failureNames[0].toLowerCase()}. Please check your connection and tap Retry.`;
-  }
-
-  return `Could not load ${failureNames.join(' and ').toLowerCase()}. Please check your connection and tap Retry.`;
+  return `Unable to load ${failureNames.join(' and ').toLowerCase()}. Your course access is unaffected — tap Retry to refresh.`;
 }
 
 export function useDashboardHome() {
@@ -116,12 +114,18 @@ export function useDashboardHome() {
   const handledAuthFailureFor = useRef<string | null>(null);
   const trackedReadinessFor = useRef<string | null>(null);
 
-  // Log specific errors for telemetry and actionable debugging
+  const loggedErrorsRef = useRef<Set<string>>(new Set());
+
+  // Log specific errors for telemetry and actionable debugging (deduplicated)
   useEffect(() => {
     const failed = namedQueries.filter((nq) => nq.query.error != null);
     if (failed.length > 0) {
       for (const f of failed) {
-        console.error(`[CandidateDashboard] Query '${f.name}' failed for user ${userId}:`, f.query.error);
+        const errorKey = `${f.name}:${String((f.query.error as any)?.message ?? f.query.error)}`;
+        if (!loggedErrorsRef.current.has(errorKey)) {
+          loggedErrorsRef.current.add(errorKey);
+          console.error(`[CandidateDashboard] Query '${f.name}' failed for user ${userId}:`, f.query.error);
+        }
       }
     }
   }, [namedQueries, userId]);
