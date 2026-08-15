@@ -381,24 +381,28 @@ export function SubscriptionsCatalog() {
 
       {entitlement ? <CatalogEntitlementSummary snapshot={entitlement} /> : null}
 
-      {/* Horizontally scrollable mobile shortcut buttons */}
+      {/* Horizontally scrollable mobile shortcut buttons (in normal page flow, non-sticky) */}
       <nav
         aria-label="Catalogue quick jump navigation"
-        className="sticky top-2 z-20 -mx-4 flex items-center gap-2 overflow-x-auto rounded-2xl border border-border/90 bg-surface/95 px-4 py-2.5 shadow-sm backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-3 sm:py-2"
+        className="relative w-full rounded-2xl border border-border/80 bg-surface p-1.5 shadow-xs sm:p-2"
       >
-        <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-muted">
-          Quick jump:
-        </span>
-        {CATALOG_SHORTCUTS.map((shortcut) => (
-          <button
-            key={shortcut.id}
-            type="button"
-            onClick={() => handleShortcutClick(shortcut.id)}
-            className="shrink-0 rounded-full border border-border bg-background-light px-3.5 py-1 text-xs font-semibold text-navy transition hover:border-primary/50 hover:bg-primary/10 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-          >
-            {shortcut.label}
-          </button>
-        ))}
+        <div className="flex w-full items-center gap-2 overflow-x-auto overscroll-x-contain py-1 px-1 [-webkit-overflow-scrolling:touch] touch-pan-x [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="shrink-0 pl-1.5 text-[11px] font-bold uppercase tracking-wider text-muted select-none">
+            Quick jump:
+          </span>
+          {CATALOG_SHORTCUTS.map((shortcut) => (
+            <button
+              key={shortcut.id}
+              type="button"
+              onClick={() => handleShortcutClick(shortcut.id)}
+              className="shrink-0 touch-manipulation select-none rounded-full border border-border bg-background-light px-3.5 py-1.5 text-xs font-semibold text-navy transition-all duration-150 hover:border-primary/50 hover:bg-primary/10 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              {shortcut.label}
+            </button>
+          ))}
+          {/* Trailing spacer ensures final button is 100% visible and unclipped on narrow 320-430px screens */}
+          <div className="w-3 shrink-0" aria-hidden="true" />
+        </div>
       </nav>
 
       {error ? (
