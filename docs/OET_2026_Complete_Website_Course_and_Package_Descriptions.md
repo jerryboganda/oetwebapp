@@ -646,56 +646,6 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 
 <!-- Original source page(s): 11 -->
 
-# TutorBook
-
-### 28. TutorBook - First Edition 2026
-
-**Profession:** All disciplines | **Category:** 2026 recall-based OET book
-
-**Website description:** TutorBook is a 2026 recall-based OET preparation book built around 8 full exams covering Listening, Reading, Writing and Speaking. It brings together the main 2026 exam ideas and recall themes, with complete model answers, rationales, Listening scripts, Reading vocabulary support and additional recent recall-based exams already included as add-ons.
-
-**Access:** Permanent access with content updates | **Format:** Personalised watermarked PDF plus private update channel
-
-#### Included components
-
-- 8 full 2026 recall-based OET exams covering Listening, Reading, Writing and Speaking
-- The main exam ideas and recall themes from 2026 across all four sub-tests
-- New Reading dictionary including the vocabulary from the 2026 Reading recalls
-- Model answers for Writing and relevant practice tasks
-- Answer rationales and justifications to help candidates understand why each answer is correct
-- Listening scripts for recall-based Listening practice
-- Listening recall vocabulary and repeated words from recent exams
-- Already-included add-on exams with more recent recall-based practice
-- Private update channel access for new book updates and recall additions
-
-**Best for:** Candidates who want complete 2026 recall-based practice for Listening, Reading, Writing and Speaking in one book.
-
-<!-- Original source page(s): 11, 12 -->
-
-### 29. TutorBook - Add-on for Enrolled Students
-
-**Profession:** All disciplines | **Category:** Book add-on
-
-**Website description:** A TutorBook add-on available to candidates with an eligible active enrolment. TutorBook is a 2026 recall-based OET preparation book built around 8 full exams covering Listening, Reading, Writing and Speaking. It brings together the main 2026 exam ideas and recall themes, with complete model answers, rationales, Listening scripts, Reading vocabulary support and additional recent recall-based exams already included as add-ons.
-
-**Access:** Permanent access | **Format:** Personalised watermarked PDF plus private update channel
-
-#### Included components
-
-- 8 full 2026 recall-based OET exams covering Listening, Reading, Writing and Speaking
-- The main exam ideas and recall themes from 2026 across all four sub-tests
-- New Reading dictionary including the vocabulary from the 2026 Reading recalls
-- Model answers for Writing and relevant practice tasks
-- Answer rationales and justifications to help candidates understand why each answer is correct
-- Listening scripts for recall-based Listening practice
-- Listening recall vocabulary and repeated words from recent exams
-- Already-included add-on exams with more recent recall-based practice
-- Private update channel access for new book updates and recall additions
-
-**Best for:** Already enrolled candidates who want to add complete 2026 recall-based TutorBook practice to their preparation.
-
-<!-- Original source page(s): 12 -->
-
 ---
 
 # AI Credits, Practice & Mock Exam Packages
@@ -778,71 +728,9 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 14 -->
 
-# Full Mock Exam Packages
-
-### 33. 1 Full Mock
-
-**Profession:** All disciplines | **Category:** Full mock exam package
-
-**Website description:** One complete OET mock exam covering all four sub-tests. Writing and Speaking are AI-graded, while Listening and Reading are auto-marked using answer-key marking. Mock exam allowances are separate from AI grading credits.
-
-**Access:** 6 months from purchase | **Format:** One full mock exam across all four sub-tests
-
-#### Included components
-
-- 1 full mock exam covering Listening, Reading, Writing and Speaking
-- Writing and Speaking AI-graded
-- Listening and Reading auto-marked
-- Mock allowance separate from AI credits
-- 6-month validity
-
-**Best for:** Candidates who want one complete exam-style practice run.
-
-<!-- Original source page(s): 15 -->
-
-### 34. 3 Full Mocks
-
-**Profession:** All disciplines | **Category:** Full mock exam package
-
-**Website description:** Three complete OET mock exams covering all four sub-tests. Writing and Speaking are AI-graded, while Listening and Reading are auto-marked using answer-key marking. Mock exam allowances are separate from AI grading credits.
-
-**Access:** 6 months from purchase | **Format:** Three full mock exams across all four sub-tests
-
-#### Included components
-
-- 3 full mock exams covering Listening, Reading, Writing and Speaking
-- Writing and Speaking AI-graded
-- Listening and Reading auto-marked
-- Mock allowance separate from AI credits
-- 6-month validity
-
-**Best for:** Candidates who want several complete practice attempts before the real exam.
-
-<!-- Original source page(s): 15 -->
-
-### 35. 5 Full Mocks
-
-**Profession:** All disciplines | **Category:** Full mock exam package
-
-**Website description:** Five complete OET mock exams covering all four sub-tests. Writing and Speaking are AI-graded, while Listening and Reading are auto-marked using answer-key marking. Mock exam allowances are separate from AI grading credits.
-
-**Access:** 6 months from purchase | **Format:** Five full mock exams across all four sub-tests
-
-#### Included components
-
-- 5 full mock exams covering Listening, Reading, Writing and Speaking
-- Writing and Speaking AI-graded
-- Listening and Reading auto-marked
-- Mock allowance separate from AI credits
-- 6-month validity
-
-**Best for:** Candidates who want repeated full exam simulation and progress tracking.
-
-<!-- Original source page(s): 15 -->
-
 # Separate Listening Packages
 
-### 36. Listening Starter
+### 33. Listening Starter
 
 **Profession:** All disciplines | **Category:** Separate Listening practice package
 
@@ -861,7 +749,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 16 -->
 
-### 37. Listening Standard
+### 34. Listening Standard
 
 **Profession:** All disciplines | **Category:** Separate Listening practice package
 
@@ -880,7 +768,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 16 -->
 
-### 38. Listening Pro
+### 35. Listening Pro
 
 **Profession:** All disciplines | **Category:** Unlimited Listening practice package
 
@@ -901,7 +789,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 # Separate Reading Packages
 
-### 39. Reading Starter
+### 36. Reading Starter
 
 **Profession:** All disciplines | **Category:** Separate Reading practice package
 
@@ -920,7 +808,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 17 -->
 
-### 40. Reading Standard
+### 37. Reading Standard
 
 **Profession:** All disciplines | **Category:** Separate Reading practice package
 
@@ -939,7 +827,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 17 -->
 
-### 41. Reading Pro
+### 38. Reading Pro
 
 **Profession:** All disciplines | **Category:** Unlimited Reading practice package
 
@@ -960,7 +848,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 # Separate Writing Packages
 
-### 42. Writing Starter
+### 39. Writing Starter
 
 **Profession:** All disciplines | **Category:** Separate Writing AI grading package
 
@@ -979,7 +867,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 18 -->
 
-### 43. Writing Standard
+### 40. Writing Standard
 
 **Profession:** All disciplines | **Category:** Separate Writing AI grading package
 
@@ -998,7 +886,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 18 -->
 
-### 44. Writing Pro
+### 41. Writing Pro
 
 **Profession:** All disciplines | **Category:** Separate Writing AI grading package
 
@@ -1019,7 +907,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 # Separate Speaking Packages
 
-### 45. Speaking Starter
+### 42. Speaking Starter
 
 **Profession:** All disciplines | **Category:** Separate Speaking AI grading package
 
@@ -1038,7 +926,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 19 -->
 
-### 46. Speaking Standard
+### 43. Speaking Standard
 
 **Profession:** All disciplines | **Category:** Separate Speaking AI grading package
 
@@ -1057,7 +945,7 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 19 -->
 
-### 47. Speaking Pro
+### 44. Speaking Pro
 
 **Profession:** All disciplines | **Category:** Separate Speaking AI grading package
 
@@ -1076,7 +964,9 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 <!-- Original source page(s): 19 -->
 
-### 48. Listening Recalls
+# Listening Recalls
+
+### 45. Listening Recalls
 
 **Profession:** All disciplines | **Category:** Recall-based Listening vocabulary package
 
@@ -1098,6 +988,118 @@ This addendum contains the website descriptions for the AI grading packages, ful
 **Best for:** Candidates who want focused, repeatable vocabulary practice for OET Listening.
 
 <!-- Added post-launch 2026-07-29: standalone Recalls-only package, not part of the original PDF sources. -->
+
+# TutorBook
+
+### 46. TutorBook - First Edition 2026
+
+**Profession:** All disciplines | **Category:** 2026 recall-based OET book
+
+**Website description:** TutorBook is a 2026 recall-based OET preparation book built around 8 full exams covering Listening, Reading, Writing and Speaking. It brings together the main 2026 exam ideas and recall themes, with complete model answers, rationales, Listening scripts, Reading vocabulary support and additional recent recall-based exams already included as add-ons.
+
+**Access:** Permanent access with content updates | **Format:** Personalised watermarked PDF plus private update channel
+
+#### Included components
+
+- 8 full 2026 recall-based OET exams covering Listening, Reading, Writing and Speaking
+- The main exam ideas and recall themes from 2026 across all four sub-tests
+- New Reading dictionary including the vocabulary from the 2026 Reading recalls
+- Model answers for Writing and relevant practice tasks
+- Answer rationales and justifications to help candidates understand why each answer is correct
+- Listening scripts for recall-based Listening practice
+- Listening recall vocabulary and repeated words from recent exams
+- Already-included add-on exams with more recent recall-based practice
+- Private update channel access for new book updates and recall additions
+
+**Best for:** Candidates who want complete 2026 recall-based practice for Listening, Reading, Writing and Speaking in one book.
+
+<!-- Original source page(s): 11, 12 -->
+
+### 47. TutorBook - Add-on for Enrolled Students
+
+**Profession:** All disciplines | **Category:** Book add-on
+
+**Website description:** A TutorBook add-on available to candidates with an eligible active enrolment. TutorBook is a 2026 recall-based OET preparation book built around 8 full exams covering Listening, Reading, Writing and Speaking. It brings together the main 2026 exam ideas and recall themes, with complete model answers, rationales, Listening scripts, Reading vocabulary support and additional recent recall-based exams already included as add-ons.
+
+**Access:** Permanent access | **Format:** Personalised watermarked PDF plus private update channel
+
+#### Included components
+
+- 8 full 2026 recall-based OET exams covering Listening, Reading, Writing and Speaking
+- The main exam ideas and recall themes from 2026 across all four sub-tests
+- New Reading dictionary including the vocabulary from the 2026 Reading recalls
+- Model answers for Writing and relevant practice tasks
+- Answer rationales and justifications to help candidates understand why each answer is correct
+- Listening scripts for recall-based Listening practice
+- Listening recall vocabulary and repeated words from recent exams
+- Already-included add-on exams with more recent recall-based practice
+- Private update channel access for new book updates and recall additions
+
+**Best for:** Already enrolled candidates who want to add complete 2026 recall-based TutorBook practice to their preparation.
+
+<!-- Original source page(s): 12 -->
+
+# Full Mock Exam Packages
+
+### 48. 1 Full Mock
+
+**Profession:** All disciplines | **Category:** Full mock exam package
+
+**Website description:** One complete OET mock exam covering all four sub-tests. Writing and Speaking are AI-graded, while Listening and Reading are auto-marked using answer-key marking. Mock exam allowances are separate from AI grading credits.
+
+**Access:** 6 months from purchase | **Format:** One full mock exam across all four sub-tests
+
+#### Included components
+
+- 1 full mock exam covering Listening, Reading, Writing and Speaking
+- Writing and Speaking AI-graded
+- Listening and Reading auto-marked
+- Mock allowance separate from AI credits
+- 6-month validity
+
+**Best for:** Candidates who want one complete exam-style practice run.
+
+<!-- Original source page(s): 15 -->
+
+### 49. 3 Full Mocks
+
+**Profession:** All disciplines | **Category:** Full mock exam package
+
+**Website description:** Three complete OET mock exams covering all four sub-tests. Writing and Speaking are AI-graded, while Listening and Reading are auto-marked using answer-key marking. Mock exam allowances are separate from AI grading credits.
+
+**Access:** 6 months from purchase | **Format:** Three full mock exams across all four sub-tests
+
+#### Included components
+
+- 3 full mock exams covering Listening, Reading, Writing and Speaking
+- Writing and Speaking AI-graded
+- Listening and Reading auto-marked
+- Mock allowance separate from AI credits
+- 6-month validity
+
+**Best for:** Candidates who want several complete practice attempts before the real exam.
+
+<!-- Original source page(s): 15 -->
+
+### 50. 5 Full Mocks
+
+**Profession:** All disciplines | **Category:** Full mock exam package
+
+**Website description:** Five complete OET mock exams covering all four sub-tests. Writing and Speaking are AI-graded, while Listening and Reading are auto-marked using answer-key marking. Mock exam allowances are separate from AI grading credits.
+
+**Access:** 6 months from purchase | **Format:** Five full mock exams across all four sub-tests
+
+#### Included components
+
+- 5 full mock exams covering Listening, Reading, Writing and Speaking
+- Writing and Speaking AI-graded
+- Listening and Reading auto-marked
+- Mock allowance separate from AI credits
+- 6-month validity
+
+**Best for:** Candidates who want repeated full exam simulation and progress tracking.
+
+<!-- Original source page(s): 15 -->
 
 ---
 

@@ -43,7 +43,7 @@ function formatDate(value?: string | null) {
 
 function canonicalAiPackage(pkg: AiPackage): WebsitePackage | undefined {
   const websitePackage = resolveWebsitePackageByCode(pkg.code);
-  return websitePackage && websitePackage.packageNo >= 30 && websitePackage.packageNo <= 47
+  return websitePackage && websitePackage.packageNo >= 30 && websitePackage.packageNo <= 50
     ? websitePackage
     : undefined;
 }

@@ -36,7 +36,7 @@ function canonicalAiRows(rows: AiPackage[]): CanonicalAiPackage[] {
   return rows
     .flatMap((live) => {
       const website = resolveWebsitePackageByCode(live.code);
-      return website && website.packageNo >= 30 && website.packageNo <= 47
+      return website && website.packageNo >= 30 && website.packageNo <= 50
         ? [{ live, website }]
         : [];
     })
