@@ -356,8 +356,8 @@ export function SubscriptionsCatalog() {
     { id: 'section-ai', label: 'AI Grading Packages' },
     { id: 'section-separate-ai', label: 'Separate AI Packages' },
     { id: 'section-listening-recalls', label: 'Listening Recalls' },
-    { id: 'section-tutorbook', label: 'TutorBook of Recalls' },
-    { id: 'section-mock', label: 'Full Mock Exams' },
+    { id: 'section-tutorbook', label: 'TutorBook / TutorBook of Recalls' },
+    { id: 'section-mock', label: 'Full Mock Exam Packages' },
   ];
 
   const handleShortcutClick = (sectionId: string) => {
