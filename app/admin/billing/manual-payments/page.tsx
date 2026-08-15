@@ -663,12 +663,12 @@ export default function AdminPaymentProofsPage() {
 
   return (
     <AdminTableLayout
-      title="Payment proofs"
-      description="Every order carries a proof of payment — a learner upload for offline methods, or a system receipt for card gateways. Manual and WhatsApp orders wait here for hand-over."
+      title="Pending Payment Approvals & Proofs"
+      description="Review and act on pending candidate payments. Verify candidate, package, amount, method, and proof/gateway transaction record to approve or reject access."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Billing', href: '/admin/billing' },
-        { label: 'Payment proofs' },
+        { label: 'Pending Payment Approvals' },
       ]}
       actions={
         <Button
@@ -869,8 +869,15 @@ export default function AdminPaymentProofsPage() {
               </a>
             )
           ) : null}
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeProof}>
+          <DialogFooter className="flex items-center justify-between sm:justify-between">
+            {proofView?.url ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={proofView.url} download={`payment-proof-${proofView.candidate || 'file'}`} target="_blank" rel="noreferrer">
+                  Download proof
+                </a>
+              </Button>
+            ) : <div />}
+            <Button variant="ghost" size="sm" onClick={closeProof}>
               Close
             </Button>
           </DialogFooter>

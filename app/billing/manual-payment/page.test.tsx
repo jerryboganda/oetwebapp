@@ -16,14 +16,19 @@ const {
 }));
 
 vi.mock('@/lib/api', () => ({
-  apiClient: {
-    get: vi.fn().mockResolvedValue({ whatsAppNumber: null, whatsAppProofTemplate: null }),
-  },
   listOwnManualPayments: mockListOwnManualPayments,
   submitManualPayment: mockSubmitManualPayment,
   listPublicPaymentMethods: mockListPublicPaymentMethods,
   fetchAvailablePaymentGateways: mockFetchAvailablePaymentGateways,
   fetchPaymentMethodQrBlob: mockFetchPaymentMethodQrBlob,
+}));
+
+vi.mock('@/lib/billing/whatsapp', () => ({
+  fetchSupportWhatsApp: vi.fn().mockResolvedValue({ whatsAppNumber: '447961725989', whatsAppProofTemplate: null }),
+  buildManualPaymentWhatsAppLink: vi.fn(() => 'https://wa.me/447961725989?text=TXN-123'),
+  displayWhatsAppNumber: vi.fn((num) => `+${num || '447961725989'}`),
+  normalizeWhatsAppNumber: vi.fn((num) => num || '447961725989'),
+  PLATFORM_WHATSAPP: '447961725989',
 }));
 
 vi.mock('@/contexts/auth-context', () => ({
@@ -95,7 +100,8 @@ describe('Manual payment page', () => {
       }),
     );
 
-    expect(await screen.findByText(/payment submitted/i)).toBeInTheDocument();
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(await screen.findByText(/payment submitted successfully/i)).toBeInTheDocument();
     const wa = screen.getByRole('link', { name: /notify us on whatsapp/i });
     expect(wa.getAttribute('href')).toContain('wa.me/447961725989');
     expect(decodeURIComponent(wa.getAttribute('href') ?? '')).toContain('TXN-123');
