@@ -16,6 +16,8 @@ interface AsyncStateWrapperProps {
   children: ReactNode;
   /** Error retry handler */
   onRetry?: () => void;
+  /** Contextual retry label, e.g. "Retry dashboard highlights" */
+  retryLabel?: string;
   /** Error message */
   errorMessage?: string;
   /** Empty state content */
@@ -33,6 +35,7 @@ export function AsyncStateWrapper({
   status,
   children,
   onRetry,
+  retryLabel = 'Retry this page',
   errorMessage,
   emptyContent,
   loadingContent,
@@ -71,7 +74,20 @@ export function AsyncStateWrapper({
       case 'partial':
         return (
           <motion.div key="partial" {...motionProps} initial={initial ? motionProps.initial : false} className={cn('w-full min-w-0', className)}>
-            <InlineAlert variant="warning" className="mb-4" dismissible>
+            <InlineAlert
+              variant="warning"
+              className="mb-4"
+              dismissible
+              action={onRetry ? (
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900"
+                >
+                  {retryLabel}
+                </button>
+              ) : undefined}
+            >
               {partialMessage}
             </InlineAlert>
             <div>{children}</div>

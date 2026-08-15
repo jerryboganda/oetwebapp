@@ -954,7 +954,7 @@ public static partial class SeedData
             // Mirror of SignupProfessionCatalog (the canonical taxonomy) — ids and
             // sort order must stay identical to the catalog seeded below, or the
             // discipline filters that join on Id fall through.
-            new ProfessionReference { Id = "other-allied-health", Code = "other-allied-health", Label = "Other Allied health profession", Status = "active", SortOrder = 7 },
+            new ProfessionReference { Id = "other-allied-health", Code = "other-allied-health", Label = "Modified Allied Health Profession", Status = "active", SortOrder = 7 },
             new ProfessionReference { Id = "academic-english", Code = "academic-english", Label = "Academic / General English", Status = "active", SortOrder = 8 }
         );
 
@@ -2280,7 +2280,7 @@ public static partial class SeedData
             new SignupProfessionCatalog
             {
                 Id = "other-allied-health",
-                Label = "Other Allied health profession",
+                Label = "Modified Allied Health Profession",
                 CountryTargetsJson = "[]",
                 ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
                 Description = "Other allied health professionals (occupational therapy, dietetics, speech pathology, podiatry, optometry, etc.).",

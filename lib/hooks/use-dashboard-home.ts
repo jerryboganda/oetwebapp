@@ -43,24 +43,35 @@ const emptyData: DashboardHomeData = {
   loadedAt: null,
 };
 
+function isGenericFailureCopy(value: string): boolean {
+  const normalised = value.trim().toLowerCase();
+  return (
+    normalised.length === 0 ||
+    normalised.includes('something went wrong') ||
+    normalised === 'an unexpected error occurred. please try again.' ||
+    normalised === 'internal server error' ||
+    normalised === 'request failed'
+  );
+}
+
 function toErrorMessage(error: unknown, fallbackArea = 'dashboard data'): string {
   if (isApiError(error)) {
-    if (error.userMessage && !error.userMessage.toLowerCase().includes('something went wrong')) {
+    if (error.userMessage && !isGenericFailureCopy(error.userMessage)) {
       return error.userMessage;
     }
   }
 
   if (error && typeof error === 'object') {
-    if ('userMessage' in error && typeof error.userMessage === 'string' && !error.userMessage.toLowerCase().includes('something went wrong')) {
+    if ('userMessage' in error && typeof error.userMessage === 'string' && !isGenericFailureCopy(error.userMessage)) {
       return error.userMessage;
     }
 
-    if ('message' in error && typeof error.message === 'string' && !error.message.toLowerCase().includes('something went wrong')) {
+    if ('message' in error && typeof error.message === 'string' && !isGenericFailureCopy(error.message)) {
       return error.message;
     }
   }
 
-  return `Unable to load ${fallbackArea}. Please tap Retry or check your connection.`;
+  return `Unable to load ${fallbackArea}. Your course access is unaffected.`;
 }
 
 function isAuthFailure(error: unknown): error is ApiError {
@@ -79,7 +90,23 @@ function describeQueryError(queries: Array<{ name: string; error: unknown }>): s
     return `${primary.name}: ${rawMessage}`;
   }
 
-  return `Unable to load ${failureNames.join(' and ').toLowerCase()}. Your course access is unaffected — tap Retry to refresh.`;
+  return `Unable to load ${failureNames.join(' and ').toLowerCase()}. Your course access is unaffected.`;
+}
+
+function retryLabelFor(queries: Array<{ name: string; error: unknown }>): string {
+  const failed = queries.filter((q) => q.error != null);
+  if (failed.length === 1) {
+    return `Retry ${failed[0]!.name.toLowerCase()}`;
+  }
+  return 'Retry dashboard data';
+}
+
+function supportRefFor(queries: Array<{ name: string; error: unknown }>): string | null {
+  const failed = queries.filter((q) => q.error != null);
+  if (failed.length === 0) return null;
+  const stamp = Date.now().toString(36).slice(-6).toUpperCase();
+  const prefix = failed.map((item) => item.name.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase()).join('');
+  return `DASH-${prefix || 'GEN'}-${stamp}`;
 }
 
 export function useDashboardHome() {
@@ -138,11 +165,10 @@ export function useDashboardHome() {
     });
   }, [hasAuthFailure, signOut, userId]);
 
-  // The hero, next action, and study-plan surfaces only need these three
-  // responses. Readiness and engagement are below the fold and can hydrate
-  // independently so a slow supplemental endpoint cannot hold the first
-  // meaningful dashboard paint behind the full five-request fan-out.
-  const criticalQueries = [tasksQuery, profileQuery, homeQuery];
+  // Profile and today's plan power the first viewport. Highlights, readiness,
+  // and engagement are widgets — a single failure must stay inline instead of
+  // turning into a global banner.
+  const criticalQueries = [tasksQuery, profileQuery];
   const criticalPending = enabled && criticalQueries.some((query) => query.isPending);
   const criticalError = criticalQueries.find((query) => query.error)?.error ?? null;
   const allSuccessful = enabled && queries.every((query) => query.isSuccess);
@@ -185,13 +211,14 @@ export function useDashboardHome() {
     await Promise.all(queries.map((query) => query.refetch()));
   };
 
-  const actionableErrorMessage = describeQueryError(
-    namedQueries.map((nq) => ({ name: nq.name, error: nq.query.error })),
-  );
+  const namedFailures = namedQueries.map((nq) => ({ name: nq.name, error: nq.query.error }));
+  const actionableErrorMessage = describeQueryError(namedFailures);
 
   return {
     data,
     error: actionableErrorMessage ?? (firstError ? toErrorMessage(firstError) : null),
+    retryLabel: retryLabelFor(namedFailures),
+    supportRef: supportRefFor(namedFailures),
     reload,
     status,
   };

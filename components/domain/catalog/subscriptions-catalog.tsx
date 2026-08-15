@@ -299,25 +299,16 @@ export function SubscriptionsCatalog() {
     [canonicalOwnedPlanCode, catalog?.plans],
   );
 
-  // Discipline tabs are derived from the profession of the Full Recorded courses.
-  const professions = useMemo(() => {
-    const present = new Set<string>();
-    for (const pkg of WEBSITE_PACKAGES) {
-      if (pkg.section !== 'full-recorded') continue;
-      const prof = priceMap.get(pkg.code)?.profession;
-      if (prof) present.add(prof);
-      if (pkg.code === 'full-allied-health') present.add('other-allied-health');
-    }
-    const order = [
-      'all',
-      'medicine',
-      'nursing',
-      'pharmacy',
-      'physiotherapy',
-      'other-allied-health',
-    ];
-    return order.filter((p) => p === 'all' || present.has(p));
-  }, [priceMap]);
+  // Always show the six candidate-facing discipline chips in this order,
+  // including Modified Allied Health Profession after Physiotherapy.
+  const professions = [
+    'all',
+    'medicine',
+    'nursing',
+    'pharmacy',
+    'physiotherapy',
+    'other-allied-health',
+  ] as const;
 
   const packagesBySection = useMemo(() => {
     const grouped = new Map<WebsiteSectionKey, WebsitePackage[]>();
@@ -468,7 +459,7 @@ export function SubscriptionsCatalog() {
                   description={section.description}
                 />
 
-                {section.key === 'full-recorded' && professions.length > 1 ? (
+                {section.key === 'full-recorded' ? (
                   <div className="flex flex-wrap gap-1.5">
                     {professions.map((profession) => {
                       const active = profession === activeProfession;

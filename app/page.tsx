@@ -229,7 +229,7 @@ export default function Dashboard() {
   const searchParams = useSearchParams();
   const authContext = useContext(AuthContext);
   const queryClient = useQueryClient();
-  const { data, error, reload, status } = useDashboardHome();
+  const { data, error, reload, retryLabel, supportRef, status } = useDashboardHome();
   const [scoringExpanded, setScoringExpanded] = useState(false);
   const purchaseSuccess = searchParams?.get('purchase') === 'success';
   const queryUserId = authContext?.user?.userId ?? 'current';
@@ -397,9 +397,10 @@ export default function Dashboard() {
         <AsyncStateWrapper
           status={asyncStatus}
           onRetry={reload}
+          retryLabel={retryLabel}
           errorMessage={error ?? undefined}
           initial={false}
-          partialMessage={error ?? 'Some dashboard data could not be loaded right now. Your course access is active — tap Retry to reload.'}
+          partialMessage={error ? `${error}${supportRef ? ` Support ref ${supportRef}.` : ''}` : 'Some dashboard data could not be loaded right now. Your course access is active.'}
           loadingContent={(
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <LearnerDashboardLoadingCard />
@@ -416,6 +417,20 @@ export default function Dashboard() {
           }
         >
           <div className="space-y-6">
+          {asyncStatus === 'success' && error ? (
+            <InlineAlert
+              variant="warning"
+              dismissible
+              action={(
+                <Button type="button" variant="outline" size="sm" onClick={() => void reload()}>
+                  {retryLabel}
+                </Button>
+              )}
+            >
+              {error}
+              {supportRef ? ` Support ref ${supportRef}.` : ''} Course access is unaffected.
+            </InlineAlert>
+          ) : null}
           {purchaseSuccess ? (
             <InlineAlert variant="success">
               AI package purchase received. Current balances: {aiPackageCredits

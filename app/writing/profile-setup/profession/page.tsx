@@ -15,7 +15,7 @@ const PROFESSIONS: Array<{ id: WritingProfession; label: string; description: st
   { id: 'medicine', label: 'Medicine', description: 'GPs, hospital doctors, specialists.' },
   { id: 'pharmacy', label: 'Pharmacy', description: 'Community + hospital pharmacy.' },
   { id: 'nursing', label: 'Nursing', description: 'Acute, community, paediatric nursing.' },
-  { id: 'other', label: 'Other allied health', description: 'Dentistry, OT, physio, dietetics, etc.' },
+  { id: 'other', label: 'Modified Allied Health Profession', description: 'Dentistry, OT, physio, dietetics, etc.' },
 ];
 
 export default function ProfileSetupProfessionPage() {

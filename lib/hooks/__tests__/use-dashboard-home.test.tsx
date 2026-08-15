@@ -157,11 +157,34 @@ describe('useDashboardHome', () => {
     const { result } = renderHook(() => useDashboardHome(), { wrapper });
 
     await waitFor(() => {
-      expect(result.current.status).toBe('partial');
-    }, { timeout: 2_500 });
+      expect(result.current.status).toBe('success');
+      expect(result.current.error).toContain('Dashboard Highlights: summary temporarily unavailable');
+    }, { timeout: 4_000 });
 
-    expect(result.current.error).toContain('Dashboard Highlights: summary temporarily unavailable');
+    expect(result.current.retryLabel).toBe('Retry dashboard highlights');
+    expect(result.current.supportRef).toMatch(/^DASH-/);
     expect(result.current.data.tasks).toHaveLength(1);
+  });
+
+  it('rewrites generic backend copy into an actionable dashboard message', async () => {
+    mockFetchStudyPlan.mockResolvedValue([]);
+    mockFetchReadiness.mockResolvedValue({ subTests: [], blockers: [] });
+    mockFetchUserProfile.mockResolvedValue({ id: 'user-1' });
+    mockFetchDashboardHome.mockRejectedValue(
+      new MockApiError(500, 'server_error', 'Something went wrong. Please try again later.', true),
+    );
+    mockFetchEngagement.mockResolvedValue({ weeklyActivity: [] });
+
+    const wrapper = createWrapper(() => createAuthValue(), createQueryClient());
+    const { result } = renderHook(() => useDashboardHome(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.error).toContain('Dashboard Highlights');
+    }, { timeout: 4_000 });
+
+    expect(result.current.error).not.toMatch(/something went wrong/i);
+    expect(result.current.retryLabel).toBe('Retry dashboard highlights');
+    expect(result.current.status).toBe('success');
   });
 
   it('reuses fresh dashboard data when the hook remounts', async () => {

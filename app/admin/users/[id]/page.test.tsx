@@ -169,8 +169,8 @@ describe('UserDetailPage profile catalog fields', () => {
   it('does not submit unchanged catalog fields after normalizing labels to ids', async () => {
     const user = userEvent.setup();
     mockGetAdminUserDetailData.mockResolvedValue(buildUser({
-      profession: 'Other Allied health profession',
-      professionId: 'Other Allied health profession',
+      profession: 'Modified Allied Health Profession',
+      professionId: 'Modified Allied Health Profession',
       examTypeId: 'OET',
     }));
     mockFetchAdminSignupCatalog.mockResolvedValue({
@@ -179,8 +179,8 @@ describe('UserDetailPage profile catalog fields', () => {
         ...baseCatalog.professions,
         {
           id: 'other-allied-health',
-          label: 'Other Allied health profession',
-          description: 'Other allied health pathway',
+          label: 'Modified Allied Health Profession',
+          description: 'Modified allied health pathway',
           examTypeIds: ['oet'],
           countryTargets: [],
           sortOrder: 3,

@@ -48,7 +48,7 @@ interface ErrorStateProps {
   className?: string;
 }
 
-export function ErrorState({ title = 'Something went wrong', message = 'An unexpected error occurred. Please try again.', onRetry, className }: ErrorStateProps) {
+export function ErrorState({ title = 'This page could not be loaded', message = 'Unable to complete this action. Please retry or check your connection.', onRetry, className }: ErrorStateProps) {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const motionProps = getSurfaceMotion('section', reducedMotion);
 
@@ -66,7 +66,7 @@ export function ErrorState({ title = 'Something went wrong', message = 'An unexp
       </div>
       <h3 className="mb-1 text-lg font-bold tracking-tight text-navy">{title}</h3>
       <p className="mb-4 max-w-sm text-sm leading-6 text-muted">{message}</p>
-      {onRetry && <Button variant="outline" onClick={onRetry}>Try Again</Button>}
+      {onRetry && <Button variant="outline" onClick={onRetry}>Retry this page</Button>}
     </motion.div>
   );
 }

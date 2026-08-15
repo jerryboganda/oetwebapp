@@ -7,7 +7,7 @@
  */
 export function readErrorMessage(
   err: unknown,
-  fallback = 'Something went wrong. Please try again.',
+  fallback = 'Unable to complete this action. Please retry or check your connection.',
 ): string {
   const detail = (err as { detail?: { message?: string; error?: string } })?.detail;
   if (detail?.message) return detail.message;
