@@ -413,7 +413,7 @@ export function TutorMarkingWorkspace({
           <Card padding="md">
             <div className="mb-2 flex items-center justify-between gap-2">
               <h3 className="flex items-center gap-1.5 text-sm font-bold text-navy">
-                <ClipboardCheck className="h-4 w-4 text-primary" aria-hidden="true" /> Student response
+                <ClipboardCheck className="h-4 w-4 text-primary" aria-hidden="true" /> Candidate response
               </h3>
               <span className="text-xs text-muted">
                 {submission.wordCount} words · {submission.mode}

@@ -244,7 +244,7 @@ export default function PackageDetailPage() {
             {tutorBookAddon && (
               <div className="mt-6">
                 <h3 className="text-sm font-semibold uppercase tracking-wider text-muted">
-                  The Tutor Book (£32, discount for enrolled students)
+                  The Tutor Book (£32, discount for enrolled candidates)
                 </h3>
                 <div className="mt-3 max-w-sm rounded-2xl border border-border bg-surface p-5">
                   <div className="flex items-start justify-between gap-3">

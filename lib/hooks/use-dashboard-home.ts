@@ -65,6 +65,25 @@ function isAuthFailure(error: unknown): error is ApiError {
   return isApiError(error) && (error.status === 401 || error.status === 403 || error.code === 'not_authenticated' || error.code === 'unauthorized' || error.code === 'forbidden');
 }
 
+function describeQueryError(queries: Array<{ name: string; error: unknown }>): string | null {
+  const failed = queries.filter((q) => q.error != null);
+  if (failed.length === 0) return null;
+
+  const failureNames = failed.map((q) => q.name);
+  const primaryError = failed[0]?.error;
+  const rawMessage = toErrorMessage(primaryError);
+
+  if (rawMessage && rawMessage !== 'Something went wrong. Please try again.') {
+    return `${failureNames.join(', ')}: ${rawMessage}`;
+  }
+
+  if (failureNames.length === 1) {
+    return `Could not load your ${failureNames[0].toLowerCase()}. Please check your connection and tap Retry.`;
+  }
+
+  return `Could not load ${failureNames.join(' and ').toLowerCase()}. Please check your connection and tap Retry.`;
+}
+
 export function useDashboardHome() {
   const { track } = useAnalytics();
   const authContext = useContext(AuthContext);
@@ -82,11 +101,30 @@ export function useDashboardHome() {
   const profileQuery = useUserProfileQuery(userId, queryOptions);
   const homeQuery = useDashboardHomeQuery(userId, queryOptions);
   const engagementQuery = useEngagement(userId, queryOptions);
-  const queries = [tasksQuery, readinessQuery, profileQuery, homeQuery, engagementQuery];
+
+  const namedQueries = [
+    { name: 'Study Plan', query: tasksQuery },
+    { name: 'Readiness Metrics', query: readinessQuery },
+    { name: 'Candidate Profile', query: profileQuery },
+    { name: 'Dashboard Highlights', query: homeQuery },
+    { name: 'Practice Streak', query: engagementQuery },
+  ];
+
+  const queries = namedQueries.map((nq) => nq.query);
   const firstError = queries.find((query) => query.error)?.error ?? null;
   const hasAuthFailure = queries.some((query) => isAuthFailure(query.error));
   const handledAuthFailureFor = useRef<string | null>(null);
   const trackedReadinessFor = useRef<string | null>(null);
+
+  // Log specific errors for telemetry and actionable debugging
+  useEffect(() => {
+    const failed = namedQueries.filter((nq) => nq.query.error != null);
+    if (failed.length > 0) {
+      for (const f of failed) {
+        console.error(`[CandidateDashboard] Query '${f.name}' failed for user ${userId}:`, f.query.error);
+      }
+    }
+  }, [namedQueries, userId]);
 
   useEffect(() => {
     if (!hasAuthFailure || !signOut || handledAuthFailureFor.current === userId) return;
@@ -143,9 +181,13 @@ export function useDashboardHome() {
     await Promise.all(queries.map((query) => query.refetch()));
   };
 
+  const actionableErrorMessage = describeQueryError(
+    namedQueries.map((nq) => ({ name: nq.name, error: nq.query.error })),
+  );
+
   return {
     data,
-    error: firstError ? toErrorMessage(firstError) : null,
+    error: actionableErrorMessage ?? (firstError ? toErrorMessage(firstError) : null),
     reload,
     status,
   };

@@ -689,7 +689,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
           </div>
 
           <div className="rounded-2xl border border-border bg-background-light/50 p-4">
-            <p className="mb-1 text-sm font-semibold text-navy">Student subscription modules</p>
+            <p className="mb-1 text-sm font-semibold text-navy">Candidate subscription modules</p>
             <p className="mb-3 text-xs text-muted">Enable or disable these modules for learners on this plan. Disabling hides the module from the learner’s dashboard &amp; navigation and blocks access on the server.</p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {MODULE_TOGGLES.map((module) => (

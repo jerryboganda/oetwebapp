@@ -185,7 +185,7 @@ export default function ReadingPreviewAsStudentPage() {
 
   return (
     <AdminSettingsLayout
-      title="Preview as student"
+      title="Preview as candidate"
       description="Review the learner-safe candidate rendering and the protected marking projection before publishing."
       eyebrow="Reading authoring"
       icon={<Eye className="h-5 w-5" />}
@@ -205,7 +205,7 @@ export default function ReadingPreviewAsStudentPage() {
       <div className="space-y-6">
         {previewMode === 'candidate' ? (
           <InlineAlert variant="info">
-            This candidate preview is built from the same learner-safe projection used in the student player. It never exposes correct answers, explanations, or accepted variants.
+            This candidate preview is built from the same learner-safe projection used in the candidate player. It never exposes correct answers, explanations, or accepted variants.
           </InlineAlert>
         ) : null}
 

@@ -6,6 +6,8 @@ import { CheckCircle2, MessageCircleQuestion, ShoppingCart, Sparkles } from 'luc
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { CatalogEntitlementSummary } from './catalog-sections';
 import { PromoHeroSlider } from './promo-hero-slider';
+import { AppDownloadPromo } from '@/components/marketing/app-download-promo';
+import { CandidateFeedbackVideos } from '@/components/marketing/candidate-feedback-videos';
 import {
   fetchPublicCatalog,
   fetchAiPackages,
@@ -348,6 +350,23 @@ export function SubscriptionsCatalog() {
     return () => window.clearTimeout(timer);
   }, [loading, searchParams]);
 
+  const CATALOG_SHORTCUTS = [
+    { id: 'section-full-recorded', label: 'Full Recorded Courses' },
+    { id: 'section-separate', label: 'Separate Packages' },
+    { id: 'section-ai', label: 'AI Grading Packages' },
+    { id: 'section-separate-ai', label: 'Separate AI Packages' },
+    { id: 'section-listening-recalls', label: 'Listening Recalls' },
+    { id: 'section-tutorbook', label: 'TutorBook of Recalls' },
+    { id: 'section-mock', label: 'Full Mock Exams' },
+  ];
+
+  const handleShortcutClick = (sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
+
   return (
     <div className="space-y-8">
       <LearnerPageHero
@@ -362,6 +381,26 @@ export function SubscriptionsCatalog() {
 
       {entitlement ? <CatalogEntitlementSummary snapshot={entitlement} /> : null}
 
+      {/* Horizontally scrollable mobile shortcut buttons */}
+      <nav
+        aria-label="Catalogue quick jump navigation"
+        className="sticky top-2 z-20 -mx-4 flex items-center gap-2 overflow-x-auto rounded-2xl border border-border/90 bg-surface/95 px-4 py-2.5 shadow-sm backdrop-blur [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:px-3 sm:py-2"
+      >
+        <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-muted">
+          Quick jump:
+        </span>
+        {CATALOG_SHORTCUTS.map((shortcut) => (
+          <button
+            key={shortcut.id}
+            type="button"
+            onClick={() => handleShortcutClick(shortcut.id)}
+            className="shrink-0 rounded-full border border-border bg-background-light px-3.5 py-1 text-xs font-semibold text-navy transition hover:border-primary/50 hover:bg-primary/10 hover:text-primary active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            {shortcut.label}
+          </button>
+        ))}
+      </nav>
+
       {error ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center text-muted">{error}</div>
       ) : loading ? (
@@ -371,64 +410,74 @@ export function SubscriptionsCatalog() {
           ))}
         </div>
       ) : (
-        WEBSITE_SECTIONS.map((section) => {
-          const packages = packagesBySection.get(section.key) ?? [];
-          if (packages.length === 0) return null;
-          return (
-            <Fragment key={section.key}>
-              {section.key === firstSeparateAiSectionKey ? (
-                <div id="section-separate-ai" className="border-t border-border pt-8">
-                  <h2 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
-                    {SEPARATE_AI_PACKAGES_GROUP.title}
-                  </h2>
-                  <p className="mt-1 text-[13px] text-muted sm:text-sm">
-                    {SEPARATE_AI_PACKAGES_GROUP.description}
-                  </p>
-                </div>
-              ) : null}
-            <section id={`section-${section.key}`} className="space-y-4">
-              <LearnerSurfaceSectionHeader
-                title={section.title}
-                description={section.description}
-              />
+        <>
+          {WEBSITE_SECTIONS.map((section) => {
+            const packages = packagesBySection.get(section.key) ?? [];
+            if (packages.length === 0) return null;
+            return (
+              <Fragment key={section.key}>
+                {section.key === firstSeparateAiSectionKey ? (
+                  <div id="section-separate-ai" className="scroll-mt-16 border-t border-border pt-8">
+                    <h2 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">
+                      {SEPARATE_AI_PACKAGES_GROUP.title}
+                    </h2>
+                    <p className="mt-1 text-[13px] text-muted sm:text-sm">
+                      {SEPARATE_AI_PACKAGES_GROUP.description}
+                    </p>
+                  </div>
+                ) : null}
+              <section id={`section-${section.key}`} className="scroll-mt-16 space-y-4">
+                <LearnerSurfaceSectionHeader
+                  title={section.title}
+                  description={section.description}
+                />
 
-              {section.key === 'full-recorded' && professions.length > 1 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {professions.map((profession) => {
-                    const active = profession === activeProfession;
-                    return (
-                      <button
-                        key={profession}
-                        type="button"
-                        onClick={() => setActiveProfession(profession)}
-                        aria-pressed={active}
-                        className={cn(
-                          'rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors',
-                          active ? 'bg-primary text-white' : 'border border-border bg-surface text-muted hover:text-navy',
-                        )}
-                      >
-                        {PROFESSION_LABEL[profession] ?? profession}
-                      </button>
-                    );
-                  })}
-                </div>
-              ) : null}
+                {section.key === 'full-recorded' && professions.length > 1 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {professions.map((profession) => {
+                      const active = profession === activeProfession;
+                      return (
+                        <button
+                          key={profession}
+                          type="button"
+                          onClick={() => setActiveProfession(profession)}
+                          aria-pressed={active}
+                          className={cn(
+                            'rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors',
+                            active ? 'bg-primary text-white' : 'border border-border bg-surface text-muted hover:text-navy',
+                          )}
+                        >
+                          {PROFESSION_LABEL[profession] ?? profession}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
 
-              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-                {packages.map((pkg) => (
-                  <SubscriptionPackageCard
-                    key={pkg.code}
-                    pkg={pkg}
-                    live={priceMap.get(pkg.code)!}
-                    owned={canonicalOwnedPlanCode != null && canonicalOwnedPlanCode === pkg.code}
-                    highlighted={highlightCode === pkg.code}
-                  />
-                ))}
-              </div>
-            </section>
-            </Fragment>
-          );
-        })
+                <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                  {packages.map((pkg) => (
+                    <SubscriptionPackageCard
+                      key={pkg.code}
+                      pkg={pkg}
+                      live={priceMap.get(pkg.code)!}
+                      owned={canonicalOwnedPlanCode != null && canonicalOwnedPlanCode === pkg.code}
+                      highlighted={highlightCode === pkg.code}
+                    />
+                  ))}
+                </div>
+              </section>
+              </Fragment>
+            );
+          })}
+
+          {/* Official Candidate Apps Download Section */}
+          <div className="pt-4">
+            <AppDownloadPromo variant="card" />
+          </div>
+
+          {/* YouTube Candidate Feedback Videos & Social Proof */}
+          <CandidateFeedbackVideos className="pt-4" />
+        </>
       )}
     </div>
   );

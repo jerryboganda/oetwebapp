@@ -18,7 +18,7 @@ export function ReadingCohortTable({ students, className }: ReadingCohortTablePr
   if (students.length === 0) {
     return (
       <p className="rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
-        No students selected.
+        No candidates selected.
       </p>
     );
   }
@@ -26,10 +26,10 @@ export function ReadingCohortTable({ students, className }: ReadingCohortTablePr
   return (
     <div className={cn('overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700', className)}>
       <table className="w-full border-collapse text-sm">
-        <caption className="sr-only">Per-student reading results and assignment completion</caption>
+        <caption className="sr-only">Per-candidate reading results and assignment completion</caption>
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
-            <th scope="col" className="px-4 py-2.5">Student</th>
+            <th scope="col" className="px-4 py-2.5">Candidate</th>
             <th scope="col" className="px-4 py-2.5">Status</th>
             <th scope="col" className="px-4 py-2.5 text-right">Raw</th>
             <th scope="col" className="px-4 py-2.5 text-right">Scaled</th>

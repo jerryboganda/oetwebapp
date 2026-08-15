@@ -164,7 +164,7 @@ export default function GetAppPage() {
 
         <p className="mt-8 text-center text-xs leading-5 text-muted">
           Why app-only videos? Our video lessons are original teaching material. Streaming them
-          exclusively inside the apps keeps the content secure for paying students and keeps
+          exclusively inside the apps keeps the content secure for paying candidates and keeps
           prices fair for everyone.
         </p>
       </div>

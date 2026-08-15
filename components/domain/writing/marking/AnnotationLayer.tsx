@@ -294,7 +294,7 @@ export function AnnotationLayer({
           ref={containerRef}
           id="writing-response-content"
           role="article"
-          aria-label="Student response. Select text to add an annotation."
+          aria-label="Candidate response. Select text to add an annotation."
           onMouseUp={captureSelection}
           className="whitespace-pre-wrap rounded-xl border border-border bg-background-light p-4 font-serif text-[15px] leading-relaxed text-navy selection:bg-primary/20"
         >
