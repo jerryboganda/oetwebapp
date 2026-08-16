@@ -36,12 +36,13 @@ describe('video wizard config', () => {
     expect(unseedVideoValue('Real title')).toBe('Real title');
   });
 
-  it('offers the four subtests plus general', () => {
+  it('offers the four subtests plus Basic English Course and general', () => {
     expect(VIDEO_SUBTEST_OPTIONS.map((o) => o.value)).toEqual([
       'listening',
       'reading',
       'writing',
       'speaking',
+      'basic-english',
       'general',
     ]);
   });

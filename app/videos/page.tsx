@@ -3,20 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
-  BookOpen,
   BookOpenCheck,
   ChevronRight,
   Clock,
   FolderClosed,
-  Headphones,
-  Mic,
-  PenLine,
   PlayCircle,
   RotateCcw,
   Search,
   Video,
 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,7 +22,12 @@ import { fetchVideoLibraryHome, toggleVideoBookmark } from '@/lib/api/videos';
 import { analytics } from '@/lib/analytics';
 import { VideoCard, videoHasProgress } from '@/components/videos/video-card';
 import { AppDownloadPromo } from '@/components/marketing/app-download-promo';
-import type { VideoLibraryCategory, VideoLibraryHome, VideoSummary } from '@/lib/types/videos';
+import type { VideoLibraryHome, VideoSummary } from '@/lib/types/videos';
+import {
+  groupVideoCategoriesByModule,
+  subTitleOf,
+  type VideoModuleTheme,
+} from '@/lib/videos/video-library-modules';
 
 type LibraryView = 'browse' | 'continue' | 'saved';
 type LanguageKey = 'all' | 'en' | 'ar';
@@ -38,68 +38,7 @@ const LANGUAGE_TABS: Array<[LanguageKey, string]> = [
   ['ar', 'Arabic'],
 ];
 
-// The learner opens the module as four subtest cards (Listening · Reading · Writing ·
-// Speaking). Each card drills into its collections (the "Module / Sub / …" shelves),
-// and a collection drills into its videos. Order + accent theming per module below.
-type ModuleTheme = {
-  key: string;
-  label: string;
-  icon: LucideIcon;
-  iconWrap: string;   // icon tile bg + text
-  gradient: string;   // card background wash
-  hoverBorder: string;
-  accentText: string; // arrow / hover accent
-};
-
-const MODULES: ModuleTheme[] = [
-  {
-    key: 'listening',
-    label: 'Listening',
-    icon: Headphones,
-    iconWrap: 'bg-sky-100 text-sky-600 dark:bg-sky-900/50 dark:text-sky-300',
-    gradient: 'from-sky-50/80 to-surface dark:from-sky-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-sky-300 dark:hover:border-sky-700',
-    accentText: 'text-sky-600 dark:text-sky-300',
-  },
-  {
-    key: 'reading',
-    label: 'Reading',
-    icon: BookOpen,
-    iconWrap: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-300',
-    gradient: 'from-emerald-50/80 to-surface dark:from-emerald-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-emerald-300 dark:hover:border-emerald-700',
-    accentText: 'text-emerald-600 dark:text-emerald-300',
-  },
-  {
-    key: 'writing',
-    label: 'Writing',
-    icon: PenLine,
-    iconWrap: 'bg-violet-100 text-violet-600 dark:bg-violet-900/50 dark:text-violet-300',
-    gradient: 'from-violet-50/80 to-surface dark:from-violet-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-violet-300 dark:hover:border-violet-700',
-    accentText: 'text-violet-600 dark:text-violet-300',
-  },
-  {
-    key: 'speaking',
-    label: 'Speaking',
-    icon: Mic,
-    iconWrap: 'bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-300',
-    gradient: 'from-rose-50/80 to-surface dark:from-rose-950/30 dark:to-surface',
-    hoverBorder: 'hover:border-rose-300 dark:hover:border-rose-700',
-    accentText: 'text-rose-600 dark:text-rose-300',
-  },
-];
-
-const MODULE_BY_KEY = new Map(MODULES.map((m) => [m.key, m]));
-
-function moduleKeyOf(title: string): string {
-  return (title.split('/')[0] ?? '').trim().toLowerCase();
-}
-
-function subTitleOf(title: string): string {
-  const parts = title.split('/').map((part) => part.trim()).filter(Boolean);
-  return parts.slice(1).join(' / ') || 'General';
-}
+type ModuleTheme = VideoModuleTheme;
 
 function flattenVideos(home: VideoLibraryHome): VideoSummary[] {
   const byId = new Map<string, VideoSummary>();
@@ -201,23 +140,9 @@ export default function VideoLibraryPage() {
   // Module → its collections (language-scoped, non-empty), grouped for the drill-down.
   const modules = useMemo(() => {
     if (!home) return [];
-    const byModule = new Map<string, VideoLibraryCategory[]>();
-    for (const category of home.categories) {
-      const videos = language === 'all' ? category.videos : category.videos.filter(matchesLanguage);
-      if (videos.length === 0) continue;
-      const key = moduleKeyOf(category.title);
-      const scoped = { ...category, videos };
-      const bucket = byModule.get(key);
-      if (bucket) bucket.push(scoped);
-      else byModule.set(key, [scoped]);
-    }
-    return MODULES.map((meta) => {
-      const categories = (byModule.get(meta.key) ?? []).sort((a, b) =>
-        subTitleOf(a.title).localeCompare(subTitleOf(b.title)),
-      );
-      const videoCount = categories.reduce((sum, c) => sum + c.videos.length, 0);
-      return { meta, categories, videoCount };
-    }).filter((m) => m.videoCount > 0);
+    return groupVideoCategoriesByModule(home.categories, (category) =>
+      language === 'all' ? category.videos : category.videos.filter(matchesLanguage),
+    );
   }, [home, language, matchesLanguage]);
 
   const activeModule = moduleKey ? modules.find((m) => m.meta.key === moduleKey) ?? null : null;
@@ -358,7 +283,13 @@ export default function VideoLibraryPage() {
             onModule={() => setCategoryId(null)}
           />
           {activeCategory.videos.length === 0
-            ? emptyCard('No videos in this collection.', 'Try another language or collection.', goToRoot)
+            ? emptyCard(
+                activeModule.meta.key === 'basic-english'
+                  ? 'Basic English Course videos are being prepared.'
+                  : 'No videos in this collection.',
+                'Try another language or collection.',
+                goToRoot,
+              )
             : grid([...activeCategory.videos].sort(newestFirst))}
         </section>
       );
@@ -382,6 +313,13 @@ export default function VideoLibraryPage() {
               </p>
             </div>
           </div>
+          {activeModule.categories.length === 0
+            ? emptyCard(
+                'Basic English Course videos are being prepared.',
+                'Arabic foundation lessons for registered candidates will appear here as soon as they are published.',
+                goToRoot,
+              )
+            : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {activeModule.categories.map((category, index) => (
               <MotionItem key={category.id} delayIndex={index}>
@@ -409,17 +347,18 @@ export default function VideoLibraryPage() {
               </MotionItem>
             ))}
           </div>
+            )}
         </section>
       );
     }
 
-    // ── Drill-down: the four subtest cards (level 1 — landing) ──────────────
+    // ── Drill-down: the four subtest cards plus Basic English Course ────────
     return (
       <section className="space-y-5">
         <LearnerSurfaceSectionHeader
-          eyebrow="Browse by subtest"
-          title="Choose a subtest to start"
-          description="Open a subtest to see its video collections, then pick a collection to watch."
+          eyebrow="Browse by category"
+          title="Choose a course area to start"
+          description="Open Listening, Reading, Writing, Speaking, or the Basic English Course to see its video collections."
           className="mb-1"
         />
         {modules.length === 0 ? (

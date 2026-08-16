@@ -61,7 +61,7 @@ export function CourseVideosMap({ onAdvanced }: { onAdvanced: () => void }) {
       {error ? <EmptyState icon={<BookOpen className="h-6 w-6" />} title="Course map unavailable" description={error} /> : null}
       {data ? <div className="space-y-5">
         {data.unmapped.length > 0 ? <div role="alert" className="rounded-admin border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">{data.unmapped.length} canonical video{data.unmapped.length === 1 ? '' : 's'} need language/subtest alignment before they can appear in the course map.</div> : null}
-        <div role="list" aria-label="Course video professions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <div role="list" aria-label="Course video professions" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-7">
           {data.professions.map((profession) => (
             <div key={profession.id} role="listitem">
               <button
@@ -76,7 +76,40 @@ export function CourseVideosMap({ onAdvanced }: { onAdvanced: () => void }) {
               </button>
             </div>
           ))}
+          <div role="listitem">
+            <button
+              type="button"
+              aria-label="Open Basic English Course"
+              onClick={() => setSelectedId('general_english')}
+              className={`h-full w-full rounded-admin border p-4 text-left transition ${selectedId === 'general_english' ? 'border-admin-primary bg-admin-primary-tint ring-1 ring-admin-primary' : 'border-admin-border bg-admin-bg-surface hover:border-admin-primary'}`}
+            >
+              <BookOpen className="mb-3 h-5 w-5 text-admin-primary" />
+              <span className="block text-sm font-bold text-admin-fg-strong">Basic English Course</span>
+              <span className="mt-1 block text-xs text-admin-fg-muted">{data.generalEnglish?.count ?? 0} videos · registered candidates</span>
+            </button>
+          </div>
         </div>
+
+        {selectedId === 'general_english' ? (
+          <Card>
+            <CardContent className="space-y-4 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Languages className="h-4 w-4 text-admin-primary" />
+                  <h2 className="font-bold text-admin-fg-strong">Basic English Course</h2>
+                </div>
+                <Link
+                  href="/admin/content/videos/new?language=ar&subtest=basic-english"
+                  className={buttonVariants({ variant: 'outline', size: 'sm' })}
+                >
+                  New
+                </Link>
+              </div>
+              <p className="text-xs text-admin-fg-muted">Arabic foundation videos for registered candidates. Shared across every profession.</p>
+              <VideoRows items={data.generalEnglish?.items ?? []} />
+            </CardContent>
+          </Card>
+        ) : null}
 
         {selected ? <div className="grid gap-4 xl:grid-cols-2">
           {selected.languages.map((language) => <Card key={language.code}>

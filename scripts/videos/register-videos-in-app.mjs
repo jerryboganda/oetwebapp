@@ -102,6 +102,7 @@ async function importAndPatch(plan) {
         targetProfessionIds: v.targetProfessionIds,
         categoryIds: catId ? [catId] : [],
         tagsCsv: v.tagsCsv,
+        ...(v.language ? { language: v.language } : {}),
       };
       const pr = await api('PATCH', `/videos/${videoId}`, patch);
       if (pr.__dry || pr.ok) { reg.videos[v.bunnyVideoId] = { videoId, step: 'patched' }; await saveReg(); done++; if (!DRY) console.log(`  ✓ ${v.title}  (${done}/${ready.length})`); }

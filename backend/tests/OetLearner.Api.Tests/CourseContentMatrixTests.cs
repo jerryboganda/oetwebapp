@@ -54,6 +54,21 @@ public sealed class CourseContentMatrixTests
     }
 
     [Fact]
+    public void Basic_English_Course_Videos_Are_Shared_Across_Professions()
+    {
+        Assert.True(CourseContentMatrix.IsBasicEnglishSubtest("basic-english"));
+        Assert.True(CourseContentMatrix.IsBasicEnglishSubtest("general"));
+        Assert.True(CourseContentMatrix.TryValidateVideo("ar", "basic-english", [], out var okMessage));
+        Assert.Equal(string.Empty, okMessage);
+        Assert.False(CourseContentMatrix.TryValidateVideo("ar", "basic-english", ["medicine"], out var targeted));
+        Assert.Contains("all professions", targeted, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal("Basic English Course", CourseContentMatrix.VideoSourceLabel("ar", "basic-english", []));
+        Assert.Empty(CourseContentMatrix.ExpectedVideoTargets("ar", "basic-english", "medicine"));
+        foreach (var profession in CourseContentMatrix.Professions)
+            Assert.True(CourseContentMatrix.VideoAppearsFor(profession.Id, "ar", "basic-english", []));
+    }
+
+    [Fact]
     public void Structured_Material_Scope_Takes_Priority_Over_Legacy_Folder_Names()
     {
         var folder = new MaterialFolder

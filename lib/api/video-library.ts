@@ -160,10 +160,18 @@ export interface VideoCourseMapItem {
   courseFolder: 'sessions' | 'workshops' | null;
 }
 export interface VideoCourseMapSection { subtestCode: string; available: boolean; count: number; items: VideoCourseMapItem[] }
+export interface VideoCourseMapGeneralEnglish {
+  id: string;
+  label: string;
+  count: number;
+  items: VideoCourseMapItem[];
+}
+
 export interface VideoCourseMap {
   canonicalCounts: { totalVideos: number; activeVideos: number; archivedVideos: number; bunnyVideoIds: number };
   unmapped: { canonicalVideoId: string; title: string }[];
   professions: { id: string; label: string; languages: { code: 'en' | 'ar'; label: string; sections: VideoCourseMapSection[] }[] }[];
+  generalEnglish?: VideoCourseMapGeneralEnglish;
 }
 
 /** Presigned Bunny TUS authorization from the backend. */
