@@ -96,6 +96,9 @@ export function skinForSubtest(subtestCode: string | null | undefined): SectionS
   if (code === 'listening' || code === 'reading' || code === 'writing' || code === 'speaking') {
     return SECTION_SKINS[code];
   }
+  if (code === 'basic-english' || code === 'general' || code === 'general-english' || code === 'general_english') {
+    return SECTION_SKINS['general-english'];
+  }
   return SECTION_SKINS.other;
 }
 

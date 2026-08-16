@@ -174,6 +174,22 @@ public static class VideoLibraryAdminEndpoints
                 Targets = VideoLibraryAdminService.ParseProfessionIds(v.ProfessionIdsJson),
             }).ToList();
 
+            var basicEnglishItems = parsed
+                .Where(row => CourseContentMatrix.IsBasicEnglishSubtest(row.Video.SubtestCode)
+                    && CourseContentMatrix.TryValidateVideo(row.Video.Language, row.Video.SubtestCode, row.Targets, out _))
+                .Select(row => new
+                {
+                    canonicalVideoId = row.Video.Id,
+                    row.Video.Title,
+                    subtestCode = CourseContentMatrix.BasicEnglishSubtest,
+                    language = string.Equals(row.Video.Language, "en", StringComparison.OrdinalIgnoreCase) ? "en" : "ar",
+                    sourceLabel = CourseContentMatrix.VideoSourceLabel(row.Video.Language, row.Video.SubtestCode, row.Targets),
+                    status = row.Video.Status.ToString(),
+                    encodeStatus = VideoLibraryAdminService.EncodeStatusLabel(row.Video.EncodeStatus),
+                    bunnyVideoId = row.Video.BunnyVideoId,
+                    courseFolder = (string?)null,
+                }).ToList();
+
             return Results.Ok(new
             {
                 canonicalCounts = new
@@ -186,6 +202,13 @@ public static class VideoLibraryAdminEndpoints
                 unmapped = parsed.Where(row => !CourseContentMatrix.TryValidateVideo(
                         row.Video.Language, row.Video.SubtestCode, row.Targets, out _))
                     .Select(row => new { canonicalVideoId = row.Video.Id, row.Video.Title }),
+                generalEnglish = new
+                {
+                    id = "general_english",
+                    label = "Basic English Course",
+                    count = basicEnglishItems.Count,
+                    items = basicEnglishItems,
+                },
                 professions = CourseContentMatrix.Professions.Select(profession => new
                 {
                     profession.Id,

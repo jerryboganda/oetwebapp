@@ -2,7 +2,8 @@
 // Bulk-upload OET lecture videos to Bunny Stream, mirroring the on-disk folder
 // hierarchy as flat, path-named collections (Bunny Stream collections cannot nest).
 //
-// - Videos only (.mp4 / .mkv). Skips the Materials and "Basic English Course" trees.
+// - Videos only (.mp4 / .mkv). Skips the Materials tree. Basic English Course
+//   videos are included so they can appear as their own learner Video Library box.
 // - Resumable: per-file state persisted to state.json; re-running skips completed files
 //   and re-PUTs any half-finished uploads to the SAME Bunny video guid (no orphans).
 // - Emits manifest.json (one row per video incl. parsed module/profession/language/
@@ -40,7 +41,9 @@ const MAX_ATTEMPTS = Number(process.env.VIDEO_MAX_ATTEMPTS || 5);
 const IDLE_TIMEOUT_MS = Number(process.env.VIDEO_IDLE_TIMEOUT_MS || 120_000);
 
 const VIDEO_EXTS = new Set(['.mp4', '.mkv']);
-const EXCLUDE_RE = /(\\|\/)Materials(\\|\/)|Basic English Course/i;
+const EXCLUDE_RE = /(\\|\/)Materials(\\|\/)/i;
+const BASIC_ENGLISH_RE = /Basic English Course|Basic English|General English/i;
+const ONLY_BASIC_ENGLISH = process.argv.includes('--only-basic-english');
 
 const DRY_RUN = process.argv.includes('--dry-run') || process.argv.includes('--plan-only');
 
@@ -212,6 +215,7 @@ async function buildPlan() {
   files.sort((a, b) => a.localeCompare(b));
   const rows = [];
   for (const full of files) {
+    if (ONLY_BASIC_ENGLISH && !BASIC_ENGLISH_RE.test(full)) continue;
     const rel = full.substring(SRC_ROOT.length).replace(/^[\\/]+/, '');
     const parts = rel.split(/[\\/]+/);
     const fileName = parts[parts.length - 1];
@@ -248,7 +252,7 @@ async function main() {
   console.log(`\n== OET video -> Bunny Stream uploader ==`);
   console.log(`Source : ${SRC_ROOT}`);
   console.log(`Library: ${LIBRARY_ID}`);
-  console.log(`Mode   : ${DRY_RUN ? 'DRY-RUN (no network writes)' : 'LIVE UPLOAD'}\n`);
+  console.log(`Mode   : ${DRY_RUN ? 'DRY-RUN (no network writes)' : 'LIVE UPLOAD'}${ONLY_BASIC_ENGLISH ? ' [Basic English Course only]' : ''}\n`);
 
   await loadState();
   let rows = await buildPlan();

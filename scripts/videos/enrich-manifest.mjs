@@ -17,7 +17,18 @@ const STATE_DIR = process.env.VIDEO_STATE_DIR || path.join(process.cwd(), 'scrip
 const STATE_PATH = path.join(STATE_DIR, 'state.json');
 const OUT_PATH = path.join(STATE_DIR, 'registration-plan.json');
 
-const MODULE_ORDER = { listening: 0, reading: 1, speaking: 2, writing: 3 };
+const MODULE_ORDER = { listening: 0, reading: 1, speaking: 2, writing: 3, 'basic english course': 4, 'basic-english': 4, 'basic english': 4, 'general english': 4 };
+
+function isBasicEnglish(segments, moduleName) {
+  const haystack = [moduleName, ...(segments || [])].join(' / ');
+  return /basic\s*english|general\s*english/i.test(haystack);
+}
+
+function moduleOrderOf(title) {
+  const first = (title.split(' / ')[0] || '').toLowerCase();
+  if (isBasicEnglish([first], first)) return MODULE_ORDER['basic-english'];
+  return MODULE_ORDER[first] ?? 99;
+}
 const PROFESSIONS = ['medicine', 'nursing', 'pharmacy', 'physiotherapy', 'radiography', 'dentistry'];
 
 // Default: every instructional video is premium (the course paywall). Flip specific
@@ -55,14 +66,14 @@ async function main() {
   // Category list = distinct collectionName, ordered by module block then name.
   const catNames = [...new Set(videos.map((v) => v.collectionName))];
   catNames.sort((a, b) => {
-    const ma = MODULE_ORDER[(a.split(' / ')[0] || '').toLowerCase()] ?? 99;
-    const mb = MODULE_ORDER[(b.split(' / ')[0] || '').toLowerCase()] ?? 99;
+    const ma = moduleOrderOf(a);
+    const mb = moduleOrderOf(b);
     return ma - mb || a.localeCompare(b);
   });
   const categories = catNames.map((title, i) => ({
     title: title.length > 128 ? title.slice(0, 125) + '…' : title,
     fullTitle: title,
-    moduleOrder: MODULE_ORDER[(title.split(' / ')[0] || '').toLowerCase()] ?? 99,
+    moduleOrder: moduleOrderOf(title),
     sortIndex: i,
   }));
 
@@ -72,18 +83,20 @@ async function main() {
     categories,
     videos: videos.map((v) => {
       const segs = v.pathSegments || v.collectionName.split(' / ');
-      const prof = detectProfession(segs);
+      const basicEnglish = isBasicEnglish(segs, v.module);
+      const prof = basicEnglish ? { profession: null, confidence: 'none' } : detectProfession(segs);
       return {
         relPath: v.relPath,
         bunnyVideoId: v.bunnyVideoId || null,
         collectionGuid: v.collectionGuid || null,
         uploadStatus: v.status,
         title: v.title,
-        subtestCode: (v.module || segs[0] || '').toLowerCase() || null,
-        targetProfessionIds: prof.profession ? [prof.profession] : [],
+        subtestCode: basicEnglish ? 'basic-english' : ((v.module || segs[0] || '').toLowerCase() || null),
+        language: basicEnglish ? 'ar' : (v.language === 'English' ? 'en' : v.language === 'Arabic' ? 'ar' : null),
+        targetProfessionIds: basicEnglish ? [] : (prof.profession ? [prof.profession] : []),
         professionConfidence: prof.confidence,
         accessTier: DEFAULT_ACCESS_TIER,
-        tagsCsv: buildTags(v),
+        tagsCsv: basicEnglish ? 'module:basic-english,lang:arabic' : buildTags(v),
         categoryTitle: v.collectionName.length > 128 ? v.collectionName.slice(0, 125) + '…' : v.collectionName,
       };
     }),

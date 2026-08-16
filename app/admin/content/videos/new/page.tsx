@@ -30,13 +30,19 @@ export default function NewVideoPage() {
       const query = new URLSearchParams(window.location.search);
       const profession = query.get('profession') as CourseProfessionId | null;
       const language = query.get('language');
-      const subtest = query.get('subtest') as CourseSubtest | null;
+      const subtest = query.get('subtest');
       const courseFolder = query.get('folder');
-      if (profession && language && subtest
+      if (language && (language === 'en' || language === 'ar') && subtest === 'basic-english') {
+        await adminPatchVideo(created.videoId, {
+          language,
+          subtestCode: 'basic-english',
+          targetProfessionIds: [],
+        });
+      } else if (profession && language && subtest
         && COURSE_PROFESSIONS.some((p) => p.id === profession)
         && (language === 'en' || language === 'ar')
-        && COURSE_SUBTESTS.includes(subtest)) {
-        const targets = expectedVideoTargets(language, subtest, profession);
+        && COURSE_SUBTESTS.includes(subtest as CourseSubtest)) {
+        const targets = expectedVideoTargets(language, subtest as CourseSubtest, profession);
         if (targets) {
           await adminPatchVideo(created.videoId, {
             language,

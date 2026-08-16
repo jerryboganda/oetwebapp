@@ -21,10 +21,18 @@ public static class CourseContentMatrix
     ];
 
     public static readonly IReadOnlyList<string> Subtests = ["listening", "reading", "writing", "speaking"];
+    public const string BasicEnglishSubtest = "basic-english";
+    private static readonly HashSet<string> BasicEnglishSubtestAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        BasicEnglishSubtest, "general", "general-english", "general_english",
+    };
     private static readonly HashSet<string> GeneralEnglishFolderNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "Basic English Course", "Basic English", "General English", "Academic / General English",
     };
+
+    public static bool IsBasicEnglishSubtest(string? value) =>
+        BasicEnglishSubtestAliases.Contains(value?.Trim() ?? string.Empty);
 
     public static bool IsProfession(string? value) =>
         Professions.Any(p => string.Equals(p.Id, value?.Trim(), StringComparison.OrdinalIgnoreCase));
@@ -35,7 +43,7 @@ public static class CourseContentMatrix
         subtest = subtest.Trim().ToLowerInvariant();
         sourceProfession = sourceProfession.Trim().ToLowerInvariant();
 
-        if (language == "en" || subtest is "listening" or "reading") return [];
+        if (IsBasicEnglishSubtest(subtest) || language == "en" || subtest is "listening" or "reading") return [];
         if (language != "ar" || subtest is not ("writing" or "speaking"))
             throw new ArgumentException("Unsupported course-video language or subtest.");
 
@@ -57,9 +65,23 @@ public static class CourseContentMatrix
             return false;
         }
 
-        if (lang is not ("en" or "ar") || !Subtests.Contains(section ?? string.Empty))
+        if (lang is not ("en" or "ar"))
         {
-            message = "Course videos require English or Arabic and a Listening, Reading, Writing, or Speaking subtest.";
+            message = "Course videos require English or Arabic and a Listening, Reading, Writing, Speaking, or Basic English Course subtest.";
+            return false;
+        }
+
+        if (IsBasicEnglishSubtest(section))
+        {
+            message = normalized.Length == 0
+                ? string.Empty
+                : "Basic English Course videos are shared and must target all professions.";
+            return normalized.Length == 0;
+        }
+
+        if (!Subtests.Contains(section ?? string.Empty))
+        {
+            message = "Course videos require English or Arabic and a Listening, Reading, Writing, Speaking, or Basic English Course subtest.";
             return false;
         }
 
@@ -84,6 +106,7 @@ public static class CourseContentMatrix
 
     public static string VideoSourceLabel(string? language, string? subtest, IReadOnlyCollection<string> targets)
     {
+        if (IsBasicEnglishSubtest(subtest)) return "Basic English Course";
         if (string.Equals(language, "en", StringComparison.OrdinalIgnoreCase)) return "Shared English";
         if (subtest?.Trim().ToLowerInvariant() is "listening" or "reading") return "Shared Arabic";
         var labels = Professions

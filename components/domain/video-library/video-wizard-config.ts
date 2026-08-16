@@ -41,6 +41,7 @@ export const VIDEO_SUBTEST_OPTIONS: { value: string; label: string }[] = [
   { value: 'reading', label: 'Reading' },
   { value: 'writing', label: 'Writing' },
   { value: 'speaking', label: 'Speaking' },
+  { value: 'basic-english', label: 'Basic English Course' },
   { value: 'general', label: 'General' },
 ];
 

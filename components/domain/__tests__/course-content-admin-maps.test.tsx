@@ -26,8 +26,24 @@ const labels = Object.fromEntries(COURSE_PROFESSIONS.map((profession) => [profes
 
 function videoMap(): VideoCourseMap {
   return {
-    canonicalCounts: { totalVideos: 1, activeVideos: 1, archivedVideos: 0, bunnyVideoIds: 1 },
+    canonicalCounts: { totalVideos: 2, activeVideos: 2, archivedVideos: 0, bunnyVideoIds: 2 },
     unmapped: [],
+    generalEnglish: {
+      id: 'general_english',
+      label: 'Basic English Course',
+      count: 1,
+      items: [{
+        canonicalVideoId: 'video-basic-1',
+        title: 'Basic English intro',
+        subtestCode: 'basic-english',
+        language: 'ar',
+        sourceLabel: 'Basic English Course',
+        status: 'Published',
+        encodeStatus: 'ready',
+        bunnyVideoId: 'bunny-basic-1',
+        courseFolder: null,
+      }],
+    },
     professions: COURSE_PROFESSIONS.map((profession) => ({
       id: profession.id,
       label: profession.label,
@@ -90,9 +106,10 @@ describe('profession-first admin course maps', () => {
     render(<CourseVideosMap onAdvanced={vi.fn()} />);
 
     const root = await screen.findByRole('list', { name: 'Course video professions' });
-    expect(within(root).getAllByRole('listitem')).toHaveLength(6);
+    expect(within(root).getAllByRole('listitem')).toHaveLength(7);
     expect(within(root).queryByText('Listening')).not.toBeInTheDocument();
     for (const label of Object.values(labels)) expect(within(root).getByText(label)).toBeInTheDocument();
+    expect(within(root).getByText('Basic English Course')).toBeInTheDocument();
 
     expect(screen.getAllByRole('link', { name: 'New' })[0]).toHaveAttribute(
       'href', '/admin/content/videos/new?profession=medicine&language=en&subtest=listening',
@@ -105,6 +122,22 @@ describe('profession-first admin course maps', () => {
       'href', '/admin/content/videos/new?profession=nursing&language=en&subtest=listening',
     );
     expect(screen.getByRole('link', { name: 'Edit / Move' })).toHaveAttribute('href', '/admin/content/videos/video-shared-1/details');
+  });
+
+  it('opens the Basic English Course video area independently of profession projections', async () => {
+    const user = userEvent.setup();
+    render(<CourseVideosMap onAdvanced={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Open Basic English Course' }));
+    expect(screen.getByText('Arabic foundation videos for registered candidates. Shared across every profession.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New' })).toHaveAttribute(
+      'href',
+      '/admin/content/videos/new?language=ar&subtest=basic-english',
+    );
+    expect(screen.getByRole('link', { name: 'Edit / Move' })).toHaveAttribute(
+      'href',
+      '/admin/content/videos/video-basic-1/details',
+    );
   });
 
   it('renders professions plus General English at the Materials root and edits the same shared canonical file from every projection', async () => {
