@@ -80,12 +80,11 @@ describe('video library modules', () => {
     ]);
   });
 
-  it('still shows the Basic English Course box when no videos have been registered yet', () => {
+  it('hides the Basic English Course box when the learner has no published videos there', () => {
     const modules = groupVideoCategoriesByModule(
       [category('l1', 'Listening / Arabic', 1)],
       (item) => item.videos,
     );
-    expect(modules.map((module) => module.meta.key)).toEqual(['listening', 'basic-english']);
-    expect(modules.at(-1)?.videoCount).toBe(0);
+    expect(modules.map((module) => module.meta.key)).toEqual(['listening']);
   });
 });

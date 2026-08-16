@@ -127,5 +127,16 @@ public sealed class BunnyEncodeStatusWorker(
                 await db.SaveChangesAsync(ct);
             }
         }
+
+        // 3. Import + publish Ready Basic English Course videos still sitting only on Bunny.
+        try
+        {
+            var ingest = scope.ServiceProvider.GetRequiredService<BunnyCollectionAdminService>();
+            await ingest.IngestReadyBasicEnglishAsync("system", ct);
+        }
+        catch (BunnyNotConfiguredException)
+        {
+            // Dormant — nothing to ingest until Bunny is configured.
+        }
     }
 }

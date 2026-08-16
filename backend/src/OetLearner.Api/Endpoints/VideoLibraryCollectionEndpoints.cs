@@ -166,6 +166,24 @@ internal static class VideoLibraryCollectionEndpoints
         })
         .WithAdminWrite("AdminContentWrite");
 
+        admin.MapPost("/collections/{collectionId}/import-ready", async (
+            HttpContext http,
+            string collectionId,
+            BunnyCollectionAdminService service,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                return Results.Ok(await service.ImportReadyFromCollectionAsync(
+                    http.AdminId(), collectionId, ct));
+            }
+            catch (BunnyNotConfiguredException)
+            {
+                return BunnyNotConfigured();
+            }
+        })
+        .WithAdminWrite("AdminContentWrite");
+
         admin.MapPost("/collections/videos/{bunnyVideoId}/bunny-delete", async (
             HttpContext http,
             string bunnyVideoId,

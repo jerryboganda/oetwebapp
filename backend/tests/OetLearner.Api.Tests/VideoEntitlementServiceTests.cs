@@ -37,7 +37,8 @@ public class VideoEntitlementServiceTests
         string entitlementsJson,
         SubscriptionStatus status = SubscriptionStatus.Active,
         DateTimeOffset? expiresAt = null,
-        string? dashboardModulesJson = null)
+        string? dashboardModulesJson = null,
+        bool basicEnglishUnlocked = false)
     {
         var now = DateTimeOffset.UtcNow;
         var planCode = $"plan-{Guid.NewGuid():N}"[..24];
@@ -60,6 +61,7 @@ public class VideoEntitlementServiceTests
             StartedAt = now.AddDays(-1),
             ChangedAt = now,
             ExpiresAt = expiresAt,
+            BasicEnglishUnlocked = basicEnglishUnlocked,
         });
     }
 
@@ -444,4 +446,56 @@ public class VideoEntitlementServiceTests
     [InlineData(null, false)]
     public void GrantsVideoLibrary_CoversAddOnShapes(string? json, bool expected)
         => Assert.Equal(expected, VideoEntitlementService.GrantsVideoLibrary(json));
+
+    [Fact]
+    public async Task BasicEnglishVideo_OetVideoLibraryPlan_IsDenied()
+    {
+        await using var db = CreateDb();
+        SeedSubscription(db, "learner-1", "{}", dashboardModulesJson: """["VideoLibrary"]""");
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: "basic-english"), default);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("plan_does_not_grant_basic_english", result.Reason);
+    }
+
+    [Fact]
+    public async Task BasicEnglishVideo_BasicEnglishCourseSubscription_IsAllowed()
+    {
+        await using var db = CreateDb();
+        SeedSubscription(
+            db,
+            "learner-1",
+            "{}",
+            dashboardModulesJson: """["BasicEnglish","Vocabulary","Grammar","ListeningFoundations","StudyPlan","Booklet","Recalls","MaterialsLibrary","VideoLibrary","Mocks"]""",
+            basicEnglishUnlocked: true);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: "basic-english"), default);
+
+        Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_video_library", result.Reason);
+    }
+
+    [Fact]
+    public async Task OetVideo_ExclusiveBasicEnglishSubscriber_IsDenied()
+    {
+        await using var db = CreateDb();
+        SeedSubscription(
+            db,
+            "learner-1",
+            "{}",
+            dashboardModulesJson: """["BasicEnglish","Vocabulary","Grammar","ListeningFoundations","StudyPlan","Booklet","Recalls","MaterialsLibrary","VideoLibrary","Mocks"]""",
+            basicEnglishUnlocked: true);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+
+        var result = await service.AllowAccessAsync("learner-1", Video(subtestCode: "listening"), default);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("plan_does_not_grant", result.Reason);
+    }
 }

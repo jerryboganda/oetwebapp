@@ -167,6 +167,69 @@ public class VideoLibraryCollectionFlowsTests(BunnyMockedWebApplicationFactory f
     }
 
     [Fact]
+    public async Task ImportFromBunny_BasicEnglishCollection_PublishesSharedArabicCatalog()
+    {
+        await ConfigureBunnyAsync();
+        ResetBunny();
+        factory.Bunny.Collections.Add(new BunnyCollectionInfo(
+            "col-be", "Basic English Course - Arabic", 1, 0, Array.Empty<string>()));
+        factory.Bunny.NextVideoInfo = factory.Bunny.NextVideoInfo with
+        {
+            LengthSeconds = 600,
+            Status = 4,
+        };
+        using var admin = CreateAdminClient();
+
+        var response = await admin.PostAsJsonAsync(
+            "/v1/admin/video-library/collections/videos/bunny-be-1/import",
+            new { title = "1-First Session.mp4", collectionId = "col-be" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var detail = await ReadJsonAsync(response);
+        Assert.Equal("Published", detail.GetProperty("status").GetString());
+        Assert.Equal("basic-english", detail.GetProperty("subtestCode").GetString());
+        Assert.Equal("ar", detail.GetProperty("language").GetString());
+        Assert.Equal(0, detail.GetProperty("targetProfessionIds").GetArrayLength());
+        Assert.Contains(
+            "Basic English Course / Arabic",
+            detail.GetProperty("categoryNames").EnumerateArray().Select(x => x.GetString()));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var row = await db.LibraryVideos.SingleAsync(v => v.BunnyVideoId == "bunny-be-1");
+        Assert.Equal(ContentStatus.Published, row.Status);
+        Assert.Equal("basic-english", row.SubtestCode);
+        Assert.Equal("ar", row.Language);
+    }
+
+    [Fact]
+    public async Task ImportReady_ImportsUnimportedReadyVideosInCollection()
+    {
+        await ConfigureBunnyAsync();
+        ResetBunny();
+        factory.Bunny.Collections.Add(new BunnyCollectionInfo(
+            "col-be-ready", "Basic English Course - Arabic", 2, 0, Array.Empty<string>()));
+        factory.Bunny.CollectionVideos["col-be-ready"] =
+        [
+            MakeItem("bunny-be-ready-1", "5-Fifth Session.mp4"),
+            MakeItem("bunny-be-ready-2", "6-Sixth Session.mp4"),
+        ];
+        factory.Bunny.NextVideoInfo = factory.Bunny.NextVideoInfo with { Status = 4, LengthSeconds = 480 };
+        using var admin = CreateAdminClient();
+
+        var response = await admin.PostAsJsonAsync(
+            "/v1/admin/video-library/collections/col-be-ready/import-ready", new { });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var payload = await ReadJsonAsync(response);
+        Assert.Equal(2, payload.GetProperty("imported").GetInt32());
+        Assert.Equal(2, payload.GetProperty("published").GetInt32());
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(2, await db.LibraryVideos.CountAsync(v =>
+            v.BunnyVideoId == "bunny-be-ready-1" || v.BunnyVideoId == "bunny-be-ready-2"));
+    }
+
+    [Fact]
     public async Task MoveVideo_RecordsMove_AndNullClearsMembership()
     {
         await ConfigureBunnyAsync();

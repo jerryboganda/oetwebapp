@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.VideoLibrary;
@@ -96,7 +97,11 @@ public sealed record VideoAccessContext(
     // Per-USER video allocation scope. Explicit ids remain allow-listed, while videos first
     // published after the initial scope timestamp are automatically included. Null = no
     // per-user restriction (fail-open). Admins bypass it.
-    UserVideoAccessScope? UserVideoAccess = null);
+    UserVideoAccessScope? UserVideoAccess = null,
+    // Basic English Course videos are a separate product. Entitled learners see that box;
+    // exclusive Basic English subscribers do not inherit the OET Listening/Reading/Writing/Speaking pool.
+    bool BasicEnglishEntitled = false,
+    bool ExclusivelyBasicEnglish = false);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
 public sealed record VideoLibraryBundle(bool HasNode, string Tier, IReadOnlyList<string> Subtests)
@@ -139,6 +144,9 @@ public sealed class VideoEntitlementService(
             case "profession_mismatch":
                 throw ApiException.PaymentRequired("content_locked",
                     "This video is for a different profession. It is not part of your package.");
+            case "plan_does_not_grant_basic_english":
+                throw ApiException.PaymentRequired("content_locked",
+                    "This video is part of the Basic English Course. Register for that subscription to watch it.");
             default:
                 throw ApiException.PaymentRequired("content_locked",
                     "Your current plan does not include the Video Library. Upgrade to a plan or add-on that includes it.");
@@ -152,7 +160,8 @@ public sealed class VideoEntitlementService(
             return new VideoAccessContext(
                 IsAdmin: true, Authenticated: true,
                 HasEligibleSubscription: true, Frozen: false, Expired: false,
-                PlanGrantsPremium: true, AddOnGrantsPremium: false, CurrentTier: "admin");
+                PlanGrantsPremium: true, AddOnGrantsPremium: false, CurrentTier: "admin",
+                BasicEnglishEntitled: true);
         }
 
         if (string.IsNullOrWhiteSpace(userId))
@@ -222,6 +231,7 @@ public sealed class VideoEntitlementService(
         if (planGrantsPremium && !planAllSubtests) grantedSubtests.UnionWith(planSubtests);
         if (addOnGrants && !addOn.AllSubtests) grantedSubtests.UnionWith(addOn.Subtests);
 
+        var basicEnglish = MaterialAccessService.ResolveBasicEnglishVideoScope(entitlement);
         return new VideoAccessContext(
             IsAdmin: false, Authenticated: true,
             HasEligibleSubscription: true, Frozen: false, Expired: false,
@@ -234,7 +244,9 @@ public sealed class VideoEntitlementService(
             ProfessionId: entitlement.ProfessionId,
             VideoIncludes: entitlement.ContentOverrides.VideoIncludes,
             VideoExcludes: entitlement.ContentOverrides.VideoExcludes,
-            UserVideoAccess: userVideoAccess);
+            UserVideoAccess: userVideoAccess,
+            BasicEnglishEntitled: basicEnglish.Entitled,
+            ExclusivelyBasicEnglish: basicEnglish.ExclusivelyBasicEnglish);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
@@ -242,6 +254,18 @@ public sealed class VideoEntitlementService(
         if (context.IsAdmin)
         {
             return new VideoEntitlementResult(true, "admin", "admin");
+        }
+
+        if (CourseContentMatrix.IsBasicEnglishVideo(video))
+        {
+            if (!context.BasicEnglishEntitled)
+            {
+                return new VideoEntitlementResult(false, "plan_does_not_grant_basic_english", context.CurrentTier);
+            }
+        }
+        else if (context.ExclusivelyBasicEnglish)
+        {
+            return new VideoEntitlementResult(false, "plan_does_not_grant", context.CurrentTier);
         }
 
         // Per-user allocation: explicit ids remain restricted, while newly published videos are

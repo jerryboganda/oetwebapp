@@ -680,6 +680,15 @@ export function adminImportCollectionVideo(
   );
 }
 
+export function adminImportReadyCollectionVideos(
+  collectionId: string,
+): Promise<{ imported: number; published: number; skipped: number }> {
+  return apiClient.post<{ imported: number; published: number; skipped: number }>(
+    `${BASE}/collections/${encodeURIComponent(collectionId)}/import-ready`,
+    {},
+  );
+}
+
 export function adminBunnyDeleteCollectionVideo(bunnyVideoId: string): Promise<{ deleted: boolean }> {
   return apiClient.post<{ deleted: boolean }>(
     `${BASE}/collections/videos/${encodeURIComponent(bunnyVideoId)}/bunny-delete`,

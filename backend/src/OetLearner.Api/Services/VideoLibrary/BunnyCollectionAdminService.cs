@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.VideoLibrary;
 
@@ -44,6 +45,8 @@ public sealed record AdminCollectionVideoPageDto(
     int Page,
     int ItemsPerPage,
     IReadOnlyList<AdminCollectionVideoDto> Items);
+
+public sealed record AdminCollectionImportReadyResult(int Imported, int Published, int Skipped);
 
 /// <summary>
 /// Admin management of the live Bunny Stream library: browse collections, browse
@@ -168,9 +171,184 @@ public sealed class BunnyCollectionAdminService(
         draft.UpdatedByAdminId = adminId;
         await db.SaveChangesAsync(ct);
 
+        if (await IsBasicEnglishImportAsync(collectionId, title, ct))
+        {
+            await ApplyBasicEnglishCatalogAsync(draft, adminId, ct);
+        }
+
         logger.LogInformation("Imported Bunny video {BunnyVideoId} into catalog as {VideoId} by admin {AdminId}.",
             bunnyVideoId, draft.Id, adminId);
         return await videos.BuildDetailAsync(draft, ct);
+    }
+
+    /// <summary>
+    /// Import every Ready, not-yet-catalogued video in a Bunny collection.
+    /// Basic English Course collections are tagged Arabic / basic-english / shared and published.
+    /// </summary>
+    public async Task<AdminCollectionImportReadyResult> ImportReadyFromCollectionAsync(
+        string adminId, string collectionId, CancellationToken ct)
+    {
+        var imported = 0;
+        var published = 0;
+        var skipped = 0;
+        var page = 1;
+        while (true)
+        {
+            var list = await bunny.ListCollectionVideosAsync(collectionId, page, 50, search: null, orderBy: null, ct);
+            foreach (var item in list.Items)
+            {
+                if (await db.LibraryVideos.AnyAsync(v => v.BunnyVideoId == item.VideoId, ct)
+                    || VideoLibraryAdminService.MapBunnyStatus(item.Status) != VideoEncodeStatus.Ready)
+                {
+                    skipped++;
+                    continue;
+                }
+
+                var detail = await ImportFromBunnyAsync(adminId, item.VideoId, item.Title, collectionId, ct);
+                imported++;
+                if (string.Equals(detail.Status, "Published", StringComparison.OrdinalIgnoreCase))
+                    published++;
+            }
+
+            if (list.Items.Count < 50) break;
+            page++;
+        }
+
+        return new AdminCollectionImportReadyResult(imported, published, skipped);
+    }
+
+    /// <summary>
+    /// Background ingest: any Ready Bunny video sitting in a Basic English Course collection
+    /// is imported, tagged, and published so registered candidates see the fifth Videos box
+    /// without a manual admin click.
+    /// </summary>
+    public async Task<AdminCollectionImportReadyResult> IngestReadyBasicEnglishAsync(string adminId, CancellationToken ct)
+    {
+        var imported = 0;
+        var published = 0;
+        var skipped = 0;
+        var page = 1;
+        while (true)
+        {
+            var collections = await bunny.ListCollectionsAsync(page, 100, search: null, orderBy: null, ct);
+            foreach (var collection in collections.Items)
+            {
+                if (!CourseContentMatrix.IsBasicEnglishCollectionName(collection.Name)) continue;
+                var result = await ImportReadyFromCollectionAsync(adminId, collection.Guid, ct);
+                imported += result.Imported;
+                published += result.Published;
+                skipped += result.Skipped;
+            }
+
+            if (collections.Items.Count < 100) break;
+            page++;
+        }
+
+        if (imported > 0)
+        {
+            logger.LogInformation(
+                "Auto-ingested Basic English Course videos: imported={Imported} published={Published} skipped={Skipped}.",
+                imported, published, skipped);
+        }
+
+        return new AdminCollectionImportReadyResult(imported, published, skipped);
+    }
+
+    private async Task<bool> IsBasicEnglishImportAsync(string? collectionId, string title, CancellationToken ct)
+    {
+        if (CourseContentMatrix.IsBasicEnglishCollectionName(title)) return true;
+        if (string.IsNullOrWhiteSpace(collectionId)) return false;
+        try
+        {
+            var collection = await bunny.GetCollectionAsync(collectionId, ct);
+            return CourseContentMatrix.IsBasicEnglishCollectionName(collection.Name);
+        }
+        catch (Exception ex) when (ex is not BunnyNotConfiguredException and not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Could not resolve Bunny collection {CollectionId} for Basic English import tagging.", collectionId);
+            return false;
+        }
+    }
+
+    private async Task ApplyBasicEnglishCatalogAsync(LibraryVideo video, string adminId, CancellationToken ct)
+    {
+        video.Language = "ar";
+        video.SubtestCode = CourseContentMatrix.BasicEnglishSubtest;
+        video.ProfessionIdsJson = "[]";
+        video.AccessTier = "premium";
+        video.UpdatedAt = DateTimeOffset.UtcNow;
+        video.UpdatedByAdminId = adminId;
+
+        var category = await EnsureBasicEnglishCategoryAsync(ct);
+        var alreadyLinked = await db.VideoCategoryItems.AnyAsync(
+            i => i.VideoId == video.Id && i.CategoryId == category.Id, ct);
+        if (!alreadyLinked)
+        {
+            var nextSort = await db.VideoCategoryItems.AsNoTracking()
+                .Where(i => i.CategoryId == category.Id)
+                .Select(i => (int?)i.SortOrder)
+                .MaxAsync(ct) ?? -1;
+            db.VideoCategoryItems.Add(new VideoCategoryItem
+            {
+                Id = Guid.NewGuid(),
+                CategoryId = category.Id,
+                VideoId = video.Id,
+                SortOrder = nextSort + 1,
+            });
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var gate = await videos.PublishAsync(video, adminId, publishAt: null, ct);
+        if (!gate.CanPublish)
+        {
+            logger.LogWarning(
+                "Imported Basic English video {VideoId} but left it unpublished: {Errors}",
+                video.Id, string.Join("; ", gate.Errors));
+        }
+    }
+
+    private async Task<VideoCategory> EnsureBasicEnglishCategoryAsync(CancellationToken ct)
+    {
+        const string title = "Basic English Course / Arabic";
+        var existing = await db.VideoCategories
+            .FirstOrDefaultAsync(c => c.Title == title, ct);
+        if (existing is not null)
+        {
+            if (existing.Status != ContentStatus.Published)
+            {
+                existing.Status = ContentStatus.Published;
+                existing.UpdatedAt = DateTimeOffset.UtcNow;
+                await db.SaveChangesAsync(ct);
+            }
+            return existing;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var slug = "basic-english-course-arabic";
+        var suffix = 2;
+        while (await db.VideoCategories.AsNoTracking().AnyAsync(c => c.Slug == slug, ct))
+        {
+            slug = $"basic-english-course-arabic-{suffix++}";
+        }
+
+        var maxOrder = await db.VideoCategories.AsNoTracking()
+            .Select(c => (int?)c.DisplayOrder)
+            .MaxAsync(ct) ?? -1;
+        var category = new VideoCategory
+        {
+            Id = $"vcat_{Guid.NewGuid():N}",
+            Title = title,
+            Slug = slug,
+            Description = "Arabic Basic English Course videos for registered candidates.",
+            DisplayOrder = maxOrder + 1,
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.VideoCategories.Add(category);
+        await db.SaveChangesAsync(ct);
+        return category;
     }
 
     public Task MoveVideoAsync(string bunnyVideoId, string? targetCollectionId, CancellationToken ct)

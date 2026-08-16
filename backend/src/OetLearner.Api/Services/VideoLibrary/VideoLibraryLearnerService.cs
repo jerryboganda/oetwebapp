@@ -305,6 +305,13 @@ public sealed class VideoLibraryLearnerService(
         var userVideoAccess = await UserVideoAccessScope.LoadAsync(db, userId, ct);
         if (!userVideoAccess.Allows(video)) return null;
 
+        var context = await entitlements.ResolveContextAsync(userId, isAdmin: false, ct);
+        if (!CourseContentMatrix.IsVisibleInBasicEnglishScope(
+                video, context.BasicEnglishEntitled, context.ExclusivelyBasicEnglish))
+        {
+            return null;
+        }
+
         return video;
     }
 
@@ -319,10 +326,13 @@ public sealed class VideoLibraryLearnerService(
                 && (v.PublishAt == null || v.PublishAt <= now))
             .ToListAsync(ct);
         var userVideoAccess = await UserVideoAccessScope.LoadAsync(db, userId, ct);
+        var context = await entitlements.ResolveContextAsync(userId, isAdmin: false, ct);
         // ProfessionIdsJson is a JSON column — filter client-side (never LINQ into JSON).
         return published
             .Where(v => IsCourseProfessionVisible(v, profession))
             .Where(userVideoAccess.Allows)
+            .Where(v => CourseContentMatrix.IsVisibleInBasicEnglishScope(
+                v, context.BasicEnglishEntitled, context.ExclusivelyBasicEnglish))
             .ToList();
     }
 
