@@ -60,6 +60,7 @@ import {
   adminCreateCollection,
   adminDeleteCollection,
   adminImportCollectionVideo,
+  adminImportReadyCollectionVideos,
   adminListCollections,
   adminListCollectionVideos,
   adminMoveCollectionVideo,
@@ -147,6 +148,7 @@ export default function AdminVideoCollectionsPage() {
   const [bunnyDeleteBusy, setBunnyDeleteBusy] = useState(false);
 
   const [importingId, setImportingId] = useState<string | null>(null);
+  const [importingAll, setImportingAll] = useState(false);
 
   // Multi-select + drag-and-drop for fast reorganising.
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -347,18 +349,47 @@ export default function AdminVideoCollectionsPage() {
   }
 
   async function handleImport(video: AdminCollectionVideo) {
-    if (importingId) return;
+    if (importingId || importingAll) return;
     setImportingId(video.bunnyVideoId);
     try {
       const detail = await adminImportCollectionVideo(video.bunnyVideoId, {
         title: video.title || undefined,
         collectionId: selected?.collectionId ?? null,
       });
+      const isBasicEnglish = /basic\s*english|general\s*english/i.test(selected?.name ?? '');
+      if (isBasicEnglish && selected) {
+        setToast({
+          variant: 'success',
+          message: detail.status === 'Published'
+            ? 'Imported and published to Basic English Course.'
+            : 'Imported as a Basic English Course draft — finish encoding, then publish.',
+        });
+        await loadVideos(selected.collectionId);
+        setImportingId(null);
+        return;
+      }
       setToast({ variant: 'success', message: 'Imported — opening the wizard…' });
       router.push(`/admin/content/videos/${detail.videoId}/details`);
     } catch (err) {
       setToast({ variant: 'error', message: errorMessage(err, 'Import failed.') });
       setImportingId(null);
+    }
+  }
+
+  async function handleImportReady() {
+    if (!selected || importingAll || importingId) return;
+    setImportingAll(true);
+    try {
+      const result = await adminImportReadyCollectionVideos(selected.collectionId);
+      setToast({
+        variant: 'success',
+        message: `Imported ${result.imported} video${result.imported === 1 ? '' : 's'} (${result.published} published).`,
+      });
+      await loadVideos(selected.collectionId);
+    } catch (err) {
+      setToast({ variant: 'error', message: errorMessage(err, 'Import failed.') });
+    } finally {
+      setImportingAll(false);
     }
   }
 
@@ -539,6 +570,12 @@ export default function AdminVideoCollectionsPage() {
                     <div className="mb-3 flex items-center justify-between gap-2">
                       <h2 className="truncate text-sm font-bold text-admin-fg-strong">{selected.name}</h2>
                       <div className="flex shrink-0 items-center gap-2">
+                        {canWrite && videos.some((video) => !video.isImported && video.encodeStatus === 'ready') ? (
+                          <Button size="sm" variant="primary" disabled={importingAll || Boolean(importingId)} onClick={() => void handleImportReady()}>
+                            {importingAll ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <Upload className="mr-1 h-3.5 w-3.5" />}
+                            Import ready
+                          </Button>
+                        ) : null}
                         {canWrite ? (
                           <Button size="sm" variant="outline" onClick={() => openCreate(selected.name)}>
                             <Plus className="mr-1 h-3.5 w-3.5" /> New sub-folder

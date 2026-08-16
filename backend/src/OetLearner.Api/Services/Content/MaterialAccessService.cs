@@ -558,6 +558,25 @@ public sealed class MaterialAccessService(
     }
 
     /// <summary>
+    /// Video Library variant of <see cref="ResolveBasicEnglishScope(EffectiveEntitlementSnapshot)"/>.
+    /// Unlike materials, an empty module list does NOT fail-open: Basic English Course videos
+    /// appear only when the learner actually holds the Basic English Course subscription
+    /// (module or <see cref="EffectiveEntitlementSnapshot.BasicEnglishUnlocked"/>).
+    /// </summary>
+    internal static BasicEnglishScope ResolveBasicEnglishVideoScope(EffectiveEntitlementSnapshot entitlement)
+    {
+        var explicitGrant = entitlement.BasicEnglishUnlocked
+            || entitlement.EnabledModules.Any(m => string.Equals(m, ModuleKeys.BasicEnglish, StringComparison.OrdinalIgnoreCase));
+        var explicitlyDisabled = entitlement.DisabledModules
+            .Any(m => string.Equals(m, ModuleKeys.BasicEnglish, StringComparison.OrdinalIgnoreCase));
+        var entitled = explicitGrant && !explicitlyDisabled;
+        var exclusive = entitled
+            && entitlement.EnabledModules.Count > 0
+            && entitlement.EnabledModules.All(BasicEnglishCourseModules.Contains);
+        return new BasicEnglishScope(entitled, exclusive);
+    }
+
+    /// <summary>
     /// Plan-side flavour for <see cref="Billing.PlanContentAvailabilityService"/>: modules are the
     /// plan's EXPLICIT list (that service already treats a legacy no-module plan as granting no
     /// content module, so fail-open never reaches here). Same exclusivity rule as the learner

@@ -34,6 +34,24 @@ public static class CourseContentMatrix
     public static bool IsBasicEnglishSubtest(string? value) =>
         BasicEnglishSubtestAliases.Contains(value?.Trim() ?? string.Empty);
 
+    public static bool IsBasicEnglishCollectionName(string? name)
+    {
+        var value = name?.Trim() ?? string.Empty;
+        if (value.Length == 0) return false;
+        if (GeneralEnglishFolderNames.Contains(value)) return true;
+        var first = value.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault() ?? string.Empty;
+        if (GeneralEnglishFolderNames.Contains(first)) return true;
+        return value.Contains("Basic English", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("General English", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public static bool IsBasicEnglishVideo(LibraryVideo video) =>
+        IsBasicEnglishSubtest(video.SubtestCode) || IsBasicEnglishCollectionName(video.Title);
+
+    public static bool IsVisibleInBasicEnglishScope(LibraryVideo video, bool entitled, bool exclusive) =>
+        IsBasicEnglishVideo(video) ? entitled : !exclusive;
+
     public static bool IsProfession(string? value) =>
         Professions.Any(p => string.Equals(p.Id, value?.Trim(), StringComparison.OrdinalIgnoreCase));
 

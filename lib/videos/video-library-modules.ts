@@ -106,5 +106,5 @@ export function groupVideoCategoriesByModule(
     );
     const videoCount = moduleCategories.reduce((sum, category) => sum + category.videos.length, 0);
     return { meta, categories: moduleCategories, videoCount };
-  }).filter((module) => module.videoCount > 0 || module.meta.key === 'basic-english');
+  }).filter((module) => module.videoCount > 0);
 }

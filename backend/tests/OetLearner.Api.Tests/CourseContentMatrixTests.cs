@@ -63,6 +63,9 @@ public sealed class CourseContentMatrixTests
         Assert.False(CourseContentMatrix.TryValidateVideo("ar", "basic-english", ["medicine"], out var targeted));
         Assert.Contains("all professions", targeted, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("Basic English Course", CourseContentMatrix.VideoSourceLabel("ar", "basic-english", []));
+        Assert.True(CourseContentMatrix.IsBasicEnglishCollectionName("Basic English Course - Arabic"));
+        Assert.True(CourseContentMatrix.IsBasicEnglishCollectionName("Basic English Course / Arabic"));
+        Assert.False(CourseContentMatrix.IsBasicEnglishCollectionName("Listening / Arabic"));
         Assert.Empty(CourseContentMatrix.ExpectedVideoTargets("ar", "basic-english", "medicine"));
         foreach (var profession in CourseContentMatrix.Professions)
             Assert.True(CourseContentMatrix.VideoAppearsFor(profession.Id, "ar", "basic-english", []));
