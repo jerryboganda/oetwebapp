@@ -34,6 +34,7 @@ import {
   type ReadingTextDto,
   type ReadingValidationReport,
 } from '@/lib/reading-authoring-api';
+import { expectedPartAQuestionType, suggestPartALayout } from '@/lib/reading-part-a-layout';
 
 interface Props { paperId: string }
 
@@ -668,7 +669,8 @@ function QuestionEditorModal({ draft, texts, saving, onChange, onClose, onSave }
 function defaultQuestionDraftFor(part: ReadingPartAdminDto): QuestionDraft {
   const nextOrder = part.questions.length + 1;
   const type: ReadingQuestionType =
-    part.partCode === 'A' ? 'ShortAnswer'
+    part.partCode === 'A'
+      ? (expectedPartAQuestionType(nextOrder, suggestPartALayout(part.questions)) ?? 'ShortAnswer')
       : part.partCode === 'B' ? 'MultipleChoice3'
       : 'MultipleChoice4';
   return {

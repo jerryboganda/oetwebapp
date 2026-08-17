@@ -18,6 +18,7 @@ import {
   type ReadingQuestionType,
   type ReadingTextManifest,
 } from '@/lib/mock-wizard/api';
+import { expectedPartAQuestionType, suggestPartALayout } from '@/lib/reading-part-a-layout';
 
 interface TextDraft {
   id: string;
@@ -119,13 +120,19 @@ export function StepReading() {
   }
 
   function addQuestion(partCode: ReadingPartCode) {
-    setQuestions((prev) => [
+    setQuestions((prev) => {
+      const partQuestions = prev.filter((q) => q.partCode === partCode);
+      const displayOrder = partQuestions.length + 1;
+      const questionType = partCode === 'A'
+        ? (expectedPartAQuestionType(displayOrder, suggestPartALayout(partQuestions)) ?? 'MatchingTextReference')
+        : partCode === 'B' ? 'MultipleChoice3' : 'MultipleChoice4';
+      return [
       ...prev,
       {
         id: makeId(),
         partCode,
-        displayOrder: prev.filter((q) => q.partCode === partCode).length + 1,
-        questionType: partCode === 'A' ? 'MatchingTextReference' : 'MultipleChoice4',
+        displayOrder,
+        questionType,
         stem: '',
         optionsCsv: '',
         correctAnswer: '',
@@ -134,7 +141,8 @@ export function StepReading() {
         points: 1,
         textDisplayOrder: null,
       },
-    ]);
+    ];
+    });
   }
 
   function updateText(id: string, patch: Partial<TextDraft>) {

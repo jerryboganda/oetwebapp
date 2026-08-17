@@ -12,6 +12,25 @@
  * after a write.
  */
 
+import {
+  describePartALayout,
+  detectPartALayoutFromQuestions,
+  expectedPartAQuestionType,
+  type PartALayout,
+} from './reading-part-a-layout';
+
+export {
+  CLASSIC_PART_A_LAYOUT,
+  describePartALayout,
+  detectPartALayoutFromBookletText,
+  detectPartALayoutFromQuestions,
+  expectedPartAQuestionType,
+  partALayoutId,
+  resolvePartALayout,
+  suggestPartALayout,
+  type PartALayout,
+} from './reading-part-a-layout';
+
 export const READING_PUBLISH_TYPES = [
   'MatchingTextReference',
   'ShortAnswer',
@@ -64,6 +83,7 @@ export interface ReadingManifestValidationReport {
     missingAnswers: number;
     reviewPublished: number;
     reviewNotPublished: number;
+    partALayout: string | null;
   };
   importGaps: ReadingValidationIssue[];
 }
@@ -126,13 +146,6 @@ const CANONICAL_MAX_RAW = 42;
 const MATCHING_LETTERS = ['A', 'B', 'C', 'D'] as const;
 const MCQ_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
 const LEARNER_SAFE_OPTION_KEYS = new Set(['id', 'value', 'label', 'text', 'title', 'letter']);
-
-export function expectedPartAQuestionType(displayOrder: number): ReadingPublishQuestionType | null {
-  if (displayOrder >= 1 && displayOrder <= 7) return 'MatchingTextReference';
-  if (displayOrder >= 8 && displayOrder <= 14) return 'ShortAnswer';
-  if (displayOrder >= 15 && displayOrder <= 20) return 'SentenceCompletion';
-  return null;
-}
 
 export function isQuestionTypeAllowedForPart(partCode: ReadingPartCodeName, questionType: string): boolean {
   if (partCode === 'A') {
@@ -339,6 +352,7 @@ export function validateReadingManifest(
   let missingAnswers = 0;
   let reviewPublished = 0;
   let reviewNotPublished = 0;
+  let detectedPartALayout: string | null = null;
 
   if (parts.length === 0) {
     issues.push(issue('manifest_empty', 'error', 'Reading manifest must contain at least one part.'));
@@ -419,6 +433,24 @@ export function validateReadingManifest(
     const partAHasAnyTextLink = partCode === 'A'
       && questions.some((question) => question.readingTextDisplayOrder != null && textOrders.has(question.readingTextDisplayOrder));
 
+    let partALayout: PartALayout | null = null;
+    if (partCode === 'A' && questions.length > 0) {
+      const detectedLayout = detectPartALayoutFromQuestions(
+        questions.map((question) => ({ displayOrder: question.displayOrder, questionType: question.questionType })),
+      );
+      if (detectedLayout.ok && detectedLayout.layout) {
+        partALayout = detectedLayout.layout;
+        detectedPartALayout = describePartALayout(detectedLayout.layout);
+      } else if (questions.length === 20) {
+        issues.push(issue(
+          'part_A_layout_invalid',
+          'error',
+          detectedLayout.error ?? 'Part A does not match an official 1-7/1-8 matching layout.',
+          'Part A',
+        ));
+      }
+    }
+
     for (const question of questions) {
       const target = `Part ${partCode} Q${question.displayOrder}`;
       questionTypes.add(question.questionType);
@@ -443,8 +475,8 @@ export function validateReadingManifest(
           target,
         ));
       }
-      if (partCode === 'A') {
-        const expectedType = expectedPartAQuestionType(question.displayOrder);
+      if (partCode === 'A' && partALayout) {
+        const expectedType = expectedPartAQuestionType(question.displayOrder, partALayout);
         if (!expectedType) {
           issues.push(issue('part_A_question_order', 'error', `${target} is outside the official 1-20 range.`, target));
         } else if (expectedType !== question.questionType) {
@@ -576,6 +608,7 @@ export function validateReadingManifest(
       missingAnswers,
       reviewPublished,
       reviewNotPublished,
+      partALayout: detectedPartALayout,
     },
     importGaps,
   };
@@ -685,12 +718,18 @@ function linkedTexts(partCode: ReadingPartCodeName): ReadingTextManifestLike[] {
 }
 
 export function buildCanonicalReadingManifest(
-  overrides: Partial<Record<ReadingPartCodeName, Partial<ReadingPartManifestLike>>> = {},
+  overrides: Partial<Record<ReadingPartCodeName, Partial<ReadingPartManifestLike>>> & {
+    partALayout?: PartALayout;
+  } = {},
 ): ReadingStructureManifestLike {
+  const layout = overrides.partALayout;
+  const matchingCount = layout?.matchingEnd ?? 7;
+  const middleType = layout?.middleType ?? 'ShortAnswer';
+  const lastType = layout?.lastType ?? 'SentenceCompletion';
   const partAQuestions = [
-    ...Array.from({ length: 7 }, (_, index) => cloneTemplate('MatchingTextReference', index + 1)),
-    ...Array.from({ length: 7 }, (_, index) => cloneTemplate('ShortAnswer', index + 8)),
-    ...Array.from({ length: 6 }, (_, index) => cloneTemplate('SentenceCompletion', index + 15)),
+    ...Array.from({ length: matchingCount }, (_, index) => cloneTemplate('MatchingTextReference', index + 1)),
+    ...Array.from({ length: 14 - matchingCount }, (_, index) => cloneTemplate(middleType, matchingCount + 1 + index)),
+    ...Array.from({ length: 6 }, (_, index) => cloneTemplate(lastType, index + 15)),
   ];
   const partBQuestions = Array.from({ length: 6 }, (_, index) => cloneTemplate('MultipleChoice3', index + 1));
   const partCQuestions = Array.from({ length: 16 }, (_, index) => cloneTemplate('MultipleChoice4', index + 1));

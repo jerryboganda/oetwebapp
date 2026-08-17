@@ -34,7 +34,7 @@ answers. Official exam papers do not go through that stack.
 
 | Part | Items | Points | Minutes | Texts if present | Official types |
 | --- | --- | --- | --- | --- | --- |
-| A | 20 | 20 | 15 | 4 | Q1-7 MatchingTextReference, Q8-14 ShortAnswer, Q15-20 SentenceCompletion |
+| A | 20 | 20 | 15 | 4 | Matching 1-7 **or** 1-8; remaining two blocks are ShortAnswer / SentenceCompletion and may swap. Last block is always 15-20. |
 | B | 6 | 6 | 45 | 6 | MultipleChoice3, one per extract |
 | C | 16 | 16 | 45 | 2 | MultipleChoice4, 8 per article |
 

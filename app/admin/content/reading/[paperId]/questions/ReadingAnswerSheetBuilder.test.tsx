@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type {
   ReadingPartAdminDto,
@@ -93,6 +93,38 @@ describe('ReadingAnswerSheetBuilder', () => {
     expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(15, 'paper-1', expect.objectContaining({
       questionType: 'SentenceCompletion',
       displayOrder: 15,
+    }));
+  });
+
+  it('auto-detects Sample 5 1-8 matching from pasted Part A headings', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReadingAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="A"
+        activePart={partA()}
+        activeSection={null}
+        onSaved={noop}
+        onNotify={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/part a question paper headings/i), {
+      target: {
+        value: 'Questions 1- 8 For each question, 1-8, decide which text (A, B, C or D) the information comes from. Questions 9-14 Answer each of the questions, 9-14, with a word or short phrase. Questions 15-20 Complete each of the sentences, 15-20, with a word or short phrase.',
+      },
+    });
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await fillAllAnswers(user);
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(8, 'paper-1', expect.objectContaining({
+      questionType: 'MatchingTextReference',
+      displayOrder: 8,
+    }));
+    expect(mockUpsertReadingQuestion).toHaveBeenNthCalledWith(9, 'paper-1', expect.objectContaining({
+      questionType: 'ShortAnswer',
+      displayOrder: 9,
     }));
   });
 

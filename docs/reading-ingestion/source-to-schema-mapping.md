@@ -29,9 +29,11 @@ Texts are optional. The official exam player is PDF-first and does not render `b
 
 | Booklet item | `displayOrder` | Public number | `questionType` | `optionsJson` | `correctAnswerJson` |
 | --- | --- | --- | --- | --- | --- |
-| Part A matching Q1-7 | 1-7 | 1-7 | `MatchingTextReference` | `[]` or `["Text A",…]` | `"A"` / `"B"` / `"C"` / `"D"` |
-| Part A short answer Q8-14 | 8-14 | 8-14 | `ShortAnswer` | `[]` | JSON string, e.g. `"ORT"` |
-| Part A sentence completion Q15-20 | 15-20 | 15-20 | `SentenceCompletion` | `[]` | JSON string |
+| Part A matching Q1-7 **or** Q1-8 | 1-7 or 1-8 | same | `MatchingTextReference` | `[]` or `["Text A",…]` | `"A"` / `"B"` / `"C"` / `"D"` |
+| Part A middle block | 8-14 or 9-14 | same | `ShortAnswer` **or** `SentenceCompletion` | `[]` | JSON string, e.g. `"ORT"` |
+| Part A last block | 15-20 | 15-20 | the other of `ShortAnswer` / `SentenceCompletion` | `[]` | JSON string |
+
+Detect the three headings automatically (`lib/reading-part-a-layout.ts`). Matching is always first. Last heading is always 15-20. Middle and last may swap between “answer the questions” and “complete the sentences”.
 | Part B extract 1-6 | 1-6 | 1-6 | `MultipleChoice3` | 3 strings | letter `"A"`-`"C"` |
 | Part C Q7-22 | 1-16 | 7-22 | `MultipleChoice4` | 4 strings | letter `"A"`-`"D"` |
 
