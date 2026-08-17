@@ -48,7 +48,28 @@ Part A question types are position-sensitive: Q1-Q7 are matching text reference,
 Q8-Q14 are short answer, and Q15-Q20 are sentence completion. Part B uses
 three-option multiple choice. Part C uses four-option multiple choice.
 
-## 3. Import Command
+## 3. Offline dry-run (required before write)
+
+Validate a bundle without calling the API or inserting papers:
+
+```powershell
+node --experimental-strip-types --no-warnings=ExperimentalWarning `
+  scripts/admin/validate-reading-manifest.ts --manifest output/reading-import-manifests/reading-samples.local.mjs
+
+node scripts/admin/import-reading-manifests-local.mjs `
+  --manifest output/reading-import-manifests/reading-samples.local.mjs --dry-run
+```
+
+The dry-run uses `lib/reading-manifest-contract.ts`, which mirrors
+`ValidatePaperAsync` / `ValidateQuestionPayload`. Backend validation remains
+authoritative after a write. Every dry-run warns that write import uses
+`replaceExisting=true` (PDF wipe) and that `EvidenceSentence` is not imported
+from the manifest. Prefer official `texts: []` unless B/C `readingTextDisplayOrder`
+links are complete (1 per B extract, 8 per C article).
+
+Machine spec and templates live in `docs/reading-ingestion/`.
+
+## 4. Import Command
 
 Run from the repository root in PowerShell. Set the admin credentials in the
 terminal session only; do not write them to a tracked file.
@@ -64,7 +85,7 @@ The script refuses non-local API hosts. `--replace-existing` updates an existing
 paper with the same slug, replaces same-role assets, imports the manifest, runs
 backend Reading validation, and publishes the paper.
 
-## 4. Validation
+## 5. Validation
 
 After import, validate through the API before checking the UI:
 
@@ -77,7 +98,7 @@ After import, validate through the API before checking the UI:
 5. Open `http://localhost:3000/admin/content/reading` and confirm the imported
    papers appear with published status.
 
-## 5. Troubleshooting
+## 6. Troubleshooting
 
 | Symptom | Likely cause | Fix |
 | ------- | ------------ | --- |
@@ -87,7 +108,7 @@ After import, validate through the API before checking the UI:
 | API response terminates during asset or structure operations | Endpoint returned EF navigation graphs instead of DTO projections. | Check `ContentPapersAdminEndpoints` and `ReadingAuthoringAdminEndpoints` projection helpers. |
 | Admin UI shows only legacy seed content | The Reading list is still using the legacy content library endpoint. | Rebuild local web and confirm it calls `/v1/admin/papers?subtest=reading`. |
 
-## 6. Operational Notes
+## 7. Operational Notes
 
 - This workflow is for local data loading and QA. Production content promotion
   needs the normal release/deployment evidence path.

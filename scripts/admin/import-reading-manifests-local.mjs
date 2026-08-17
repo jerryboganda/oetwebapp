@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -64,7 +65,7 @@ async function loadManifestBundle(manifestPath) {
     return { bundle: module.default ?? module.bundle, baseDir: path.dirname(resolvedPath), resolvedPath };
   }
   const raw = await fs.readFile(resolvedPath, 'utf8');
-  return { bundle: JSON.parse(raw), baseDir: path.dirname(resolvedPath), resolvedPath };
+  return { bundle: JSON.parse(raw.replace(/^\uFEFF/, '')), baseDir: path.dirname(resolvedPath), resolvedPath };
 }
 
 async function apiRequest(apiBase, route, { method = 'GET', body, token, headers } = {}) {
@@ -340,15 +341,38 @@ async function importPaper(apiBase, token, paperConfig, baseDir, options) {
   };
 }
 
+function runOfflineDryRun(resolvedPath, replaceExisting) {
+  const validator = path.join(workspaceRoot, 'scripts', 'admin', 'validate-reading-manifest.ts');
+  const argv = [
+    '--experimental-strip-types',
+    '--no-warnings=ExperimentalWarning',
+    validator,
+    '--manifest',
+    resolvedPath,
+  ];
+  if (replaceExisting) argv.push('--replace-existing');
+  const result = spawnSync(process.execPath, argv, { stdio: 'inherit', cwd: workspaceRoot });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error('Offline Reading dry-run failed. No papers were imported.');
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const apiBase = args.api ?? DEFAULT_API_BASE;
-  assertLocalApi(apiBase);
-
   const manifestPath = requireText(args.manifest, '--manifest');
+  const { bundle, baseDir, resolvedPath } = await loadManifestBundle(manifestPath);
+
+  if (args['dry-run']) {
+    runOfflineDryRun(resolvedPath, Boolean(args['replace-existing']));
+    console.log(JSON.stringify({ dryRun: true, manifest: resolvedPath, paperCount: Array.isArray(bundle?.papers) ? bundle.papers.length : 0 }, null, 2));
+    return;
+  }
+
+  assertLocalApi(apiBase);
   const email = requireText(args.email ?? process.env.OET_ADMIN_EMAIL, '--email or OET_ADMIN_EMAIL');
   const password = requireText(args.password ?? process.env.OET_ADMIN_PASSWORD, '--password or OET_ADMIN_PASSWORD');
-  const { bundle, baseDir, resolvedPath } = await loadManifestBundle(manifestPath);
   const papers = Array.isArray(bundle?.papers) ? bundle.papers : [];
   if (papers.length === 0) throw new Error(`No papers found in ${resolvedPath}.`);
 

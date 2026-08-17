@@ -1,0 +1,80 @@
+{
+  "$comment": "Machine-usable Reading question templates derived from ReadingStructureService + ReadingAnswerSheetBuilder. Practice-only types must stay Draft and are not publishable.",
+  "publishTypes": {
+    "MatchingTextReference": {
+      "part": "A",
+      "displayOrders": [1, 2, 3, 4, 5, 6, 7],
+      "optionsJson": "[]",
+      "correctAnswerJson": "\"A\"",
+      "acceptedSynonymsJson": null,
+      "studentAnswerJson": "\"A\"",
+      "notes": "Single letter A-D. Empty options fall back to Part A texts A-D in the exam player."
+    },
+    "ShortAnswer": {
+      "part": "A",
+      "displayOrders": [8, 9, 10, 11, 12, 13, 14],
+      "optionsJson": "[]",
+      "correctAnswerJson": "\"ORT\"",
+      "acceptedSynonymsJson": "[\"oral rehydration\"]",
+      "studentAnswerJson": "\"ORT\"",
+      "notes": "CorrectAnswerJson is a JSON string. Synonyms are a string array and only mark if policy ShortAnswerAcceptSynonyms is on."
+    },
+    "SentenceCompletion": {
+      "part": "A",
+      "displayOrders": [15, 16, 17, 18, 19, 20],
+      "optionsJson": "[]",
+      "correctAnswerJson": "\"rest in bed\"",
+      "acceptedSynonymsJson": null,
+      "studentAnswerJson": "\"rest in bed\"",
+      "notes": "Same payload as ShortAnswer. Player renders a text box."
+    },
+    "MultipleChoice3": {
+      "part": "B",
+      "displayOrders": [1, 2, 3, 4, 5, 6],
+      "optionsJson": "[\"wash their hands\",\"reuse gloves\",\"skip documentation\"]",
+      "correctAnswerJson": "\"A\"",
+      "studentAnswerJson": "\"A\"",
+      "notes": "Exactly 3 options. Answer is a letter, not option text."
+    },
+    "MultipleChoice4": {
+      "part": "C",
+      "displayOrders": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+      "publicDisplayOrders": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22],
+      "optionsJson": "[\"option A\",\"option B\",\"option C\",\"option D\"]",
+      "correctAnswerJson": "\"C\"",
+      "studentAnswerJson": "\"C\"",
+      "notes": "Exactly 4 options. Internal 1-16; public numbers are +6."
+    }
+  },
+  "practiceOnlyTypes": {
+    "FillInBlank": {
+      "publishable": false,
+      "optionsJson": "[]",
+      "correctAnswerJson": "\"sample\""
+    },
+    "ShortAnswerLabeled": {
+      "publishable": false,
+      "optionsJson": "[{\"value\":\"box1\",\"label\":\"Box 1\"}]",
+      "correctAnswerJson": "{\"box1\":\"one\"}"
+    },
+    "MultipleChoiceFlexible": {
+      "publishable": false,
+      "optionsJson": "[\"one\",\"two\"]",
+      "correctAnswerJson": "\"A\""
+    }
+  },
+  "textLinkRules": {
+    "pdfOnly": "Each part must include texts: []. This is the official exam-player shape.",
+    "partA": "If any question has readingTextDisplayOrder, every Part A question must have one.",
+    "partB": "If texts are present: 6 texts and readingTextDisplayOrder must yield 1 question per text.",
+    "partC": "If texts are present: 2 texts and readingTextDisplayOrder must yield 8 questions per text (1-8 -> 1, 9-16 -> 2)."
+  },
+  "requiredPublishFields": [
+    "explanationMarkdown",
+    "evidenceSentence (required on the paper; NOT imported from the current C# manifest)",
+    "reviewState=Published",
+    "points=1",
+    "optionsJson present even when []",
+    "primary QuestionPaper asset per part A/B/C"
+  ]
+}
