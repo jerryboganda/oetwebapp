@@ -19,6 +19,7 @@ public sealed class ReadingPartALayoutTests
     {
         Assert.True(ReadingPartALayoutDetector.TryDetectFromBookletText(Sample5Headings, out var layout, out var error), error);
         Assert.Equal(8, layout.MatchingEnd);
+        Assert.Equal(15, layout.LastStart);
         Assert.Equal(ReadingQuestionType.ShortAnswer, layout.MiddleType);
         Assert.Equal(ReadingQuestionType.SentenceCompletion, layout.LastType);
         Assert.Equal(ReadingQuestionType.MatchingTextReference, layout.TypeFor(8));
@@ -79,6 +80,37 @@ public sealed class ReadingPartALayoutTests
                         : ReadingQuestionType.SentenceCompletion));
 
         Assert.False(ReadingPartALayoutDetector.TryDetectFromQuestions(questions, out _, out var error));
-        Assert.Contains("8-14", error);
+        Assert.Contains("15 or 16", error);
+    }
+
+    [Fact]
+    public void Detects_jayden_eight_to_fifteen_short_answer_layout()
+    {
+        const string headings = """
+            Questions 1-7
+            For each question, 1-7, decide which text (A, B, C or D) the information comes from.
+            Questions 8-15
+            Answer each of the questions, 8-15, with a word or short phrase from one of the texts.
+            Questions 16-20
+            Complete each of the sentences, 16-20, with a word or short phrase from one of the texts.
+            """;
+
+        Assert.True(ReadingPartALayoutDetector.TryDetectFromBookletText(headings, out var fromBooklet, out var bookletError), bookletError);
+        Assert.Equal(7, fromBooklet.MatchingEnd);
+        Assert.Equal(16, fromBooklet.LastStart);
+        Assert.Equal(ReadingQuestionType.ShortAnswer, fromBooklet.MiddleType);
+        Assert.Equal(ReadingQuestionType.SentenceCompletion, fromBooklet.LastType);
+        Assert.Equal(ReadingQuestionType.ShortAnswer, fromBooklet.TypeFor(15));
+        Assert.Equal(ReadingQuestionType.SentenceCompletion, fromBooklet.TypeFor(16));
+
+        var questions = Enumerable.Range(1, 20).Select(order => (
+            order,
+            order <= 7
+                ? ReadingQuestionType.MatchingTextReference
+                : order <= 15
+                    ? ReadingQuestionType.ShortAnswer
+                    : ReadingQuestionType.SentenceCompletion));
+        Assert.True(ReadingPartALayoutDetector.TryDetectFromQuestions(questions, out var fromQuestions, out var questionError), questionError);
+        Assert.Equal(16, fromQuestions.LastStart);
     }
 }

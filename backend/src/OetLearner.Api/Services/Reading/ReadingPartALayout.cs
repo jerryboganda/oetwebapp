@@ -5,17 +5,19 @@ namespace OetLearner.Api.Services.Reading;
 
 /// <summary>
 /// Official OET Reading Part A is always 20 items, but the three task blocks
-/// are not fixed at 1-7 / 8-14 / 15-20. Matching is 1-7 or 1-8; 15-20 stays
-/// the last heading; the middle block fills the gap and may swap with the
-/// last between ShortAnswer and SentenceCompletion.
+/// are not fixed at 1-7 / 8-14 / 15-20. Matching is 1-7 or 1-8; the last
+/// heading starts at 15 or 16 and ends at 20; the middle block fills the gap
+/// and may swap with the last between ShortAnswer and SentenceCompletion.
 /// </summary>
 public readonly record struct ReadingPartALayout(
     int MatchingEnd,
+    int LastStart,
     ReadingQuestionType MiddleType,
     ReadingQuestionType LastType)
 {
     public static readonly ReadingPartALayout Classic = new(
         7,
+        15,
         ReadingQuestionType.ShortAnswer,
         ReadingQuestionType.SentenceCompletion);
 
@@ -23,7 +25,7 @@ public readonly record struct ReadingPartALayout(
     {
         if (displayOrder is < 1 or > 20) return null;
         if (displayOrder <= MatchingEnd) return ReadingQuestionType.MatchingTextReference;
-        if (displayOrder < 15) return MiddleType;
+        if (displayOrder < LastStart) return MiddleType;
         return LastType;
     }
 
@@ -35,7 +37,7 @@ public readonly record struct ReadingPartALayout(
         var last = LastType == ReadingQuestionType.ShortAnswer
             ? "answer the questions"
             : "complete the sentences";
-        return $"Questions 1-{MatchingEnd} matching A-D; {MatchingEnd + 1}-14 {middle}; 15-20 {last}";
+        return $"Questions 1-{MatchingEnd} matching A-D; {MatchingEnd + 1}-{LastStart - 1} {middle}; {LastStart}-20 {last}";
     }
 }
 
@@ -90,34 +92,57 @@ public static class ReadingPartALayoutDetector
             }
         }
 
-        var middleTypes = Enumerable.Range(matchingEnd + 1, 14 - matchingEnd)
-            .Select(order => byOrder[order])
-            .Distinct()
-            .ToList();
-        var lastTypes = Enumerable.Range(15, 6)
-            .Select(order => byOrder[order])
-            .Distinct()
-            .ToList();
-
-        if (middleTypes.Count != 1 || !IsGapType(middleTypes[0]))
+        if (!byOrder.TryGetValue(matchingEnd + 1, out var firstGap) || !IsGapType(firstGap))
         {
-            error = $"Part A Q{matchingEnd + 1}-14 must be one block of ShortAnswer or SentenceCompletion.";
+            error = $"Part A Q{matchingEnd + 1} must start a ShortAnswer or SentenceCompletion block.";
             return false;
         }
 
-        if (lastTypes.Count != 1 || !IsGapType(lastTypes[0]))
+        int? lastStart = null;
+        for (var order = matchingEnd + 2; order <= 20; order++)
         {
-            error = "Part A Q15-20 must be one block of ShortAnswer or SentenceCompletion.";
+            if (byOrder[order] != firstGap)
+            {
+                lastStart = order;
+                break;
+            }
+        }
+
+        if (lastStart is not (15 or 16))
+        {
+            error = "Part A last block must start at question 15 or 16.";
             return false;
         }
 
-        if (middleTypes[0] == lastTypes[0])
+        var lastType = byOrder[lastStart.Value];
+        if (!IsGapType(lastType) || lastType == firstGap)
         {
             error = "Part A middle and last blocks must be different tasks (answer vs complete the sentences).";
             return false;
         }
 
-        layout = new ReadingPartALayout(matchingEnd, middleTypes[0], lastTypes[0]);
+        var middleTypes = Enumerable.Range(matchingEnd + 1, lastStart.Value - matchingEnd - 1)
+            .Select(order => byOrder[order])
+            .Distinct()
+            .ToList();
+        var lastTypes = Enumerable.Range(lastStart.Value, 21 - lastStart.Value)
+            .Select(order => byOrder[order])
+            .Distinct()
+            .ToList();
+
+        if (middleTypes.Count != 1 || middleTypes[0] != firstGap)
+        {
+            error = $"Part A Q{matchingEnd + 1}-{lastStart.Value - 1} must be one block of ShortAnswer or SentenceCompletion.";
+            return false;
+        }
+
+        if (lastTypes.Count != 1 || lastTypes[0] != lastType)
+        {
+            error = $"Part A Q{lastStart}-20 must be one block of ShortAnswer or SentenceCompletion.";
+            return false;
+        }
+
+        layout = new ReadingPartALayout(matchingEnd, lastStart.Value, firstGap, lastType);
         error = string.Empty;
         return true;
     }
@@ -156,7 +181,7 @@ public static class ReadingPartALayoutDetector
         }
 
         var matching = blocks.FirstOrDefault(block => block.Kind == "matching" && block.Start == 1 && block.End is 7 or 8);
-        var last = blocks.FirstOrDefault(block => block.Start == 15 && block.End == 20 && IsGapKind(block.Kind));
+        var last = blocks.FirstOrDefault(block => block.Start is 15 or 16 && block.End == 20 && IsGapKind(block.Kind));
         if (matching == default)
         {
             error = "Could not find a Questions 1-7 or 1-8 matching A-D heading.";
@@ -165,17 +190,19 @@ public static class ReadingPartALayoutDetector
 
         if (last == default)
         {
-            error = "Could not find a Questions 15-20 answer/complete heading.";
+            error = "Could not find a Questions 15-20 or 16-20 answer/complete heading.";
             return false;
         }
 
         var matchingEnd = matching.End;
+        var lastStart = last.Start;
         var expectedMiddleStart = matchingEnd + 1;
+        var expectedMiddleEnd = lastStart - 1;
         var middle = blocks.FirstOrDefault(block =>
-            block.Start == expectedMiddleStart && block.End == 14 && IsGapKind(block.Kind));
+            block.Start == expectedMiddleStart && block.End == expectedMiddleEnd && IsGapKind(block.Kind));
         if (middle == default)
         {
-            middle = (expectedMiddleStart, 14, OtherGapKind(last.Kind));
+            middle = (expectedMiddleStart, expectedMiddleEnd, OtherGapKind(last.Kind));
         }
 
         if (!IsGapKind(middle.Kind) || middle.Kind == last.Kind)
@@ -184,7 +211,7 @@ public static class ReadingPartALayoutDetector
             return false;
         }
 
-        layout = new ReadingPartALayout(matchingEnd, ParseGap(middle.Kind), ParseGap(last.Kind));
+        layout = new ReadingPartALayout(matchingEnd, lastStart, ParseGap(middle.Kind), ParseGap(last.Kind));
         error = string.Empty;
         return true;
     }

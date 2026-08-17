@@ -110,7 +110,7 @@ public sealed class ClamAvUploadScanner : IUploadScanner
         try
         {
             using var tcp = new TcpClient();
-            await tcp.ConnectAsync(settings.Host, settings.Port, scanCt);
+            await tcp.ConnectAsync(ResolveScannerHost(settings.Host), settings.Port, scanCt);
             await using var netStream = tcp.GetStream();
 
             // INSTREAM command. Null-terminated per clamd protocol.
@@ -184,6 +184,17 @@ public sealed class ClamAvUploadScanner : IUploadScanner
                 ? (false, "scan_unreachable")
                 : (true, null);
         }
+    }
+
+    private string ResolveScannerHost(string host)
+    {
+        if (_environment.IsDevelopment()
+            && string.Equals(host, "clamav", StringComparison.OrdinalIgnoreCase))
+        {
+            return "127.0.0.1";
+        }
+
+        return host;
     }
 }
 

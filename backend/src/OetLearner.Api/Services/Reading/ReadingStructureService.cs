@@ -169,7 +169,8 @@ public sealed record ReadingQuestionManifest(
     string? SkillTag,
     int? ReadingTextDisplayOrder,
     string? OptionDistractorsJson = null,
-    ReadingReviewState ReviewState = ReadingReviewState.Draft);
+    ReadingReviewState ReviewState = ReadingReviewState.Draft,
+    string? EvidenceSentence = null);
 
 public sealed record ReadingStructureImportResult(
     ReadingStructure Structure,
@@ -1024,6 +1025,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                 if (row is null) continue;
                 if (qm.OptionDistractorsJson is { Length: > 0 })
                     row.OptionDistractorsJson = qm.OptionDistractorsJson;
+                if (!string.IsNullOrWhiteSpace(qm.EvidenceSentence))
+                    row.EvidenceSentence = qm.EvidenceSentence;
                 row.ReviewState = qm.ReviewState;
             }
             await db.SaveChangesAsync(ct);
@@ -1055,19 +1058,23 @@ public sealed class ReadingStructureService : IReadingStructureService
                 $"Paper subtest is '{paper.SubtestCode}', expected 'reading'.", null));
         }
 
-        var pdfParts = await db.ContentPaperAssets.AsNoTracking()
+        // Filter MIME/format in memory. EF cannot translate
+        // string.StartsWith(..., StringComparison.OrdinalIgnoreCase).
+        var primaryQuestionAssets = await db.ContentPaperAssets.AsNoTracking()
+            .Include(a => a.MediaAsset)
             .Where(a => a.PaperId == paperId
                 && a.Role == PaperAssetRole.QuestionPaper
                 && a.IsPrimary
-                && (a.Part == "A" || a.Part == "B" || a.Part == "C")
-                && a.MediaAsset != null
-                && a.MediaAsset.Status == MediaAssetStatus.Ready
-                && (a.MediaAsset.Format == "pdf"
-                    || a.MediaAsset.MimeType == "application/pdf"
-                    || a.MediaAsset.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
+                && (a.Part == "A" || a.Part == "B" || a.Part == "C"))
+            .ToListAsync(ct);
+        var pdfParts = primaryQuestionAssets
+            .Where(a => a.MediaAsset is { Status: MediaAssetStatus.Ready } media
+                && (string.Equals(media.Format, "pdf", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(media.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase)
+                    || (media.MimeType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false)))
             .GroupBy(a => a.Part!)
             .Select(g => new { Part = g.Key, Count = g.Count() })
-            .ToListAsync(ct);
+            .ToList();
         foreach (var requiredPart in new[] { "A", "B", "C" })
         {
             var count = pdfParts.FirstOrDefault(p => p.Part == requiredPart)?.Count ?? 0;

@@ -46,12 +46,13 @@ function typedPartA(
   matchingEnd: 7 | 8,
   middle: 'ShortAnswer' | 'SentenceCompletion',
   last: 'ShortAnswer' | 'SentenceCompletion',
+  lastStart: 15 | 16 = 15,
 ) {
   return Array.from({ length: 20 }, (_, index) => {
     const displayOrder = index + 1;
     const questionType = displayOrder <= matchingEnd
       ? 'MatchingTextReference'
-      : displayOrder <= 14
+      : displayOrder < lastStart
         ? middle
         : last;
     return { displayOrder, questionType };
@@ -73,6 +74,7 @@ describe('reading-part-a-layout', () => {
     expect(detected.ok).toBe(true);
     expect(detected.layout).toEqual({
       matchingEnd: 8,
+      lastStart: 15,
       middleType: 'ShortAnswer',
       lastType: 'SentenceCompletion',
     });
@@ -85,9 +87,32 @@ describe('reading-part-a-layout', () => {
     expect(detectPartALayoutFromBookletText(CLASSIC_HEADINGS).layout).toEqual(CLASSIC_PART_A_LAYOUT);
     expect(detectPartALayoutFromBookletText(SWAPPED_HEADINGS).layout).toEqual({
       matchingEnd: 7,
+      lastStart: 15,
       middleType: 'SentenceCompletion',
       lastType: 'ShortAnswer',
     });
+  });
+
+  it('detects Jayden 8-15 answer / 16-20 complete layout', () => {
+    const headings = `
+Questions 1-7
+For each question, 1-7, decide which text (A, B, C or D) the information comes from.
+Questions 8-15
+Answer each of the questions, 8-15, with a word or short phrase from one of the texts.
+Questions 16-20
+Complete each of the sentences, 16-20, with a word or short phrase from one of the texts.
+`;
+    const detected = detectPartALayoutFromBookletText(headings);
+    expect(detected.ok).toBe(true);
+    expect(detected.layout).toEqual({
+      matchingEnd: 7,
+      lastStart: 16,
+      middleType: 'ShortAnswer',
+      lastType: 'SentenceCompletion',
+    });
+    expect(expectedPartAQuestionType(15, detected.layout!)).toBe('ShortAnswer');
+    expect(expectedPartAQuestionType(16, detected.layout!)).toBe('SentenceCompletion');
+    expect(detectPartALayoutFromQuestions(typedPartA(7, 'ShortAnswer', 'SentenceCompletion', 16)).ok).toBe(true);
   });
 
   it('accepts all four official typed layouts and rejects mixed blocks', () => {

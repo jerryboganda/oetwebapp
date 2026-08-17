@@ -26,7 +26,7 @@ describe('reading-manifest-contract', () => {
       textCCount: 0,
     });
     expect(errorCodes(report)).toEqual([]);
-    expect(report.importGaps.some((issue) => issue.code === 'evidence_not_imported')).toBe(true);
+    expect(report.importGaps.some((issue) => issue.code === 'evidence_imported')).toBe(true);
   });
 
   it('rejects omitted texts arrays because ImportManifestAsync requires them', () => {

@@ -585,14 +585,14 @@ export function validateReadingManifest(
 
   const importGaps = [
     issue(
-      'evidence_not_imported',
+      'evidence_imported',
       'warning',
-      'EvidenceSentence is required at publish, but ImportManifestAsync does not persist it from the manifest. After import, set evidence via the admin UI/API before publish. Dry-run publish-ready is not import publish-ready.',
+      'ImportManifestAsync now persists EvidenceSentence and ReviewState from the manifest. Confirm the live API includes that patch before publishing.',
     ),
     issue(
       'replace_import_wipes_pdfs',
       'warning',
-      'The local write importer always posts replaceExisting=true on /reading/manifest, which can delete existing QuestionPaper assets. Re-attach Part A/B/C primary PDFs after a replace import.',
+      'The local write importer posts replaceExisting=true on /reading/manifest. It now re-injects uploaded QuestionPaper mediaAssetIds into the manifest so Part A/B/C PDFs are recreated in the same request.',
     ),
   ];
   issues.push(...importGaps);
