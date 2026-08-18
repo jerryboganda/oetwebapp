@@ -3,7 +3,7 @@
 > **Audience:** future coding agents / LLMs. Read this file first. Do **not**
 > restart the research loop. This is the operational contract used to import
 > official OET Reading papers (Jayden Book JB1–JB5, Anna Hartford AH1–AH3,
-> and later books).
+> Atlas 01/05/10, and later books).
 >
 > **Zero-deviation law:** `docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md`
 > (read this before any import). **New session start:**
@@ -50,7 +50,7 @@ Do **not**:
 - Put HTML passages in `texts` for official papers.
 - Use practice-only types (`FillInBlank`, `ShortAnswerLabeled`, `MultipleChoiceFlexible`).
 - Enable fuzzy / Levenshtein marking.
-- Re-import or mutate Jayden JB1–JB5 or Anna Hartford AH1–AH3 unless the owner asks.
+- Re-import or mutate Jayden JB1–JB5, Anna Hartford AH1–AH3, or Atlas 01/05/10 unless the owner asks.
 - Touch Doctor Marriage Bureau (`Modernized-Platform/`). This work is **oetwebapp** only.
 - Work in `D:\Projects\OET with Dr Hesham\...`. Canonical checkout is `E:\Projects\OET with Dr Hesham\Web App` on `main`.
 
@@ -419,7 +419,37 @@ Tags: `reading,anna-hartford,official-key`. Status 4. 20/6/16. 42 points. Part-o
 
 AH3 Part B letters were reconstructed from option prose in the printed key: `1A 2B 3B 4C 5A 6A`. Do not invent other letters.
 
-Also live: `reading-sample-1`. Do **not** re-import Jayden or Anna Hartford.
+Also live: `reading-sample-1`. Do **not** re-import Jayden, Anna Hartford, or Atlas 01/05/10.
+
+### 7.3 Atlas Practice Series papers already in prod (Published 2026-08-18)
+
+| Slug | Paper id | Layout | Topic |
+| --- | --- | --- | --- |
+| `atlas-practice-series-01-fractures-dislocations-sprains` | `53d261affe2541359f5578b7e25d688d` | classic 1–7 / 8–14 / 15–20 | Fractures, dislocations and sprains |
+| `atlas-practice-series-05-cellulitis` | `3d4e36bbdf6747c79ff4f00f078fc5a5` | 1–8 / 9–14 / 15–20 | Cellulitis |
+| `atlas-practice-series-10-sedation` | `e85f13d7cf7749c7aa42f3e279bc6d30` | classic | Sedation |
+
+Tags: `reading,atlas-practice-series,official-key`. Status 4. 20/6/16. 42 points. Part-only QuestionPaper PDFs.
+
+Page maps (1-based, keys omitted): Atlas01 A1–5 B6–11 C12–19 drop 20–21 · Atlas05 A1–8 B9–15 C16–23 drop 24–28 · Atlas10 A1–5 B6–11 C12–19 drop 20–21.
+
+Printed Atlas keys (authoritative, from the PDFs):
+
+```
+Atlas01 A: C D B A C B A | pillow | 0.2 mg | bony prominences | naloxone | crepe bandage | fentanyl | compartment syndrome | dislocation | sling | jewellery | throbbing | stockinette | 70
+Atlas01 B: B C A B A B
+Atlas01 C: B C C A D D A B D C A C C B A C
+
+Atlas05 A: C D B A D C D C | topical | morbid obesity | 2.4 g | renal function | 500 mg | 1.2 g | aseptic aspiration | naproxen | hot tubs | deep vein thrombosis | facial cellulitis | chronic lymphoedema
+Atlas05 B: C A B B B A
+Atlas05 C: A D B C A A D B D B C B C B A B
+
+Atlas10 A: A D A B C A B | benzodiazepines | minimal sedation | emergency intubation | fracture reduction | Phencyclidines | Remifentanil | 5mg | IV | cardiovascular function | verbal commands | epileptic seizures | carbon dioxide | reversal agent
+Atlas10 B: C B B B A A
+Atlas10 C: B B A B D C D A D A C D A B B D
+```
+
+Remaining Desktop Atlas files (Sample 2–4, 6–9, 11–26, Kaplan) are **not** imported. Invalid Part A layouts, CamScanner scans, or third-party verified keys. Do not invent answers. Ask the owner before touching them.
 
 Printed AH keys (authoritative, from the PDFs):
 
@@ -476,7 +506,7 @@ AH3 C: A C B A C C C A D A A D C C B C
 [ ] Publish live (no --no-publish). Confirm Status=4 and isPublishReady=true
 [ ] Confirm PDFs exist on /var/opt/oet-learner/storage
 [ ] Confirm the paper appears in the same book folder on /reading/exam and /reading/parts/a|b|c
-[ ] Do not recreate green from an old image. Do not build on the VPS. Do not reimport JB/AH.
+[ ] Do not recreate green from an old image. Do not build on the VPS. Do not reimport JB/AH/Atlas 01-05-10.
 ```
 
 ---

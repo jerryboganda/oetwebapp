@@ -36,6 +36,7 @@ Owner standing orders:
 | --- | --- | --- |
 | Jayden Book | `jayden-book-01-bed-bugs` … `jayden-book-05-resveratrol` | Published, 210/210 keys matched |
 | Anna Hartford | `anna-hartford-01-cigarette-smoking-lung-cancer`, `anna-hartford-02-vision-impairment`, `anna-hartford-03-vaccines-immunisation` | Published 2026-08-20, 20/6/16, 42 pts |
+| Atlas (partial) | `atlas-practice-series-01-fractures-dislocations-sprains`, `atlas-practice-series-05-cellulitis`, `atlas-practice-series-10-sedation` | Published 2026-08-18, 20/6/16, 42 pts |
 | Sample | `reading-sample-1` | Published |
 
 AH paper ids:
@@ -48,16 +49,29 @@ AH layouts are all classic `1–7 / 8–14 / 15–20`. Printed keys are in the p
 
 ---
 
+Atlas paper ids:
+
+- Atlas 01 `53d261affe2541359f5578b7e25d688d` (classic 1–7 / 8–14 / 15–20)
+- Atlas 05 `3d4e36bbdf6747c79ff4f00f078fc5a5` (1–8 / 9–14 / 15–20)
+- Atlas 10 `e85f13d7cf7749c7aa42f3e279bc6d30` (classic)
+
+---
+
 ## What remains (folder order)
 
-1. **Atlas Practice Series** ← start here when the owner uploads PDFs
-2. **Nova Practice Series**
+1. **Rest of Atlas Practice Series** — Desktop folder has Sample 2–4, 6–9, 11–26 + Kaplan. Do **not** import those until the owner decides. They fail the contract as-is:
+   - Sample 2: booklet last block is 14–20 (validator only allows 15 or 16)
+   - Sample 3: matching 1–5
+   - Sample 4 / Kaplan: matching 1–6
+   - Sample 6–8: CamScanner, no extractable printed key
+   - Sample 9: no printed key
+   - Sample 11–15 E2language, 16–21 OET Online, 22–26 IRS: third-party “Verified Answer Key” and/or invalid layouts
+2. **Nova Practice Series** (`Nova Reading Tests.pdf`)
 3. **VERY DIFFICULT READING EXAMS**
 
-Anna Hartford and Jayden Book folders are done. Their Part A/B/C QuestionPaper PDFs were split and re-attached on 2026-08-18 (distinct media per part, answer-key pages removed). Do **not** re-import questions/keys. Do **not** re-attach the original combined booklet.
+Do **not** re-import Jayden, Anna Hartford, Atlas 01/05/10, or `reading-sample-1`.
 
-If this session has **no new booklets**, do not invent papers. Ask the owner to
-upload the next series PDFs (same way they uploaded Anna Hartford).
+If this session has **no new contract-valid booklets**, do not invent papers. Ask the owner.
 
 ---
 
@@ -205,8 +219,8 @@ On the public API, for each new paper:
 
 ## Hard do-not list
 
-- Do not re-import or mutate Jayden / Anna Hartford answers. Do not re-attach
-  their original combined booklets.
+- Do not re-import or mutate Jayden / Anna Hartford / Atlas 01, 05, 10.
+  Do not re-attach their original combined booklets.
 - Do not invent keys or HTML passages.
 - Do not use practice-only question types or fuzzy marking.
 - Do not work in `D:\Projects\OET with Dr Hesham\...`.
@@ -225,6 +239,15 @@ On the public API, for each new paper:
 - `READING-MODULE-UNDERSTANDING.md` — earlier locked understanding
 
 Use them as examples. Do not re-publish AH from them.
+
+Atlas 01/05/10 session (not in git):
+
+`C:\Users\Admin\.copilot\session-state\a5cfda67-ead6-4944-98fe-e3b1fc27f2d9\files\`
+
+- `atlas-import\` — published JSON, part-only PDFs, prod importer
+- `atlas-extract\` — `pdftotext` + page maps
+
+Do not re-publish Atlas 01/05/10 from them.
 
 ---
 

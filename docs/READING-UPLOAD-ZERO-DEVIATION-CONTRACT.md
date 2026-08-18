@@ -62,9 +62,12 @@ Live AH / JB maps (1-based, keys omitted). Copy this method for new books:
 | JB3 (16p) | 1–4 | **4–7** | 8–14 | 15–16 |
 | JB4 (17p) | 1–4 | 5–8 | **8–15** | 16–17 |
 | JB5 (16p) | 1–5 | **5–8** | **8–14** | 15–16 |
+| Atlas01 (21p) | 1–5 | 6–11 | 12–19 | 20–21 |
+| Atlas05 (28p) | 1–8 | 9–15 | 16–23 | 24–28 |
+| Atlas10 (21p) | 1–5 | 6–11 | 12–19 | 20–21 |
 
-Do **not** re-import or re-attach Jayden / Anna Hartford unless the owner
-asks. Their part files are already live.
+Do **not** re-import or re-attach Jayden / Anna Hartford / Atlas 01, 05, 10
+unless the owner asks. Their part files are already live.
 
 ---
 

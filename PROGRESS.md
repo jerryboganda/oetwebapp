@@ -2,11 +2,18 @@
 
 Last updated: 2026-08-18
 
+## Current Checkpoint - Atlas Practice Series 01 / 05 / 10 live
+
+- Published on production: `atlas-practice-series-01-fractures-dislocations-sprains` (`53d261affe2541359f5578b7e25d688d`), `atlas-practice-series-05-cellulitis` (`3d4e36bbdf6747c79ff4f00f078fc5a5`), `atlas-practice-series-10-sedation` (`e85f13d7cf7749c7aa42f3e279bc6d30`).
+- Status 4, 20/6/16, 42 pts, three distinct part-only QuestionPaper media ids each. Tags `reading,atlas-practice-series,official-key`.
+- Remaining Desktop Atlas files skipped (invalid Part A layouts, CamScanner, or third-party verified keys). Do not invent papers.
+- Next: owner decision on those remaining Atlas files, then Nova Practice Series.
+
 ## Current Checkpoint - Reading part-only PDFs + zero-deviation contract
 
 - AH1–AH3 and JB1–JB5 now have distinct Part A/B/C QuestionPaper files on production (keys stripped; shared boundary pages duplicated).
 - Law for every future upload: `docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md`. Never attach a combined booklet.
-- Next: owner uploads Atlas Practice Series PDFs; new session follows the contract with no deviations.
+- Atlas 01 / 05 / 10 are now live; remaining Atlas files need an owner decision.
 
 ## Current Checkpoint - Empty Reading exam folders
 
@@ -134,6 +141,8 @@ Implement the OET 2026 product portfolio plan on `feat/oet-2026-entitlement-conf
   - Frontend unit/lint/tsc/build, SBOM/SCA, and all E2E smoke shards passed.
   - Backend shards 1/4, 2/4, and 3/4 passed; shard 4 failed only `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription`.
   - Focused local rerun for `RecallsAudioEntitlementTests.Audio_returns_402_for_learner_without_active_subscription|Queue_exposes_term_id_but_never_cached_audio_urls|Quiz_never_returns_cached_audio_urls|Vocabulary_term_payload_redacts_cached_audio_fields`: red on 404 for the unauthorised audio case, then green after seeding a cancelled subscription for non-active learners so the shared debug factory does not auto-create an active subscription.
+
+- 2026-08-18: Published Atlas Practice Series 01 / 05 / 10 on production (`atlas-practice-series-01-fractures-dislocations-sprains`, `atlas-practice-series-05-cellulitis`, `atlas-practice-series-10-sedation`). Status 4, 20/6/16, 42 pts, three distinct part-only QuestionPaper media ids each. Remaining Desktop Atlas files skipped (invalid Part A layouts, CamScanner, or third-party keys). Next: owner decision on those, then Nova.
 
 ## Next-Step Protocol For New Agent Runs
 
