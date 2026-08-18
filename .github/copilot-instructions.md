@@ -38,7 +38,7 @@ Ask only when a missing decision blocks correctness or safety.
 - Frontend: follow Next.js App Router, React 19, TypeScript, Tailwind, direct imports, `motion/react`, and `apiClient` rules.
 - Backend: follow ASP.NET Core Minimal API, EF Core, PostgreSQL, DI services, DTO contracts, cancellation tokens, and server-side authorization.
 - Security/auth/AI/uploads/scoring/rulebooks/runtime settings/deployment: load the matching domain docs before editing.
-- Reading save / upload / import / publish: load `docs/READING-MODULE-SAVE-AND-UPLOAD.md` first and follow it. Do not restart the Reading research loop.
+- Reading save / upload / import / publish: load `docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md` first, then the playbook and handoff. Follow them with no deviations. Do not restart the Reading research loop. Never attach a combined A+B+C booklet.
 - Admin UI: load admin Hallmark instructions and keep operational UI dense, restrained, accessible, and scan-friendly.
 - Review/audit requests: lead with findings ordered by severity.
 

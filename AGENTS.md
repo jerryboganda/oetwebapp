@@ -51,6 +51,18 @@ installed: Node 22.x, pnpm 10.33.0, .NET 10.x.
   `pnpm run build`, `dotnet build`, `dotnet test`, or `dotnet publish` there
   unless the user explicitly approves an emergency source-build exception.
 
+## Official Reading uploads — COMPULSORY
+
+Before any Reading import / attach / publish, load
+`docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md` and follow it with
+**no deviations**. Then the playbook and handoff.
+
+Non-negotiable: crop **part-only** A/B/C PDFs (drop answer-key pages;
+shared boundary pages go in both parts); never attach the combined
+booklet; 20/6/16 = 42; `texts: []`; `correctAnswerJson` from the printed
+key only; publish live on `https://api.oetwithdrhesham.co.uk`; same five
+book folders on `/reading/exam` and `/reading/parts/a|b|c`.
+
 ## GitHub Actions visibility — COMPULSORY
 
 For **every** GitHub Actions run (deploy, CI, smoke, `workflow_dispatch`, reruns):

@@ -2,6 +2,12 @@
 
 Last updated: 2026-08-18
 
+## Current Checkpoint - Reading part-only PDFs + zero-deviation contract
+
+- AH1–AH3 and JB1–JB5 now have distinct Part A/B/C QuestionPaper files on production (keys stripped; shared boundary pages duplicated).
+- Law for every future upload: `docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md`. Never attach a combined booklet.
+- Next: owner uploads Atlas Practice Series PDFs; new session follows the contract with no deviations.
+
 ## Current Checkpoint - Empty Reading exam folders
 
 - Learner `/reading/exam` showed empty folders because `GET /v1/reading-papers/home` 500ed: `ReadingAttempts.MarkingPolicyVersionId` missing.

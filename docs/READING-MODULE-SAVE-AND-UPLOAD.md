@@ -5,7 +5,9 @@
 > official OET Reading papers (Jayden Book JB1–JB5, Anna Hartford AH1–AH3,
 > and later books).
 >
-> **New session start:** `docs/READING-UPLOAD-AGENT-HANDOFF.md`
+> **Zero-deviation law:** `docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md`
+> (read this before any import). **New session start:**
+> `docs/READING-UPLOAD-AGENT-HANDOFF.md`
 >
 > **Status:** authoritative for save / import / validate / publish as of
 > 2026-08-20. Older notes in `docs/reading-ingestion/READING-MODULE-KNOWLEDGE-BASE.md`
@@ -44,6 +46,7 @@ Do **not**:
 - Send **Full Reading Exam** (`/reading/exam`) or Part A/B/C (`/reading/parts/a|b|c`) to `/mocks`. Those routes are folder-first paper lists.
 - Assume last Part A block is always 15–20.
 - Use `correctAnswer` instead of `correctAnswerJson`.
+- Attach the combined A+B+C booklet (or the answer-key pages) as the Part A/B/C QuestionPaper. Crop first. Three distinct media ids.
 - Put HTML passages in `texts` for official papers.
 - Use practice-only types (`FillInBlank`, `ShortAnswerLabeled`, `MultipleChoiceFlexible`).
 - Enable fuzzy / Levenshtein marking.

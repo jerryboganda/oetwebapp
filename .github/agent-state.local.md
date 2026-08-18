@@ -5,8 +5,9 @@ Continue official OET Reading uploads on production for **oetwebapp**.
 Publish live. Same five book folders for Full Exam and Part A/B/C.
 
 ## Read first
-1. `docs/READING-UPLOAD-AGENT-HANDOFF.md`
-2. `docs/READING-MODULE-SAVE-AND-UPLOAD.md`
+1. `docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md`
+2. `docs/READING-UPLOAD-AGENT-HANDOFF.md`
+3. `docs/READING-MODULE-SAVE-AND-UPLOAD.md`
 
 ## Already live — do not re-import
 - Jayden JB1–JB5 — part-only QuestionPaper PDFs attached

@@ -1,8 +1,9 @@
 # Reading upload — new-session agent handoff
 
-Read this file first, then `docs/READING-MODULE-SAVE-AND-UPLOAD.md`.
-Do **not** restart a repo-wide research loop. Do **not** implement this in
-Doctor Marriage Bureau.
+Read `docs/READING-UPLOAD-ZERO-DEVIATION-CONTRACT.md` first, then this
+file, then `docs/READING-MODULE-SAVE-AND-UPLOAD.md`. Follow them with
+**no deviations**. Do **not** restart a repo-wide research loop. Do
+**not** implement this in Doctor Marriage Bureau.
 
 ---
 
@@ -25,6 +26,7 @@ Owner standing orders:
    Make the repo **public** for the Actions run, then set it **private** again when the run finishes. Never leave it public.
 4. Future papers must appear in the **same five book folders** as Reading materials.
 5. Full Exam lists whole papers. Part A / B / C lists that part of every paper.
+6. Crop **part-only** PDFs before attach. Never serve the combined booklet.
 
 ---
 
@@ -63,11 +65,15 @@ upload the next series PDFs (same way they uploaded Anna Hartford).
 
 1. Confirm cwd is `E:\Projects\OET with Dr Hesham\Web App` on `main`.
 2. `git pull --ff-only origin main` if needed. Do not switch to DMB.
-3. Read this file + the playbook. Do not re-derive the 20/6/16 contract.
+3. Read the zero-deviation contract + this file + the playbook. Do not
+   re-derive the 20/6/16 contract.
 4. Inventory owner-uploaded PDFs. Each must be a full exam + printed key.
-5. Extract text with `pdftotext` at
+5. Crop Part A / B / C PDFs. Drop answer-key pages. Duplicate shared
+   boundary pages. Confirm three files and no `ANSWER KEY` text.
+6. Extract text with `pdftotext` at
    `C:\Program Files\Git\mingw64\bin\pdftotext.exe`.
-6. Build a JSON bundle. Offline validate. Then import + publish on the public API.
+7. Build a JSON bundle. Offline validate (`ERROR COUNT 0`, 42 points).
+   Import + publish on the public API. Confirm three distinct media ids.
 
 ---
 
