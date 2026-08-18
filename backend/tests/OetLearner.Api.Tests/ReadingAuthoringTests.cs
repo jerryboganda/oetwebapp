@@ -279,6 +279,27 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Validator_accepts_part_a_one_to_eight_matching_layout()
+    {
+        var (db, structure, _, _, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var q8 = await db.ReadingQuestions.FirstAsync(q => q.ReadingPartId == partA.Id && q.DisplayOrder == 8);
+        q8.QuestionType = ReadingQuestionType.MatchingTextReference;
+        q8.OptionsJson = "[]";
+        q8.CorrectAnswerJson = "\"A\"";
+        await db.SaveChangesAsync();
+
+        var report = await structure.ValidatePaperAsync("p1", default);
+
+        Assert.DoesNotContain(report.Issues, i => i.Code is "part_A_layout_invalid" or "part_A_question_sequence");
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Validator_rejects_individual_part_a_question_missing_text_link()
     {
         var (db, structure, _, _, _) = Build();

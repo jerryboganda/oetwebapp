@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const DEFAULT_API_BASE = 'http://localhost:8080';
 const DEFAULT_CHUNK_SIZE_BYTES = 2 * 1024 * 1024;
+const extraRequestHeaders = {};
 const PAPER_ASSET_ROLE_VALUE = new Map([
   ['Audio', 0],
   ['QuestionPaper', 1],
@@ -64,7 +66,7 @@ async function loadManifestBundle(manifestPath) {
     return { bundle: module.default ?? module.bundle, baseDir: path.dirname(resolvedPath), resolvedPath };
   }
   const raw = await fs.readFile(resolvedPath, 'utf8');
-  return { bundle: JSON.parse(raw), baseDir: path.dirname(resolvedPath), resolvedPath };
+  return { bundle: JSON.parse(raw.replace(/^\uFEFF/, '')), baseDir: path.dirname(resolvedPath), resolvedPath };
 }
 
 async function apiRequest(apiBase, route, { method = 'GET', body, token, headers } = {}) {
@@ -77,7 +79,8 @@ async function apiRequest(apiBase, route, { method = 'GET', body, token, headers
         Accept: 'application/json',
         ...(body !== undefined && !(body instanceof Uint8Array) ? { 'Content-Type': 'application/json' } : {}),
         ...(body instanceof Uint8Array ? { 'Content-Type': 'application/octet-stream' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(token && token !== 'dev-auth' ? { Authorization: `Bearer ${token}` } : {}),
+        ...extraRequestHeaders,
         ...(headers ?? {}),
       },
     });
@@ -204,9 +207,38 @@ async function replaceAssets(apiBase, token, paper, paperConfig, baseDir) {
       displayOrder: asset.displayOrder ?? 1,
       makePrimary: asset.makePrimary !== false,
     });
-    attached.push(attachedAsset);
+    attached.push({
+      ...attachedAsset,
+      role,
+      part: asset.part ?? null,
+      mediaAssetId,
+      title: asset.title ?? path.basename(sourcePath),
+      displayOrder: asset.displayOrder ?? 1,
+      isPrimary: asset.makePrimary !== false,
+    });
   }
   return attached;
+}
+
+function injectQuestionPaperAssets(manifest, attached) {
+  const byPart = new Map();
+  for (const asset of attached) {
+    if (asset.role === 'QuestionPaper' && asset.part && asset.mediaAssetId) {
+      byPart.set(asset.part, {
+        mediaAssetId: asset.mediaAssetId,
+        title: asset.title,
+        displayOrder: asset.displayOrder ?? 1,
+        isPrimary: asset.isPrimary !== false,
+      });
+    }
+  }
+  return {
+    ...manifest,
+    parts: (manifest?.parts ?? []).map((part) => ({
+      ...part,
+      questionPaperAsset: byPart.get(part.partCode) ?? part.questionPaperAsset ?? null,
+    })),
+  };
 }
 
 async function attachPaperAsset(apiBase, token, paperId, asset) {
@@ -294,7 +326,8 @@ async function upsertPaper(apiBase, token, paperConfig, replaceExisting) {
 
 async function importPaper(apiBase, token, paperConfig, baseDir, options) {
   const { paper, created } = await upsertPaper(apiBase, token, paperConfig, options.replaceExisting);
-  await replaceAssets(apiBase, token, paper, paperConfig, baseDir);
+  const attached = await replaceAssets(apiBase, token, paper, paperConfig, baseDir);
+  const manifest = injectQuestionPaperAssets(paperConfig.manifest, attached);
   await apiRequest(apiBase, `/v1/admin/papers/${paper.id}/reading/ensure-canonical`, {
     method: 'POST',
     token,
@@ -306,7 +339,7 @@ async function importPaper(apiBase, token, paperConfig, baseDir, options) {
       token,
       body: {
         replaceExisting: true,
-        manifest: paperConfig.manifest,
+        manifest,
       },
     });
   } catch (error) {
@@ -340,19 +373,59 @@ async function importPaper(apiBase, token, paperConfig, baseDir, options) {
   };
 }
 
+function runOfflineDryRun(resolvedPath, replaceExisting) {
+  const validator = path.join(workspaceRoot, 'scripts', 'admin', 'validate-reading-manifest.ts');
+  const argv = [
+    '--experimental-strip-types',
+    '--no-warnings=ExperimentalWarning',
+    validator,
+    '--manifest',
+    resolvedPath,
+  ];
+  if (replaceExisting) argv.push('--replace-existing');
+  const result = spawnSync(process.execPath, argv, { stdio: 'inherit', cwd: workspaceRoot });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    throw new Error('Offline Reading dry-run failed. No papers were imported.');
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const apiBase = args.api ?? DEFAULT_API_BASE;
-  assertLocalApi(apiBase);
-
   const manifestPath = requireText(args.manifest, '--manifest');
-  const email = requireText(args.email ?? process.env.OET_ADMIN_EMAIL, '--email or OET_ADMIN_EMAIL');
-  const password = requireText(args.password ?? process.env.OET_ADMIN_PASSWORD, '--password or OET_ADMIN_PASSWORD');
   const { bundle, baseDir, resolvedPath } = await loadManifestBundle(manifestPath);
+
+  if (args['dry-run']) {
+    runOfflineDryRun(resolvedPath, Boolean(args['replace-existing']));
+    console.log(JSON.stringify({ dryRun: true, manifest: resolvedPath, paperCount: Array.isArray(bundle?.papers) ? bundle.papers.length : 0 }, null, 2));
+    return;
+  }
+
+  assertLocalApi(apiBase);
   const papers = Array.isArray(bundle?.papers) ? bundle.papers : [];
   if (papers.length === 0) throw new Error(`No papers found in ${resolvedPath}.`);
 
-  const token = await signIn(apiBase, email, password);
+  let token;
+  if (args['dev-auth']) {
+    extraRequestHeaders['X-Debug-Role'] = 'admin';
+    extraRequestHeaders['X-Debug-UserId'] = requireText(
+      args['debug-user-id'] ?? process.env.OET_DEBUG_USER_ID,
+      '--debug-user-id or OET_DEBUG_USER_ID',
+    );
+    extraRequestHeaders['X-Debug-Email'] = args['debug-email'] ?? process.env.OET_DEBUG_EMAIL ?? 'admin@local';
+    extraRequestHeaders['X-Debug-Name'] = 'Jayden Import';
+    extraRequestHeaders['X-Debug-EmailVerified'] = 'true';
+    extraRequestHeaders['X-Debug-AdminPermissions'] =
+      args['debug-permissions']
+      ?? process.env.OET_DEBUG_ADMIN_PERMISSIONS
+      ?? 'system_admin,content:read,content:write,content:publish';
+    token = 'dev-auth';
+  } else {
+    const email = requireText(args.email ?? process.env.OET_ADMIN_EMAIL, '--email or OET_ADMIN_EMAIL');
+    const password = requireText(args.password ?? process.env.OET_ADMIN_PASSWORD, '--password or OET_ADMIN_PASSWORD');
+    token = await signIn(apiBase, email, password);
+  }
   const options = {
     replaceExisting: Boolean(args['replace-existing']),
     publish: !args['no-publish'],

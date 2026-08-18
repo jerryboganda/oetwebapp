@@ -17,6 +17,14 @@ import {
   type ReadingSectionAdminDto,
 } from '@/lib/reading-authoring-api';
 import { readingPublicDisplayNumber } from '@/lib/reading-display-number';
+import {
+  CLASSIC_PART_A_LAYOUT,
+  describePartALayout,
+  detectPartALayoutFromBookletText,
+  expectedPartAQuestionType,
+  resolvePartALayout,
+  type PartALayout,
+} from '@/lib/reading-part-a-layout';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -98,17 +106,27 @@ function sectionIndex(section: ReadingSectionAdminDto): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : section.displayOrder;
 }
 
-function templateSlots(partCode: ReadingPartCode, activeSection: ReadingSectionAdminDto | null): SlotTemplate[] {
+function slotKindFor(questionType: ReadingQuestionType): BuilderRowKind {
+  if (questionType === 'MatchingTextReference') return 'matching';
+  if (questionType === 'MultipleChoice3' || questionType === 'MultipleChoice4') return 'mcq';
+  return 'shortText';
+}
+
+function templateSlots(
+  partCode: ReadingPartCode,
+  activeSection: ReadingSectionAdminDto | null,
+  partALayout: PartALayout = CLASSIC_PART_A_LAYOUT,
+): SlotTemplate[] {
   if (partCode === 'A') {
     const slots: SlotTemplate[] = [];
     for (let order = 1; order <= 20; order += 1) {
-      if (order <= 7) {
-        slots.push({ internalDisplayOrder: order, questionType: 'MatchingTextReference', kind: 'matching', options: [...PART_A_TEXT_OPTIONS] });
-      } else if (order <= 14) {
-        slots.push({ internalDisplayOrder: order, questionType: 'ShortAnswer', kind: 'shortText', options: [] });
-      } else {
-        slots.push({ internalDisplayOrder: order, questionType: 'SentenceCompletion', kind: 'shortText', options: [] });
-      }
+      const questionType = expectedPartAQuestionType(order, partALayout) ?? 'ShortAnswer';
+      slots.push({
+        internalDisplayOrder: order,
+        questionType,
+        kind: slotKindFor(questionType),
+        options: questionType === 'MatchingTextReference' ? [...PART_A_TEXT_OPTIONS] : [],
+      });
     }
     return slots;
   }
@@ -150,11 +168,10 @@ function buildRows(
   partCode: ReadingPartCode,
   activeSection: ReadingSectionAdminDto | null,
   scopeQuestions: ReadingQuestionAdminDto[],
+  partALayout: PartALayout = CLASSIC_PART_A_LAYOUT,
 ): BuilderRow[] {
-  return templateSlots(partCode, activeSection).map((slot) => {
-    const existing = scopeQuestions.find(
-      (q) => q.displayOrder === slot.internalDisplayOrder && q.questionType === slot.questionType,
-    );
+  return templateSlots(partCode, activeSection, partALayout).map((slot) => {
+    const existing = scopeQuestions.find((q) => q.displayOrder === slot.internalDisplayOrder);
     const seeded = existing ? parseExisting(existing) : null;
     const isMcq = slot.kind === 'mcq';
     const baseOptions = seeded && seeded.options.length > 0 ? seeded.options : slot.options;
@@ -210,6 +227,19 @@ export function ReadingAnswerSheetBuilder({
   const [rows, setRows] = useState<BuilderRow[]>([]);
   const [shown, setShown] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [bookletText, setBookletText] = useState('');
+  const [layoutNote, setLayoutNote] = useState<string | null>(null);
+
+  const detectedLayout = useMemo(() => {
+    if (partCode !== 'A') return CLASSIC_PART_A_LAYOUT;
+    return resolvePartALayout({
+      questions: scopeQuestions.map((question) => ({
+        displayOrder: question.displayOrder,
+        questionType: question.questionType,
+      })),
+      bookletText,
+    }).layout ?? CLASSIC_PART_A_LAYOUT;
+  }, [partCode, scopeQuestions, bookletText]);
 
   useEffect(() => {
     if (blocked || needsSection) {
@@ -219,19 +249,31 @@ export function ReadingAnswerSheetBuilder({
     }
     if (scopeQuestions.length > 0) {
       // Already authored via the builder — seed and show in place.
-      setRows(buildRows(partCode, activeSection, scopeQuestions));
+      setRows(buildRows(partCode, activeSection, scopeQuestions, detectedLayout));
       setShown(true);
+      if (partCode === 'A') setLayoutNote(describePartALayout(detectedLayout));
     } else {
       setRows([]);
       setShown(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partCode, activePart.id, activeSection?.id, scopeSignature, blocked, needsSection]);
+  }, [partCode, activePart.id, activeSection?.id, scopeSignature, blocked, needsSection, detectedLayout]);
 
   const handleGenerate = useCallback(() => {
-    setRows(buildRows(partCode, activeSection, scopeQuestions));
+    const fromBooklet = partCode === 'A' && bookletText.trim()
+      ? detectPartALayoutFromBookletText(bookletText)
+      : null;
+    const layout = fromBooklet?.ok && fromBooklet.layout
+      ? fromBooklet.layout
+      : detectedLayout;
+    if (partCode === 'A') {
+      setLayoutNote(fromBooklet && !fromBooklet.ok
+        ? fromBooklet.error
+        : describePartALayout(layout));
+    }
+    setRows(buildRows(partCode, activeSection, scopeQuestions, layout));
     setShown(true);
-  }, [partCode, activeSection, scopeQuestions]);
+  }, [partCode, activeSection, scopeQuestions, bookletText, detectedLayout]);
 
   const patchRow = useCallback((index: number, patch: Partial<BuilderRow>) => {
     setRows((prev) => prev.map((row, i) => (i === index ? { ...row, ...patch } : row)));
@@ -292,7 +334,7 @@ export function ReadingAnswerSheetBuilder({
           <CardTitle className="text-sm">Answer sheet — Part {partCode}{sectionLabel}</CardTitle>
           <CardDescription>
             {partCode === 'A'
-              ? 'Read the question on the PDF, then record the machine-gradable answer for each item.'
+              ? 'The builder detects 1-7 vs 1-8 matching and whether 8-14 / 9-14 is answer or complete-the-sentences. Paste the Part A headings if you are starting a new paper.'
               : 'Type each question’s stem and options, then mark the correct one — they render inline on the learner card. Leave a field blank to keep the PDF-backed placeholder.'}
           </CardDescription>
         </div>
@@ -312,14 +354,30 @@ export function ReadingAnswerSheetBuilder({
             These questions were authored with the advanced editor. Edit them in the question list below to avoid overwriting custom content.
           </InlineAlert>
         ) : !shown ? (
-          <div className="text-center py-6 space-y-3">
-            <p className="text-sm text-admin-fg-muted">No answers yet for Part {partCode}{sectionLabel}.</p>
-            <Button variant="primary" size="sm" onClick={handleGenerate} startIcon={<Sparkles className="h-4 w-4" />}>
-              Generate from PDF template
-            </Button>
+          <div className="space-y-3 py-4">
+            {partCode === 'A' ? (
+              <Textarea
+                label="Part A question paper headings"
+                aria-label="Part A question paper headings"
+                value={bookletText}
+                onChange={(e) => setBookletText(e.target.value)}
+                placeholder="Paste Questions 1-7 or 1-8, then the answer / complete-the-sentences headings. The layout is detected automatically."
+                rows={4}
+              />
+            ) : null}
+            <div className="text-center space-y-3">
+              <p className="text-sm text-admin-fg-muted">No answers yet for Part {partCode}{sectionLabel}.</p>
+              {layoutNote ? <p className="text-xs text-admin-fg-muted">{layoutNote}</p> : null}
+              <Button variant="primary" size="sm" onClick={handleGenerate} startIcon={<Sparkles className="h-4 w-4" />}>
+                Generate from PDF template
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="space-y-2">
+            {partCode === 'A' && layoutNote ? (
+              <p className="text-xs text-admin-fg-muted">{layoutNote}</p>
+            ) : null}
             {rows.map((row, index) => {
               const letterOptions = row.options.map((opt, idx) => ({
                 value: MCQ_LETTERS[idx],

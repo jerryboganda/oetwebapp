@@ -1,6 +1,40 @@
 ﻿# Agent State (local)
 
 ## Goal
+Reading reverse-engineering / future-ingestion contract. No content insert. No OCR.
+
+## Latest
+Automatic Part A layout detection is in place on branch `manwara575-star-fluffy-guacamole`.
+
+Official Part A stays 20 items. Detector accepts four layouts:
+- 1-7 matching / 8-14 answer / 15-20 complete (classic)
+- 1-7 matching / 8-14 complete / 15-20 answer
+- 1-8 matching / 9-14 answer / 15-20 complete (Sample 5)
+- 1-8 matching / 9-14 complete / 15-20 answer
+
+TS + C# share the same rules. Authoring paste/generate and publish validation use the detected layout. No paper insert. No OCR.
+
+Validation: Node smoke passed. API compiled. Full test project blocked by pre-existing unrelated CS errors.
+
+## Previous
+Offline Reading import contract is in place on branch `manwara575-star-fluffy-guacamole`.
+
+Independent review first blocked on: missing B/C questions-per-text rule, unlinked "canonical" texts, and undocumented EvidenceSentence import gap. Those are now fixed in the TS contract/docs/fixture. Backend import still does not persist evidence.
+
+Delivered:
+- `lib/reading-manifest-contract.ts` + tests + Node smoke
+- `scripts/admin/validate-reading-manifest.ts`
+- importer `--dry-run` (no API, no credentials)
+- `docs/reading-ingestion/` knowledge base, mapping, templates, PDF-only sample fixture
+- runbook dry-run section
+
+Readiness: CONDITIONALLY READY (contract verified; no source booklets; evidence must be set after import; replace-import PDF-wipe remains).
+
+Validation: Node 24 strip-types smoke (PDF-only ready, unlinked B fails, linked 4/6/2 ready) + CLI dry-run on fixture (`20/6/16/42`, texts 0). Worktree has no node_modules so host `pnpm exec vitest` was not run.
+
+Do not insert papers. Do not start OCR until a real booklet + dry-run + human review exist.
+
+## Goal (previous)
 Batch of 3 spec cards: (6) pending payment approval cycle UX, (7) Egypt-only regional gateways, (8) admin-managed multiple Stripe accounts. ALL DONE & SHIPPED.
 
 ## Shipped

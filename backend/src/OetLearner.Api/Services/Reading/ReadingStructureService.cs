@@ -169,7 +169,8 @@ public sealed record ReadingQuestionManifest(
     string? SkillTag,
     int? ReadingTextDisplayOrder,
     string? OptionDistractorsJson = null,
-    ReadingReviewState ReviewState = ReadingReviewState.Draft);
+    ReadingReviewState ReviewState = ReadingReviewState.Draft,
+    string? EvidenceSentence = null);
 
 public sealed record ReadingStructureImportResult(
     ReadingStructure Structure,
@@ -1024,6 +1025,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                 if (row is null) continue;
                 if (qm.OptionDistractorsJson is { Length: > 0 })
                     row.OptionDistractorsJson = qm.OptionDistractorsJson;
+                if (!string.IsNullOrWhiteSpace(qm.EvidenceSentence))
+                    row.EvidenceSentence = qm.EvidenceSentence;
                 row.ReviewState = qm.ReviewState;
             }
             await db.SaveChangesAsync(ct);
@@ -1055,19 +1058,23 @@ public sealed class ReadingStructureService : IReadingStructureService
                 $"Paper subtest is '{paper.SubtestCode}', expected 'reading'.", null));
         }
 
-        var pdfParts = await db.ContentPaperAssets.AsNoTracking()
+        // Filter MIME/format in memory. EF cannot translate
+        // string.StartsWith(..., StringComparison.OrdinalIgnoreCase).
+        var primaryQuestionAssets = await db.ContentPaperAssets.AsNoTracking()
+            .Include(a => a.MediaAsset)
             .Where(a => a.PaperId == paperId
                 && a.Role == PaperAssetRole.QuestionPaper
                 && a.IsPrimary
-                && (a.Part == "A" || a.Part == "B" || a.Part == "C")
-                && a.MediaAsset != null
-                && a.MediaAsset.Status == MediaAssetStatus.Ready
-                && (a.MediaAsset.Format == "pdf"
-                    || a.MediaAsset.MimeType == "application/pdf"
-                    || a.MediaAsset.MimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase)))
+                && (a.Part == "A" || a.Part == "B" || a.Part == "C"))
+            .ToListAsync(ct);
+        var pdfParts = primaryQuestionAssets
+            .Where(a => a.MediaAsset is { Status: MediaAssetStatus.Ready } media
+                && (string.Equals(media.Format, "pdf", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(media.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase)
+                    || (media.MimeType?.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ?? false)))
             .GroupBy(a => a.Part!)
             .Select(g => new { Part = g.Key, Count = g.Count() })
-            .ToListAsync(ct);
+            .ToList();
         foreach (var requiredPart in new[] { "A", "B", "C" })
         {
             var count = pdfParts.FirstOrDefault(p => p.Part == requiredPart)?.Count ?? 0;
@@ -1177,6 +1184,25 @@ public sealed class ReadingStructureService : IReadingStructureService
                 case ReadingPartCode.C: partC = questionCount; break;
             }
             var textIds = texts.Select(t => t.Id).ToHashSet(StringComparer.Ordinal);
+            ReadingPartALayout? partALayout = null;
+            if (part.PartCode == ReadingPartCode.A && part.Questions.Count == expected)
+            {
+                if (ReadingPartALayoutDetector.TryDetectFromQuestions(
+                        part.Questions.Select(q => (q.DisplayOrder, q.QuestionType)),
+                        out var detected,
+                        out var layoutError))
+                {
+                    partALayout = detected;
+                }
+                else
+                {
+                    issues.Add(new(
+                        Code: "part_A_layout_invalid",
+                        Severity: "error",
+                        Message: layoutError,
+                        TargetId: part.Id));
+                }
+            }
             foreach (var q in part.Questions)
             {
                 totalPoints += q.Points;
@@ -1204,12 +1230,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                         Message: $"Part {part.PartCode} question {q.DisplayOrder} references a legacy text outside this part. PDF-only rendering ignores text links.",
                         TargetId: q.Id));
                 }
-                if (part.PartCode == ReadingPartCode.A)
+                if (part.PartCode == ReadingPartCode.A && partALayout is { } detectedLayout)
                 {
-                    // Part A type layout — relaxed to match real OET paper
-                    // v1.1 fixes the Part A sequence: Q1-7 matching, Q8-14
-                    // short answer, and Q15-20 sentence completion. Do not relax
-                    // this into a generic Q1-14 typed block at publish time.
                     if (q.DisplayOrder is < 1 or > 20)
                     {
                         issues.Add(new(
@@ -1220,9 +1242,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                     }
                     else
                     {
-                        var expectedType = ExpectedPartAQuestionType(q.DisplayOrder);
-                        var blockOk = expectedType == q.QuestionType;
-                        if (!blockOk)
+                        var expectedType = detectedLayout.TypeFor(q.DisplayOrder);
+                        if (expectedType is null || expectedType != q.QuestionType)
                         {
                             issues.Add(new(
                                 Code: "part_A_question_sequence",
@@ -1369,7 +1390,7 @@ public sealed class ReadingStructureService : IReadingStructureService
             issues.Add(new(
                 Code: "short_answer_synonyms_paper_wide",
                 Severity: "warning",
-                Message: "Reading rule R04.6 — Q8–14 and Q15–20 must come word-for-word from the text. Paper-wide synonym acceptance increases the risk of false positives; prefer per-question accepted variants only.",
+                Message: "Reading rule R04.6 — Part A short-answer and sentence-completion items must come word-for-word from the text. Paper-wide synonym acceptance increases the risk of false positives; prefer per-question accepted variants only.",
                 TargetId: paperId));
         }
 
@@ -1412,14 +1433,6 @@ public sealed class ReadingStructureService : IReadingStructureService
         ReadingPartCode.B => questionType == ReadingQuestionType.MultipleChoice3,
         ReadingPartCode.C => questionType == ReadingQuestionType.MultipleChoice4,
         _ => false,
-    };
-
-    private static ReadingQuestionType? ExpectedPartAQuestionType(int displayOrder) => displayOrder switch
-    {
-        >= 1 and <= 7 => ReadingQuestionType.MatchingTextReference,
-        >= 8 and <= 14 => ReadingQuestionType.ShortAnswer,
-        >= 15 and <= 20 => ReadingQuestionType.SentenceCompletion,
-        _ => null,
     };
 
     private static IReadOnlyList<ReadingSectionView> BuildSectionViews(ReadingPart part)
