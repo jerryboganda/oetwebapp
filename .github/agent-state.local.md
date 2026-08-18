@@ -14,7 +14,7 @@ Publish live. Same five book folders for Full Exam and Part A/B/C.
 - `reading-sample-1`
 
 ## Next step
-Owner should hard-refresh `/reading/exam`. Empty folders were a 500 from missing `ReadingAttempts.MarkingPolicyVersionId` (two migrations lacked `[Migration]` attributes so EF never applied them). Schema is now on prod. Then continue Atlas PDFs when uploaded.
+Owner should click **Start full exam** again. The marking-policy block is cleared: effective Reading/Listening policies plus 0–42 conversion tables are on production. Then continue Atlas PDFs when uploaded.
 
 ## Constraints
 - Public API only. No local API/DB. No `--dev-auth` on Production.
