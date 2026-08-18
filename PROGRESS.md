@@ -1,6 +1,13 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-06-10
+Last updated: 2026-08-20
+
+## Current Checkpoint - Reading upload playbook + handoff
+
+- AH1–AH3 are Published on production. Folder-first Full Exam / Part A–C UI is live on web-blue `6eb4f075` via Actions `32114213139`.
+- Updated `docs/READING-MODULE-SAVE-AND-UPLOAD.md` for public-API writes, device headers, publish-live, Actions-only deploys, and AH inventory.
+- Added `docs/READING-UPLOAD-AGENT-HANDOFF.md` for a fresh session to continue with Atlas → Nova → Very Difficult.
+- Next: owner uploads Atlas Practice Series PDFs; new session imports on the public API.
 
 ## Current Checkpoint - Production Deploy Main
 

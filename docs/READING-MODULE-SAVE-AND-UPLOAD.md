@@ -2,12 +2,17 @@
 
 > **Audience:** future coding agents / LLMs. Read this file first. Do **not**
 > restart the research loop. This is the operational contract used to import
-> official OET Reading papers (Jayden Book JB1–JB5 and later books).
+> official OET Reading papers (Jayden Book JB1–JB5, Anna Hartford AH1–AH3,
+> and later books).
+>
+> **New session start:** `docs/READING-UPLOAD-AGENT-HANDOFF.md`
 >
 > **Status:** authoritative for save / import / validate / publish as of
-> 2026-08-18. Older notes in `docs/reading-ingestion/READING-MODULE-KNOWLEDGE-BASE.md`
+> 2026-08-20. Older notes in `docs/reading-ingestion/READING-MODULE-KNOWLEDGE-BASE.md`
 > and `docs/runbooks/local-reading-sample-import.md` are **stale** on Part A
-> last-block and EvidenceSentence import. This file wins.
+> last-block, EvidenceSentence import, write path, and learner exam routes.
+> This file wins on the contract. The handoff wins on the current live
+> inventory and next book.
 
 ---
 
@@ -23,22 +28,27 @@ then import a structured answer-sheet manifest, then validate, then publish.
 | 2 | Auto-detect Part A layout | Matching is 1–7 **or** 1–8. Last block starts at **15 or 16**. Middle/last swap SA vs SC. |
 | 3 | Build a JSON bundle | Field is `correctAnswerJson` (JSON-encoded string). Include `evidenceSentence`. `texts: []`. |
 | 4 | Offline dry-run | `ERROR COUNT 0`, 42 points, layout id matches the booklet headings. |
-| 5 | Write import via **local API only** | `scripts/admin/import-reading-manifests-local.mjs` refuses non-localhost. |
-| 6 | Backend validate + publish | `GET .../reading/validate` then `POST .../publish`. |
+| 5 | Write import on **production public API** | Owner-approved. Stock importer is localhost-only; use the public-API copy with device headers. Publish live (status 4). |
+| 6 | Backend validate + publish | `GET .../reading/validate` then `POST .../publish`. Do not leave drafts. |
 | 7 | Compare answers to the printed key | Never invent keys. Exception: JB2 Part C Q7–14 printed key is a paste error. |
+| 8 | Confirm learner folders | Full Exam and Part A/B/C must list the paper in the same book folder. |
 
 Do **not**:
 
-- Point the importer at `https://api.oetwithdrhesham.co.uk`.
-- Retry bootstrap / admin passwords (lockout after 5).
-- Recreate `oet-api-green` from the old GHCR image while the 2026-08-18 DLL overlay is live.
-- Send **Full Reading Exam** (`/reading/exam`) to `/mocks`. That route lists published papers by book folder. Mock bundles are a separate surface.
+- Host API or Postgres locally. Do not tunnel-and-run `dotnet` on the Windows host (no SDK / no Docker).
+- Use `--dev-auth` against Production. Debug headers work only when the API `IsDevelopment()`.
+- Retry `admin@oet-prep.dev` or any other bootstrap / expert password. Seed admin `FailedSignInCount` is already 1.
+- Recreate `oet-api-green` from an old GHCR image. That drops the 15/16 validator overlay.
+- Build, `dotnet publish`, or Next compile on the VPS. Heavy work is GitHub Actions only.
+- Send **Full Reading Exam** (`/reading/exam`) or Part A/B/C (`/reading/parts/a|b|c`) to `/mocks`. Those routes are folder-first paper lists.
 - Assume last Part A block is always 15–20.
 - Use `correctAnswer` instead of `correctAnswerJson`.
 - Put HTML passages in `texts` for official papers.
 - Use practice-only types (`FillInBlank`, `ShortAnswerLabeled`, `MultipleChoiceFlexible`).
 - Enable fuzzy / Levenshtein marking.
-- Touch the main checkout at `D:\Projects\OET with Dr Hesham\...`. Work only in the Copilot worktree.
+- Re-import or mutate Jayden JB1–JB5 or Anna Hartford AH1–AH3 unless the owner asks.
+- Touch Doctor Marriage Bureau (`Modernized-Platform/`). This work is **oetwebapp** only.
+- Work in `D:\Projects\OET with Dr Hesham\...`. Canonical checkout is `E:\Projects\OET with Dr Hesham\Web App` on `main`.
 
 ---
 
@@ -214,7 +224,10 @@ Session builder (not in git): Copilot session `files/build_jayden_manifests.py` 
 
 ---
 
-## 5. Save / upload pipeline (the only supported write path)
+## 5. Save / upload pipeline
+
+Stock importer = localhost-only dry-run / local-dev writes.
+Owner-approved production writes = public API + device headers (section 5.3).
 
 ### 5.1 API sequence
 
@@ -244,14 +257,11 @@ node --experimental-strip-types --no-warnings=ExperimentalWarning `
 node scripts/admin/import-reading-manifests-local.mjs `
   --manifest path\to\bundle.json --dry-run
 
-# Write. Host must be localhost / 127.0.0.1.
-# Default API is :8080. Jayden prod-via-tunnel used :5198.
+# Offline dry-run of the stock importer (no credentials).
+# Stock script still refuses non-localhost. Do not use it for prod writes.
+
 node scripts/admin/import-reading-manifests-local.mjs `
-  --manifest path\to\bundle.json `
-  --api http://127.0.0.1:5198 `
-  --dev-auth `
-  --debug-user-id auth_admin_local_001 `
-  --replace-existing
+  --manifest path\to\bundle.json --dry-run
 ```
 
 Flags:
@@ -260,31 +270,46 @@ Flags:
 | --- | --- |
 | `--dry-run` | Offline contract only. |
 | `--replace-existing` | Update same slug. Unpublishes to draft first. |
-| `--no-publish` | Stop after validate. |
-| `--dev-auth` | Development debug headers. Needs `OET_DEBUG_USER_ID` / `--debug-user-id`. |
-| `--email` / `--password` | Real sign-in when not using debug auth. |
-| `--api` | Must be local. Script refuses the public hostname. |
+| `--no-publish` | Stop after validate. **Do not use on official books** unless the owner asks for a draft. |
+| `--dev-auth` | Development debug headers only. Needs `OET_DEBUG_USER_ID` / `--debug-user-id`. **Never against Production.** |
+| `--email` / `--password` | Real sign-in. Required for the public API. |
+| `--api` | Stock script: localhost only. Production writes: public hostname via the session importer. |
 
 The importer now calls `injectQuestionPaperAssets()` so replace-import does **not** wipe the Part A/B/C PDFs. If you POST a manifest yourself, you must put `questionPaperAsset` on each part or re-attach PDFs after import.
 
-### 5.3 Writing into the production database (owner-approved only)
+### 5.3 Writing into production (owner-approved, current path)
 
-The importer cannot call the public API. The safe pattern used for Jayden:
+Owner instruction (2026-08-20): **use the live public API**. Do not host API or database locally. Do not SSH-tunnel Postgres/ClamAV and run `dotnet` on Windows (host has no Docker / no .NET SDK).
 
-1. SSH tunnels from the Windows host:
-   - Postgres `127.0.0.1:15433` → VPS `172.20.0.3:5432`
-   - ClamAV `127.0.0.1:3310` → VPS ClamAV `172.20.0.6:3310`
-2. Run the **updated** API on the host: `dotnet run --no-build --no-launch-profile` on `http://127.0.0.1:5198`.
-3. Required env (do not commit):
-   - `Bootstrap__SkipSchemaChanges=true` — **mandatory**. Never run Development+AutoMigrate against prod (EnsureCreated or Migrate will damage the schema).
-   - Connection string points at `127.0.0.1:15433`.
-   - `ASPNETCORE_ENVIRONMENT=Development` so `--dev-auth` and the ClamAV hostname remap work.
-4. `ClamAvUploadScanner` in Development remaps host `clamav` → `127.0.0.1`. Do **not** change prod RuntimeSettings. Prod is fail-closed on ClamAV.
-5. Copy prod DataProtection key XMLs into local `App_Data` (gitignored) if cookie/token unprotect is needed.
-6. Import with `--dev-auth --debug-user-id auth_admin_local_001 --api http://127.0.0.1:5198`.
-7. After publish, copy the five content-addressed PDFs onto the VPS volume `oetwebsite_oet_learner_storage` (`/var/opt/oet-learner/storage`) if the local API wrote files only on the Windows host.
+Working public-API importer (Anna Hartford):
 
-Do **not** retry the live bootstrap password. Do not print connection strings, signing keys, or cookies.
+`C:\Users\Admin\.copilot\session-state\6f7a0022-0c5f-43ab-8ee7-b78856aca49a\files\anna-hartford-import\import-reading-prod.mjs`
+
+That copy allows `api.oetwithdrhesham.co.uk` and sends device headers on every call.
+
+Required headers on **sign-in and every admin call**:
+
+```
+X-OET-Device-Id: <any UUID>
+X-OET-Client-Platform: desktop
+```
+
+Without them, Production returns `403 device_id_required` (TrustedDeviceRequired is on).
+
+Auth:
+
+1. Do **not** retry `admin@oet-prep.dev`. One failed sign-in already recorded.
+2. Do **not** retry bootstrap / expert passwords.
+3. Create a short-lived temp admin on the VPS (`auth_identities` + `admin_permission_grants` for `content:write` and `content:publish`), sign in with email/password + device headers, import, publish, then **delete the identity, grants, and any local secret files**.
+4. `--dev-auth` / `X-Debug-*` only work when the API is Development. Production returns 401.
+
+Publish live. Do not pass `--no-publish`. Confirm `ContentPapers.Status = 4` and `isPublishReady=true` with `counts.totalPoints=42`.
+
+Public-API uploads land on the VPS volume `/var/opt/oet-learner/storage` themselves. You do **not** copy PDFs by hand after a public-API import.
+
+**Legacy Jayden path (do not use unless the owner explicitly asks and the host has a .NET SDK):** SSH tunnels + local Development API + `Bootstrap__SkipSchemaChanges=true` + `--dev-auth`. Never AutoMigrate against prod. Never change prod ClamAV RuntimeSettings.
+
+Do not print connection strings, signing keys, cookies, or temp-admin passwords.
 
 ### 5.4 Admin UI path (same contract)
 
@@ -318,26 +343,31 @@ Learner endpoints never serialize answers, explanations, or synonyms.
 
 ---
 
-## 7. Production live API notes (2026-08-18)
+## 7. Production live notes (2026-08-20)
 
 | Item | Value |
 | --- | --- |
+| Product | **oetwebapp** (`E:\Projects\OET with Dr Hesham\Web App`). Not DMB. |
 | Public API | `https://api.oetwithdrhesham.co.uk` |
+| Member panel | `https://app.oetwithdrhesham.co.uk` (confirm live host before quoting) |
 | VPS | `root@185.252.233.186` |
 | Router | nginx container `oet-api` proxies `http://learner-api-{slot}:8080` |
-| Active slot after the layout fix | **green** (`/opt/oetwebapp/.deploy/active-slot.env`) |
-| Code on `main` | squash `af049e9a997cca24e9abae1355250bf2ee165ff8` (PR #152) |
-| Official deploy | push `main` → `.github/workflows/deploy.yml` → GHCR → `scripts/deploy/rollout-release.sh` |
-| Current blocker | GitHub Actions billing / spending limit. Workflows fail before an image is built. |
-| Emergency overlay | Linux `OetLearner.Api.dll` copied onto idle green, then router flipped. Snapshot tag: `oetwebsite-learner-api:part-a-laststart-af049e9a` |
-| Proof the new validator is loaded | green DLL UTF-16 string `last block must start` / `15 or 16`. Old backup DLL does not contain it. |
-| Rollback | point nginx `learner-api-green` back to `learner-api-blue` and `nginx -s reload`, **or** restore `/tmp/OetLearner.Api.dll.green.bak` and restart green |
+| Live API slot | **green** |
+| Live web slot | **web-blue** image `ghcr.io/jerryboganda/oetwebapp-web:6eb4f075...` |
+| Folder-first exam UI | commit `6eb4f075` on `jerryboganda/oetwebapp` `main` |
+| Official deploy | push `main` → GitHub Actions → GHCR → `scripts/deploy/rollout-release.sh` |
+| Last successful folder-UI deploy | Actions run `32114213139` (web/API/migrate/deploy all succeeded) |
+| Host limits | Windows: Node + Python 3.14. No local Docker. No local `dotnet` SDK. `pdftotext` at `C:\Program Files\Git\mingw64\bin\pdftotext.exe`. |
+| Heavy compute | **GitHub Actions only.** Never Next/`dotnet` build on the VPS. |
+| Actions instant-fail (~5s, empty steps) | Repo was private and runners could not start. Temporarily making the repo public unblocked this. |
+| Trusted devices | Production requires `X-OET-Device-Id` + `X-OET-Client-Platform: desktop`. |
+| Postgres / storage | `oet_learner` / `/var/opt/oet-learner/storage` |
 
-**Do not** `docker compose up --force-recreate learner-api-green` while the overlay is the only copy of the new validator. That recreates green from the old GHCR tag and the 15/16 rule disappears from live.
+**Do not** `docker compose up --force-recreate learner-api-green` from an old GHCR tag. That can drop the 15/16 validator.
 
-**Do not** `docker compose build` / `dotnet publish` on the VPS. Windows host has no Docker. VPS source-build requires `ALLOW_VPS_SOURCE_BUILD=owner-approved-emergency`.
+**Do not** `docker compose build` / `dotnet publish` / `next build` on the VPS.
 
-When billing is fixed, the next successful `main` deploy will build an image that already contains this validator. Until then the overlay + local image tag are the live copy.
+If a UI change is not live, check the **web** image digest / commit on the active web slot. API-only deploys do not update `/reading/exam`.
 
 ### 7.1 Jayden papers already in prod (Published)
 
@@ -353,6 +383,36 @@ PDFs live under `/var/opt/oet-learner/storage/uploads/published/...` (content-ad
 
 Answer compare after import: **210 / 210** official answers matched. Every question has explanation + evidence.
 
+### 7.2 Anna Hartford papers already in prod (Published)
+
+| Slug | Paper id | Layout | Topic |
+| --- | --- | --- | --- |
+| `anna-hartford-01-cigarette-smoking-lung-cancer` | `8f78b84f54b649618ac7ecdd2ac2adba` | classic 1–7 / 8–14 / 15–20 | Cigarette Smoking / Lung Cancer |
+| `anna-hartford-02-vision-impairment` | `c923296171034cae88c497c4939ee94f` | classic | Vision Impairment |
+| `anna-hartford-03-vaccines-immunisation` | `44e58008f91e4a14828696ec06f4d86d` | classic | Vaccines and Immunisation |
+
+Tags: `reading,anna-hartford,official-key`. Status 4. 20/6/16. 42 points. One QuestionPaper PDF reused for A/B/C.
+
+AH3 Part B letters were reconstructed from option prose in the printed key: `1A 2B 3B 4C 5A 6A`. Do not invent other letters.
+
+Also live: `reading-sample-1`. Do **not** re-import Jayden or Anna Hartford.
+
+Printed AH keys (authoritative, from the PDFs):
+
+```
+AH1 A: D A C B A B C | around 40% | 131 848 | carbon dioxide | worsens | early stage lung cancer | heart disease and stroke | Victoria | alveoli | breathe | lung cancer | cilia | respiratory illnesses | quit
+AH1 B: C A B C B A
+AH1 C: C B A B C A B A B D A A A B D B
+
+AH2 A: C D B A B D A | 246 million | Females | Naturally | Introduce others | Blindness | 6/6 | Uncorrected refractive errors | Visual fields | Avoid | Recognise you | Prevented or cured | Low-income settings | Age group
+AH2 B: B C A C C A
+AH2 C: D A B A B B B C C A C B A C A B
+
+AH3 A: B D A A B C D | Hepatitis B | Strengthen | 1932 | Children under 3 years of age | Two | 12 months | Recognise and clear out | Schedule | Mumps | Exposure | Three years (of age) | Exercise strengthens | Small fraction
+AH3 B: A B B C A A
+AH3 C: A C B A C C C A D A A D C C B C
+```
+
 ---
 
 ## 8. Bugs already fixed — do not re-open
@@ -365,26 +425,33 @@ Answer compare after import: **210 / 210** official answers matched. Every quest
 | EF `MimeType.StartsWith(..., OrdinalIgnoreCase)` crash | `Include` then in-memory MIME filter | `ValidatePaperAsync` |
 | Prod ClamAV host `clamav` fail-closed from Windows | Development remap to `127.0.0.1` | `ClamAvUploadScanner.cs` |
 | Local API trying to migrate prod | `Bootstrap__SkipSchemaChanges` | `DatabaseBootstrapper.cs` |
-| Live public API still on old validator | Green DLL overlay + router flip (PR #152 on main; GHA image not built) | VPS green slot |
+| Live public API still on old validator | Green DLL overlay + router flip (PR #152 on main) | VPS green slot |
+| Full Exam / Part A–C redirected to mocks | Folder-first `ReadingExamFolderBrowser`; do not send those routes to `/mocks` | `app/reading/exam/page.tsx`, `app/reading/parts/[part]/page.tsx` |
+| UI change committed but live still old | Actions failed while repo was private (~5s empty run). Redeploy via Actions after repo is runnable. Confirm **web** slot commit, not only API. | `.github/workflows/deploy.yml` |
+| Public API sign-in 403 | Send `X-OET-Device-Id` + `X-OET-Client-Platform: desktop` on every call | TrustedDeviceRequired |
+| Seed admin lockout risk | Do not retry `admin@oet-prep.dev` | `auth_identities` |
 
 ---
 
-## 9. Next book / next 5 PDFs — copy this checklist
+## 9. Next book / next PDFs — copy this checklist
 
 ```
-[ ] Work only in the Copilot worktree, not D:\Projects\...
+[ ] Work in E:\Projects\OET with Dr Hesham\Web App on main. Not DMB. Not D:\...
 [ ] Confirm each PDF is a full 20/6/16 paper with a printed key
 [ ] Detect Part A from booklet headings (1-7 vs 1-8, last 15 vs 16, SA/SC swap)
 [ ] Build bundle with correctAnswerJson, evidenceSentence, reviewState=Published, texts: []
+[ ] tagsCsv includes the series slug (atlas-practice-series / nova-practice-series / very-difficult-reading-exams)
+[ ] slug includes the same series token so folders match even if tags are thin
 [ ] Three primary QuestionPaper assets (A/B/C); one PDF file may be reused
 [ ] Offline validate-reading-manifest.ts → 42 points, 0 errors
 [ ] Side-by-side official-key compare (42 answers × N papers)
 [ ] If a printed C key is clearly pasted from another paper, stop and use passage evidence (see JB2)
-[ ] Import via local API only; --dev-auth only on Development
-[ ] If targeting prod DB: tunnels + SkipSchemaChanges + ClamAV tunnel; never AutoMigrate
-[ ] Validate isPublishReady=true on the API that will serve learners
-[ ] Publish; confirm Status=4; confirm PDFs exist on the VPS storage volume
-[ ] Do not recreate green from the old image; do not retry bootstrap passwords
+[ ] Import via public API + device headers. Never --dev-auth on Production.
+[ ] Do not retry seed/bootstrap passwords. Use a short-lived temp admin; delete it after.
+[ ] Publish live (no --no-publish). Confirm Status=4 and isPublishReady=true
+[ ] Confirm PDFs exist on /var/opt/oet-learner/storage
+[ ] Confirm the paper appears in the same book folder on /reading/exam and /reading/parts/a|b|c
+[ ] Do not recreate green from an old image. Do not build on the VPS. Do not reimport JB/AH.
 ```
 
 ---
@@ -399,8 +466,11 @@ Answer compare after import: **210 / 210** official answers matched. Every quest
 | Admin TS client | `lib/reading-authoring-api.ts` |
 | Official builder UI | `app/admin/content/reading/[paperId]/questions/ReadingAnswerSheetBuilder.tsx` |
 | Full Reading Exam list | `app/reading/exam/page.tsx` |
+| Part A/B/C lists | `app/reading/parts/[part]/page.tsx` |
+| Shared folder UI | `components/domain/reading/reading-exam-folder-browser.tsx` |
 | Book folders | `lib/reading-exam-categories.ts` |
 | Exam player | `app/reading/paper/[paperId]/page.tsx` |
+| New-session handoff | `docs/READING-UPLOAD-AGENT-HANDOFF.md` |
 | Entities | `backend/src/OetLearner.Api/Domain/ReadingEntities.cs` |
 | Import + validate | `backend/.../Services/Reading/ReadingStructureService.cs` |
 | Layout (C#) | `backend/.../Services/Reading/ReadingPartALayout.cs` |
@@ -418,30 +488,54 @@ Answer compare after import: **210 / 210** official answers matched. Every quest
 
 ## 11. Collection / git locality
 
-This Copilot collection has two worktrees. Reading lives in **oet-project-web-app**:
+Canonical checkout (in-place `main`):
 
-- Worktree: `...\manwara575-star-fluffy-guacamole\oet-project-web-app`
-- Branch used for the layout/import work: `manwara575-star-fluffy-guacamole` (merged via PR #152, remote branch may already be deleted)
-- Never read or write `D:\Projects\OET with Dr Hesham\OET Project Web App`
+- `E:\Projects\OET with Dr Hesham\Web App`
+- Remote: `jerryboganda/oetwebapp`
+- Branch: `main`
+
+Never read or write `D:\Projects\OET with Dr Hesham\OET Project Web App`.
+Never implement Reading uploads in Doctor Marriage Bureau (`Modernized-Platform/`).
+
+Ship-it for oetwebapp: targeted check, commit, push `main`. Include
+`Co-authored-by: Copilot App <223556219+Copilot@users.noreply.github.com>`.
+Do not force-push. Do not create extra branches unless the owner asks.
 
 Rename branches with the Copilot `rename_branch` tool, not `git branch -m`.
 
 ---
 
-## 12. Learner Full Reading Exam is a paper list, not Mocks
+## 12. Learner Full Exam and Part A/B/C are the same book folders
 
-The Reading hub card **Full Reading Exam** goes to `/reading/exam`. That page lists published `ContentPaper`s (`GET /v1/reading-papers/home`) grouped by the five official book folders from the complete Reading library:
+The Reading hub cards:
 
-1. Anna Hartford
-2. Atlas Practice Series
-3. Jayden Book
-4. Nova Practice Series
-5. VERY DIFFICULT READING EXAMS
+| Hub card | Route | What it lists | Start action |
+| --- | --- | --- | --- |
+| Full Reading Exam | `/reading/exam` | Every published paper, grouped in the five book folders | Full 60-minute exam attempt |
+| Part A / B / C | `/reading/parts/a\|b\|c` | The **same** folders, but each card starts only that part | `startReadingPartPracticeAttempt` |
 
-Grouping uses `tagsCsv`, then slug, then title (`jayden-book`, `anna-hartford`, …). Empty series still render so the library shape stays visible. Unmatched published papers go under **Other papers**.
+Shared UI: `ReadingExamFolderBrowser`. Both surfaces use `GET /v1/reading-papers/home`.
 
-Starting a card calls `POST /v1/reading-papers/papers/{id}/attempts` (full Exam mode, 60 minutes) and opens `/reading/paper/{id}?attemptId=…`. Do **not** start a part-practice attempt from this page.
+Folders (screenshot order, do not invent extra series):
 
-`/reading/mocks` still redirects to `/mocks?subtest=reading`. That is the mock-bundle surface. Prod currently has no published mock bundles; an empty Mocks page is expected and is **not** the Full Reading Exam.
+1. Anna Hartford — matchers `anna-hartford`, `anna hartford`
+2. Atlas Practice Series — `atlas-practice-series`, `atlas practice series`, `atlas-practice`
+3. Jayden Book — `jayden-book`, `jayden book`
+4. Nova Practice Series — `nova-practice-series`, `nova practice series`, `nova-practice`
+5. VERY DIFFICULT READING EXAMS — `very-difficult-reading-exams`, `very difficult reading exams`, `very-difficult`
 
-Tag new books on import (`tagsCsv` must include the series slug, e.g. `reading,jayden-book,official-key`) so they land in the right folder.
+Grouping uses `tagsCsv`, then slug, then title. Empty series still render. Unmatched published papers go under **Other papers**.
+
+Future papers land automatically if tagged **and** slugged with the series token.
+
+- Full Exam start: `POST /v1/reading-papers/papers/{id}/attempts` then `/reading/paper/{id}?attemptId=…`
+- Part start: part-practice attempt for A or B or C only
+- Do **not** send either surface to `/mocks`
+
+`/reading/mocks` still redirects to `/mocks?subtest=reading`. That is the mock-bundle surface. An empty Mocks page is expected and is **not** the Full Reading Exam.
+
+Tag new books on import, for example:
+
+- `reading,atlas-practice-series,official-key`
+- `reading,nova-practice-series,official-key`
+- `reading,very-difficult-reading-exams,official-key`
