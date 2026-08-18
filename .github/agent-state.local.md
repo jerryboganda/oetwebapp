@@ -19,5 +19,5 @@ Owner should click **Start full exam** again. The marking-policy block is cleare
 ## Constraints
 - Public API only. No local API/DB. No `--dev-auth` on Production.
 - Do not retry `admin@oet-prep.dev` or bootstrap passwords.
-- GitHub Actions for deploys. No VPS compute. No green recreate.
+- GitHub Actions for deploys. Make the repo public for the run, then private again. Never leave it public. No VPS compute. No green recreate.
 - Not DMB. Checkout is `E:\Projects\OET with Dr Hesham\Web App` on `main`.

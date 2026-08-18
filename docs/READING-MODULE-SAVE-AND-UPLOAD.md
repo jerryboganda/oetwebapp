@@ -40,6 +40,7 @@ Do **not**:
 - Retry `admin@oet-prep.dev` or any other bootstrap / expert password. Seed admin `FailedSignInCount` is already 1.
 - Recreate `oet-api-green` from an old GHCR image. That drops the 15/16 validator overlay.
 - Build, `dotnet publish`, or Next compile on the VPS. Heavy work is GitHub Actions only.
+- Leave `jerryboganda/oetwebapp` public after an Actions run. Make it public for the run, then private again. Never keep it permanently public.
 - Send **Full Reading Exam** (`/reading/exam`) or Part A/B/C (`/reading/parts/a|b|c`) to `/mocks`. Those routes are folder-first paper lists.
 - Assume last Part A block is always 15–20.
 - Use `correctAnswer` instead of `correctAnswerJson`.

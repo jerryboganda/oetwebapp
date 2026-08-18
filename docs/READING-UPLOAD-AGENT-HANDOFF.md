@@ -22,6 +22,7 @@ Owner standing orders:
 1. Upload **on production**. Publish live. **No drafts.**
 2. Use the **production public API**. Do not host API or Postgres locally.
 3. Do not use the VPS for compute-heavy work. Builds/deploys = **GitHub Actions**.
+   Make the repo **public** for the Actions run, then set it **private** again when the run finishes. Never leave it public.
 4. Future papers must appear in the **same five book folders** as Reading materials.
 5. Full Exam lists whole papers. Part A / B / C lists that part of every paper.
 

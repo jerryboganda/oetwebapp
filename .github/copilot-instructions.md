@@ -42,6 +42,10 @@ Ask only when a missing decision blocks correctness or safety.
 - Admin UI: load admin Hallmark instructions and keep operational UI dense, restrained, accessible, and scan-friendly.
 - Review/audit requests: lead with findings ordered by severity.
 
+## GitHub Actions visibility
+
+For every Actions run (deploy/CI/smoke/rerun): make `jerryboganda/oetwebapp` **public** first, start the run, then set it **private** again when the run finishes. Never leave it public. Never start Actions while it is private.
+
 ## Execution Locality
 
 Local validation runs directly on the Windows host via PowerShell or `cmd` (Node 22.x, pnpm 10.33.0,

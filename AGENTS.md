@@ -50,6 +50,17 @@ installed: Node 22.x, pnpm 10.33.0, .NET 10.x.
   gates; never run `docker compose build`, `docker compose up --build`,
   `pnpm run build`, `dotnet build`, `dotnet test`, or `dotnet publish` there
   unless the user explicitly approves an emergency source-build exception.
+
+## GitHub Actions visibility — COMPULSORY
+
+For **every** GitHub Actions run (deploy, CI, smoke, `workflow_dispatch`, reruns):
+
+1. Make the repo **public** immediately before the run:
+   `gh repo edit jerryboganda/oetwebapp --visibility public --accept-visibility-change-consequences`
+   Use the **owner** account. If `GH_TOKEN` is set to another user, unset it first.
+2. Push / dispatch / rerun the workflow while it is public. Private runs die in ~5s with empty logs.
+3. When the needed run has **finished**, set the repo **private** again. Do not leave it public.
+4. Never keep the repo permanently public. Never "forget" the private flip.
 - Docker compose files exist for deployment/packaging, not as a required local validation path.
 
 See `.github/instructions/validation.instructions.md` for the full command ladder.
