@@ -25,8 +25,8 @@ Product is **oetwebapp** (`E:\Projects\OET with Dr Hesham\Web App`,
 5. Every question needs `explanationMarkdown`, `evidenceSentence`, and
    `reviewState=Published`.
 6. Detect Part A layout from booklet headings. Do not hard-code
-   `1–7 / 8–14 / 15–20`. Matching may be 1–7 or 1–8; last block may
-   start at 15 or 16.
+   `1–7 / 8–14 / 15–20`. Matching may be 1–5, 1–6, 1–7, or 1–8; last
+   block may start at 13, 14, 15, or 16.
 7. If a printed Part C key is clearly pasted from another paper, **stop**.
    Use passage evidence and ask the owner. (JB2 C Q7–14 already handled.)
 
@@ -72,6 +72,13 @@ Live AH / JB maps (1-based, keys omitted). Copy this method for new books:
 | Atlas23 (22p) | 1–6 | 7–12 | 13–20 | 21–22 |
 | Atlas24 (22p) | 1–6 | 7–12 | 13–20 | 21–22 |
 | Atlas25 (22p) | 1–7 | 8–13 | 14–20 | 21–22 |
+| Atlas02 (23p) | 1–6 | 7–14 | **14–21** | 22–23 |
+| Atlas15 (22p) | 1–6 | 7–12 | 13–20 | 21–22 |
+| Atlas16 (17p) | 1–6 | 7–9 | 10–15 | 16–17 |
+| Atlas17 (19p) | 1–6 | 7–9 | 10–17 | 18–19 |
+| Atlas22 (23p) | 1–7 | 8–13 | 14–21 | 22–23 |
+| Atlas26 (22p) | 1–7 | 8–13 | 14–20 | 21–22 |
+| Kaplan (26p) | 1–8 | 9–14 | 15–24 | 25–26 |
 
 Do **not** re-import or re-attach Jayden / Anna Hartford / live Atlas slugs
 unless the owner asks. Their part files are already live.

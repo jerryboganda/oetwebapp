@@ -27,7 +27,7 @@ then import a structured answer-sheet manifest, then validate, then publish.
 | Step | Action | Gate |
 | --- | --- | --- |
 | 1 | Inventory the booklet + printed answer key | Complete exam = Part A 20 + Part B 6 + Part C 16. Keys live **in the PDF**. Split the booklet into **part-only** PDFs before attach. |
-| 2 | Auto-detect Part A layout | Matching is 1–7 **or** 1–8. Last block starts at **15 or 16**. Middle/last swap SA vs SC. |
+| 2 | Auto-detect Part A layout | Matching is 1–5 / 1–6 / 1–7 / 1–8. Last block starts at **13, 14, 15, or 16**. Middle/last swap SA vs SC. |
 | 3 | Build a JSON bundle | Field is `correctAnswerJson` (JSON-encoded string). Include `evidenceSentence`. `texts: []`. |
 | 4 | Offline dry-run | `ERROR COUNT 0`, 42 points, layout id matches the booklet headings. |
 | 5 | Write import on **production public API** | Owner-approved. Stock importer is localhost-only; use the public-API copy with device headers. Publish live (status 4). |
@@ -435,10 +435,17 @@ Also live: `reading-sample-1`. Do **not** re-import Jayden, Anna Hartford, or At
 | `atlas-practice-series-23-tuberculosis` | `bee8010b11c84ce18f9e66ee923c7d36` | classic | Tuberculosis |
 | `atlas-practice-series-24-deep-vein-thrombosis` | `ae075207261b430189a88933f37afefd` | classic | Deep vein thrombosis |
 | `atlas-practice-series-25-schizophrenia` | `69348a2fd0b24959a1f38ef833a20979` | classic | Schizophrenia |
+| `atlas-practice-series-02-paracetamol-overdose` | `dca80cd281f54e8cb0544e821141dbd6` | 1–7 / 8–13 / 14–20 | Paracetamol overdose |
+| `atlas-practice-series-15-transfusion-reaction` | `18d925210bfd4d3aa574f1cd944a883f` | 1–7 / 8–13 / 14–20 | Transfusion reaction |
+| `atlas-practice-series-16-assessing-pain` | `f0fbc15366f545c9a98874941a081dec` | 1–7 / 8–13 / 14–20 | Assessing pain |
+| `atlas-practice-series-17-overweight-obese-children` | `d9fc1487a7304334805651b26d87e271` | 1–6 SC 7–13 / SA 14–20 | Overweight and obese children |
+| `atlas-practice-series-22-hiv-testing` | `a6a3e6ad96be40bcac16f5f444e6bde3` | 1–7 / 8–13 / 14–20 | HIV testing |
+| `atlas-practice-series-26-inguinal-hernia` | `eb813cce22d841ae921c53a8c0691c0d` | 1–6 / 7–14 SA / 15–20 SC | Inguinal hernia |
+| `atlas-practice-series-kaplan-asthma-ect` | `f4e5676c5d2a4eb2834b3a18360151d1` | 1–6 SC 7–12 / SA 13–20 | Kaplan asthma and ECT |
 
 Tags: `reading,atlas-practice-series,official-key`. Status 4. 20/6/16. 42 points. Part-only QuestionPaper PDFs.
 
-Page maps (1-based, keys omitted): Atlas01 A1–5 B6–11 C12–19 drop 20–21 · Atlas05 A1–8 B9–15 C16–23 drop 24–28 · Atlas10 A1–5 B6–11 C12–19 drop 20–21 · Atlas11 A1–6 B7–12 C13–20 drop 21–22 · Atlas12 A1–7 B8–10 C11–16 drop 17–18 · Atlas13 A1–6 B7–9 C10–15 drop 16–17 · Atlas14 A1–7 B8–13 C14–21 drop 22–23 · Atlas23 A1–6 B7–12 C13–20 drop 21–22 · Atlas24 A1–6 B7–12 C13–20 drop 21–22 · Atlas25 A1–7 B8–13 C14–20 drop 21–22.
+Page maps (1-based, keys omitted): Atlas01 A1–5 B6–11 C12–19 drop 20–21 · Atlas02 A1–6 B7–14 C**14–21** drop 22–23 · Atlas05 A1–8 B9–15 C16–23 drop 24–28 · Atlas10 A1–5 B6–11 C12–19 drop 20–21 · Atlas11 A1–6 B7–12 C13–20 drop 21–22 · Atlas12 A1–7 B8–10 C11–16 drop 17–18 · Atlas13 A1–6 B7–9 C10–15 drop 16–17 · Atlas14 A1–7 B8–13 C14–21 drop 22–23 · Atlas15 A1–6 B7–12 C13–20 drop 21–22 · Atlas16 A1–6 B7–9 C10–15 drop 16–17 · Atlas17 A1–6 B7–9 C10–17 drop 18–19 · Atlas22 A1–7 B8–13 C14–21 drop 22–23 · Atlas23 A1–6 B7–12 C13–20 drop 21–22 · Atlas24 A1–6 B7–12 C13–20 drop 21–22 · Atlas25 A1–7 B8–13 C14–20 drop 21–22 · Atlas26 A1–7 B8–13 C14–20 drop 21–22 · Kaplan A1–8 B9–14 C15–24 drop 25–26.
 
 Printed Atlas keys (authoritative, from the PDFs):
 
@@ -482,9 +489,45 @@ Atlas24 C: B C C B D B D D D B B D C D D C
 Atlas25 A: D B A A C C B | linkage of services | organising confusing experiences | feedback | outcome measures | evaluate frequently | 0.5-1.5 hours | olanzapine, risperidone and aripiprazole | patient cooperation | intranasal | reevaluate | emotional distress | simple examples | undue pressure
 Atlas25 B: B C C C A C
 Atlas25 C: B B C B B C B A C A A A B B C C
+
+Atlas02 A: D C B D A B C | headache(s) | hepatitis C | ALF | renal failure | methionine | activated charcoal | speed of absorption | right upper quadrant | nausea | enzyme-inducing | 100 | 12 | supportive
+Atlas02 B: C A A B A A
+Atlas02 C: A C A D D B B D C B C A D A B B
+
+Atlas15 A: B C C D C A B | 24 hours | an appropriate blood culture bottle | 5 minutes | Critical Care admission | systolic blood pressure | aspirin-containing products | opposite arm | Category 3 / life-threatening | salbutamol | puncture sites or wounds | mild hypersensitivity and non-haemolytic febrile | signs of haemoglobinuria | Category 2 / moderately severe
+Atlas15 B: B A B C C A
+Atlas15 C: B C B D A C B D D A D B A C C B
+
+Atlas16 A: A B A D C C B | physiological and behavioural | 18 years | under-treating pain | parents and caregivers | on the clinical observation chart | once per shift | gold standard | physiological / clinical | face | cognitive | 0-2 | console | before and after
+Atlas16 B: B A B C B C
+Atlas16 C: B A D C C D C B A D B B C D B D
+
+Atlas17 A: B A C A C D | diabetes | yearly | measured | growth chart | growth status | complication | long-term | age and gender | weight, length/height and BMI | poor intake | >80% | an action plan | poor self-esteem, social difficulties and depression | drugs and surgery
+Atlas17 B: C A B A A C
+Atlas17 C: B C D D C A B D C A C B B D A A
+
+Atlas22 A: B D A C A D B | HCG | combination of factors | 20 minutes | lupus and rheumatoid arthritis | sexual and drug-taking history | 3 months after exposure | protein | transactional | finger | eligibility | immune system | reliability | condomless sex
+Atlas22 B: B C A B A C
+Atlas22 C: D A B B B D B C D B A C B A D D
+
+Atlas26 A: A C D C B C | the groin | acetaminophen | old age | laparoscope | open hernia repair | laparoscopic surgery | men | Trendelenburg's position | fibre | nerves | palpable | pain | laparoscopic | pubic tubercle
+Atlas26 B: A C A B B A
+Atlas26 C: B A D B D B C A D B C B C A A B
+
+Kaplan A: C B A D A B | arterial saturation | magnesium sulfate | allergies | life-threatening | reversibility testing | smoking | daily | every hour | in severe cases | children | warn ICU | peak expiratory flow rate | a whistling sound | a peak flow meter
+Kaplan B: B C C A A B
+Kaplan C: B D C A A C D B D A D B C A B C
 ```
 
-Remaining Desktop Atlas files (official Sample 2–4, 6–9, 15–22, 26, Kaplan) are **not** imported. Invalid Part A layouts, CamScanner scans, or B/C letters not extractable. Do not invent answers. Official 2/3/4/15/22/26 need a layout-detector expand + Actions deploy before import.
+Remaining Desktop Atlas files are **not** imported. Do not invent answers:
+
+- Official Sample 3: A Q10 blank; some B/C letters missing.
+- Official Sample 4: B/C key pages are OCR overlay garbage.
+- Sample 18: printed key complete and lastStart=13 is live, but B Q5–6 and several C pages are image-only.
+- Sample 19–21: B/C image-only.
+- Sample 6–8 CamScanner; Sample 9 no printed key.
+- Nova: 20 tests, no printed key.
+- Very Difficult: B/C answers are prose, not letters.
 
 Printed AH keys (authoritative, from the PDFs):
 
@@ -508,7 +551,7 @@ AH3 C: A C B A C C C A D A A D C C B C
 
 | Bug | Fix | File |
 | --- | --- | --- |
-| Last block assumed 15–20 only | `lastStart: 15 \| 16`, 8 layouts | `lib/reading-part-a-layout.ts`, `ReadingPartALayout.cs` |
+| Last block assumed 15–20 only | `lastStart: 13 \| 14 \| 15 \| 16` | `lib/reading-part-a-layout.ts`, `ReadingPartALayout.cs` |
 | `EvidenceSentence` dropped on import | DTO + persist | `ReadingStructureService.cs` |
 | Replace-import deleted QuestionPaper PDFs | `injectQuestionPaperAssets()` | `import-reading-manifests-local.mjs` |
 | EF `MimeType.StartsWith(..., OrdinalIgnoreCase)` crash | `Include` then in-memory MIME filter | `ValidatePaperAsync` |
@@ -528,7 +571,7 @@ AH3 C: A C B A C C C A D A A D C C B C
 ```
 [ ] Work in E:\Projects\OET with Dr Hesham\Web App on main. Not DMB. Not D:\...
 [ ] Confirm each PDF is a full 20/6/16 paper with a printed key
-[ ] Detect Part A from booklet headings (1-7 vs 1-8, last 15 vs 16, SA/SC swap)
+[ ] Detect Part A from booklet headings (matching 5/6/7/8, lastStart 13/14/15/16, SA/SC swap)
 [ ] Build bundle with correctAnswerJson, evidenceSentence, reviewState=Published, texts: []
 [ ] tagsCsv includes the series slug (atlas-practice-series / nova-practice-series / very-difficult-reading-exams)
 [ ] slug includes the same series token so folders match even if tags are thin

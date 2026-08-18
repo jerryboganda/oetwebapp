@@ -2,6 +2,14 @@
 
 Last updated: 2026-08-18
 
+## Current Checkpoint - Atlas 02/15–17/22/26 + Kaplan live
+
+- Published this wave: `02-paracetamol-overdose` (`dca80cd281f54e8cb0544e821141dbd6`), `15-transfusion-reaction` (`18d925210bfd4d3aa574f1cd944a883f`), `16-assessing-pain` (`f0fbc15366f545c9a98874941a081dec`), `17-overweight-obese-children` (`d9fc1487a7304334805651b26d87e271`), `22-hiv-testing` (`a6a3e6ad96be40bcac16f5f444e6bde3`), `26-inguinal-hernia` (`eb813cce22d841ae921c53a8c0691c0d`), `kaplan-asthma-ect` (`f4e5676c5d2a4eb2834b3a18360151d1`).
+- All Status 4, 20/6/16, 42 pts, three distinct QuestionPaper media ids. Offline + admin `isPublishReady=true`.
+- Layout expand `lastStart=13` is live on production (`49948217`, Actions `32195366137`). Repo private again.
+- Still blocked (do not invent): official Sample 3 Q10 blank; Sample 4 B/C overlay garbage; Sample 18 image B/C; Sample 19–21 image B/C; Sample 6–8 CamScanner; Sample 9 no key; Nova no key; VD B/C prose.
+- Next: owner OCR/text for Sample 18 B Q5–6 + missing C pages, or a complete Sample 3/4 letter key. Then VD only if B/C letters exist.
+
 ## Current Checkpoint - Atlas 11/12/13/14/23/24/25 live
 
 - Also published: `11-iron-deficiency` (`d8f4dd5f910645b59e49aaf612bf0e8c`), `12-opioid-dependence` (`253ae682ccbd431f91af03cda516b462`), `13-adhd` (`06ee37bacea740a5b56807a210b0399d`), `14-evaluating-cognitive-function` (`f45c6cc1ebb7462496822c20f8fa2616`), `23-tuberculosis` (`bee8010b11c84ce18f9e66ee923c7d36`), `24-deep-vein-thrombosis` (`ae075207261b430189a88933f37afefd`), `25-schizophrenia` (`69348a2fd0b24959a1f38ef833a20979`).
