@@ -610,7 +610,7 @@ public class ReadingAuthoringTests
         Assert.Contains("Safe option", payload);
 
         var paper = json.RootElement.GetProperty("paper");
-        Assert.True(paper.GetProperty("allowPaperReadingMode").GetBoolean());
+        Assert.False(paper.GetProperty("allowPaperReadingMode").GetBoolean());
         var assets = paper.GetProperty("questionPaperAssets").EnumerateArray().ToList();
         Assert.Equal(4, assets.Count);
         var asset = Assert.Single(assets.Where(asset => asset.GetProperty("id").GetString() == "asset-redaction-paper"));
@@ -619,7 +619,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Learner_structure_endpoint_withholds_question_paper_assets_when_paper_mode_is_disabled()
+    public async Task Learner_structure_endpoint_exposes_question_paper_assets_when_paper_mode_is_disabled()
     {
         using var factory = new TestWebApplicationFactory();
         await using var scope = factory.Services.CreateAsyncScope();
@@ -680,8 +680,10 @@ public class ReadingAuthoringTests
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var paper = json.RootElement.GetProperty("paper");
         Assert.False(paper.GetProperty("allowPaperReadingMode").GetBoolean());
-        Assert.Empty(paper.GetProperty("questionPaperAssets").EnumerateArray());
-        Assert.DoesNotContain("/v1/media/media-policy-disabled-paper/content", json.RootElement.GetRawText());
+        var assets = paper.GetProperty("questionPaperAssets").EnumerateArray().ToList();
+        var asset = Assert.Single(assets);
+        Assert.Equal("A", asset.GetProperty("part").GetString());
+        Assert.Equal("/v1/media/media-policy-disabled-paper/content", asset.GetProperty("downloadPath").GetString());
 
         var access = scope.ServiceProvider.GetRequiredService<MediaAssetAccessService>();
         var principal = new ClaimsPrincipal(new ClaimsIdentity(new[]
@@ -689,12 +691,7 @@ public class ReadingAuthoringTests
             new Claim(ClaimTypes.NameIdentifier, "mock-user-001"),
             new Claim(ClaimTypes.Role, ApplicationUserRoles.Learner),
         }, "Test"));
-        Assert.False(await access.CanAccessAsync(principal, "media-policy-disabled-paper", default));
-
-        var directMediaResponse = await client.GetAsync("/v1/media/media-policy-disabled-paper/content");
-        Assert.Equal(HttpStatusCode.NotFound, directMediaResponse.StatusCode);
-        var signedUrlResponse = await client.GetAsync("/v1/media/media-policy-disabled-paper/url");
-        Assert.Equal(HttpStatusCode.NotFound, signedUrlResponse.StatusCode);
+        Assert.True(await access.CanAccessAsync(principal, "media-policy-disabled-paper", default));
     }
 
     [Fact]
@@ -823,7 +820,7 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
-    public async Task Reading_pdf_annotations_are_unavailable_when_pdf_mode_is_disabled()
+    public async Task Reading_pdf_annotations_remain_available_when_paper_simulation_is_disabled()
     {
         using var factory = new TestWebApplicationFactory();
         await using var scope = factory.Services.CreateAsyncScope();
@@ -844,7 +841,9 @@ public class ReadingAuthoringTests
         client.DefaultRequestHeaders.Add("X-Debug-UserId", "annotation-policy-disabled");
 
         using var listResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
-        Assert.Equal(HttpStatusCode.NotFound, listResponse.StatusCode);
+        listResponse.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        Assert.Empty(listJson.RootElement.EnumerateArray());
 
         using var createResponse = await client.PostAsJsonAsync(
             $"/v1/reading-papers/papers/{paperId}/annotations",
@@ -855,7 +854,7 @@ public class ReadingAuthoringTests
                 kind = "Text",
                 geometryJson = new { x = 0.10, y = 0.20, width = 0.30, height = 0.08 },
             });
-        Assert.Equal(HttpStatusCode.NotFound, createResponse.StatusCode);
+        createResponse.EnsureSuccessStatusCode();
     }
 
     [Fact]

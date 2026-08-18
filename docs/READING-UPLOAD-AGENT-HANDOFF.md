@@ -51,7 +51,7 @@ AH layouts are all classic `1–7 / 8–14 / 15–20`. Printed keys are in the p
 2. **Nova Practice Series**
 3. **VERY DIFFICULT READING EXAMS**
 
-Anna Hartford and Jayden Book folders are done.
+Anna Hartford and Jayden Book folders are done. Their Part A/B/C QuestionPaper PDFs are already attached in `ContentPaperAssets` (same booklet reused per part). Do not re-upload those PDFs unless a file is actually missing from storage.
 
 If this session has **no new booklets**, do not invent papers. Ask the owner to
 upload the next series PDFs (same way they uploaded Anna Hartford).

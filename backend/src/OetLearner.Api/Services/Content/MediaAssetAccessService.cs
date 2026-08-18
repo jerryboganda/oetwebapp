@@ -2,14 +2,12 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
-using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services.Content;
 
 public sealed class MediaAssetAccessService(
     LearnerDbContext db,
     IContentEntitlementService contentEntitlements,
-    IReadingPolicyService readingPolicy,
     MaterialAccessService materialAccess,
     OetLearner.Api.Services.VideoLibrary.IVideoEntitlementService videoEntitlements)
 {
@@ -132,15 +130,6 @@ public sealed class MediaAssetAccessService(
                 })
                 .ToListAsync(ct)
             : [];
-
-        var isReadingQuestionPaperAsset = attachedPaperAssets.Any(candidate =>
-            candidate.Role == PaperAssetRole.QuestionPaper
-            && string.Equals(candidate.Paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase));
-        if (isReadingQuestionPaperAsset
-            && !(await readingPolicy.ResolveForUserAsync(userId, ct)).AllowPaperReadingMode)
-        {
-            return false;
-        }
 
         var candidatePaperAssets = attachedPaperAssets
             .Where(asset => asset.IsPrimary

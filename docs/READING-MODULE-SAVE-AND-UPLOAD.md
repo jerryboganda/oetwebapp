@@ -64,6 +64,7 @@ Do **not**:
 - Each item is exactly 1 point. `30/42 ≡ 350/500` via `lib/scoring.ts` / `OetScoring`. Never inline a formula.
 - Public numbers: A and B unchanged. Part C internal 1–16 is shown to learners as **7–22** (`internal + 6`).
 - Official papers are **PDF-only**: `texts: []` on every part. The player is `ReadingPdfViewer`. Stem is often the booklet prompt; booklet body lives in the PDF.
+- Learner `GET /v1/reading-papers/papers/{id}/structure` **must** include `paper.questionPaperAssets` for every primary Part A/B/C (and B1–B6 / C1–C2) QuestionPaper. That is independent of `allowPaperReadingMode`, which stays **false** (legacy paper-simulation UI). If the player says “No Part A document is attached”, the assets are missing from the structure payload or media access is denied — do **not** re-import the booklet until you have queried `ContentPaperAssets`.
 - If any texts exist for a part, counts must be exactly 4 / 6 / 2 **and** B/C questions must be linked (`readingTextDisplayOrder`: 1 per B extract, 8 per C article). Part A links are all-or-nothing. Import still requires the `texts` array to be present even when empty.
 - Publish needs: explanation, evidence, `ReviewState=Published` on every question, `SourceProvenance` on the paper, one **primary** `QuestionPaper` PDF for Part A, B, and C.
 

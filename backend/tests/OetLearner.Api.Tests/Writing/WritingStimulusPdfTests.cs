@@ -38,7 +38,6 @@ public class WritingStimulusPdfTests
         return new MediaAssetAccessService(
             db,
             new StubContentEntitlementService(),
-            new StubReadingPolicyService(),
             materialAccess,
             new OetLearner.Api.Services.VideoLibrary.VideoEntitlementService(db, new StubEntitlementResolver()));
     }

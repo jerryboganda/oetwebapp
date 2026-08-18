@@ -69,29 +69,28 @@ public static class ReadingLearnerEndpoints
             await entitlements.RequireAccessAsync(userId, paper, ct);
             var resolvedPolicy = await policyService.ResolveForUserAsync(userId, ct);
 
-            List<QuestionPaperAssetDto> questionPaperAssets = [];
-            if (resolvedPolicy.AllowPaperReadingMode)
-            {
-                questionPaperAssets = await db.ContentPaperAssets.AsNoTracking()
-                    .Where(a => a.PaperId == paperId
-                        && a.Role == PaperAssetRole.QuestionPaper
-                        && a.IsPrimary
-                        && (a.Part == "A" || a.Part == "B" || a.Part == "C"
-                            || a.Part == "B1" || a.Part == "B2" || a.Part == "B3"
-                            || a.Part == "B4" || a.Part == "B5" || a.Part == "B6"
-                            || a.Part == "C1" || a.Part == "C2")
-                        && a.MediaAsset != null
-                        && a.MediaAsset.Status == MediaAssetStatus.Ready)
-                    .Include(a => a.MediaAsset)
-                    .OrderBy(a => a.DisplayOrder)
-                    .ThenBy(a => a.Part)
-                    .Select(a => new QuestionPaperAssetDto(
-                        a.Id,
-                        a.Part,
-                        a.Title ?? a.MediaAsset!.OriginalFilename,
-                        $"/v1/media/{a.MediaAssetId}/content"))
-                    .ToListAsync(ct);
-            }
+            // Official OET Reading is PDF-first. Question-paper booklets are part of
+            // computer-based delivery and must be returned even though the legacy
+            // paper-simulation flag (AllowPaperReadingMode) stays permanently off.
+            var questionPaperAssets = await db.ContentPaperAssets.AsNoTracking()
+                .Where(a => a.PaperId == paperId
+                    && a.Role == PaperAssetRole.QuestionPaper
+                    && a.IsPrimary
+                    && (a.Part == "A" || a.Part == "B" || a.Part == "C"
+                        || a.Part == "B1" || a.Part == "B2" || a.Part == "B3"
+                        || a.Part == "B4" || a.Part == "B5" || a.Part == "B6"
+                        || a.Part == "C1" || a.Part == "C2")
+                    && a.MediaAsset != null
+                    && a.MediaAsset.Status == MediaAssetStatus.Ready)
+                .Include(a => a.MediaAsset)
+                .OrderBy(a => a.DisplayOrder)
+                .ThenBy(a => a.Part)
+                .Select(a => new QuestionPaperAssetDto(
+                    a.Id,
+                    a.Part,
+                    a.Title ?? a.MediaAsset!.OriginalFilename,
+                    $"/v1/media/{a.MediaAssetId}/content"))
+                .ToListAsync(ct);
 
             var parts = await db.ReadingParts.AsNoTracking()
                 .Where(p => p.PaperId == paperId)
@@ -1539,8 +1538,7 @@ public static class ReadingLearnerEndpoints
             return false;
 
         await entitlements.RequireAccessAsync(userId, paper, ct);
-        var resolvedPolicy = await policyService.ResolveForUserAsync(userId, ct);
-        return resolvedPolicy.AllowPaperReadingMode;
+        return true;
     }
 
     private static Task<bool> IsReadingPdfAssetForPaperAsync(

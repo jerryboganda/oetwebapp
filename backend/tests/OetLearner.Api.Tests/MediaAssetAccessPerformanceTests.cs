@@ -55,7 +55,7 @@ public sealed class MediaAssetAccessPerformanceTests : IAsyncLifetime
     [InlineData(AccessScenario.PaperImage, true, 3)]
     [InlineData(AccessScenario.PaperAudio, true, 3)]
     [InlineData(AccessScenario.ProtectedPaperOverFreePreview, false, 3)]
-    [InlineData(AccessScenario.ReadingPaperModeDisabled, false, 3)]
+    [InlineData(AccessScenario.ReadingPaperModeDisabled, true, 3)]
     [InlineData(AccessScenario.WritingVoiceNote, true, 2)]
     [InlineData(AccessScenario.AdminStandalone, true, 1)]
     [InlineData(AccessScenario.OwnerStandalone, true, 1)]
@@ -93,7 +93,6 @@ public sealed class MediaAssetAccessPerformanceTests : IAsyncLifetime
         var service = new MediaAssetAccessService(
             db,
             contentEntitlements,
-            readingPolicy,
             new MaterialAccessService(db, new MediaPerformanceEffectiveEntitlementResolver()),
             videoEntitlements);
 
@@ -108,10 +107,13 @@ public sealed class MediaAssetAccessPerformanceTests : IAsyncLifetime
             Assert.Contains(_commands.Commands, command =>
                 command.Contains("UNION ALL", StringComparison.OrdinalIgnoreCase));
         }
-        else if (scenario is AccessScenario.ProtectedPaperOverFreePreview
-                 or AccessScenario.ReadingPaperModeDisabled)
+        else if (scenario is AccessScenario.ProtectedPaperOverFreePreview)
         {
             Assert.Equal(0, contentEntitlements.AllowCalls);
+        }
+        else if (scenario is AccessScenario.ReadingPaperModeDisabled)
+        {
+            Assert.Equal(1, contentEntitlements.AllowCalls);
         }
     }
 
