@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -10,6 +12,8 @@ namespace OetLearner.Api.Data.Migrations;
 /// still produce an auditable raw-only result, but it must not adopt a table
 /// that becomes effective later.
 /// </summary>
+[DbContext(typeof(LearnerDbContext))]
+[Migration("20260902090000_AddAssessmentScoreConversionAttemptSnapshots")]
 public partial class AddAssessmentScoreConversionAttemptSnapshots : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

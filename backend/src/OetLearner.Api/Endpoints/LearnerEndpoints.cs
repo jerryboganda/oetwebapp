@@ -888,6 +888,7 @@ public static class LearnerEndpoints
                 id = p.Id,
                 p.Title,
                 p.Slug,
+                p.TagsCsv,
                 p.Difficulty,
                 p.EstimatedDurationMinutes,
                 p.PublishedAt,

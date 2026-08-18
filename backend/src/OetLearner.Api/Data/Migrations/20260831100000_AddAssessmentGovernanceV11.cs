@@ -1,5 +1,7 @@
 using System;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
 
 #nullable disable
 
@@ -10,6 +12,8 @@ namespace OetLearner.Api.Data.Migrations;
 /// intentionally hand-scoped because the repository snapshot contains older,
 /// unrelated model drift; it must not replay those unrelated changes here.
 /// </summary>
+[DbContext(typeof(LearnerDbContext))]
+[Migration("20260831100000_AddAssessmentGovernanceV11")]
 public partial class AddAssessmentGovernanceV11 : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

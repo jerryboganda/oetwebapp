@@ -14,7 +14,7 @@ Publish live. Same five book folders for Full Exam and Part A/B/C.
 - `reading-sample-1`
 
 ## Next step
-Wait for the owner to upload **Atlas Practice Series** PDFs (full 20/6/16 + printed keys). Then extract, build manifests, offline-validate, import via the production public API with device headers, and publish status 4. If Atlas is not in the session, ask for the PDFs. Do not invent papers.
+Owner should hard-refresh `/reading/exam`. Empty folders were a 500 from missing `ReadingAttempts.MarkingPolicyVersionId` (two migrations lacked `[Migration]` attributes so EF never applied them). Schema is now on prod. Then continue Atlas PDFs when uploaded.
 
 ## Constraints
 - Public API only. No local API/DB. No `--dev-auth` on Production.

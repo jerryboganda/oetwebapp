@@ -1,6 +1,12 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-20
+Last updated: 2026-08-18
+
+## Current Checkpoint - Empty Reading exam folders
+
+- Learner `/reading/exam` showed empty folders because `GET /v1/reading-papers/home` 500ed: `ReadingAttempts.MarkingPolicyVersionId` missing.
+- Cause: `20260831100000_AddAssessmentGovernanceV11` and `20260902090000_AddAssessmentScoreConversionAttemptSnapshots` had no `[Migration]` attributes, so Actions idempotent SQL never applied them.
+- Applied the missing columns/tables on production and recorded those migration ids. Added the attributes plus `tagsCsv` on the home payload.
 
 ## Current Checkpoint - Reading upload playbook + handoff
 
