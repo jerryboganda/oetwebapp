@@ -36,7 +36,7 @@ Owner standing orders:
 | --- | --- | --- |
 | Jayden Book | `jayden-book-01-bed-bugs` … `jayden-book-05-resveratrol` | Published, 210/210 keys matched |
 | Anna Hartford | `anna-hartford-01-cigarette-smoking-lung-cancer`, `anna-hartford-02-vision-impairment`, `anna-hartford-03-vaccines-immunisation` | Published 2026-08-20, 20/6/16, 42 pts |
-| Atlas (partial) | `atlas-practice-series-01-fractures-dislocations-sprains`, `atlas-practice-series-05-cellulitis`, `atlas-practice-series-10-sedation` | Published 2026-08-18, 20/6/16, 42 pts |
+| Atlas (partial) | `atlas-practice-series-01-fractures-dislocations-sprains`, `05-cellulitis`, `10-sedation`, `11-iron-deficiency`, `12-opioid-dependence`, `13-adhd`, `14-evaluating-cognitive-function`, `23-tuberculosis`, `24-deep-vein-thrombosis`, `25-schizophrenia` | Published. 20/6/16, 42 pts. Do not re-import. |
 | Sample | `reading-sample-1` | Published |
 
 AH paper ids:
@@ -49,27 +49,35 @@ AH layouts are all classic `1–7 / 8–14 / 15–20`. Printed keys are in the p
 
 ---
 
-Atlas paper ids:
+Atlas paper ids (all Status 4, classic 1–7 / 8–14 / 15–20 except 05 = 1–8 / 9–14 / 15–20):
 
-- Atlas 01 `53d261affe2541359f5578b7e25d688d` (classic 1–7 / 8–14 / 15–20)
-- Atlas 05 `3d4e36bbdf6747c79ff4f00f078fc5a5` (1–8 / 9–14 / 15–20)
-- Atlas 10 `e85f13d7cf7749c7aa42f3e279bc6d30` (classic)
+- Atlas 01 `53d261affe2541359f5578b7e25d688d`
+- Atlas 05 `3d4e36bbdf6747c79ff4f00f078fc5a5`
+- Atlas 10 `e85f13d7cf7749c7aa42f3e279bc6d30`
+- Atlas 11 `d8f4dd5f910645b59e49aaf612bf0e8c`
+- Atlas 12 `253ae682ccbd431f91af03cda516b462`
+- Atlas 13 `06ee37bacea740a5b56807a210b0399d`
+- Atlas 14 `f45c6cc1ebb7462496822c20f8fa2616`
+- Atlas 23 `bee8010b11c84ce18f9e66ee923c7d36`
+- Atlas 24 `ae075207261b430189a88933f37afefd`
+- Atlas 25 `69348a2fd0b24959a1f38ef833a20979`
 
 ---
 
 ## What remains (folder order)
 
-1. **Rest of Atlas Practice Series** — Desktop folder has Sample 2–4, 6–9, 11–26 + Kaplan. Do **not** import those until the owner decides. They fail the contract as-is:
-   - Sample 2: booklet last block is 14–20 (validator only allows 15 or 16)
-   - Sample 3: matching 1–5
-   - Sample 4 / Kaplan: matching 1–6
+1. **Rest of Atlas Practice Series** — 01/05/10/11/12/13/14/23/24/25 are live. Remaining Desktop files still fail the contract:
+   - Official Sample 2: last block 14–20 (validator only allows 15 or 16)
+   - Official Sample 3: matching 1–5
+   - Official Sample 4 / Kaplan / Sample 26: matching 1–6
+   - Sample 15 / 22: lastStart=14
    - Sample 6–8: CamScanner, no extractable printed key
    - Sample 9: no printed key
-   - Sample 11–15 E2language, 16–21 OET Online, 22–26 IRS: third-party “Verified Answer Key” and/or invalid layouts
-2. **Nova Practice Series** (`Nova Reading Tests.pdf`)
-3. **VERY DIFFICULT READING EXAMS**
+   - Sample 16–21: printed key present but B/C letters not extractable (letter_keys=0)
+2. **Nova Practice Series** (`Nova Reading Tests.pdf`) — 20 tests, **no printed key**. Do not invent.
+3. **VERY DIFFICULT READING EXAMS** — after remaining Atlas. Part B/C keys are often option prose, not letters.
 
-Do **not** re-import Jayden, Anna Hartford, Atlas 01/05/10, or `reading-sample-1`.
+Do **not** re-import Jayden, Anna Hartford, live Atlas slugs, or `reading-sample-1`.
 
 If this session has **no new contract-valid booklets**, do not invent papers. Ask the owner.
 

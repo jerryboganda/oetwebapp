@@ -43,10 +43,10 @@ Answer each of the questions, 15-20, with a word or short phrase from one of the
 `;
 
 function typedPartA(
-  matchingEnd: 7 | 8,
+  matchingEnd: 5 | 6 | 7 | 8,
   middle: 'ShortAnswer' | 'SentenceCompletion',
   last: 'ShortAnswer' | 'SentenceCompletion',
-  lastStart: 15 | 16 = 15,
+  lastStart: 14 | 15 | 16 = 15,
 ) {
   return Array.from({ length: 20 }, (_, index) => {
     const displayOrder = index + 1;
@@ -139,5 +139,58 @@ Complete each of the sentences, 16-20, with a word or short phrase from one of t
     const resolved = resolvePartALayout({ bookletText: SAMPLE5_HEADINGS, questions: [] });
     expect(resolved.source).toBe('booklet');
     expect(describePartALayout(resolved.layout!)).toContain('Questions 1-8 matching');
+  });
+
+  it('detects official Sample 2 as 1-7 matching, 8-13 short answer, 14-20 sentence completion', () => {
+    const headings = `
+Questions 1-7
+For each question, 1-7, decide which text (A, B, C or D) the information comes from.
+Questions 8-13
+Answer each of the questions, 8-13, with a word or short phrase from one of the texts.
+Questions 14-20
+Complete each of the sentences, 14-20, with a word or short phrase from one of the texts.
+`;
+    const detected = detectPartALayoutFromBookletText(headings);
+    expect(detected.ok).toBe(true);
+    expect(detected.layout).toEqual({
+      matchingEnd: 7,
+      lastStart: 14,
+      middleType: 'ShortAnswer',
+      lastType: 'SentenceCompletion',
+    });
+    expect(detectPartALayoutFromQuestions(typedPartA(7, 'ShortAnswer', 'SentenceCompletion', 14)).ok).toBe(true);
+  });
+
+  it('detects official Sample 3 as 1-5 matching and Sample 4 as 1-6 matching', () => {
+    const sample3 = `
+Questions 1-5
+For each question, 1-5, decide which text (A, B, C or D) the information comes from.
+Questions 6-13
+Answer each of the questions, 6-13, with a word or short phrase from one of the texts.
+Questions 14-20
+Complete each of the sentences, 14-20, with a word or short phrase from one of the texts.
+`;
+    const sample4 = `
+Questions 1-6
+For each question, 1-6, decide which text (A, B, C or D) the information comes from.
+Questions 7-14
+Answer each of the questions, 7-14, with a word or short phrase from one of the texts.
+Questions 15-20
+Complete each of the sentences, 15-20, with a word or short phrase from one of the texts.
+`;
+    expect(detectPartALayoutFromBookletText(sample3).layout).toEqual({
+      matchingEnd: 5,
+      lastStart: 14,
+      middleType: 'ShortAnswer',
+      lastType: 'SentenceCompletion',
+    });
+    expect(detectPartALayoutFromBookletText(sample4).layout).toEqual({
+      matchingEnd: 6,
+      lastStart: 15,
+      middleType: 'ShortAnswer',
+      lastType: 'SentenceCompletion',
+    });
+    expect(detectPartALayoutFromQuestions(typedPartA(5, 'ShortAnswer', 'SentenceCompletion', 14)).ok).toBe(true);
+    expect(detectPartALayoutFromQuestions(typedPartA(6, 'ShortAnswer', 'SentenceCompletion', 15)).ok).toBe(true);
   });
 });

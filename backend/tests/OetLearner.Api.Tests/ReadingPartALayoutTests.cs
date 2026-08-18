@@ -67,6 +67,43 @@ public sealed class ReadingPartALayoutTests
     }
 
     [Fact]
+    public void Detects_official_sample2_last_block_starting_at_14()
+    {
+        const string headings = """
+            Questions 1-7
+            For each question, 1-7, decide which text (A, B, C or D) the information comes from.
+            Questions 8-13
+            Answer each of the questions, 8-13, with a word or short phrase from one of the texts.
+            Questions 14-20
+            Complete each of the sentences, 14-20, with a word or short phrase from one of the texts.
+            """;
+
+        Assert.True(ReadingPartALayoutDetector.TryDetectFromBookletText(headings, out var layout, out var error), error);
+        Assert.Equal(7, layout.MatchingEnd);
+        Assert.Equal(14, layout.LastStart);
+        Assert.Equal(ReadingQuestionType.ShortAnswer, layout.MiddleType);
+        Assert.Equal(ReadingQuestionType.SentenceCompletion, layout.LastType);
+    }
+
+    [Theory]
+    [InlineData(5, 14)]
+    [InlineData(6, 15)]
+    public void Detects_shorter_matching_blocks(int matchingEnd, int lastStart)
+    {
+        var questions = Enumerable.Range(1, 20).Select(order => (
+            order,
+            order <= matchingEnd
+                ? ReadingQuestionType.MatchingTextReference
+                : order < lastStart
+                    ? ReadingQuestionType.ShortAnswer
+                    : ReadingQuestionType.SentenceCompletion));
+
+        Assert.True(ReadingPartALayoutDetector.TryDetectFromQuestions(questions, out var layout, out var error), error);
+        Assert.Equal(matchingEnd, layout.MatchingEnd);
+        Assert.Equal(lastStart, layout.LastStart);
+    }
+
+    [Fact]
     public void Rejects_mixed_middle_block()
     {
         var questions = Enumerable.Range(1, 20).Select(order => (

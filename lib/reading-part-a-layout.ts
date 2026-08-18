@@ -2,19 +2,20 @@
  * Official OET Reading Part A always has 20 items, but the three task
  * blocks are not fixed at 1-7 / 8-14 / 15-20.
  *
- * Verified from live booklets (Jayden Book + Sample 5):
- * - Matching (which text A-D) is always first and is either 1-7 or 1-8.
- * - The last heading ends at 20 and starts at 15 or 16.
- * - The middle block fills the gap (8-14, 9-14, 8-15, or 9-15).
+ * Verified from live booklets (Jayden Book + Atlas + official Samples 2-4):
+ * - Matching (which text A-D) is always first and ends at 5, 6, 7, or 8.
+ * - The last heading ends at 20 and starts at 14, 15, or 16.
+ * - The middle block fills the gap.
  * - Middle and last swap between "answer the questions" (ShortAnswer)
  *   and "complete the sentences" (SentenceCompletion).
  */
 
 export const PART_A_LAST_QUESTION = 20;
-export const PART_A_LAST_BLOCK_STARTS = [15, 16] as const;
+export const PART_A_MATCHING_ENDS = [5, 6, 7, 8] as const;
+export const PART_A_LAST_BLOCK_STARTS = [14, 15, 16] as const;
 
-export type PartAMatchingEnd = 7 | 8;
-export type PartALastStart = 15 | 16;
+export type PartAMatchingEnd = 5 | 6 | 7 | 8;
+export type PartALastStart = 14 | 15 | 16;
 export type PartAGapQuestionType = 'ShortAnswer' | 'SentenceCompletion';
 
 export interface PartALayout {
@@ -43,8 +44,9 @@ export const PART_A_LAST_BLOCK_START = CLASSIC_PART_A_LAYOUT.lastStart;
 
 function allLayouts(): PartALayout[] {
   const layouts: PartALayout[] = [];
-  for (const matchingEnd of [7, 8] as const) {
+  for (const matchingEnd of PART_A_MATCHING_ENDS) {
     for (const lastStart of PART_A_LAST_BLOCK_STARTS) {
+      if (lastStart <= matchingEnd + 1) continue;
       layouts.push(
         { matchingEnd, lastStart, middleType: 'ShortAnswer', lastType: 'SentenceCompletion' },
         { matchingEnd, lastStart, middleType: 'SentenceCompletion', lastType: 'ShortAnswer' },
@@ -57,9 +59,15 @@ function allLayouts(): PartALayout[] {
 export const PART_A_LAYOUTS: readonly PartALayout[] = allLayouts();
 
 export function normalizePartALayout(layout: Partial<PartALayout> | null | undefined): PartALayout {
+  const matchingEnd = PART_A_MATCHING_ENDS.includes(layout?.matchingEnd as PartAMatchingEnd)
+    ? layout!.matchingEnd as PartAMatchingEnd
+    : 7;
+  const lastStart = PART_A_LAST_BLOCK_STARTS.includes(layout?.lastStart as PartALastStart)
+    ? layout!.lastStart as PartALastStart
+    : 15;
   return {
-    matchingEnd: layout?.matchingEnd === 8 ? 8 : 7,
-    lastStart: layout?.lastStart === 16 ? 16 : 15,
+    matchingEnd,
+    lastStart: lastStart <= matchingEnd + 1 ? 15 : lastStart,
     middleType: layout?.middleType === 'SentenceCompletion' ? 'SentenceCompletion' : 'ShortAnswer',
     lastType: layout?.lastType === 'ShortAnswer' ? 'ShortAnswer' : 'SentenceCompletion',
   };
@@ -140,8 +148,14 @@ export function detectPartALayoutFromQuestions(
     return fail(`Part A must have questions 1-20 before a layout can be confirmed (found ${byOrder.size}).`);
   }
 
-  const q8 = byOrder.get(8);
-  const matchingEnd: PartAMatchingEnd = q8 === 'MatchingTextReference' ? 8 : 7;
+  let matchingEnd = 0;
+  for (let order = 1; order <= 8; order += 1) {
+    if (byOrder.get(order) !== 'MatchingTextReference') break;
+    matchingEnd = order;
+  }
+  if (!PART_A_MATCHING_ENDS.includes(matchingEnd as PartAMatchingEnd)) {
+    return fail('Part A matching A–D block must be questions 1-5, 1-6, 1-7, or 1-8.');
+  }
 
   for (let order = 1; order <= matchingEnd; order += 1) {
     if (byOrder.get(order) !== 'MatchingTextReference') {
@@ -163,8 +177,8 @@ export function detectPartALayoutFromQuestions(
     }
   }
 
-  if (lastStart !== 15 && lastStart !== 16) {
-    return fail('Part A last block must start at question 15 or 16.');
+  if (lastStart !== 14 && lastStart !== 15 && lastStart !== 16) {
+    return fail('Part A last block must start at question 14, 15, or 16.');
   }
 
   const lastType = byOrder.get(lastStart);
@@ -202,15 +216,19 @@ export function suggestPartALayout(
   questions: Array<{ displayOrder: number; questionType: string }> = [],
 ): PartALayout {
   const byOrder = new Map(questions.map((question) => [question.displayOrder, question.questionType]));
-  const q8 = byOrder.get(8);
-  const matchingEnd: PartAMatchingEnd = q8 === 'MatchingTextReference' ? 8 : 7;
+  let matchingEnd: PartAMatchingEnd = 7;
+  if (byOrder.get(8) === 'MatchingTextReference') matchingEnd = 8;
+  else if (byOrder.get(5) === 'MatchingTextReference' && byOrder.get(6) && byOrder.get(6) !== 'MatchingTextReference') matchingEnd = 5;
+  else if (byOrder.get(6) === 'MatchingTextReference' && byOrder.get(7) && byOrder.get(7) !== 'MatchingTextReference') matchingEnd = 6;
 
   const firstGap = [matchingEnd + 1, matchingEnd + 2, matchingEnd + 3]
     .map((order) => byOrder.get(order))
     .find(isGapType);
 
   let lastStart: PartALastStart = 15;
-  if (byOrder.get(15) && byOrder.get(15) === firstGap && isGapType(byOrder.get(16))) {
+  if (byOrder.get(14) && firstGap && byOrder.get(14) !== firstGap && isGapType(byOrder.get(14))) {
+    lastStart = 14;
+  } else if (byOrder.get(15) && byOrder.get(15) === firstGap && isGapType(byOrder.get(16))) {
     lastStart = 16;
   } else if (isGapType(byOrder.get(16)) && byOrder.get(15) && byOrder.get(15) !== byOrder.get(16)) {
     lastStart = 16;
@@ -294,17 +312,21 @@ export function detectPartALayoutFromBookletText(raw: string): PartALayoutDetect
     blocks.push({ start, end, kind });
   }
 
-  const matching = blocks.find((block) => block.kind === 'matching' && block.start === 1 && (block.end === 7 || block.end === 8));
+  const matching = blocks.find((block) => (
+    block.kind === 'matching'
+    && block.start === 1
+    && PART_A_MATCHING_ENDS.includes(block.end as PartAMatchingEnd)
+  ));
   const last = blocks.find((block) => (
-    (block.start === 15 || block.start === 16)
+    PART_A_LAST_BLOCK_STARTS.includes(block.start as PartALastStart)
     && block.end === PART_A_LAST_QUESTION
     && isGapType(block.kind)
   ));
   if (!matching) {
-    return { ok: false, layout: null, source: 'booklet', error: 'Could not find a Questions 1-7 or 1-8 matching A–D heading.' };
+    return { ok: false, layout: null, source: 'booklet', error: 'Could not find a Questions 1-5, 1-6, 1-7, or 1-8 matching A–D heading.' };
   }
   if (!last || last.kind === 'matching') {
-    return { ok: false, layout: null, source: 'booklet', error: 'Could not find a Questions 15-20 or 16-20 answer/complete heading.' };
+    return { ok: false, layout: null, source: 'booklet', error: 'Could not find a Questions 14-20, 15-20, or 16-20 answer/complete heading.' };
   }
 
   const matchingEnd = matching.end as PartAMatchingEnd;

@@ -5,8 +5,8 @@ namespace OetLearner.Api.Services.Reading;
 
 /// <summary>
 /// Official OET Reading Part A is always 20 items, but the three task blocks
-/// are not fixed at 1-7 / 8-14 / 15-20. Matching is 1-7 or 1-8; the last
-/// heading starts at 15 or 16 and ends at 20; the middle block fills the gap
+/// are not fixed at 1-7 / 8-14 / 15-20. Matching ends at 5, 6, 7, or 8; the last
+/// heading starts at 14, 15, or 16 and ends at 20; the middle block fills the gap
 /// and may swap with the last between ShortAnswer and SentenceCompletion.
 /// </summary>
 public readonly record struct ReadingPartALayout(
@@ -78,10 +78,22 @@ public static class ReadingPartALayoutDetector
             return false;
         }
 
-        var matchingEnd = byOrder.TryGetValue(8, out var q8)
-            && q8 == ReadingQuestionType.MatchingTextReference
-            ? 8
-            : 7;
+        var matchingEnd = 0;
+        for (var order = 1; order <= 8; order++)
+        {
+            if (!byOrder.TryGetValue(order, out var opening) || opening != ReadingQuestionType.MatchingTextReference)
+            {
+                break;
+            }
+
+            matchingEnd = order;
+        }
+
+        if (matchingEnd is not (5 or 6 or 7 or 8))
+        {
+            error = "Part A matching A-D block must be questions 1-5, 1-6, 1-7, or 1-8.";
+            return false;
+        }
 
         for (var order = 1; order <= matchingEnd; order++)
         {
@@ -108,9 +120,9 @@ public static class ReadingPartALayoutDetector
             }
         }
 
-        if (lastStart is not (15 or 16))
+        if (lastStart is not (14 or 15 or 16))
         {
-            error = "Part A last block must start at question 15 or 16.";
+            error = "Part A last block must start at question 14, 15, or 16.";
             return false;
         }
 
@@ -180,17 +192,17 @@ public static class ReadingPartALayoutDetector
             blocks.Add((start, end, kind));
         }
 
-        var matching = blocks.FirstOrDefault(block => block.Kind == "matching" && block.Start == 1 && block.End is 7 or 8);
-        var last = blocks.FirstOrDefault(block => block.Start is 15 or 16 && block.End == 20 && IsGapKind(block.Kind));
+        var matching = blocks.FirstOrDefault(block => block.Kind == "matching" && block.Start == 1 && block.End is 5 or 6 or 7 or 8);
+        var last = blocks.FirstOrDefault(block => block.Start is 14 or 15 or 16 && block.End == 20 && IsGapKind(block.Kind));
         if (matching == default)
         {
-            error = "Could not find a Questions 1-7 or 1-8 matching A-D heading.";
+            error = "Could not find a Questions 1-5, 1-6, 1-7, or 1-8 matching A-D heading.";
             return false;
         }
 
         if (last == default)
         {
-            error = "Could not find a Questions 15-20 or 16-20 answer/complete heading.";
+            error = "Could not find a Questions 14-20, 15-20, or 16-20 answer/complete heading.";
             return false;
         }
 

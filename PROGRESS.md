@@ -2,12 +2,17 @@
 
 Last updated: 2026-08-18
 
+## Current Checkpoint - Atlas 11/12/13/14/23/24/25 live
+
+- Also published: `11-iron-deficiency` (`d8f4dd5f910645b59e49aaf612bf0e8c`), `12-opioid-dependence` (`253ae682ccbd431f91af03cda516b462`), `13-adhd` (`06ee37bacea740a5b56807a210b0399d`), `14-evaluating-cognitive-function` (`f45c6cc1ebb7462496822c20f8fa2616`), `23-tuberculosis` (`bee8010b11c84ce18f9e66ee923c7d36`), `24-deep-vein-thrombosis` (`ae075207261b430189a88933f37afefd`), `25-schizophrenia` (`69348a2fd0b24959a1f38ef833a20979`).
+- Status 4, 20/6/16, 42 pts, three distinct QuestionPaper media ids each. Offline + admin validate publishReady.
+- Still blocked: official Sample 2/3/4 (layout), 6–8 CamScanner, 9 no key, 15/22 lastStart=14, 16–21 no B/C letters, 26 matching 1–6, Kaplan matching 1–6, Nova no key.
+- Next: expand Part A layout (lastStart=14, matchingEnd 5/6) in TS+C#, deploy via Actions, then import official 2/3/4/15/22/26. Then VD. Do not invent Nova keys.
+
 ## Current Checkpoint - Atlas Practice Series 01 / 05 / 10 live
 
 - Published on production: `atlas-practice-series-01-fractures-dislocations-sprains` (`53d261affe2541359f5578b7e25d688d`), `atlas-practice-series-05-cellulitis` (`3d4e36bbdf6747c79ff4f00f078fc5a5`), `atlas-practice-series-10-sedation` (`e85f13d7cf7749c7aa42f3e279bc6d30`).
 - Status 4, 20/6/16, 42 pts, three distinct part-only QuestionPaper media ids each. Tags `reading,atlas-practice-series,official-key`.
-- Remaining Desktop Atlas files skipped (invalid Part A layouts, CamScanner, or third-party verified keys). Do not invent papers.
-- Next: owner decision on those remaining Atlas files, then Nova Practice Series.
 
 ## Current Checkpoint - Reading part-only PDFs + zero-deviation contract
 

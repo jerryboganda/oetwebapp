@@ -428,10 +428,17 @@ Also live: `reading-sample-1`. Do **not** re-import Jayden, Anna Hartford, or At
 | `atlas-practice-series-01-fractures-dislocations-sprains` | `53d261affe2541359f5578b7e25d688d` | classic 1–7 / 8–14 / 15–20 | Fractures, dislocations and sprains |
 | `atlas-practice-series-05-cellulitis` | `3d4e36bbdf6747c79ff4f00f078fc5a5` | 1–8 / 9–14 / 15–20 | Cellulitis |
 | `atlas-practice-series-10-sedation` | `e85f13d7cf7749c7aa42f3e279bc6d30` | classic | Sedation |
+| `atlas-practice-series-11-iron-deficiency` | `d8f4dd5f910645b59e49aaf612bf0e8c` | classic | Iron deficiency |
+| `atlas-practice-series-12-opioid-dependence` | `253ae682ccbd431f91af03cda516b462` | classic | Opioid dependence |
+| `atlas-practice-series-13-adhd` | `06ee37bacea740a5b56807a210b0399d` | classic | ADHD |
+| `atlas-practice-series-14-evaluating-cognitive-function` | `f45c6cc1ebb7462496822c20f8fa2616` | classic | Evaluating cognitive function |
+| `atlas-practice-series-23-tuberculosis` | `bee8010b11c84ce18f9e66ee923c7d36` | classic | Tuberculosis |
+| `atlas-practice-series-24-deep-vein-thrombosis` | `ae075207261b430189a88933f37afefd` | classic | Deep vein thrombosis |
+| `atlas-practice-series-25-schizophrenia` | `69348a2fd0b24959a1f38ef833a20979` | classic | Schizophrenia |
 
 Tags: `reading,atlas-practice-series,official-key`. Status 4. 20/6/16. 42 points. Part-only QuestionPaper PDFs.
 
-Page maps (1-based, keys omitted): Atlas01 A1–5 B6–11 C12–19 drop 20–21 · Atlas05 A1–8 B9–15 C16–23 drop 24–28 · Atlas10 A1–5 B6–11 C12–19 drop 20–21.
+Page maps (1-based, keys omitted): Atlas01 A1–5 B6–11 C12–19 drop 20–21 · Atlas05 A1–8 B9–15 C16–23 drop 24–28 · Atlas10 A1–5 B6–11 C12–19 drop 20–21 · Atlas11 A1–6 B7–12 C13–20 drop 21–22 · Atlas12 A1–7 B8–10 C11–16 drop 17–18 · Atlas13 A1–6 B7–9 C10–15 drop 16–17 · Atlas14 A1–7 B8–13 C14–21 drop 22–23 · Atlas23 A1–6 B7–12 C13–20 drop 21–22 · Atlas24 A1–6 B7–12 C13–20 drop 21–22 · Atlas25 A1–7 B8–13 C14–20 drop 21–22.
 
 Printed Atlas keys (authoritative, from the PDFs):
 
@@ -447,9 +454,37 @@ Atlas05 C: A D B C A A D B D B C B C B A B
 Atlas10 A: A D A B C A B | benzodiazepines | minimal sedation | emergency intubation | fracture reduction | Phencyclidines | Remifentanil | 5mg | IV | cardiovascular function | verbal commands | epileptic seizures | carbon dioxide | reversal agent
 Atlas10 B: C B B B A A
 Atlas10 C: B B A B D C D A D A C D A B B D
+
+Atlas11 A: B C A B D A D | <30 mcg/L | excess cow's milk intake | iron polymaltose | evaluate other causes | 1-2 weeks | ferric carboxymaltose | oral iron supplements | low in iron | adult doses of iron | endoscopy and colonoscopy | 3 times per week | in patients with comorbidities | tolerate oral iron therapy
+Atlas11 B: C C B C A A
+Atlas11 C: D C C B B A B A C B C B A D C A
+
+Atlas12 A: B A C D A D B | pain intensity | buprenorphine-naloxone (sublingual) | 1-3 days | if pain is not managed with non-opioid medication | urine drug screening | alternative interests or pleasures | a single patch | permit | poorer outcomes | central features | treatment agreement | non-opioid combinations | three or more
+Atlas12 B: C C A A B C
+Atlas12 C: B D B B C D C C C B C D D A B B
+
+Atlas13 A: C D B A A C D | 60 mg/day | multiple follow-up appointments | parent or partner interview | side effects of stimulant medication | at least 40-50% | more spontaneous and adventurous | atomoxetine | building blocks | longstanding / underlying | longer-acting formulations of methylphenidate | comorbid disorders | blood pressure | careful titration
+Atlas13 B: C A A C B B
+Atlas13 C: A C B D C C B A C B A B A C B C
+
+Atlas14 A: C B A D A C B | major neurocognitive disorder | Alzheimer's disease | executive function | specialist referral | psychiatric or psychogeriatric referral | learning and memory | every 12 months | delirium | ability to live independently | 0 | cognitive | recognition of emotions | day-to-day
+Atlas14 B: C A B B C C
+Atlas14 C: B D A C C C B A D A C D D B C A
+
+Atlas23 A: D B A B B C A | tuberculin | 10 | Mycobacterium tuberculosis | 20-30 months | pulmonary tuberculosis | adequate ventilation | drug-resistant TB | lungs | organ | swelling | X-ray | 20 | first-line
+Atlas23 B: A C C C A A
+Atlas23 C: A B B C B C D D A D D C B C B C
+
+Atlas24 A: A B D A C D B | morphine | excessive bleeding | above 40 | throbbing cramp-like pain | leg | older anticoagulants | anticoagulants | elastic compression stockings | pulmonary embolism | blood flow | oestrogen | Fragmin | purpura
+Atlas24 B: B A A A A C
+Atlas24 C: B C C B D B D D D B B D C D D C
+
+Atlas25 A: D B A A C C B | linkage of services | organising confusing experiences | feedback | outcome measures | evaluate frequently | 0.5-1.5 hours | olanzapine, risperidone and aripiprazole | patient cooperation | intranasal | reevaluate | emotional distress | simple examples | undue pressure
+Atlas25 B: B C C C A C
+Atlas25 C: B B C B B C B A C A A A B B C C
 ```
 
-Remaining Desktop Atlas files (Sample 2–4, 6–9, 11–26, Kaplan) are **not** imported. Invalid Part A layouts, CamScanner scans, or third-party verified keys. Do not invent answers. Ask the owner before touching them.
+Remaining Desktop Atlas files (official Sample 2–4, 6–9, 15–22, 26, Kaplan) are **not** imported. Invalid Part A layouts, CamScanner scans, or B/C letters not extractable. Do not invent answers. Official 2/3/4/15/22/26 need a layout-detector expand + Actions deploy before import.
 
 Printed AH keys (authoritative, from the PDFs):
 
