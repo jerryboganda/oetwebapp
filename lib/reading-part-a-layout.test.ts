@@ -46,7 +46,7 @@ function typedPartA(
   matchingEnd: 5 | 6 | 7 | 8,
   middle: 'ShortAnswer' | 'SentenceCompletion',
   last: 'ShortAnswer' | 'SentenceCompletion',
-  lastStart: 14 | 15 | 16 = 15,
+  lastStart: 13 | 14 | 15 | 16 = 15,
 ) {
   return Array.from({ length: 20 }, (_, index) => {
     const displayOrder = index + 1;
@@ -192,5 +192,25 @@ Complete each of the sentences, 15-20, with a word or short phrase from one of t
     });
     expect(detectPartALayoutFromQuestions(typedPartA(5, 'ShortAnswer', 'SentenceCompletion', 14)).ok).toBe(true);
     expect(detectPartALayoutFromQuestions(typedPartA(6, 'ShortAnswer', 'SentenceCompletion', 15)).ok).toBe(true);
+  });
+
+  it('detects Kaplan / Sample 18 as last block starting at 13', () => {
+    const headings = `
+Questions 1-6
+For each question, 1-6, decide which text (A, B, C or D) the information comes from.
+Questions 7-12
+Complete each of the sentences, 7-12, with a word or short phrase from one of the texts.
+Questions 13-20
+Answer each of the questions, 13-20, with a word or short phrase from one of the texts.
+`;
+    const detected = detectPartALayoutFromBookletText(headings);
+    expect(detected.ok).toBe(true);
+    expect(detected.layout).toEqual({
+      matchingEnd: 6,
+      lastStart: 13,
+      middleType: 'SentenceCompletion',
+      lastType: 'ShortAnswer',
+    });
+    expect(detectPartALayoutFromQuestions(typedPartA(6, 'SentenceCompletion', 'ShortAnswer', 13)).ok).toBe(true);
   });
 });

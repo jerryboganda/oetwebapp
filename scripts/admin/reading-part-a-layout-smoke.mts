@@ -62,4 +62,17 @@ assert(!detectPartALayoutFromQuestions(mixed).ok, 'mixed 8-14 must fail');
 
 assert(suggestPartALayout([{ displayOrder: 8, questionType: 'MatchingTextReference' }]).matchingEnd === 8, 'Q8 matching hint');
 
-console.log('reading-part-a-layout smoke: Sample 5 1-8, swapped 8-14, and all four typed layouts passed');
+const kaplan = detectPartALayoutFromBookletText(`
+Questions 1-6
+For each question, 1-6, decide which text (A, B, C or D) the information comes from.
+Questions 7-12
+Complete each of the sentences, 7-12, with a word or short phrase from one of the texts.
+Questions 13-20
+Answer each of the questions, 13-20, with a word or short phrase from one of the texts.
+`);
+assert(kaplan.ok && kaplan.layout?.lastStart === 13, `Kaplan lastStart=13: ${kaplan.error}`);
+assert(kaplan.layout?.matchingEnd === 6, 'Kaplan matching 1-6');
+assert(kaplan.layout?.middleType === 'SentenceCompletion', 'Kaplan middle SC');
+assert(kaplan.layout?.lastType === 'ShortAnswer', 'Kaplan last SA');
+
+console.log('reading-part-a-layout smoke: Sample 5 1-8, swapped 8-14, lastStart=13, and all four typed layouts passed');

@@ -85,6 +85,25 @@ public sealed class ReadingPartALayoutTests
         Assert.Equal(ReadingQuestionType.SentenceCompletion, layout.LastType);
     }
 
+    [Fact]
+    public void Detects_kaplan_last_block_starting_at_13()
+    {
+        const string headings = """
+            Questions 1-6
+            For each question, 1-6, decide which text (A, B, C or D) the information comes from.
+            Questions 7-12
+            Complete each of the sentences, 7-12, with a word or short phrase from one of the texts.
+            Questions 13-20
+            Answer each of the questions, 13-20, with a word or short phrase from one of the texts.
+            """;
+
+        Assert.True(ReadingPartALayoutDetector.TryDetectFromBookletText(headings, out var layout, out var error), error);
+        Assert.Equal(6, layout.MatchingEnd);
+        Assert.Equal(13, layout.LastStart);
+        Assert.Equal(ReadingQuestionType.SentenceCompletion, layout.MiddleType);
+        Assert.Equal(ReadingQuestionType.ShortAnswer, layout.LastType);
+    }
+
     [Theory]
     [InlineData(5, 14)]
     [InlineData(6, 15)]
@@ -117,7 +136,7 @@ public sealed class ReadingPartALayoutTests
                         : ReadingQuestionType.SentenceCompletion));
 
         Assert.False(ReadingPartALayoutDetector.TryDetectFromQuestions(questions, out _, out var error));
-        Assert.Contains("15 or 16", error);
+        Assert.Contains("last block must start", error);
     }
 
     [Fact]
