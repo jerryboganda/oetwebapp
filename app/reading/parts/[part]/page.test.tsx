@@ -73,6 +73,7 @@ describe('Reading part practice dispatcher', () => {
 
     render(<ReadingPartPracticePage />);
 
+    await user.click(await screen.findByRole('button', { name: /other papers/i }));
     await user.click(await screen.findByRole('button', { name: /start part a practice/i }));
 
     await waitFor(() => {
@@ -80,6 +81,38 @@ describe('Reading part practice dispatcher', () => {
       expect(mockPush).toHaveBeenCalledWith('/reading/paper/paper-1?attemptId=attempt-part-a&mode=part-practice&part=A');
     });
     expect(mockTrack).toHaveBeenCalledWith('content_view', { page: 'reading-part-practice', part: 'A' });
+  });
+
+  it('lists each paper Part A inside the same book folders as Reading materials', async () => {
+    const user = userEvent.setup();
+    mockGetReadingHome.mockResolvedValue({
+      ...buildHome(),
+      papers: [
+        {
+          ...buildHome().papers[0],
+          id: 'ah1',
+          title: 'Anna Hartford 1 — Cigarette Smoking and Lung Cancer',
+          slug: 'anna-hartford-01-cigarette-smoking-lung-cancer',
+          tagsCsv: 'reading,anna-hartford,official-key',
+        },
+        {
+          ...buildHome().papers[0],
+          id: 'jb1',
+          title: 'Jayden Book 01 — Bed Bugs',
+          slug: 'jayden-book-01-bed-bugs',
+        },
+      ],
+    });
+
+    render(<ReadingPartPracticePage />);
+
+    expect(await screen.findByRole('button', { name: /anna hartford/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /jayden book/i })).toBeInTheDocument();
+    expect(screen.queryByText(/Anna Hartford 1/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /anna hartford/i }));
+    expect(screen.getByText(/Anna Hartford 1 — Cigarette Smoking and Lung Cancer · Part A/)).toBeInTheDocument();
+    expect(screen.queryByText(/Jayden Book 01/)).not.toBeInTheDocument();
   });
 });
 

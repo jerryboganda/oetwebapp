@@ -20,7 +20,7 @@ import {
   type ReadingHomeDto,
   type ReadingHomePaperDto,
 } from '@/lib/reading-authoring-api';
-import { groupReadingExamPapers } from '@/lib/reading-exam-categories';
+import { ReadingExamFolderBrowser } from '@/components/domain/reading/reading-exam-folder-browser';
 import { readErrorMessage } from '@/lib/read-error-message';
 import {
   InsufficientCreditsModal,
@@ -28,8 +28,8 @@ import {
   readInsufficientCreditsMessage,
 } from '@/components/domain/InsufficientCreditsModal';
 
-// Full Reading Exam lists published ContentPapers by the five official book
-// folders. Mock bundles stay on /mocks. Do not redirect this route there.
+// Full Reading Exam uses the same book-folder list as Reading materials.
+// New published papers appear automatically. Mock bundles stay on /mocks.
 
 function isPaperAllowed(paper: ReadingHomePaperDto): boolean {
   return paper.entitlement?.allowed !== false;
@@ -65,7 +65,6 @@ export default function ReadingFullExamPage() {
     };
   }, []);
 
-  const sections = useMemo(() => groupReadingExamPapers(home?.papers ?? []), [home?.papers]);
   const activeByPaper = useMemo(() => {
     const map = new Map<string, string>();
     for (const attempt of home?.activeAttempts ?? []) {
@@ -126,7 +125,7 @@ export default function ReadingFullExamPage() {
           icon={BookOpen}
           accent="blue"
           title="Full Reading Exam"
-          description="Choose a published paper from a book series. Each exam is 60 minutes, 42 questions, with Part A hard-locked and Parts B+C sharing a 45-minute window."
+          description="Open a book folder, then start a published full exam. Each exam is 60 minutes, 42 questions, with Part A hard-locked and Parts B+C sharing a 45-minute window."
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
@@ -135,79 +134,59 @@ export default function ReadingFullExamPage() {
         {loading ? (
           <LearnerSkeleton variant="card-grid" />
         ) : (
-          <div className="space-y-8">
-            {sections.map((section) => (
-              <section key={section.id} aria-labelledby={`reading-exam-${section.id}`}>
-                <div className="mb-3">
-                  <h2 id={`reading-exam-${section.id}`} className="text-base font-bold text-navy">
-                    {section.title}
-                  </h2>
-                  <p className="mt-1 text-sm text-muted">{section.description}</p>
-                </div>
-
-                {section.papers.length === 0 ? (
-                  <p className="rounded-2xl border border-dashed border-border px-4 py-5 text-sm text-muted">
-                    No papers in this series yet. They will appear here after they are published.
+          <ReadingExamFolderBrowser
+            papers={home?.papers ?? []}
+            emptyMessage="No papers in this series yet. They will appear here after they are published."
+            renderPaper={(paper) => {
+              const allowed = isPaperAllowed(paper);
+              const resumeRoute = activeByPaper.get(paper.id);
+              const starting = startingPaperId === paper.id;
+              return (
+                <article className="flex h-full flex-col rounded-2xl border border-blue-100 bg-surface p-5 shadow-sm dark:border-blue-900/40">
+                  <h3 className="text-base font-bold text-navy">{paper.title}</h3>
+                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                    <span className="inline-flex items-center gap-1">
+                      <ListChecks className="h-3 w-3" aria-hidden />
+                      {paper.partACount}+{paper.partBCount}+{paper.partCCount} items
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" aria-hidden />
+                      {paper.estimatedDurationMinutes ||
+                        paper.partATimerMinutes + paper.partBCTimerMinutes}{' '}
+                      min
+                    </span>
+                    {!allowed ? (
+                      <span className="inline-flex items-center gap-1 text-amber-800">
+                        <Lock className="h-3 w-3" aria-hidden />
+                        Subscription required
+                      </span>
+                    ) : null}
                   </p>
-                ) : (
-                  <ul className="grid gap-4 sm:grid-cols-2">
-                    {section.papers.map((paper) => {
-                      const allowed = isPaperAllowed(paper);
-                      const resumeRoute = activeByPaper.get(paper.id);
-                      const starting = startingPaperId === paper.id;
-                      return (
-                        <li key={paper.id}>
-                          <article className="flex h-full flex-col rounded-2xl border border-blue-100 bg-surface p-5 shadow-sm dark:border-blue-900/40">
-                            <h3 className="text-base font-bold text-navy">{paper.title}</h3>
-                            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                              <span className="inline-flex items-center gap-1">
-                                <ListChecks className="h-3 w-3" aria-hidden />
-                                {paper.partACount}+{paper.partBCount}+{paper.partCCount} items
-                              </span>
-                              <span className="inline-flex items-center gap-1">
-                                <Clock className="h-3 w-3" aria-hidden />
-                                {paper.estimatedDurationMinutes ||
-                                  paper.partATimerMinutes + paper.partBCTimerMinutes}{' '}
-                                min
-                              </span>
-                              {!allowed ? (
-                                <span className="inline-flex items-center gap-1 text-amber-800">
-                                  <Lock className="h-3 w-3" aria-hidden />
-                                  Subscription required
-                                </span>
-                              ) : null}
-                            </p>
-                            {paper.lastAttempt?.submittedAt ? (
-                              <p className="mt-2 text-xs text-muted">
-                                Last score {paper.lastAttempt.rawScore ?? '—'}/
-                                {paper.totalPoints || 42}
-                              </p>
-                            ) : null}
-                            <div className="mt-auto pt-4">
-                              <button
-                                type="button"
-                                onClick={() => handleStart(paper)}
-                                disabled={starting}
-                                className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90 disabled:opacity-70"
-                              >
-                                {starting
-                                  ? 'Starting...'
-                                  : resumeRoute
-                                    ? 'Resume exam'
-                                    : allowed
-                                      ? 'Start full exam'
-                                      : 'View access'}
-                              </button>
-                            </div>
-                          </article>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </section>
-            ))}
-          </div>
+                  {paper.lastAttempt?.submittedAt ? (
+                    <p className="mt-2 text-xs text-muted">
+                      Last score {paper.lastAttempt.rawScore ?? '—'}/{paper.totalPoints || 42}
+                    </p>
+                  ) : null}
+                  <div className="mt-auto pt-4">
+                    <button
+                      type="button"
+                      onClick={() => handleStart(paper)}
+                      disabled={starting}
+                      className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90 disabled:opacity-70"
+                    >
+                      {starting
+                        ? 'Starting...'
+                        : resumeRoute
+                          ? 'Resume exam'
+                          : allowed
+                            ? 'Start full exam'
+                            : 'View access'}
+                    </button>
+                  </div>
+                </article>
+              );
+            }}
+          />
         )}
       </main>
     </LearnerDashboardShell>

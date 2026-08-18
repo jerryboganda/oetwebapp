@@ -91,14 +91,17 @@ describe('Reading full exam page', () => {
 
     render(<ReadingFullExamPage />);
 
-    expect(await screen.findByRole('heading', { name: 'Jayden Book' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Anna Hartford' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Atlas Practice Series' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Nova Practice Series' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'VERY DIFFICULT READING EXAMS' })).toBeInTheDocument();
-    expect(screen.getByText('Jayden Book 01 — Bed Bugs')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Other papers' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /jayden book/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /anna hartford/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /atlas practice series/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /nova practice series/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /very difficult reading exams/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /other papers/i })).toBeInTheDocument();
+    expect(screen.queryByText('Jayden Book 01 — Bed Bugs')).not.toBeInTheDocument();
     expect(screen.queryByText(/no mock bundles/i)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /jayden book/i }));
+    expect(await screen.findByText('Jayden Book 01 — Bed Bugs')).toBeInTheDocument();
   });
 
   it('starts a full exam attempt and opens the paper player', async () => {
@@ -108,6 +111,7 @@ describe('Reading full exam page', () => {
     mockStartReadingAttempt.mockResolvedValue({ attemptId: 'att-1' });
 
     render(<ReadingFullExamPage />);
+    fireEvent.click(await screen.findByRole('button', { name: /jayden book/i }));
     fireEvent.click(await screen.findByRole('button', { name: 'Start full exam' }));
 
     await waitFor(() => {
