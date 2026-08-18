@@ -90,6 +90,7 @@ Load the named docs before editing these surfaces.
 - Content uploads: use `ContentPaper -> ContentPaperAsset -> MediaAsset`, chunked admin upload endpoints, `IFileStorage`, provenance, publish gates, and audit events. See `docs/CONTENT-UPLOAD-PLAN.md`.
 - Statement of Results: do not restyle the CBLA-style card; use `lib/adapters/oet-sor-adapter.ts`. See `docs/OET-RESULT-CARD-SPEC.md`.
 - Reading, grammar, pronunciation, and conversation are server-authoritative; preserve their scoring, rulebook, ASR/TTS/provider, entitlement, retention, and publish-gate contracts. See the matching docs in `docs/`.
+- Reading save / import / validate / publish: load `docs/READING-MODULE-SAVE-AND-UPLOAD.md` first. Do not re-research the contract. Official papers are PDF-first 20/6/16; Part A last block starts at 15 or 16.
 - Runtime settings/secrets: services read through `IRuntimeSettingsProvider`, with encrypted DB value over env fallback and audit on writes. See `docs/ADMIN-RUNTIME-SETTINGS.md`.
 
 ## Admin UI

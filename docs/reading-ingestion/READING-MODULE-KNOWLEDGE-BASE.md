@@ -1,5 +1,10 @@
 # Reading Module Knowledge Base
 
+> **STALE (2026-08-18).** For save / upload / import / publish, read
+> [`docs/READING-MODULE-SAVE-AND-UPLOAD.md`](../READING-MODULE-SAVE-AND-UPLOAD.md)
+> first. This file still claims last Part A block is always 15–20 and that
+> `EvidenceSentence` is not imported. Both are wrong.
+
 Status: **CONDITIONALLY READY** for future ingestion.
 
 This document reverse-engineers the live Reading module from code. It is the

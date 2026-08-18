@@ -1,5 +1,10 @@
 # Local Reading Sample Import Runbook
 
+> **Agents:** the current save/upload contract is
+> [`docs/READING-MODULE-SAVE-AND-UPLOAD.md`](../READING-MODULE-SAVE-AND-UPLOAD.md).
+> This runbook is localhost-only and still describes the classic 1–7 / 8–14 / 15–20
+> Part A shape. Live papers may be 1–8 matching and/or last block 16–20.
+
 > Audience: local developer or content operator preparing owner-supplied OET Reading samples.
 > Scope: localhost Docker only. Do not use this runbook against staging, production, or the `185.252.233.186` VPS.
 
