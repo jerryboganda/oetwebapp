@@ -32,6 +32,7 @@ Do **not**:
 - Point the importer at `https://api.oetwithdrhesham.co.uk`.
 - Retry bootstrap / admin passwords (lockout after 5).
 - Recreate `oet-api-green` from the old GHCR image while the 2026-08-18 DLL overlay is live.
+- Send **Full Reading Exam** (`/reading/exam`) to `/mocks`. That route lists published papers by book folder. Mock bundles are a separate surface.
 - Assume last Part A block is always 15–20.
 - Use `correctAnswer` instead of `correctAnswerJson`.
 - Put HTML passages in `texts` for official papers.
@@ -397,6 +398,8 @@ Answer compare after import: **210 / 210** official answers matched. Every quest
 | Public Part C numbers | `lib/reading-display-number.ts` |
 | Admin TS client | `lib/reading-authoring-api.ts` |
 | Official builder UI | `app/admin/content/reading/[paperId]/questions/ReadingAnswerSheetBuilder.tsx` |
+| Full Reading Exam list | `app/reading/exam/page.tsx` |
+| Book folders | `lib/reading-exam-categories.ts` |
 | Exam player | `app/reading/paper/[paperId]/page.tsx` |
 | Entities | `backend/src/OetLearner.Api/Domain/ReadingEntities.cs` |
 | Import + validate | `backend/.../Services/Reading/ReadingStructureService.cs` |
@@ -422,3 +425,23 @@ This Copilot collection has two worktrees. Reading lives in **oet-project-web-ap
 - Never read or write `D:\Projects\OET with Dr Hesham\OET Project Web App`
 
 Rename branches with the Copilot `rename_branch` tool, not `git branch -m`.
+
+---
+
+## 12. Learner Full Reading Exam is a paper list, not Mocks
+
+The Reading hub card **Full Reading Exam** goes to `/reading/exam`. That page lists published `ContentPaper`s (`GET /v1/reading-papers/home`) grouped by the five official book folders from the complete Reading library:
+
+1. Anna Hartford
+2. Atlas Practice Series
+3. Jayden Book
+4. Nova Practice Series
+5. VERY DIFFICULT READING EXAMS
+
+Grouping uses `tagsCsv`, then slug, then title (`jayden-book`, `anna-hartford`, …). Empty series still render so the library shape stays visible. Unmatched published papers go under **Other papers**.
+
+Starting a card calls `POST /v1/reading-papers/papers/{id}/attempts` (full Exam mode, 60 minutes) and opens `/reading/paper/{id}?attemptId=…`. Do **not** start a part-practice attempt from this page.
+
+`/reading/mocks` still redirects to `/mocks?subtest=reading`. That is the mock-bundle surface. Prod currently has no published mock bundles; an empty Mocks page is expected and is **not** the Full Reading Exam.
+
+Tag new books on import (`tagsCsv` must include the series slug, e.g. `reading,jayden-book,official-key`) so they land in the right folder.

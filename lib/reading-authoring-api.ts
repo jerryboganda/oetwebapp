@@ -336,6 +336,7 @@ export interface ReadingHomePaperDto {
   id: string;
   title: string;
   slug: string;
+  tagsCsv?: string | null;
   difficulty: string;
   estimatedDurationMinutes: number;
   publishedAt: string | null;
