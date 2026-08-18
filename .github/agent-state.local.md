@@ -8,13 +8,13 @@ Publish live. Same five book folders for Full Exam and Part A/B/C.
 1. `docs/READING-UPLOAD-AGENT-HANDOFF.md`
 2. `docs/READING-MODULE-SAVE-AND-UPLOAD.md`
 
-## Already live — do not touch
-- Jayden JB1–JB5
-- Anna Hartford AH1–AH3
-- `reading-sample-1`
+## Already live — do not re-import
+- Jayden JB1–JB5 — part-only QuestionPaper PDFs attached
+- Anna Hartford AH1–AH3 — part-only QuestionPaper PDFs attached
+- `reading-sample-1` already had separate part files
 
 ## Next step
-Owner should click **Start full exam** again. The marking-policy block is cleared: effective Reading/Listening policies plus 0–42 conversion tables are on production. Then continue Atlas PDFs when uploaded.
+Continue Atlas PDFs when the owner uploads them. Split each booklet into Part A/B/C files first (no answer-key pages; shared boundary pages go in both parts).
 
 ## Constraints
 - Public API only. No local API/DB. No `--dev-auth` on Production.

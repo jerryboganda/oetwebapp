@@ -24,7 +24,7 @@ then import a structured answer-sheet manifest, then validate, then publish.
 
 | Step | Action | Gate |
 | --- | --- | --- |
-| 1 | Inventory the booklet + printed answer key | Complete exam = Part A 20 + Part B 6 + Part C 16. Keys live **in the PDF**. |
+| 1 | Inventory the booklet + printed answer key | Complete exam = Part A 20 + Part B 6 + Part C 16. Keys live **in the PDF**. Split the booklet into **part-only** PDFs before attach. |
 | 2 | Auto-detect Part A layout | Matching is 1–7 **or** 1–8. Last block starts at **15 or 16**. Middle/last swap SA vs SC. |
 | 3 | Build a JSON bundle | Field is `correctAnswerJson` (JSON-encoded string). Include `evidenceSentence`. `texts: []`. |
 | 4 | Offline dry-run | `ERROR COUNT 0`, 42 points, layout id matches the booklet headings. |
@@ -140,9 +140,9 @@ Backend authority after write: `ReadingStructureService.ValidatePaperAsync`.
       "sourceProvenance": "Jayden Book JB1 official PDF and printed answer key",
       "paper": { "slug": "...", "title": "...", "subtestCode": "reading", "sourceProvenance": "..." },
       "assets": [
-        { "role": "QuestionPaper", "part": "A", "sourcePath": "JB1.pdf", "makePrimary": true },
-        { "role": "QuestionPaper", "part": "B", "sourcePath": "JB1.pdf", "makePrimary": true },
-        { "role": "QuestionPaper", "part": "C", "sourcePath": "JB1.pdf", "makePrimary": true }
+        { "role": "QuestionPaper", "part": "A", "sourcePath": "JB1-PartA.pdf", "makePrimary": true },
+        { "role": "QuestionPaper", "part": "B", "sourcePath": "JB1-PartB.pdf", "makePrimary": true },
+        { "role": "QuestionPaper", "part": "C", "sourcePath": "JB1-PartC.pdf", "makePrimary": true }
       ],
       "manifest": {
         "parts": [
@@ -156,7 +156,26 @@ Backend authority after write: `ReadingStructureService.ValidatePaperAsync`.
 }
 ```
 
-One booklet PDF reused for A/B/C is allowed and is what Jayden used. `makePrimary: true` is required for each part.
+**Never reuse the combined booklet for A/B/C.** The player serves the PDF for the part being attempted. A shared file shows Part B/C (and the answer key) during Part A. Crop first:
+
+- Map pages from booklet headings (`Part A` / `Part B` / `Part C` / `END OF PART` / `ANSWER KEY`).
+- Drop every answer-key page. Candidates must never see keys in the viewer.
+- If a page contains the end of one part and the start of the next, include that page in **both** part files.
+- Attach three **distinct** primary `QuestionPaper` media ids. `makePrimary: true` is required for each part.
+- Full Exam already swaps the viewer by `part`. Distinct files are enough; no UI change.
+
+Live AH/JB page maps (1-based, keys omitted):
+
+| Paper | A | B | C | Drop |
+| --- | --- | --- | --- | --- |
+| AH1 (30p) | 1–7 | 8–16 | 17–27 | 28–30 |
+| AH2 (24p) | 1–5 | 6–13 | 14–21 | 22–24 |
+| AH3 (25p) | 1–7 | **7–13** | 14–22 | 23–25 |
+| JB1 (16p) | 1–4 | **4–7** | 8–14 | 15–16 |
+| JB2 (16p) | 1–4 | 5–8 | **8–14** | 15–16 |
+| JB3 (16p) | 1–4 | **4–7** | 8–14 | 15–16 |
+| JB4 (17p) | 1–4 | 5–8 | **8–15** | 16–17 |
+| JB5 (16p) | 1–5 | **5–8** | **8–14** | 15–16 |
 
 ### 3.2 Question fields that agents get wrong
 
@@ -381,7 +400,7 @@ If a UI change is not live, check the **web** image digest / commit on the activ
 | `jayden-book-04-tmj-disorders` | `14b1be2a0f4d44e79a06af67eece6599` |
 | `jayden-book-05-resveratrol` | `22941dadfe39482481720f5bc9070aef` |
 
-PDFs live under `/var/opt/oet-learner/storage/uploads/published/...` (content-addressed). Same file is reused for A/B/C per paper.
+PDFs live under `/var/opt/oet-learner/storage/uploads/published/...` (content-addressed). Each part has its **own** QuestionPaper file (keys stripped). Do not re-attach the combined booklet.
 
 Answer compare after import: **210 / 210** official answers matched. Every question has explanation + evidence.
 
@@ -393,7 +412,7 @@ Answer compare after import: **210 / 210** official answers matched. Every quest
 | `anna-hartford-02-vision-impairment` | `c923296171034cae88c497c4939ee94f` | classic | Vision Impairment |
 | `anna-hartford-03-vaccines-immunisation` | `44e58008f91e4a14828696ec06f4d86d` | classic | Vaccines and Immunisation |
 
-Tags: `reading,anna-hartford,official-key`. Status 4. 20/6/16. 42 points. One QuestionPaper PDF reused for A/B/C.
+Tags: `reading,anna-hartford,official-key`. Status 4. 20/6/16. 42 points. Part-only QuestionPaper PDFs (AH3 p7 is in both A and B).
 
 AH3 Part B letters were reconstructed from option prose in the printed key: `1A 2B 3B 4C 5A 6A`. Do not invent other letters.
 
@@ -432,6 +451,7 @@ AH3 C: A C B A C C C A D A A D C C B C
 | UI change committed but live still old | Actions failed while repo was private (~5s empty run). Redeploy via Actions after repo is runnable. Confirm **web** slot commit, not only API. | `.github/workflows/deploy.yml` |
 | Public API sign-in 403 | Send `X-OET-Device-Id` + `X-OET-Client-Platform: desktop` on every call | TrustedDeviceRequired |
 | Seed admin lockout risk | Do not retry `admin@oet-prep.dev` | `auth_identities` |
+| Combined booklet shown for every part | Split A/B/C PDFs; drop keys; shared pages duplicated | live `ContentPaperAssets` 2026-08-18 |
 
 ---
 
@@ -444,7 +464,7 @@ AH3 C: A C B A C C C A D A A D C C B C
 [ ] Build bundle with correctAnswerJson, evidenceSentence, reviewState=Published, texts: []
 [ ] tagsCsv includes the series slug (atlas-practice-series / nova-practice-series / very-difficult-reading-exams)
 [ ] slug includes the same series token so folders match even if tags are thin
-[ ] Three primary QuestionPaper assets (A/B/C); one PDF file may be reused
+[ ] Three primary QuestionPaper assets (A/B/C) from **part-only** PDFs. Never attach the combined booklet. Never include answer-key pages. Shared boundary pages go in both parts.
 [ ] Offline validate-reading-manifest.ts → 42 points, 0 errors
 [ ] Side-by-side official-key compare (42 answers × N papers)
 [ ] If a printed C key is clearly pasted from another paper, stop and use passage evidence (see JB2)

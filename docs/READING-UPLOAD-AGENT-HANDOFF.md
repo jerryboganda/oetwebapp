@@ -52,7 +52,7 @@ AH layouts are all classic `1–7 / 8–14 / 15–20`. Printed keys are in the p
 2. **Nova Practice Series**
 3. **VERY DIFFICULT READING EXAMS**
 
-Anna Hartford and Jayden Book folders are done. Their Part A/B/C QuestionPaper PDFs are already attached in `ContentPaperAssets` (same booklet reused per part). Do not re-upload those PDFs unless a file is actually missing from storage.
+Anna Hartford and Jayden Book folders are done. Their Part A/B/C QuestionPaper PDFs were split and re-attached on 2026-08-18 (distinct media per part, answer-key pages removed). Do **not** re-import questions/keys. Do **not** re-attach the original combined booklet.
 
 If this session has **no new booklets**, do not invent papers. Ask the owner to
 upload the next series PDFs (same way they uploaded Anna Hartford).
@@ -74,7 +74,7 @@ upload the next series PDFs (same way they uploaded Anna Hartford).
 ## Manifest contract (non-negotiable)
 
 - Official papers are **PDF-first**. `texts: []` on every part.
-- One primary `QuestionPaper` PDF per part. The same booklet file may be reused.
+- One primary `QuestionPaper` PDF per part. **Never** reuse the combined A+B+C booklet. Crop to the part being attempted. Drop answer-key pages. Duplicate shared boundary pages into both parts.
 - Field is `correctAnswerJson` (JSON-encoded string), not `correctAnswer`.
 - Every question needs explanation, `evidenceSentence`, `reviewState=Published`.
 - Counts must be 20 / 6 / 16 = **42 points**.
@@ -192,12 +192,15 @@ On the public API, for each new paper:
   `next=` those routes**, not `/mocks`
 - After sign-in, the paper is in the correct folder on Full Exam **and** on
   each Part A/B/C list
+- Learner structure has **three distinct** QuestionPaper media ids. Part A
+  PDF starts with Part A and has no answer key. Same for B and C.
 
 ---
 
 ## Hard do-not list
 
-- Do not touch Jayden or Anna Hartford papers.
+- Do not re-import or mutate Jayden / Anna Hartford answers. Do not re-attach
+  their original combined booklets.
 - Do not invent keys or HTML passages.
 - Do not use practice-only question types or fuzzy marking.
 - Do not work in `D:\Projects\OET with Dr Hesham\...`.
