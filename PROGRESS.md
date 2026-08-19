@@ -8,6 +8,7 @@ Last updated: 2026-08-20
 - Atlas 09 Full Exam without C2 is live (`51bea4e4`). Same 60-minute timer. Scoring /42. Do not invent C2.
 - Live Reading papers: **80**. VD Test 6 stays unpublished. Desktop extra `Reading -1.pdf` (feeding tubes / tetanus / NF) is not imported.
 - Production data is **volume-independent**. Named volumes `oetwebsite_oet_postgres_data` and `oetwebsite_oet_learner_storage` (created 2026-06-03) survive container rebuilds. Compose now marks them `external: true`. See `docs/PRODUCTION-DATA-PERSISTENCE.md`.
+- Production data guard is host-level: `/usr/local/bin/docker` blocks volume rm/prune and `compose down -v`. Content is deleted only from the admin UI.
 - Next: only act if owner sends Atlas 09 C2 or asks to import the extra pack. Never `down -v`.
 
 ## Current Checkpoint - Atlas 02/15–17/22/26 + Kaplan live

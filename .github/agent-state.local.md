@@ -19,7 +19,7 @@ Publish live. Same five book folders for Full Exam and Part A/B/C.
 Idle unless the owner sends Atlas 09 C2 or asks to import Desktop extra `Reading -1.pdf`. Never invent C2. Never publish VD6. Never `down -v`.
 
 ## Persistence
-Named volumes `oetwebsite_oet_*` are independent of containers. Production compose pins them `external: true`. Deploy only recreates web/API slots.
+Named volumes `oetwebsite_oet_*` are independent of containers. Compose pins them `external: true`. Host wrapper `/usr/local/bin/docker` blocks volume rm/prune and `compose down -v`. Content is deleted only from the admin UI. Deploy only recreates web/API slots.
 
 ## Constraints
 - Public API only. No local API/DB. No `--dev-auth` on Production.

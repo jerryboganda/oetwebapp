@@ -35,6 +35,17 @@ It does **not** recreate `postgres`. It does **not** pass `-v`. It does **not**
 
 `down -v` in `qa-smoke.yml` is **desktop CI only**, never production.
 
+Host wrapper `/usr/local/bin/docker` (installed by
+`scripts/deploy/protect-production-data.sh` on every deploy) **blocks**:
+
+- `docker volume rm` of any `oetwebsite_oet_*` volume
+- `docker volume prune`
+- `docker system prune --volumes`
+- `docker compose down -v` / `--volumes`
+
+Live papers, media, users, and attempts are **not** removed by rebuilds.
+The only intended way to remove application content is the **admin panel**.
+
 ## Forbidden
 
 - `docker compose down -v`

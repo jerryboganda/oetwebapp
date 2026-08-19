@@ -93,6 +93,7 @@ Live VPS names (created 2026-06-03, project `oetwebsite`):
 - Media/user file I/O must go through `IFileStorage` or `S3CompatibleFileStorage`.
 - Never use raw `File.*`, `Path.*`, or `Directory.*` for media/user data.
 - Never run `docker compose down -v`, `docker volume rm`, `volume prune`, or recreate postgres/storage volumes.
+- Production installs `scripts/deploy/protect-production-data.sh` so those commands are blocked on the VPS. Content is removed only from the admin UI.
 
 ## Frontend Rules
 
