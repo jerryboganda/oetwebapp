@@ -79,8 +79,27 @@ Live AH / JB maps (1-based, keys omitted). Copy this method for new books:
 | Atlas22 (23p) | 1–7 | 8–13 | 14–21 | 22–23 |
 | Atlas26 (22p) | 1–7 | 8–13 | 14–20 | 21–22 |
 | Kaplan (26p) | 1–8 | 9–14 | 15–24 | 25–26 |
+| Nova01 | 1–5 | 7–12 | 13–21 | 6, 22 |
+| Nova02 | 23–27 | 29–**34** | **34–41** | 28, 42 |
+| Nova03 | 43–47 | 49–**54** | **54–61** | 48, 62 |
+| Nova04 | 63–68 | 70–74 | 75–82 | 69, 83 |
+| Nova05 | 84–88 | 90–94 | 95–101 | 89, 102 |
+| Nova06 | 103–107 | 109–**114** | **114–120** | 108, 121 |
+| Nova08 | 140–144 | 146–**151** | **151–157** | 145, 158 |
+| Nova09 | 159–164 | 166–**170** | **170–177** | 165, 178 |
+| Nova10 | 179–184 | 186–191 | 192–198 | 185, 199 |
+| Nova11 | 201–205 | 207–210 | 211–224 | 206, 225 |
+| Nova12 | 226–231 | 233–236 | 237–243 | 232, 244 |
+| Nova13 | 245–249 | 251–**255** | **255–262** | 250, 263 |
+| Nova14 | 264–268 | 270–**274** | **274–280** | 269, 281 |
+| Nova15 | 282–286 | 288–291 | 292–299 | 287, 300 |
+| Nova16 | 301–305 | 307–310 | 311–318 | 306, 319 |
+| Nova17 | 320–324 | 326–329 | 330–337 | 325, 338 |
+| Nova19 | 358–362 | 364–367 | 368–375 | 363, 376 |
 
-Do **not** re-import or re-attach Jayden / Anna Hartford / live Atlas slugs
+Nova page numbers are 1-based in the combined `Nova Reading Tests.pdf`. Answers are after each part; rotate picture key pages; take **green only**. Tests 7 / 18 / 20 were not imported.
+
+Do **not** re-import or re-attach Jayden / Anna Hartford / live Atlas / live Nova slugs
 unless the owner asks. Their part files are already live.
 
 ---

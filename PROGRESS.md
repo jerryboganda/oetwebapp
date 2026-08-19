@@ -1,6 +1,14 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
+
+## Current Checkpoint - Nova Practice Series 17 papers live
+
+- Published: Nova 01–06, 08–17, 19. All Status 4, 20/6/16, 42 pts, three distinct QuestionPaper media ids, admin `isPublishReady=true` / 0 issues.
+- Green keys only, after each part; picture key pages rotated. Part-only PDFs; key pages dropped; shared B/C pages duplicated.
+- Not imported (do not invent): Test 7 no Part A key; Test 18 C Q22 A–C only; Test 20 no B/C key.
+- Temp admin deleted (`nova.import.1787103392956@oet-prep.dev`), leftover 0.
+- Next: Very Difficult only if a 20/6/16 letter key exists. Do not re-import live Nova/Atlas/AH/Jayden.
 
 ## Current Checkpoint - Atlas 02/15–17/22/26 + Kaplan live
 

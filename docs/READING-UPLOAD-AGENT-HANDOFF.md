@@ -37,6 +37,7 @@ Owner standing orders:
 | Jayden Book | `jayden-book-01-bed-bugs` … `jayden-book-05-resveratrol` | Published, 210/210 keys matched |
 | Anna Hartford | `anna-hartford-01-cigarette-smoking-lung-cancer`, `anna-hartford-02-vision-impairment`, `anna-hartford-03-vaccines-immunisation` | Published 2026-08-20, 20/6/16, 42 pts |
 | Atlas | `01` `02` `05` `10`–`17` `22`–`26` plus `atlas-practice-series-kaplan-asthma-ect` | Published. 20/6/16, 42 pts. Do not re-import. |
+| Nova | `nova-practice-series-01-skin-cancer` … `06-glandular-fever`, `08`–`17`, `19-back-pain` (17 papers) | Published 2026-08-19. 20/6/16, 42 pts. Green keys after each part. Do not re-import. |
 | Sample | `reading-sample-1` | Published |
 
 AH paper ids:
@@ -69,21 +70,43 @@ Atlas paper ids (all Status 4). Layouts vary — see playbook §7.3:
 - Atlas 26 `eb813cce22d841ae921c53a8c0691c0d`
 - Kaplan `f4e5676c5d2a4eb2834b3a18360151d1`
 
+Nova paper ids (all Status 4). Classic Part A 1–7 / 8–14 / 15–20. Green answers only, after each part; picture key pages were rotated:
+
+- Nova 01 `c607e392ec6047229de3a6e7e54bb0ef`
+- Nova 02 `46aa1406d5324caf9bfe0d3d97230932`
+- Nova 03 `ba5ec527f38d490399348530e06c6c21`
+- Nova 04 `458d0df326f7453cb68dc791427582d3`
+- Nova 05 `b677bfa7ae1148d5b95af596a200bbb6`
+- Nova 06 `14be93ac74ca47728b84ffb6a0ddb884`
+- Nova 08 `280bc69664944c4c9b6de8aae728ab22`
+- Nova 09 `5ca30a6670764f5d838042bc87d1afcf`
+- Nova 10 `1384f80078084c8e91c84dddbd42b980`
+- Nova 11 `864ad037e5334f71a693750fcf970db9`
+- Nova 12 `e92b671bfc014626925af1d5ddb59c09`
+- Nova 13 `4d40083ae25640d489c285c19775674c`
+- Nova 14 `cfb5cf359cea42fbba2eadb50b7cadf7`
+- Nova 15 `47bff86fc47d494ca829500192aa6c84`
+- Nova 16 `6f80386316804630a7489d6b90eac5fc`
+- Nova 17 `5b0364f3a32649f4b488ccd0b9abd211`
+- Nova 19 `bf13b54206c343bbad825e2b95574550`
+
+Not imported (do not invent): Test 7 no Part A key page; Test 18 Part C Q22 printed A–C only; Test 20 no B/C key page.
+
 ---
 
 ## What remains (folder order)
 
 1. **Rest of Atlas Practice Series** — 01/02/05/10–17/22–26 and Kaplan are live. Remaining Desktop files still fail the contract:
    - Official Sample 3: Part A Q10 blank on the printed key; several B/C letters missing. Do not invent.
-   - Official Sample 4: Part A keys complete; B/C key pages are two-paper OCR overlay garbage.
-   - Sample 18: printed key complete, lastStart=13 is now allowed, but B Q5–6 and several C pages are image-only. Need OCR or a text dump from the owner.
-   - Sample 19–21: B/C pages image-only.
+   - Official Sample 4: Part A keys complete; B/C key pages are two-paper overlay garbage.
+   - Sample 18: printed key complete, lastStart=13 is now allowed, but B Q5–6 and several C pages are picture-only. Need a text dump from the owner.
+   - Sample 19–21: B/C pages picture-only.
    - Sample 6–8: CamScanner, no extractable printed key.
    - Sample 9: no printed ANSWER KEY.
-2. **Nova Practice Series** (`Nova Reading Tests.pdf`) — 20 tests, **no printed key**. Do not invent.
+2. **Nova Practice Series** — 17 complete tests are live. Left unpublished: Tests 7, 18, 20 only. Do not invent those keys.
 3. **VERY DIFFICULT READING EXAMS** — Part A letters exist; B/C answers are prose, not A/B/C. Skip unless a 20/6/16 letter key exists.
 
-Do **not** re-import Jayden, Anna Hartford, live Atlas slugs, or `reading-sample-1`.
+Do **not** re-import Jayden, Anna Hartford, live Atlas slugs, live Nova slugs, or `reading-sample-1`.
 
 If this session has **no new contract-valid booklets**, do not invent papers. Ask the owner.
 

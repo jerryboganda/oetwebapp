@@ -522,12 +522,83 @@ Kaplan C: B D C A A C D B D A D B C A B C
 Remaining Desktop Atlas files are **not** imported. Do not invent answers:
 
 - Official Sample 3: A Q10 blank; some B/C letters missing.
-- Official Sample 4: B/C key pages are OCR overlay garbage.
-- Sample 18: printed key complete and lastStart=13 is live, but B Q5–6 and several C pages are image-only.
-- Sample 19–21: B/C image-only.
+- Official Sample 4: B/C key pages are two-paper overlay garbage.
+- Sample 18: printed key complete and lastStart=13 is live, but B Q5–6 and several C pages are picture-only.
+- Sample 19–21: B/C picture-only.
 - Sample 6–8 CamScanner; Sample 9 no printed key.
-- Nova: 20 tests, no printed key.
+- Nova Tests 7 / 18 / 20: incomplete printed keys (no A key page / C Q22 A–C only / no B/C key).
 - Very Difficult: B/C answers are prose, not letters.
+
+### 7.4 Nova Practice Series papers already in prod (Published 2026-08-19)
+
+| Slug | Paper id | Topic |
+| --- | --- | --- |
+| `nova-practice-series-01-skin-cancer` | `c607e392ec6047229de3a6e7e54bb0ef` | Skin Cancer |
+| `nova-practice-series-02-total-knee-replacement` | `46aa1406d5324caf9bfe0d3d97230932` | Total Knee Replacement |
+| `nova-practice-series-03-clinical-depression` | `ba5ec527f38d490399348530e06c6c21` | Clinical Depression |
+| `nova-practice-series-04-norovirus` | `458d0df326f7453cb68dc791427582d3` | Norovirus |
+| `nova-practice-series-05-diabetes` | `b677bfa7ae1148d5b95af596a200bbb6` | Diabetes |
+| `nova-practice-series-06-glandular-fever` | `14be93ac74ca47728b84ffb6a0ddb884` | Glandular Fever |
+| `nova-practice-series-08-gallstones` | `280bc69664944c4c9b6de8aae728ab22` | Gallstones |
+| `nova-practice-series-09-overweight-and-obesity` | `5ca30a6670764f5d838042bc87d1afcf` | Overweight and Obesity |
+| `nova-practice-series-10-chronic-obstructive-pulmonary-disease` | `1384f80078084c8e91c84dddbd42b980` | COPD |
+| `nova-practice-series-11-mumps` | `864ad037e5334f71a693750fcf970db9` | Mumps |
+| `nova-practice-series-12-necrotising-fasciitis` | `e92b671bfc014626925af1d5ddb59c09` | Necrotising Fasciitis |
+| `nova-practice-series-13-tobacco-smoking` | `4d40083ae25640d489c285c19775674c` | Tobacco Smoking |
+| `nova-practice-series-14-stroke` | `cfb5cf359cea42fbba2eadb50b7cadf7` | Stroke |
+| `nova-practice-series-15-ganglion-cyst` | `47bff86fc47d494ca829500192aa6c84` | Ganglion Cyst |
+| `nova-practice-series-16-chicken-pox-and-shingles` | `6f80386316804630a7489d6b90eac5fc` | Chicken Pox and Shingles |
+| `nova-practice-series-17-varicose-veins` | `5b0364f3a32649f4b488ccd0b9abd211` | Varicose Veins |
+| `nova-practice-series-19-back-pain` | `bf13b54206c343bbad825e2b95574550` | Back Pain |
+
+Tags: `reading,nova-practice-series,official-key`. Status 4. 20/6/16. 42 points. Part-only QuestionPaper PDFs. Three distinct media ids each. Admin `isPublishReady=true`, 0 issues.
+
+Nova booklet is one combined `Nova Reading Tests.pdf` (394 pages, 20 tests). Answers sit **after each part** (Part A key after Part A; B&C key after B&C). Picture key pages must be rotated. **Green only** are official. Red “Your Answer” is ignored.
+
+Page maps (1-based in the combined booklet; **bold** = shared B/C page; key pages dropped): N01 A1–5 B7–12 C13–21 drop 6,22 · N02 A23–27 B29–**34** C**34–41** drop 28,42 · N03 A43–47 B49–**54** C**54–61** drop 48,62 · N04 A63–68 B70–74 C75–82 drop 69,83 · N05 A84–88 B90–94 C95–101 drop 89,102 · N06 A103–107 B109–**114** C**114–120** drop 108,121 · N08 A140–144 B146–**151** C**151–157** drop 145,158 · N09 A159–164 B166–**170** C**170–177** drop 165,178 · N10 A179–184 B186–191 C192–198 drop 185,199 · N11 A201–205 B207–210 C211–224 drop 206,225 · N12 A226–231 B233–236 C237–243 drop 232,244 · N13 A245–249 B251–**255** C**255–262** drop 250,263 · N14 A264–268 B270–**274** C**274–280** drop 269,281 · N15 A282–286 B288–291 C292–299 drop 287,300 · N16 A301–305 B307–310 C311–318 drop 306,319 · N17 A320–324 B326–329 C330–337 drop 325,338 · N19 A358–362 B364–367 C368–375 drop 363,376.
+
+Not imported: Test 7 (no Part A key page), Test 18 (Part C Q22 printed A–C only), Test 20 (no B/C key). Do not invent.
+
+Printed Nova B/C keys (green only, authoritative):
+
+```
+Nova01 B: B A B C C B
+Nova01 C: C A D C C D C B C D B C C B D C
+Nova02 B: A C B A B C
+Nova02 C: C B A B C C D C A D C D B D A B
+Nova03 B: B C A B A C
+Nova03 C: A A C A C D B B D D C A B B C A
+Nova04 B: C B A B C A
+Nova04 C: A A C B A B B C B C C A C B B C
+Nova05 B: C B A C C A
+Nova05 C: A D C A D D B C C C D A B C C A
+Nova06 B: B A C A C B
+Nova06 C: A C C C B C A D A D D B B A B C
+Nova08 B: A C B A C B
+Nova08 C: A C A C A D D D C B B C B D B C
+Nova09 B: B C B A C A
+Nova09 C: C C A B D C A D D B A C A B B C
+Nova10 B: C A C B C B
+Nova10 C: C B D C D B C A B C B D A B B A
+Nova11 B: C A A B C B
+Nova11 C: C B B D A C D A A B D D C C A B
+Nova12 B: A C C A C C
+Nova12 C: B C D A B B A B B B A C D C A B
+Nova13 B: B C B A C B
+Nova13 C: D A C B D C A A B A D B B C A D
+Nova14 B: C A A A C A
+Nova14 C: C B C A D A C D B C C A D B A A
+Nova15 B: B B A B B C
+Nova15 C: C A B D B A B C B A A D A B D A
+Nova16 B: B A A C B A
+Nova16 C: C B B D B A B A A C B D A C B A
+Nova17 B: A B A B A A
+Nova17 C: B C A A D A B B B A A D A C D C
+Nova19 B: A C B B A C
+Nova19 C: A D A B C B C A D A C B D A A D
+```
+
+Part A matching letters (Q1–7) from the same green pages: N01 B A D C D A B · N02 B D A D C C A · N03 D B D C D B C · N04 C A A B B D B · N05 D A D C C A B · N06 B C A D B A B · N08 B A D C A C B · N09 C D C D A B A · N10 D B C A B C D · N11 D A C B A C D · N12 C B D A B D C · N13 D A C D B A C · N14 A D C B C D A · N15 A D B C B C A · N16 C B D A A D B · N17 B A C D A B C · N19 C D C B A C D. Q8–20 are green short answers after Part A. Do not re-import these 17.
 
 Printed AH keys (authoritative, from the PDFs):
 
