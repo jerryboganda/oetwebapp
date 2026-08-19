@@ -259,6 +259,36 @@ public sealed class ReadingStructureService : IReadingStructureService
     /// <summary>Max raw score for a fully-assembled Reading paper.</summary>
     public const int CanonicalMaxRawScore = 42;
 
+    /// <summary>
+    /// Owner-approved Atlas Sample 9 shape: Part C Text 1 only. Full exam
+    /// may start; scoring stays /42 and C2 is never invented.
+    /// </summary>
+    public const int OwnerApprovedC1OnlyPartCCount = 8;
+    public const int OwnerApprovedC1OnlyTotalPoints = 34;
+
+    /// <summary>
+    /// Full-exam start gate. Publish-ready 20/6/16 papers always start.
+    /// A published 20/6/8 paper may also start when the only remaining
+    /// structural errors are the missing C2 item count and the 34-point total.
+    /// </summary>
+    public static bool CanStartFullExam(ReadingValidationReport report)
+    {
+        if (report.IsPublishReady)
+            return true;
+
+        if (report.Counts.PartACount != 20
+            || report.Counts.PartBCount != 6
+            || report.Counts.PartCCount != OwnerApprovedC1OnlyPartCCount
+            || report.Counts.TotalPoints != OwnerApprovedC1OnlyTotalPoints)
+        {
+            return false;
+        }
+
+        return report.Issues
+            .Where(issue => string.Equals(issue.Severity, "error", StringComparison.OrdinalIgnoreCase))
+            .All(issue => issue.Code is "part_C_item_count" or "total_points_mismatch");
+    }
+
     public async Task EnsureCanonicalPartsAsync(string paperId, CancellationToken ct)
     {
         await EnsureReadingPaperAsync(paperId, ct);

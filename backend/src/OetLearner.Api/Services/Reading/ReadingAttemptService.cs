@@ -289,14 +289,14 @@ public sealed class ReadingAttemptService(
         }
 
         // Gate 5: a full Reading exam may only run against a structurally
-        // publish-ready paper. Subset/learning modes remain available for
-        // controlled practice workflows, but the scored 42-item exam path
-        // must never start on incomplete or invalid authored content.
+        // startable paper. Subset/learning modes remain available for
+        // controlled practice. The scored path stays /42. Owner-approved
+        // C1-only papers (20/6/8) may start without inventing C2.
         if (!isPracticeMode)
         {
             var structureReport = await new ReadingStructureService(db)
                 .ValidatePaperAsync(paper.Id, ct);
-            if (!structureReport.IsPublishReady)
+            if (!ReadingStructureService.CanStartFullExam(structureReport))
             {
                 throw new ReadingAttemptException(
                     "reading_paper_not_publish_ready",

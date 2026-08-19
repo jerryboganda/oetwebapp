@@ -1,6 +1,13 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-18
+Last updated: 2026-08-19
+
+## Current Checkpoint - Atlas 09 full exam without C2
+
+- Owner: start the timed Full Exam without inventing C2. Same 60-minute timer. Everything else unchanged.
+- `ReadingStructureService.CanStartFullExam` allows published 20/6/8 papers when the only errors are `part_C_item_count` and `total_points_mismatch`.
+- Scoring stays /42. `isPublishReady` stays false until C2 exists. VD Test 6 still unpublished.
+- Next: deploy this API change. Do not import C2 unless the owner sends it.
 
 ## Current Checkpoint - Atlas 02/15–17/22/26 + Kaplan live
 

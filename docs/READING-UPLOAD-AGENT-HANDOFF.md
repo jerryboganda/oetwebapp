@@ -69,6 +69,9 @@ Atlas paper ids (all Status 4). Layouts vary — see playbook §7.3:
 - Atlas 26 `eb813cce22d841ae921c53a8c0691c0d`
 - Kaplan `f4e5676c5d2a4eb2834b3a18360151d1`
 
+Owner 2026-08-19: Atlas 09 Full Exam starts without C2. Same 60-minute
+timer. Do not invent C2. Scoring stays /42.
+
 ---
 
 ## What remains (folder order)

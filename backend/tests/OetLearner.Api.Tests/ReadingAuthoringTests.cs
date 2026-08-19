@@ -526,6 +526,64 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public void CanStartFullExam_allows_publish_ready_or_owner_approved_c1_only()
+    {
+        var ready = new ReadingValidationReport(
+            true,
+            Array.Empty<ReadingValidationIssue>(),
+            new ReadingValidationCounts(20, 6, 16, 42));
+        Assert.True(ReadingStructureService.CanStartFullExam(ready));
+
+        var c1Only = new ReadingValidationReport(
+            false,
+            new[]
+            {
+                new ReadingValidationIssue("part_C_item_count", "error", "Part C has 8 item(s), expected 16.", null),
+                new ReadingValidationIssue("total_points_mismatch", "error", "Total Reading points = 34, must equal 42.", null),
+            },
+            new ReadingValidationCounts(20, 6, 8, 34));
+        Assert.True(ReadingStructureService.CanStartFullExam(c1Only));
+
+        var extraError = new ReadingValidationReport(
+            false,
+            new[]
+            {
+                new ReadingValidationIssue("part_C_item_count", "error", "Part C has 8 item(s), expected 16.", null),
+                new ReadingValidationIssue("total_points_mismatch", "error", "Total Reading points = 34, must equal 42.", null),
+                new ReadingValidationIssue("part_A_item_count", "error", "Part A has 19 item(s), expected 20.", null),
+            },
+            new ReadingValidationCounts(19, 6, 8, 33));
+        Assert.False(ReadingStructureService.CanStartFullExam(extraError));
+    }
+
+    [Fact]
+    public async Task Exam_start_allows_published_c1_only_paper_with_same_60_minute_timer()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "atlas-09-c1", ContentStatus.Published);
+        await structure.EnsureCanonicalPartsAsync("atlas-09-c1", default);
+        await AuthorC1OnlyPaperAsync(db, structure, "atlas-09-c1");
+        await SeedEffectiveReadingMarkingPolicyAsync(db, "reading-test-policy-c1-only");
+
+        var report = await structure.ValidatePaperAsync("atlas-09-c1", default);
+        Assert.False(report.IsPublishReady);
+        Assert.Equal(20, report.Counts.PartACount);
+        Assert.Equal(6, report.Counts.PartBCount);
+        Assert.Equal(8, report.Counts.PartCCount);
+        Assert.Equal(34, report.Counts.TotalPoints);
+
+        var started = await attemptSvc.StartAsync("u1", "atlas-09-c1", default);
+
+        Assert.Equal(15, started.PartATimerMinutes);
+        Assert.Equal(45, started.PartBCTimerMinutes);
+        Assert.True(started.PartABreakAvailable);
+        var attempt = await db.ReadingAttempts.SingleAsync();
+        Assert.Equal(42, attempt.MaxRawScore);
+        Assert.Equal(60, (int)Math.Round((started.PartBCDeadlineAt - started.StartedAt).TotalMinutes));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Learner_structure_endpoint_redacts_answers_explanations_synonyms_and_exposes_question_paper_assets()
     {
         using var factory = new TestWebApplicationFactory();
@@ -3252,6 +3310,67 @@ public class ReadingAuthoringTests
     // ════════════════════════════════════════════════════════════════════
     // Helpers
     // ════════════════════════════════════════════════════════════════════
+
+    private static async Task SeedEffectiveReadingMarkingPolicyAsync(LearnerDbContext db, string policyId)
+    {
+        var policyNow = DateTimeOffset.UtcNow.AddMinutes(-1);
+        db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
+        {
+            Id = policyId,
+            Assessment = "reading",
+            ScopeKey = "default",
+            VersionKey = $"{policyId}-v1",
+            Status = AssessmentGovernanceStatus.Effective,
+            EffectiveFrom = policyNow,
+            PolicyJson = JsonSerializer.Serialize(new
+            {
+                trimLeadingTrailingWhitespace = true,
+                collapseInternalWhitespace = false,
+                caseSensitive = true,
+                readingPartAMatchingPartialCredit = false,
+                listeningAudioReplayAllowed = false,
+                audioLockMode = "exam",
+                technicalRequirementsGuidanceOnly = true,
+            }),
+            CreatedByUserId = "test-owner",
+            CreatedAt = policyNow,
+            UpdatedAt = policyNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task AuthorC1OnlyPaperAsync(
+        LearnerDbContext db,
+        ReadingStructureService structure,
+        string paperId)
+    {
+        await FullyAuthorPaperAsync(db, structure, paperId);
+
+        var partC = await db.ReadingParts.SingleAsync(p => p.PaperId == paperId && p.PartCode == ReadingPartCode.C);
+        var cQuestions = await db.ReadingQuestions.Where(q => q.ReadingPartId == partC.Id).ToListAsync();
+        db.ReadingQuestions.RemoveRange(cQuestions.Where(q => q.DisplayOrder > 8));
+        foreach (var question in cQuestions.Where(q => q.DisplayOrder <= 8))
+            question.ReadingTextId = null;
+
+        var cTexts = await db.ReadingTexts.Where(t => t.ReadingPartId == partC.Id).ToListAsync();
+        db.ReadingTexts.RemoveRange(cTexts);
+
+        var remaining = await db.ReadingQuestions
+            .Where(q => db.ReadingParts.Any(p => p.Id == q.ReadingPartId && p.PaperId == paperId))
+            .ToListAsync();
+        foreach (var question in remaining)
+        {
+            question.ExplanationMarkdown = string.IsNullOrWhiteSpace(question.ExplanationMarkdown)
+                ? "Printed key."
+                : question.ExplanationMarkdown;
+            question.EvidenceSentence = string.IsNullOrWhiteSpace(question.EvidenceSentence)
+                ? "Printed answer key."
+                : question.EvidenceSentence;
+            question.ReviewState = ReadingReviewState.Published;
+        }
+
+        await db.SaveChangesAsync();
+    }
 
     private static async Task FullyAuthorPaperAsync(LearnerDbContext db, ReadingStructureService structure, string paperId)
     {

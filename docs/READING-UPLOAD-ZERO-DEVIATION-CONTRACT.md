@@ -16,6 +16,10 @@ Product is **oetwebapp** (`E:\Projects\OET with Dr Hesham\Web App`,
 ## A. What a paper is
 
 1. One official paper = **Part A 20 + Part B 6 + Part C 16 = 42 points**.
+    Owner 2026-08-19 exception: published Atlas 09 Head injuries may run
+    the **same 60-minute Full Exam** with C1 only (20/6/8). Do **not**
+    invent C2. Scoring stays `/42`. `isPublishReady` stays false until
+    C2 exists.
 2. Official papers are **PDF-first**. Every part has `texts: []`.
    Do not OCR passages into HTML.
 3. Answers come **only** from the printed key in the source PDF.

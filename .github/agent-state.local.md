@@ -15,7 +15,8 @@ Publish live. Same five book folders for Full Exam and Part A/B/C.
 - `reading-sample-1` already had separate part files
 
 ## Next step
-Continue Atlas PDFs when the owner uploads them. Split each booklet into Part A/B/C files first (no answer-key pages; shared boundary pages go in both parts).
+Owner 2026-08-19: Atlas 09 Full Exam starts without C2 (same 60-min timer).
+Deploy `CanStartFullExam` on production. Do not invent C2. Do not publish VD6.
 
 ## Constraints
 - Public API only. No local API/DB. No `--dev-auth` on Production.
