@@ -1,6 +1,6 @@
 {
   "$schema": "https://oetwithdrhesham.co.uk/schemas/oet-2026-catalog.v1.json",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "generatedFromPdf": "OET_2026_Website_Course_Package_Descriptions_UPDATED (1).pdf + OET_2026_Website_Course_Package_Descriptions_UPDATED_WITH_AI_PACKAGES (1).pdf",
   "designLanguage": {
     "primaryNavy": "#0E2841",
@@ -108,6 +108,7 @@
                              ],
         "comparisonFeatures":  [
                                    "Everything included in the Full Condensed Recorded Medicine Course",
+                                   "5 AI practice credits",
                                    "TutorBook as a personalised watermarked PDF",
                                    "8 full 2026 recall-based OET exams covering Listening, Reading, Writing and Speaking",
                                    "The main exam ideas and recall themes from 2026 across all four sub-tests",
@@ -135,7 +136,7 @@
         "bundled":  {
                         "writingAssessments":  0,
                         "speakingSessions":  0,
-                        "aiCredits":  0,
+                        "aiCredits":  5,
                         "tutorBook":  false,
                         "basicEnglish":  false
                     },
@@ -151,6 +152,7 @@
                                  "Speaking",
                                  "MaterialsLibrary",
                                  "VideoLibrary",
+                                 "AiPractice",
                                  "Recalls",
                                  "Addons"
                              ],
@@ -159,6 +161,7 @@
                                    "Recall-based Nursing Writing letters and model answers",
                                    "Recall-based Nursing Speaking cards with expected ideas",
                                    "Listening and Reading practice library",
+                                   "5 AI practice credits",
                                    "Continuous Q\u0026A support during the access period"
                                ]
     },
@@ -244,6 +247,7 @@
                              ],
         "comparisonFeatures":  [
                                    "Everything included in the Nursing Course + Assessment Package",
+                                   "5 AI practice credits",
                                    "Basic English Course - Preparation for OET",
                                    "11+ hours of foundation English training",
                                    "Grammar, vocabulary and sentence-formation support",
@@ -265,7 +269,7 @@
         "bundled":  {
                         "writingAssessments":  0,
                         "speakingSessions":  0,
-                        "aiCredits":  0,
+                        "aiCredits":  5,
                         "tutorBook":  false,
                         "basicEnglish":  false
                     },
@@ -281,6 +285,7 @@
                                  "Speaking",
                                  "MaterialsLibrary",
                                  "VideoLibrary",
+                                 "AiPractice",
                                  "Recalls",
                                  "Addons"
                              ],
@@ -289,6 +294,7 @@
                                    "Pharmacy-specific Writing examples and model answers",
                                    "Pharmacy Speaking cards with expected ideas and useful language",
                                    "Recall-based practice resources",
+                                   "5 AI practice credits",
                                    "Continuous Q\u0026A support during the access period"
                                ]
     },
@@ -323,6 +329,7 @@
                                  "Speaking",
                                  "MaterialsLibrary",
                                  "VideoLibrary",
+                                 "AiPractice",
                                  "Recalls",
                                  "Addons"
                              ],
@@ -369,6 +376,7 @@
                                  "Speaking",
                                  "MaterialsLibrary",
                                  "VideoLibrary",
+                                 "AiPractice",
                                  "Recalls",
                                  "Addons"
                              ],
@@ -443,7 +451,7 @@
         "bundled":  {
                         "writingAssessments":  0,
                         "speakingSessions":  0,
-                        "aiCredits":  0,
+                        "aiCredits":  5,
                         "tutorBook":  false,
                         "basicEnglish":  false
                     },
@@ -459,6 +467,7 @@
                                  "Speaking",
                                  "MaterialsLibrary",
                                  "VideoLibrary",
+                                 "AiPractice",
                                  "Recalls",
                                  "Addons"
                              ],
@@ -466,7 +475,8 @@
                                    "Condensed recorded preparation across Listening, Reading, Writing and Speaking",
                                    "High-yield exam strategies and practical techniques",
                                    "Recall-based guidance for recent exam trends",
-                                   "Selected study materials and Listening recalls"
+                                   "Selected study materials and Listening recalls",
+                                   "5 AI practice credits"
                                ]
     },
     {
@@ -484,7 +494,7 @@
         "bundled":  {
                         "writingAssessments":  3,
                         "speakingSessions":  0,
-                        "aiCredits":  0,
+                        "aiCredits":  5,
                         "tutorBook":  false,
                         "basicEnglish":  false
                     },
@@ -501,6 +511,7 @@
                                  "MaterialsLibrary",
                                  "VideoLibrary",
                                  "WritingAssessments",
+                                 "AiPractice",
                                  "Recalls",
                                  "Addons"
                              ],
@@ -526,7 +537,7 @@
         "bundled":  {
                         "writingAssessments":  5,
                         "speakingSessions":  0,
-                        "aiCredits":  0,
+                        "aiCredits":  5,
                         "tutorBook":  false,
                         "basicEnglish":  false
                     },
@@ -543,6 +554,7 @@
                                  "MaterialsLibrary",
                                  "VideoLibrary",
                                  "WritingAssessments",
+                                 "AiPractice",
                                  "Recalls",
                                  "Addons"
                              ],

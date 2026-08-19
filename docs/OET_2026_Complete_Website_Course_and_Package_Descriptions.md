@@ -184,6 +184,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 #### Included components
 
 - Everything included in the Full Condensed Recorded Medicine Course
+- 5 AI practice credits
 - TutorBook as a personalised watermarked PDF
 - 8 full 2026 recall-based OET exams covering Listening, Reading, Writing and Speaking
 - The main exam ideas and recall themes from 2026 across all four sub-tests
@@ -213,6 +214,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 - Recall-based Nursing Writing letters and model answers
 - Recall-based Nursing Speaking cards with expected ideas
 - Listening and Reading practice library
+- 5 AI practice credits
 - Continuous Q&A support during the access period
 
 **Best for:** Nurses who need a complete recorded course without bundled assessments.
@@ -249,6 +251,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 #### Included components
 
 - Everything included in the Nursing Course + Assessment Package
+- 5 AI practice credits
 - Basic English Course - Preparation for OET
 - 11+ hours of foundation English training
 - Grammar, vocabulary and sentence-formation support
@@ -272,6 +275,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 - Pharmacy-specific Writing examples and model answers
 - Pharmacy Speaking cards with expected ideas and useful language
 - Recall-based practice resources
+- 5 AI practice credits
 - Continuous Q&A support during the access period
 
 **Best for:** Pharmacists who want profession-specific OET preparation rather than a general course.
@@ -314,6 +318,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 - High-yield exam strategies and practical techniques
 - Recall-based guidance for recent exam trends
 - Selected study materials and Listening recalls
+- 5 AI practice credits
 
 **Best for:** Candidates who need fast, focused preparation across all four sub-tests.
 
