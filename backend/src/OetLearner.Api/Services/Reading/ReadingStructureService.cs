@@ -1515,6 +1515,9 @@ public sealed class ReadingStructureService : IReadingStructureService
         }).ToList();
     }
 
+    public static IReadOnlyList<ReadingSectionView> ProjectLearnerSections(ReadingPart part)
+        => BuildSectionViews(part);
+
     private static ReadingSectionCode? ResolveFallbackSectionCode(
         ReadingPartCode partCode,
         ReadingQuestion question,
@@ -1522,7 +1525,7 @@ public sealed class ReadingStructureService : IReadingStructureService
     {
         if (question.ReadingTextId is not null && textSectionCodes.TryGetValue(question.ReadingTextId, out var code))
             return code;
-        return TryMapFallbackSectionCode(partCode, question.DisplayOrder);
+        return TryMapQuestionSectionCode(partCode, question.DisplayOrder);
     }
 
     private static ReadingSectionCode? TryMapFallbackSectionCode(ReadingPartCode partCode, int displayOrder)
@@ -1530,6 +1533,15 @@ public sealed class ReadingStructureService : IReadingStructureService
         {
             ReadingPartCode.B when displayOrder is >= 1 and <= 6 => (ReadingSectionCode)((int)ReadingSectionCode.B1 + displayOrder - 1),
             ReadingPartCode.C when displayOrder is >= 1 and <= 2 => (ReadingSectionCode)((int)ReadingSectionCode.C1 + displayOrder - 1),
+            _ => null,
+        };
+
+    private static ReadingSectionCode? TryMapQuestionSectionCode(ReadingPartCode partCode, int displayOrder)
+        => partCode switch
+        {
+            ReadingPartCode.B when displayOrder is >= 1 and <= 6 => (ReadingSectionCode)((int)ReadingSectionCode.B1 + displayOrder - 1),
+            ReadingPartCode.C when displayOrder is >= 1 and <= 8 => ReadingSectionCode.C1,
+            ReadingPartCode.C when displayOrder is >= 9 and <= 16 => ReadingSectionCode.C2,
             _ => null,
         };
 

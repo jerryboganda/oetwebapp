@@ -130,10 +130,10 @@ public static class ReadingLearnerEndpoints
                     p.TimeLimitMinutes,
                     p.MaxRawScore,
                     p.Instructions,
-                    sections = p.Sections.Select(section => new
+                    sections = ReadingStructureService.ProjectLearnerSections(p).Select(section => new
                     {
                         section.Id,
-                        section.SectionCode,
+                        sectionCode = section.SectionCode.ToString(),
                         section.DisplayOrder,
                         section.MaxRawScore,
                         section.ContentPaperAssetId,

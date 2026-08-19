@@ -78,11 +78,12 @@ export function ReadingPdfViewer({
   documentNoun = 'Reading paper',
 }: ReadingPdfViewerProps) {
   const asset = useMemo(() => {
-    const exact = assets.find((candidate) => candidate.part === partCode);
-    if (exact) return exact;
-    // Section codes (B1–B6, C1–C2) fall back to the parent part PDF for legacy papers.
-    const parentCode = partCode.length > 1 ? partCode.slice(0, 1) : null;
-    return (parentCode ? assets.find((candidate) => candidate.part === parentCode) : null) ?? null;
+    const parentCode = partCode.length > 1 ? partCode.slice(0, 1) : partCode;
+    // Official papers attach one booklet per part (A/B/C). Prefer that even when
+    // leftover B1–B6 / C1–C2 extract assets exist, so candidates see one PDF.
+    return assets.find((candidate) => candidate.part === parentCode)
+      ?? assets.find((candidate) => candidate.part === partCode)
+      ?? null;
   }, [assets, partCode]);
   const assetKind = useMemo<AssetKind>(() => detectAssetKind(asset?.downloadPath ?? ''), [asset?.downloadPath]);
   const [zoom, setZoom] = useState(100);

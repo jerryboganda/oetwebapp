@@ -98,40 +98,32 @@ interface ActiveAttempt {
   scopeQuestionIds: string[] | null;
 }
 
-function getSectionCodeForQuestion(partCode: ReadingPartCode, displayOrder: number): ReadingSectionCode | null {
-  if (partCode === 'B') {
-    return (`B${Math.min(6, Math.max(1, displayOrder))}` as ReadingSectionCode);
-  }
-  if (partCode === 'C') {
-    return displayOrder <= 8 ? 'C1' : 'C2';
-  }
-  return null;
-}
-
 function getSectionsForPart(part: ReadingLearnerStructureDto['parts'][number]) {
   if (part.partCode === 'A') {
     return [] as Array<{ code: ReadingSectionCode; label: string; questions: ReadingQuestionLearnerDto[] }>;
   }
 
-  if (part.sections && part.sections.length > 0) {
-    return part.sections.map((section) => ({
+  const persisted = (part.sections ?? [])
+    .map((section) => ({
       code: section.sectionCode,
       label: SECTION_LABELS[section.sectionCode],
       questions: section.questions,
-    }));
+    }))
+    .filter((section) => section.questions.length > 0);
+  if (persisted.length > 0) return persisted;
+
+  const sorted = [...part.questions].sort((left, right) => left.displayOrder - right.displayOrder);
+  if (part.partCode === 'B') {
+    return sorted.slice(0, 6).map((question, index) => {
+      const code = (`B${index + 1}` as ReadingSectionCode);
+      return { code, label: SECTION_LABELS[code], questions: [question] };
+    });
   }
 
-  const sectionOrder: ReadingSectionCode[] = part.partCode === 'B'
-    ? ['B1', 'B2', 'B3', 'B4', 'B5', 'B6']
-    : ['C1', 'C2'];
-
-  return sectionOrder
-    .map((code) => ({
-      code,
-      label: SECTION_LABELS[code],
-      questions: part.questions.filter((question) => getSectionCodeForQuestion(part.partCode, question.displayOrder) === code),
-    }))
-    ;
+  return [
+    { code: 'C1' as const, label: SECTION_LABELS.C1, questions: sorted.slice(0, 8) },
+    { code: 'C2' as const, label: SECTION_LABELS.C2, questions: sorted.slice(8, 16) },
+  ].filter((section) => section.questions.length > 0);
 }
 
 export default function ReadingPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
@@ -470,9 +462,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const displayedSections = useMemo(() => (displayedCurrentPart ? getSectionsForPart(displayedCurrentPart) : []), [displayedCurrentPart]);
   const displayedQuestions = useMemo(() => {
     if (!displayedCurrentPart) return [] as ReadingQuestionLearnerDto[];
-    if (displayedCurrentPart.partCode === 'A') return displayedCurrentPart.questions;
+    // Part B uses one collective booklet on the left and every B question on the right.
+    if (displayedCurrentPart.partCode !== 'C') return displayedCurrentPart.questions;
     const currentSection = displayedSections.find((section) => section.code === activeSection) ?? displayedSections[0] ?? null;
-    return currentSection?.questions ?? displayedCurrentPart.questions;
+    return currentSection?.questions.length ? currentSection.questions : displayedCurrentPart.questions;
   }, [activeSection, displayedCurrentPart, displayedSections]);
   const displayedPartForRender = useMemo(() => {
     if (!displayedCurrentPart) return null;
@@ -1126,7 +1119,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               />
             ) : null}
 
-            {!breakPending && !showPartTransition && displayedSections.length > 0 ? (
+            {!breakPending && !showPartTransition && activePart === 'C' && displayedSections.length > 0 ? (
               <SectionTabs
                 sections={displayedSections}
                 activeSection={activeSection}
@@ -1146,7 +1139,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                   activeQuestionId={activeQuestionId}
                   eliminatedChoices={eliminatedChoices}
                   locked={attemptInputsLocked || (displayedCurrentPart?.partCode === 'A' && partALocked)}
-                  assetKey={activeSection ?? displayedCurrentPart?.partCode ?? 'A'}
+                  assetKey={displayedCurrentPart?.partCode ?? 'A'}
                   onCreatePdfAnnotation={handleCreatePdfAnnotation}
                   onDeletePdfAnnotation={handleDeletePdfAnnotation}
                   onClearPdfAsset={handleClearPdfAsset}

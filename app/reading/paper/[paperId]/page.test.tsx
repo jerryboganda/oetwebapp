@@ -88,7 +88,18 @@ describe('Reading paper player page', () => {
       value: vi.fn(() => ({ closed: false, close: vi.fn(), location: { assign: vi.fn() }, opener: null })),
       configurable: true,
     });
+    class ResizeObserverStub {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      configurable: true,
+      value: ResizeObserverStub,
+    });
     mockSearchParams.current = new URLSearchParams();
+    mockFetchAuthorizedObjectUrl.mockResolvedValue('blob:http://localhost/reading-paper');
     mockGetReadingStructureLearner.mockResolvedValue(buildStructure());
     mockGetReadingPaperAnnotations.mockResolvedValue([]);
     mockClearReadingPaperAnnotations.mockResolvedValue(undefined);
@@ -294,6 +305,27 @@ describe('Reading paper player page', () => {
     expect(screen.getByText('Option D')).toBeInTheDocument();
   });
 
+  it('shows Part B/C questions and the collective Part B booklet when section shells are empty', async () => {
+    mockSearchParams.current = new URLSearchParams('attemptId=attempt-1');
+    mockGetReadingAttempt.mockResolvedValueOnce(buildAttempt({ mode: 'Drill' }));
+    mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ officialBcLayout: true }));
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await renderPlayer();
+
+    await user.click(await screen.findByRole('tab', { name: /^part b/i }));
+
+    expect(await screen.findByLabelText(/part b document/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no section b1 document/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^b1/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /question 1, unanswered/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /question 2, unanswered/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('tab', { name: /^part c/i }));
+    expect(await screen.findByLabelText(/part c document/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /question 7, unanswered/i })).toBeInTheDocument();
+  });
+
   it('hydrates persisted rule-out marks when resuming an attempt', async () => {
     mockSearchParams.current = new URLSearchParams('attemptId=attempt-1');
     mockGetReadingStructureLearner.mockResolvedValueOnce(buildStructure({ partAMcq: true }));
@@ -354,7 +386,18 @@ function resolvedParams<T>(value: T): Promise<T> {
   return promise;
 }
 
-function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?: boolean; partAMcq?: boolean; partCSectionLocal?: boolean }): ReadingLearnerStructureDto {
+function emptySection(code: 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2', displayOrder: number) {
+  return {
+    id: `sec-${code}`,
+    sectionCode: code,
+    displayOrder,
+    maxRawScore: code.startsWith('C') ? 8 : 1,
+    contentPaperAssetId: null,
+    questions: [],
+  };
+}
+
+function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?: boolean; partAMcq?: boolean; partCSectionLocal?: boolean; officialBcLayout?: boolean }): ReadingLearnerStructureDto {
   const partATexts = opts?.partAMatching
     ? [
       { id: 'text-a-2', displayOrder: 2, title: 'Medication extract', source: 'Clinic', bodyHtml: '<p>Use aspirin carefully.</p>', wordCount: 4, topicTag: null },
@@ -389,6 +432,14 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
       },
       questionPaperAssets: [
         { id: 'asset-a', part: 'A', title: 'Part A PDF', downloadPath: '/v1/media/media-a/content' },
+        ...(opts?.officialBcLayout
+          ? [
+            { id: 'asset-b', part: 'B', title: 'Part B booklet', downloadPath: '/v1/media/media-b/content' },
+            { id: 'asset-b1', part: 'B1', title: 'B1 extract only', downloadPath: '/v1/media/media-b1/content' },
+            { id: 'asset-c', part: 'C', title: 'Part C booklet', downloadPath: '/v1/media/media-c/content' },
+            { id: 'asset-c1', part: 'C1', title: 'C1 extract only', downloadPath: '/v1/media/media-c1/content' },
+          ]
+          : []),
       ],
     },
     parts: [
@@ -410,9 +461,17 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
         texts: [
           { id: 'text-b-1', displayOrder: 1, title: 'Text B', source: 'Policy', bodyHtml: '<p>Policy extract.</p>', wordCount: 2, topicTag: null },
         ],
-        questions: [
-          { id: 'q-b-1', readingTextId: 'text-b-1', readingSectionId: null, displayOrder: 21, points: 1, questionType: 'MultipleChoice3', stem: 'What is the policy purpose?', options: ['A', 'B', 'C'] },
-        ],
+        sections: opts?.officialBcLayout
+          ? (['B1', 'B2', 'B3', 'B4', 'B5', 'B6'] as const).map((code, index) => emptySection(code, index + 1))
+          : undefined,
+        questions: opts?.officialBcLayout
+          ? [
+            { id: 'q-b-1', readingTextId: 'text-b-1', readingSectionId: null, displayOrder: 1, points: 1, questionType: 'MultipleChoice3', stem: 'What is the policy purpose?', options: ['A', 'B', 'C'] },
+            { id: 'q-b-2', readingTextId: 'text-b-1', readingSectionId: null, displayOrder: 2, points: 1, questionType: 'MultipleChoice3', stem: 'What should staff do next?', options: ['A', 'B', 'C'] },
+          ]
+          : [
+            { id: 'q-b-1', readingTextId: 'text-b-1', readingSectionId: null, displayOrder: 21, points: 1, questionType: 'MultipleChoice3', stem: 'What is the policy purpose?', options: ['A', 'B', 'C'] },
+          ],
       },
       {
         id: 'part-c',
@@ -423,11 +482,14 @@ function buildStructure(opts?: { allowPaperReadingMode?: boolean; partAMatching?
         texts: [
           { id: 'text-c-1', displayOrder: 1, title: 'Text C', source: 'Journal', bodyHtml: '<p>Journal extract.</p>', wordCount: 2, topicTag: null },
         ],
+        sections: opts?.officialBcLayout
+          ? [emptySection('C1', 1), emptySection('C2', 2)]
+          : undefined,
         questions: [
           // Section-local internal display order (C1 = 1..8) when authored via the
           // answer-sheet builder; the legacy single-stream number (27) otherwise.
           // The builder stores generic option strings ("Option A" …) verbatim.
-          { id: 'q-c-1', readingTextId: 'text-c-1', readingSectionId: null, displayOrder: opts?.partCSectionLocal ? 1 : 27, points: 1, questionType: 'MultipleChoice4', stem: 'What can be inferred?', options: opts?.partCSectionLocal ? ['Option A', 'Option B', 'Option C', 'Option D'] : ['A', 'B', 'C', 'D'] },
+          { id: 'q-c-1', readingTextId: 'text-c-1', readingSectionId: null, displayOrder: opts?.partCSectionLocal || opts?.officialBcLayout ? 1 : 27, points: 1, questionType: 'MultipleChoice4', stem: 'What can be inferred?', options: opts?.partCSectionLocal || opts?.officialBcLayout ? ['Option A', 'Option B', 'Option C', 'Option D'] : ['A', 'B', 'C', 'D'] },
         ],
       },
     ],
