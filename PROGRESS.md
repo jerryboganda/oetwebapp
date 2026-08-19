@@ -1,13 +1,14 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-19
+Last updated: 2026-08-20
 
-## Current Checkpoint - Atlas 09 full exam without C2
+## Current Checkpoint - Reading B/C visible + production data pinned
 
-- Owner: start the timed Full Exam without inventing C2. Same 60-minute timer. Everything else unchanged.
-- `ReadingStructureService.CanStartFullExam` allows published 20/6/8 papers when the only errors are `part_C_item_count` and `total_points_mismatch`.
-- Scoring stays /42. `isPublishReady` stays false until C2 exists. VD Test 6 still unpublished.
-- Next: deploy this API change. Do not import C2 unless the owner sends it.
+- Candidate Part B/C were empty: player used empty B1–B6/C1–C2 shells and per-extract PDFs. Fix `fdcc4776` (Actions `32299151644`): one Part A/B/C booklet on the left; Part B questions stay separate on the right.
+- Atlas 09 Full Exam without C2 is live (`51bea4e4`). Same 60-minute timer. Scoring /42. Do not invent C2.
+- Live Reading papers: **80**. VD Test 6 stays unpublished. Desktop extra `Reading -1.pdf` (feeding tubes / tetanus / NF) is not imported.
+- Production data is **volume-independent**. Named volumes `oetwebsite_oet_postgres_data` and `oetwebsite_oet_learner_storage` (created 2026-06-03) survive container rebuilds. Compose now marks them `external: true`. See `docs/PRODUCTION-DATA-PERSISTENCE.md`.
+- Next: only act if owner sends Atlas 09 C2 or asks to import the extra pack. Never `down -v`.
 
 ## Current Checkpoint - Atlas 02/15–17/22/26 + Kaplan live
 

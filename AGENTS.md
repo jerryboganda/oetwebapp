@@ -79,12 +79,20 @@ See `.github/instructions/validation.instructions.md` for the full command ladde
 
 ## Storage Persistence
 
-All media/user files must use persistent storage at `/var/opt/oet-learner/storage`.
+Papers, media, users, and backups live in **named Docker volumes**. They are
+independent of web/API containers. Rebuilding or recreating containers does
+**not** delete them. Law: `docs/PRODUCTION-DATA-PERSISTENCE.md`.
 
+Live VPS names (created 2026-06-03, project `oetwebsite`):
+`oetwebsite_oet_postgres_data`, `oetwebsite_oet_learner_storage`,
+`oetwebsite_oet_db_backups`, `oetwebsite_oet_clamav_data`.
+
+- Media path inside API containers is always `/var/opt/oet-learner/storage`.
 - Every API-running `docker-compose*.yml` must set `Storage__LocalRootPath: /var/opt/oet-learner/storage`.
+- Production/VPS compose pins those volumes `external: true` with the exact live names. Do not change `name: oetwebsite`.
 - Media/user file I/O must go through `IFileStorage` or `S3CompatibleFileStorage`.
 - Never use raw `File.*`, `Path.*`, or `Directory.*` for media/user data.
-- Never run `docker compose down -v`, `docker volume rm`, or recreate postgres or storage volumes without a verified backup and explicit approval.
+- Never run `docker compose down -v`, `docker volume rm`, `volume prune`, or recreate postgres/storage volumes.
 
 ## Frontend Rules
 

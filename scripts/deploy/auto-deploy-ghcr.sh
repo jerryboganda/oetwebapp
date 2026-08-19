@@ -84,7 +84,8 @@ pull_with_retry "$WEB_IMAGE"
 pull_with_retry "$API_IMAGE"
 pull_with_retry "$DB_BACKUP_IMAGE"
 
-# --- start the target slot from the new images ---
+# Recreate ONLY the inactive web/API slot + backup sidecar.
+# Never recreate postgres. Never pass -v. Named volumes stay mounted.
 echo "--- starting target slot ($target_slot) ---"
 compose "$target_slot" up -d --no-build --force-recreate \
   "web-$target_slot" "learner-api-$target_slot" db-backup

@@ -350,11 +350,23 @@ services:
     networks:
       - internal
 
+# Named host volumes. Independent of containers. Recreating web/API
+# never touches these. `external: true` + exact live names so Compose
+# cannot create a parallel empty volume and cannot delete them on
+# `compose down`. NEVER run `docker compose down -v` or `docker volume rm`.
 volumes:
   oet_postgres_data:
+    external: true
+    name: oetwebsite_oet_postgres_data
   oet_learner_storage:
+    external: true
+    name: oetwebsite_oet_learner_storage
   oet_clamav_data:
+    external: true
+    name: oetwebsite_oet_clamav_data
   oet_db_backups:
+    external: true
+    name: oetwebsite_oet_db_backups
 
 networks:
   internal:

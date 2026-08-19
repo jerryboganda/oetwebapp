@@ -69,26 +69,37 @@ Atlas paper ids (all Status 4). Layouts vary — see playbook §7.3:
 - Atlas 26 `eb813cce22d841ae921c53a8c0691c0d`
 - Kaplan `f4e5676c5d2a4eb2834b3a18360151d1`
 
-Owner 2026-08-19: Atlas 09 Full Exam starts without C2. Same 60-minute
+Owner 2026-08-19: Atlas 09 Full Exam starts without C2 (`51bea4e4`). Same 60-minute
 timer. Do not invent C2. Scoring stays /42.
+
+Owner 2026-08-20: candidates see Part B/C. Part B left pane is **one collective
+booklet PDF**; questions on the right stay separate (`fdcc4776`).
+
+Production papers/media live in named volumes. Recreating API/web does not
+delete them. See `docs/PRODUCTION-DATA-PERSISTENCE.md`.
 
 ---
 
-## What remains (folder order)
+## What remains
 
-1. **Rest of Atlas Practice Series** — 01/02/05/10–17/22–26 and Kaplan are live. Remaining Desktop files still fail the contract:
-   - Official Sample 3: Part A Q10 blank on the printed key; several B/C letters missing. Do not invent.
-   - Official Sample 4: Part A keys complete; B/C key pages are two-paper OCR overlay garbage.
-   - Sample 18: printed key complete, lastStart=13 is now allowed, but B Q5–6 and several C pages are image-only. Need OCR or a text dump from the owner.
-   - Sample 19–21: B/C pages image-only.
-   - Sample 6–8: CamScanner, no extractable printed key.
-   - Sample 9: no printed ANSWER KEY.
-2. **Nova Practice Series** (`Nova Reading Tests.pdf`) — 20 tests, **no printed key**. Do not invent.
-3. **VERY DIFFICULT READING EXAMS** — Part A letters exist; B/C answers are prose, not A/B/C. Skip unless a 20/6/16 letter key exists.
+**Completely remaining (do not publish):** Very Difficult Test 6. `READING_6.pdf`
+missing. `part_6.pdf` exists. Owner: **never publish Exam 6**.
 
-Do **not** re-import Jayden, Anna Hartford, live Atlas slugs, or `reading-sample-1`.
+**Partially remaining:** Atlas Sample 9 Head injuries
+(`451a205c8ce0429ea1ea5a90d1cf619a`) live A+B+C1 (20/6/8). Booklet/key stop
+after C Text 1. Full exam starts without C2. Do not invent C2.
 
-If this session has **no new contract-valid booklets**, do not invent papers. Ask the owner.
+**Untouched numbered booklets in the Desktop folder:** none.
+
+**Extra, not in the numbered queue:**
+`VERY DIFFICULT READING EXAMS\Exams\Reading -1.pdf` — three official-style
+papers (feeding tubes, tetanus, necrotizing fasciitis). Do not import unless
+the owner says so.
+
+Live **80** papers. Do **not** re-import Jayden, Anna Hartford, Atlas 01–26 +
+Kaplan, Nova 01–20, VD 01–05/07–25, or `reading-sample-1`.
+
+If this session has **no new booklet**, stop. Do not invent papers.
 
 ---
 

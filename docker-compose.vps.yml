@@ -239,11 +239,21 @@ services:
     networks:
       - internal
 
+# Same live named volumes as docker-compose.production.yml. Independent of
+# containers. NEVER `docker compose down -v` or `docker volume rm`.
 volumes:
   oet_postgres_data:
+    external: true
+    name: oetwebsite_oet_postgres_data
   oet_learner_storage:
+    external: true
+    name: oetwebsite_oet_learner_storage
   oet_clamav_data:
+    external: true
+    name: oetwebsite_oet_clamav_data
   oet_db_backups:
+    external: true
+    name: oetwebsite_oet_db_backups
 
 networks:
   internal:

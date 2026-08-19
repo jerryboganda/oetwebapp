@@ -38,6 +38,11 @@ Product is **oetwebapp** (`E:\Projects\OET with Dr Hesham\Web App`,
 
 ## B. PDFs the candidate sees — no combined booklets
 
+Attach **one primary QuestionPaper PDF per Part A, B, and C**. The learner
+player must show that part booklet on the left. Part B is **one collective
+PDF for all 6 questions**; only the questions on the right are one-by-one.
+Do not key the left pane to B1–B6 extract files when a Part B booklet exists.
+
 8. The source file is usually **one** A+B+C booklet plus the answer key.
    The candidate must **never** see that combined file.
 9. Before any attach/import, crop three files: `*-PartA.pdf`,
