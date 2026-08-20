@@ -120,6 +120,45 @@ public class UserAccessAllocationServiceTests
     }
 
     [Fact]
+    public async Task GrantPackage_ReGrant_AfterGiftedCreditsAreSet_FundsSpendableWallet()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-regrant-gift");
+        var plan = new BillingPlan
+        {
+            Id = "plan-nursing",
+            Code = "full-nursing",
+            Name = "Full Nursing OET Course",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 0,
+        };
+        db.BillingPlans.Add(plan);
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = CreateService(db, credits);
+        var req = new AdminUserAccessPackageRequest(
+            "full-nursing",
+            StartsAt: null,
+            ExpiresAt: null,
+            MakePrimary: true,
+            GrantIncludedCredits: false,
+            OverrideProfessionMismatch: false);
+
+        await svc.GrantPackageAsync("admin", "Admin", "learner-regrant-gift", req, default);
+        Assert.Equal(0, (await credits.GetSnapshotAsync("learner-regrant-gift", 20, default)).FlexibleCredits);
+
+        plan.BundledAiCredits = 5;
+        await db.SaveChangesAsync();
+        await svc.GrantPackageAsync("admin", "Admin", "learner-regrant-gift", req, default);
+
+        var snapshot = await credits.GetSnapshotAsync("learner-regrant-gift", 20, default);
+        Assert.Equal(5, snapshot.FlexibleCredits);
+        Assert.Equal(5, snapshot.CreditsGranted);
+        Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.UserId == "learner-regrant-gift"));
+    }
+
+    [Fact]
     public async Task GrantPackage_TwoDifferentPlans_ProducesTwoSubscriptions()
     {
         await using var db = CreateDb();
