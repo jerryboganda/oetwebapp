@@ -29,4 +29,15 @@ public sealed class DeviceVerificationExemptionTests
     {
         Assert.False(AuthService.IsDeviceVerificationExempt("drhagermurad2026@gmail.com", null));
     }
+
+    [Theory]
+    [InlineData("drhagermurad2026@gmail.com")]
+    [InlineData("drahmedhesham9595@gmail.com")]
+    [InlineData("drahmedhesham19951995@gmail.com")]
+    public void IsDeviceVerificationExempt_MatchesOwnerExceptionListCsv(string email)
+    {
+        const string csv = "DRAHMEDHESHAM9595@GMAIL.COM,DRAHMEDHESHAM19951995@GMAIL.COM,DRHAGERMURAD2026@GMAIL.COM";
+
+        Assert.True(AuthService.IsDeviceVerificationExempt(email, csv));
+    }
 }

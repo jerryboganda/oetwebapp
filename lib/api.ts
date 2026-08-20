@@ -1,4 +1,5 @@
 import { ensureFreshAccessToken } from './auth-client';
+import { loadStoredSession } from './auth-storage';
 import {
   titleCase as domainTitleCase,
   minutesToLabel as domainMinutesToLabel,
@@ -562,7 +563,17 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
             typeof window !== 'undefined' &&
             !window.location.pathname.startsWith('/verify-email')
           ) {
-            window.location.assign('/verify-email');
+            const params = new URLSearchParams();
+            const storedEmail = loadStoredSession()?.currentUser?.email;
+            if (storedEmail) {
+              params.set('email', storedEmail);
+            }
+            const nextPath = `${window.location.pathname}${window.location.search}`;
+            if (nextPath && nextPath !== '/verify-email') {
+              params.set('next', nextPath);
+            }
+            const query = params.toString();
+            window.location.assign(query ? `/verify-email?${query}` : '/verify-email');
           }
         } catch (err) {
           if (response.status === 401) {
