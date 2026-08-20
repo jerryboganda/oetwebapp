@@ -144,6 +144,7 @@ public sealed class UserAccessAllocationService(
             existing.ChangedAt = now;
             if (request.MakePrimary) learner.CurrentPlanId = plan.Code;
             await db.SaveChangesAsync(ct);
+            await TryGrantCourseGiftCreditsAsync(userId, plan, existing, startsAt, ct);
             await SyncAccessExpiryAsync(learner, ct);
             await AuditAsync(adminId, adminName, "Package Re-granted", existing.Id,
                 $"Adjusted package {plan.Code} for {userId}", ct);
@@ -208,18 +209,7 @@ public sealed class UserAccessAllocationService(
         }
 
         await db.SaveChangesAsync(ct);
-
-        if (aiPackageCreditService is not null && plan.BundledAiCredits > 0)
-        {
-            await aiPackageCreditService.GrantCourseGiftCreditsAsync(
-                userId,
-                plan.Code,
-                plan.Name,
-                plan.BundledAiCredits,
-                $"admin-package:{subscription.Id}:{plan.Code}",
-                subscription.ExpiresAt ?? startsAt.AddDays(plan.AccessDurationDays > 0 ? plan.AccessDurationDays : 180),
-                ct);
-        }
+        await TryGrantCourseGiftCreditsAsync(userId, plan, subscription, startsAt, ct);
 
         await SyncAccessExpiryAsync(learner, ct);
         await AuditAsync(adminId, adminName, "Package Granted", subscription.Id,
@@ -468,6 +458,28 @@ public sealed class UserAccessAllocationService(
         await AuditAsync(adminId, adminName, "Access Scope Updated", userId,
             $"Updated per-user module/content scope + expiry for {userId}", ct);
         return await GetAccessAsync(userId, ct);
+    }
+
+    private async Task TryGrantCourseGiftCreditsAsync(
+        string userId,
+        BillingPlan plan,
+        Subscription subscription,
+        DateTimeOffset startsAt,
+        CancellationToken ct)
+    {
+        if (aiPackageCreditService is null || plan.BundledAiCredits <= 0)
+        {
+            return;
+        }
+
+        await aiPackageCreditService.GrantCourseGiftCreditsAsync(
+            userId,
+            plan.Code,
+            plan.Name,
+            plan.BundledAiCredits,
+            $"admin-package:{subscription.Id}:{plan.Code}",
+            subscription.ExpiresAt ?? startsAt.AddDays(plan.AccessDurationDays > 0 ? plan.AccessDurationDays : 180),
+            ct);
     }
 
     private async Task<(LearnerUser Learner, Subscription Subscription)> LoadPackageAsync(
