@@ -29,7 +29,7 @@ test.describe('Admin workflows @admin @smoke', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('user detail credit modal opens with accessible fields and closes cleanly', async ({ page }, testInfo) => {
+  test('user detail hides review credits and shows AI credits', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-admin') {
       test.skip();
     }
@@ -39,18 +39,9 @@ test.describe('Admin workflows @admin @smoke', () => {
     await page.goto('/admin/users/mock-user-001');
     await expect(page.getByRole('heading', { name: /faisal maqsood/i })).toBeVisible({ timeout: 30000 });
 
-    const adjustCreditsButton = page.getByRole('button', { name: /adjust credits/i });
-    await adjustCreditsButton.click();
-
-    const dialog = page.getByRole('dialog', { name: /adjust credits/i });
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel('Credit Adjustment')).toBeVisible();
-    await expect(dialog.getByLabel('Reason')).toBeVisible();
-
-    await page.keyboard.press('Escape');
-
-    await expect(dialog).toHaveCount(0);
-    await expect(adjustCreditsButton).toBeFocused();
+    await expect(page.getByRole('button', { name: /adjust credits/i })).toHaveCount(0);
+    await expect(page.getByText(/credit balance/i)).toHaveCount(0);
+    await expect(page.getByTestId('ai-credit-summary')).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();

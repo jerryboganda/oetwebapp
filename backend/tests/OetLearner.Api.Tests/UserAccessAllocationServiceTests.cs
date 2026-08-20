@@ -386,4 +386,56 @@ public class UserAccessAllocationServiceTests
         var token = await db.RefreshTokenRecords.FirstAsync(t => t.Id == tokenId);
         Assert.NotNull(token.RevokedAt);
     }
+
+    [Fact]
+    public async Task GrantAddon_WithProductionLengthIds_SavesItem_FitsKeys_AndFundsAiPackage()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner_b8d731647c9b4462bd7151e55e1e4558";
+        var subscriptionId = $"sub-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = subscriptionId,
+            UserId = userId,
+            PlanId = "full-condensed-medicine-tbook",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddMonths(6),
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_writing_starter",
+            Code = "pkg_writing_starter",
+            Name = "Writing Starter",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            GrantCredits = 3,
+            GrantEntitlementsJson = """{"package_type":"writing","writing_only_credits":3}""",
+            DurationDays = 30,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        var access = await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_writing_starter", subscriptionId, 1), default);
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+        var idem = Assert.Single(await db.IdempotencyRecords.ToListAsync());
+        var tx = Assert.Single(await db.AiPackageCreditTransactions.ToListAsync());
+
+        Assert.Contains(access.AddOns, addOn => addOn.Code == "pkg_writing_starter" && addOn.SubscriptionId == subscriptionId);
+        Assert.True(idem.Key.Length <= 128);
+        Assert.True((tx.StripeSessionId ?? string.Empty).Length <= 128);
+        Assert.True((tx.ReferenceId ?? string.Empty).Length <= 128);
+        Assert.Equal(3, snapshot.WritingOnlyCredits);
+        Assert.Equal(3, snapshot.CreditsRemaining);
+    }
 }

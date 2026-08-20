@@ -121,6 +121,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return await GetSnapshotAsync(userId, 20, ct);
         }
 
+        stripeSessionId = AddonGrantProcessor.FitDatabaseKey(stripeSessionId);
+        quoteId = quoteId is null ? null : AddonGrantProcessor.FitDatabaseKey(quoteId);
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
         await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
@@ -159,7 +161,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             ReadingTestsDelta = grant.ReadingTests ?? 0,
             MockExamsDelta = grant.MockExams,
             Reason = AiPackageCreditReason.Purchase,
-            ReferenceId = quoteId is null ? $"stripe:{stripeSessionId}" : $"quote:{quoteId}:{addOn.Code}",
+            ReferenceId = AddonGrantProcessor.FitDatabaseKey(
+                quoteId is null ? $"stripe:{stripeSessionId}" : $"quote:{quoteId}:{addOn.Code}"),
             Description = $"{addOn.Name} purchased",
             ExpiresAt = newExpiry,
             CreatedAt = now
@@ -184,6 +187,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return false;
         }
 
+        referenceId = AddonGrantProcessor.FitDatabaseKey(referenceId);
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
         var now = DateTimeOffset.UtcNow;

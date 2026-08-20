@@ -510,4 +510,54 @@ public sealed class AddonGrantProcessorTests
         Assert.Equal(5, snapshot.CreditsRemaining);
         Assert.Equal(5, snapshot.FlexibleCredits);
     }
+
+    [Fact]
+    public async Task ApplyAsync_FitsLongAdminGrantKeys_AndUnlocksReadingPackage()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+        const string userId = "learner_b8d731647c9b4462bd7151e55e1e4558";
+        var subscriptionId = $"sub-{Guid.NewGuid():N}";
+        var eventId = $"admin_alloc:{userId}:pkg_reading_pro:{subscriptionId}:0";
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = subscriptionId,
+            UserId = userId,
+            PlanId = "full-condensed-medicine-tbook",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddMonths(1),
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_reading_pro",
+            Code = "pkg_reading_pro",
+            Name = "Reading Pro",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            GrantCredits = 0,
+            GrantEntitlementsJson = """{"package_type":"reading","reading_tests":null}""",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var result = await processor.ApplyAsync(eventId, subscriptionId, "pkg_reading_pro");
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+        var idem = Assert.Single(await db.IdempotencyRecords.ToListAsync());
+        var tx = Assert.Single(await db.AiPackageCreditTransactions.ToListAsync());
+
+        Assert.True(result.Applied);
+        Assert.True(idem.Key.Length <= 128);
+        Assert.True((tx.StripeSessionId ?? string.Empty).Length <= 128);
+        Assert.True((tx.ReferenceId ?? string.Empty).Length <= 128);
+        Assert.Null(snapshot.ReadingTestsRemaining);
+    }
 }
