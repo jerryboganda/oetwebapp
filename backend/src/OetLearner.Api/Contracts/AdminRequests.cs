@@ -572,8 +572,9 @@ public record AdminSubscriptionStatusRequest(
 /// Request to inspect-and-correct a subscription's OET 2026 entitlement counters and
 /// unlock flags from the admin console. Each field is an <b>absolute SET</b>: a non-null
 /// value overwrites the stored value (counters are clamped to &gt;= 0); a null value
-/// leaves that field unchanged. <paramref name="Reason"/> is required and recorded with
-/// a before/after snapshot in the audit log.
+/// leaves that field unchanged. <paramref name="Reason"/> is recorded with a
+/// before/after snapshot in the audit log; blank defaults to
+/// "Admin entitlement adjustment".
 /// </summary>
 public record AdminSubscriptionEntitlementAdjustRequest(
     int? WritingAssessmentsRemaining,
@@ -581,7 +582,7 @@ public record AdminSubscriptionEntitlementAdjustRequest(
     int? AiCreditsRemaining,
     bool? TutorBookUnlocked,
     bool? BasicEnglishUnlocked,
-    string Reason);
+    string? Reason = null);
 
 /// <summary>
 /// Request to create a brand-new subscription for a learner who does not currently have
