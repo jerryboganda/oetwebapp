@@ -6,7 +6,6 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   ChevronDown,
   ChevronUp,
-  Coins,
   KeyRound,
   Lock,
   LockKeyhole,
@@ -41,7 +40,6 @@ import { QuickGrantModal } from '@/components/admin/user-access/quick-grant-moda
 import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 import type { GrantUserPackageInput, UserAccessSubscriptionRow } from '@/lib/api/user-access-packages';
 import {
-  adjustAdminUserCredits,
   deleteAdminUser,
   fetchAdminPermissions,
   fetchAdminSignupCatalog,
@@ -210,15 +208,11 @@ export default function UserDetailPage() {
   const [retryNonce, setRetryNonce] = useState(0);
   const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
-  const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
   const [isLifecycleModalOpen, setIsLifecycleModalOpen] = useState(false);
   const [lifecycleAction, setLifecycleAction] = useState<'delete' | 'restore' | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const [creditAmount, setCreditAmount] = useState('0');
-  const [creditReason, setCreditReason] = useState('');
   const [lifecycleReason, setLifecycleReason] = useState('');
   const [isMutating, setIsMutating] = useState(false);
-  const adjustCreditsButtonRef = useRef<HTMLButtonElement | null>(null);
   const setPasswordButtonRef = useRef<HTMLButtonElement | null>(null);
   const [adminPermissions, setAdminPermissions] = useState<AdminPermissionGrant[] | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -335,18 +329,6 @@ export default function UserDetailPage() {
       cancelled = true;
     };
   }, [userId, retryNonce]);
-
-  const closeCreditModal = useCallback(() => {
-    setIsCreditModalOpen(false);
-    setCreditAmount('0');
-    setCreditReason('');
-    window.setTimeout(() => {
-      adjustCreditsButtonRef.current?.focus();
-      if (document.activeElement !== adjustCreditsButtonRef.current) {
-        requestAnimationFrame(() => adjustCreditsButtonRef.current?.focus());
-      }
-    }, 50);
-  }, []);
 
   const openPasswordModal = useCallback(() => {
     setPasswordForm({ password: '', confirmPassword: '' });
@@ -763,25 +745,6 @@ export default function UserDetailPage() {
     }
   }
 
-  async function handleAdjustCredits() {
-    if (!user) return;
-    setIsMutating(true);
-    try {
-      await adjustAdminUserCredits(user.id, {
-        amount: Number(creditAmount || 0),
-        reason: creditReason || undefined,
-      });
-      await reloadUser();
-      closeCreditModal();
-      setToast({ variant: 'success', message: 'Credit balance updated successfully.' });
-    } catch (error) {
-      console.error(error);
-      setToast({ variant: 'error', message: 'Unable to adjust credits for this user.' });
-    } finally {
-      setIsMutating(false);
-    }
-  }
-
   async function openProfileModal() {
     if (!user) return;
     setProfileForm({
@@ -1048,12 +1011,6 @@ export default function UserDetailPage() {
                     Unlock Account
                   </Button>
                 ) : null}
-                {user.availableActions.canAdjustCredits ? (
-                  <Button ref={adjustCreditsButtonRef} variant="outline" onClick={() => setIsCreditModalOpen(true)} className="gap-2">
-                    <Coins className="h-4 w-4" />
-                    Adjust Credits
-                  </Button>
-                ) : null}
                 {user.availableActions.canSuspend ? (
                   <Button variant={user.status === 'active' ? 'destructive' : 'primary'} onClick={handleToggleStatus} loading={isMutating}>
                     {user.status === 'active' ? 'Suspend' : 'Reactivate'}
@@ -1122,14 +1079,10 @@ export default function UserDetailPage() {
               </SettingsSection>
 
               <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{user.role === 'expert' ? 'Tasks Graded' : 'Tasks Completed'}</p>
                     <p className="mt-1 text-2xl font-semibold text-admin-fg-strong">{(user.role === 'expert' ? user.tasksGraded : user.tasksCompleted) ?? 0}</p>
-                  </div>
-                  <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Credit Balance</p>
-                    <p className="mt-1 text-2xl font-semibold text-admin-fg-strong">{user.creditBalance ?? 0}</p>
                   </div>
                   <div className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Last Login</p>
@@ -1575,27 +1528,6 @@ export default function UserDetailPage() {
           </>
         ) : null}
       </AsyncStateWrapper>
-
-      <Modal open={isCreditModalOpen} onClose={closeCreditModal} title="Adjust Credits">
-        <div className="space-y-4 py-2">
-          <Input
-            label="Credit Adjustment"
-            type="number"
-            value={creditAmount}
-            onChange={(event) => setCreditAmount(event.target.value)}
-            hint="Use a negative number to remove credits when the current balance allows it."
-          />
-          <Input label="Reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} />
-          <div className="flex justify-end gap-3 border-t border-border pt-4">
-            <Button variant="outline" onClick={() => setIsCreditModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleAdjustCredits} loading={isMutating}>
-              Save Adjustment
-            </Button>
-          </div>
-        </div>
-      </Modal>
 
       <Modal open={isPasswordModalOpen} onClose={closePasswordModal} title="Set Password">
         <div className="space-y-4 py-2">

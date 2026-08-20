@@ -1,6 +1,5 @@
 import { promises as fs } from 'node:fs';
 import { expect, test } from '@playwright/test';
-import { fetchAdminUserDetailApi } from '../fixtures/api-auth';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 
 test.describe('Admin deep CRUD and mutation workflows @admin', () => {
@@ -85,28 +84,17 @@ test.describe('Admin deep CRUD and mutation workflows @admin', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('admin user detail supports credit adjustment and protected account actions', async ({ page, request }, testInfo) => {
+  test('admin user detail supports protected account actions', async ({ page }, testInfo) => {
     if (testInfo.project.name !== 'chromium-admin') {
       test.skip();
     }
 
     const diagnostics = observePage(page);
     const userId = 'mock-user-001';
-    const before = await fetchAdminUserDetailApi(request, userId) as { creditBalance?: number };
 
     await page.goto(`/admin/users/${userId}`);
     await expect(page.getByRole('heading', { name: /faisal maqsood/i })).toBeVisible({ timeout: 30000 });
-
-    await page.getByRole('button', { name: /adjust credits/i }).click();
-    await page.getByLabel('Credit Adjustment').fill('1');
-    await page.getByLabel('Reason').fill(`QA adjustment ${Date.now()}`);
-    await page.getByRole('button', { name: /save adjustment/i }).click();
-
-    await expect(page.getByText(/credit balance updated successfully\./i)).toBeVisible();
-    await expect.poll(async () => {
-      const detail = await fetchAdminUserDetailApi(request, userId) as { creditBalance?: number };
-      return detail.creditBalance ?? 0;
-    }).toBe((before.creditBalance ?? 0) + 1);
+    await expect(page.getByRole('button', { name: /adjust credits/i })).toHaveCount(0);
 
     const resetPasswordButton = page.getByRole('button', { name: /reset password/i });
     if (await resetPasswordButton.count()) {

@@ -341,15 +341,28 @@ public sealed class UserAccessAllocationService(
         }
 
         var quantity = Math.Max(1, request.Quantity);
+        var appliedUnits = 0;
         for (var unit = 0; unit < quantity; unit++)
         {
-            // Idempotent per unit: re-submitting the same quantity replays the same eventIds.
-            var eventId = $"admin_alloc:{userId}:{addonCode}:{targetSubId}:{unit}";
-            await addonGrantProcessor.ApplyAsync(eventId, targetSubId, addonCode, ct);
+            // Short event ids: the previous admin_alloc:{userId}:{code}:{sub}:{unit}
+            // key overflowed IdempotencyRecord.Key and StripeSessionId (varchar 128),
+            // so Reading Pro / other AI add-ons failed on Save Access.
+            var eventId = $"admin:{unit}";
+            var result = await addonGrantProcessor.ApplyAsync(eventId, targetSubId, addonCode, ct);
+            if (!result.Applied && !result.DuplicateSkipped)
+            {
+                throw ApiException.Validation(
+                    "addon_grant_failed",
+                    $"Unable to grant add-on '{addonCode}': {result.Reason ?? "unknown"}.");
+            }
+
+            if (result.Applied) appliedUnits++;
         }
 
+        await EnsureAddonSubscriptionItemAsync(targetSubId, addonCode, ct);
+
         await AuditAsync(adminId, adminName, "Add-on Granted", targetSubId,
-            $"Granted add-on {addonCode} x{quantity} to {userId}", ct);
+            $"Granted add-on {addonCode} x{quantity} to {userId} ({appliedUnits} new)", ct);
         return await GetAccessAsync(userId, ct);
     }
 
@@ -458,6 +471,33 @@ public sealed class UserAccessAllocationService(
         await AuditAsync(adminId, adminName, "Access Scope Updated", userId,
             $"Updated per-user module/content scope + expiry for {userId}", ct);
         return await GetAccessAsync(userId, ct);
+    }
+
+    private async Task EnsureAddonSubscriptionItemAsync(string subscriptionId, string addonCode, CancellationToken ct)
+    {
+        var exists = await db.SubscriptionItems.AnyAsync(
+            item => item.SubscriptionId == subscriptionId
+                    && item.ItemCode == addonCode
+                    && item.Status == SubscriptionItemStatus.Active,
+            ct);
+        if (exists) return;
+
+        var addOn = await db.BillingAddOns.AsNoTracking().FirstAsync(a => a.Code == addonCode, ct);
+        var now = timeProvider.GetUtcNow();
+        db.SubscriptionItems.Add(new SubscriptionItem
+        {
+            Id = $"subitem-{Guid.NewGuid():N}",
+            SubscriptionId = subscriptionId,
+            ItemCode = addonCode,
+            ItemType = addOn.IsRecurring ? "recurring_addon" : "addon",
+            Quantity = 1,
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now,
+            EndsAt = addOn.DurationDays > 0 ? now.AddDays(addOn.DurationDays) : null,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task TryGrantCourseGiftCreditsAsync(

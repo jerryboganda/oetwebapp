@@ -296,4 +296,20 @@ describe('UserDetailPage profile catalog fields', () => {
     await waitFor(() => expect(mockDeleteAdminUser).toHaveBeenCalledWith('learner-1', undefined));
     expect(mockRouterReplace).toHaveBeenCalledWith('/admin/users');
   });
+
+  it('does not show review credit balance or Adjust Credits', async () => {
+    mockGetAdminUserDetailData.mockResolvedValue(buildUser({
+      creditBalance: 200,
+      availableActions: {
+        ...buildUser().availableActions,
+        canAdjustCredits: true,
+      },
+    }));
+
+    renderWithRouter(<UserDetailPage />);
+
+    await screen.findByRole('button', { name: /edit profile/i });
+    expect(screen.queryByRole('button', { name: /adjust credits/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/credit balance/i)).not.toBeInTheDocument();
+  });
 });

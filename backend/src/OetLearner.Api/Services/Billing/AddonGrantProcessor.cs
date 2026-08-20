@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace OetLearner.Api.Services.Billing;
@@ -37,7 +39,7 @@ public sealed class AddonGrantProcessor(
     {
         if (string.IsNullOrWhiteSpace(eventId)) return new(false, false, "event_id_missing");
 
-        var idemKey = $"{subscriptionId}:{addOnCode}:{eventId}";
+        var idemKey = FitDatabaseKey($"{subscriptionId}:{addOnCode}:{eventId}");
         var alreadyApplied = await db.IdempotencyRecords.AsNoTracking()
             .AnyAsync(r => r.Scope == GrantScope && r.Key == idemKey, ct);
         if (alreadyApplied)
@@ -58,7 +60,7 @@ public sealed class AddonGrantProcessor(
         var aiCreditGrant = ResolveAiCreditGrant(addOn.GrantEntitlementsJson, addOn.GrantCredits);
         if (aiCreditGrant > 0)
         {
-            var creditReferenceId = $"addon:{idemKey}";
+            var creditReferenceId = FitDatabaseKey($"addon:{idemKey}");
             var creditAlreadyGranted = await db.AiCreditLedger.AsNoTracking()
                 .AnyAsync(entry => entry.UserId == subscription.UserId
                                    && entry.Source == AiCreditSource.Purchase
@@ -84,7 +86,7 @@ public sealed class AddonGrantProcessor(
 
         if (aiPackageCredits is not null)
         {
-            var walletReference = $"addon:{idemKey}";
+            var walletReference = FitDatabaseKey($"addon:{idemKey}");
             var walletExpiry = addOn.DurationDays > 0
                 ? DateTimeOffset.UtcNow.AddDays(addOn.DurationDays)
                 : DateTimeOffset.UtcNow.AddDays(180);
@@ -144,7 +146,7 @@ public sealed class AddonGrantProcessor(
     {
         if (string.IsNullOrWhiteSpace(eventId)) return new(false, false, "event_id_missing");
 
-        var idemKey = $"{subscriptionId}:{addOnCode}:{eventId}";
+        var idemKey = FitDatabaseKey($"{subscriptionId}:{addOnCode}:{eventId}");
         var alreadyReversed = await db.IdempotencyRecords.AsNoTracking()
             .AnyAsync(r => r.Scope == RefundScope && r.Key == idemKey, ct);
         if (alreadyReversed) return new(false, true, "duplicate");
@@ -334,5 +336,17 @@ public sealed class AddonGrantProcessor(
 
         value = 0;
         return false;
+    }
+
+    internal static string FitDatabaseKey(string value, int maxLength = 128)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+        var prefixLength = Math.Max(0, maxLength - hash.Length - 1);
+        return (prefixLength == 0 ? string.Empty : value[..prefixLength]) + "-" + hash;
     }
 }
