@@ -284,6 +284,11 @@ public static class AdminEndpoints
             => Results.Ok(await svc.GetAccessAsync(userId, ct)))
             .WithAdminRead("AdminUsersRead");
 
+        admin.MapGet("/users/{userId}/ai-credits", async (string userId,
+            IAiPackageCreditService credits, CancellationToken ct, int? pageSize)
+            => Results.Ok(await credits.GetSnapshotAsync(userId, pageSize ?? 100, ct)))
+            .WithAdminRead("AdminUsersRead");
+
         admin.MapPost("/users/{userId}/access/packages", async (string userId, HttpContext http,
             AdminUserAccessPackageRequest request,
             OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)

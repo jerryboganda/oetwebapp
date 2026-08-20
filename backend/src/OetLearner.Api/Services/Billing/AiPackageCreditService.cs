@@ -67,7 +67,10 @@ public sealed record AiPackageCreditSnapshot(
     DateTimeOffset? ExpiresAt,
     bool ExpiredBecausePassed,
     DateTimeOffset? PassedAt,
-    IReadOnlyList<AiPackageCreditTransactionDto> Transactions);
+    IReadOnlyList<AiPackageCreditTransactionDto> Transactions,
+    int CreditsGranted = 0,
+    int CreditsUsed = 0,
+    int CreditsRemaining = 0);
 
 public sealed record AiPackageCreditTransactionDto(
     string Id,
@@ -797,6 +800,18 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                     row.CreatedAt))
                 .ToListAsync(ct);
 
+        var practiceRows = await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == userId)
+            .Select(row => new { row.Reason, row.FlexibleCreditsDelta, row.WritingOnlyCreditsDelta, row.SpeakingOnlyCreditsDelta })
+            .ToListAsync(ct);
+        var creditsGranted = practiceRows
+            .Where(row => row.Reason is AiPackageCreditReason.Purchase or AiPackageCreditReason.AdminAdjustment)
+            .Sum(row => Math.Max(0, row.FlexibleCreditsDelta) + Math.Max(0, row.WritingOnlyCreditsDelta) + Math.Max(0, row.SpeakingOnlyCreditsDelta));
+        var creditsUsed = practiceRows
+            .Where(row => row.Reason is AiPackageCreditReason.GradingDeduct or AiPackageCreditReason.ObjectivePracticeDeduct)
+            .Sum(row => Math.Max(0, -row.FlexibleCreditsDelta) + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta));
+        var creditsRemaining = account.FlexibleCredits + account.WritingOnlyCredits + account.SpeakingOnlyCredits;
+
         return new AiPackageCreditSnapshot(
             account.UserId,
             account.FlexibleCredits,
@@ -808,7 +823,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             account.ExpiresAt,
             account.ExpiredBecausePassed,
             account.PassedAt,
-            transactions);
+            transactions,
+            creditsGranted,
+            creditsUsed,
+            creditsRemaining);
     }
 
     private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)

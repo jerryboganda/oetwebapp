@@ -25,7 +25,10 @@ public interface IAddonGrantProcessor
 
 public sealed record AddonGrantResult(bool Applied, bool DuplicateSkipped, string? Reason);
 
-public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantProcessor> logger) : IAddonGrantProcessor
+public sealed class AddonGrantProcessor(
+    LearnerDbContext db,
+    ILogger<AddonGrantProcessor> logger,
+    IAiPackageCreditService? aiPackageCredits = null) : IAddonGrantProcessor
 {
     private const string GrantScope = "addon_grant";
     private const string RefundScope = "addon_refund";
@@ -76,6 +79,29 @@ public sealed class AddonGrantProcessor(LearnerDbContext db, ILogger<AddonGrantP
                     ExpiresAt = addOn.DurationDays > 0 ? now.AddDays(addOn.DurationDays) : null,
                     CreatedAt = now,
                 });
+            }
+        }
+
+        if (aiPackageCredits is not null)
+        {
+            var walletReference = $"addon:{idemKey}";
+            var walletExpiry = addOn.DurationDays > 0
+                ? DateTimeOffset.UtcNow.AddDays(addOn.DurationDays)
+                : DateTimeOffset.UtcNow.AddDays(180);
+            if (string.Equals(addOn.AddonKind, "ai_package", StringComparison.OrdinalIgnoreCase))
+            {
+                await aiPackageCredits.GrantPackageAsync(subscription.UserId, addOn, 1, walletReference, null, ct);
+            }
+            else if (aiCreditGrant > 0)
+            {
+                await aiPackageCredits.GrantCourseGiftCreditsAsync(
+                    subscription.UserId,
+                    addOn.Code,
+                    addOn.Name,
+                    aiCreditGrant,
+                    walletReference,
+                    walletExpiry,
+                    ct);
             }
         }
 

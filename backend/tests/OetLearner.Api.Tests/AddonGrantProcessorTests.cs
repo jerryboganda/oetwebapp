@@ -467,4 +467,47 @@ public sealed class AddonGrantProcessorTests
         Assert.Empty(await db.AiCreditLedger.ToListAsync());
         Assert.True(await db.IdempotencyRecords.AnyAsync(record => record.Scope == "addon_refund" && record.Key.Contains("evt-refund-writing")));
     }
+
+    [Fact]
+    public async Task ApplyAsync_FundsExamWalletWhenAiCreditsAreGranted()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-exam-wallet",
+            UserId = "user-exam-wallet",
+            PlanId = "plan-basic",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddMonths(1),
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_exam_wallet",
+            Code = "pkg_exam_wallet",
+            Name = "AI Credit Pack",
+            Status = BillingAddOnStatus.Active,
+            GrantCredits = 5,
+            GrantEntitlementsJson = "{\"ai_credits\":5}",
+            DurationDays = 30,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var result = await processor.ApplyAsync("evt-exam-wallet", "sub-exam-wallet", "pkg_exam_wallet");
+        var snapshot = await credits.GetSnapshotAsync("user-exam-wallet", 20, default);
+
+        Assert.True(result.Applied);
+        Assert.Equal(5, snapshot.CreditsGranted);
+        Assert.Equal(5, snapshot.CreditsRemaining);
+        Assert.Equal(5, snapshot.FlexibleCredits);
+    }
 }

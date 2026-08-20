@@ -547,7 +547,6 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Price</th>
                 <th className="px-3 py-3">Interval</th>
-                <th className="px-3 py-3">Review credits</th>
                 <th className="px-3 py-3">Gifted AI credits</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3 sr-only">Actions</th>
@@ -555,16 +554,15 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
             </thead>
             <tbody className="divide-y divide-border bg-surface">
               {status === 'loading' ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">Loading…</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">Loading…</td></tr>
               ) : sortedRows.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">No plans yet.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No plans yet.</td></tr>
               ) : (
                 sortedRows.map((row) => (
                   <tr key={row.id} className="align-middle">
                     <td className="px-3 py-3"><div className="font-semibold text-navy">{row.name}</div><div className="text-xs text-muted">{row.code}</div></td>
                     <td className="px-3 py-3 tabular-nums">{row.currency} {row.price}</td>
                     <td className="px-3 py-3">{row.interval ?? 'month'}</td>
-                    <td className="px-3 py-3 tabular-nums">{row.includedCredits ?? 0}</td>
                     <td className="px-3 py-3 tabular-nums">{row.bundledAiCredits ?? 0}</td>
                     <td className="px-3 py-3"><Badge variant={(row.status ?? 'active').toLowerCase() === 'active' ? 'success' : 'default'}>{(row.status ?? 'active').toLowerCase()}</Badge></td>
                     <td className="px-3 py-3 text-right">
@@ -604,20 +602,6 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
             <Input label="Currency" value={form.currency} maxLength={3} onChange={(e) => setField('currency', e.target.value.toUpperCase())} className="uppercase" />
             <Select label="Interval" value={form.interval} onChange={(e) => setField('interval', e.target.value)} options={INTERVAL_OPTIONS} />
             <Input label="Duration (months)" inputMode="numeric" value={form.durationMonths} onChange={(e) => setField('durationMonths', e.target.value)} />
-            <Input
-              label="Included review credits"
-              inputMode="numeric"
-              value={form.includedCredits}
-              onChange={(e) => setField('includedCredits', e.target.value)}
-              hint="Wallet review credits. 2026 Full Courses keep this at 0."
-            />
-            <Input
-              label="Gifted AI credits"
-              inputMode="numeric"
-              value={form.bundledAiCredits}
-              onChange={(e) => setField('bundledAiCredits', e.target.value)}
-              hint="AI practice credits granted on purchase. Full Courses use 5."
-            />
             <Input label="Trial days" inputMode="numeric" value={form.trialDays} onChange={(e) => setField('trialDays', e.target.value)} />
             <Input label="Display order" inputMode="numeric" value={form.displayOrder} onChange={(e) => setField('displayOrder', e.target.value)} />
             <Select label="Status" value={form.status} onChange={(e) => setField('status', e.target.value)} options={STATUS_OPTIONS} />
@@ -628,6 +612,16 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
               value={form.accessDurationDays}
               onChange={(e) => setField('accessDurationDays', e.target.value)}
               hint="How long access lasts from the start date. 180 = 6 months."
+            />
+          </div>
+
+          <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
+            <Input
+              label="Gifted AI credits"
+              inputMode="numeric"
+              value={form.bundledAiCredits}
+              onChange={(e) => setField('bundledAiCredits', e.target.value)}
+              hint="Granted automatically into the exam wallet when this Full Course is purchased or assigned. Full Courses use 5. No extra checkbox."
             />
           </div>
 

@@ -477,5 +477,8 @@ public sealed class AiPackageCreditServiceTests
         Assert.True(reading.Debited);
         Assert.False(extra.Debited);
         Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Equal(5, snapshot.CreditsGranted);
+        Assert.Equal(5, snapshot.CreditsUsed);
+        Assert.Equal(0, snapshot.CreditsRemaining);
     }
 }
