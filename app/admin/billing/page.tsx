@@ -786,7 +786,8 @@ export default function BillingPage() {
     if (!subscriptionAction) return;
     setIsSubmittingSubscriptionAction(true);
     try {
-      const reason = subscriptionActionForm.reason.trim() || undefined;
+      const reason = subscriptionActionForm.reason.trim()
+        || (subscriptionAction.kind === 'entitlements' ? 'Admin entitlement adjustment' : undefined);
       switch (subscriptionAction.kind) {
         case 'create': {
           if (!subscriptionActionForm.userId.trim() || !subscriptionActionForm.planCode.trim()) {
@@ -910,11 +911,6 @@ export default function BillingPage() {
           break;
         }
         case 'entitlements': {
-          if (!reason) {
-            setToast({ variant: 'error', message: 'A reason is required to adjust entitlements.' });
-            setIsSubmittingSubscriptionAction(false);
-            return;
-          }
           // Parse counter inputs: '' = leave unchanged; otherwise must be a non-negative integer.
           const parseCounter = (raw: string, label: string): number | null | undefined => {
             const trimmed = raw.trim();
@@ -942,7 +938,7 @@ export default function BillingPage() {
             aiCreditsRemaining: aiCredits,
             tutorBookUnlocked: flag(subscriptionActionForm.entTutorBook),
             basicEnglishUnlocked: flag(subscriptionActionForm.entBasicEnglish),
-            reason: subscriptionActionForm.reason.trim(),
+            reason: reason ?? 'Admin entitlement adjustment',
           });
           setToast({ variant: 'success', message: 'Entitlements updated.' });
           break;
@@ -3876,10 +3872,14 @@ export default function BillingPage() {
             ) : null}
 
             <Textarea
-              label="Reason (recorded in audit log)"
+              label={subscriptionAction.kind === 'entitlements'
+                ? 'Reason (optional — recorded in audit log)'
+                : 'Reason (recorded in audit log)'}
               value={subscriptionActionForm.reason}
               onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, reason: event.target.value }))}
-              placeholder="Why is this change being made?"
+              placeholder={subscriptionAction.kind === 'entitlements'
+                ? 'Optional. Blank uses “Admin entitlement adjustment”.'
+                : 'Why is this change being made?'}
             />
 
             <div className="flex justify-end gap-3 border-t border-border pt-4">

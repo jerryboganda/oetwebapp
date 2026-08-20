@@ -6101,12 +6101,6 @@ public partial class AdminService(
     public Task<object> AdjustSubscriptionEntitlementsAsync(string adminId, string adminName,
         string subscriptionId, AdminSubscriptionEntitlementAdjustRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-        {
-            throw ApiException.Validation("reason_required",
-                "A reason is required when adjusting subscription entitlements.");
-        }
-
         return WithSubscriptionConcurrencyRetryAsync(
             inner => AdjustSubscriptionEntitlementsCoreAsync(adminId, adminName, subscriptionId, request, inner),
             ct);
@@ -6161,7 +6155,10 @@ public partial class AdminService(
             subscription.TutorBookUnlocked,
             subscription.BasicEnglishUnlocked,
         };
-        var details = $"reason: {request.Reason.Trim()}"
+        var reason = string.IsNullOrWhiteSpace(request.Reason)
+            ? "Admin entitlement adjustment"
+            : request.Reason.Trim();
+        var details = $"reason: {reason}"
             + $"; before: {JsonSerializer.Serialize(before)}"
             + $"; after: {JsonSerializer.Serialize(after)}";
         await LogAuditAsync(adminId, adminName, "SubscriptionEntitlementsAdjusted", "Subscription", subscriptionId, details, ct);

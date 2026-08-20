@@ -9,8 +9,9 @@ namespace OetLearner.Api.Tests;
 /// <summary>
 /// Service-level tests for <see cref="AdminService.AdjustSubscriptionEntitlementsAsync"/> —
 /// the admin "inspect and correct entitlements" surface. Each non-null request field is an
-/// absolute SET (counters clamp to &gt;= 0); a null field is left unchanged; Reason is
-/// required; and every successful mutation writes exactly one matching
+/// absolute SET (counters clamp to &gt;= 0); a null field is left unchanged; a blank
+/// Reason defaults to "Admin entitlement adjustment"; every successful mutation writes
+/// exactly one matching
 /// <see cref="AuditEvent"/>. Mirrors the harness in
 /// <see cref="AdminSubscriptionLifecycleTests"/>.
 /// </summary>
@@ -129,27 +130,30 @@ public class AdminSubscriptionEntitlementAdjustTests
     [Theory]
     [InlineData("")]
     [InlineData("   ")]
-    public async Task AdjustEntitlements_MissingReason_Throws(string reason)
+    [InlineData(null)]
+    public async Task AdjustEntitlements_MissingReason_DefaultsAndSucceeds(string? reason)
     {
         await using var db = NewDb();
-        var sub = await SeedSubscriptionAsync(db);
+        var sub = await SeedSubscriptionAsync(db, writing: 0);
         var service = NewAdminService(db);
-        var auditCountBefore = await db.AuditEvents.CountAsync();
 
-        var ex = await Assert.ThrowsAsync<ApiException>(() => service.AdjustSubscriptionEntitlementsAsync(
+        await service.AdjustSubscriptionEntitlementsAsync(
             AdminId, AdminName, sub.Id,
             new AdminSubscriptionEntitlementAdjustRequest(
                 WritingAssessmentsRemaining: 1,
                 SpeakingSessionsRemaining: null,
                 AiCreditsRemaining: null,
                 TutorBookUnlocked: null,
-                BasicEnglishUnlocked: null,
+                BasicEnglishUnlocked: true,
                 Reason: reason),
-            CancellationToken.None));
+            CancellationToken.None);
 
-        Assert.Equal("reason_required", ex.ErrorCode);
-        // No mutation, no audit row.
-        Assert.Equal(auditCountBefore, await db.AuditEvents.CountAsync());
+        var refreshed = await db.Subscriptions.SingleAsync();
+        Assert.Equal(1, refreshed.WritingAssessmentsRemaining);
+        Assert.True(refreshed.BasicEnglishUnlocked);
+        var audit = await db.AuditEvents.SingleAsync(a =>
+            a.ResourceType == "Subscription" && a.Action == "SubscriptionEntitlementsAdjusted");
+        Assert.Contains("Admin entitlement adjustment", audit.Details);
     }
 
     [Fact]
