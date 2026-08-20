@@ -91,7 +91,7 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
             {
                 Id = "part-export",
                 PaperId = "paper-export",
-                PartCode = ListeningPartCode.B,
+                PartCode = ListeningPartCode.B1,
                 MaxRawScore = 6,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
@@ -110,8 +110,8 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
             });
-            var answer = await db.ListeningAnswers.SingleAsync(a => a.ListeningAttemptId == attemptId);
-            answer.IsCorrect = null;
+            var exportAnswer = await db.ListeningAnswers.SingleAsync(a => a.ListeningAttemptId == attemptId);
+            exportAnswer.IsCorrect = null;
             await db.SaveChangesAsync();
         }
 

@@ -251,6 +251,49 @@ export function uploadPaymentMethodQr(key: string, imageBase64: string): Promise
   );
 }
 
+export interface AdminPaymentGatewayDto {
+  name: string;
+  label: string;
+  candidateLabel: string;
+  region: string;
+  mode: string;
+  iconName: string;
+  isEnabled: boolean;
+  isPrimary: boolean;
+  displayOrder: number;
+  isConfigured: boolean;
+  apiKeyMasked: string;
+  hashKeyMasked: string;
+  providerKey: string | null;
+  webhookSecretMasked: string;
+  companyId: string | null;
+}
+
+export interface AdminPaymentGatewayUpdateRequest {
+  isEnabled?: boolean;
+  isPrimary?: boolean;
+  displayOrder?: number;
+  apiKey?: string | null;
+  hashApiKey?: string | null;
+  providerKey?: string | null;
+  webhookSecret?: string | null;
+  companyId?: string | null;
+}
+
+export function listAdminPaymentGateways(): Promise<AdminPaymentGatewayDto[]> {
+  return apiClient.get<AdminPaymentGatewayDto[]>('/v1/admin/billing/payment-gateways');
+}
+
+export function updateAdminPaymentGateway(
+  name: string,
+  payload: AdminPaymentGatewayUpdateRequest,
+): Promise<AdminPaymentGatewayDto> {
+  return apiClient.patch<AdminPaymentGatewayDto>(
+    `/v1/admin/billing/payment-gateways/${encodeURIComponent(name)}`,
+    payload,
+  );
+}
+
 // ── Scholarships ──────────────────────────────────────────────────
 
 export interface ScholarshipDto {

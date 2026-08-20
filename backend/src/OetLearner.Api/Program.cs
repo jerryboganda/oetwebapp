@@ -1138,8 +1138,11 @@ builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PayTabsG
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PaymobGateway>();
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway>();
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.EasyKashGateway>();
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.WhopGateway>();
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.FawaterakGateway>();
 builder.Services.AddScoped<PaymentGatewayService>();
 builder.Services.AddScoped<IPaymentGatewayProvider>(sp => sp.GetRequiredService<PaymentGatewayService>());
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPaymentGatewayCatalog, OetLearner.Api.Services.Billing.PaymentGatewayCatalog>();
 // Phase 1-10 international expansion services.
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IGatewayRegistry, OetLearner.Api.Services.Billing.GatewayRegistry>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IRegionTaxResolver, OetLearner.Api.Services.Billing.TaxResolver>();

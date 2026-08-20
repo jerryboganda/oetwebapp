@@ -285,5 +285,38 @@ UPDATE ""ApplicationUserAccounts""
 SET ""MaxDevicesOverride"" = NULL
 WHERE ""MaxDevicesOverride"" IS NOT NULL
   AND (""MaxDevicesOverride"" <= 0 OR ""MaxDevicesOverride"" > 5);
+
+-- Whop / Fawaterak payment gateways -- sync with migration 20260905090000_AddWhopFawaterakPaymentGateways
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhopApiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhopApiKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhopCompanyId"" character varying(128);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhopWebhookSecretEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhopSuccessUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""WhopCancelUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FawaterakApiBaseUrl"" character varying(512);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FawaterakHashApiKeyEncrypted"" text;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FawaterakProviderKey"" character varying(128);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FawaterakSuccessUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FawaterakFailUrl"" character varying(1024);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FawaterakPendingUrl"" character varying(1024);
+
+CREATE TABLE IF NOT EXISTS ""PaymentGatewayToggles"" (
+  ""Id"" character varying(64) NOT NULL,
+  ""Name"" character varying(32) NOT NULL,
+  ""Label"" character varying(128) NOT NULL,
+  ""CandidateLabel"" character varying(128) NOT NULL,
+  ""Region"" character varying(16) NOT NULL,
+  ""Mode"" character varying(16) NOT NULL,
+  ""IconName"" character varying(64) NOT NULL,
+  ""IsEnabled"" boolean NOT NULL,
+  ""IsPrimary"" boolean NOT NULL,
+  ""DisplayOrder"" integer NOT NULL,
+  ""CreatedAt"" timestamp with time zone NOT NULL,
+  ""UpdatedAt"" timestamp with time zone NOT NULL,
+  ""UpdatedByAdminId"" character varying(64),
+  CONSTRAINT ""PK_PaymentGatewayToggles"" PRIMARY KEY (""Id"")
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PaymentGatewayToggles_Name"" ON ""PaymentGatewayToggles"" (""Name"");
+CREATE INDEX IF NOT EXISTS ""IX_PaymentGatewayToggles_Region_IsEnabled_DisplayOrder"" ON ""PaymentGatewayToggles"" (""Region"", ""IsEnabled"", ""DisplayOrder"");
 ";
 }

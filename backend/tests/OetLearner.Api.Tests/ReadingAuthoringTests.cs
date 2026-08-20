@@ -4370,7 +4370,7 @@ public class ReadingAuthoringTests
             && h.SelectedCount == 6);
         Assert.Contains(data.RiskLabels, r => r.QuestionId == partCQ.Id && r.Code == "too_hard");
         Assert.Contains(data.HardestQuestions, h => h.QuestionId == partCQ.Id && h.CorrectRate == 0);
-        Assert.Contains(data.HardestQuestions, h => h.QuestionId == partCQ.Id && h.Opportunities == 6);
+        Assert.Contains(data.HardestQuestions, h => h.QuestionId == partCQ.Id && h.AnswerCount == 6);
         await db.DisposeAsync();
     }
 

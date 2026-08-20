@@ -28,7 +28,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var first = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 25,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey
         });
         var firstBody = await first.Content.ReadAsStringAsync();
@@ -37,7 +37,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var second = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 25,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey
         });
         var secondBody = await second.Content.ReadAsStringAsync();
@@ -71,7 +71,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var first = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 10,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey = $"a{Guid.NewGuid():N}"
         });
         Assert.True(first.IsSuccessStatusCode, await first.Content.ReadAsStringAsync());
@@ -79,7 +79,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var second = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 10,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey = $"b{Guid.NewGuid():N}"
         });
         Assert.True(second.IsSuccessStatusCode, await second.Content.ReadAsStringAsync());
@@ -107,7 +107,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var first = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 25,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey
         });
         Assert.True(first.IsSuccessStatusCode, await first.Content.ReadAsStringAsync());
@@ -115,7 +115,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var second = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 50,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey
         });
 
@@ -141,7 +141,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 25,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey
         });
 
@@ -165,7 +165,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 50,
-            gateway = "paypal"
+            gateway = "whop"
         });
         var body = await response.Content.ReadAsStringAsync();
         Assert.True(response.IsSuccessStatusCode, body);
@@ -185,7 +185,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount,
-            gateway = "stripe"
+            gateway = "whop"
         });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -201,7 +201,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 7,
-            gateway = "stripe"
+            gateway = "whop"
         });
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -237,7 +237,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 10,
-            gateway = "stripe",
+            gateway = "whop",
             idempotencyKey = $"idem-custom-{Guid.NewGuid():N}"
         });
 
@@ -278,7 +278,7 @@ public class BillingTopUpIdempotencyTests : IClassFixture<TestWebApplicationFact
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 25,
-            gateway = "stripe"
+            gateway = "whop"
         });
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());

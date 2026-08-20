@@ -63,7 +63,35 @@ public static class AdminBillingEndpoints
         tax.MapGet("/", ListTaxRegistrations);
         tax.MapPost("/", CreateTaxRegistration).WithAdminWrite("AdminBillingCatalogWrite");
 
+        billing.MapGet("/payment-gateways", ListPaymentGateways);
+        billing.MapPatch("/payment-gateways/{name}", UpdatePaymentGateway).WithAdminWrite("AdminBillingCatalogWrite");
+
         return app;
+    }
+
+    private static async Task<IResult> ListPaymentGateways(IPaymentGatewayCatalog catalog, CancellationToken ct)
+        => Results.Ok(await catalog.ListAdminAsync(ct));
+
+    private static async Task<IResult> UpdatePaymentGateway(
+        string name,
+        AdminPaymentGatewayUpdateRequest request,
+        IPaymentGatewayCatalog catalog,
+        ClaimsPrincipal user,
+        CancellationToken ct)
+    {
+        try
+        {
+            var updated = await catalog.UpdateAsync(
+                name,
+                request,
+                user.FindFirstValue(ClaimTypes.NameIdentifier),
+                ct);
+            return Results.Ok(updated);
+        }
+        catch (KeyNotFoundException)
+        {
+            return Results.NotFound(new { error = "unknown_gateway", message = $"Unknown payment gateway '{name}'." });
+        }
     }
 
     // ─────────────────────── Analytics ───────────────────────

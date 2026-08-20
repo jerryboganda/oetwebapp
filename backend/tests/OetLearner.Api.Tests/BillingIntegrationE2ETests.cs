@@ -20,13 +20,9 @@ namespace OetLearner.Api.Tests;
 ///   POST /v1/payment/webhooks/{gateway}   →
 ///   assert payment transaction completes, audit events fire, invoice issues.
 ///
-/// We use the PayPal sandbox-fallback path because the existing test factory
-/// does not configure a Stripe webhook secret (Stripe enforces HMAC and would
-/// reject every payload as <c>signature_verification_failed</c>). PayPal goes
-/// through the same internal completion pipeline, so this still exercises the
-/// shared post-payment finalization code (entitlement bump + invoice +
-/// audit events). Slice B / I should add a Stripe-signed variant once the
-/// factory is hardened.
+/// We use the Whop sandbox-fallback path because Stripe/PayPal are disabled in
+/// the candidate catalog. Whop still runs the shared post-payment finalization
+/// pipeline (entitlement bump + invoice + audit events).
 /// </summary>
 public class BillingIntegrationE2ETests : IClassFixture<TestWebApplicationFactory>
 {
@@ -84,7 +80,7 @@ public class BillingIntegrationE2ETests : IClassFixture<TestWebApplicationFactor
             }
         }
 
-        // 3. Checkout session ─ PayPal sandbox path.
+        // 3. Checkout session ─ Whop sandbox path.
         string checkoutSessionId;
         using (var checkoutResponse = await client.PostAsJsonAsync(
             "/v1/billing/checkout-sessions",
@@ -93,7 +89,7 @@ public class BillingIntegrationE2ETests : IClassFixture<TestWebApplicationFactor
                 productType = "review_credits",
                 quantity = 3,
                 quoteId,
-                gateway = "paypal"
+                gateway = "whop"
             }))
         {
             var body = await checkoutResponse.Content.ReadAsStringAsync();
@@ -108,25 +104,20 @@ public class BillingIntegrationE2ETests : IClassFixture<TestWebApplicationFactor
                     $"Checkout response is missing a session identifier. Body: {body}");
         }
 
-        // 4. Simulate a PayPal capture-completed webhook for that session.
+        // 4. Simulate a Whop payment.succeeded webhook for that session.
         var webhookPayload = JsonSerializer.Serialize(new
         {
-            id = $"evt-{Guid.NewGuid():N}",
-            event_type = "PAYMENT.CAPTURE.COMPLETED",
-            resource = new
+            type = "payment.succeeded",
+            data = new
             {
-                supplementary_data = new
-                {
-                    related_ids = new
-                    {
-                        order_id = checkoutSessionId
-                    }
-                }
+                id = checkoutSessionId,
+                status = "paid",
+                metadata = new { quote_id = quoteId, order_id = quoteId }
             }
         });
 
         using (var webhookResponse = await client.PostAsync(
-            "/v1/payment/webhooks/paypal",
+            "/v1/payment/webhooks/whop",
             new StringContent(webhookPayload, Encoding.UTF8, "application/json")))
         {
             var body = await webhookResponse.Content.ReadAsStringAsync();

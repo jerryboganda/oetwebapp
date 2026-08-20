@@ -44,6 +44,12 @@ public sealed class BillingOptions
 
     /// <summary>EasyKash (Egypt hosted Direct-Pay) configuration. Inactive when ApiKey/HmacSecret unset.</summary>
     public EasyKashOptions EasyKash { get; set; } = new();
+
+    /// <summary>Whop (primary Global / Outside Egypt). Inactive when ApiKey unset.</summary>
+    public WhopOptions Whop { get; set; } = new();
+
+    /// <summary>Fawaterak (secondary Global / Outside Egypt). Inactive when HashApiKey unset.</summary>
+    public FawaterakOptions Fawaterak { get; set; } = new();
 }
 
 public sealed class WalletBillingOptions

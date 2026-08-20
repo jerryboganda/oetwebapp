@@ -37,19 +37,20 @@ public class BillingTopUpGatewayErrorTests : IClassFixture<TestWebApplicationFac
 
         using var factory = _factory.WithWebHostBuilder(builder =>
         {
-            // A configured Stripe key forces the real HTTP path instead of the sandbox
+            // A configured Whop key forces the real HTTP path instead of the sandbox
             // fallback; the stub handler below then rejects it with 401, exactly like an
             // expired/revoked live key in production.
             builder.ConfigureAppConfiguration((_, config) =>
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    ["Billing:Stripe:SecretKey"] = "sk_test_stub_expired",
+                    ["Billing:Whop:ApiKey"] = "whop_stub_expired",
+                    ["Billing:AllowSandboxFallbacks"] = "false",
                 });
             });
             builder.ConfigureTestServices(services =>
             {
-                services.AddHttpClient<StripeGateway>()
+                services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.WhopGateway>()
                     .ConfigurePrimaryHttpMessageHandler(() => new ExpiredKeyHandler());
             });
         });
@@ -62,7 +63,7 @@ public class BillingTopUpGatewayErrorTests : IClassFixture<TestWebApplicationFac
         var response = await client.PostAsJsonAsync("/v1/billing/wallet/top-up", new
         {
             amount = 25,
-            gateway = "stripe",
+            gateway = "whop",
         });
 
         var body = await response.Content.ReadAsStringAsync();

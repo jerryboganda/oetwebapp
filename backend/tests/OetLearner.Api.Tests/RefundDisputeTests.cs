@@ -32,7 +32,9 @@ public class RefundDisputeTests
             new OetLearner.Api.Services.Billing.Gateways.PayTabsGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
             new OetLearner.Api.Services.Billing.Gateways.PaymobGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
             new OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
-            new OetLearner.Api.Services.Billing.Gateways.EasyKashGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)));
+            new OetLearner.Api.Services.Billing.Gateways.EasyKashGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
+            new OetLearner.Api.Services.Billing.Gateways.WhopGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
+            new OetLearner.Api.Services.Billing.Gateways.FawaterakGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)));
         return (db, new RefundService(db, gatewayProvider ?? gateways), new DisputeService(db));
     }
 

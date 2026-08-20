@@ -8,6 +8,7 @@ public partial class LearnerDbContext
     // ── Phase 1 ──
     public DbSet<RegionPricing> RegionPricings => Set<RegionPricing>();
     public DbSet<GatewayRoutingConfig> GatewayRoutingConfigs => Set<GatewayRoutingConfig>();
+    public DbSet<PaymentGatewayToggle> PaymentGatewayToggles => Set<PaymentGatewayToggle>();
 
     // ── Phase 3 ──
     public DbSet<TaxRule> TaxRules => Set<TaxRule>();

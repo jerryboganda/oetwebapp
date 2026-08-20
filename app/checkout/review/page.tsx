@@ -107,6 +107,7 @@ function CheckoutReviewContent() {
   // When PayPal Expanded checkout is selected but the embedded config is unavailable
   // (no public client id), fall back to the hosted-portal redirect button.
   const [paypalUnavailable, setPaypalUnavailable] = useState(false);
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   // Unified payment-method picker: the methods the backend says are usable here, plus
   // the learner's current selection.
   const [methods, setMethods] = useState<PaymentMethodOption[]>([]);
@@ -121,7 +122,8 @@ function CheckoutReviewContent() {
     [methods, selectedGateway],
   );
   const selectedMode: PaymentMethodMode =
-    selectedMethod?.mode ?? (selectedGateway === 'paypal' ? 'embedded' : 'redirect');
+    selectedMethod?.mode ?? (selectedGateway === 'paypal' ? 'embedded' : selectedGateway === 'whop' ? 'embedded' : selectedGateway === 'fawaterak' ? 'iframe' : 'redirect');
+  const usesOnSiteCheckout = selectedGateway === 'whop' || selectedGateway === 'fawaterak' || selectedMode === 'iframe';
 
   const nextHref = useMemo(() => {
     const query = searchParams?.toString();
@@ -222,15 +224,14 @@ function CheckoutReviewContent() {
           (opt) => !['easykash', 'easy_cash', 'easycash'].includes(opt.name.toLowerCase()),
         );
       } catch {
-        options = [deriveMethod('stripe')];
+        options = [];
       }
       if (cancelled) return;
-      if (options.length === 0) options = [deriveMethod('stripe')];
       setMethods(options);
       setSelectedGateway((current) =>
         current && options.some((option) => option.name === current)
           ? current
-          : options[0]!.name);
+          : options[0]?.name ?? '');
     })();
     return () => {
       cancelled = true;
@@ -297,6 +298,11 @@ function CheckoutReviewContent() {
         gateway: selectedGateway,
         idempotencyKey: newIdempotencyKey(),
       });
+      if (usesOnSiteCheckout && checkout.checkoutUrl) {
+        setEmbedUrl(checkout.checkoutUrl);
+        setBusy(false);
+        return;
+      }
       const opened = await openCheckoutUrl(checkout.checkoutUrl);
       if (opened === 'noop') {
         setError('Could not open the secure payment window. Please try again.');
@@ -450,7 +456,10 @@ function CheckoutReviewContent() {
                                     name="paymentMethod"
                                     value={method.name}
                                     checked={active}
-                                    onChange={() => setSelectedGateway(method.name)}
+                                    onChange={() => {
+                                      setSelectedGateway(method.name);
+                                      setEmbedUrl(null);
+                                    }}
                                     className="sr-only"
                                   />
                                 ) : null}
@@ -458,7 +467,14 @@ function CheckoutReviewContent() {
                                   <MethodIcon iconName={method.iconName} name={method.name} />
                                 </span>
                                 <span className="min-w-0 flex-1">
-                                  <span className="block text-sm font-bold text-navy">{brand.title}</span>
+                                  <span className="flex items-center gap-2">
+                                    <span className="block text-sm font-bold text-navy">{brand.title}</span>
+                                    {method.badge ? (
+                                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
+                                        {method.badge}
+                                      </span>
+                                    ) : null}
+                                  </span>
                                   <span className="block text-xs text-muted">{brand.subtitle}</span>
                                 </span>
                                 {selectable ? (
@@ -478,7 +494,7 @@ function CheckoutReviewContent() {
                       </fieldset>
                     ) : null}
 
-                    {selectedMode === 'embedded' && !paypalUnavailable ? (
+                    {selectedGateway === 'paypal' && selectedMode === 'embedded' && !paypalUnavailable ? (
                       <div className="mt-4">
                         <PayPalExpandedCheckout
                           createOrder={createPaypalOrder}
@@ -492,13 +508,31 @@ function CheckoutReviewContent() {
                           Pay securely without leaving this page. Your account unlocks the moment your payment is confirmed.
                         </p>
                       </div>
+                    ) : embedUrl ? (
+                      <div className="mt-4">
+                        <iframe
+                          title="Secure payment"
+                          src={embedUrl}
+                          className="h-[640px] w-full rounded-xl border border-border bg-white"
+                          allow="payment *"
+                        />
+                        <p className="mt-3 text-xs leading-5 text-muted">
+                          Pay on this page. Access unlocks after the payment provider confirms the charge.
+                        </p>
+                      </div>
+                    ) : methods.length === 0 ? (
+                      <InlineAlert variant="info" className="mt-4">
+                        Card checkout is temporarily unavailable. Use Pay inside Egypt to upload proof, or try again shortly.
+                      </InlineAlert>
                     ) : (
                       <>
                         <Button className="mt-4" fullWidth loading={busy} disabled={!quote} onClick={startCheckout}>
                           <CreditCard className="h-4 w-4" /> Continue to secure payment
                         </Button>
                         <p className="mt-3 text-xs leading-5 text-muted">
-                          Payment opens in the hosted portal. Your account unlocks after webhook confirmation.
+                          {usesOnSiteCheckout
+                            ? 'Payment stays on this page. Your account unlocks after webhook confirmation.'
+                            : 'Payment opens in the hosted portal. Your account unlocks after webhook confirmation.'}
                         </p>
                       </>
                     )}
@@ -664,6 +698,10 @@ function PlanBlockedScreen({
  *  (Stripe / PayPal) rather than a generic "Credit or debit card". */
 function methodBrand(method: PaymentMethodOption): { title: string; subtitle: string } {
   switch (method.name) {
+    case 'whop':
+      return { title: 'Whop', subtitle: 'Pay on this page — cards and wallets' };
+    case 'fawaterak':
+      return { title: 'Fawaterak', subtitle: 'Secure card checkout in an on-page window' };
     case 'paypal':
       return { title: 'PayPal', subtitle: 'Pay with your PayPal balance or card' };
     case 'stripe':

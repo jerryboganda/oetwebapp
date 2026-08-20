@@ -441,6 +441,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var paymob = ResolvePaymob(r, billing.Paymob);
         var payTabs = ResolvePayTabs(r, billing.PayTabs);
         var easyKash = ResolveEasyKash(r, billing.EasyKash);
+        var whop = ResolveWhop(r, billing.Whop);
+        var fawaterak = ResolveFawaterak(r, billing.Fawaterak);
         var soketi = ResolveSoketi(r, _soketi.Value);
         var dataRetention = ResolveDataRetention(r, _dataRetention.Value);
         var expertAutoAssignment = ResolveExpertAutoAssignment(r, _expertAutoAssignment.Value);
@@ -518,6 +520,8 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             VideoAttestation = videoAttestation,
             IpIntelligence = ResolveIpIntelligence(r),
             EasyKash = easyKash,
+            Whop = whop,
+            Fawaterak = fawaterak,
             Support = support,
         };
     }
@@ -677,6 +681,24 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             SuccessUrl: Coalesce(r.EasyKashSuccessUrl, env.SuccessUrl),
             CancelUrl: Coalesce(r.EasyKashCancelUrl, env.CancelUrl));
     }
+
+    private WhopSettings ResolveWhop(RuntimeSettingsRow r, WhopOptions env)
+        => new(
+            ApiBaseUrl: Coalesce(r.WhopApiBaseUrl, env.ApiBaseUrl, "https://api.whop.com/api/v1")!,
+            ApiKey: Unprotect(r.WhopApiKeyEncrypted) ?? NullIfEmpty(env.ApiKey),
+            CompanyId: Coalesce(r.WhopCompanyId, env.CompanyId),
+            WebhookSecret: Unprotect(r.WhopWebhookSecretEncrypted) ?? NullIfEmpty(env.WebhookSecret),
+            SuccessUrl: Coalesce(r.WhopSuccessUrl, env.SuccessUrl),
+            CancelUrl: Coalesce(r.WhopCancelUrl, env.CancelUrl));
+
+    private FawaterakSettings ResolveFawaterak(RuntimeSettingsRow r, FawaterakOptions env)
+        => new(
+            ApiBaseUrl: Coalesce(r.FawaterakApiBaseUrl, env.ApiBaseUrl, "https://app.fawaterk.com")!,
+            HashApiKey: Unprotect(r.FawaterakHashApiKeyEncrypted) ?? NullIfEmpty(env.HashApiKey),
+            ProviderKey: Coalesce(r.FawaterakProviderKey, env.ProviderKey),
+            SuccessUrl: Coalesce(r.FawaterakSuccessUrl, env.SuccessUrl),
+            FailUrl: Coalesce(r.FawaterakFailUrl, env.FailUrl),
+            PendingUrl: Coalesce(r.FawaterakPendingUrl, env.PendingUrl));
 
     private SoketiSettings ResolveSoketi(RuntimeSettingsRow r, SoketiOptions env)
         => new(

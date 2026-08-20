@@ -21,16 +21,27 @@ public class PaymentGatewayAvailabilityTests : IClassFixture<TestWebApplicationF
     }
 
     [Fact]
-    public async Task PaymentGateways_WithSandboxFallbacks_AdvertisesStripeAndPayPal()
+    public async Task PaymentGateways_WithSandboxFallbacks_AdvertisesWhopThenFawaterak()
     {
-        using var client = CreateLearnerClient(_factory, $"gw-sandbox-{Guid.NewGuid():N}");
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Billing:AllowSandboxFallbacks"] = "true",
+                });
+            });
+        });
+        using var client = CreateLearnerClient(factory, $"gw-sandbox-{Guid.NewGuid():N}");
 
         var response = await client.GetAsync("/v1/billing/payment-gateways");
 
         response.EnsureSuccessStatusCode();
         var gateways = await ReadGatewaysAsync(response);
-        Assert.Contains("stripe", gateways);
-        Assert.Contains("paypal", gateways);
+        Assert.Equal(["whop", "fawaterak"], gateways);
+        Assert.DoesNotContain("stripe", gateways);
+        Assert.DoesNotContain("paypal", gateways);
     }
 
     [Fact]
@@ -57,26 +68,7 @@ public class PaymentGatewayAvailabilityTests : IClassFixture<TestWebApplicationF
     }
 
     [Fact]
-    public async Task PaymentGateways_Methods_CarryModeMetadataForStripeAndPayPal()
-    {
-        using var client = CreateLearnerClient(_factory, $"gw-methods-{Guid.NewGuid():N}");
-
-        var response = await client.GetAsync("/v1/billing/payment-gateways");
-
-        response.EnsureSuccessStatusCode();
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        var methods = json.RootElement.GetProperty("methods").EnumerateArray().ToList();
-
-        var stripe = methods.Single(m => m.GetProperty("name").GetString() == "stripe");
-        Assert.Equal("redirect", stripe.GetProperty("mode").GetString());
-
-        var paypal = methods.Single(m => m.GetProperty("name").GetString() == "paypal");
-        // PayPal renders the in-page SDK (Smart Buttons / card fields), not a redirect.
-        Assert.Equal("embedded", paypal.GetProperty("mode").GetString());
-    }
-
-    [Fact]
-    public async Task PaymentGateways_WithCheckoutComConfigured_AdvertisesItAsRedirectMethod()
+    public async Task PaymentGateways_Methods_CarryModeAndMainBadgeForWhopThenFawaterak()
     {
         using var factory = _factory.WithWebHostBuilder(builder =>
         {
@@ -84,8 +76,35 @@ public class PaymentGatewayAvailabilityTests : IClassFixture<TestWebApplicationF
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
                 {
-                    // Sandbox off so only credential-backed gateways surface; a
-                    // Checkout.com secret makes that gateway "configured".
+                    ["Billing:AllowSandboxFallbacks"] = "true",
+                });
+            });
+        });
+        using var client = CreateLearnerClient(factory, $"gw-methods-{Guid.NewGuid():N}");
+
+        var response = await client.GetAsync("/v1/billing/payment-gateways");
+
+        response.EnsureSuccessStatusCode();
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var methods = json.RootElement.GetProperty("methods").EnumerateArray().ToList();
+
+        var whop = methods.Single(m => m.GetProperty("name").GetString() == "whop");
+        Assert.Equal("embedded", whop.GetProperty("mode").GetString());
+        Assert.Equal("MAIN", whop.GetProperty("badge").GetString());
+
+        var fawaterak = methods.Single(m => m.GetProperty("name").GetString() == "fawaterak");
+        Assert.Equal("iframe", fawaterak.GetProperty("mode").GetString());
+    }
+
+    [Fact]
+    public async Task PaymentGateways_WithCheckoutComConfigured_DoesNotAdvertiseDisabledGateway()
+    {
+        using var factory = _factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
                     ["Billing:AllowSandboxFallbacks"] = "false",
                     ["Billing:CheckoutCom:SecretKey"] = "sk_cko_test_stub",
                 });
@@ -96,16 +115,9 @@ public class PaymentGatewayAvailabilityTests : IClassFixture<TestWebApplicationF
         var response = await client.GetAsync("/v1/billing/payment-gateways");
 
         response.EnsureSuccessStatusCode();
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-
-        var gateways = json.RootElement.GetProperty("gateways")
-            .EnumerateArray().Select(e => e.GetString()).ToArray();
-        Assert.Contains("checkoutcom", gateways);
-        Assert.DoesNotContain("stripe", gateways); // no Stripe key + sandbox off
-
-        var methods = json.RootElement.GetProperty("methods").EnumerateArray().ToList();
-        var cko = methods.Single(m => m.GetProperty("name").GetString() == "checkoutcom");
-        Assert.Equal("redirect", cko.GetProperty("mode").GetString());
+        var gateways = await ReadGatewaysAsync(response);
+        Assert.DoesNotContain("checkoutcom", gateways);
+        Assert.DoesNotContain("stripe", gateways);
     }
 
     private static HttpClient CreateLearnerClient(WebApplicationFactory<Program> factoryLike, string userId)

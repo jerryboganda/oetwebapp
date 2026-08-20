@@ -242,6 +242,22 @@ public class RuntimeSettingsRow
     [MaxLength(1024)] public string? EasyKashSuccessUrl { get; set; }
     [MaxLength(1024)] public string? EasyKashCancelUrl { get; set; }
 
+    // ── Whop (primary Global / Outside Egypt) ──────────────────────
+    [MaxLength(512)] public string? WhopApiBaseUrl { get; set; }
+    public string? WhopApiKeyEncrypted { get; set; }
+    [MaxLength(128)] public string? WhopCompanyId { get; set; }
+    public string? WhopWebhookSecretEncrypted { get; set; }
+    [MaxLength(1024)] public string? WhopSuccessUrl { get; set; }
+    [MaxLength(1024)] public string? WhopCancelUrl { get; set; }
+
+    // ── Fawaterak (secondary Global / Outside Egypt) ───────────────
+    [MaxLength(512)] public string? FawaterakApiBaseUrl { get; set; }
+    public string? FawaterakHashApiKeyEncrypted { get; set; }
+    [MaxLength(128)] public string? FawaterakProviderKey { get; set; }
+    [MaxLength(1024)] public string? FawaterakSuccessUrl { get; set; }
+    [MaxLength(1024)] public string? FawaterakFailUrl { get; set; }
+    [MaxLength(1024)] public string? FawaterakPendingUrl { get; set; }
+
     // ── Soketi (realtime websocket push) ───────────────────────────
     [MaxLength(256)] public string? SoketiHost { get; set; }
     public int? SoketiPort { get; set; }

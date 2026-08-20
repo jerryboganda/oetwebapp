@@ -1118,7 +1118,9 @@ public sealed class PaymentGatewayService : IPaymentGatewayProvider
         OetLearner.Api.Services.Billing.Gateways.PayTabsGateway payTabs,
         OetLearner.Api.Services.Billing.Gateways.PaymobGateway paymob,
         OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway checkoutCom,
-        OetLearner.Api.Services.Billing.Gateways.EasyKashGateway easyKash)
+        OetLearner.Api.Services.Billing.Gateways.EasyKashGateway easyKash,
+        OetLearner.Api.Services.Billing.Gateways.WhopGateway whop,
+        OetLearner.Api.Services.Billing.Gateways.FawaterakGateway fawaterak)
     {
         _gateways = new Dictionary<string, IPaymentGateway>(StringComparer.OrdinalIgnoreCase)
         {
@@ -1128,6 +1130,8 @@ public sealed class PaymentGatewayService : IPaymentGatewayProvider
             ["paymob"] = paymob,
             ["checkoutcom"] = checkoutCom,
             ["easykash"] = easyKash,
+            ["whop"] = whop,
+            ["fawaterak"] = fawaterak,
         };
     }
 
@@ -1138,7 +1142,7 @@ public sealed class PaymentGatewayService : IPaymentGatewayProvider
             return gateway;
         }
 
-        throw new ArgumentException($"Unsupported payment gateway: '{name}'. Supported: stripe, paypal.");
+        throw new ArgumentException($"Unsupported payment gateway: '{name}'. Supported: {string.Join(", ", _gateways.Keys)}.");
     }
 
     public IReadOnlyList<string> SupportedGateways => _gateways.Keys.ToList().AsReadOnly();

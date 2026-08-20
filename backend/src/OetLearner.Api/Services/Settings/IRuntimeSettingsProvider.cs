@@ -125,6 +125,8 @@ public sealed record EffectiveSettings(
     // so the existing EffectiveSettings construction sites keep compiling; the
     // provider sets it via object initializer in Merge.
     public EasyKashSettings EasyKash { get; init; } = EasyKashSettings.Unconfigured;
+    public WhopSettings Whop { get; init; } = WhopSettings.Unconfigured;
+    public FawaterakSettings Fawaterak { get; init; } = FawaterakSettings.Unconfigured;
 
     // Support (public WhatsApp proof channel). Init-only property (like
     // BunnyStream) so the existing EffectiveSettings construction sites keep
@@ -495,6 +497,36 @@ public sealed record EasyKashSettings(
 
     public static EasyKashSettings Unconfigured { get; } =
         new("https://back.easykash.net", null, null, System.Array.Empty<int>(), "passthrough", null, null);
+}
+
+/// <summary>Whop payment gateway settings (DB-over-env merged). Secrets decrypted.</summary>
+public sealed record WhopSettings(
+    string ApiBaseUrl,
+    string? ApiKey,
+    string? CompanyId,
+    string? WebhookSecret,
+    string? SuccessUrl,
+    string? CancelUrl)
+{
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ApiKey);
+
+    public static WhopSettings Unconfigured { get; } =
+        new("https://api.whop.com/api/v1", null, null, null, null, null);
+}
+
+/// <summary>Fawaterak payment gateway settings (DB-over-env merged). Secrets decrypted.</summary>
+public sealed record FawaterakSettings(
+    string ApiBaseUrl,
+    string? HashApiKey,
+    string? ProviderKey,
+    string? SuccessUrl,
+    string? FailUrl,
+    string? PendingUrl)
+{
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(HashApiKey);
+
+    public static FawaterakSettings Unconfigured { get; } =
+        new("https://app.fawaterk.com", null, null, null, null, null);
 }
 
 /// <summary>Soketi realtime websocket push settings (DB-over-env merged).</summary>

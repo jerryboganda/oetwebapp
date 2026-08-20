@@ -1559,17 +1559,20 @@ export async function fetchWalletTopUpTiers(): Promise<WalletTopUpTiersResponse>
 
 /** How a payment method initiates: an in-page SDK ("embedded", e.g. PayPal) or a
  *  hosted-checkout redirect ("redirect", e.g. Stripe / Checkout.com / Paymob / PayTabs). */
-export type PaymentMethodMode = 'embedded' | 'redirect';
+export type PaymentMethodMode = 'embedded' | 'iframe' | 'redirect';
 
 export interface PaymentMethodOption {
-  /** Gateway name passed back to checkout / top-up (e.g. "stripe", "paypal", "checkoutcom"). */
+  /** Gateway name passed back to checkout / top-up (e.g. "whop", "fawaterak"). */
   name: string;
   /** Learner-facing label for the method. */
   label: string;
   /** Icon hint (e.g. "credit-card", "paypal", "wallet"). */
   iconName: string;
-  /** "embedded" renders an in-page SDK; "redirect" opens a hosted checkout. */
+  /** "embedded"/"iframe" stay on-site; "redirect" opens a hosted checkout. */
   mode: PaymentMethodMode;
+  badge?: string | null;
+  recommended?: boolean;
+  region?: string;
 }
 
 export interface AvailablePaymentGatewaysResponse {
@@ -4463,7 +4466,7 @@ export async function createBillingCheckoutSession(input: {
   quoteId?: string | null;
   gateway?: string;
   idempotencyKey?: string;
-}): Promise<{ checkoutUrl: string; checkoutSessionId: string; quoteId?: string | null; totalAmount?: number; currency?: string }> {
+}): Promise<{ checkoutUrl: string; checkoutSessionId: string; quoteId?: string | null; totalAmount?: number; currency?: string; clientSecret?: string | null; gateway?: string }> {
   const response = await apiRequest<ApiRecord>('/v1/billing/checkout-sessions', {
     method: 'POST',
     body: JSON.stringify({
@@ -4484,6 +4487,8 @@ export async function createBillingCheckoutSession(input: {
     quoteId: response.quoteId ?? null,
     totalAmount: response.totalAmount != null ? Number(response.totalAmount) : undefined,
     currency: response.currency ?? undefined,
+    clientSecret: response.clientSecret ?? null,
+    gateway: response.gateway ?? undefined,
   };
 }
 

@@ -434,7 +434,7 @@ public class WalletService(
                 CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gateway)}"),
                 IdempotencyKey: idempotencyKey), ct);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not fully configured", StringComparison.OrdinalIgnoreCase))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not configured", StringComparison.OrdinalIgnoreCase))
         {
             throw ApiException.Validation(
                 "gateway_unavailable",

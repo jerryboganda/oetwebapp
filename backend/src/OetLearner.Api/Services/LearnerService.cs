@@ -85,7 +85,8 @@ public partial class LearnerService(
     IPasswordHasher<ApplicationUserAccount>? passwordHasher = null,
     ILogger<LearnerService>? logger = null,
     IAssessmentScoreConversionService? scoreConversionService = null,
-    IAssessmentMarkingPolicyService? markingPolicyService = null)
+    IAssessmentMarkingPolicyService? markingPolicyService = null,
+    IPaymentGatewayCatalog? paymentGatewayCatalog = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -4118,14 +4119,7 @@ public partial class LearnerService(
                 [new ApiFieldError("priceId", "required", "Choose the plan or add-on you want to purchase.")]);
         }
 
-        var gatewayLabel = string.IsNullOrWhiteSpace(request.Gateway) ? "stripe" : request.Gateway.Trim().ToLowerInvariant();
-        if (!paymentGateways.SupportedGateways.Contains(gatewayLabel, StringComparer.OrdinalIgnoreCase))
-        {
-            throw ApiException.Validation(
-                "unsupported_gateway",
-                $"Payment gateway '{gatewayLabel}' is not supported.",
-                [new ApiFieldError("gateway", "unsupported", "Choose stripe or paypal.")]);
-        }
+        var gatewayLabel = string.IsNullOrWhiteSpace(request.Gateway) ? PaymentGatewayNames.Whop : request.Gateway.Trim().ToLowerInvariant();
 
         var normalizedAddOnCodes = NormalizeCodes(request.AddOnCodes);
         var idempotencyKey = NormalizeIdempotencyKey(request.IdempotencyKey);
@@ -4254,6 +4248,7 @@ public partial class LearnerService(
         }
 
         var purchaseTarget = quoteResponse.Items.FirstOrDefault()?.Code ?? quoteEntity.PlanCode ?? request.PriceId;
+        await EnsureCheckoutGatewayAsync(gatewayLabel, cancellationToken);
         PaymentIntentResult checkoutIntent;
         try
         {
@@ -4284,7 +4279,7 @@ public partial class LearnerService(
                                     IdempotencyKey: idempotencyKey),
                         cancellationToken);
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("not fully configured", StringComparison.OrdinalIgnoreCase))
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not configured", StringComparison.OrdinalIgnoreCase))
         {
             throw ApiException.Validation(
                 "gateway_unavailable",
@@ -4332,6 +4327,7 @@ public partial class LearnerService(
                     addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
                     quoteId: quoteEntity.Id)
                 : checkoutIntent.CheckoutUrl,
+            clientSecret = checkoutIntent.ClientSecret,
             state = checkoutIntent.Status
         };
         idempotencyResponse = response;
@@ -10082,14 +10078,10 @@ public partial class LearnerService(
         await EnsureUserAsync(userId, ct);
         await EnsureLearnerMutationAllowedAsync(userId, ct);
 
-        var gateway = (request.Gateway ?? string.Empty).Trim().ToLowerInvariant();
-        if (gateway is not "stripe" and not "paypal")
-        {
-            throw ApiException.Validation(
-                "invalid_gateway",
-                "Choose stripe or paypal as payment gateway.",
-                [new ApiFieldError("gateway", "invalid", "Select a supported payment method.")]);
-        }
+        var gateway = string.IsNullOrWhiteSpace(request.Gateway)
+            ? PaymentGatewayNames.Whop
+            : request.Gateway.Trim().ToLowerInvariant();
+        await EnsureCheckoutGatewayAsync(gateway, ct);
 
         var configuredTiers = walletService.GetConfiguredTopUpTiers();
         if (!configuredTiers.Any(t => t.Amount == request.Amount))
@@ -10199,6 +10191,25 @@ public partial class LearnerService(
 
     // ── Payment Webhooks ──
 
+    private async Task EnsureCheckoutGatewayAsync(string gatewayLabel, CancellationToken cancellationToken)
+    {
+        if (!paymentGateways.SupportedGateways.Contains(gatewayLabel, StringComparer.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "unsupported_gateway",
+                $"Payment gateway '{gatewayLabel}' is not supported.",
+                [new ApiFieldError("gateway", "unsupported", "Choose an available payment method.")]);
+        }
+
+        if (paymentGatewayCatalog is not null && !await paymentGatewayCatalog.IsEnabledAsync(gatewayLabel, cancellationToken))
+        {
+            throw ApiException.Validation(
+                "gateway_disabled",
+                "This payment method is currently unavailable. Please choose another option.",
+                [new ApiFieldError("gateway", "disabled", "Choose an available payment method.")]);
+        }
+    }
+
     public Task<object> HandleStripeWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
         => HandlePaymentWebhookAsync("stripe", payload, headers, ct);
 
@@ -10220,6 +10231,12 @@ public partial class LearnerService(
 
     public Task<object> HandleEasyKashWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
         => HandlePaymentWebhookAsync("easykash", payload, headers, ct);
+
+    public Task<object> HandleWhopWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync(PaymentGatewayNames.Whop, payload, headers, ct);
+
+    public Task<object> HandleFawaterakWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync(PaymentGatewayNames.Fawaterak, payload, headers, ct);
 
     public static bool IsRejectedWebhookOutcome(object outcome)
         => outcome.GetType().GetProperty("received")?.GetValue(outcome) is false;

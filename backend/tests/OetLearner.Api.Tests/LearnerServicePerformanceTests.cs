@@ -534,6 +534,14 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
             new OetLearner.Api.Services.Billing.Gateways.EasyKashGateway(
                 new HttpClient(),
                 billingOptions,
+                runtimeSettings),
+            new OetLearner.Api.Services.Billing.Gateways.WhopGateway(
+                new HttpClient(),
+                billingOptions,
+                runtimeSettings),
+            new OetLearner.Api.Services.Billing.Gateways.FawaterakGateway(
+                new HttpClient(),
+                billingOptions,
                 runtimeSettings));
     }
 

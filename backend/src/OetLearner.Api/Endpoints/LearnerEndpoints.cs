@@ -361,62 +361,39 @@ public static class LearnerEndpoints
             .RequireRateLimiting("PerUserWrite");
         billing.MapGet("/wallet/top-up-tiers", (LearnerService service) => Results.Ok(service.GetWalletTopUpTiers()));
 
-        // Configured payment gateways. Lets the frontend offer only the gateways
-        // that can actually create a checkout session in this environment, so a
-        // learner never picks an option that would fail with a server error.
-        //
-        // Returns both a back-compat `gateways: string[]` (gateway names) and a
-        // richer `methods[]` ({ name, label, iconName, mode }) that drives the
-        // unified payment-method picker. `mode` is "embedded" for the in-page
-        // PayPal SDK flow and "redirect" for hosted-checkout gateways. Stripe and
-        // PayPal honour sandbox fallbacks (so they appear in dev); the regional
-        // gateways (Checkout.com / Paymob / PayTabs) only appear once their live
-        // credentials are configured, since they have no sandbox stand-in.
-        //
-        // Region rule (spec 2026-08 §7): EasyKash and the other Egypt-market
-        // gateways are for learners in Egypt ONLY. Outside Egypt the picker must
-        // offer just Stripe and PayPal. Region comes from the learner's stored
-        // billing profile first (same precedence as /v1/billing/region), then
-        // the geo/Accept-Language headers.
+        // Configured + admin-enabled payment gateways. Lets the frontend offer only
+        // the gateways that can actually create a checkout session, so a learner
+        // never picks an option that would fail with a server error.
         billing.MapGet("/payment-gateways", async (
             HttpContext http,
             LearnerDbContext db,
             IRegionDetector regionDetector,
-            IRuntimeSettingsProvider runtimeSettings,
-            IOptions<BillingOptions> billingOptions,
+            IPaymentGatewayCatalog catalog,
             CancellationToken ct) =>
         {
-            var effective = await runtimeSettings.GetAsync(ct);
-            var billingSettings = effective.Billing;
-            var sandbox = billingOptions.Value.AllowSandboxFallbacks;
-
-            var stripeOk = sandbox || !string.IsNullOrWhiteSpace(billingSettings.StripeSecretKey);
-            var paypalOk = sandbox || (!string.IsNullOrWhiteSpace(billingSettings.PayPalClientId)
-                                       && !string.IsNullOrWhiteSpace(billingSettings.PayPalClientSecret));
-
             var account = await db.ApplicationUserAccounts.AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Id == http.UserId(), ct);
             var detection = regionDetector.Detect(
                 http, account?.Country, account?.PreferredRegion, account?.PreferredCurrency);
-            var inEgypt = string.Equals(detection.Region, BillingRegions.Egypt, StringComparison.OrdinalIgnoreCase);
+            var region = string.Equals(detection.Region, BillingRegions.Egypt, StringComparison.OrdinalIgnoreCase)
+                ? PaymentGatewayRegions.Egypt
+                : PaymentGatewayRegions.Global;
 
-            var candidates = new (string Name, string Label, string IconName, string Mode, bool Available)[]
+            var methods = await catalog.ListLearnerMethodsAsync(region, ct);
+            return Results.Ok(new
             {
-                ("stripe", "Credit or debit card", "credit-card", "redirect", stripeOk),
-                ("paypal", "PayPal", "paypal", "embedded", paypalOk),
-                ("easykash", "EasyKash", "wallet", "redirect", inEgypt && effective.EasyKash.IsConfigured),
-                ("checkoutcom", "Card (Checkout.com)", "credit-card", "redirect", inEgypt && effective.CheckoutCom.IsConfigured),
-                ("paymob", "Paymob (cards & wallets)", "wallet", "redirect", inEgypt && effective.Paymob.IsConfigured),
-                ("paytabs", "PayTabs", "credit-card", "redirect", inEgypt && effective.PayTabs.IsConfigured),
-            };
-
-            var available = candidates.Where(c => c.Available).ToList();
-            var gateways = available.Select(c => c.Name).ToList();
-            var methods = available
-                .Select(c => new { name = c.Name, label = c.Label, iconName = c.IconName, mode = c.Mode })
-                .ToList();
-
-            return Results.Ok(new { gateways, methods });
+                gateways = methods.Select(m => m.Name).ToList(),
+                methods = methods.Select(m => new
+                {
+                    name = m.Name,
+                    label = m.Label,
+                    iconName = m.IconName,
+                    mode = m.Mode,
+                    badge = m.Badge,
+                    recommended = m.Recommended,
+                    region = m.Region,
+                }).ToList(),
+            });
         });
 
         // PayPal Expanded (embedded) checkout config for the browser SDK. Exposes ONLY the
@@ -505,7 +482,10 @@ public static class LearnerEndpoints
         // integration guidance — but we also accept POST (JSON or form) defensively.
         // Either way we normalise the EasyKash fields into a canonical JSON object
         // and run the same verify → idempotent-fulfil contract.
-        async Task<IResult> HandleEasyKashCallback(HttpContext http, LearnerService service, CancellationToken ct)
+        async Task<IResult> HandleFieldCallback(
+            HttpContext http,
+            Func<string, IReadOnlyDictionary<string, string>, CancellationToken, Task<object>> handler,
+            CancellationToken ct)
         {
             var fields = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var kv in http.Request.Query)
@@ -548,14 +528,18 @@ public static class LearnerEndpoints
                 header => header.Key,
                 header => header.Value.ToString(),
                 StringComparer.OrdinalIgnoreCase);
-            var outcome = await service.HandleEasyKashWebhookAsync(payloadJson, headers, ct);
+            var outcome = await handler(payloadJson, headers, ct);
             return LearnerService.IsRejectedWebhookOutcome(outcome)
                 ? Results.StatusCode(StatusCodes.Status400BadRequest)
                 : Results.Ok(outcome);
         }
 
         webhooks.MapMethods("/easykash", new[] { "GET", "POST" }, (HttpContext http, LearnerService service, CancellationToken ct)
-            => HandleEasyKashCallback(http, service, ct));
+            => HandleFieldCallback(http, service.HandleEasyKashWebhookAsync, ct));
+        webhooks.MapPost("/whop", (HttpContext http, LearnerService service, CancellationToken ct) =>
+            HandleGatewayWebhook(http, service.HandleWhopWebhookAsync, ct));
+        webhooks.MapMethods("/fawaterak", new[] { "GET", "POST" }, (HttpContext http, LearnerService service, CancellationToken ct)
+            => HandleFieldCallback(http, service.HandleFawaterakWebhookAsync, ct));
 
         // Exam family reference
         v1.MapGet("/reference/exam-families", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetExamFamiliesAsync(ct)));

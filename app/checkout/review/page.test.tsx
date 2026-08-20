@@ -13,6 +13,10 @@ vi.mock('@/lib/api', () => ({
   },
   fetchBillingQuote: mockFetchBillingQuote,
   createBillingCheckoutSession: mockCreateBillingCheckoutSession,
+  fetchAvailablePaymentGateways: vi.fn().mockResolvedValue({
+    gateways: ['stripe'],
+    methods: [{ name: 'stripe', label: 'Pay with Stripe', iconName: 'credit-card', mode: 'redirect' }],
+  }),
 }));
 
 vi.mock('@/lib/mobile/web-checkout', () => ({

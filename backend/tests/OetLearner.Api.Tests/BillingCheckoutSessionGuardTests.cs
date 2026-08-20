@@ -127,7 +127,7 @@ public class BillingCheckoutSessionGuardTests : IClassFixture<TestWebApplication
         {
             productType = "review_credits",
             quantity = 1,
-            gateway = "paypal",
+            gateway = "whop",
             idempotencyKey
         });
         var firstBody = await first.Content.ReadAsStringAsync();
@@ -137,7 +137,7 @@ public class BillingCheckoutSessionGuardTests : IClassFixture<TestWebApplication
         {
             productType = "review_credits",
             quantity = 1,
-            gateway = "paypal",
+            gateway = "whop",
             idempotencyKey
         });
         var secondBody = await second.Content.ReadAsStringAsync();

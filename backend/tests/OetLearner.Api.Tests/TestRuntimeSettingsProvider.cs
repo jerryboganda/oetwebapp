@@ -101,6 +101,20 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
                 WalletTopUpTiers: options.Wallet.TopUpTiers,
                 PayPalUseSandbox: options.PayPal.UseSandbox,
                 PayPalApiBaseUrl: string.IsNullOrWhiteSpace(options.PayPal.ApiBaseUrl) ? "https://api-m.paypal.com" : options.PayPal.ApiBaseUrl),
+            Whop = new WhopSettings(
+                string.IsNullOrWhiteSpace(options.Whop.ApiBaseUrl) ? "https://api.whop.com/api/v1" : options.Whop.ApiBaseUrl,
+                options.Whop.ApiKey,
+                options.Whop.CompanyId,
+                options.Whop.WebhookSecret,
+                options.Whop.SuccessUrl,
+                options.Whop.CancelUrl),
+            Fawaterak = new FawaterakSettings(
+                string.IsNullOrWhiteSpace(options.Fawaterak.ApiBaseUrl) ? "https://app.fawaterk.com" : options.Fawaterak.ApiBaseUrl,
+                options.Fawaterak.HashApiKey,
+                options.Fawaterak.ProviderKey,
+                options.Fawaterak.SuccessUrl,
+                options.Fawaterak.FailUrl,
+                options.Fawaterak.PendingUrl),
         });
 
     public static TestRuntimeSettingsProvider FromZoomOptions(ZoomOptions options)
