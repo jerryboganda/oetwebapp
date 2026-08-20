@@ -11369,6 +11369,21 @@ public partial class LearnerService(
                     {
                         subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + targetPlan.BundledAiCredits);
                     }
+
+                    if (aiPackageCreditService is not null)
+                    {
+                        var giftExpiry = targetPlan.DurationMonths > 0
+                            ? now.AddMonths(targetPlan.DurationMonths)
+                            : now.AddDays(180);
+                        await aiPackageCreditService.GrantCourseGiftCreditsAsync(
+                            transaction.LearnerUserId,
+                            targetPlan.Code,
+                            targetPlan.Name,
+                            targetPlan.BundledAiCredits,
+                            $"plan:{quote.Id}:{targetPlan.Code}",
+                            giftExpiry,
+                            ct);
+                    }
                 }
 
                 // Provision the rest of the bundled entitlement template (writing

@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -10,7 +12,9 @@ public class UserAccessAllocationServiceTests
 {
     private static LearnerDbContext CreateDb()
         => new(new DbContextOptionsBuilder<LearnerDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N")).Options);
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .ConfigureWarnings(w => w.Ignore(InMemoryEventId.TransactionIgnoredWarning))
+            .Options);
 
     private sealed class NoopAddonProcessor : IAddonGrantProcessor
     {
@@ -20,8 +24,8 @@ public class UserAccessAllocationServiceTests
             => throw new NotSupportedException();
     }
 
-    private static UserAccessAllocationService CreateService(LearnerDbContext db)
-        => new(db, new NoopAddonProcessor(), TimeProvider.System);
+    private static UserAccessAllocationService CreateService(LearnerDbContext db, IAiPackageCreditService? credits = null)
+        => new(db, new NoopAddonProcessor(), TimeProvider.System, credits);
 
     private static async Task SeedLearnerAsync(LearnerDbContext db, string userId, string? authId = null)
     {
@@ -76,6 +80,43 @@ public class UserAccessAllocationServiceTests
 
         Assert.Single(access.Subscriptions);
         Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.UserId == "learner-2"));
+    }
+
+    [Fact]
+    public async Task GrantPackage_FullCourse_PutsGiftedAiCreditsInSpendableWallet()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-gift");
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine Full Course",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 5,
+        });
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+
+        await CreateService(db, credits).GrantPackageAsync(
+            "admin",
+            "Admin",
+            "learner-gift",
+            new AdminUserAccessPackageRequest(
+                "full-condensed-medicine",
+                StartsAt: null,
+                ExpiresAt: null,
+                MakePrimary: true,
+                GrantIncludedCredits: false,
+                OverrideProfessionMismatch: false),
+            default);
+
+        var snapshot = await credits.GetSnapshotAsync("learner-gift", 20, default);
+        Assert.Equal(5, snapshot.FlexibleCredits);
+        var writing = await credits.CheckGradingCreditAsync(
+            "learner-gift", "writing", AiGradingCreditCost.WritingExam, default);
+        Assert.True(writing.Debited);
     }
 
     [Fact]

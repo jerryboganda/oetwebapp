@@ -12,8 +12,19 @@ public static class AiGradingCreditCost
     /// </summary>
     public const int WritingExam = 2;
 
-    // Speaking is intentionally NOT represented here: a full AI Speaking exam
-    // already totals two credits by charging one per card at each card's reveal
-    // (SpeakingExamService), and single-card AI practice deliberately stays at
-    // one credit. Both are unchanged by the 2-credits-per-exam rule.
+    /// <summary>
+    /// A full AI Speaking exam costs two credits in total — one per card at
+    /// each card reveal in <c>SpeakingExamService</c>. Single-card practice
+    /// stays at <see cref="SpeakingCard"/>.
+    /// </summary>
+    public const int SpeakingExam = 2;
+
+    /// <summary>One AI Speaking card (practice or exam slot) costs one credit.</summary>
+    public const int SpeakingCard = 1;
+
+    /// <summary>One Listening exam / paper costs one gifted AI credit.</summary>
+    public const int ListeningExam = 1;
+
+    /// <summary>One Reading exam / paper costs one gifted AI credit.</summary>
+    public const int ReadingExam = 1;
 }

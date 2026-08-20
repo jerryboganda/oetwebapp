@@ -16,7 +16,8 @@ namespace OetLearner.Api.Services.Billing;
 public sealed class UserAccessAllocationService(
     LearnerDbContext db,
     IAddonGrantProcessor addonGrantProcessor,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    IAiPackageCreditService? aiPackageCreditService = null)
 {
     /// <summary>Statuses that actually grant access — mirrors the set
     /// <c>EffectiveEntitlementResolver.TryResolveEffectivePackage</c> resolves. Frozen is
@@ -207,6 +208,19 @@ public sealed class UserAccessAllocationService(
         }
 
         await db.SaveChangesAsync(ct);
+
+        if (aiPackageCreditService is not null && plan.BundledAiCredits > 0)
+        {
+            await aiPackageCreditService.GrantCourseGiftCreditsAsync(
+                userId,
+                plan.Code,
+                plan.Name,
+                plan.BundledAiCredits,
+                $"admin-package:{subscription.Id}:{plan.Code}",
+                subscription.ExpiresAt ?? startsAt.AddDays(plan.AccessDurationDays > 0 ? plan.AccessDurationDays : 180),
+                ct);
+        }
+
         await SyncAccessExpiryAsync(learner, ct);
         await AuditAsync(adminId, adminName, "Package Granted", subscription.Id,
             $"Granted package {plan.Code} to {userId} (starts {startsAt:u}, expires {(subscription.ExpiresAt is { } e ? e.ToString("u") : "never")})", ct);

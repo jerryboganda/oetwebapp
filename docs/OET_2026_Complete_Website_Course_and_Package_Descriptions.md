@@ -338,6 +338,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 - Assessment of 3 Writing letters
 - Estimated score, detailed correction and voice-note feedback
 - Letters may be candidate-chosen or recall-recommended
+- 5 AI practice credits
 
 **Best for:** Crash-course candidates who want limited but focused Writing feedback.
 
@@ -357,6 +358,7 @@ support@oetwithdrhesham.co.uk | app.oetwithdrhesham.co.uk
 - Assessment of 5 Writing letters
 - Estimated score, detailed correction and voice-note feedback
 - Letters may be candidate-chosen or recall-recommended
+- 5 AI practice credits
 
 **Best for:** Crash-course candidates who want more extensive Writing assessment support.
 
