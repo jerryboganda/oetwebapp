@@ -70,7 +70,9 @@ public sealed record AiPackageCreditSnapshot(
     IReadOnlyList<AiPackageCreditTransactionDto> Transactions,
     int CreditsGranted = 0,
     int CreditsUsed = 0,
-    int CreditsRemaining = 0);
+    int CreditsRemaining = 0,
+    bool WritingUnlimited = false,
+    bool SpeakingUnlimited = false);
 
 public sealed record AiPackageCreditTransactionDto(
     string Id,
@@ -815,6 +817,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             .Where(row => row.Reason is AiPackageCreditReason.GradingDeduct or AiPackageCreditReason.ObjectivePracticeDeduct)
             .Sum(row => Math.Max(0, -row.FlexibleCreditsDelta) + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta));
         var creditsRemaining = account.FlexibleCredits + account.WritingOnlyCredits + account.SpeakingOnlyCredits;
+        var unlimitedGrading = await HasActiveUnlimitedGradingAsync(userId, DateTimeOffset.UtcNow, ct);
 
         return new AiPackageCreditSnapshot(
             account.UserId,
@@ -830,7 +833,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             transactions,
             creditsGranted,
             creditsUsed,
-            creditsRemaining);
+            creditsRemaining,
+            unlimitedGrading,
+            unlimitedGrading);
     }
 
     private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
@@ -876,9 +881,16 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(addOn.GrantEntitlementsJson) ? "{}" : addOn.GrantEntitlementsJson);
             var root = doc.RootElement.ValueKind == JsonValueKind.Object ? doc.RootElement : default;
             var packageType = ReadString(root, "package_type") ?? ResolvePackageType(addOn.Code);
-            var flexible = ReadInt(root, "flexible_credits") ?? (packageType == "full" ? addOn.GrantCredits : 0);
-            var writing = ReadInt(root, "writing_only_credits") ?? (packageType == "writing" ? addOn.GrantCredits : 0);
-            var speaking = ReadInt(root, "speaking_only_credits") ?? (packageType == "speaking" ? addOn.GrantCredits : 0);
+            var unlimitedGrading = ReadBool(root, "unlimited_grading");
+            var flexible = unlimitedGrading
+                ? 0
+                : ReadInt(root, "flexible_credits") ?? (packageType == "full" ? addOn.GrantCredits : 0);
+            var writing = unlimitedGrading
+                ? 0
+                : ReadInt(root, "writing_only_credits") ?? (packageType == "writing" ? addOn.GrantCredits : 0);
+            var speaking = unlimitedGrading
+                ? 0
+                : ReadInt(root, "speaking_only_credits") ?? (packageType == "speaking" ? addOn.GrantCredits : 0);
             var listening = ReadNullableAllowance(root, "listening_tests");
             var reading = ReadNullableAllowance(root, "reading_tests");
             var mocks = ReadInt(root, "mock_exams") ?? ReadInt(root, "mockFull") ?? 0;
@@ -917,6 +929,11 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+
+        private static bool ReadBool(JsonElement root, string name)
+            => root.ValueKind == JsonValueKind.Object
+               && root.TryGetProperty(name, out var value)
+               && value.ValueKind == JsonValueKind.True;
 
         private static int? ReadNullableAllowance(JsonElement root, string name)
         {

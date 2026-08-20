@@ -480,6 +480,104 @@ public class UserAccessAllocationServiceTests
     }
 
     [Fact]
+    public async Task GrantAddon_WritingThenSpeaking_KeepsPoolsSeparate()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-skill-separate";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.AddRange(
+            new BillingAddOn
+            {
+                Id = "addon_pkg_writing_starter",
+                Code = "pkg_writing_starter",
+                Name = "Writing Starter",
+                Status = BillingAddOnStatus.Active,
+                AddonKind = "ai_package",
+                RequiresEligibleParent = false,
+                GrantCredits = 3,
+                GrantEntitlementsJson = """{"package_type":"writing","writing_only_credits":6,"listening_tests":0,"reading_tests":0}""",
+                DurationDays = 30,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new BillingAddOn
+            {
+                Id = "addon_pkg_speaking_starter",
+                Code = "pkg_speaking_starter",
+                Name = "Speaking Starter",
+                Status = BillingAddOnStatus.Active,
+                AddonKind = "ai_package",
+                RequiresEligibleParent = false,
+                GrantCredits = 3,
+                GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":3,"listening_tests":0,"reading_tests":0}""",
+                DurationDays = 30,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_writing_starter", null, 1), default);
+        var afterWriting = await credits.GetSnapshotAsync(userId, 20, default);
+        await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_speaking_starter", null, 1), default);
+        var afterSpeaking = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.Equal(6, afterWriting.WritingOnlyCredits);
+        Assert.Equal(0, afterWriting.SpeakingOnlyCredits);
+        Assert.Equal(6, afterSpeaking.WritingOnlyCredits);
+        Assert.Equal(3, afterSpeaking.SpeakingOnlyCredits);
+        Assert.Equal(0, afterSpeaking.FlexibleCredits);
+    }
+
+    [Fact]
+    public async Task GrantAddon_OetMastery_MarksWritingAndSpeakingUnlimited()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-mastery-unlimited";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_oet_mastery",
+            Code = "pkg_oet_mastery",
+            Name = "OET Mastery",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantCredits = 30,
+            GrantEntitlementsJson = """{"package_type":"full","unlimited_grading":true,"flexible_credits":30,"listening_tests":null,"reading_tests":null}""",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        var access = await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_oet_mastery", null, 1), default);
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.Contains(access.AddOns, addOn => addOn.Code == "pkg_oet_mastery");
+        Assert.True(snapshot.WritingUnlimited);
+        Assert.True(snapshot.SpeakingUnlimited);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Null(snapshot.ListeningTestsRemaining);
+        Assert.Null(snapshot.ReadingTestsRemaining);
+    }
+
+    [Fact]
     public async Task GrantAddon_ParentRequired_WithoutMainPlan_DoesNotUseMainPlanError()
     {
         await using var db = CreateDb();
