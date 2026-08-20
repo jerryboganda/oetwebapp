@@ -179,6 +179,31 @@ export async function grantUserAddon(userId: string, payload: GrantUserAddonPayl
   return apiClient.post<UserAccess>(`/v1/admin/users/${encodeURIComponent(userId)}/access/addons`, payload);
 }
 
+export function addonIdentityKey(addOn: Pick<UserAccessAddOn, 'code' | 'subscriptionId'>): string {
+  return `${addOn.code}::${addOn.subscriptionId ?? ''}`;
+}
+
+/** Add-ons present on the last saved access that the admin removed from the draft. */
+export function findRemovedAddOns(original: UserAccessAddOn[], current: UserAccessAddOn[]): UserAccessAddOn[] {
+  const remaining = new Set(
+    current.filter((addOn) => !addOn.isPending).map((addOn) => addonIdentityKey(addOn)),
+  );
+  return original.filter((addOn) => !addOn.isPending && !remaining.has(addonIdentityKey(addOn)));
+}
+
+export async function removeUserAddon(
+  userId: string,
+  addonCode: string,
+  subscriptionId?: string,
+): Promise<UserAccess> {
+  const query = subscriptionId
+    ? `?subscriptionId=${encodeURIComponent(subscriptionId)}`
+    : '';
+  return apiClient.delete<UserAccess>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/access/addons/${encodeURIComponent(addonCode)}${query}`,
+  );
+}
+
 export interface PutUserAccessScopePayload {
   modules: UserAccessModuleOverride[];
   materialFolderIds: string[];

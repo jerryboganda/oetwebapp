@@ -49,8 +49,9 @@ public sealed class UserAccessAllocationService(
             .Where(s => s.UserId == userId && s.Status != SubscriptionStatus.Cancelled)
             .OrderByDescending(s => s.ChangedAt)
             .ToListAsync(ct);
+        var visibleSubs = subs.Where(s => !IsStandaloneAddonPlan(s.PlanId)).ToList();
 
-        var planCodes = subs.Select(s => s.PlanId).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToList();
+        var planCodes = visibleSubs.Select(s => s.PlanId).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct().ToList();
         var matchingPlans = await db.BillingPlans.AsNoTracking()
             .Where(p => planCodes.Contains(p.Code) || planCodes.Contains(p.Id))
             .ToListAsync(ct);
@@ -61,7 +62,7 @@ public sealed class UserAccessAllocationService(
             planMap.TryAdd(p.Id, p);
         }
 
-        var primarySubscription = ResolvePrimarySubscription(subs, learner.CurrentPlanId, planMap);
+        var primarySubscription = ResolvePrimarySubscription(visibleSubs, learner.CurrentPlanId, planMap);
 
         var subIds = subs.Select(s => s.Id).ToList();
         var now = timeProvider.GetUtcNow();
@@ -87,7 +88,7 @@ public sealed class UserAccessAllocationService(
         var recallSetCodes = await db.UserRecallSetAccesses.AsNoTracking()
             .Where(x => x.UserId == userId).Select(x => x.RecallSetCode).ToListAsync(ct);
 
-        var subscriptionDtos = subs.Select(s => {
+        var subscriptionDtos = visibleSubs.Select(s => {
             var planObj = planMap.TryGetValue(s.PlanId, out var p) ? p : null;
             var planName = planObj?.Name ?? s.PlanId;
             var isPrimary = primarySubscription?.Id == s.Id;
@@ -311,13 +312,12 @@ public sealed class UserAccessAllocationService(
         }
 
         var addonCode = request.AddonCode.Trim();
-        var addonExists = await db.BillingAddOns.AsNoTracking().AnyAsync(a => a.Code == addonCode, ct);
-        if (!addonExists)
-        {
-            throw ApiException.Validation("addon_not_found", $"Add-on '{addonCode}' was not found.");
-        }
+        var addon = await db.BillingAddOns.AsNoTracking().FirstOrDefaultAsync(a => a.Code == addonCode, ct)
+            ?? throw ApiException.Validation("addon_not_found", $"Add-on '{addonCode}' was not found.");
 
-        // Resolve target subscription: explicit id, else the user's primary/latest live sub.
+        // Resolve target subscription: explicit id, else a live course package,
+        // else a hidden standalone container for AI / skill / mock packs that
+        // do not require a parent (Quick Check, Reading Starter, Full Mocks, …).
         string targetSubId;
         if (!string.IsNullOrWhiteSpace(request.SubscriptionId))
         {
@@ -333,11 +333,25 @@ public sealed class UserAccessAllocationService(
         else
         {
             var primary = await db.Subscriptions.AsNoTracking()
-                .Where(s => s.UserId == userId && AccessGrantingStatuses.Contains(s.Status))
+                .Where(s => s.UserId == userId
+                    && AccessGrantingStatuses.Contains(s.Status)
+                    && s.PlanId != Subscription.StandaloneAddonPlanId)
                 .OrderByDescending(s => s.ChangedAt)
-                .FirstOrDefaultAsync(ct)
-                ?? throw ApiException.Validation("no_subscription", "The user has no active subscription to attach the add-on to.");
-            targetSubId = primary.Id;
+                .FirstOrDefaultAsync(ct);
+            if (primary is not null)
+            {
+                targetSubId = primary.Id;
+            }
+            else if (!addon.RequiresEligibleParent)
+            {
+                targetSubId = await EnsureStandaloneAddonSubscriptionAsync(userId, ct);
+            }
+            else
+            {
+                throw ApiException.Validation(
+                    "addon_needs_package",
+                    "This add-on needs an existing course package. Add a Full Course first.");
+            }
         }
 
         var quantity = Math.Max(1, request.Quantity);
@@ -363,6 +377,49 @@ public sealed class UserAccessAllocationService(
 
         await AuditAsync(adminId, adminName, "Add-on Granted", targetSubId,
             $"Granted add-on {addonCode} x{quantity} to {userId} ({appliedUnits} new)", ct);
+        return await GetAccessAsync(userId, ct);
+    }
+
+    public async Task<UserAccessDto> RemoveAddonAsync(
+        string adminId, string adminName, string userId, string addonCode, string? subscriptionId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(addonCode))
+        {
+            throw ApiException.Validation("addon_required", "An add-on code is required.");
+        }
+
+        var code = addonCode.Trim();
+        var now = timeProvider.GetUtcNow();
+        var userSubIds = await db.Subscriptions.AsNoTracking()
+            .Where(sub => sub.UserId == userId)
+            .Select(sub => sub.Id)
+            .ToListAsync(ct);
+        var itemsQuery = db.SubscriptionItems.Where(item =>
+            userSubIds.Contains(item.SubscriptionId)
+            && item.ItemCode == code
+            && item.Status == SubscriptionItemStatus.Active);
+        if (!string.IsNullOrWhiteSpace(subscriptionId))
+        {
+            var targetId = subscriptionId.Trim();
+            itemsQuery = itemsQuery.Where(item => item.SubscriptionId == targetId);
+        }
+
+        var items = await itemsQuery.ToListAsync(ct);
+
+        foreach (var item in items)
+        {
+            item.Status = SubscriptionItemStatus.Cancelled;
+            item.EndsAt = now;
+            item.UpdatedAt = now;
+        }
+
+        if (items.Count > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            await AuditAsync(adminId, adminName, "Add-on Removed", userId,
+                $"Removed add-on {code} x{items.Count} from {userId}", ct);
+        }
+
         return await GetAccessAsync(userId, ct);
     }
 
@@ -472,6 +529,48 @@ public sealed class UserAccessAllocationService(
             $"Updated per-user module/content scope + expiry for {userId}", ct);
         return await GetAccessAsync(userId, ct);
     }
+
+    private async Task<string> EnsureStandaloneAddonSubscriptionAsync(string userId, CancellationToken ct)
+    {
+        var existing = await db.Subscriptions.FirstOrDefaultAsync(
+            s => s.UserId == userId
+                && s.PlanId == Subscription.StandaloneAddonPlanId
+                && s.Status != SubscriptionStatus.Cancelled,
+            ct);
+        if (existing is not null)
+        {
+            if (!AccessGrantingStatuses.Contains(existing.Status))
+            {
+                existing.Status = SubscriptionStatus.Active;
+                existing.ChangedAt = timeProvider.GetUtcNow();
+                await db.SaveChangesAsync(ct);
+            }
+
+            return existing.Id;
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var subscription = new Subscription
+        {
+            Id = $"sub-{Guid.NewGuid():N}",
+            UserId = userId,
+            PlanId = Subscription.StandaloneAddonPlanId,
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddYears(10),
+            PriceAmount = 0,
+            Currency = "AUD",
+            Interval = "one_time",
+            AccessDurationDays = 0,
+        };
+        db.Subscriptions.Add(subscription);
+        await db.SaveChangesAsync(ct);
+        return subscription.Id;
+    }
+
+    private static bool IsStandaloneAddonPlan(string? planId)
+        => string.Equals(planId, Subscription.StandaloneAddonPlanId, StringComparison.OrdinalIgnoreCase);
 
     private async Task EnsureAddonSubscriptionItemAsync(string subscriptionId, string addonCode, CancellationToken ct)
     {
@@ -636,7 +735,9 @@ public sealed class UserAccessAllocationService(
     private async Task SyncAccessExpiryAsync(LearnerUser learner, CancellationToken ct)
     {
         var expiries = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == learner.Id && AccessGrantingStatuses.Contains(s.Status))
+            .Where(s => s.UserId == learner.Id
+                && AccessGrantingStatuses.Contains(s.Status)
+                && s.PlanId != Subscription.StandaloneAddonPlanId)
             .Select(s => s.ExpiresAt)
             .ToListAsync(ct);
         if (expiries.Count == 0) return;

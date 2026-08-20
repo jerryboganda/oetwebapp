@@ -765,6 +765,13 @@ public class AccountFreezeEntitlement
 
 public class Subscription
 {
+    /// <summary>
+    /// Hidden container used when admin grants AI / skill / mock add-ons with no
+    /// course package. It is not a main plan: GetAccess omits it from Packages,
+    /// and the entitlement resolver ignores it when picking the learner's course.
+    /// </summary>
+    public const string StandaloneAddonPlanId = "standalone-addon";
+
     [Key]
     [MaxLength(64)]
     public string Id { get; set; } = default!;

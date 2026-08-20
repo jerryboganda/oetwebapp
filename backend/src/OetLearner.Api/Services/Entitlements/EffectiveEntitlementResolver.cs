@@ -237,7 +237,10 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         var now = DateTimeOffset.UtcNow;
         var trace = new List<string>();
         var subscriptions = await LoadOrderedSubscriptionsAsync(userId, ct);
-        var subscription = subscriptions.Count > 0 ? subscriptions[0] : null;
+        var courseSubscriptions = subscriptions
+            .Where(s => !string.Equals(s.PlanId, Subscription.StandaloneAddonPlanId, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var subscription = courseSubscriptions.Count > 0 ? courseSubscriptions[0] : null;
         var overlays = await LoadResolverOverlaysAsync(userId, ct);
         var isFrozen = ResolveIsFrozen(overlays, now);
         var professionId = await LoadActiveProfessionIdAsync(userId, ct);

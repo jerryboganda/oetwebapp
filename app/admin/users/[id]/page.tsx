@@ -56,9 +56,11 @@ import {
 } from '@/lib/api';
 import {
   fetchUserAccess,
+  findRemovedAddOns,
   grantUserAddon,
   grantUserPackage,
   putUserAccessScope,
+  removeUserAddon,
   removeUserPackage,
   type UserAccess,
 } from '@/lib/user-access';
@@ -447,6 +449,10 @@ export default function UserDetailPage() {
     try {
       let currentAccess = access;
 
+      for (const removed of findRemovedAddOns(originalAccess?.addOns ?? [], access.addOns)) {
+        currentAccess = await removeUserAddon(user.id, removed.code, removed.subscriptionId);
+      }
+
       // Remove packages first. This is important when a package is replaced by
       // another row with the same plan code: grant-first would update the old
       // subscription and then remove it again.
@@ -473,16 +479,14 @@ export default function UserDetailPage() {
         }
       }
 
-      // Add-ons have no removal endpoint. Never submit a pending add-on whose
-      // explicit target package was removed during this save.
+      // AI / skill / mock packs may be granted with no main plan. Only skip a
+      // pending add-on when it was explicitly attached to a package that this
+      // save just removed.
       const survivingSubscriptionIds = new Set(currentAccess.subscriptions.map((sub) => sub.id));
       for (const addOn of access.addOns) {
-        if (
-          addOn.isPending
-          && (!addOn.subscriptionId || survivingSubscriptionIds.has(addOn.subscriptionId))
-        ) {
-          currentAccess = await grantUserAddon(user.id, { addonCode: addOn.code, subscriptionId: addOn.subscriptionId });
-        }
+        if (!addOn.isPending) continue;
+        if (addOn.subscriptionId && !survivingSubscriptionIds.has(addOn.subscriptionId)) continue;
+        currentAccess = await grantUserAddon(user.id, { addonCode: addOn.code, subscriptionId: addOn.subscriptionId });
       }
 
       const saved = await putUserAccessScope(user.id, {

@@ -18,9 +18,10 @@ interface AddonPickerProps {
 
 /**
  * Add-on multiselect. New rows are local drafts (`isPending: true`) until the
- * caller persists them via `grantUserAddon` on submit/save. Add-ons can only
- * be attached to already-committed (non-pending) packages, since a locally
- * drafted package has no real subscription id yet.
+ * caller persists them via `grantUserAddon` on submit/save. Attaching to a
+ * course package is optional: AI, skill, and mock packs are standalone and
+ * save with no main plan. A locally drafted package has no real subscription
+ * id yet, so only committed packages appear in the attach list.
  */
 export function AddonPicker({ addons, subscriptions, selected, onChange, disabled }: AddonPickerProps) {
   const [addonCode, setAddonCode] = useState('');
@@ -50,8 +51,8 @@ export function AddonPicker({ addons, subscriptions, selected, onChange, disable
   }
 
   function subscriptionLabel(id?: string) {
-    if (!id) return 'No specific subscription';
-    return subscriptions.find((sub) => sub.id === id)?.planName ?? id;
+    if (!id) return 'Standalone — no course package required';
+    return subscriptions.find((sub) => sub.id === id)?.planName ?? 'Standalone — no course package required';
   }
 
   return (
@@ -66,13 +67,17 @@ export function AddonPicker({ addons, subscriptions, selected, onChange, disable
             disabled={disabled}
           />
           <Select
-            label="Attach to subscription"
+            label="Attach to course package (optional)"
             value={subscriptionId}
             onChange={(event) => setSubscriptionId(event.target.value)}
-            options={[{ value: '', label: 'No specific subscription' }, ...subscriptionOptions]}
+            options={[{ value: '', label: 'Standalone (no course package)' }, ...subscriptionOptions]}
             disabled={disabled || committedSubscriptions.length === 0}
           />
         </div>
+        <p className="text-xs text-muted">
+          Quick Check, Exam Prep Pro, OET Mastery, Listening/Reading/Writing/Speaking packs, and Full Mocks
+          save without a course package.
+        </p>
         <div className="flex justify-end">
           <Button type="button" size="sm" onClick={handleAdd} disabled={disabled || !addonCode}>
             Add add-on
