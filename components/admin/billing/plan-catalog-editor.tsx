@@ -38,6 +38,7 @@ interface AdminPlanRow {
   interval?: string;
   durationMonths?: number;
   includedCredits?: number;
+  bundledAiCredits?: number;
   trialDays?: number;
   displayOrder?: number;
   isVisible?: boolean;
@@ -141,6 +142,7 @@ interface FormState {
   interval: string;
   durationMonths: string;
   includedCredits: string;
+  bundledAiCredits: string;
   trialDays: string;
   displayOrder: string;
   isVisible: boolean;
@@ -162,7 +164,7 @@ interface FormState {
 function emptyForm(): FormState {
   return {
     id: null, code: '', name: '', description: '', price: '', currency: 'GBP',
-    interval: 'month', durationMonths: '1', includedCredits: '0', trialDays: '0',
+    interval: 'month', durationMonths: '1', includedCredits: '0', bundledAiCredits: '0', trialDays: '0',
     displayOrder: '0', isVisible: true, isRenewable: true, status: 'active',
     subtests: [], modules: [...DEFAULT_NEW_PLAN_MODULES], profession: 'all',
     accessDurationDays: String(DEFAULT_ACCESS_DURATION_DAYS), deliveryMethod: 'automatic_web',
@@ -185,6 +187,7 @@ function toForm(row: AdminPlanRow): FormState {
     interval: row.interval || 'month',
     durationMonths: row.durationMonths != null ? String(row.durationMonths) : '1',
     includedCredits: row.includedCredits != null ? String(row.includedCredits) : '0',
+    bundledAiCredits: row.bundledAiCredits != null ? String(row.bundledAiCredits) : '0',
     trialDays: row.trialDays != null ? String(row.trialDays) : '0',
     displayOrder: row.displayOrder != null ? String(row.displayOrder) : '0',
     isVisible: row.isVisible ?? true,
@@ -447,6 +450,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
       interval: form.interval,
       durationMonths: intOr(form.durationMonths, 1),
       includedCredits: intOr(form.includedCredits),
+      bundledAiCredits: intOr(form.bundledAiCredits),
       trialDays: intOr(form.trialDays),
       displayOrder: intOr(form.displayOrder),
       isVisible: form.isVisible,
@@ -543,16 +547,17 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Price</th>
                 <th className="px-3 py-3">Interval</th>
-                <th className="px-3 py-3">Credits</th>
+                <th className="px-3 py-3">Review credits</th>
+                <th className="px-3 py-3">Gifted AI credits</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3 sr-only">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border bg-surface">
               {status === 'loading' ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">Loading…</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">Loading…</td></tr>
               ) : sortedRows.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-muted">No plans yet.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-8 text-center text-muted">No plans yet.</td></tr>
               ) : (
                 sortedRows.map((row) => (
                   <tr key={row.id} className="align-middle">
@@ -560,6 +565,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
                     <td className="px-3 py-3 tabular-nums">{row.currency} {row.price}</td>
                     <td className="px-3 py-3">{row.interval ?? 'month'}</td>
                     <td className="px-3 py-3 tabular-nums">{row.includedCredits ?? 0}</td>
+                    <td className="px-3 py-3 tabular-nums">{row.bundledAiCredits ?? 0}</td>
                     <td className="px-3 py-3"><Badge variant={(row.status ?? 'active').toLowerCase() === 'active' ? 'success' : 'default'}>{(row.status ?? 'active').toLowerCase()}</Badge></td>
                     <td className="px-3 py-3 text-right">
                       <div className="flex justify-end gap-2">
@@ -598,7 +604,20 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
             <Input label="Currency" value={form.currency} maxLength={3} onChange={(e) => setField('currency', e.target.value.toUpperCase())} className="uppercase" />
             <Select label="Interval" value={form.interval} onChange={(e) => setField('interval', e.target.value)} options={INTERVAL_OPTIONS} />
             <Input label="Duration (months)" inputMode="numeric" value={form.durationMonths} onChange={(e) => setField('durationMonths', e.target.value)} />
-            <Input label="Included review credits" inputMode="numeric" value={form.includedCredits} onChange={(e) => setField('includedCredits', e.target.value)} />
+            <Input
+              label="Included review credits"
+              inputMode="numeric"
+              value={form.includedCredits}
+              onChange={(e) => setField('includedCredits', e.target.value)}
+              hint="Wallet review credits. 2026 Full Courses keep this at 0."
+            />
+            <Input
+              label="Gifted AI credits"
+              inputMode="numeric"
+              value={form.bundledAiCredits}
+              onChange={(e) => setField('bundledAiCredits', e.target.value)}
+              hint="AI practice credits granted on purchase. Full Courses use 5."
+            />
             <Input label="Trial days" inputMode="numeric" value={form.trialDays} onChange={(e) => setField('trialDays', e.target.value)} />
             <Input label="Display order" inputMode="numeric" value={form.displayOrder} onChange={(e) => setField('displayOrder', e.target.value)} />
             <Select label="Status" value={form.status} onChange={(e) => setField('status', e.target.value)} options={STATUS_OPTIONS} />

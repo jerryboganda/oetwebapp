@@ -432,4 +432,50 @@ public sealed class AiPackageCreditServiceTests
         Assert.Equal(0, snapshot.ListeningTestsRemaining);
         Assert.Contains(snapshot.Transactions, tx => tx.Reason == nameof(AiPackageCreditReason.PassExpiry));
     }
+
+    [Fact]
+    public async Task FullCourseGift_FiveCredits_PaysWriting2Speaking1Listening1Reading1()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        var expiry = DateTimeOffset.UtcNow.AddDays(180);
+
+        var granted = await service.GrantCourseGiftCreditsAsync(
+            "learner-1",
+            "full-condensed-medicine",
+            "Full Condensed Recorded OET Course - Medicine",
+            5,
+            "plan:quote-1:full-condensed-medicine",
+            expiry,
+            CancellationToken.None);
+        var duplicate = await service.GrantCourseGiftCreditsAsync(
+            "learner-1",
+            "full-condensed-medicine",
+            "Full Condensed Recorded OET Course - Medicine",
+            5,
+            "plan:quote-1:full-condensed-medicine",
+            expiry,
+            CancellationToken.None);
+
+        var writing = await service.DeductGradingCreditAsync(
+            "learner-1", "writing", "gift-writing", AiGradingCreditCost.WritingExam, CancellationToken.None);
+        var speaking = await service.DeductGradingCreditAsync(
+            "learner-1", "speaking", "gift-speaking", AiGradingCreditCost.SpeakingCard, CancellationToken.None);
+        var listening = await service.DeductObjectivePracticeAsync(
+            "learner-1", "listening", "gift-listening-paper", CancellationToken.None);
+        var reading = await service.DeductObjectivePracticeAsync(
+            "learner-1", "reading", "gift-reading-paper", CancellationToken.None);
+        var extra = await service.DeductGradingCreditAsync(
+            "learner-1", "writing", "gift-writing-2", AiGradingCreditCost.WritingExam, CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.True(granted);
+        Assert.False(duplicate);
+        Assert.True(writing.Debited);
+        Assert.True(speaking.Debited);
+        Assert.True(listening.Debited);
+        Assert.True(reading.Debited);
+        Assert.False(extra.Debited);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+    }
 }

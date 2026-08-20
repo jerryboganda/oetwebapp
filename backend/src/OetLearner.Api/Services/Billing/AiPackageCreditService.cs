@@ -11,6 +11,20 @@ public interface IAiPackageCreditService
 {
     Task<AiPackageCreditSnapshot> GetSnapshotAsync(string userId, int transactionLimit, CancellationToken ct);
     Task<AiPackageCreditSnapshot> GrantPackageAsync(string userId, BillingAddOn addOn, int quantity, string stripeSessionId, string? quoteId, CancellationToken ct);
+
+    /// <summary>
+    /// Grant the Full Course gifted AI credits into the wallet exams actually
+    /// debit (flexible pool). Idempotent on <paramref name="referenceId"/>.
+    /// Writing letter = 2, Speaking exam = 2 (1/card), Listening/Reading = 1.
+    /// </summary>
+    Task<bool> GrantCourseGiftCreditsAsync(
+        string userId,
+        string planCode,
+        string planName,
+        int credits,
+        string referenceId,
+        DateTimeOffset? expiresAt,
+        CancellationToken ct);
     Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct);
 
     /// <summary>
@@ -151,6 +165,75 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
         return await ProjectSnapshotAsync(userId, 20, ct);
+    }
+
+    public async Task<bool> GrantCourseGiftCreditsAsync(
+        string userId,
+        string planCode,
+        string planName,
+        int credits,
+        string referenceId,
+        DateTimeOffset? expiresAt,
+        CancellationToken ct)
+    {
+        if (credits <= 0 || string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(referenceId))
+        {
+            return false;
+        }
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var account = await GetOrCreateAccountAsync(userId, ct);
+        var now = DateTimeOffset.UtcNow;
+        await ExpireIfNeededAsync(account, now, ct);
+        if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.Purchase, ct))
+        {
+            return false;
+        }
+
+        account.FlexibleCredits += credits;
+        account.ExpiredBecausePassed = false;
+        account.PassedAt = null;
+        if (expiresAt is { } expiry && expiry > now)
+        {
+            account.ExpiresAt = Later(account.ExpiresAt, expiry);
+        }
+
+        // Null L/R means unlimited on paid AI packages. A course gift must not
+        // inherit that: empty finite pools so Listening/Reading spend flexible.
+        // Leave an existing paid unlimited allowance (pkg_*) intact.
+        if (account.ListeningTestsRemaining is null || account.ReadingTestsRemaining is null)
+        {
+            var hasPaidAiPackage = await db.AiPackageCreditTransactions.AnyAsync(
+                row => row.UserId == userId
+                    && row.Reason == AiPackageCreditReason.Purchase
+                    && row.PackageId != null
+                    && row.PackageId.StartsWith("pkg_"),
+                ct);
+            if (!hasPaidAiPackage)
+            {
+                account.ListeningTestsRemaining ??= 0;
+                account.ReadingTestsRemaining ??= 0;
+            }
+        }
+
+        account.UpdatedAt = now;
+
+        AddTransaction(account, new AiPackageCreditTransaction
+        {
+            Id = NewId("aipkg-tx"),
+            PackageId = planCode,
+            PackageType = "full",
+            FlexibleCreditsDelta = credits,
+            Reason = AiPackageCreditReason.Purchase,
+            ReferenceId = referenceId,
+            Description = $"{planName} gifted AI practice credits",
+            ExpiresAt = expiresAt,
+            CreatedAt = now
+        });
+
+        await db.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
+        return true;
     }
 
     public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
@@ -300,6 +383,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var account = await GetOrCreateAccountAsync(userId, ct);
         await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
         if (account.ExpiresAt is null
+            && account.FlexibleCredits <= 0
             && account.ListeningTestsRemaining.GetValueOrDefault() == 0
             && account.ReadingTestsRemaining.GetValueOrDefault() == 0)
         {
@@ -323,17 +407,40 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         var listeningDelta = 0;
         var readingDelta = 0;
+        var flexibleDelta = 0;
         if (normalized == "listening" && account.ListeningTestsRemaining is not null)
         {
-            if (account.ListeningTestsRemaining <= 0) return new(false, "no_listening_tests", "You have no Listening practice tests remaining. Purchase a package to continue.", null);
-            account.ListeningTestsRemaining--;
-            listeningDelta = -1;
+            if (account.ListeningTestsRemaining > 0)
+            {
+                account.ListeningTestsRemaining--;
+                listeningDelta = -AiGradingCreditCost.ListeningExam;
+            }
+            else if (account.FlexibleCredits >= AiGradingCreditCost.ListeningExam)
+            {
+                account.FlexibleCredits -= AiGradingCreditCost.ListeningExam;
+                flexibleDelta = -AiGradingCreditCost.ListeningExam;
+            }
+            else
+            {
+                return new(false, "no_listening_tests", "You have no Listening practice tests remaining. Purchase a package to continue.", null);
+            }
         }
         if (normalized == "reading" && account.ReadingTestsRemaining is not null)
         {
-            if (account.ReadingTestsRemaining <= 0) return new(false, "no_reading_tests", "You have no Reading practice tests remaining. Purchase a package to continue.", null);
-            account.ReadingTestsRemaining--;
-            readingDelta = -1;
+            if (account.ReadingTestsRemaining > 0)
+            {
+                account.ReadingTestsRemaining--;
+                readingDelta = -AiGradingCreditCost.ReadingExam;
+            }
+            else if (account.FlexibleCredits >= AiGradingCreditCost.ReadingExam)
+            {
+                account.FlexibleCredits -= AiGradingCreditCost.ReadingExam;
+                flexibleDelta = -AiGradingCreditCost.ReadingExam;
+            }
+            else
+            {
+                return new(false, "no_reading_tests", "You have no Reading practice tests remaining. Purchase a package to continue.", null);
+            }
         }
 
         account.UpdatedAt = DateTimeOffset.UtcNow;
@@ -341,11 +448,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         {
             Id = NewId("aipkg-tx"),
             PackageType = normalized,
+            FlexibleCreditsDelta = flexibleDelta,
             ListeningTestsDelta = listeningDelta,
             ReadingTestsDelta = readingDelta,
             Reason = AiPackageCreditReason.ObjectivePracticeDeduct,
             ReferenceId = referenceId,
-            Description = $"{normalized} deterministic practice allowance used",
+            Description = flexibleDelta < 0
+                ? $"{normalized} exam used {Math.Abs(flexibleDelta)} gifted AI credit"
+                : $"{normalized} deterministic practice allowance used",
             CreatedAt = DateTimeOffset.UtcNow
         });
 

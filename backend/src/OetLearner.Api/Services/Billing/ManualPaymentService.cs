@@ -66,6 +66,7 @@ public sealed class ManualPaymentService : IManualPaymentService
     private readonly IFileStorage _storage;
     private readonly IBillingNotificationDispatcher? _notifier;
     private readonly ILogger<ManualPaymentService>? _logger;
+    private readonly IAiPackageCreditService? _aiPackageCredits;
 
     /// <summary>Fallback method allowlist used only when the PaymentMethodConfigs
     /// table is empty. Mirrors the seed in 20260620120000_AddPaymentMethodConfig.</summary>
@@ -84,12 +85,14 @@ public sealed class ManualPaymentService : IManualPaymentService
         LearnerDbContext db,
         IFileStorage storage,
         IBillingNotificationDispatcher? notifier = null,
-        ILogger<ManualPaymentService>? logger = null)
+        ILogger<ManualPaymentService>? logger = null,
+        IAiPackageCreditService? aiPackageCredits = null)
     {
         _db = db;
         _storage = storage;
         _notifier = notifier;
         _logger = logger;
+        _aiPackageCredits = aiPackageCredits;
     }
 
     public async Task<ManualPaymentRequest> SubmitAsync(string userId, ManualPaymentSubmitRequest request, byte[] proofBytes, CancellationToken ct)
@@ -323,6 +326,18 @@ public sealed class ManualPaymentService : IManualPaymentService
                     CreatedAt = now,
                 });
                 subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + aiCredits);
+                if (_aiPackageCredits is not null)
+                {
+                    var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
+                    await _aiPackageCredits.GrantCourseGiftCreditsAsync(
+                        row.UserId,
+                        planCodeForCredit,
+                        plan?.Name ?? row.CourseName,
+                        aiCredits,
+                        creditReferenceId,
+                        giftExpiry,
+                        ct);
+                }
             }
         }
 
