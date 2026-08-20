@@ -191,6 +191,13 @@ public sealed class AiPackageCreditServiceTests
         db.SubscriptionItems.Add(item);
         await db.SaveChangesAsync();
 
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+        Assert.True(snapshot.WritingUnlimited);
+        Assert.True(snapshot.SpeakingUnlimited);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Null(snapshot.ListeningTestsRemaining);
+        Assert.Null(snapshot.ReadingTestsRemaining);
+
         var writing = await service.DeductGradingCreditAsync(
             "learner-1", "writing", "mastery-writing", 2, CancellationToken.None);
         var speaking = await service.CheckGradingCreditAsync(
@@ -480,5 +487,126 @@ public sealed class AiPackageCreditServiceTests
         Assert.Equal(5, snapshot.CreditsGranted);
         Assert.Equal(5, snapshot.CreditsUsed);
         Assert.Equal(0, snapshot.CreditsRemaining);
+    }
+
+    [Fact]
+    public async Task GrantPackage_WritingStarter_DoesNotChangeSpeakingCredits()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+
+        var snapshot = await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_writing_starter", 30, 3,
+                """{"package_type":"writing","writing_only_credits":6,"writing_items":3,"listening_tests":0,"reading_tests":0}"""),
+            1,
+            "cs_writing_only",
+            null,
+            CancellationToken.None);
+
+        Assert.Equal(6, snapshot.WritingOnlyCredits);
+        Assert.Equal(0, snapshot.SpeakingOnlyCredits);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.False(snapshot.WritingUnlimited);
+        Assert.False(snapshot.SpeakingUnlimited);
+    }
+
+    [Fact]
+    public async Task GrantPackage_SpeakingStarter_DoesNotChangeWritingCredits()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_writing_starter", 30, 3,
+                """{"package_type":"writing","writing_only_credits":6}"""),
+            1,
+            "cs_writing_first",
+            null,
+            CancellationToken.None);
+
+        var snapshot = await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_speaking_starter", 30, 3,
+                """{"package_type":"speaking","speaking_only_credits":3,"speaking_items":3,"listening_tests":0,"reading_tests":0}"""),
+            1,
+            "cs_speaking_only",
+            null,
+            CancellationToken.None);
+
+        Assert.Equal(6, snapshot.WritingOnlyCredits);
+        Assert.Equal(3, snapshot.SpeakingOnlyCredits);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+    }
+
+    [Fact]
+    public async Task GrantPackage_QuickCheck_AppliesConfiguredListeningReadingAndFlexible()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+
+        var snapshot = await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_quick_check", 30, 5,
+                """{"package_type":"full","flexible_credits":5,"listening_tests":3,"reading_tests":3}"""),
+            1,
+            "cs_quick_check",
+            null,
+            CancellationToken.None);
+
+        Assert.Equal(5, snapshot.FlexibleCredits);
+        Assert.Equal(0, snapshot.WritingOnlyCredits);
+        Assert.Equal(0, snapshot.SpeakingOnlyCredits);
+        Assert.Equal(3, snapshot.ListeningTestsRemaining);
+        Assert.Equal(3, snapshot.ReadingTestsRemaining);
+        Assert.False(snapshot.WritingUnlimited);
+        Assert.False(snapshot.SpeakingUnlimited);
+    }
+
+    [Fact]
+    public async Task GrantPackage_ExamPrepPro_AppliesConfiguredListeningReadingAndFlexible()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+
+        var snapshot = await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_exam_prep_pro", 90, 15,
+                """{"package_type":"full","flexible_credits":15,"listening_tests":6,"reading_tests":6}"""),
+            1,
+            "cs_exam_prep_pro",
+            null,
+            CancellationToken.None);
+
+        Assert.Equal(15, snapshot.FlexibleCredits);
+        Assert.Equal(0, snapshot.WritingOnlyCredits);
+        Assert.Equal(0, snapshot.SpeakingOnlyCredits);
+        Assert.Equal(6, snapshot.ListeningTestsRemaining);
+        Assert.Equal(6, snapshot.ReadingTestsRemaining);
+        Assert.Equal(0, snapshot.MockExamsRemaining);
+    }
+
+    [Fact]
+    public async Task GrantPackage_OetMastery_IgnoresLegacyFlexibleGrantCredits()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+
+        var snapshot = await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_oet_mastery", 180, 30,
+                """{"package_type":"full","unlimited_grading":true,"flexible_credits":30,"listening_tests":null,"reading_tests":null}"""),
+            1,
+            "cs_mastery_legacy_flexible",
+            null,
+            CancellationToken.None);
+
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Equal(0, snapshot.WritingOnlyCredits);
+        Assert.Equal(0, snapshot.SpeakingOnlyCredits);
+        Assert.Null(snapshot.ListeningTestsRemaining);
+        Assert.Null(snapshot.ReadingTestsRemaining);
+        Assert.False(snapshot.WritingUnlimited);
+        Assert.False(snapshot.SpeakingUnlimited);
     }
 }

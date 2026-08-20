@@ -26,4 +26,50 @@ describe('AiCreditSummary', () => {
     expect(screen.getByText('Used').parentElement).toHaveTextContent('2');
     expect(screen.getByText('Remaining').parentElement).toHaveTextContent('3');
   });
+
+  it('shows writing and speaking AI credits separately', () => {
+    render(
+      <AiCreditSummary
+        snapshot={{
+          ...snapshot,
+          flexibleCredits: 0,
+          writingOnlyCredits: 6,
+          speakingOnlyCredits: 3,
+          creditsGranted: 9,
+          creditsUsed: 0,
+          creditsRemaining: 9,
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('writing-ai-credits')).toHaveTextContent('6');
+    expect(screen.getByTestId('speaking-ai-credits')).toHaveTextContent('3');
+    expect(screen.queryByTestId('shared-ai-credits')).not.toBeInTheDocument();
+  });
+
+  it('shows unlimited writing and speaking for OET Mastery and hides the stale generic remaining', () => {
+    render(
+      <AiCreditSummary
+        snapshot={{
+          ...snapshot,
+          flexibleCredits: 5,
+          writingOnlyCredits: 0,
+          speakingOnlyCredits: 0,
+          listeningTestsRemaining: null,
+          readingTestsRemaining: null,
+          writingUnlimited: true,
+          speakingUnlimited: true,
+          creditsRemaining: 5,
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId('writing-ai-credits')).toHaveTextContent('Unlimited');
+    expect(screen.getByTestId('speaking-ai-credits')).toHaveTextContent('Unlimited');
+    expect(screen.getByText('Reading tests').parentElement).toHaveTextContent('Unlimited');
+    expect(screen.getByText('Listening tests').parentElement).toHaveTextContent('Unlimited');
+    expect(screen.queryByTestId('shared-ai-credits')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('finite-remaining')).not.toBeInTheDocument();
+    expect(screen.queryByText('Granted / purchased')).not.toBeInTheDocument();
+  });
 });

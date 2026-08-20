@@ -243,4 +243,6 @@ export interface AiPackageCreditSnapshot {
   creditsGranted: number;
   creditsUsed: number;
   creditsRemaining: number;
+  writingUnlimited?: boolean;
+  speakingUnlimited?: boolean;
 }
