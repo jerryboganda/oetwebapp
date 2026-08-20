@@ -12,6 +12,7 @@ import { OtpCodeInput } from '@/components/auth/otp-code-input';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { useAuth } from '@/contexts/auth-context';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
+import { loadStoredSession } from '@/lib/auth-storage';
 import { readErrorMessage } from '@/lib/read-error-message';
 
 export default function VerifyEmailPage() {
@@ -39,8 +40,9 @@ function VerifyEmailFallback() {
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, verifyEmailOtp } = useAuth();
-  const email = user?.email ?? searchParams?.get('email') ?? '';
+  const { user, loading, verifyEmailOtp, refreshSession } = useAuth();
+  const email =
+    user?.email ?? searchParams?.get('email') ?? loadStoredSession()?.currentUser?.email ?? '';
   const nextHref = searchParams?.get('next') ?? null;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [otp, setOtp] = useState('');
@@ -50,8 +52,13 @@ function VerifyEmailContent() {
   useEffect(() => {
     if (user?.isEmailVerified) {
       router.replace(resolveAuthenticatedDestination(user, nextHref));
+      return;
     }
-  }, [nextHref, router, user]);
+
+    if (!loading && !email) {
+      router.replace(AUTH_ROUTES.signIn);
+    }
+  }, [email, loading, nextHref, router, user]);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,11 +70,24 @@ function VerifyEmailContent() {
 
       try {
         const challenge = await sendEmailVerificationOtp(email);
-        if (!cancelled) {
-          setNotice(
-            `Enter the 6 digit verification code sent to ${challenge.destinationHint || email}.`
-          );
+        if (cancelled) {
+          return;
         }
+
+        if (user) {
+          const refreshed = await refreshSession();
+          if (cancelled) {
+            return;
+          }
+          if (refreshed?.currentUser.isEmailVerified) {
+            router.replace(resolveAuthenticatedDestination(refreshed.currentUser, nextHref));
+            return;
+          }
+        }
+
+        setNotice(
+          `Enter the 6 digit verification code sent to ${challenge.destinationHint || email}.`
+        );
       } catch (error) {
         if (!cancelled) {
           setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
@@ -80,7 +100,7 @@ function VerifyEmailContent() {
     return () => {
       cancelled = true;
     };
-  }, [email, user?.isEmailVerified]);
+  }, [email, nextHref, refreshSession, router, user, user?.isEmailVerified]);
 
   const handleResend = async () => {
     setOtp('');
@@ -135,20 +155,8 @@ function VerifyEmailContent() {
     }
   };
 
-  if (!email) {
-    return (
-      <AuthScreenShell
-        brandHref={AUTH_ROUTES.signIn}
-        brandLabel="OET"
-        eyebrow="Step Verification"
-        title="Verify OTP"
-        subtitle="Enter the 6 digit verification code sent to your account to continue."
-      >
-        <p className={`${styles.notice} ${styles.noticeDanger}`.trim()}>
-          A valid email address is required before verification can continue.
-        </p>
-      </AuthScreenShell>
-    );
+  if (loading || !email || user?.isEmailVerified) {
+    return <VerifyEmailFallback />;
   }
 
   return (
