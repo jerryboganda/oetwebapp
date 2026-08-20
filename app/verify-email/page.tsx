@@ -48,10 +48,16 @@ function VerifyEmailContent() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
+    if (user?.isEmailVerified) {
+      router.replace(resolveAuthenticatedDestination(user, nextHref));
+    }
+  }, [nextHref, router, user]);
+
+  useEffect(() => {
     let cancelled = false;
 
     const sendCode = async () => {
-      if (!email) {
+      if (!email || user?.isEmailVerified) {
         return;
       }
 
@@ -74,7 +80,7 @@ function VerifyEmailContent() {
     return () => {
       cancelled = true;
     };
-  }, [email]);
+  }, [email, user?.isEmailVerified]);
 
   const handleResend = async () => {
     setOtp('');

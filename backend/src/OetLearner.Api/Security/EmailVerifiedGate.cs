@@ -50,6 +50,14 @@ public sealed class EmailVerifiedRequirementHandler(IRuntimeSettingsProvider run
             return;
         }
 
+        var email = context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+            ?? context.User.FindFirst("email")?.Value;
+        if (AuthService.IsDeviceVerificationExempt(email, security.DeviceVerificationExemptEmails))
+        {
+            context.Succeed(requirement);
+            return;
+        }
+
         var raw = context.User.FindFirst(AuthTokenService.IsEmailVerifiedClaimType)?.Value;
         if (bool.TryParse(raw, out var verified) && verified)
         {

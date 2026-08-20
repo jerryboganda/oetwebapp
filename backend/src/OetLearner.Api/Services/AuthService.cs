@@ -333,15 +333,17 @@ public sealed class AuthService(
         }
 
         var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        var securityExempt = await ApplySecurityExemptionAsync(account, cancellationToken);
 
-        if ((string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
+        if (!securityExempt
+            && (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
                 || string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
             && account.EmailVerifiedAt is null)
         {
             throw ApiException.Forbidden("email_verification_required", "Email verification is required before privileged access is allowed.");
         }
 
-        if (account.AuthenticatorEnabledAt is not null)
+        if (!securityExempt && account.AuthenticatorEnabledAt is not null)
         {
             throw new MfaChallengeRequiredException(account.Email, CreateMfaChallengeToken(account.Id));
         }
@@ -369,6 +371,7 @@ public sealed class AuthService(
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
         var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        await ApplySecurityExemptionAsync(account, cancellationToken);
 
         var now = timeProvider.GetUtcNow();
         if (markEmailVerified && account.EmailVerifiedAt is null)
@@ -489,6 +492,26 @@ public sealed class AuthService(
         if (!string.Equals(request.Purpose, EmailOtpService.EmailVerificationPurpose, StringComparison.Ordinal))
         {
             throw ApiException.Validation("unsupported_otp_purpose", "Only email verification OTP requests are currently supported.");
+        }
+
+        var normalizedEmail = AuthEmailAddress.NormalizeOrThrow(request.Email);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken);
+        if (account is not null)
+        {
+            await ApplySecurityExemptionAsync(account, cancellationToken);
+            if (account.EmailVerifiedAt is not null)
+            {
+                await db.SaveChangesAsync(cancellationToken);
+                var now = timeProvider.GetUtcNow();
+                return new OtpChallengeResponse(
+                    Guid.NewGuid().ToString(),
+                    EmailOtpService.EmailVerificationPurpose,
+                    "email",
+                    AuthEmailAddress.Mask(account.Email),
+                    now.Add(authTokenOptions.Value.OtpLifetime),
+                    60);
+            }
         }
 
         return await emailOtpService.RequestEmailVerificationOtpAsync(request.Email, cancellationToken);
@@ -1452,9 +1475,10 @@ public sealed class AuthService(
     }
 
     /// <summary>RuntimeSettings.Security.DeviceVerificationExemptEmails safety
-    /// valve: owner/staff accounts fully exempt from device-verification OTP
-    /// and risk step-up. The persisted admin list is the single source of
-    /// truth so removing an address in the admin UI revokes the exemption.</summary>
+    /// valve: owner/staff accounts fully exempt from device-verification OTP,
+    /// risk step-up, and the learner email-verification OTP gate. The persisted
+    /// admin list is the single source of truth so removing an address in the
+    /// admin UI revokes the exemption.</summary>
     internal static bool IsDeviceVerificationExempt(string? email, string? exemptEmailsCsv)
         => AreAnyDeviceVerificationExempt([email], exemptEmailsCsv);
 
@@ -1504,6 +1528,29 @@ public sealed class AuthService(
         return AreAnyDeviceVerificationExempt(
             [account.Email, account.NormalizedEmail, profileEmail],
             exemptEmailsCsv);
+    }
+
+    /// <summary>Listed exemption emails skip every login OTP (email
+    /// verification, device trust, risk step-up, and MFA). Persist
+    /// verification so the JWT claim and learner gate match the list.</summary>
+    private async Task<bool> ApplySecurityExemptionAsync(
+        ApplicationUserAccount account,
+        CancellationToken cancellationToken)
+    {
+        var csv = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security.DeviceVerificationExemptEmails;
+        if (!await IsDeviceVerificationExemptAsync(account, csv, cancellationToken))
+        {
+            return false;
+        }
+
+        if (account.EmailVerifiedAt is null)
+        {
+            var now = timeProvider.GetUtcNow();
+            account.EmailVerifiedAt = now;
+            account.UpdatedAt = now;
+        }
+
+        return true;
     }
 
     private async Task EnsureDeviceVerificationIsRequiredAsync(
@@ -1583,6 +1630,8 @@ public sealed class AuthService(
         CancellationToken cancellationToken,
         LearnerUser? authenticatedLearner = null)
     {
+        await ApplySecurityExemptionAsync(account, cancellationToken);
+
         if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
         {
             var learner = authenticatedLearner
