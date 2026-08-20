@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Tests;
@@ -437,5 +438,113 @@ public class UserAccessAllocationServiceTests
         Assert.True((tx.ReferenceId ?? string.Empty).Length <= 128);
         Assert.Equal(3, snapshot.WritingOnlyCredits);
         Assert.Equal(3, snapshot.CreditsRemaining);
+    }
+
+    [Fact]
+    public async Task GrantAddon_AiPackage_WithoutMainPlan_CreatesStandaloneEntitlement()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-standalone-ai";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_reading_starter",
+            Code = "pkg_reading_starter",
+            Name = "Reading Starter",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantCredits = 0,
+            GrantEntitlementsJson = """{"package_type":"reading","reading_tests":5}""",
+            DurationDays = 30,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        var access = await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_reading_starter", null, 1), default);
+
+        Assert.Empty(access.Subscriptions);
+        Assert.Contains(access.AddOns, addOn => addOn.Code == "pkg_reading_starter");
+        Assert.Null((await db.Users.SingleAsync(u => u.Id == userId)).CurrentPlanId);
+        Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.UserId == userId && s.PlanId == Subscription.StandaloneAddonPlanId));
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(5, snapshot.ReadingTestsRemaining);
+    }
+
+    [Fact]
+    public async Task GrantAddon_ParentRequired_WithoutMainPlan_DoesNotUseMainPlanError()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-parent-addon";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_access_ext",
+            Code = "access_extension",
+            Name = "Access Extension",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "access_extension",
+            RequiresEligibleParent = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            CreateService(db).GrantAddonAsync(
+                "admin", "Admin", userId,
+                new AdminUserAccessAddonRequest("access_extension", null, 1), default));
+
+        Assert.Equal("addon_needs_package", ex.ErrorCode);
+        Assert.DoesNotContain("main plan", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("no active subscription to attach", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RemoveAddon_DeletedAddOn_DoesNotReturnOnGetAccess()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-addon";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_reading_pro",
+            Code = "pkg_reading_pro",
+            Name = "Reading Pro",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantEntitlementsJson = """{"package_type":"reading","reading_tests":null}""",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        var granted = await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_reading_pro", null, 1), default);
+        Assert.Contains(granted.AddOns, addOn => addOn.Code == "pkg_reading_pro");
+
+        var removed = await service.RemoveAddonAsync(
+            "admin", "Admin", userId, "pkg_reading_pro", granted.AddOns[0].SubscriptionId, default);
+
+        Assert.Empty(removed.AddOns);
+        Assert.Empty((await service.GetAccessAsync(userId, default)).AddOns);
+        Assert.Equal(SubscriptionItemStatus.Cancelled, (await db.SubscriptionItems.SingleAsync()).Status);
     }
 }

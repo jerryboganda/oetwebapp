@@ -325,6 +325,17 @@ public static class AdminEndpoints
             => Results.Ok(await svc.GrantAddonAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
             .WithAdminWrite("AdminBillingSubscriptionWrite");
 
+        admin.MapDelete("/users/{userId}/access/addons/{addonCode}", async (
+            string userId,
+            string addonCode,
+            string? subscriptionId,
+            HttpContext http,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc,
+            CancellationToken ct)
+            => Results.Ok(await svc.RemoveAddonAsync(
+                http.AdminId(), http.AdminName(), userId, addonCode, subscriptionId, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
         admin.MapPut("/users/{userId}/access/scope", async (string userId, HttpContext http,
             AdminUserAccessScopeRequest request,
             OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
