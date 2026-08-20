@@ -4543,13 +4543,18 @@ export async function fetchAiPackages(): Promise<AiPackagesResponse> {
   };
 }
 
-export async function fetchMyAiPackageCredits(): Promise<AiPackageCreditSnapshot> {
-  const data = await apiRequest<ApiRecord>('/v1/me/ai-package-credits');
+function mapAiPackageCreditSnapshot(data: ApiRecord): AiPackageCreditSnapshot {
+  const flexibleCredits = Number(data.flexibleCredits ?? 0);
+  const writingOnlyCredits = Number(data.writingOnlyCredits ?? 0);
+  const speakingOnlyCredits = Number(data.speakingOnlyCredits ?? 0);
+  const creditsRemaining = Number(
+    data.creditsRemaining ?? flexibleCredits + writingOnlyCredits + speakingOnlyCredits,
+  );
   return {
     userId: String(data.userId ?? ''),
-    flexibleCredits: Number(data.flexibleCredits ?? 0),
-    writingOnlyCredits: Number(data.writingOnlyCredits ?? 0),
-    speakingOnlyCredits: Number(data.speakingOnlyCredits ?? 0),
+    flexibleCredits,
+    writingOnlyCredits,
+    speakingOnlyCredits,
     listeningTestsRemaining: data.listeningTestsRemaining == null ? null : Number(data.listeningTestsRemaining),
     readingTestsRemaining: data.readingTestsRemaining == null ? null : Number(data.readingTestsRemaining),
     mockExamsRemaining: Number(data.mockExamsRemaining ?? 0),
@@ -4572,7 +4577,22 @@ export async function fetchMyAiPackageCredits(): Promise<AiPackageCreditSnapshot
       expiresAt: toNullableString(item.expiresAt),
       createdAt: String(item.createdAt ?? ''),
     })),
+    creditsGranted: Number(data.creditsGranted ?? 0),
+    creditsUsed: Number(data.creditsUsed ?? 0),
+    creditsRemaining,
   };
+}
+
+export async function fetchMyAiPackageCredits(): Promise<AiPackageCreditSnapshot> {
+  const data = await apiRequest<ApiRecord>('/v1/me/ai-package-credits');
+  return mapAiPackageCreditSnapshot(data);
+}
+
+export async function fetchAdminUserAiCredits(userId: string): Promise<AiPackageCreditSnapshot> {
+  const data = await apiRequest<ApiRecord>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/ai-credits?pageSize=100`,
+  );
+  return mapAiPackageCreditSnapshot(data);
 }
 
 export async function downloadInvoice(invoiceId: string): Promise<string> {

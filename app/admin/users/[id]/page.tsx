@@ -35,14 +35,17 @@ import { Badge } from '@/components/admin/ui/badge';
 import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { AiCreditSummary } from '@/components/admin/user-access/ai-credit-summary';
 import { ManageAccessPanel } from '@/components/admin/user-access/manage-access-panel';
 import { QuickGrantModal } from '@/components/admin/user-access/quick-grant-modal';
+import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 import type { GrantUserPackageInput, UserAccessSubscriptionRow } from '@/lib/api/user-access-packages';
 import {
   adjustAdminUserCredits,
   deleteAdminUser,
   fetchAdminPermissions,
   fetchAdminSignupCatalog,
+  fetchAdminUserAiCredits,
   resendAdminUserInvite,
   restoreAdminUser,
   revokeAdminUserSessions,
@@ -230,6 +233,8 @@ export default function UserDetailPage() {
   const [isSavingAccess, setIsSavingAccess] = useState(false);
   const [isQuickGrantOpen, setIsQuickGrantOpen] = useState(false);
   const [advancedAccessOpen, setAdvancedAccessOpen] = useState(false);
+  const [aiCredits, setAiCredits] = useState<AiPackageCreditSnapshot | null>(null);
+  const [aiCreditsLoading, setAiCreditsLoading] = useState(false);
   const [securitySessions, setSecuritySessions] = useState<AdminSecuritySession[]>([]);
   const [securityDevices, setSecurityDevices] = useState<AdminSecurityDevice[]>([]);
   const [isLoadingSecurityDetail, setIsLoadingSecurityDetail] = useState(false);
@@ -280,9 +285,13 @@ export default function UserDetailPage() {
               setOriginalAccess(null);
             }
           }
+          if (!cancelled) {
+            await refreshAiCredits(detail.id);
+          }
         } else {
           setAccess(null);
           setOriginalAccess(null);
+          setAiCredits(null);
         }
 
         // Security spec §4.4: sessions/devices list only makes sense for an
@@ -362,6 +371,18 @@ export default function UserDetailPage() {
     const detail = await getAdminUserDetailData(userId);
     setUser(detail);
     setPageStatus('success');
+  }
+
+  async function refreshAiCredits(id: string) {
+    setAiCreditsLoading(true);
+    try {
+      setAiCredits(await fetchAdminUserAiCredits(id));
+    } catch (error) {
+      console.error(error);
+      setAiCredits(null);
+    } finally {
+      setAiCreditsLoading(false);
+    }
   }
 
   async function handlePasswordReset() {
@@ -496,6 +517,7 @@ export default function UserDetailPage() {
       // sourced from `user`, not `access` — without this, a package swap here
       // looks like it silently didn't take until the admin manually reloads the page.
       await reloadUser();
+      await refreshAiCredits(user.id);
       setToast({ variant: 'success', message: `Access updated for ${user.email}.` });
     } catch (error) {
       console.error(error);
@@ -1500,10 +1522,13 @@ export default function UserDetailPage() {
                       </div>
                     }
                   >
+                    <div className="space-y-3">
+                     <AiCreditSummary snapshot={aiCredits} loading={aiCreditsLoading} />
+                    </div>
                     <button
-                      type="button"
-                      onClick={() => setAdvancedAccessOpen((current) => !current)}
-                      className="flex items-center gap-1 text-sm font-medium text-primary"
+                     type="button"
+                     onClick={() => setAdvancedAccessOpen((current) => !current)}
+                     className="flex items-center gap-1 text-sm font-medium text-primary"
                     >
                       {advancedAccessOpen ? 'Hide advanced' : 'Advanced (full manual control)'}
                       {advancedAccessOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -1819,6 +1844,7 @@ export default function UserDetailPage() {
             setOriginalAccess(saved);
             // See handleSaveAccess: the "Subscription" summary card reads `user`, not `access`.
             void reloadUser();
+            void refreshAiCredits(user.id);
             setToast({ variant: 'success', message: `Access updated for ${user.email}.` });
           }}
         />

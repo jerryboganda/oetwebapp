@@ -76,7 +76,6 @@ export function PackageList({
   const [startsAt, setStartsAt] = useState(() => toDateInput(new Date()));
   const [expiryOverride, setExpiryOverride] = useState('');
   const [makePrimary, setMakePrimary] = useState(subscriptions.length === 0);
-  const [grantIncludedCredits, setGrantIncludedCredits] = useState(true);
   const [overrideProfession, setOverrideProfession] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
@@ -99,7 +98,6 @@ export function PackageList({
     starts: string,
     expiryOverrideVal: string,
     primaryVal: boolean,
-    creditsVal: boolean,
     overrideProfVal: boolean,
   ) {
     if (!code) {
@@ -138,7 +136,7 @@ export function PackageList({
       expiresAt: toIso(effExpiry),
       isPrimary: primaryVal,
       isPending: true,
-      grantIncludedCredits: creditsVal,
+      grantIncludedCredits: false,
       overrideProfessionMismatch: mismatch && overrideProfVal,
     };
 
@@ -155,7 +153,6 @@ export function PackageList({
     setStartsAt(toDateInput(new Date()));
     setExpiryOverride('');
     setMakePrimary(false);
-    setGrantIncludedCredits(true);
     setOverrideProfession(false);
     setActiveDraftId(null);
   }
@@ -186,7 +183,7 @@ export function PackageList({
               const val = event.target.value;
               setPlanCode(val);
               setOverrideProfession(false);
-              syncDraft(val, startsAt, expiryOverride, makePrimary, grantIncludedCredits, false);
+              syncDraft(val, startsAt, expiryOverride, makePrimary, false);
             }}
             options={[{ value: '', label: 'Select a plan...' }, ...planOptions]}
             disabled={disabled}
@@ -198,7 +195,7 @@ export function PackageList({
             onChange={(event) => {
               const val = event.target.value;
               setStartsAt(val);
-              syncDraft(planCode, val, expiryOverride, makePrimary, grantIncludedCredits, overrideProfession);
+              syncDraft(planCode, val, expiryOverride, makePrimary, overrideProfession);
             }}
             hint="Access begins on this date."
             disabled={disabled}
@@ -210,7 +207,7 @@ export function PackageList({
             onChange={(event) => {
               const val = event.target.value;
               setExpiryOverride(val);
-              syncDraft(planCode, startsAt, val, makePrimary, grantIncludedCredits, overrideProfession);
+              syncDraft(planCode, startsAt, val, makePrimary, overrideProfession);
             }}
             hint={`Defaults to ${accessDurationDays} days after the start date${
               isExpiryOverridden ? ' — overridden' : ''
@@ -225,7 +222,7 @@ export function PackageList({
                 size="sm"
                 onClick={() => {
                   setExpiryOverride('');
-                  syncDraft(planCode, startsAt, '', makePrimary, grantIncludedCredits, overrideProfession);
+                  syncDraft(planCode, startsAt, '', makePrimary, overrideProfession);
                 }}
                 disabled={disabled}
               >
@@ -249,7 +246,7 @@ export function PackageList({
               onChange={(event) => {
                 const val = event.target.checked;
                 setOverrideProfession(val);
-                syncDraft(planCode, startsAt, expiryOverride, makePrimary, grantIncludedCredits, val);
+                syncDraft(planCode, startsAt, expiryOverride, makePrimary, val);
               }}
               disabled={disabled}
             />
@@ -265,7 +262,7 @@ export function PackageList({
               onChange={(event) => {
                 const val = event.target.checked;
                 setMakePrimary(val);
-                syncDraft(planCode, startsAt, expiryOverride, val, grantIncludedCredits, overrideProfession);
+                syncDraft(planCode, startsAt, expiryOverride, val, overrideProfession);
               }}
               disabled={disabled}
             />
@@ -274,17 +271,12 @@ export function PackageList({
               credits, and expiry.
             </p>
           </div>
-          <Checkbox
-            label="Grant included credits"
-            checked={grantIncludedCredits}
-            onChange={(event) => {
-              const val = event.target.checked;
-              setGrantIncludedCredits(val);
-              syncDraft(planCode, startsAt, expiryOverride, makePrimary, val, overrideProfession);
-            }}
-            disabled={disabled}
-          />
         </div>
+        {(selectedPlan?.bundledAiCredits ?? 0) > 0 ? (
+          <p className="text-sm text-admin-fg-strong">
+            Includes {selectedPlan?.bundledAiCredits} gifted AI credits, granted automatically when you add this package.
+          </p>
+        ) : null}
         <div className="flex justify-end">
           <Button
             type="button"

@@ -240,4 +240,7 @@ export interface AiPackageCreditSnapshot {
   expiredBecausePassed: boolean;
   passedAt?: string | null;
   transactions: AiPackageCreditTransaction[];
+  creditsGranted: number;
+  creditsUsed: number;
+  creditsRemaining: number;
 }

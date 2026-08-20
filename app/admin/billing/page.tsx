@@ -1184,7 +1184,7 @@ export default function BillingPage() {
       render: (plan) => (
         <div className="space-y-1 text-muted">
           <p>{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
-          <p className="text-xs">{plan.includedCredits ?? 0} included credits</p>
+          <p className="text-xs">{plan.bundledAiCredits ?? 0} gifted AI credits</p>
         </div>
       ),
     },
@@ -1792,8 +1792,8 @@ export default function BillingPage() {
           <p className="mt-1 font-medium text-admin-fg-strong">{plan.activeSubscribers.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Credits</p>
-          <p className="mt-1 font-medium text-admin-fg-strong">{(plan.includedCredits ?? 0).toLocaleString()}</p>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gifted AI credits</p>
+          <p className="mt-1 font-medium text-admin-fg-strong">{(plan.bundledAiCredits ?? 0).toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Visibility</p>
@@ -3306,7 +3306,6 @@ export default function BillingPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-4">
             <Input label="Duration months" type="number" min={1} value={planForm.durationMonths} onChange={(event) => setPlanForm((current) => ({ ...current, durationMonths: event.target.value }))} />
-            <Input label="Included credits" type="number" min={0} value={planForm.includedCredits} onChange={(event) => setPlanForm((current) => ({ ...current, includedCredits: event.target.value }))} />
             <Input label="Display order" type="number" min={0} value={planForm.displayOrder} onChange={(event) => setPlanForm((current) => ({ ...current, displayOrder: event.target.value }))} />
             <Input label="Trial days" type="number" min={0} value={planForm.trialDays} onChange={(event) => setPlanForm((current) => ({ ...current, trialDays: event.target.value }))} />
           </div>
@@ -3408,7 +3407,14 @@ export default function BillingPage() {
               <div className="mt-2 grid gap-3 md:grid-cols-3">
                 <Input label="Writing assessments" type="number" min={0} value={planForm.bundledWritingAssessments} onChange={(event) => setPlanForm((current) => ({ ...current, bundledWritingAssessments: event.target.value }))} />
                 <Input label="Human Tutor Speaking sessions" type="number" min={0} value={planForm.bundledSpeakingSessions} onChange={(event) => setPlanForm((current) => ({ ...current, bundledSpeakingSessions: event.target.value }))} hint="Bookable live-tutor sessions, distinct from AI Speaking Credits" />
-                <Input label="AI credits" type="number" min={0} value={planForm.bundledAiCredits} onChange={(event) => setPlanForm((current) => ({ ...current, bundledAiCredits: event.target.value }))} />
+                <Input
+                  label="Gifted AI credits"
+                  type="number"
+                  min={0}
+                  value={planForm.bundledAiCredits}
+                  onChange={(event) => setPlanForm((current) => ({ ...current, bundledAiCredits: event.target.value }))}
+                  hint="Granted automatically into the exam wallet when this Full Course is purchased or assigned. Full Courses use 5."
+                />
               </div>
               <div className="mt-2 flex flex-wrap gap-4">
                 <Checkbox label="Bundle includes Tutor Book" checked={planForm.bundledTutorBook} onChange={(event) => setPlanForm((current) => ({ ...current, bundledTutorBook: event.target.checked }))} />
@@ -3692,11 +3698,9 @@ export default function BillingPage() {
                   onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, planCode: event.target.value }))}
                   options={plans.map((plan) => ({ value: plan.code ?? plan.id, label: `${plan.name} (${plan.code ?? plan.id})` }))}
                 />
-                <Checkbox
-                  label="Grant the plan's included credits to the wallet"
-                  checked={subscriptionActionForm.grantIncludedCredits}
-                  onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, grantIncludedCredits: event.target.checked }))}
-                />
+                <p className="text-sm text-admin-text-muted">
+                  Gifted AI credits on the plan are granted automatically. No extra checkbox.
+                </p>
               </>
             ) : null}
 
@@ -3714,11 +3718,6 @@ export default function BillingPage() {
                     label="Reset renewal date to plan duration from now"
                     checked={subscriptionActionForm.resetRenewalDate}
                     onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, resetRenewalDate: event.target.checked }))}
-                  />
-                  <Checkbox
-                    label="Grant included credits"
-                    checked={subscriptionActionForm.grantIncludedCredits}
-                    onChange={(event) => setSubscriptionActionForm((current) => ({ ...current, grantIncludedCredits: event.target.checked }))}
                   />
                 </div>
               </>
