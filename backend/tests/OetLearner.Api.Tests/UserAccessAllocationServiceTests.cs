@@ -22,7 +22,7 @@ public class UserAccessAllocationServiceTests
         public Task<AddonGrantResult> ApplyAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
             => throw new NotSupportedException();
         public Task<AddonGrantResult> ReverseAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
-            => throw new NotSupportedException();
+            => Task.FromResult(new AddonGrantResult(false, false, "noop"));
     }
 
     private static UserAccessAllocationService CreateService(LearnerDbContext db, IAiPackageCreditService? credits = null)
@@ -644,5 +644,247 @@ public class UserAccessAllocationServiceTests
         Assert.Empty(removed.AddOns);
         Assert.Empty((await service.GetAccessAsync(userId, default)).AddOns);
         Assert.Equal(SubscriptionItemStatus.Cancelled, (await db.SubscriptionItems.SingleAsync()).Status);
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(0, snapshot.ReadingTestsRemaining);
+        Assert.False(snapshot.WritingUnlimited);
+        Assert.False(snapshot.SpeakingUnlimited);
+    }
+
+    [Fact]
+    public async Task RemoveAddon_WritingPack_ReversesWritingOnly_LeavesSpeaking()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-writing";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.AddRange(
+            new BillingAddOn
+            {
+                Id = "addon_pkg_writing_starter",
+                Code = "pkg_writing_starter",
+                Name = "Writing Starter",
+                Status = BillingAddOnStatus.Active,
+                AddonKind = "ai_package",
+                RequiresEligibleParent = false,
+                GrantCredits = 3,
+                GrantEntitlementsJson = """{"package_type":"writing","writing_only_credits":6,"listening_tests":0,"reading_tests":0}""",
+                DurationDays = 30,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new BillingAddOn
+            {
+                Id = "addon_pkg_speaking_starter",
+                Code = "pkg_speaking_starter",
+                Name = "Speaking Starter",
+                Status = BillingAddOnStatus.Active,
+                AddonKind = "ai_package",
+                RequiresEligibleParent = false,
+                GrantCredits = 3,
+                GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":3,"listening_tests":0,"reading_tests":0}""",
+                DurationDays = 30,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        await service.GrantAddonAsync("admin", "Admin", userId, new AdminUserAccessAddonRequest("pkg_writing_starter", null, 1), default);
+        await service.GrantAddonAsync("admin", "Admin", userId, new AdminUserAccessAddonRequest("pkg_speaking_starter", null, 1), default);
+        await service.RemoveAddonAsync("admin", "Admin", userId, "pkg_writing_starter", null, default);
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.Equal(0, snapshot.WritingOnlyCredits);
+        Assert.Equal(3, snapshot.SpeakingOnlyCredits);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.DoesNotContain((await service.GetAccessAsync(userId, default)).AddOns, addOn => addOn.Code == "pkg_writing_starter");
+        Assert.Contains((await service.GetAccessAsync(userId, default)).AddOns, addOn => addOn.Code == "pkg_speaking_starter");
+    }
+
+    [Fact]
+    public async Task RemoveAddon_OetMastery_ClearsUnlimitedWritingAndSpeaking()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-mastery";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_oet_mastery",
+            Code = "pkg_oet_mastery",
+            Name = "OET Mastery",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantCredits = 0,
+            GrantEntitlementsJson = """{"package_type":"full","unlimited_grading":true,"listening_tests":null,"reading_tests":null}""",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        await service.GrantAddonAsync("admin", "Admin", userId, new AdminUserAccessAddonRequest("pkg_oet_mastery", null, 1), default);
+        var removed = await service.RemoveAddonAsync("admin", "Admin", userId, "pkg_oet_mastery", null, default);
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.Empty(removed.AddOns);
+        Assert.False(snapshot.WritingUnlimited);
+        Assert.False(snapshot.SpeakingUnlimited);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Equal(0, snapshot.ListeningTestsRemaining);
+        Assert.Equal(0, snapshot.ReadingTestsRemaining);
+    }
+
+    [Fact]
+    public async Task RemoveAddon_QuickCheck_ReversesConfiguredPools()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-quick-check";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_quick_check",
+            Code = "pkg_quick_check",
+            Name = "Quick Check",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantCredits = 5,
+            GrantEntitlementsJson = """{"package_type":"full","flexible_credits":5,"listening_tests":3,"reading_tests":3}""",
+            DurationDays = 30,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        await service.GrantAddonAsync("admin", "Admin", userId, new AdminUserAccessAddonRequest("pkg_quick_check", null, 1), default);
+        await service.RemoveAddonAsync("admin", "Admin", userId, "pkg_quick_check", null, default);
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Equal(0, snapshot.ListeningTestsRemaining);
+        Assert.Equal(0, snapshot.ReadingTestsRemaining);
+        Assert.Equal(0, snapshot.CreditsRemaining);
+    }
+
+    [Fact]
+    public async Task GrantAndRemove_TutorBookAddon_UnlocksThenLocksBookAccess()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-tutor-book-sync";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledTutorBook = false,
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_tutor_book",
+            Code = "tutor-book-addon",
+            Name = "TutorBook - Add-on",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "tutor_book",
+            RequiresEligibleParent = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        var grantedPackage = await service.GrantPackageAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("full-condensed-medicine", null, null, true, false, false), default);
+        var subscriptionId = grantedPackage.Subscriptions.Single().Id;
+
+        await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("tutor-book-addon", subscriptionId, 1), default);
+        Assert.True((await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).TutorBookUnlocked);
+
+        await service.RemoveAddonAsync("admin", "Admin", userId, "tutor-book-addon", subscriptionId, default);
+        Assert.False((await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).TutorBookUnlocked);
+        Assert.Empty((await service.GetAccessAsync(userId, default)).AddOns);
+    }
+
+    [Fact]
+    public async Task RemovePackage_ReversesGiftedAiCreditsAndLinkedAiAddOn()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-package-sync";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 5,
+            BundledTutorBook = true,
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_writing_starter",
+            Code = "pkg_writing_starter",
+            Name = "Writing Starter",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantCredits = 3,
+            GrantEntitlementsJson = """{"package_type":"writing","writing_only_credits":6}""",
+            DurationDays = 30,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        var granted = await service.GrantPackageAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("full-condensed-medicine", null, null, true, false, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+        await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_writing_starter", subscriptionId, 1), default);
+
+        var before = await credits.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(5, before.FlexibleCredits);
+        Assert.Equal(6, before.WritingOnlyCredits);
+        Assert.True((await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).TutorBookUnlocked);
+
+        var removed = await service.RemovePackageAsync("admin", "Admin", userId, subscriptionId, default);
+        var after = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.Empty(removed.Subscriptions);
+        Assert.Empty(removed.AddOns);
+        Assert.Equal(0, after.FlexibleCredits);
+        Assert.Equal(0, after.WritingOnlyCredits);
+        Assert.Equal(SubscriptionStatus.Cancelled, (await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).Status);
     }
 }

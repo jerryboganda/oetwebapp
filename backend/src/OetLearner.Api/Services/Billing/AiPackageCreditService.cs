@@ -54,6 +54,19 @@ public interface IAiPackageCreditService
     Task<bool> RefundAsync(string userId, string originalReferenceId, string refundReferenceId, string description, CancellationToken ct);
     Task<AiPackageCreditSnapshot> AdjustAsync(string userId, AiPackageCreditAdjustmentRequest request, string adminId, CancellationToken ct);
     Task<AiPackageCreditSnapshot> RecordExamOutcomeAsync(string userId, LearnerExamOutcomeRequest request, string adminId, string adminName, CancellationToken ct);
+
+    /// <summary>
+    /// Reverse unreversed Purchase rows for <paramref name="packageId"/> (AI
+    /// add-on or Full Course gift). Remaining pools clamp at zero so spent
+    /// credits are not restored as a negative balance.
+    /// </summary>
+    Task<int> ReverseGrantsAsync(string userId, string packageId, CancellationToken ct);
+
+    /// <summary>
+    /// If unlimited Listening/Reading was lost because the last unlimited
+    /// add-on item was cancelled, drop the null sentinel back to a finite pool.
+    /// </summary>
+    Task RecalculateObjectiveAllowancesAsync(string userId, CancellationToken ct);
 }
 
 public sealed record AiPackageCreditSnapshot(
@@ -243,6 +256,88 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
         return true;
+    }
+
+    public async Task<int> ReverseGrantsAsync(string userId, string packageId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(packageId))
+        {
+            return 0;
+        }
+
+        var reversed = 0;
+        while (await ReverseOneGrantAsync(userId, packageId, ct))
+        {
+            reversed++;
+        }
+
+        return reversed;
+    }
+
+    public async Task RecalculateObjectiveAllowancesAsync(string userId, CancellationToken ct)
+    {
+        var account = await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
+        if (account is null)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var entitlementJson = await (
+            from item in db.SubscriptionItems.AsNoTracking()
+            join subscription in db.Subscriptions.AsNoTracking()
+                on item.SubscriptionId equals subscription.Id
+            join addOn in db.BillingAddOns.AsNoTracking()
+                on item.ItemCode equals addOn.Code
+            where subscription.UserId == userId
+                  && (subscription.Status == SubscriptionStatus.Active
+                      || subscription.Status == SubscriptionStatus.Trial
+                      || subscription.Status == SubscriptionStatus.FreezeRequested)
+                  && item.Status == SubscriptionItemStatus.Active
+                  && item.StartsAt <= now
+                  && (item.EndsAt == null || item.EndsAt > now)
+                  && addOn.AddonKind == "ai_package"
+            select addOn.GrantEntitlementsJson
+        ).ToListAsync(ct);
+
+        var listeningUnlimited = false;
+        var readingUnlimited = false;
+        var listeningSum = 0;
+        var readingSum = 0;
+        foreach (var json in entitlementJson)
+        {
+            var grant = AiPackageGrant.FromAddOn(new BillingAddOn
+            {
+                Code = "pkg_recalc",
+                AddonKind = "ai_package",
+                GrantEntitlementsJson = json,
+            }, 1);
+            if (grant.ListeningTests is null) listeningUnlimited = true;
+            else listeningSum += grant.ListeningTests.Value;
+            if (grant.ReadingTests is null) readingUnlimited = true;
+            else readingSum += grant.ReadingTests.Value;
+        }
+
+        if (listeningUnlimited)
+        {
+            account.ListeningTestsRemaining = null;
+        }
+        else if (account.ListeningTestsRemaining is null)
+        {
+            account.ListeningTestsRemaining = listeningSum;
+        }
+
+        if (readingUnlimited)
+        {
+            account.ReadingTestsRemaining = null;
+        }
+        else if (account.ReadingTestsRemaining is null)
+        {
+            account.ReadingTestsRemaining = readingSum;
+        }
+
+        account.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
     }
 
     public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
@@ -729,6 +824,80 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         db.AiPackageCreditTransactions.Add(row);
     }
 
+    private async Task<bool> ReverseOneGrantAsync(string userId, string packageId, CancellationToken ct)
+    {
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        var account = await GetOrCreateAccountAsync(userId, ct);
+        var purchases = await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == userId
+                          && row.PackageId == packageId
+                          && row.Reason == AiPackageCreditReason.Purchase
+                          && row.ReferenceId != null)
+            .OrderBy(row => row.CreatedAt)
+            .ThenBy(row => row.Id)
+            .ToListAsync(ct);
+        var reversedReferences = (await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == userId
+                          && row.Reason == AiPackageCreditReason.GrantReversed
+                          && row.ReferenceId != null)
+            .Select(row => row.ReferenceId!)
+            .ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+        var purchase = purchases.FirstOrDefault(row =>
+        {
+            var reverseReference = AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{row.ReferenceId}");
+            return !reversedReferences.Contains(row.ReferenceId!)
+                   && !reversedReferences.Contains(reverseReference);
+        });
+        if (purchase is null)
+        {
+            return false;
+        }
+
+        var flexible = -Math.Min(account.FlexibleCredits, Math.Max(0, purchase.FlexibleCreditsDelta));
+        var writing = -Math.Min(account.WritingOnlyCredits, Math.Max(0, purchase.WritingOnlyCreditsDelta));
+        var speaking = -Math.Min(account.SpeakingOnlyCredits, Math.Max(0, purchase.SpeakingOnlyCreditsDelta));
+        var mocks = -Math.Min(account.MockExamsRemaining, Math.Max(0, purchase.MockExamsDelta));
+        var listening = 0;
+        var reading = 0;
+        if (account.ListeningTestsRemaining is int listeningRemaining && purchase.ListeningTestsDelta > 0)
+        {
+            listening = -Math.Min(listeningRemaining, purchase.ListeningTestsDelta);
+            account.ListeningTestsRemaining = listeningRemaining + listening;
+        }
+        if (account.ReadingTestsRemaining is int readingRemaining && purchase.ReadingTestsDelta > 0)
+        {
+            reading = -Math.Min(readingRemaining, purchase.ReadingTestsDelta);
+            account.ReadingTestsRemaining = readingRemaining + reading;
+        }
+
+        account.FlexibleCredits += flexible;
+        account.WritingOnlyCredits += writing;
+        account.SpeakingOnlyCredits += speaking;
+        account.MockExamsRemaining += mocks;
+        account.UpdatedAt = DateTimeOffset.UtcNow;
+        var reverseReference = AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{purchase.ReferenceId}");
+        AddTransaction(account, new AiPackageCreditTransaction
+        {
+            Id = NewId("aipkg-tx"),
+            PackageId = purchase.PackageId,
+            PackageType = purchase.PackageType,
+            FlexibleCreditsDelta = flexible,
+            WritingOnlyCreditsDelta = writing,
+            SpeakingOnlyCreditsDelta = speaking,
+            ListeningTestsDelta = listening,
+            ReadingTestsDelta = reading,
+            MockExamsDelta = mocks,
+            Reason = AiPackageCreditReason.GrantReversed,
+            ReferenceId = reverseReference,
+            Description = $"{purchase.PackageId} grant reversed",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync(ct);
+        if (tx is not null) await tx.CommitAsync(ct);
+        return true;
+    }
+
     private async Task<bool> TransactionExistsAsync(string referenceId, AiPackageCreditReason reason, CancellationToken ct)
         => await db.AiPackageCreditTransactions.AsNoTracking()
             .AnyAsync(row => row.ReferenceId == referenceId && row.Reason == reason, ct);
@@ -810,9 +979,11 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             .Where(row => row.UserId == userId)
             .Select(row => new { row.Reason, row.FlexibleCreditsDelta, row.WritingOnlyCreditsDelta, row.SpeakingOnlyCreditsDelta })
             .ToListAsync(ct);
-        var creditsGranted = practiceRows
-            .Where(row => row.Reason is AiPackageCreditReason.Purchase or AiPackageCreditReason.AdminAdjustment)
-            .Sum(row => Math.Max(0, row.FlexibleCreditsDelta) + Math.Max(0, row.WritingOnlyCreditsDelta) + Math.Max(0, row.SpeakingOnlyCreditsDelta));
+        var creditsGranted = Math.Max(0, practiceRows
+            .Where(row => row.Reason is AiPackageCreditReason.Purchase
+                or AiPackageCreditReason.AdminAdjustment
+                or AiPackageCreditReason.GrantReversed)
+            .Sum(row => row.FlexibleCreditsDelta + row.WritingOnlyCreditsDelta + row.SpeakingOnlyCreditsDelta));
         var creditsUsed = practiceRows
             .Where(row => row.Reason is AiPackageCreditReason.GradingDeduct or AiPackageCreditReason.ObjectivePracticeDeduct)
             .Sum(row => Math.Max(0, -row.FlexibleCreditsDelta) + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta));

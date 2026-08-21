@@ -14,6 +14,7 @@ public enum AiPackageCreditReason
     MockRefundOnFailure = 6,
     PassExpiry = 7,
     ObjectivePracticeDeduct = 8,
+    GrantReversed = 9,
 }
 
 [Index(nameof(UserId), IsUnique = true)]
