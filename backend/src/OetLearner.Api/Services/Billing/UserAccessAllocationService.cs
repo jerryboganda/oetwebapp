@@ -227,6 +227,12 @@ public sealed class UserAccessAllocationService(
         // keeps removal atomic when a shared wallet no longer has enough balance to
         // safely reverse the exact package grant.
         var reversedCredits = await ReverseAdminGrantedCreditsAsync(adminId, sub, ct);
+        await ReverseLinkedAddOnsAsync(userId, sub, ct);
+        if (aiPackageCreditService is not null)
+        {
+            await aiPackageCreditService.ReverseGrantsAsync(userId, sub.PlanId, ct);
+            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
+        }
 
         // Expired/Cancelled already grant nothing, and the state machine keeps Expired
         // terminal — removing one of those again is a no-op rather than a 409.
@@ -374,6 +380,10 @@ public sealed class UserAccessAllocationService(
         }
 
         await EnsureAddonSubscriptionItemAsync(targetSubId, addonCode, ct);
+        if (IsTutorBookAddOn(addon))
+        {
+            await SetTutorBookUnlockedAsync(targetSubId, true, ct);
+        }
 
         await AuditAsync(adminId, adminName, "Add-on Granted", targetSubId,
             $"Granted add-on {addonCode} x{quantity} to {userId} ({appliedUnits} new)", ct);
@@ -411,11 +421,30 @@ public sealed class UserAccessAllocationService(
             item.Status = SubscriptionItemStatus.Cancelled;
             item.EndsAt = now;
             item.UpdatedAt = now;
+            await addonGrantProcessor.ReverseAsync($"admin-remove:{item.Id}", item.SubscriptionId, code, ct);
         }
 
         if (items.Count > 0)
         {
             await db.SaveChangesAsync(ct);
+            if (aiPackageCreditService is not null)
+            {
+                await aiPackageCreditService.ReverseGrantsAsync(userId, code, ct);
+                await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
+            }
+
+            var addon = await db.BillingAddOns.AsNoTracking().FirstOrDefaultAsync(a => a.Code == code, ct);
+            if (addon is not null && IsTutorBookAddOn(addon))
+            {
+                foreach (var parentSubscriptionId in items.Select(item => item.SubscriptionId).Distinct())
+                {
+                    if (!await HasActiveTutorBookSourceAsync(userId, parentSubscriptionId, ct))
+                    {
+                        await SetTutorBookUnlockedAsync(parentSubscriptionId, false, ct);
+                    }
+                }
+            }
+
             await AuditAsync(adminId, adminName, "Add-on Removed", userId,
                 $"Removed add-on {code} x{items.Count} from {userId}", ct);
         }
@@ -597,6 +626,82 @@ public sealed class UserAccessAllocationService(
             UpdatedAt = now,
         });
         await db.SaveChangesAsync(ct);
+    }
+
+    private async Task ReverseLinkedAddOnsAsync(string userId, Subscription subscription, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+        var items = await db.SubscriptionItems
+            .Where(item => item.SubscriptionId == subscription.Id && item.Status == SubscriptionItemStatus.Active)
+            .ToListAsync(ct);
+        if (items.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var item in items)
+        {
+            item.Status = SubscriptionItemStatus.Cancelled;
+            item.EndsAt = now;
+            item.UpdatedAt = now;
+            await addonGrantProcessor.ReverseAsync($"admin-remove:{item.Id}", item.SubscriptionId, item.ItemCode, ct);
+            if (aiPackageCreditService is not null)
+            {
+                await aiPackageCreditService.ReverseGrantsAsync(userId, item.ItemCode, ct);
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static bool IsTutorBookAddOn(BillingAddOn addon)
+        => string.Equals(addon.AddonKind, "tutor_book", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(addon.Code, "tutor-book-addon", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(addon.Code, "tutor-book", StringComparison.OrdinalIgnoreCase);
+
+    private async Task SetTutorBookUnlockedAsync(string subscriptionId, bool unlocked, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == subscriptionId, ct);
+        if (subscription is null)
+        {
+            return;
+        }
+
+        subscription.TutorBookUnlocked = unlocked;
+        subscription.ChangedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+    }
+
+    private async Task<bool> HasActiveTutorBookSourceAsync(string userId, string subscriptionId, CancellationToken ct)
+    {
+        var now = timeProvider.GetUtcNow();
+        var hasAddon = await (
+            from item in db.SubscriptionItems.AsNoTracking()
+            join addOn in db.BillingAddOns.AsNoTracking()
+                on item.ItemCode equals addOn.Code
+            where item.SubscriptionId == subscriptionId
+                  && item.Status == SubscriptionItemStatus.Active
+                  && item.StartsAt <= now
+                  && (item.EndsAt == null || item.EndsAt > now)
+                  && (addOn.AddonKind == "tutor_book"
+                      || addOn.Code == "tutor-book-addon"
+                      || addOn.Code == "tutor-book")
+            select item.Id).AnyAsync(ct);
+        if (hasAddon)
+        {
+            return true;
+        }
+
+        var subscription = await db.Subscriptions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == subscriptionId && s.UserId == userId, ct);
+        if (subscription is null || !AccessGrantingStatuses.Contains(subscription.Status))
+        {
+            return false;
+        }
+
+        var plan = await db.BillingPlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Code == subscription.PlanId || p.Id == subscription.PlanId, ct);
+        return plan?.BundledTutorBook == true;
     }
 
     private async Task TryGrantCourseGiftCreditsAsync(

@@ -25,7 +25,7 @@ public class UserAccessPackageSwapReproTests
         public Task<AddonGrantResult> ApplyAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
             => throw new NotSupportedException();
         public Task<AddonGrantResult> ReverseAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
-            => throw new NotSupportedException();
+            => Task.FromResult(new AddonGrantResult(false, false, "noop"));
     }
 
     private static UserAccessAllocationService CreateService(LearnerDbContext db)
