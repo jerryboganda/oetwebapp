@@ -4297,6 +4297,13 @@ public partial class LearnerService(
                 "We couldn't start your payment right now. Please try again in a moment or choose another payment method.",
                 retryable: true);
         }
+        catch (HttpRequestException)
+        {
+            throw ApiException.ServiceUnavailable(
+                "payment_gateway_error",
+                "We couldn't start your payment right now. Please try again in a moment or choose another payment method.",
+                retryable: true);
+        }
                         providerRequestReturned = true;
 
         quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;

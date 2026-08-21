@@ -35,7 +35,7 @@ export function CheckoutPayRegion({
           onClick={() => onChange('global')}
           icon={<Globe className="h-5 w-5" />}
           title="Pay globally"
-          subtitle="Card, PayPal or UK bank transfer"
+          subtitle="Whop, Fawaterak or UK bank transfer"
         />
         <RegionCard
           active={value === 'egypt'}

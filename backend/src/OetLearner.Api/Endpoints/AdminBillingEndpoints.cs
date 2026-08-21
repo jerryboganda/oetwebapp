@@ -65,6 +65,7 @@ public static class AdminBillingEndpoints
 
         billing.MapGet("/payment-gateways", ListPaymentGateways);
         billing.MapPatch("/payment-gateways/{name}", UpdatePaymentGateway).WithAdminWrite("AdminBillingCatalogWrite");
+        billing.MapPost("/payment-gateways/{name}/ping", PingPaymentGateway).WithAdminWrite("AdminBillingCatalogWrite");
 
         return app;
     }
@@ -93,6 +94,63 @@ public static class AdminBillingEndpoints
             return Results.NotFound(new { error = "unknown_gateway", message = $"Unknown payment gateway '{name}'." });
         }
     }
+
+    private static async Task<IResult> PingPaymentGateway(
+        string name,
+        IRuntimeSettingsProvider runtimeSettings,
+        IHttpClientFactory httpFactory,
+        CancellationToken ct)
+    {
+        var settings = await runtimeSettings.GetAsync(ct);
+        var client = httpFactory.CreateClient();
+        client.Timeout = TimeSpan.FromSeconds(20);
+        client.DefaultRequestVersion = System.Net.HttpVersion.Version11;
+        client.DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower;
+
+        try
+        {
+            if (string.Equals(name, PaymentGatewayNames.Whop, StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(settings.Whop.ApiKey))
+                {
+                    return Results.Ok(new { ok = false, status = 0, reason = "not_configured" });
+                }
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, CombineUrl(settings.Whop.ApiBaseUrl, "me"));
+                req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + settings.Whop.ApiKey.Trim());
+                req.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
+                using var resp = await client.SendAsync(req, ct);
+                return Results.Ok(new { ok = resp.IsSuccessStatusCode, status = (int)resp.StatusCode, reason = resp.IsSuccessStatusCode ? "ok" : "upstream" });
+            }
+
+            if (string.Equals(name, PaymentGatewayNames.Fawaterak, StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrWhiteSpace(settings.Fawaterak.HashApiKey))
+                {
+                    return Results.Ok(new { ok = false, status = 0, reason = "not_configured" });
+                }
+
+                using var req = new HttpRequestMessage(HttpMethod.Get, CombineUrl(settings.Fawaterak.ApiBaseUrl, "api/v2/getPaymentmethods"));
+                req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + settings.Fawaterak.HashApiKey.Trim());
+                req.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
+                using var resp = await client.SendAsync(req, ct);
+                return Results.Ok(new { ok = resp.IsSuccessStatusCode, status = (int)resp.StatusCode, reason = resp.IsSuccessStatusCode ? "ok" : "upstream" });
+            }
+        }
+        catch (HttpRequestException)
+        {
+            return Results.Ok(new { ok = false, status = 0, reason = "unreachable" });
+        }
+        catch (TaskCanceledException)
+        {
+            return Results.Ok(new { ok = false, status = 0, reason = "timeout" });
+        }
+
+        return Results.BadRequest(new { error = "unsupported_gateway", message = "Ping is available for Whop and Fawaterak." });
+    }
+
+    private static Uri CombineUrl(string baseUrl, string path)
+        => new(new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/"), path);
 
     // ─────────────────────── Analytics ───────────────────────
 

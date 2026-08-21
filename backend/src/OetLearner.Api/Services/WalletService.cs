@@ -452,6 +452,13 @@ public class WalletService(
                 "We couldn't start your payment right now. Please try again in a moment or choose another payment method.",
                 retryable: true);
         }
+        catch (HttpRequestException)
+        {
+            throw ApiException.ServiceUnavailable(
+                "payment_gateway_error",
+                "We couldn't start your payment right now. Please try again in a moment or choose another payment method.",
+                retryable: true);
+        }
 
         var now = DateTimeOffset.UtcNow;
 

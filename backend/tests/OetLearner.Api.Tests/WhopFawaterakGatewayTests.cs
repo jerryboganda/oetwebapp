@@ -158,21 +158,58 @@ public class WhopFawaterakGatewayTests
         Assert.Equal("https://app.fawaterk.com/api/v2/invoiceInitPay", handler.LastUri?.ToString());
     }
 
+    [Fact]
+    public async Task FawaterakCreateIntent_ConvertsUnsupportedCurrencyToUsd()
+    {
+        var handler = new StubHandler
+        {
+           Response = """{"status":"success","data":{"invoice_id":99,"invoice_key":"k99","payment_data":{"iframeURL":"https://app.fawaterk.com/pay/99"}}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+           Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var fx = new StubFx { Rate = 0.65m };
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime, fx);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+           "user-1", 10m, "AUD", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal("99", result.GatewayTransactionId);
+        Assert.Contains("\"currency\":\"USD\"", handler.LastBody);
+        Assert.Contains("\"cartTotal\":\"6.50\"", handler.LastBody);
+    }
+
+    private sealed class StubFx : IFxRateService
+    {
+        public decimal Rate { get; set; } = 1m;
+
+        public Task<decimal> GetRateAsync(string fromCurrency, string toCurrency, CancellationToken ct)
+           => Task.FromResult(Rate);
+
+        public Task<decimal> ConvertAsync(decimal amount, string fromCurrency, string toCurrency, CancellationToken ct)
+           => Task.FromResult(decimal.Round(amount * Rate, 4));
+
+        public Task<int> RefreshRatesAsync(CancellationToken ct) => Task.FromResult(0);
+    }
+
     private sealed class StubHandler : HttpMessageHandler
     {
         public string Response { get; set; } = "{}";
         public Uri? LastUri { get; private set; }
         public string? LastAuthorization { get; private set; }
+        public string? LastBody { get; private set; }
 
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            LastUri = request.RequestUri;
-            LastAuthorization = request.Headers.Authorization?.ToString()
-                ?? (request.Headers.TryGetValues("Authorization", out var values) ? values.FirstOrDefault() : null);
-            return Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
-            {
-                Content = new StringContent(Response, System.Text.Encoding.UTF8, "application/json"),
-            });
+           LastUri = request.RequestUri;
+           LastAuthorization = request.Headers.Authorization?.ToString()
+               ?? (request.Headers.TryGetValues("Authorization", out var values) ? values.FirstOrDefault() : null);
+           LastBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+           return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+           {
+               Content = new StringContent(Response, System.Text.Encoding.UTF8, "application/json"),
+           };
         }
     }
 }

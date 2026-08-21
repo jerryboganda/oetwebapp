@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
@@ -23,12 +24,18 @@ public sealed class WhopGateway : IPaymentGateway
     private readonly HttpClient _http;
     private readonly IOptions<BillingOptions> _billing;
     private readonly IRuntimeSettingsProvider _runtimeSettings;
+    private readonly ILogger<WhopGateway>? _logger;
 
-    public WhopGateway(HttpClient http, IOptions<BillingOptions> billing, IRuntimeSettingsProvider runtimeSettings)
+    public WhopGateway(
+        HttpClient http,
+        IOptions<BillingOptions> billing,
+        IRuntimeSettingsProvider runtimeSettings,
+        ILogger<WhopGateway>? logger = null)
     {
         _http = http;
         _billing = billing;
         _runtimeSettings = runtimeSettings;
+        _logger = logger;
     }
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
@@ -87,26 +94,28 @@ public sealed class WhopGateway : IPaymentGateway
         {
             ["plan"] = plan,
             ["metadata"] = metadata,
-            ["redirect_url"] = request.SuccessUrl ?? opts.SuccessUrl,
+            ["redirect_url"] = StripStripeSessionPlaceholder(request.SuccessUrl) ?? opts.SuccessUrl,
         };
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, Combine(opts.ApiBaseUrl, "checkout_configurations"))
+        var first = await PostCheckoutAsync(opts, payload, ct);
+        var status = first.Status;
+        var body = first.Body;
+        if (status is < 200 or >= 300 && plan.ContainsKey("company_id"))
         {
-            Version = HttpVersion.Version11,
-            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
-        };
-        message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey);
-        message.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
+            _logger?.LogWarning("Whop checkout with company_id failed HTTP {Status}; retrying without it", status);
+            plan.Remove("company_id");
+            var retry = await PostCheckoutAsync(opts, payload, ct);
+            status = retry.Status;
+            body = retry.Body;
+        }
 
-        using var response = await _http.SendAsync(message, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
+        if (status is < 200 or >= 300)
         {
+            _logger?.LogWarning("Whop checkout configuration failed with HTTP {Status}", status);
             throw new PaymentGatewayApiException(
                 GatewayName,
-                (int)response.StatusCode,
-                $"Whop checkout configuration failed: {(int)response.StatusCode} {Truncate(body, 400)}");
+                status,
+                $"Whop checkout configuration failed: {status} {Truncate(body, 400)}");
         }
 
         using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
@@ -219,6 +228,27 @@ public sealed class WhopGateway : IPaymentGateway
         throw new InvalidOperationException("Whop refunds are processed from the Whop dashboard.");
     }
 
+    private async Task<(int Status, string Body)> PostCheckoutAsync(
+        WhopSettings opts,
+        Dictionary<string, object?> payload,
+        CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Post, Combine(opts.ApiBaseUrl, "checkout_configurations"))
+        {
+            Version = HttpVersion.Version11,
+            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+        };
+        message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey!.Trim());
+        message.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
+        using var response = await _http.SendAsync(message, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        return ((int)response.StatusCode, body);
+    }
+
+    private static string? StripStripeSessionPlaceholder(string? url)
+        => url?.Replace("{CHECKOUT_SESSION_ID}", string.Empty, StringComparison.Ordinal);
+
     private async Task<bool?> ConfirmPaymentAsync(WhopSettings opts, string paymentId, CancellationToken ct)
     {
         try
@@ -228,7 +258,7 @@ public sealed class WhopGateway : IPaymentGateway
                 Version = HttpVersion.Version11,
                 VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
             };
-            message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey);
+            message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey!.Trim());
             using var response = await _http.SendAsync(message, ct);
             if (!response.IsSuccessStatusCode)
             {

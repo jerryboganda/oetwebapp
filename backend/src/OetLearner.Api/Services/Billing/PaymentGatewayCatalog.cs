@@ -228,7 +228,8 @@ public sealed class PaymentGatewayCatalog : IPaymentGatewayCatalog
             return false;
         }
 
-        setter(input.Length == 0 ? null : _runtimeSettings.Protect(input));
+        var trimmed = input.Trim();
+        setter(trimmed.Length == 0 ? null : _runtimeSettings.Protect(trimmed));
         return true;
     }
 

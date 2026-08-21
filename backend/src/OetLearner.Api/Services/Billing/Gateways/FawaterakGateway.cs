@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
@@ -19,15 +20,29 @@ public sealed class FawaterakGateway : IPaymentGateway
 {
     public string GatewayName => PaymentGatewayNames.Fawaterak;
 
+    private static readonly HashSet<string> SupportedCurrencies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "USD", "GBP", "EGP", "EUR", "AED", "SAR",
+    };
+
     private readonly HttpClient _http;
     private readonly IOptions<BillingOptions> _billing;
     private readonly IRuntimeSettingsProvider _runtimeSettings;
+    private readonly IFxRateService? _fx;
+    private readonly ILogger<FawaterakGateway>? _logger;
 
-    public FawaterakGateway(HttpClient http, IOptions<BillingOptions> billing, IRuntimeSettingsProvider runtimeSettings)
+    public FawaterakGateway(
+        HttpClient http,
+        IOptions<BillingOptions> billing,
+        IRuntimeSettingsProvider runtimeSettings,
+        IFxRateService? fx = null,
+        ILogger<FawaterakGateway>? logger = null)
     {
         _http = http;
         _billing = billing;
         _runtimeSettings = runtimeSettings;
+        _fx = fx;
+        _logger = logger;
     }
 
     public async Task<PaymentIntentResult> CreatePaymentIntentAsync(CreatePaymentIntentRequest request, CancellationToken ct)
@@ -51,11 +66,12 @@ public sealed class FawaterakGateway : IPaymentGateway
         }
 
         var quoteId = request.ProductId ?? Guid.NewGuid().ToString("N");
-        var amount = request.Amount.ToString("F2", CultureInfo.InvariantCulture);
+        var (amountValue, currency) = await ResolveChargeCurrencyAsync(request, ct);
+        var amount = amountValue.ToString("F2", CultureInfo.InvariantCulture);
         var payload = new Dictionary<string, object?>
         {
             ["cartTotal"] = amount,
-            ["currency"] = request.Currency.ToUpperInvariant(),
+            ["currency"] = currency,
             ["invoice_number"] = quoteId,
             ["customer"] = new Dictionary<string, string>
             {
@@ -69,9 +85,11 @@ public sealed class FawaterakGateway : IPaymentGateway
             },
             ["redirectionUrls"] = new Dictionary<string, string?>
             {
-                ["successUrl"] = request.SuccessUrl ?? opts.SuccessUrl,
-                ["failUrl"] = request.CancelUrl ?? opts.FailUrl,
-                ["pendingUrl"] = opts.PendingUrl ?? request.SuccessUrl ?? opts.SuccessUrl,
+                ["successUrl"] = StripStripeSessionPlaceholder(request.SuccessUrl) ?? opts.SuccessUrl,
+                ["failUrl"] = StripStripeSessionPlaceholder(request.CancelUrl) ?? opts.FailUrl,
+                ["pendingUrl"] = opts.PendingUrl
+                    ?? StripStripeSessionPlaceholder(request.SuccessUrl)
+                    ?? opts.SuccessUrl,
             },
             ["cartItems"] = new object[]
             {
@@ -95,13 +113,14 @@ public sealed class FawaterakGateway : IPaymentGateway
             VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
         };
-        message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.HashApiKey);
+        message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.HashApiKey.Trim());
         message.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
 
         using var response = await _http.SendAsync(message, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
+            _logger?.LogWarning("Fawaterak invoiceInitPay failed with HTTP {Status}", (int)response.StatusCode);
             throw new PaymentGatewayApiException(
                 GatewayName,
                 (int)response.StatusCode,
@@ -247,6 +266,40 @@ public sealed class FawaterakGateway : IPaymentGateway
 
         return null;
     }
+
+    private async Task<(decimal Amount, string Currency)> ResolveChargeCurrencyAsync(
+        CreatePaymentIntentRequest request,
+        CancellationToken ct)
+    {
+        var currency = (request.Currency ?? "USD").Trim().ToUpperInvariant();
+        var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+        if (SupportedCurrencies.Contains(currency))
+        {
+            return (amount, currency);
+        }
+
+        if (_fx is null)
+        {
+            throw new PaymentGatewayApiException(
+                GatewayName,
+                422,
+                $"Fawaterak does not accept {currency} and FX conversion is unavailable.");
+        }
+
+        var converted = decimal.Round(await _fx.ConvertAsync(amount, currency, "USD", ct), 2, MidpointRounding.AwayFromZero);
+        if (converted <= 0)
+        {
+            throw new PaymentGatewayApiException(
+                GatewayName,
+                422,
+                $"Fawaterak FX conversion produced an invalid {currency}->USD amount.");
+        }
+
+        return (converted, "USD");
+    }
+
+    private static string? StripStripeSessionPlaceholder(string? url)
+        => url?.Replace("{CHECKOUT_SESSION_ID}", string.Empty, StringComparison.Ordinal);
 
     private static Uri Combine(string baseUrl, string path)
         => new(new Uri(EnsureTrailingSlash(baseUrl)), path);
