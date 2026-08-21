@@ -609,4 +609,47 @@ public sealed class AiPackageCreditServiceTests
         Assert.False(snapshot.WritingUnlimited);
         Assert.False(snapshot.SpeakingUnlimited);
     }
+
+    [Fact]
+    public async Task RecalculateObjectiveAllowances_WhenNoActivePacks_ClearsUnlimitedListeningReading()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantPackageAsync(
+            "learner-1",
+            AddOn("pkg_oet_mastery", 180, 0,
+                """{"package_type":"full","unlimited_grading":true,"listening_tests":null,"reading_tests":null}"""),
+            1,
+            "cs_mastery_unlimited",
+            null,
+            CancellationToken.None);
+
+        await service.RecalculateObjectiveAllowancesAsync("learner-1", CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 0, CancellationToken.None);
+
+        Assert.Equal(0, snapshot.ListeningTestsRemaining);
+        Assert.Equal(0, snapshot.ReadingTestsRemaining);
+    }
+
+    [Fact]
+    public async Task RecalculateObjectiveAllowances_ReversesOrphanedCourseGiftWhenNoLivePlan()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await service.GrantCourseGiftCreditsAsync(
+            "learner-1",
+            "full-condensed-medicine",
+            "Medicine",
+            5,
+            "admin-package:sub-gone:full-condensed-medicine",
+            DateTimeOffset.UtcNow.AddDays(180),
+            CancellationToken.None);
+
+        await service.RecalculateObjectiveAllowancesAsync("learner-1", CancellationToken.None);
+        var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
+
+        Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Equal(0, snapshot.CreditsGranted);
+        Assert.Equal(0, snapshot.CreditsRemaining);
+    }
 }
