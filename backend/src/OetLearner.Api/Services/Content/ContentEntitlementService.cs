@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Content;
@@ -76,7 +77,10 @@ public sealed record ContentEntitlementBundle(
     IReadOnlySet<string> GrantedSubtests,         // lowercased, e.g. {"listening","reading"}
     IReadOnlySet<string> GrantedPaperIds);
 
-public sealed class ContentEntitlementService(LearnerDbContext db, IEffectiveEntitlementResolver entitlementResolver) : IContentEntitlementService
+public sealed class ContentEntitlementService(
+    LearnerDbContext db,
+    IEffectiveEntitlementResolver entitlementResolver,
+    IAiPackageCreditService? aiPackageCreditService = null) : IContentEntitlementService
 {
     private const string AccessFreeTag = "access:free";
     private const string AccessPremiumTag = "access:premium";
@@ -133,6 +137,15 @@ public sealed class ContentEntitlementService(LearnerDbContext db, IEffectiveEnt
         }
 
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (!entitlement.HasEligibleSubscription
+            && aiPackageCreditService is not null
+            && await AiPackageCoversPaperAsync(userId, paper.SubtestCode, ct))
+        {
+            return new ContentEntitlementResult(
+                Allowed: true, Reason: "ai_package_grants",
+                CurrentTier: "ai_package", RequiredScope: null);
+        }
+
         if (!entitlement.HasEligibleSubscription)
         {
             if (entitlement.SubscriptionStatus == SubscriptionStatus.Frozen)
@@ -222,6 +235,27 @@ public sealed class ContentEntitlementService(LearnerDbContext db, IEffectiveEnt
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
+
+    private async Task<bool> AiPackageCoversPaperAsync(string userId, string? subtestCode, CancellationToken ct)
+    {
+        if (aiPackageCreditService is null) return false;
+
+        var snapshot = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
+        if (snapshot.ExpiredBecausePassed) return false;
+        if (snapshot.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow) return false;
+
+        var code = (subtestCode ?? string.Empty).Trim().ToLowerInvariant();
+        return code switch
+        {
+            "listening" => snapshot.ListeningTestsRemaining is null or > 0,
+            "reading" => snapshot.ReadingTestsRemaining is null or > 0,
+            "writing" => snapshot.WritingUnlimited
+                || snapshot.WritingOnlyCredits + snapshot.FlexibleCredits >= AiGradingCreditCost.WritingExam,
+            "speaking" => snapshot.SpeakingUnlimited
+                || snapshot.SpeakingOnlyCredits + snapshot.FlexibleCredits >= AiGradingCreditCost.SpeakingExam,
+            _ => snapshot.MockExamsRemaining > 0
+        };
+    }
 
     private static bool HasTag(string? tagsCsv, string tag)
     {

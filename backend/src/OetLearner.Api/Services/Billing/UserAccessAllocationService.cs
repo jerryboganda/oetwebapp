@@ -561,40 +561,8 @@ public sealed class UserAccessAllocationService(
 
     private async Task<string> EnsureStandaloneAddonSubscriptionAsync(string userId, CancellationToken ct)
     {
-        var existing = await db.Subscriptions.FirstOrDefaultAsync(
-            s => s.UserId == userId
-                && s.PlanId == Subscription.StandaloneAddonPlanId
-                && s.Status != SubscriptionStatus.Cancelled,
-            ct);
-        if (existing is not null)
-        {
-            if (!AccessGrantingStatuses.Contains(existing.Status))
-            {
-                existing.Status = SubscriptionStatus.Active;
-                existing.ChangedAt = timeProvider.GetUtcNow();
-                await db.SaveChangesAsync(ct);
-            }
-
-            return existing.Id;
-        }
-
-        var now = timeProvider.GetUtcNow();
-        var subscription = new Subscription
-        {
-            Id = $"sub-{Guid.NewGuid():N}",
-            UserId = userId,
-            PlanId = Subscription.StandaloneAddonPlanId,
-            Status = SubscriptionStatus.Active,
-            StartedAt = now,
-            ChangedAt = now,
-            NextRenewalAt = now.AddYears(10),
-            PriceAmount = 0,
-            Currency = "AUD",
-            Interval = "one_time",
-            AccessDurationDays = 0,
-        };
-        db.Subscriptions.Add(subscription);
-        await db.SaveChangesAsync(ct);
+        var subscription = await StandaloneAddonSubscriptions.EnsureAsync(
+            db, userId, timeProvider.GetUtcNow(), ct);
         return subscription.Id;
     }
 

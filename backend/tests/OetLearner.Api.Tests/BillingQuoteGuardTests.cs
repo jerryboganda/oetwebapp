@@ -151,6 +151,138 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task BillingQuote_StandaloneAiPackWithoutCourse_UsesHiddenContainerNotACoursePlan()
+    {
+        var userId = $"billing-standalone-nocourse-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var addOnCode = $"pkg_quick_check_{suffix}";
+        var addOnVersionId = $"addon-version-{suffix}-v1";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            db.Subscriptions.RemoveRange(db.Subscriptions.Where(s => s.UserId == userId));
+            var addOn = new BillingAddOn
+            {
+                Id = $"addon-nocourse-{suffix}",
+                Code = addOnCode,
+                Name = "Quick Check",
+                Description = "Standalone AI package with no course parent.",
+                Price = 19m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 30,
+                GrantCredits = 5,
+                AddonKind = "ai_package",
+                RequiresEligibleParent = false,
+                AppliesToAllPlans = true,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = JsonSerializer.Serialize(new Dictionary<string, object>
+                {
+                    ["package_type"] = "full",
+                    ["flexible_credits"] = 5,
+                    ["listening_tests"] = 3,
+                    ["reading_tests"] = 3
+                }),
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            var version = CreateAddOnVersion(addOn, addOnVersionId, 1, now);
+            version.AddonKind = "ai_package";
+            version.RequiresEligibleParent = false;
+            addOn.ActiveVersionId = version.Id;
+            addOn.LatestVersionId = version.Id;
+            db.BillingAddOns.Add(addOn);
+            db.BillingAddOnVersions.Add(version);
+            await db.SaveChangesAsync();
+        }
+
+        var quoteResponse = await client.GetAsync(
+            $"/v1/billing/quote?productType=addon_purchase&quantity=1&priceId={Uri.EscapeDataString(addOnCode)}");
+        var quoteBody = await quoteResponse.Content.ReadAsStringAsync();
+        Assert.True(quoteResponse.IsSuccessStatusCode, quoteBody);
+
+        using var quoteJson = JsonDocument.Parse(quoteBody);
+        if (quoteJson.RootElement.TryGetProperty("planCode", out var planCode))
+        {
+            var planCodeValue = planCode.ValueKind == JsonValueKind.String ? planCode.GetString() : null;
+            Assert.True(
+                string.IsNullOrWhiteSpace(planCodeValue)
+                || string.Equals(planCodeValue, Subscription.StandaloneAddonPlanId, StringComparison.OrdinalIgnoreCase),
+                quoteBody);
+        }
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subs = await db.Subscriptions.Where(s => s.UserId == userId).ToListAsync();
+            Assert.NotEmpty(subs);
+            Assert.All(subs, s => Assert.Equal(Subscription.StandaloneAddonPlanId, s.PlanId));
+            Assert.DoesNotContain(subs, s => s.PlanId == "full-condensed-medicine");
+        }
+    }
+
+    [Fact]
+    public async Task CheckoutQuote_ParentRequiredAddOnWithoutCourse_IsRejected()
+    {
+        var userId = $"billing-parent-required-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var addOnCode = $"writing-3letters-{suffix}";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            db.Subscriptions.RemoveRange(db.Subscriptions.Where(s => s.UserId == userId));
+            var addOn = new BillingAddOn
+            {
+                Id = $"addon-parent-{suffix}",
+                Code = addOnCode,
+                Name = "3 extra writing letters",
+                Description = "Needs a Full Course.",
+                Price = 40m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 0,
+                GrantCredits = 0,
+                AddonKind = "writing_assessment",
+                RequiresEligibleParent = true,
+                EligibilityFlag = "writing_addons",
+                AppliesToAllPlans = false,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = "{}",
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            var version = CreateAddOnVersion(addOn, $"addon-version-{suffix}-v1", 1, now);
+            version.AddonKind = "writing_assessment";
+            version.RequiresEligibleParent = true;
+            addOn.ActiveVersionId = version.Id;
+            addOn.LatestVersionId = version.Id;
+            db.BillingAddOns.Add(addOn);
+            db.BillingAddOnVersions.Add(version);
+            await db.SaveChangesAsync();
+        }
+
+        var quoteResponse = await client.GetAsync(
+            $"/v1/billing/quote?productType=addon_purchase&quantity=1&priceId={Uri.EscapeDataString(addOnCode)}");
+        Assert.Equal(HttpStatusCode.BadRequest, quoteResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task PayPalRefundWebhook_ForStandaloneAiAddOn_ReversesAiCreditsOnce()
     {
         var userId = $"billing-ai-refund-{Guid.NewGuid():N}";
