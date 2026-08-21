@@ -1,0 +1,84 @@
+name: Publish existing desktop release to VPS
+
+# Seeds or refreshes the production updater catalog from an already-signed
+# GitHub Release. Clients still download only from the VPS; this workflow
+# never publishes a new GitHub Release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Desktop semver already built (e.g. 0.7.3)'
+        required: true
+        default: '0.7.3'
+        type: string
+      tag:
+        description: 'Existing GitHub release tag to copy from'
+        required: true
+        default: 'v0.7.3-tauri-desktop'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish desktop ${{ inputs.version }} to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download already-signed desktop assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          gh release download "${{ inputs.tag }}" --repo "${{ github.repository }}" --dir artifacts
+          ls -la artifacts
+
+      - name: Assemble production updater feed
+        run: |
+          set -euo pipefail
+          mkdir -p stage
+          node scripts/release/assemble-desktop-feed.mjs \
+            --version="${{ inputs.version }}" \
+            --artifact-dir=artifacts \
+            --public-base=https://app.oetwithdrhesham.co.uk \
+            --out=stage/current.json
+          while IFS= read -r file; do
+            cp "$file" "stage/$(basename "$file" | sed -E 's/[[:space:]]+/./g; s/\.+/./g')"
+          done < <(find artifacts -type f \( -name '*-setup.exe' -o -name '*-setup.exe.sig' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \))
+          cp -f stage/current.json stage/latest.json
+          cat stage/current.json
+
+      - name: Upload latest desktop release to the VPS
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          CHANNEL: desktop
+          VERSION: ${{ inputs.version }}
+          SRC_DIR: stage
+        run: bash scripts/release/upload-native-release.sh
+
+      - name: Verify production updater feed
+        run: |
+          set -euo pipefail
+          feed="https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json"
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if curl --fail --silent --show-error --location "$feed" -o published-latest.json; then break; fi
+            if [ "$attempt" = 8 ]; then exit 1; fi
+            sleep $((attempt * 3))
+          done
+          node - <<'NODE'
+          const feed = JSON.parse(require('node:fs').readFileSync('published-latest.json', 'utf8'));
+          if (feed.version !== process.env.EXPECT_VERSION) throw new Error('Published updater version mismatch');
+          const win = feed.platforms?.['windows-x86_64'];
+          if (!win?.signature || win.signature.length < 64) throw new Error('Published Windows updater signature is missing');
+          if (!win.url?.startsWith('https://app.oetwithdrhesham.co.uk/releases/')) throw new Error('Published updater URL is untrusted');
+          console.log(win.url);
+          NODE
+          artifact_url=$(node -p "require('./published-latest.json').platforms['windows-x86_64'].url")
+          curl --fail --silent --show-error --location --range 0-0 "$artifact_url" -o /dev/null
+        env:
+          EXPECT_VERSION: ${{ inputs.version }}

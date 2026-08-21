@@ -29,6 +29,18 @@ echo "=== AUTO_DEPLOY_START $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 echo "WEB_IMAGE=$WEB_IMAGE"
 echo "API_IMAGE=$API_IMAGE"
 
+mkdir -p /var/opt/oet-learner/releases
+if [ -n "${NGINX_TEMPLATE_SRC:-}" ] && [ -f "$NGINX_TEMPLATE_SRC" ]; then
+  mkdir -p "$APP_DIR/scripts/deploy/nginx"
+  cp -f "$NGINX_TEMPLATE_SRC" "$APP_DIR/scripts/deploy/nginx/web-bluegreen.conf.template"
+fi
+if [ "$COMPOSE_FILE" != "$APP_DIR/docker-compose.production.yml" ] && [ -f "$COMPOSE_FILE" ]; then
+  cp -f "$COMPOSE_FILE" "$APP_DIR/docker-compose.production.yml"
+fi
+if ! grep -q '^RELEASES_HOST_PATH=' .env.production 2>/dev/null; then
+  echo 'RELEASES_HOST_PATH=/var/opt/oet-learner/releases' >> .env.production
+fi
+
 echo "--- validating production env ---"
 bash "$VALIDATE_ENV_SCRIPT" .env.production
 

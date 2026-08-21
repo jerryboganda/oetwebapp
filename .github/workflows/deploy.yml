@@ -222,6 +222,7 @@ jobs:
           REMOTE_SCRIPT="$REMOTE_DIR/auto-deploy-ghcr.sh"
           REMOTE_COMPOSE="$REMOTE_DIR/docker-compose.production.yml"
           REMOTE_VALIDATE="$REMOTE_DIR/validate-production-env.sh"
+          REMOTE_NGINX="$REMOTE_DIR/web-bluegreen.conf.template"
           mkdir -p ~/.ssh
           printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
@@ -235,7 +236,7 @@ jobs:
           )
           cleanup() {
             ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-              "rm -f '$REMOTE_SCRIPT' '$REMOTE_COMPOSE' '$REMOTE_VALIDATE'; rmdir '$REMOTE_DIR' 2>/dev/null || true" \
+              "rm -f '$REMOTE_SCRIPT' '$REMOTE_COMPOSE' '$REMOTE_VALIDATE' '$REMOTE_NGINX'; rmdir '$REMOTE_DIR' 2>/dev/null || true" \
               >/dev/null 2>&1 || true
           }
           trap cleanup EXIT
@@ -249,9 +250,13 @@ jobs:
             "umask 077; cat > '$REMOTE_VALIDATE'; chmod 700 '$REMOTE_VALIDATE'" \
             < scripts/deploy/validate-production-env.sh
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "umask 077; cat > '$REMOTE_NGINX'; chmod 644 '$REMOTE_NGINX'" \
+            < scripts/deploy/nginx/web-bluegreen.conf.template
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "set -e; echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
              WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' \
              VPS_APP_DIR='$APP_DIR' VPS_COMPOSE_FILE='$REMOTE_COMPOSE' VPS_VALIDATE_ENV_SCRIPT='$REMOTE_VALIDATE' \
+             NGINX_TEMPLATE_SRC='$REMOTE_NGINX' \
                bash '$REMOTE_SCRIPT'; \
              docker logout ghcr.io >/dev/null 2>&1 || true"
       - name: Summary
