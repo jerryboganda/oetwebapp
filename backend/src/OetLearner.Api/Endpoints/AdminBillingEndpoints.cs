@@ -8,6 +8,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Domain.Billing;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Settings;
 using Microsoft.Extensions.Options;
@@ -101,6 +102,7 @@ public static class AdminBillingEndpoints
         string name,
         IRuntimeSettingsProvider runtimeSettings,
         IHttpClientFactory httpFactory,
+        IPaymentGatewayProvider gateways,
         CancellationToken ct)
     {
         var settings = await runtimeSettings.GetAsync(ct);
@@ -141,13 +143,19 @@ public static class AdminBillingEndpoints
                 using var resp = await client.SendAsync(req, ct);
                 var body = await resp.Content.ReadAsStringAsync(ct);
                 var errorType = ReadJsonErrorType(body);
+                var adapterUsd = await ProbeWhopAdapterAsync(gateways, 1m, "USD", ct);
+                var adapterAud = await ProbeWhopAdapterAsync(gateways, 10m, "AUD", ct);
                 return Results.Ok(new
                 {
-                    ok = resp.IsSuccessStatusCode,
+                    ok = resp.IsSuccessStatusCode && adapterUsd.Ok && adapterAud.Ok,
                     status = (int)resp.StatusCode,
                     reason = resp.IsSuccessStatusCode ? "ok" : (errorType ?? "upstream"),
                     keyLength = settings.Whop.ApiKey.Trim().Length,
                     hasCompanyId = !string.IsNullOrWhiteSpace(settings.Whop.CompanyId),
+                    adapterUsdStatus = adapterUsd.Status,
+                    adapterUsdReason = adapterUsd.Reason,
+                    adapterAudStatus = adapterAud.Status,
+                    adapterAudReason = adapterAud.Reason,
                 });
             }
 
@@ -175,6 +183,44 @@ public static class AdminBillingEndpoints
         }
 
         return Results.BadRequest(new { error = "unsupported_gateway", message = "Ping is available for Whop and Fawaterak." });
+    }
+
+    private static async Task<(bool Ok, int Status, string Reason)> ProbeWhopAdapterAsync(
+        IPaymentGatewayProvider gateways,
+        decimal amount,
+        string currency,
+        CancellationToken ct)
+    {
+        try
+        {
+            await gateways.GetGateway(PaymentGatewayNames.Whop).CreatePaymentIntentAsync(
+                new CreatePaymentIntentRequest(
+                    "ping-user",
+                    amount,
+                    currency,
+                    "wallet_top_up",
+                    "ping",
+                    "OET ping",
+                    null),
+                ct);
+            return (true, 200, "ok");
+        }
+        catch (PaymentGatewayApiException ex)
+        {
+            return (false, ex.UpstreamStatusCode, ex.UpstreamErrorType ?? "upstream");
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("not configured", StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, 0, "not_configured");
+        }
+        catch (InvalidOperationException)
+        {
+            return (false, 0, "adapter");
+        }
+        catch (HttpRequestException)
+        {
+            return (false, 0, "unreachable");
+        }
     }
 
     private static Uri CombineUrl(string baseUrl, string path)

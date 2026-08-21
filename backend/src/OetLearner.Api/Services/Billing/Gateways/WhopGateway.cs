@@ -67,20 +67,18 @@ public sealed class WhopGateway : IPaymentGateway
             throw new InvalidOperationException("Whop is not configured and sandbox fallbacks are disabled.");
         }
 
-        var quoteId = request.ProductId ?? Guid.NewGuid().ToString("N");
+        var quoteId = SanitizeId(request.ProductId);
         var (amount, currency) = await ResolveChargeCurrencyAsync(request, ct);
-        var title = string.IsNullOrWhiteSpace(request.Description) ? "OET With Dr Hesham" : request.Description.Trim();
-        if (title.Length > 80)
-        {
-            title = title[..80];
-        }
+        object price = amount == decimal.Truncate(amount)
+            ? (int)amount
+            : decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
 
         var plan = new Dictionary<string, object?>
         {
             ["plan_type"] = "one_time",
             ["currency"] = currency.ToLowerInvariant(),
-            ["initial_price"] = (double)amount,
-            ["title"] = title,
+            ["initial_price"] = price,
+            ["title"] = "OET With Dr Hesham",
         };
 
         var payload = new Dictionary<string, object?>
@@ -89,7 +87,6 @@ public sealed class WhopGateway : IPaymentGateway
             ["metadata"] = new Dictionary<string, string>
             {
                 ["order_id"] = quoteId,
-                ["quote_id"] = quoteId,
             },
         };
 
@@ -103,7 +100,8 @@ public sealed class WhopGateway : IPaymentGateway
             throw new PaymentGatewayApiException(
                 GatewayName,
                 status,
-                $"Whop checkout configuration failed: {status} {Truncate(body, 400)}");
+                $"Whop checkout configuration failed: {status}",
+                upstreamErrorType: ReadErrorType(body));
         }
 
         using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
@@ -235,7 +233,15 @@ public sealed class WhopGateway : IPaymentGateway
                 $"Whop does not accept {currency} and FX conversion is unavailable.");
         }
 
-        var converted = decimal.Round(await _fx.ConvertAsync(amount, currency, "USD", ct), 2, MidpointRounding.AwayFromZero);
+        decimal converted;
+        try
+        {
+            converted = decimal.Round(await _fx.ConvertAsync(amount, currency, "USD", ct), 2, MidpointRounding.AwayFromZero);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new PaymentGatewayApiException(GatewayName, 422, ex.Message);
+        }
         if (converted <= 0)
         {
             throw new PaymentGatewayApiException(
@@ -263,6 +269,45 @@ public sealed class WhopGateway : IPaymentGateway
         using var response = await _http.SendAsync(message, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
         return ((int)response.StatusCode, body);
+    }
+
+    private static string SanitizeId(string? value)
+    {
+        var raw = string.IsNullOrWhiteSpace(value) ? Guid.NewGuid().ToString("N") : value.Trim();
+        var chars = raw.Where(char.IsLetterOrDigit).Take(32).ToArray();
+        return chars.Length > 0 ? new string(chars) : Guid.NewGuid().ToString("N")[..32];
+    }
+
+    private static string? ReadErrorType(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+            {
+                if (error.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String)
+                {
+                    return type.GetString();
+                }
+
+                if (error.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String)
+                {
+                    return code.GetString();
+                }
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private static string? StripStripeSessionPlaceholder(string? url)
