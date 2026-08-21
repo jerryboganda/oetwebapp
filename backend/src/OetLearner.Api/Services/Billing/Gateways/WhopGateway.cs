@@ -1,6 +1,6 @@
 using System.Globalization;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -90,9 +90,14 @@ public sealed class WhopGateway : IPaymentGateway
             ["redirect_url"] = request.SuccessUrl ?? opts.SuccessUrl,
         };
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, Combine(opts.ApiBaseUrl, "checkout_configurations"));
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.ApiKey);
-        message.Content = JsonContent.Create(payload);
+        using var message = new HttpRequestMessage(HttpMethod.Post, Combine(opts.ApiBaseUrl, "checkout_configurations"))
+        {
+            Version = HttpVersion.Version11,
+            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+        };
+        message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey);
+        message.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
 
         using var response = await _http.SendAsync(message, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
@@ -218,8 +223,12 @@ public sealed class WhopGateway : IPaymentGateway
     {
         try
         {
-            using var message = new HttpRequestMessage(HttpMethod.Get, Combine(opts.ApiBaseUrl, $"payments/{Uri.EscapeDataString(paymentId)}"));
-            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.ApiKey);
+            using var message = new HttpRequestMessage(HttpMethod.Get, Combine(opts.ApiBaseUrl, $"payments/{Uri.EscapeDataString(paymentId)}"))
+            {
+                Version = HttpVersion.Version11,
+                VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+            };
+            message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey);
             using var response = await _http.SendAsync(message, ct);
             if (!response.IsSuccessStatusCode)
             {

@@ -1138,8 +1138,20 @@ builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PayTabsG
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.PaymobGateway>();
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.CheckoutComGateway>();
 builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.EasyKashGateway>();
-builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.WhopGateway>();
-builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.FawaterakGateway>();
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.WhopGateway>(client =>
+{
+    client.DefaultRequestVersion = System.Net.HttpVersion.Version11;
+    client.DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower;
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
+});
+builder.Services.AddHttpClient<OetLearner.Api.Services.Billing.Gateways.FawaterakGateway>(client =>
+{
+    client.DefaultRequestVersion = System.Net.HttpVersion.Version11;
+    client.DefaultVersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower;
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
+});
 builder.Services.AddScoped<PaymentGatewayService>();
 builder.Services.AddScoped<IPaymentGatewayProvider>(sp => sp.GetRequiredService<PaymentGatewayService>());
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IPaymentGatewayCatalog, OetLearner.Api.Services.Billing.PaymentGatewayCatalog>();

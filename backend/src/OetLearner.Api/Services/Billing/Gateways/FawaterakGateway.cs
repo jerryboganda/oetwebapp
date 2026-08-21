@@ -1,6 +1,6 @@
 using System.Globalization;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
+using System.Net;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -89,9 +89,14 @@ public sealed class FawaterakGateway : IPaymentGateway
             payload["vendorKey"] = opts.ProviderKey;
         }
 
-        using var message = new HttpRequestMessage(HttpMethod.Post, Combine(opts.ApiBaseUrl, "api/v2/invoiceInitPay"));
-        message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.HashApiKey);
-        message.Content = JsonContent.Create(payload);
+        using var message = new HttpRequestMessage(HttpMethod.Post, Combine(opts.ApiBaseUrl, "api/v2/invoiceInitPay"))
+        {
+            Version = HttpVersion.Version11,
+            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+        };
+        message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.HashApiKey);
+        message.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
 
         using var response = await _http.SendAsync(message, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
@@ -105,6 +110,20 @@ public sealed class FawaterakGateway : IPaymentGateway
 
         using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
         var root = doc.RootElement;
+        if (root.TryGetProperty("status", out var statusEl))
+        {
+            var status = statusEl.ValueKind == JsonValueKind.String ? statusEl.GetString() : statusEl.GetRawText();
+            if (!string.IsNullOrWhiteSpace(status)
+                && status.IndexOf("success", StringComparison.OrdinalIgnoreCase) < 0
+                && !string.Equals(status, "true", StringComparison.OrdinalIgnoreCase)
+                && status != "200")
+            {
+                throw new PaymentGatewayApiException(
+                    GatewayName,
+                    (int)response.StatusCode,
+                    $"Fawaterak invoiceInitPay rejected: {Truncate(body, 400)}");
+            }
+        }
         var data = root.TryGetProperty("data", out var nested) ? nested : root;
         var invoiceId = ReadString(data, "invoice_id")
             ?? ReadString(data, "invoiceId")
