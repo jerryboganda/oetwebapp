@@ -5,6 +5,10 @@ export const DEFAULT_RELEASES_ROOT = '/var/opt/oet-learner/releases';
 export const DEFAULT_PUBLIC_BASE_URL = 'https://app.oetwithdrhesham.co.uk';
 export const DOWNLOAD_FALLBACK_PATH = '/get-app';
 
+export function getDownloadFallbackUrl(): string {
+  return `${getPublicBaseUrl()}${DOWNLOAD_FALLBACK_PATH}`;
+}
+
 const ALLOWED_EXTENSIONS = new Set([
   '.exe',
   '.sig',

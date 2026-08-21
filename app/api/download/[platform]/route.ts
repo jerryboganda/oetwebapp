@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
-  DOWNLOAD_FALLBACK_PATH,
+  getDownloadFallbackUrl,
   type DownloadPlatform,
   resolveDownloadUrl,
 } from '@/lib/native-releases';
@@ -12,17 +12,17 @@ const PLATFORMS = new Set<DownloadPlatform>(['windows', 'mac', 'android', 'ios']
  * Unknown platforms and missing catalogs fall back to /get-app — never GitHub.
  */
 export async function GET(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ platform: string }> },
 ) {
   const { platform } = await params;
   if (!PLATFORMS.has(platform as DownloadPlatform)) {
-    return NextResponse.redirect(new URL(DOWNLOAD_FALLBACK_PATH, req.url), 302);
+    return NextResponse.redirect(getDownloadFallbackUrl(), 302);
   }
 
   const downloadUrl = resolveDownloadUrl(platform as DownloadPlatform);
   if (!downloadUrl) {
-    return NextResponse.redirect(new URL(DOWNLOAD_FALLBACK_PATH, req.url), 302);
+    return NextResponse.redirect(getDownloadFallbackUrl(), 302);
   }
 
   return NextResponse.redirect(downloadUrl, 302);

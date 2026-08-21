@@ -59,12 +59,12 @@ describe('direct native download resolver', () => {
     process.env.RELEASES_ROOT = root;
     const response = await requestFor('ios');
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe('https://app.example/get-app');
+    expect(response.headers.get('location')).toBe('https://app.oetwithdrhesham.co.uk/get-app');
   });
 
   it('keeps unknown platform behavior on-site', async () => {
     const response = await requestFor('windows-phone');
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe('https://app.example/get-app');
+    expect(response.headers.get('location')).toBe('https://app.oetwithdrhesham.co.uk/get-app');
   });
 });
