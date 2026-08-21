@@ -231,10 +231,14 @@ public sealed class AiPackageCreditServiceTests
         item.EndsAt = null;
         await db.SaveChangesAsync();
 
-        var malformedPermanentItem = await service.CheckGradingCreditAsync(
+        // Live Mastery with a missing end date must still unlock Writing/Speaking,
+        // matching Listening/Reading Recalc (EndsAt == null || EndsAt > now).
+        var openEndedLiveItem = await service.CheckGradingCreditAsync(
             "learner-1", "writing", 2, CancellationToken.None);
-        Assert.False(malformedPermanentItem.Debited);
-        Assert.Equal("no_ai_package_credits", malformedPermanentItem.ErrorCode);
+        var openEndedSnapshot = await service.GetSnapshotAsync("learner-1", 0, CancellationToken.None);
+        Assert.True(openEndedLiveItem.Debited);
+        Assert.True(openEndedSnapshot.WritingUnlimited);
+        Assert.True(openEndedSnapshot.SpeakingUnlimited);
 
         item.EndsAt = now.AddMinutes(-1);
         var account = await db.AiPackageCreditAccounts.SingleAsync(row => row.UserId == "learner-1");

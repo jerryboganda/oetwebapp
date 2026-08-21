@@ -952,8 +952,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         => await db.AiPackageCreditTransactions.AsNoTracking()
             .AnyAsync(row => row.ReferenceId == referenceId && row.Reason == reason, ct);
 
-    private Task<bool> HasActiveUnlimitedGradingAsync(string userId, DateTimeOffset now, CancellationToken ct)
-        => (from item in db.SubscriptionItems.AsNoTracking()
+    private async Task<bool> HasActiveUnlimitedGradingAsync(string userId, DateTimeOffset now, CancellationToken ct)
+    {
+        var endsAtValues = await (
+            from item in db.SubscriptionItems.AsNoTracking()
             join subscription in db.Subscriptions.AsNoTracking()
                 on item.SubscriptionId equals subscription.Id
             where subscription.UserId == userId
@@ -963,12 +965,13 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                   && item.ItemCode == "pkg_oet_mastery"
                   && item.Status == SubscriptionItemStatus.Active
                   && item.StartsAt <= now
-                  // Mastery is a strict 180-day product. A malformed/historical
-                  // item without an end date must fail closed, never become
-                  // permanent unlimited grading.
-                  && item.EndsAt != null
-                  && item.EndsAt > now
-            select item.Id).AnyAsync(ct);
+            select item.EndsAt).ToListAsync(ct);
+
+        // Evaluate the date window in memory. EF InMemory does not reliably
+        // translate `EndsAt == null || EndsAt > now`, and standalone Mastery
+        // grants can persist a null EndsAt when DurationDays was 0.
+        return endsAtValues.Any(endsAt => endsAt is null || endsAt > now);
+    }
 
     private async Task<bool> ShouldBypassGradingDebitForLegacyAccountAsync(AiPackageCreditAccount account, CancellationToken ct)
     {

@@ -930,6 +930,80 @@ public class UserAccessAllocationServiceTests
     }
 
     [Fact]
+    public async Task GetAccess_StandaloneMasteryWithNullEndsAt_MarksWritingAndSpeakingUnlimited()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-standalone-mastery-open-ended";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_oet_mastery",
+            Code = "pkg_oet_mastery",
+            Name = "OET Mastery",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantCredits = 0,
+            GrantEntitlementsJson = """{"package_type":"full","unlimited_grading":true,"listening_tests":null,"reading_tests":null}""",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-standalone-mastery",
+            UserId = userId,
+            PlanId = Subscription.StandaloneAddonPlanId,
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddYears(10),
+            PriceAmount = 0,
+            Currency = "AUD",
+            Interval = "one_time",
+        });
+        db.SubscriptionItems.Add(new SubscriptionItem
+        {
+            Id = "item-standalone-mastery",
+            SubscriptionId = "sub-standalone-mastery",
+            ItemCode = "pkg_oet_mastery",
+            ItemType = "addon",
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now,
+            EndsAt = null,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.AiPackageCreditAccounts.Add(new AiPackageCreditAccount
+        {
+            Id = "acct-standalone-mastery",
+            UserId = userId,
+            FlexibleCredits = 0,
+            WritingOnlyCredits = 0,
+            SpeakingOnlyCredits = 0,
+            ListeningTestsRemaining = null,
+            ReadingTestsRemaining = null,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        await service.GetAccessAsync(userId, default);
+        var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.True(snapshot.WritingUnlimited);
+        Assert.True(snapshot.SpeakingUnlimited);
+        Assert.Null(snapshot.ListeningTestsRemaining);
+        Assert.Null(snapshot.ReadingTestsRemaining);
+        Assert.Equal(0, snapshot.FlexibleCredits);
+    }
+
+    [Fact]
     public async Task GetAccess_HealsStaleUnlimitedAndGiftAfterCancelledRows()
     {
         await using var db = CreateDb();
