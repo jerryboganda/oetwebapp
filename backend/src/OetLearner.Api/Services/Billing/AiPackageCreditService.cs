@@ -322,22 +322,27 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         {
             account.ListeningTestsRemaining = null;
         }
-        else if (account.ListeningTestsRemaining is null)
+        else
         {
-            account.ListeningTestsRemaining = listeningSum;
+            account.ListeningTestsRemaining = account.ListeningTestsRemaining is int listeningRemaining
+                ? Math.Min(listeningRemaining, listeningSum)
+                : listeningSum;
         }
 
         if (readingUnlimited)
         {
             account.ReadingTestsRemaining = null;
         }
-        else if (account.ReadingTestsRemaining is null)
+        else
         {
-            account.ReadingTestsRemaining = readingSum;
+            account.ReadingTestsRemaining = account.ReadingTestsRemaining is int readingRemaining
+                ? Math.Min(readingRemaining, readingSum)
+                : readingSum;
         }
 
         account.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
+        await ReverseOrphanedGrantsAsync(userId, now, ct);
     }
 
     public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
@@ -896,6 +901,51 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
         return true;
+    }
+
+    private async Task ReverseOrphanedGrantsAsync(string userId, DateTimeOffset now, CancellationToken ct)
+    {
+        var livePlanIds = (await db.Subscriptions.AsNoTracking()
+            .Where(subscription => subscription.UserId == userId
+                                   && subscription.PlanId != Subscription.StandaloneAddonPlanId
+                                   && (subscription.Status == SubscriptionStatus.Active
+                                       || subscription.Status == SubscriptionStatus.Trial
+                                       || subscription.Status == SubscriptionStatus.FreezeRequested))
+            .Select(subscription => subscription.PlanId)
+            .ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var liveItemCodes = (await (
+            from item in db.SubscriptionItems.AsNoTracking()
+            join subscription in db.Subscriptions.AsNoTracking()
+                on item.SubscriptionId equals subscription.Id
+            where subscription.UserId == userId
+                  && (subscription.Status == SubscriptionStatus.Active
+                      || subscription.Status == SubscriptionStatus.Trial
+                      || subscription.Status == SubscriptionStatus.FreezeRequested)
+                  && item.Status == SubscriptionItemStatus.Active
+                  && item.StartsAt <= now
+                  && (item.EndsAt == null || item.EndsAt > now)
+            select item.ItemCode).ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var packageIds = (await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == userId
+                          && row.Reason == AiPackageCreditReason.Purchase
+                          && row.PackageId != null)
+            .Select(row => row.PackageId!)
+            .Distinct()
+            .ToListAsync(ct));
+
+        foreach (var packageId in packageIds)
+        {
+            if (livePlanIds.Contains(packageId) || liveItemCodes.Contains(packageId))
+            {
+                continue;
+            }
+
+            await ReverseGrantsAsync(userId, packageId, ct);
+        }
     }
 
     private async Task<bool> TransactionExistsAsync(string referenceId, AiPackageCreditReason reason, CancellationToken ct)

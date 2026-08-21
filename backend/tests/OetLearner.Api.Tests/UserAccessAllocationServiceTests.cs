@@ -887,4 +887,110 @@ public class UserAccessAllocationServiceTests
         Assert.Equal(0, after.WritingOnlyCredits);
         Assert.Equal(SubscriptionStatus.Cancelled, (await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).Status);
     }
+
+    [Fact]
+    public async Task RemoveAddon_Mastery_ClearsUnlimitedListeningAndReading()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-mastery-sync";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_oet_mastery",
+            Code = "pkg_oet_mastery",
+            Name = "OET Mastery",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantEntitlementsJson = """{"package_type":"full","unlimited_grading":true,"listening_tests":null,"reading_tests":null}""",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_oet_mastery", null, 1), default);
+        var before = await credits.GetSnapshotAsync(userId, 0, default);
+        Assert.Null(before.ListeningTestsRemaining);
+        Assert.Null(before.ReadingTestsRemaining);
+
+        await service.RemoveAddonAsync("admin", "Admin", userId, "pkg_oet_mastery", null, default);
+        var after = await credits.GetSnapshotAsync(userId, 0, default);
+
+        Assert.Empty((await service.GetAccessAsync(userId, default)).AddOns);
+        Assert.Equal(0, after.ListeningTestsRemaining);
+        Assert.Equal(0, after.ReadingTestsRemaining);
+    }
+
+    [Fact]
+    public async Task GetAccess_HealsStaleUnlimitedAndGiftAfterCancelledRows()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-heal-stale-wallet";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 5,
+        });
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon_pkg_oet_mastery",
+            Code = "pkg_oet_mastery",
+            Name = "OET Mastery",
+            Status = BillingAddOnStatus.Active,
+            AddonKind = "ai_package",
+            RequiresEligibleParent = false,
+            GrantEntitlementsJson = """{"package_type":"full","unlimited_grading":true,"listening_tests":null,"reading_tests":null}""",
+            DurationDays = 180,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var processor = new AddonGrantProcessor(db, NullLogger<AddonGrantProcessor>.Instance, credits);
+        var service = new UserAccessAllocationService(db, processor, TimeProvider.System, credits);
+
+        var granted = await service.GrantPackageAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("full-condensed-medicine", null, null, true, false, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+        await service.GrantAddonAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessAddonRequest("pkg_oet_mastery", subscriptionId, 1), default);
+
+        foreach (var item in db.SubscriptionItems.Where(i => i.SubscriptionId == subscriptionId))
+        {
+            item.Status = SubscriptionItemStatus.Cancelled;
+            item.EndsAt = now;
+        }
+        var sub = await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId);
+        sub.Status = SubscriptionStatus.Cancelled;
+        await db.SaveChangesAsync();
+
+        var stale = await credits.GetSnapshotAsync(userId, 0, default);
+        Assert.Equal(5, stale.FlexibleCredits);
+        Assert.Null(stale.ListeningTestsRemaining);
+
+        await service.GetAccessAsync(userId, default);
+        var healed = await credits.GetSnapshotAsync(userId, 20, default);
+
+        Assert.Equal(0, healed.FlexibleCredits);
+        Assert.Equal(0, healed.CreditsGranted);
+        Assert.Equal(0, healed.ListeningTestsRemaining);
+        Assert.Equal(0, healed.ReadingTestsRemaining);
+    }
 }

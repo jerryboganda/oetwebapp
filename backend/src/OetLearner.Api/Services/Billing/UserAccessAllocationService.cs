@@ -42,6 +42,11 @@ public sealed class UserAccessAllocationService(
 
     public async Task<UserAccessDto> GetAccessAsync(string userId, CancellationToken ct)
     {
+        if (aiPackageCreditService is not null)
+        {
+            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
+        }
+
         var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct)
             ?? throw ApiException.NotFound("user_not_found", "User not found.");
 
@@ -231,7 +236,6 @@ public sealed class UserAccessAllocationService(
         if (aiPackageCreditService is not null)
         {
             await aiPackageCreditService.ReverseGrantsAsync(userId, sub.PlanId, ct);
-            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
         }
 
         // Expired/Cancelled already grant nothing, and the state machine keeps Expired
@@ -245,6 +249,10 @@ public sealed class UserAccessAllocationService(
 
         await RepointPrimaryAwayFromAsync(learner, sub, ct);
         await db.SaveChangesAsync(ct);
+        if (aiPackageCreditService is not null)
+        {
+            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
+        }
         await SyncAccessExpiryAsync(learner, ct);
         if (statusChanged || reversedCredits > 0)
         {
@@ -430,9 +438,16 @@ public sealed class UserAccessAllocationService(
             if (aiPackageCreditService is not null)
             {
                 await aiPackageCreditService.ReverseGrantsAsync(userId, code, ct);
-                await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
             }
+        }
 
+        if (aiPackageCreditService is not null)
+        {
+            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
+        }
+
+        if (items.Count > 0)
+        {
             var addon = await db.BillingAddOns.AsNoTracking().FirstOrDefaultAsync(a => a.Code == code, ct);
             if (addon is not null && IsTutorBookAddOn(addon))
             {
