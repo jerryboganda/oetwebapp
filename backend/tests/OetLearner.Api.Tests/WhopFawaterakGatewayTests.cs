@@ -138,6 +138,29 @@ public class WhopFawaterakGatewayTests
         Assert.DoesNotContain("visibility", handler.LastBody);
         Assert.DoesNotContain("card_payments", handler.LastBody);
         Assert.DoesNotContain("company_id", handler.LastBody);
+        Assert.Contains("\"currency\":\"gbp\"", handler.LastBody);
+    }
+
+    [Fact]
+    public async Task WhopCreateIntent_ConvertsUnsupportedCurrencyToUsd()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"id":"ch_fx","purchase_url":"https://whop.com/embedded/checkout/ch_fx/","plan":{"id":"plan_fx"}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var fx = new StubFx { Rate = 0.65m };
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime, fx);
+
+        var result = await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1", 10m, "AUD", "wallet_top_up", "quote-1", "Wallet top-up", null), default);
+
+        Assert.Equal("ch_fx", result.GatewayTransactionId);
+        Assert.Contains("\"currency\":\"usd\"", handler.LastBody);
+        Assert.Contains("\"initial_price\":6.50", handler.LastBody);
     }
 
     [Fact]

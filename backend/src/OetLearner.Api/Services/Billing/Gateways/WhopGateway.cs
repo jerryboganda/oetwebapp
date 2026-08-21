@@ -21,20 +21,28 @@ public sealed class WhopGateway : IPaymentGateway
 {
     public string GatewayName => PaymentGatewayNames.Whop;
 
+    private static readonly HashSet<string> SupportedCurrencies = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "USD", "GBP", "EUR",
+    };
+
     private readonly HttpClient _http;
     private readonly IOptions<BillingOptions> _billing;
     private readonly IRuntimeSettingsProvider _runtimeSettings;
+    private readonly IFxRateService? _fx;
     private readonly ILogger<WhopGateway>? _logger;
 
     public WhopGateway(
         HttpClient http,
         IOptions<BillingOptions> billing,
         IRuntimeSettingsProvider runtimeSettings,
+        IFxRateService? fx = null,
         ILogger<WhopGateway>? logger = null)
     {
         _http = http;
         _billing = billing;
         _runtimeSettings = runtimeSettings;
+        _fx = fx;
         _logger = logger;
     }
 
@@ -59,11 +67,11 @@ public sealed class WhopGateway : IPaymentGateway
         }
 
         var quoteId = request.ProductId ?? Guid.NewGuid().ToString("N");
-        var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+        var (amount, currency) = await ResolveChargeCurrencyAsync(request, ct);
         var plan = new Dictionary<string, object?>
         {
             ["plan_type"] = "one_time",
-            ["currency"] = request.Currency.Trim().ToLowerInvariant(),
+            ["currency"] = currency.ToLowerInvariant(),
             ["initial_price"] = amount,
             ["title"] = string.IsNullOrWhiteSpace(request.Description) ? "OET With Dr Hesham" : request.Description,
         };
@@ -232,6 +240,38 @@ public sealed class WhopGateway : IPaymentGateway
         }
 
         throw new InvalidOperationException("Whop refunds are processed from the Whop dashboard.");
+    }
+
+    private async Task<(decimal Amount, string Currency)> ResolveChargeCurrencyAsync(
+        CreatePaymentIntentRequest request,
+        CancellationToken ct)
+    {
+        var currency = (request.Currency ?? "USD").Trim().ToUpperInvariant();
+        var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
+        if (SupportedCurrencies.Contains(currency))
+        {
+            return (amount, currency);
+        }
+
+        if (_fx is null)
+        {
+            throw new PaymentGatewayApiException(
+                GatewayName,
+                422,
+                $"Whop does not accept {currency} and FX conversion is unavailable.");
+        }
+
+        var converted = decimal.Round(await _fx.ConvertAsync(amount, currency, "USD", ct), 2, MidpointRounding.AwayFromZero);
+        if (converted <= 0)
+        {
+            throw new PaymentGatewayApiException(
+                GatewayName,
+                422,
+                $"Whop FX conversion produced an invalid {currency}->USD amount.");
+        }
+
+        _logger?.LogInformation("Whop converting {From} to USD for checkout", currency);
+        return (converted, "USD");
     }
 
     private async Task<(int Status, string Body)> PostCheckoutAsync(
