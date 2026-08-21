@@ -59,20 +59,14 @@ public sealed class WhopGateway : IPaymentGateway
         }
 
         var quoteId = request.ProductId ?? Guid.NewGuid().ToString("N");
+        var amount = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero);
         var plan = new Dictionary<string, object?>
         {
             ["plan_type"] = "one_time",
             ["currency"] = request.Currency.Trim().ToLowerInvariant(),
-            ["initial_price"] = decimal.Round(request.Amount, 2, MidpointRounding.AwayFromZero),
+            ["initial_price"] = amount,
             ["title"] = string.IsNullOrWhiteSpace(request.Description) ? "OET With Dr Hesham" : request.Description,
-            ["visibility"] = "hidden",
-            ["card_payments"] = true,
         };
-        if (!string.IsNullOrWhiteSpace(opts.CompanyId))
-        {
-            plan["company_id"] = opts.CompanyId;
-        }
-
         var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["order_id"] = quoteId,
@@ -94,16 +88,28 @@ public sealed class WhopGateway : IPaymentGateway
         {
             ["plan"] = plan,
             ["metadata"] = metadata,
-            ["redirect_url"] = StripStripeSessionPlaceholder(request.SuccessUrl) ?? opts.SuccessUrl,
         };
+        var redirectUrl = StripStripeSessionPlaceholder(request.SuccessUrl) ?? opts.SuccessUrl;
+        if (!string.IsNullOrWhiteSpace(redirectUrl))
+        {
+            payload["redirect_url"] = redirectUrl;
+        }
 
         var first = await PostCheckoutAsync(opts, payload, ct);
         var status = first.Status;
         var body = first.Body;
-        if (status is < 200 or >= 300 && plan.ContainsKey("company_id"))
+        if (status is < 200 or >= 300 && payload.ContainsKey("redirect_url"))
         {
-            _logger?.LogWarning("Whop checkout with company_id failed HTTP {Status}; retrying without it", status);
-            plan.Remove("company_id");
+            _logger?.LogWarning("Whop checkout with redirect_url failed HTTP {Status}; retrying without it", status);
+            payload.Remove("redirect_url");
+            var retry = await PostCheckoutAsync(opts, payload, ct);
+            status = retry.Status;
+            body = retry.Body;
+        }
+        if (status is < 200 or >= 300 && !plan.ContainsKey("company_id") && !string.IsNullOrWhiteSpace(opts.CompanyId))
+        {
+            _logger?.LogWarning("Whop checkout without company_id failed HTTP {Status}; retrying with it", status);
+            plan["company_id"] = opts.CompanyId.Trim();
             var retry = await PostCheckoutAsync(opts, payload, ct);
             status = retry.Status;
             body = retry.Body;

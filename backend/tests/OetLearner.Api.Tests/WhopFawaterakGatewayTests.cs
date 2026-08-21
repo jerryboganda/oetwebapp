@@ -134,6 +134,10 @@ public class WhopFawaterakGatewayTests
         Assert.Equal("https://whop.com/embedded/checkout/ch_live1/", result.CheckoutUrl);
         Assert.Equal("https://api.whop.com/api/v1/checkout_configurations", handler.LastUri?.ToString());
         Assert.StartsWith("Bearer apik_test", handler.LastAuthorization);
+        Assert.Contains("\"plan_type\":\"one_time\"", handler.LastBody);
+        Assert.DoesNotContain("visibility", handler.LastBody);
+        Assert.DoesNotContain("card_payments", handler.LastBody);
+        Assert.DoesNotContain("company_id", handler.LastBody);
     }
 
     [Fact]

@@ -14,8 +14,11 @@ vi.mock('@/lib/api', () => ({
   fetchBillingQuote: mockFetchBillingQuote,
   createBillingCheckoutSession: mockCreateBillingCheckoutSession,
   fetchAvailablePaymentGateways: vi.fn().mockResolvedValue({
-    gateways: ['stripe'],
-    methods: [{ name: 'stripe', label: 'Pay with Stripe', iconName: 'credit-card', mode: 'redirect' }],
+    gateways: ['whop', 'fawaterak'],
+    methods: [
+      { name: 'whop', label: 'Pay with Whop', iconName: 'credit-card', mode: 'embedded', badge: 'MAIN', recommended: true, region: 'global' },
+      { name: 'fawaterak', label: 'Pay with Fawaterak', iconName: 'credit-card', mode: 'iframe', region: 'global' },
+    ],
   }),
 }));
 
@@ -111,9 +114,12 @@ describe('Checkout review page', () => {
     const user = userEvent.setup();
     renderWithRouter(<CheckoutReviewPage />, { searchParams });
 
-    // Global is the default region, so the Stripe payment button is shown.
+    // Global is the default region, so Whop (MAIN) then Fawaterak are shown.
     expect(await screen.findByRole('button', { name: /continue to secure payment/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /pay globally/i })).toBeInTheDocument();
+    expect(screen.getByText('Whop')).toBeInTheDocument();
+    expect(screen.getByText('MAIN')).toBeInTheDocument();
+    expect(screen.getByText('Fawaterak')).toBeInTheDocument();
 
     // Choosing Egypt reveals the manual-payment CTA, focused on the Egypt section.
     await user.click(screen.getByRole('button', { name: /pay inside egypt/i }));

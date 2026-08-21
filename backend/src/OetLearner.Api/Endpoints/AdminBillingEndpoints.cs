@@ -1,4 +1,6 @@
+using System.Net.Http.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -116,11 +118,37 @@ public static class AdminBillingEndpoints
                     return Results.Ok(new { ok = false, status = 0, reason = "not_configured" });
                 }
 
-                using var req = new HttpRequestMessage(HttpMethod.Get, CombineUrl(settings.Whop.ApiBaseUrl, "me"));
+                var plan = new Dictionary<string, object?>
+                {
+                    ["plan_type"] = "one_time",
+                    ["currency"] = "usd",
+                    ["initial_price"] = 1,
+                    ["title"] = "OET ping",
+                };
+
+                using var req = new HttpRequestMessage(HttpMethod.Post, CombineUrl(settings.Whop.ApiBaseUrl, "checkout_configurations"))
+                {
+                    Version = System.Net.HttpVersion.Version11,
+                    VersionPolicy = System.Net.Http.HttpVersionPolicy.RequestVersionOrLower,
+                    Content = JsonContent.Create(new Dictionary<string, object?>
+                    {
+                        ["plan"] = plan,
+                        ["metadata"] = new Dictionary<string, string> { ["ping"] = "true" },
+                    }),
+                };
                 req.Headers.TryAddWithoutValidation("Authorization", "Bearer " + settings.Whop.ApiKey.Trim());
                 req.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
                 using var resp = await client.SendAsync(req, ct);
-                return Results.Ok(new { ok = resp.IsSuccessStatusCode, status = (int)resp.StatusCode, reason = resp.IsSuccessStatusCode ? "ok" : "upstream" });
+                var body = await resp.Content.ReadAsStringAsync(ct);
+                var errorType = ReadJsonErrorType(body);
+                return Results.Ok(new
+                {
+                    ok = resp.IsSuccessStatusCode,
+                    status = (int)resp.StatusCode,
+                    reason = resp.IsSuccessStatusCode ? "ok" : (errorType ?? "upstream"),
+                    keyLength = settings.Whop.ApiKey.Trim().Length,
+                    hasCompanyId = !string.IsNullOrWhiteSpace(settings.Whop.CompanyId),
+                });
             }
 
             if (string.Equals(name, PaymentGatewayNames.Fawaterak, StringComparison.OrdinalIgnoreCase))
@@ -151,6 +179,48 @@ public static class AdminBillingEndpoints
 
     private static Uri CombineUrl(string baseUrl, string path)
         => new(new Uri(baseUrl.EndsWith('/') ? baseUrl : baseUrl + "/"), path);
+
+    private static string? ReadJsonErrorType(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            if (root.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+            {
+                if (error.TryGetProperty("type", out var type) && type.ValueKind == JsonValueKind.String)
+                {
+                    return type.GetString();
+                }
+
+                if (error.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.String)
+                {
+                    return code.GetString();
+                }
+            }
+
+            if (root.TryGetProperty("code", out var rootCode) && rootCode.ValueKind == JsonValueKind.String)
+            {
+                return rootCode.GetString();
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
 
     // ─────────────────────── Analytics ───────────────────────
 
