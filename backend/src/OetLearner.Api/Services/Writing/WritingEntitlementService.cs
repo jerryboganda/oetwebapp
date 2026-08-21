@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Writing;
@@ -19,7 +20,8 @@ namespace OetLearner.Api.Services.Writing;
 public sealed class WritingEntitlementService(
     LearnerDbContext db,
     IEffectiveEntitlementResolver entitlementResolver,
-    IWritingOptionsProvider optionsProvider) : IWritingEntitlementService
+    IWritingOptionsProvider optionsProvider,
+    IAiPackageCreditService? aiPackageCreditService = null) : IWritingEntitlementService
 {
     public async Task<WritingEntitlement> CheckAsync(string? userId, CancellationToken ct)
     {
@@ -48,6 +50,26 @@ public sealed class WritingEntitlementService(
                 WindowDays: opts.FreeTierWindowDays,
                 ResetAt: null,
                 Reason: "Active subscription — unlimited writing attempts.");
+        }
+
+        if (aiPackageCreditService is not null)
+        {
+            var snapshot = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
+            var expired = snapshot.ExpiredBecausePassed
+                || (snapshot.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow);
+            var hasWritingCredits = snapshot.WritingUnlimited
+                || snapshot.WritingOnlyCredits + snapshot.FlexibleCredits >= AiGradingCreditCost.WritingExam;
+            if (!expired && hasWritingCredits)
+            {
+                return new WritingEntitlement(
+                    Allowed: true,
+                    Tier: "ai_package",
+                    Remaining: int.MaxValue,
+                    LimitPerWindow: int.MaxValue,
+                    WindowDays: opts.FreeTierWindowDays,
+                    ResetAt: null,
+                    Reason: "Paid AI package — writing grading credits available.");
+            }
         }
 
         if (!opts.FreeTierEnabled)

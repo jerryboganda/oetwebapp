@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Writing;
 using Xunit;
@@ -21,7 +23,8 @@ public class WritingEntitlementServiceTests
         var cache = new MemoryCache(new MemoryCacheOptions());
         var provider = new WritingOptionsProvider(db, cache);
         var resolver = new EffectiveEntitlementResolver(db);
-        var svc = new WritingEntitlementService(db, resolver, provider);
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = new WritingEntitlementService(db, resolver, provider, credits);
         return (svc, provider, db);
     }
 
@@ -61,6 +64,31 @@ public class WritingEntitlementServiceTests
         Assert.False(result.Allowed);
         Assert.Equal("free", result.Tier);
         Assert.Equal("premium_required", result.Reason);
+    }
+
+    [Fact]
+    public async Task AiPackageCreditsWithoutCourse_AllowsWriting()
+    {
+        await using var db = new LearnerDbContext(NewInMemoryOptions());
+        var now = DateTimeOffset.UtcNow;
+        db.AiPackageCreditAccounts.Add(new AiPackageCreditAccount
+        {
+            Id = "acct-ai-writing",
+            UserId = "user-ai-pack",
+            FlexibleCredits = 5,
+            ListeningTestsRemaining = 0,
+            ReadingTestsRemaining = 0,
+            CreatedAt = now,
+            UpdatedAt = now,
+            ExpiresAt = now.AddDays(30)
+        });
+        await db.SaveChangesAsync();
+
+        var (svc, _, _) = BuildServices(db);
+        var result = await svc.CheckAsync("user-ai-pack", default);
+
+        Assert.True(result.Allowed);
+        Assert.Equal("ai_package", result.Tier);
     }
 
     [Fact]

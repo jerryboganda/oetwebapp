@@ -8705,6 +8705,7 @@ public partial class LearnerService(
 
         var now = DateTimeOffset.UtcNow;
         var parentSubscriptionId = request.ParentSubscriptionId?.Trim();
+        BillingAddOn? quotedAddOn = null;
         if (normalizedProductType == "addon_purchase")
         {
             if (string.IsNullOrWhiteSpace(request.PriceId))
@@ -8715,16 +8716,16 @@ public partial class LearnerService(
                     [new ApiFieldError("priceId", "required", "Choose the add-on you want to purchase.")]);
             }
 
-            var preflightAddOn = await FindPurchasableBillingAddOnAsync(request.PriceId, cancellationToken)
+            quotedAddOn = await FindPurchasableBillingAddOnAsync(request.PriceId, cancellationToken)
                 ?? throw ApiException.Validation(
                     "unknown_addon",
                     $"Unknown billing add-on '{request.PriceId}'.",
                     [new ApiFieldError("priceId", "unknown", "Choose a published add-on.")]);
 
-            if (preflightAddOn.RequiresEligibleParent)
+            if (quotedAddOn.RequiresEligibleParent)
             {
                 var eligibility = addonEligibilityService ?? new AddonEligibilityService(db);
-                var eligibilityResult = await eligibility.ResolveAsync(userId, preflightAddOn.Code, cancellationToken);
+                var eligibilityResult = await eligibility.ResolveAsync(userId, quotedAddOn.Code, cancellationToken);
                 if (!eligibilityResult.Eligible)
                 {
                     throw ApiException.Validation(
@@ -8759,9 +8760,31 @@ public partial class LearnerService(
         }
 
         var subscriptionQuery = db.Subscriptions.Where(x => x.UserId == userId);
-        var subscription = string.IsNullOrWhiteSpace(parentSubscriptionId)
-            ? await subscriptionQuery.FirstOrDefaultAsync(cancellationToken)
-            : await subscriptionQuery.FirstOrDefaultAsync(x => x.Id == parentSubscriptionId, cancellationToken);
+        Subscription? subscription;
+        if (!string.IsNullOrWhiteSpace(parentSubscriptionId))
+        {
+            subscription = await subscriptionQuery.FirstOrDefaultAsync(x => x.Id == parentSubscriptionId, cancellationToken);
+        }
+        else if (quotedAddOn is not null && !quotedAddOn.RequiresEligibleParent)
+        {
+            // Quick Check / Exam Prep Pro / OET Mastery / skill packs / mocks:
+            // hang off a live course if one exists, otherwise the hidden
+            // standalone-addon container. Never scaffold the cheapest Full Course.
+            subscription = await subscriptionQuery
+                .Where(s => s.PlanId != Subscription.StandaloneAddonPlanId
+                    && (s.Status == SubscriptionStatus.Active
+                        || s.Status == SubscriptionStatus.Trial
+                        || s.Status == SubscriptionStatus.FreezeRequested))
+                .OrderByDescending(s => s.ChangedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            subscription ??= await StandaloneAddonSubscriptions.EnsureAsync(
+                db, userId, now, cancellationToken, SubscriptionStatus.Pending);
+        }
+        else
+        {
+            subscription = await subscriptionQuery.FirstOrDefaultAsync(cancellationToken);
+        }
+
         if (subscription is null && normalizedProductType == "addon_purchase" && !string.IsNullOrWhiteSpace(parentSubscriptionId))
         {
             throw ApiException.Validation(
