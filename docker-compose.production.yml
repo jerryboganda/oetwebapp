@@ -148,6 +148,10 @@ x-web-slot: &web-slot
     SENTRY_DSN: ${SENTRY_DSN}
     APP_URL: ${APP_URL}
     GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    RELEASES_ROOT: /var/opt/oet-learner/releases
+    RELEASES_PUBLIC_BASE_URL: ${APP_URL}
+  volumes:
+    - ${RELEASES_HOST_PATH:-/var/opt/oet-learner/releases}:/var/opt/oet-learner/releases:ro
   expose:
     - "3000"
   networks:
@@ -275,6 +279,7 @@ services:
       NGINX_ENVSUBST_FILTER: "^ACTIVE_SLOT$"
     volumes:
       - ${VPS_APP_DIR:-.}/scripts/deploy/nginx/web-bluegreen.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ${RELEASES_HOST_PATH:-/var/opt/oet-learner/releases}:/var/opt/oet-learner/releases:ro
     expose:
       - "3000"
     networks:

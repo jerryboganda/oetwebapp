@@ -122,8 +122,11 @@ Notes:
 Production builds run on GitHub Actions. The production VPS must not run
 frontend, API, backend, Next.js, or .NET build work. Its deploy role is limited
 to fetching the exact commit, pulling the prebuilt GHCR images, recreating
-containers, and running health gates. If Actions is unavailable, fix Actions
-first; do not silently move heavy build work to the VPS.
+containers, hosting the latest native installers under
+`/var/opt/oet-learner/releases`, and running health gates. If Actions is
+unavailable, fix Actions first; do not silently move heavy build work to the
+VPS. Desktop/mobile release workflows upload only the latest artifact per
+channel and delete the previous VPS copy automatically.
 
 Production rollout is exact-SHA only. First run the protected `Build Release
 Images` workflow for the target commit. It checks out the exact 40-character

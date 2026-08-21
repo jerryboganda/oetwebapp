@@ -9,7 +9,7 @@ name: Tauri Desktop Release
 #  - Manual: workflow_dispatch with version + allow_unsigned inputs; successful
 #    signed builds publish the same updater feed as tag runs.
 #  - Tag push: v*.*.*-tauri-desktop (e.g. v1.2.0-tauri-desktop) builds and uploads
-#    artifacts and publishes the updater feed/GitHub Release automatically.
+#    artifacts and publishes the updater feed to the production VPS.
 #
 # Required repository secrets:
 #  - TAURI_SIGNING_PRIVATE_KEY           — minisign private key for updater artifacts
@@ -273,12 +273,10 @@ jobs:
           if-no-files-found: error
           retention-days: 90
 
-  # On a tag push, gather both platforms' artifacts, build the Tauri updater
-  # latest.json from the Windows .sig, and publish a GitHub Release with the
-  # installers attached. (Hosting latest.json + the .exe/.sig on the prod feed
-  # at /desktop/updates/ remains a manual VPS step — see docs/qa/TESTER_SETUP.md.)
+  # Gather platform artifacts, build a production updater feed, and publish
+  # only that latest desktop release to the VPS. Older VPS copies are deleted.
   publish:
-    name: Publish GitHub Release + updater feed
+    name: Publish VPS updater feed
     needs: build
     # Run on tag push even if a build leg failed (e.g. macOS), as long as the
     # run wasn't cancelled. The Windows installer is required (the latest.json
@@ -287,8 +285,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
     steps:
+      - uses: actions/checkout@v4
+
       - name: Resolve version
         id: version
         shell: bash
@@ -306,76 +306,35 @@ jobs:
         with:
           path: artifacts
 
-      - name: Assemble updater latest.json
+      - name: Assemble production updater feed
         shell: bash
         run: |
           set -euo pipefail
-          exe=$(find artifacts -name '*-setup.exe' | head -1)
-          sig=$(find artifacts -name '*-setup.exe.sig' | head -1)
-          if [ -z "$exe" ] || [ -z "$sig" ]; then
-            echo "Missing Windows installer (.exe) or signature (.sig) in artifacts." >&2
-            exit 1
-          fi
-          base_url="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}"
-          # GitHub release assets replace spaces with dots in the asset name.
-          # GitHub turns whitespace into dots and collapses adjacent dots in
-          # release asset names (for example `Dr. Hesham` becomes `Dr.Hesham`).
-          asset_name=$(basename "$exe" | sed -E 's/[[:space:]]+/./g; s/\.+/./g')
-          win_sig=$(cat "$sig")
-          platforms="    \"windows-x86_64\": {\n      \"signature\": \"${win_sig}\",\n      \"url\": \"${base_url}/${asset_name}\"\n    }"
+          mkdir -p stage
+          node scripts/release/assemble-desktop-feed.mjs \
+            --version="${{ steps.version.outputs.version }}" \
+            --artifact-dir=artifacts \
+            --public-base=https://app.oetwithdrhesham.co.uk \
+            --out=stage/current.json
+          while IFS= read -r file; do
+            cp "$file" "stage/$(basename "$file" | sed -E 's/[[:space:]]+/./g; s/\.+/./g')"
+          done < <(find artifacts -type f \( -name '*-setup.exe' -o -name '*-setup.exe.sig' -o -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \))
+          cp -f stage/current.json stage/latest.json
+          echo "Staged desktop release:"; ls -la stage; cat stage/current.json
 
-          # macOS updater bundle is best-effort: the mac leg is built unsigned/
-          # un-notarized and may be absent. Only add darwin-aarch64 when both the
-          # updater tarball and its signature exist, so Windows releases never break.
-          mac_tar=$(find artifacts -name '*.app.tar.gz' | head -1 || true)
-          mac_sig_file=$(find artifacts -name '*.app.tar.gz.sig' | head -1 || true)
-          if [ -n "$mac_tar" ] && [ -n "$mac_sig_file" ]; then
-            mac_asset=$(basename "$mac_tar" | tr ' ' '.')
-            mac_sig=$(cat "$mac_sig_file")
-            platforms="${platforms},\n    \"darwin-aarch64\": {\n      \"signature\": \"${mac_sig}\",\n      \"url\": \"${base_url}/${mac_asset}\"\n    }"
-          else
-            echo "No macOS updater artifact (*.app.tar.gz[.sig]) — omitting darwin-aarch64 from latest.json."
-          fi
+      - name: Upload latest desktop release to the VPS
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          CHANNEL: desktop
+          VERSION: ${{ steps.version.outputs.version }}
+          SRC_DIR: stage
+        run: bash scripts/release/upload-native-release.sh
 
-          {
-            echo '{'
-            echo "  \"version\": \"${{ steps.version.outputs.version }}\","
-            echo "  \"notes\": \"OET with Dr. Hesham desktop ${{ steps.version.outputs.version }}\","
-            echo "  \"pub_date\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\","
-            echo '  "platforms": {'
-            printf '%b\n' "$platforms"
-            echo '  }'
-            echo '}'
-          } > latest.json
-          echo "Generated latest.json:"; cat latest.json
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.tag }}
-          target_commitish: ${{ github.sha }}
-          make_latest: true
-          name: OET with Dr. Hesham Desktop ${{ steps.version.outputs.version }}
-          files: |
-            artifacts/**/*-setup.exe
-            artifacts/**/*-setup.exe.sig
-            artifacts/**/*.dmg
-            artifacts/**/*.app.tar.gz
-            artifacts/**/*.app.tar.gz.sig
-            latest.json
-          body: |
-            Internal-testing build of the OET with Dr. Hesham desktop shell (Tauri 2).
-
-            Install + certificate-trust steps: `docs/qa/TESTER_SETUP.md`.
-
-            **Auto-update:** the signed `latest.json` and updater artifacts are
-            consumed automatically through `/desktop/updates/latest.json`.
-
-      - name: Verify published updater feed and artifact
+      - name: Verify production updater feed and artifact
         shell: bash
         run: |
           set -euo pipefail
-          feed="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/latest.json"
+          feed="https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json"
           for attempt in 1 2 3 4 5; do
             if curl --fail --silent --show-error --location "$feed" -o published-latest.json; then break; fi
             if [ "$attempt" = 5 ]; then exit 1; fi
@@ -387,7 +346,7 @@ jobs:
           if (feed.version !== '${{ steps.version.outputs.version }}') throw new Error('Published updater version mismatch');
           const win = feed.platforms?.['windows-x86_64'];
           if (!win?.signature || win.signature.length < 64) throw new Error('Published Windows updater signature is missing');
-          if (!win.url?.startsWith('https://github.com/${{ github.repository }}/releases/download/')) throw new Error('Published updater URL is untrusted');
+          if (!win.url?.startsWith('https://app.oetwithdrhesham.co.uk/releases/')) throw new Error('Published updater URL is untrusted');
           console.log(win.url);
           NODE
           artifact_url=$(node -p "require('./published-latest.json').platforms['windows-x86_64'].url")

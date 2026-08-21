@@ -165,8 +165,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
+      contents: read
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download signed Android artifacts
         uses: actions/download-artifact@v4
         with:
@@ -177,38 +179,44 @@ jobs:
       - name: Stage versioned release assets
         run: |
           set -euo pipefail
+          mkdir -p stage
           test -s artifacts/app-release.apk
           test -s artifacts/app-release.aab
-          mv artifacts/app-release.apk "OET-with-Dr-Hesham-${{ inputs.version }}.apk"
-          mv artifacts/app-release.aab "OET-with-Dr-Hesham-${{ inputs.version }}.aab"
-          sha256sum OET-with-Dr-Hesham-* > SHA256SUMS.txt
+          mv artifacts/app-release.apk "stage/OET-with-Dr-Hesham-${{ inputs.version }}.apk"
+          mv artifacts/app-release.aab "stage/OET-with-Dr-Hesham-${{ inputs.version }}.aab"
+          node scripts/release/assemble-mobile-manifest.mjs \
+            --platform=android \
+            --version="${{ inputs.version }}" \
+            --artifact-dir=stage \
+            --public-base=https://app.oetwithdrhesham.co.uk \
+            --out=stage/current.json
 
-      - name: Create GitHub mobile release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ inputs.version }}-mobile-android
-          target_commitish: ${{ github.sha }}
-          name: OET with Dr. Hesham v${{ inputs.version }} (Android)
-          make_latest: false
-          files: |
-            OET-with-Dr-Hesham-${{ inputs.version }}.apk
-            OET-with-Dr-Hesham-${{ inputs.version }}.aab
-            SHA256SUMS.txt
-          body: |
-            Signed Android release for OET with Dr. Hesham.
-
-            The app discovers this release automatically and uses the APK as a
-            fallback when Google Play in-app update is unavailable.
+      - name: Upload latest Android release to the VPS
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          CHANNEL: android
+          VERSION: ${{ inputs.version }}
+          SRC_DIR: stage
+        run: bash scripts/release/upload-native-release.sh
 
       - name: Verify published APK
         run: |
           set -euo pipefail
-          url="https://github.com/${{ github.repository }}/releases/download/v${{ inputs.version }}-mobile-android/OET-with-Dr-Hesham-${{ inputs.version }}.apk"
+          feed="https://app.oetwithdrhesham.co.uk/api/releases/native?platform=android"
           for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error --location --range 0-0 "$url" -o /dev/null; then exit 0; fi
+            if curl --fail --silent --show-error --location "$feed" -o published-android.json; then break; fi
+            if [ "$attempt" = 5 ]; then exit 1; fi
             sleep $((attempt * 3))
           done
-          exit 1
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const feed = JSON.parse(fs.readFileSync('published-android.json', 'utf8'));
+          if (feed.version !== '${{ inputs.version }}') throw new Error('Published Android version mismatch');
+          if (!feed.downloadUrl?.startsWith('https://app.oetwithdrhesham.co.uk/releases/')) throw new Error('Published Android URL is untrusted');
+          console.log(feed.downloadUrl);
+          NODE
+          artifact_url=$(node -p "require('./published-android.json').downloadUrl")
+          curl --fail --silent --show-error --location --range 0-0 "$artifact_url" -o /dev/null
 
   ios-release:
     name: iOS Release
@@ -337,3 +345,42 @@ jobs:
           name: ios-release-ipa-${{ inputs.version }}
           path: ${{ runner.temp }}/ipa/*.ipa
           retention-days: 90
+
+  publish-ios:
+    name: Publish signed iOS release
+    needs: ios-release
+    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download signed iOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-release-ipa-${{ inputs.version }}
+          path: artifacts
+
+      - name: Stage versioned release assets
+        run: |
+          set -euo pipefail
+          mkdir -p stage
+          ipa=$(find artifacts -name '*.ipa' | head -1)
+          test -n "$ipa" && test -s "$ipa"
+          mv "$ipa" "stage/OET-with-Dr-Hesham-${{ inputs.version }}.ipa"
+          node scripts/release/assemble-mobile-manifest.mjs \
+            --platform=ios \
+            --version="${{ inputs.version }}" \
+            --artifact-dir=stage \
+            --public-base=https://app.oetwithdrhesham.co.uk \
+            --out=stage/current.json
+
+      - name: Upload latest iOS release to the VPS
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          CHANNEL: ios
+          VERSION: ${{ inputs.version }}
+          SRC_DIR: stage
+        run: bash scripts/release/upload-native-release.sh

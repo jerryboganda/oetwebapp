@@ -18,7 +18,7 @@ oet-desktop (Rust core)
  ├─ navigation guard  → HTTPS + trusted origin only; other links → system browser
  ├─ initialization_script → injects window.desktopBridge (inject/desktop-bridge.js)
  ├─ tray (Dashboard / Study Plan / Quit) · deep link (oet-prep://) · single-instance
- └─ updater (tauri-plugin-updater, minisign + GitHub latest.json)
+ └─ updater (tauri-plugin-updater, minisign + VPS latest.json)
 ```
 
 - The remote URLs come from `src-tauri/desktop-runtime-config.json` (bundled as a
@@ -77,8 +77,9 @@ not `@tauri-apps/api`.
 ## Updater
 
 Configured in `tauri.conf.json` (`plugins.updater`): minisign `pubkey` +
-GitHub-releases `latest.json` endpoint. CI signs updater artifacts with
-`TAURI_SIGNING_PRIVATE_KEY`. Round-trip test without installing:
+the production feed at `https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json`.
+CI signs updater artifacts with `TAURI_SIGNING_PRIVATE_KEY` and publishes only
+the latest desktop build to the VPS. Round-trip test without installing:
 
 ```bash
 OET_UPDATER_TEST=1 <run the built app>
@@ -90,6 +91,6 @@ OET_UPDATER_TEST=1 <run the built app>
 - `.github/workflows/tauri-ci.yml` — Rust gate (fmt, clippy `-D warnings`, test,
   build) on Windows + the bridge conformance test.
 - `.github/workflows/tauri-desktop-release.yml` — Windows (NSIS) + macOS (dmg)
-  build matrix, checksums, artifact upload, and (on tag) a GitHub Release with
-  the updater `latest.json`. Installers are unsigned by default — see the README
-  "Desktop signing" section to enable Authenticode / Apple notarization.
+  build matrix, checksums, artifact upload, and publish of the latest signed
+  feed/installers to the production VPS. Installers are unsigned by default —
+  see the README "Desktop signing" section to enable Authenticode / Apple notarization.

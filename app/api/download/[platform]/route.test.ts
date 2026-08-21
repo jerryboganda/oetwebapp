@@ -1,8 +1,36 @@
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { NextRequest } from 'next/server';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { GET } from './route';
 
-const RELEASES_FALLBACK = 'https://github.com/jerryboganda/oetwebapp/releases/latest';
+const originalEnv = { ...process.env };
+
+function seedCatalog() {
+  const root = mkdtempSync(path.join(tmpdir(), 'oet-download-'));
+  process.env.RELEASES_ROOT = root;
+  process.env.RELEASES_PUBLIC_BASE_URL = 'https://app.oetwithdrhesham.co.uk';
+  mkdirSync(path.join(root, 'desktop'), { recursive: true });
+  mkdirSync(path.join(root, 'mobile', 'ios'), { recursive: true });
+  writeFileSync(path.join(root, 'desktop', 'current.json'), JSON.stringify({
+    version: '0.7.1',
+    platforms: {
+      'windows-x86_64': {
+        signature: 'a'.repeat(128),
+        url: 'https://app.oetwithdrhesham.co.uk/releases/desktop/0.7.1/app-setup.exe',
+      },
+    },
+    downloads: {
+      windows: { url: 'https://app.oetwithdrhesham.co.uk/releases/desktop/0.7.1/app-setup.exe' },
+    },
+  }));
+  writeFileSync(path.join(root, 'mobile', 'ios', 'current.json'), JSON.stringify({
+    platform: 'ios',
+    version: '1.0.0',
+    downloadUrl: 'https://app.oetwithdrhesham.co.uk/releases/mobile/ios/1.0.0/OET-with-Dr-Hesham.ipa',
+  }));
+}
 
 function requestFor(platform: string) {
   return GET(
@@ -11,68 +39,32 @@ function requestFor(platform: string) {
   );
 }
 
+afterEach(() => {
+  process.env.RELEASES_ROOT = originalEnv.RELEASES_ROOT;
+  process.env.RELEASES_PUBLIC_BASE_URL = originalEnv.RELEASES_PUBLIC_BASE_URL;
+});
+
 describe('direct native download resolver', () => {
-  afterEach(() => vi.restoreAllMocks());
-
-  it('redirects iOS to the newest trusted published IPA', async () => {
-    const ipaUrl = 'https://github.com/jerryboganda/oetwebapp/releases/download/v1.0.0-mobile-ios/OET-with-Dr-Hesham.ipa';
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify([
-      {
-        tag_name: 'v1.0.0-mobile-ios',
-        draft: false,
-        prerelease: false,
-        assets: [{ name: 'OET-with-Dr-Hesham.ipa', browser_download_url: ipaUrl }],
-      },
-    ]), { status: 200 }));
-
+  it('redirects iOS to the VPS-hosted IPA', async () => {
+    seedCatalog();
     const response = await requestFor('ios');
-
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe(ipaUrl);
+    expect(response.headers.get('location')).toBe(
+      'https://app.oetwithdrhesham.co.uk/releases/mobile/ios/1.0.0/OET-with-Dr-Hesham.ipa',
+    );
   });
 
-  it('falls back when no trusted IPA is available', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify([
-      {
-        tag_name: 'v1.0.0-mobile-ios',
-        draft: false,
-        prerelease: false,
-        assets: [{
-          name: 'OET-with-Dr-Hesham.ipa',
-          browser_download_url: 'https://evil.example/OET-with-Dr-Hesham.ipa',
-        }],
-      },
-    ]), { status: 200 }));
-
+  it('falls back to /get-app when no trusted IPA is published', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'oet-download-empty-'));
+    process.env.RELEASES_ROOT = root;
     const response = await requestFor('ios');
-
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe(RELEASES_FALLBACK);
+    expect(response.headers.get('location')).toBe('https://app.example/get-app');
   });
 
-  it('falls back when the iOS release has no IPA asset', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify([
-      {
-        tag_name: 'v1.0.0-mobile-ios',
-        draft: false,
-        prerelease: false,
-        assets: [{
-          name: 'OET-with-Dr-Hesham.apk',
-          browser_download_url: 'https://github.com/jerryboganda/oetwebapp/releases/download/v1.0.0-mobile-ios/OET-with-Dr-Hesham.apk',
-        }],
-      },
-    ]), { status: 200 }));
-
-    const response = await requestFor('ios');
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe(RELEASES_FALLBACK);
-  });
-
-  it('keeps unknown platform behavior unchanged', async () => {
+  it('keeps unknown platform behavior on-site', async () => {
     const response = await requestFor('windows-phone');
-
     expect(response.status).toBe(302);
-    expect(response.headers.get('location')).toBe(RELEASES_FALLBACK);
+    expect(response.headers.get('location')).toBe('https://app.example/get-app');
   });
 });

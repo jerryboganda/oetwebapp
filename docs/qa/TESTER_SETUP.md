@@ -122,19 +122,14 @@ gh secret set TAURI_SIGNING_PRIVATE_KEY  < ~/.tauri/oet-updater-prod.key
 gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --body ""
 ```
 
-### Updater feed hosting (one-time, on the VPS behind Nginx Proxy Manager)
-Serve the three release files (`latest.json`, the signed `*-setup.exe`, and its `*.sig`) at
-`https://app.oetwithdrhesham.co.uk/desktop/updates/`. Example Nginx location (static dir):
-```nginx
-location /desktop/updates/ {
-    alias /srv/oet-desktop-updates/;
-    autoindex off;
-    add_header Cache-Control "no-cache";
-    types { application/json json; application/octet-stream exe sig; }
-}
-```
-Then on each release, copy the workflow artifacts (`latest.json`, `.exe`, `.sig`) into
-`/srv/oet-desktop-updates/`. `latest.json` format (Tauri v2):
+### Updater feed hosting
+
+The desktop/mobile release workflows publish the **latest** signed artifacts to
+`/var/opt/oet-learner/releases/` on the VPS and delete previous versions.
+The live feed is `https://app.oetwithdrhesham.co.uk/desktop/updates/latest.json`.
+Do not host installers on GitHub Releases.
+
+`latest.json` format (Tauri v2):
 ```json
 {
   "version": "0.1.1",
@@ -143,7 +138,7 @@ Then on each release, copy the workflow artifacts (`latest.json`, `.exe`, `.sig`
   "platforms": {
     "windows-x86_64": {
       "signature": "<contents of the .sig file>",
-      "url": "https://app.oetwithdrhesham.co.uk/desktop/updates/OET%20Prep_0.1.1_x64-setup.exe"
+      "url": "https://app.oetwithdrhesham.co.uk/releases/desktop/0.1.1/OET.with.Dr.Hesham_0.1.1_x64-setup.exe"
     }
   }
 }

@@ -1,18 +1,15 @@
 /**
  * Canonical download locations for the native apps.
  *
- * Desktop installers (Windows NSIS .exe / macOS .dmg) are published as GitHub
- * Release assets — the same feed the Tauri auto-updater consumes
- * (see src-tauri/tauri.conf.json updater endpoints). The Android app ships
- * via Play Store (fallback: the signed APK attached to mobile releases).
+ * Desktop installers and the Tauri auto-updater consume the VPS catalog at
+ * /desktop/updates/latest.json and /releases/**. Android prefers Play Store
+ * in-app update, with a same-origin APK fallback. Clients never need GitHub.
  */
-export const GITHUB_RELEASES_URL = 'https://github.com/jerryboganda/oetwebapp/releases/latest';
+export const NATIVE_RELEASES_URL = '/releases';
 
 /**
- * Direct-download endpoints that resolve the latest desktop installer asset and
- * redirect the browser straight to the file (see app/api/download/[platform]).
- * Use these for the download CTAs so a click starts the download instead of
- * sending the user to the GitHub releases page.
+ * Direct-download endpoints that resolve the latest installer from the VPS
+ * catalog and redirect the browser straight to the file.
  */
 export const WINDOWS_DOWNLOAD_URL = '/api/download/windows';
 export const MAC_DOWNLOAD_URL = '/api/download/mac';
