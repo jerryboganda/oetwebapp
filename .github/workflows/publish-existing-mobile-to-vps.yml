@@ -1,0 +1,100 @@
+name: Publish existing mobile release to VPS
+
+# Copies an already-signed APK/IPA from a GitHub Release onto the VPS catalog.
+# Clients download only from production; this never creates a GitHub Release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: 'Mobile platform to publish'
+        required: true
+        type: choice
+        options:
+          - android
+          - ios
+        default: android
+      version:
+        description: 'Mobile semver already built (e.g. 1.4.6)'
+        required: true
+        default: '1.4.6'
+        type: string
+      tag:
+        description: 'Existing GitHub release tag to copy from'
+        required: true
+        default: 'v1.4.6-mobile-android'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish ${{ inputs.platform }} ${{ inputs.version }} to VPS
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download already-signed mobile assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          gh release download "${{ inputs.tag }}" --repo "${{ github.repository }}" --dir artifacts
+          ls -la artifacts
+
+      - name: Assemble production mobile manifest
+        run: |
+          set -euo pipefail
+          mkdir -p stage
+          suffix='.apk'
+          if [ '${{ inputs.platform }}' = 'ios' ]; then suffix='.ipa'; fi
+          found=$(find artifacts -type f -iname "*${suffix}" | head -1)
+          test -n "$found" && test -s "$found"
+          name="$(basename "$found" | sed -E 's/[[:space:]]+/./g; s/\.+/./g')"
+          cp "$found" "stage/$name"
+          if [ '${{ inputs.platform }}' = 'android' ]; then
+            aab=$(find artifacts -type f -iname '*.aab' | head -1 || true)
+            if [ -n "${aab:-}" ]; then
+              cp "$aab" "stage/$(basename "$aab" | sed -E 's/[[:space:]]+/./g; s/\.+/./g')"
+            fi
+          fi
+          node scripts/release/assemble-mobile-manifest.mjs \
+            --platform="${{ inputs.platform }}" \
+            --version="${{ inputs.version }}" \
+            --artifact-dir=stage \
+            --public-base=https://app.oetwithdrhesham.co.uk \
+            --out=stage/current.json
+          cat stage/current.json
+
+      - name: Upload latest mobile release to the VPS
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          CHANNEL: ${{ inputs.platform }}
+          VERSION: ${{ inputs.version }}
+          SRC_DIR: stage
+        run: bash scripts/release/upload-native-release.sh
+
+      - name: Verify published mobile catalog
+        env:
+          EXPECT_PLATFORM: ${{ inputs.platform }}
+          EXPECT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          feed="https://app.oetwithdrhesham.co.uk/api/releases/native?platform=${EXPECT_PLATFORM}"
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if curl --fail --silent --show-error --location "$feed" -o published-mobile.json; then break; fi
+            if [ "$attempt" = 8 ]; then exit 1; fi
+            sleep $((attempt * 3))
+          done
+          node - <<'NODE'
+          const feed = JSON.parse(require('node:fs').readFileSync('published-mobile.json', 'utf8'));
+          if (feed.platform !== process.env.EXPECT_PLATFORM) throw new Error('Published platform mismatch');
+          if (feed.version !== process.env.EXPECT_VERSION) throw new Error('Published version mismatch');
+          if (!feed.downloadUrl?.startsWith('https://app.oetwithdrhesham.co.uk/releases/')) throw new Error('Published URL is untrusted');
+          console.log(feed.downloadUrl);
+          NODE
+          artifact_url=$(node -p "require('./published-mobile.json').downloadUrl")
+          curl --fail --silent --show-error --location --range 0-0 "$artifact_url" -o /dev/null
