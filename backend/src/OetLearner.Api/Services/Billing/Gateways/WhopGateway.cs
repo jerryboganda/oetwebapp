@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -68,60 +69,33 @@ public sealed class WhopGateway : IPaymentGateway
 
         var quoteId = request.ProductId ?? Guid.NewGuid().ToString("N");
         var (amount, currency) = await ResolveChargeCurrencyAsync(request, ct);
+        var title = string.IsNullOrWhiteSpace(request.Description) ? "OET With Dr Hesham" : request.Description.Trim();
+        if (title.Length > 80)
+        {
+            title = title[..80];
+        }
+
         var plan = new Dictionary<string, object?>
         {
             ["plan_type"] = "one_time",
             ["currency"] = currency.ToLowerInvariant(),
-            ["initial_price"] = amount,
-            ["title"] = string.IsNullOrWhiteSpace(request.Description) ? "OET With Dr Hesham" : request.Description,
+            ["initial_price"] = (double)amount,
+            ["title"] = title,
         };
-        var metadata = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["order_id"] = quoteId,
-            ["quote_id"] = quoteId,
-            ["user_id"] = request.UserId,
-        };
-        if (request.Metadata is not null)
-        {
-            foreach (var (key, value) in request.Metadata)
-            {
-                if (!string.IsNullOrWhiteSpace(key) && value is not null)
-                {
-                    metadata[key] = value;
-                }
-            }
-        }
 
         var payload = new Dictionary<string, object?>
         {
             ["plan"] = plan,
-            ["metadata"] = metadata,
+            ["metadata"] = new Dictionary<string, string>
+            {
+                ["order_id"] = quoteId,
+                ["quote_id"] = quoteId,
+            },
         };
-        var redirectUrl = StripStripeSessionPlaceholder(request.SuccessUrl) ?? opts.SuccessUrl;
-        if (!string.IsNullOrWhiteSpace(redirectUrl))
-        {
-            payload["redirect_url"] = redirectUrl;
-        }
 
         var first = await PostCheckoutAsync(opts, payload, ct);
         var status = first.Status;
         var body = first.Body;
-        if (status is < 200 or >= 300 && payload.ContainsKey("redirect_url"))
-        {
-            _logger?.LogWarning("Whop checkout with redirect_url failed HTTP {Status}; retrying without it", status);
-            payload.Remove("redirect_url");
-            var retry = await PostCheckoutAsync(opts, payload, ct);
-            status = retry.Status;
-            body = retry.Body;
-        }
-        if (status is < 200 or >= 300 && !plan.ContainsKey("company_id") && !string.IsNullOrWhiteSpace(opts.CompanyId))
-        {
-            _logger?.LogWarning("Whop checkout without company_id failed HTTP {Status}; retrying with it", status);
-            plan["company_id"] = opts.CompanyId.Trim();
-            var retry = await PostCheckoutAsync(opts, payload, ct);
-            status = retry.Status;
-            body = retry.Body;
-        }
 
         if (status is < 200 or >= 300)
         {
@@ -283,10 +257,9 @@ public sealed class WhopGateway : IPaymentGateway
         {
             Version = HttpVersion.Version11,
             VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
-            Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            Content = JsonContent.Create(payload),
         };
         message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey!.Trim());
-        message.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
         using var response = await _http.SendAsync(message, ct);
         var body = await response.Content.ReadAsStringAsync(ct);
         return ((int)response.StatusCode, body);

@@ -160,7 +160,7 @@ public class WhopFawaterakGatewayTests
 
         Assert.Equal("ch_fx", result.GatewayTransactionId);
         Assert.Contains("\"currency\":\"usd\"", handler.LastBody);
-        Assert.Contains("\"initial_price\":6.50", handler.LastBody);
+        Assert.Contains("\"initial_price\":6.5", handler.LastBody);
     }
 
     [Fact]
