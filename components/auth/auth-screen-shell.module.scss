@@ -1146,6 +1146,12 @@
   text-align: left;
 }
 
+.resendCountdown {
+  color: var(--auth-muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
 .resend a {
   color: var(--auth-accent-strong);
   font-weight: 700;

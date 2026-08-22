@@ -154,6 +154,11 @@ public class EmailOtpChallenge
     /// <summary>Data-protected Firebase sessionInfo. Never store plaintext.</summary>
     public string? ExternalSessionInfoEncrypted { get; set; }
 
+    // Anti-duplicate-send: when the email was actually handed to the sender.
+    // Null = challenge created but the send failed (or is in flight), so a
+    // retry must re-send instead of silently returning an unusable code.
+    public DateTimeOffset? SentAt { get; set; }
+
     public ApplicationUserAccount ApplicationUserAccount { get; set; } = default!;
 }
 
