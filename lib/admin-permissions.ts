@@ -115,6 +115,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/billing/wallet-tiers': [AdminPermission.BillingRead],
   '/admin/billing/manual-payments': [AdminPermission.BillingRead],
   '/admin/billing/payment-methods': [AdminPermission.BillingRead],
+  '/admin/billing/payment-gateways': [AdminPermission.BillingRead],
   '/admin/billing/stripe-accounts': [AdminPermission.BillingRead],
   '/admin/flags': [AdminPermission.FeatureFlags],
   '/admin/audit-logs': [AdminPermission.AuditLogs],
