@@ -166,6 +166,29 @@ describe('auth-client', () => {
     });
   });
 
+  it('forwards an optional recaptcha token on password reset and device OTP', async () => {
+    const challenge: OtpChallenge = {
+      challengeId: 'reset-challenge-2',
+      purpose: 'reset_password',
+      deliveryChannel: 'sms',
+      destinationHint: '+92*****4567',
+      expiresAt: '2026-03-27T00:10:00.000Z',
+      retryAfterSeconds: 60,
+    };
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify(challenge), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const { requestPasswordReset } = await import('@/lib/auth-client');
+    await expect(requestPasswordReset('learner@oet-prep.dev', { recaptchaToken: 'token-1' })).resolves.toEqual(challenge);
+    expect(JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body))).toEqual({
+      email: 'learner@oet-prep.dev',
+      recaptchaToken: 'token-1',
+    });
+  });
+
   it('can register a learner without persisting the returned session', async () => {
     const session = createSession();
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify(session), {

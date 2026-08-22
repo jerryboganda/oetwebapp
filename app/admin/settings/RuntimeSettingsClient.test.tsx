@@ -392,6 +392,16 @@ function makeResponse(overrides: Partial<RuntimeSettingsResponse> = {}): Runtime
       whatsAppProofTemplate: '',
       isWhatsAppConfigured: true,
     },
+    firebaseOtp: {
+      enabled: false,
+      smsEnabled: true,
+      emailLinksEnabled: false,
+      fallbackToBrevo: true,
+      projectId: '',
+      authDomain: '',
+      webApiKey: '',
+      isSmsConfigured: false,
+    },
     security: {
       singleActiveSessionEnabled: true,
       riskMode: 'log_only',

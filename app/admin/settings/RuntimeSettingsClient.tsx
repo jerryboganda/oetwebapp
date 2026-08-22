@@ -446,6 +446,17 @@ export interface SupportSettings {
   isWhatsAppConfigured?: boolean | null;
 }
 
+export interface FirebaseOtpSettings {
+  enabled: boolean | null;
+  smsEnabled: boolean | null;
+  emailLinksEnabled: boolean | null;
+  fallbackToBrevo: boolean | null;
+  projectId: string;
+  authDomain: string;
+  webApiKey: string;
+  isSmsConfigured?: boolean | null;
+}
+
 export interface RuntimeSettingsResponse {
   email: EmailSettings;
   billing: BillingSettings;
@@ -484,6 +495,7 @@ export interface RuntimeSettingsResponse {
   authTokens: AuthTokensSettings;
   webPush: WebPushSettings;
   support: SupportSettings;
+  firebaseOtp: FirebaseOtpSettings;
   security: SecuritySettings;
   videoProtection: VideoProtectionSettings;
   updatedBy: string | null;
@@ -498,7 +510,7 @@ export interface RuntimeSettingsIntegrationTestResponse {
   testedAt: string;
 }
 
-type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'easyKash' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush' | 'support' | 'security' | 'videoProtection';
+type SectionId = 'email' | 'billing' | 'paypal' | 'sentry' | 'backup' | 'oauth' | 'push' | 'uploadScanner' | 'zoom' | 'speakingWhisper' | 'speakingLiveKit' | 'speakingAi' | 'speakingStorage' | 'speakingCompliance' | 'speakingFeatures' | 'checkoutCom' | 'bunnyStream' | 'paymob' | 'payTabs' | 'easyKash' | 'soketi' | 'dataRetention' | 'expertAutoAssignment' | 'passwordPolicy' | 'aiAssistant' | 'aiGateway' | 'writing' | 'platform' | 'messaging' | 'fx' | 'billingCore' | 'storage' | 'pdfExtraction' | 'pronunciation' | 'authTokens' | 'webPush' | 'support' | 'firebaseOtp' | 'security' | 'videoProtection';
 
 // The object-valued payload keys (every UI section maps to one of these; the "paypal"
 // UI section writes into "billing"). Excludes the scalar audit fields so updateField can
@@ -969,6 +981,15 @@ const SUPPORT_FIELDS: FieldDef<SupportSettings>[] = [
   { key: 'whatsAppProofTemplate', label: 'Payment-Proof Message Template', type: 'text', hint: 'Message pre-filled for the learner when they tap "Send proof on WhatsApp". Blank uses the built-in wording. wa.me can only pre-fill text — the learner still attaches the screenshot themselves.' },
 ];
 
+const FIREBASE_OTP_FIELDS: FieldDef<FirebaseOtpSettings>[] = [
+  { key: 'enabled', label: 'Enable Firebase SMS OTP', type: 'checkbox', hint: 'Master switch. Leave off until Phone Auth, SMS regions, and the authorized domain are ready in Firebase Console. Email verification always stays on Brevo.' },
+  { key: 'smsEnabled', label: 'Allow SMS OTP', type: 'checkbox', hint: 'When on, password-reset and new-device codes prefer Firebase SMS if a mobile number and reCAPTCHA token are present.' },
+  { key: 'fallbackToBrevo', label: 'Fall back to Brevo email', type: 'checkbox', hint: 'Required safety net. If Firebase SMS fails or is unavailable, send the existing 6-digit Brevo email instead.' },
+  { key: 'projectId', label: 'Firebase Project ID', type: 'text', hint: 'Usually oet-prep-learner. Not the FCM service-account JSON from the Push section.' },
+  { key: 'authDomain', label: 'Auth Domain', type: 'text', hint: 'Usually {projectId}.firebaseapp.com. Must match an authorized domain in Firebase Console.' },
+  { key: 'webApiKey', label: 'Web API Key', secret: true, hint: 'Identity Toolkit browser key from Firebase Console → Project settings. Stored encrypted. The public runtime config publishes it as webKey, never apiKey.' },
+];
+
 const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'email', title: 'Email (Brevo + SMTP)', description: 'Transactional email delivery via Brevo with SMTP fallback.' },
   { id: 'billing', title: 'Billing (Stripe)', description: 'Stripe Checkout, Customer Portal, and webhook signing.' },
@@ -998,6 +1019,7 @@ const SECTION_META: { id: SectionId; title: string; description: string }[] = [
   { id: 'aiGateway', title: 'AI Gateway & Tooling', description: 'Grounded gateway defaults (provider, model, temperature, max tokens) and AI tool knobs (tool-call cap, grant cache, external-network allowlist/budget). API key managed in AI Providers.' },
   { id: 'writing', title: 'Writing Module', description: 'Writing V2 feature flags and tunables: cron kill switch, coach hint limits/cost cap, OCR pipeline + GCV key, appeals, tutor-review queue gates, plan regen, and grade idempotency.' },
   { id: 'platform', title: 'Platform', description: 'Public-facing API/Web base URLs (external auth callbacks, CSRF origin validation) and the fallback email domain for synthesized learner emails.' },
+  { id: 'firebaseOtp', title: 'Firebase OTP', description: 'Firebase Phone Auth as the SMS OTP transport for password reset and new-device approval. Email verification stays on Brevo. This is not the login authority and does not replace FCM push credentials.' },
   { id: 'messaging', title: 'Messaging (SMS / WhatsApp)', description: 'Billing-notification channels: Twilio SMS and Meta WhatsApp Business Cloud. Auth Token and Access Token are stored encrypted.' },
   { id: 'fx', title: 'FX / Currency', description: 'Currency conversion provider for dynamic pricing. The API key is stored encrypted; empty key falls back to offline seed rates.' },
   { id: 'billingCore', title: 'Billing Core (non-gateway)', description: 'Core billing knobs: default currency/region, wallet currency + top-up tiers, and webhook replay window/attempts. Gateway credentials live in the Billing/Stripe/PayPal/Checkout.com/Paymob/PayTabs sections; the PayPal live/sandbox switch is in the Payments: PayPal section.' },
@@ -1367,6 +1389,16 @@ function emptyResponse(): RuntimeSettingsResponse {
       whatsAppProofTemplate: '',
       isWhatsAppConfigured: false,
     },
+    firebaseOtp: {
+      enabled: false,
+      smsEnabled: true,
+      emailLinksEnabled: false,
+      fallbackToBrevo: true,
+      projectId: '',
+      authDomain: '',
+      webApiKey: '',
+      isSmsConfigured: false,
+    },
     security: {
       singleActiveSessionEnabled: null,
       riskMode: 'off',
@@ -1440,6 +1472,7 @@ function normalizeResponse(data: Partial<RuntimeSettingsResponse>): RuntimeSetti
     authTokens: { ...empty.authTokens, ...data.authTokens },
     webPush: { ...empty.webPush, ...data.webPush },
     support: { ...empty.support, ...data.support },
+    firebaseOtp: { ...empty.firebaseOtp, ...data.firebaseOtp },
     security: { ...empty.security, ...data.security },
     videoProtection: { ...empty.videoProtection, ...data.videoProtection },
   });
@@ -1557,6 +1590,10 @@ function sanitizeSecretFields(data: RuntimeSettingsResponse): RuntimeSettingsRes
     pdfExtraction: {
       ...data.pdfExtraction,
       azureApiKey: maskUnexpectedSecret(data.pdfExtraction.azureApiKey),
+    },
+    firebaseOtp: {
+      ...data.firebaseOtp,
+      webApiKey: maskUnexpectedSecret(data.firebaseOtp.webApiKey),
     },
   };
 }
@@ -2065,6 +2102,7 @@ export function RuntimeSettingsClient() {
     authTokens: false,
     webPush: false,
     support: false,
+    firebaseOtp: false,
     security: false,
     videoProtection: false,
   });
@@ -3238,6 +3276,35 @@ export function RuntimeSettingsClient() {
                     }
                   />
                 ))}
+
+              {section.id === 'firebaseOtp' &&
+                FIREBASE_OTP_FIELDS.map((field) =>
+                  field.secret ? (
+                    <SecretField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      serverValue={String(server.firebaseOtp[field.key] ?? '')}
+                      draftValue={String(draft.firebaseOtp[field.key] ?? '')}
+                      onChange={(next) => updateField('firebaseOtp', field.key, next as never)}
+                    />
+                  ) : (
+                    <PlainField
+                      key={field.key}
+                      label={field.label}
+                      hint={field.hint}
+                      type={field.type}
+                      value={draft.firebaseOtp[field.key] as string | number | boolean | null}
+                      onChange={(next) =>
+                        updateField(
+                          'firebaseOtp',
+                          field.key,
+                          (field.type === 'checkbox' ? Boolean(next) : String(next)) as never,
+                        )
+                      }
+                    />
+                  ),
+                )}
 
               {section.id === 'security' && (
                 <DeviceExemptionEmailTable

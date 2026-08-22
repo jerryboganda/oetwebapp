@@ -15,6 +15,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Security;
+using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services;
@@ -532,7 +533,10 @@ public sealed class AuthService(
 
     public async Task<OtpChallengeResponse> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default)
     {
-        return await emailOtpService.RequestPasswordResetOtpAsync(request.Email, cancellationToken);
+        var response = await emailOtpService.RequestPasswordResetOtpAsync(
+            request.Email, cancellationToken, request.RecaptchaToken);
+        await ApplyOtpRateLimitItemsAsync(request.Email, response.DeliveryChannel, cancellationToken);
+        return response;
     }
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
@@ -703,7 +707,7 @@ public sealed class AuthService(
     /// for a pending device challenge (mirrors the MFA challenge transport —
     /// see DeviceVerificationRequiredException / ReadDeviceChallengeTokenOrThrow).</summary>
     public async Task<OtpChallengeResponse> SendDeviceVerificationOtpAsync(
-        string? challengeToken, CancellationToken cancellationToken = default)
+        string? challengeToken, CancellationToken cancellationToken = default, string? recaptchaToken = null)
     {
         var challenge = ReadDeviceChallengeTokenOrThrow(challengeToken);
         var account = await db.ApplicationUserAccounts
@@ -711,7 +715,59 @@ public sealed class AuthService(
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
         await EnsureDeviceVerificationIsRequiredAsync(account, cancellationToken);
-        return await emailOtpService.RequestDeviceTrustOtpAsync(account, cancellationToken);
+        var response = await emailOtpService.RequestDeviceTrustOtpAsync(account, cancellationToken, recaptchaToken);
+        await ApplyOtpRateLimitItemsAsync(account.Email, response.DeliveryChannel, cancellationToken, account.Id);
+        return response;
+    }
+
+    private async Task ApplyOtpRateLimitItemsAsync(
+        string? email,
+        string? deliveryChannel,
+        CancellationToken cancellationToken,
+        string? accountId = null)
+    {
+        var http = httpContextAccessor.HttpContext;
+        if (http is null)
+        {
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            http.Items["otp_email"] = email.Trim().ToLowerInvariant();
+        }
+
+        if (!string.Equals(deliveryChannel, "sms", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string? phone = null;
+        if (!string.IsNullOrWhiteSpace(accountId))
+        {
+            phone = await db.LearnerRegistrationProfiles
+                .AsNoTracking()
+                .Where(x => x.ApplicationUserAccountId == accountId)
+                .Select(x => x.MobileNumber)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+        else if (!string.IsNullOrWhiteSpace(email))
+        {
+            var normalizedEmail = AuthEmailAddress.NormalizeOrThrow(email);
+            phone = await (
+                from profile in db.LearnerRegistrationProfiles.AsNoTracking()
+                join acc in db.ApplicationUserAccounts.AsNoTracking()
+                    on profile.ApplicationUserAccountId equals acc.Id
+                where acc.NormalizedEmail == normalizedEmail
+                select profile.MobileNumber
+            ).FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var normalizedPhone = PhoneNumberNormalizer.TryNormalize(phone);
+        if (normalizedPhone is not null)
+        {
+            http.Items["otp_phone"] = normalizedPhone;
+        }
     }
 
     /// <summary>Verifies the device-approval code, trusts the device

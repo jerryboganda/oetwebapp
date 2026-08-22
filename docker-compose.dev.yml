@@ -64,6 +64,13 @@ services:
       AuthTokens__RefreshTokenLifetime: ${AUTHTOKENS__REFRESHTOKENLIFETIME}
       AuthTokens__OtpLifetime: ${AUTHTOKENS__OTPLIFETIME}
       AuthTokens__AuthenticatorIssuer: ${AUTHTOKENS__AUTHENTICATORISSUER}
+      Firebase__Otp__Enabled: '${FIREBASE__OTP__ENABLED:-false}'
+      Firebase__Otp__SmsEnabled: '${FIREBASE__OTP__SMSENABLED:-true}'
+      Firebase__Otp__EmailLinksEnabled: '${FIREBASE__OTP__EMAILLINKSENABLED:-false}'
+      Firebase__Otp__FallbackToBrevo: '${FIREBASE__OTP__FALLBACKTOBREVO:-true}'
+      Firebase__Otp__ProjectId: ${FIREBASE__OTP__PROJECTID:-}
+      Firebase__Otp__AuthDomain: ${FIREBASE__OTP__AUTHDOMAIN:-}
+      Firebase__Otp__ApiKey: ${FIREBASE__OTP__APIKEY:-}
       Brevo__Enabled: '${BREVO__ENABLED}'
       Brevo__ApiKey: ${BREVO__APIKEY}
       Brevo__BaseUrl: ${BREVO__BASEURL}

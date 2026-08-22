@@ -21,6 +21,7 @@ using OetLearner.Api.Hubs;
 using OetLearner.Api.Middleware;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.LiveClasses;
 using OetLearner.Api.Observability;
 
@@ -201,6 +202,12 @@ else
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 }
 builder.Services.AddScoped<EmailOtpService>();
+builder.Services.AddHttpClient<IFirebaseSmsOtpClient, FirebaseSmsOtpClient>(client =>
+{
+    client.BaseAddress = new Uri("https://identitytoolkit.googleapis.com/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+builder.Services.AddScoped<IOtpDeliveryOrchestrator, OtpDeliveryOrchestrator>();
 builder.Services.AddHttpContextAccessor();
 // Security spec §4.4: machine-generated security telemetry (auth lifecycle,
 // session/device/playback/risk events). Uses its own DB scope per write —
@@ -392,19 +399,18 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
-    // Email-scoped OTP throttle. Applied to endpoints that accept a target email
-    // in the request body (verification OTP, forgot-password). Key is derived from
-    // a header the handler sets; handlers MUST call context.Items["otp_email"] = normalizedEmail
-    // before RequireRateLimiting runs for this policy. Raised generously (5 -> 50/hour)
-    // so users who need several "Resend it" clicks (slow email delivery, spam
-    // filtering, retries) don't get locked out of receiving a code.
+    // Email-or-phone OTP throttle. Handlers set context.Items["otp_email"] and,
+    // when Firebase SMS is used, context.Items["otp_phone"]. Existing email
+    // handlers set Items inside the handler; ASP.NET evaluates the limiter
+    // against that request context.
     var otpPermit = builder.Environment.IsDevelopment() ? 100 : 50;
     options.AddPolicy("AuthOtpSend", httpContext =>
     {
-        var email = (httpContext.Items["otp_email"] as string)
+        var key = (httpContext.Items["otp_email"] as string)
+            ?? (httpContext.Items["otp_phone"] as string)
             ?? httpContext.Connection.RemoteIpAddress?.ToString()
             ?? "unknown";
-        return RateLimitPartition.GetFixedWindowLimiter($"auth-otp-{email}", _ => new FixedWindowRateLimiterOptions
+        return RateLimitPartition.GetFixedWindowLimiter($"auth-otp-{key}", _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = otpPermit,
             Window = TimeSpan.FromHours(1),

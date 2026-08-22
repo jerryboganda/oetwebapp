@@ -116,6 +116,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplyAuthTokens(row, request.AuthTokens, changedKeys);
                     ApplyWebPush(row, request.WebPush, changedKeys);
                     ApplySupport(row, request.Support, changedKeys);
+                    ApplyFirebaseOtp(row, request.FirebaseOtp, provider, changedKeys);
                 }
                 catch (RuntimeSettingsValidationException ex)
                 {
@@ -642,6 +643,17 @@ public static class AdminRuntimeSettingsEndpoints
                 whatsAppNumber = settings.Support.WhatsAppNumber,
                 whatsAppProofTemplate = settings.Support.WhatsAppProofTemplate,
                 isWhatsAppConfigured = settings.Support.IsWhatsAppConfigured,
+            },
+            firebaseOtp = new
+            {
+                enabled = settings.FirebaseOtp.Enabled,
+                smsEnabled = settings.FirebaseOtp.SmsEnabled,
+                emailLinksEnabled = settings.FirebaseOtp.EmailLinksEnabled,
+                fallbackToBrevo = settings.FirebaseOtp.FallbackToBrevo,
+                projectId = settings.FirebaseOtp.ProjectId,
+                authDomain = settings.FirebaseOtp.AuthDomain,
+                webApiKey = MaskPlainSecret(settings.FirebaseOtp.WebApiKey),
+                isSmsConfigured = settings.FirebaseOtp.IsSmsConfigured,
             },
             updatedBy = settings.UpdatedByUserName,
             updatedByUserId = settings.UpdatedByUserId,
@@ -1434,6 +1446,19 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetPlain(d.WhatsAppProofTemplate, v => row.SupportWhatsAppProofTemplate = v, "support.whatsAppProofTemplate", changed)) { }
     }
 
+    private static void ApplyFirebaseOtp(RuntimeSettingsRow row, RuntimeSettingsFirebaseOtpUpdate? d,
+        IRuntimeSettingsProvider p, List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.Enabled, v => row.FirebaseOtpEnabled = v, "firebaseOtp.enabled", changed)) { }
+        if (TrySetNullableBool(d.SmsEnabled, v => row.FirebaseOtpSmsEnabled = v, "firebaseOtp.smsEnabled", changed)) { }
+        if (TrySetNullableBool(d.EmailLinksEnabled, v => row.FirebaseOtpEmailLinksEnabled = v, "firebaseOtp.emailLinksEnabled", changed)) { }
+        if (TrySetNullableBool(d.FallbackToBrevo, v => row.FirebaseOtpFallbackToBrevo = v, "firebaseOtp.fallbackToBrevo", changed)) { }
+        if (TrySetPlain(d.ProjectId, v => row.FirebaseOtpProjectId = v, "firebaseOtp.projectId", changed)) { }
+        if (TrySetPlain(d.AuthDomain, v => row.FirebaseOtpAuthDomain = v, "firebaseOtp.authDomain", changed)) { }
+        if (TrySetSecret(d.WebApiKey, p, v => row.FirebaseOtpWebApiKeyEncrypted = v, "firebaseOtp.webApiKey", changed)) { }
+    }
+
     /// <summary>
     /// The number is embedded in a <c>wa.me/&lt;number&gt;</c> deep link, which accepts
     /// digits only — no '+', spaces or dashes. Reject anything else here rather than
@@ -1791,7 +1816,7 @@ public static class AdminRuntimeSettingsEndpoints
     private static string? NormalizeSectionId(string? sectionId)
     {
         var normalized = sectionId?.Trim().ToLowerInvariant();
-        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "bunnystream" or "paymob" or "paytabs" or "easykash" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush" or "security" or "videoprotection"
+        return normalized is "email" or "billing" or "paypal" or "sentry" or "backup" or "oauth" or "push" or "uploadscanner" or "zoom" or "stripe" or "speakinglivekit" or "speakingai" or "speakingstorage" or "speakingcompliance" or "speakingfeatures" or "speakingwhisper" or "checkoutcom" or "bunnystream" or "paymob" or "paytabs" or "easykash" or "soketi" or "dataretention" or "expertautoassignment" or "passwordpolicy" or "aiassistant" or "aigateway" or "writing" or "platform" or "messaging" or "fx" or "billingcore" or "storage" or "pdfextraction" or "pronunciation" or "authtokens" or "webpush" or "security" or "videoprotection" or "support" or "firebaseotp"
             ? normalized
             : normalized == "upload-scanner" ? "uploadscanner"
             : normalized == "bunny-stream" ? "bunnystream" : null;
@@ -1887,6 +1912,7 @@ public static class AdminRuntimeSettingsEndpoints
                         ? Failed(sectionId, "WhatsApp is enabled but not fully configured. Set Access Token and Phone Number ID.", testedAt)
                         : Ok(sectionId, $"Messaging configured: Twilio SMS {(settings.Messaging.IsTwilioConfigured ? "ready" : "off")}, WhatsApp {(settings.Messaging.IsWhatsAppConfigured ? "ready" : "off")}. No message was sent.", testedAt),
             "support" => TestSupport(settings.Support, sectionId, testedAt),
+            "firebaseotp" => TestFirebaseOtp(settings.FirebaseOtp, sectionId, testedAt),
             "fx" => string.IsNullOrWhiteSpace(settings.Fx.ApiKey) || string.IsNullOrWhiteSpace(settings.Fx.ApiBaseUrl)
                 ? Ok(sectionId, $"No FX provider configured — offline seed rates are used (base {settings.Fx.BaseCurrency}). Dynamic pricing {(settings.Fx.DynamicPricingEnabled ? "on" : "off")}.", testedAt)
                 : Uri.TryCreate(settings.Fx.ApiBaseUrl, UriKind.Absolute, out _)
@@ -2117,6 +2143,19 @@ public static class AdminRuntimeSettingsEndpoints
         return Ok(sectionId, $"Support WhatsApp number is configured and wa.me-dialable (https://wa.me/{number}), proof message uses {template}. This is a deep link the learner taps — no message is sent from the server, so nothing was contacted.", testedAt);
     }
 
+    private static RuntimeSettingsIntegrationTestResponse TestFirebaseOtp(
+        FirebaseOtpSettings s, string sectionId, DateTimeOffset testedAt)
+    {
+        if (!s.Enabled)
+            return Ok(sectionId, "Firebase SMS OTP is disabled. Password reset and device-trust codes stay on Brevo/SMTP email.", testedAt);
+        if (!s.SmsEnabled)
+            return Ok(sectionId, "Firebase OTP is enabled but SMS is off. Email remains the only OTP channel.", testedAt);
+        if (string.IsNullOrWhiteSpace(s.WebApiKey) || string.IsNullOrWhiteSpace(s.ProjectId))
+            return Failed(sectionId, "Enable Firebase SMS OTP only after the web key and project id are set. No live SMS was sent.", testedAt);
+        var fallback = s.FallbackToBrevo ? "Brevo email fallback ON" : "Brevo email fallback OFF";
+        return Ok(sectionId, $"Firebase SMS OTP is configured ({fallback}). No live SMS was sent.", testedAt);
+    }
+
     private static async Task<RuntimeSettingsIntegrationTestResponse> TestPayTabsAsync(
         PayTabsSettings s, IHttpClientFactory httpClientFactory, string sectionId, DateTimeOffset testedAt, CancellationToken ct)
     {
@@ -2293,6 +2332,20 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsAuthTokensUpdate? AuthTokens { get; set; }
     public RuntimeSettingsWebPushUpdate? WebPush { get; set; }
     public RuntimeSettingsSupportUpdate? Support { get; set; }
+    public RuntimeSettingsFirebaseOtpUpdate? FirebaseOtp { get; set; }
+}
+
+/// <summary>Firebase Phone Auth as an SMS OTP transport only. Never the login
+/// / session authority. WebApiKey is stored encrypted; GET returns the mask.</summary>
+public sealed class RuntimeSettingsFirebaseOtpUpdate
+{
+    public JsonElement? Enabled { get; set; }
+    public JsonElement? SmsEnabled { get; set; }
+    public JsonElement? EmailLinksEnabled { get; set; }
+    public JsonElement? FallbackToBrevo { get; set; }
+    public string? ProjectId { get; set; }
+    public string? AuthDomain { get; set; }
+    public string? WebApiKey { get; set; }
 }
 
 /// <summary>Public support channel (WhatsApp proof number + deep-link template).

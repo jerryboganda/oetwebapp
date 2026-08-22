@@ -107,7 +107,8 @@ Notes:
 
 - `CHECKOUT_BASE_URL` should point at your frontend billing route or external payment handoff page.
 - `PUBLIC_API_BASE_URL` must be the final public HTTPS API URL because the backend returns absolute upload/audio links.
-- The API now uses first-party JWTs issued by the backend, so there is no Firebase, mock auth, or third-party JWT authority to configure for production.
+- The API now uses first-party JWTs issued by the backend, so there is no Firebase, mock auth, or third-party JWT authority to configure for production. Firebase Phone Auth is an optional SMS OTP transport only (password reset + new-device approval). Email verification stays on Brevo. Do not treat Firebase ID tokens as app sessions.
+- Firebase SMS OTP is off by default. Paste `FIREBASE__OTP__PROJECTID`, `FIREBASE__OTP__AUTHDOMAIN`, and `FIREBASE__OTP__APIKEY` (or set them in Admin → Firebase OTP), enable Phone Auth + SMS regions + authorized domain `oetwithdrhesham.co.uk` in Firebase Console, then turn `FIREBASE__OTP__ENABLED=true`. Keep `BREVO__ENABLED=true` as the email fallback. Localhost is not a valid Firebase phone-auth domain.
 - `AUTHTOKENS__ACCESSTOKENSIGNINGKEY` and `AUTHTOKENS__REFRESHTOKENSIGNINGKEY` should be different random secrets, each at least 32 characters long.
 - Brevo SMTP relay is the recommended production email path for this release. Set `SMTP__HOST=smtp-relay.brevo.com`, `SMTP__PORT=587`, `SMTP__ENABLESSL=true`, `SMTP__USERNAME` to the Brevo login shown in the Brevo console, and `SMTP__PASSWORD` to the Brevo SMTP key.
 - If you want to use Brevo transactional templates through the API instead, enable `BREVO__ENABLED=true` and populate `BREVO__APIKEY`, `BREVO__FROMEMAIL`, `BREVO__EMAILVERIFICATIONTEMPLATEID`, and `BREVO__PASSWORDRESETTEMPLATEID`.

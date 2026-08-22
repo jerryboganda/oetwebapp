@@ -41,3 +41,24 @@ describe('middleware CSP — Bunny Stream hosts', () => {
     expect(connectSrc).toContain('https://video.bunnycdn.com');
   });
 });
+
+describe('middleware CSP — Firebase Phone Auth / reCAPTCHA', () => {
+  it('allows reCAPTCHA and Firebase hosts in script-src and frame-src', () => {
+    const response = middleware(new NextRequest('https://app.oetwithdrhesham.co.uk/forgot-password'));
+    const csp = response.headers.get('content-security-policy') ?? '';
+    const scriptSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('script-src')) ?? '';
+    const frameSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('frame-src')) ?? '';
+
+    expect(scriptSrc).toContain('https://www.google.com');
+    expect(scriptSrc).toContain('https://www.gstatic.com');
+    expect(scriptSrc).toContain('https://www.recaptcha.net');
+    expect(frameSrc).toContain('https://www.google.com/recaptcha');
+    expect(frameSrc).toContain('https://*.firebaseapp.com');
+  });
+});

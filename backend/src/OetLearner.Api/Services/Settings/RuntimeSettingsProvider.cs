@@ -523,8 +523,24 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             Whop = whop,
             Fawaterak = fawaterak,
             Support = support,
+            FirebaseOtp = ResolveFirebaseOtp(r),
         };
     }
+
+    // ── Firebase OTP (SMS transport only) ──────────────────────────
+    // DB-over-env: Firebase:Otp:* / FIREBASE__OTP__*. Default OFF.
+    // WebApiKey is the Identity Toolkit web key (browser-safe). It is still
+    // stored encrypted at rest because admins paste it as a credential.
+    private FirebaseOtpSettings ResolveFirebaseOtp(RuntimeSettingsRow r)
+        => new(
+            Enabled: r.FirebaseOtpEnabled ?? ParseBool(_config["Firebase:Otp:Enabled"]) ?? false,
+            SmsEnabled: r.FirebaseOtpSmsEnabled ?? ParseBool(_config["Firebase:Otp:SmsEnabled"]) ?? true,
+            EmailLinksEnabled: r.FirebaseOtpEmailLinksEnabled ?? ParseBool(_config["Firebase:Otp:EmailLinksEnabled"]) ?? false,
+            FallbackToBrevo: r.FirebaseOtpFallbackToBrevo ?? ParseBool(_config["Firebase:Otp:FallbackToBrevo"]) ?? true,
+            ProjectId: Coalesce(r.FirebaseOtpProjectId, _config["Firebase:Otp:ProjectId"]),
+            AuthDomain: Coalesce(r.FirebaseOtpAuthDomain, _config["Firebase:Otp:AuthDomain"]),
+            WebApiKey: Unprotect(r.FirebaseOtpWebApiKeyEncrypted)
+                ?? NullIfEmpty(_config["Firebase:Otp:ApiKey"]));
 
     // ── Support (public WhatsApp proof channel) ────────────────────
     // (DB-over-env: null DB field → Support:* config. Not a secret — the number

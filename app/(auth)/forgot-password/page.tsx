@@ -6,15 +6,20 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { requestPasswordReset } from '@/lib/auth-client';
+import { obtainFirebaseOtpRecaptchaToken } from '@/lib/auth/firebase-otp-recaptcha';
+import { persistPasswordResetOtp } from '@/lib/auth/password-reset-otp';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
+import { useRuntimeConfig } from '@/app/providers/RuntimeConfigProvider';
 import { readErrorMessage } from '@/lib/read-error-message';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const flowLinks = getAuthFlowLinks('passwordReset');
+  const firebaseOtp = useRuntimeConfig().firebaseOtp;
+  const smsReady = firebaseOtp.enabled && firebaseOtp.smsEnabled;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [email, setEmail] = useState(searchParams?.get('email') ?? '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -26,7 +31,9 @@ export default function ForgotPasswordPage() {
 
     try {
       const normalizedEmail = email.trim();
-      await requestPasswordReset(normalizedEmail);
+      const recaptchaToken = await obtainFirebaseOtpRecaptchaToken();
+      const challenge = await requestPasswordReset(normalizedEmail, { recaptchaToken });
+      persistPasswordResetOtp(normalizedEmail, challenge);
       router.push(`${AUTH_ROUTES.passwordResetOtp}?email=${encodeURIComponent(normalizedEmail)}`);
     } catch (error) {
       setErrorMessage(readErrorMessage(error, 'Unable to send the reset OTP right now.'));
@@ -65,7 +72,9 @@ export default function ForgotPasswordPage() {
             required
           />
           <p className={styles.fieldHint}>
-            We&apos;ll send a 6 digit reset code to this email address.
+            {smsReady
+              ? "We'll send a 6 digit reset code by SMS when a mobile number is on file, or by email if SMS is unavailable."
+              : "We'll send a 6 digit reset code to this email address."}
           </p>
         </div>
 

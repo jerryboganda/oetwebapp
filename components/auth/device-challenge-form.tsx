@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { ArrowRight, Laptop, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { sendDeviceVerificationOtp } from '@/lib/auth-client';
+import { obtainFirebaseOtpRecaptchaToken } from '@/lib/auth/firebase-otp-recaptcha';
+import { describeOtpDelivery } from '@/lib/auth/otp-delivery';
 import { appendAuthNextParam, AUTH_ROUTES } from '@/lib/auth/routes';
 import { resolvePostAuthDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from './auth-screen-shell';
@@ -25,7 +27,19 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deliveryChannel, setDeliveryChannel] = useState('email');
   const sentForToken = useRef<string | null>(null);
+
+  const applyChallengeNotice = (destinationHint?: string, channel?: string) => {
+    const nextChannel = channel || 'email';
+    setDeliveryChannel(nextChannel);
+    setNotice(`Enter the 6-digit code sent by ${describeOtpDelivery(nextChannel, destinationHint, pendingDeviceChallenge?.email)}.`);
+  };
+
+  const sendOtp = async () => {
+    const recaptchaToken = await obtainFirebaseOtpRecaptchaToken();
+    return sendDeviceVerificationOtp({ recaptchaToken });
+  };
 
   useEffect(() => {
     const challengeToken = pendingDeviceChallenge?.challengeToken;
@@ -39,9 +53,9 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
 
     (async () => {
       try {
-        const challenge = await sendDeviceVerificationOtp();
+        const challenge = await sendOtp();
         if (!cancelled) {
-          setNotice(`Enter the 6-digit code sent to ${challenge.destinationHint || pendingDeviceChallenge?.email}.`);
+          applyChallengeNotice(challenge.destinationHint, challenge.deliveryChannel);
         }
       } catch (sendError) {
         if (!cancelled) {
@@ -65,8 +79,8 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     setIsSending(true);
 
     try {
-      const challenge = await sendDeviceVerificationOtp();
-      setNotice(`Enter the 6-digit code sent to ${challenge.destinationHint || pendingDeviceChallenge?.email}.`);
+      const challenge = await sendOtp();
+      applyChallengeNotice(challenge.destinationHint, challenge.deliveryChannel);
     } catch (sendError) {
       setError(readErrorMessage(sendError, 'Unable to send the device verification code.'));
     } finally {
@@ -79,7 +93,9 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     const normalizedCode = code.replace(/\D/g, '');
 
     if (normalizedCode.length !== 6) {
-      setError('Enter the 6-digit code sent to your email.');
+      setError(deliveryChannel === 'sms'
+        ? 'Enter the 6-digit code sent by SMS.'
+        : 'Enter the 6-digit code sent to your email.');
       return;
     }
 
@@ -133,7 +149,11 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
               <span className={styles.summaryIcon}>
                 <ShieldCheck size={16} />
               </span>
-              <p>Enter the code we emailed you to trust this device and finish signing in.</p>
+              <p>
+                {deliveryChannel === 'sms'
+                  ? 'Enter the SMS code to trust this device and finish signing in.'
+                  : 'Enter the code we emailed you to trust this device and finish signing in.'}
+              </p>
             </div>
           </div>
         </div>
@@ -144,7 +164,11 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
             setCode(next.replace(/\D/g, '').slice(0, 6));
             setError(null);
           }} disabled={!pendingDeviceChallenge || isSubmitting} />
-          <p className={styles.fieldHint}>Use the 6-digit code from your email.</p>
+          <p className={styles.fieldHint}>
+            {deliveryChannel === 'sms'
+              ? 'Use the 6-digit code from the SMS we sent you.'
+              : 'Use the 6-digit code from your email.'}
+          </p>
         </div>
 
         {notice ? <p className={styles.fieldHint}>{notice}</p> : null}

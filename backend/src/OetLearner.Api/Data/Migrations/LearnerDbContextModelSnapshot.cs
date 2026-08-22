@@ -7143,6 +7143,23 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("DeliveryChannel")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("DestinationHint")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ExternalSessionInfoEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("Purpose")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -19912,6 +19929,29 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(256)");
 
                     b.Property<string>("FcmServiceAccountJsonEncrypted")
+                        .HasColumnType("text");
+
+                    b.Property<string>("FirebaseOtpAuthDomain")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<bool?>("FirebaseOtpEmailLinksEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("FirebaseOtpEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool?>("FirebaseOtpFallbackToBrevo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("FirebaseOtpProjectId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool?>("FirebaseOtpSmsEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("FirebaseOtpWebApiKeyEncrypted")
                         .HasColumnType("text");
 
                     b.Property<string>("FxApiBaseUrl")

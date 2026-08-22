@@ -83,6 +83,11 @@ public class PublicRuntimeConfigEndpointTests : IClassFixture<TestWebApplication
         Assert.Equal(ConfiguredVapidPublicKey, root.GetProperty("webPush").GetProperty("vapidPublicKey").GetString());
         Assert.Equal(ConfiguredWebBaseUrl, root.GetProperty("platform").GetProperty("publicWebBaseUrl").GetString());
         Assert.Equal(ConfiguredApiBaseUrl, root.GetProperty("platform").GetProperty("publicApiBaseUrl").GetString());
+        var firebaseOtp = root.GetProperty("firebaseOtp");
+        Assert.False(firebaseOtp.GetProperty("enabled").GetBoolean());
+        Assert.True(firebaseOtp.TryGetProperty("webKey", out _));
+        Assert.False(firebaseOtp.TryGetProperty("apiKey", out _));
+        Assert.False(firebaseOtp.TryGetProperty("webApiKey", out _));
     }
 
     [Fact]

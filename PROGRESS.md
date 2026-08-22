@@ -1,6 +1,14 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-22
+Last updated: 2026-09-22
+
+## Current Checkpoint - Firebase SMS OTP + Brevo fallback
+
+- Firebase Phone Auth is the SMS transport for `reset_password` and `trust_device` when enabled + E.164 + reCAPTCHA. Official Firebase cannot send this app's 6-digit email OTP.
+- `verify_email` stays first-party 6-digit + Brevo. SMS success never sets `EmailVerifiedAt`. One challenge / one provider / one send. Firebase ID tokens are discarded.
+- Public runtime config publishes `firebaseOtp.webKey` (never `apiKey`). Feature flag default off. Admin card: Runtime Settings → Firebase OTP.
+- Validation: `dotnet test --filter FullyQualifiedName~FirebaseOtp` 11/11. OTP-related `tsc` is clean. Unrelated host `AuthFlows` TTS-production failures and pre-existing tsc errors were not in this change.
+- Next: owner enables Firebase OTP in admin after Phone Auth / authorized domain / Blaze SMS are ready, then verifies reset + device SMS on production.
 
 ## Current Checkpoint - Answer-key reports
 

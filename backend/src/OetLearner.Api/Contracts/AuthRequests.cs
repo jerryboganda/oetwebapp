@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace OetLearner.Api.Contracts;
 
 public record RegisterRequest(
@@ -36,7 +38,9 @@ public record SignOutRequest(string? RefreshToken);
 public record SendEmailOtpRequest(
     string Email,
     string Purpose,
-    bool ForceNew = false);
+    bool ForceNew = false,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? RecaptchaToken = null);
 
 public record VerifyEmailOtpRequest(
     string Email,
@@ -54,11 +58,17 @@ public record MfaChallengeRequest(
     string? RecoveryCode);
 
 /// <summary>Security spec §3.2: device-verification challenge requests.</summary>
-public record DeviceOtpSendRequest(string? ChallengeToken);
+public record DeviceOtpSendRequest(
+    string? ChallengeToken,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? RecaptchaToken = null);
 
 public record DeviceOtpVerifyRequest(string? ChallengeToken, string? Code);
 
-public record ForgotPasswordRequest(string Email);
+public record ForgotPasswordRequest(
+    string Email,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? RecaptchaToken = null);
 
 public record ResetPasswordRequest(
     string Email,

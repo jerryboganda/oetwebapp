@@ -29,6 +29,19 @@ connection string, JWT signing keys, AI gateway key).
 The admin settings page is divided into six sections. Each section lists the
 `.env.production` keys it supersedes when a DB value is present.
 
+### 2.1a Firebase OTP — SMS transport only
+
+| UI field | Supersedes env key |
+|---|---|
+| Enable Firebase SMS OTP | `FIREBASE__OTP__ENABLED` |
+| Allow SMS OTP | `FIREBASE__OTP__SMSENABLED` |
+| Fall back to Brevo email | `FIREBASE__OTP__FALLBACKTOBREVO` |
+| Firebase project id | `FIREBASE__OTP__PROJECTID` |
+| Auth domain | `FIREBASE__OTP__AUTHDOMAIN` |
+| Web API key | `FIREBASE__OTP__APIKEY` |
+
+Firebase is **not** the login authority. Email verification always uses Brevo/SMTP 6-digit codes. Password-reset and new-device codes prefer Firebase SMS when this section is enabled, a valid E.164 mobile number exists, and the browser supplies a reCAPTCHA token. Any miss falls back to one Brevo email. Enable Phone Auth, SMS regions, authorized domain `oetwithdrhesham.co.uk`, and Blaze billing in Firebase Console before turning the master switch on.
+
 ### 2.1 Email — Brevo + SMTP
 
 | UI field | Supersedes env key |
@@ -256,6 +269,7 @@ redacting.
 | Setting category | Takes effect |
 |---|---|
 | Email (Brevo API, SMTP) | Within 30s — next send call re-reads the provider |
+| Firebase OTP (SMS transport) | Within 30s — next password-reset / device-trust send re-reads the provider |
 | Sentry DSN (backend) | Within 30s — Sentry SDK is re-initialised on next read |
 | Sentry DSN (frontend) | On next frontend page render (server-rendered public config) |
 | Backup S3 credentials | Within 30s — next scheduled backup job reads fresh creds |

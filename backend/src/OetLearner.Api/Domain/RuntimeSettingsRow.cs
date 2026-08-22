@@ -578,6 +578,15 @@ public class RuntimeSettingsRow
     /// placeholders the proof button substitutes (name / course / reference).</summary>
     [MaxLength(1000)] public string? SupportWhatsAppProofTemplate { get; set; }
 
+    // ── Firebase OTP (SMS transport only; not the login authority) ─
+    public bool? FirebaseOtpEnabled { get; set; }
+    public bool? FirebaseOtpSmsEnabled { get; set; }
+    public bool? FirebaseOtpEmailLinksEnabled { get; set; }
+    public bool? FirebaseOtpFallbackToBrevo { get; set; }
+    [MaxLength(128)] public string? FirebaseOtpProjectId { get; set; }
+    [MaxLength(256)] public string? FirebaseOtpAuthDomain { get; set; }
+    public string? FirebaseOtpWebApiKeyEncrypted { get; set; }
+
     // ── Audit ──────────────────────────────────────────────────────
     [MaxLength(64)]
     public string? UpdatedByUserId { get; set; }

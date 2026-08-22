@@ -553,9 +553,13 @@ export async function verifyEmailOtp(email: string, code: string): Promise<Curre
   return currentUser;
 }
 
-export async function requestPasswordReset(email: string): Promise<OtpChallenge> {
+export async function requestPasswordReset(
+  email: string,
+  options?: { recaptchaToken?: string | null },
+): Promise<OtpChallenge> {
   return postJson<OtpChallenge>('/v1/auth/forgot-password', {
     email,
+    recaptchaToken: options?.recaptchaToken || undefined,
   });
 }
 
@@ -659,7 +663,9 @@ export async function completeRecoveryChallenge(recoveryCode: string): Promise<M
  * pending challenge (mirrors `sendEmailVerificationOtp`). No auth state
  * changes here, so this is a plain client call rather than a context method —
  * same reasoning as the email-verification send during registration. */
-export async function sendDeviceVerificationOtp(): Promise<OtpChallenge> {
+export async function sendDeviceVerificationOtp(
+  options?: { recaptchaToken?: string | null },
+): Promise<OtpChallenge> {
   const challenge = loadPendingDeviceChallenge();
   if (!challenge) {
     throw new AuthClientError(400, 'missing_device_challenge', 'No device verification challenge is available.');
@@ -667,6 +673,7 @@ export async function sendDeviceVerificationOtp(): Promise<OtpChallenge> {
 
   return postJson<OtpChallenge>('/v1/auth/device/send-otp', {
     challengeToken: challenge.challengeToken,
+    recaptchaToken: options?.recaptchaToken || undefined,
   });
 }
 

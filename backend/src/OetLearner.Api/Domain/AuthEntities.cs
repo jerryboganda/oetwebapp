@@ -140,7 +140,27 @@ public class EmailOtpChallenge
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset? VerifiedAt { get; set; }
 
+    /// <summary>OTP transport that issued this challenge: brevo_email or firebase_sms.</summary>
+    [MaxLength(32)]
+    public string Provider { get; set; } = EmailOtpProviders.BrevoEmail;
+
+    /// <summary>Learner-facing channel: email or sms.</summary>
+    [MaxLength(16)]
+    public string DeliveryChannel { get; set; } = "email";
+
+    [MaxLength(64)]
+    public string? DestinationHint { get; set; }
+
+    /// <summary>Data-protected Firebase sessionInfo. Never store plaintext.</summary>
+    public string? ExternalSessionInfoEncrypted { get; set; }
+
     public ApplicationUserAccount ApplicationUserAccount { get; set; } = default!;
+}
+
+public static class EmailOtpProviders
+{
+    public const string BrevoEmail = "brevo_email";
+    public const string FirebaseSms = "firebase_sms";
 }
 
 public class MfaRecoveryCode

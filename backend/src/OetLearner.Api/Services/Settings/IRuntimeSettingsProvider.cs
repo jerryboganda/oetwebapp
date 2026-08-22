@@ -132,6 +132,33 @@ public sealed record EffectiveSettings(
     // BunnyStream) so the existing EffectiveSettings construction sites keep
     // compiling; the provider sets it via object initializer in Merge.
     public SupportSettings Support { get; init; } = SupportSettings.Unconfigured;
+
+    // Firebase Phone Auth is an OTP transport only. It is never the login /
+    // session authority. Init-only so existing EffectiveSettings construction
+    // sites keep compiling; the provider sets it in Merge.
+    public FirebaseOtpSettings FirebaseOtp { get; init; } = FirebaseOtpSettings.Disabled;
+}
+
+/// <summary>
+/// Firebase Phone Auth settings used as an SMS OTP transport. The web API key
+/// is a browser-safe Identity Toolkit key (not a service-account secret).
+/// Email links are stored only; they are not implemented.
+/// </summary>
+public sealed record FirebaseOtpSettings(
+    bool Enabled,
+    bool SmsEnabled,
+    bool EmailLinksEnabled,
+    bool FallbackToBrevo,
+    string? ProjectId,
+    string? AuthDomain,
+    string? WebApiKey)
+{
+    public bool IsSmsConfigured => Enabled
+        && SmsEnabled
+        && !string.IsNullOrWhiteSpace(WebApiKey);
+
+    public static FirebaseOtpSettings Disabled { get; } =
+        new(false, true, false, true, null, null, null);
 }
 
 /// <summary>

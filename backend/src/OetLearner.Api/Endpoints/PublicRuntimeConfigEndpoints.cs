@@ -83,5 +83,16 @@ public static class PublicRuntimeConfigEndpoints
                 publicWebBaseUrl = settings.Platform.PublicWebBaseUrl,
                 publicApiBaseUrl = settings.Platform.PublicApiBaseUrl,
             },
+            // Firebase Phone Auth web config is public (webKey is the Identity
+            // Toolkit browser key). Field MUST be webKey, never apiKey — the
+            // public-config contract test forbids that marker.
+            firebaseOtp = new
+            {
+                enabled = settings.FirebaseOtp.Enabled,
+                smsEnabled = settings.FirebaseOtp.SmsEnabled,
+                projectId = settings.FirebaseOtp.ProjectId,
+                authDomain = settings.FirebaseOtp.AuthDomain,
+                webKey = settings.FirebaseOtp.WebApiKey,
+            },
         };
 }

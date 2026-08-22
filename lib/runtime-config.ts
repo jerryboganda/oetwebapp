@@ -43,11 +43,20 @@ export interface RuntimePlatformConfig {
   publicApiBaseUrl: string | null;
 }
 
+export interface RuntimeFirebaseOtpConfig {
+  enabled: boolean;
+  smsEnabled: boolean;
+  projectId: string | null;
+  authDomain: string | null;
+  webKey: string | null;
+}
+
 export interface RuntimeConfig {
   sentry: RuntimeSentryConfig;
   soketi: RuntimeSoketiConfig;
   webPush: RuntimeWebPushConfig;
   platform: RuntimePlatformConfig;
+  firebaseOtp: RuntimeFirebaseOtpConfig;
 }
 
 const RUNTIME_CONFIG_PATH = '/api/backend/v1/public/runtime-config';
@@ -105,6 +114,13 @@ export function buildFallbackRuntimeConfig(): RuntimeConfig {
       publicWebBaseUrl: trim(process.env.NEXT_PUBLIC_APP_URL) ?? trim(process.env.NEXT_PUBLIC_SITE_URL),
       publicApiBaseUrl: trim(process.env.NEXT_PUBLIC_API_BASE_URL),
     },
+    firebaseOtp: {
+      enabled: false,
+      smsEnabled: false,
+      projectId: null,
+      authDomain: null,
+      webKey: null,
+    },
   };
 }
 
@@ -116,6 +132,7 @@ function normalizeResponse(raw: unknown, fallback: RuntimeConfig): RuntimeConfig
   const soketi = (r.soketi ?? {}) as Record<string, unknown>;
   const webPush = (r.webPush ?? {}) as Record<string, unknown>;
   const platform = (r.platform ?? {}) as Record<string, unknown>;
+  const firebaseOtp = (r.firebaseOtp ?? {}) as Record<string, unknown>;
 
   const str = (v: unknown): string | null =>
     typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
@@ -143,6 +160,13 @@ function normalizeResponse(raw: unknown, fallback: RuntimeConfig): RuntimeConfig
     platform: {
       publicWebBaseUrl: str(platform.publicWebBaseUrl) ?? fallback.platform.publicWebBaseUrl,
       publicApiBaseUrl: str(platform.publicApiBaseUrl) ?? fallback.platform.publicApiBaseUrl,
+    },
+    firebaseOtp: {
+      enabled: bool(firebaseOtp.enabled, fallback.firebaseOtp.enabled),
+      smsEnabled: bool(firebaseOtp.smsEnabled, fallback.firebaseOtp.smsEnabled),
+      projectId: str(firebaseOtp.projectId) ?? fallback.firebaseOtp.projectId,
+      authDomain: str(firebaseOtp.authDomain) ?? fallback.firebaseOtp.authDomain,
+      webKey: str(firebaseOtp.webKey) ?? fallback.firebaseOtp.webKey,
     },
   };
 }

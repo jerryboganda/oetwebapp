@@ -318,5 +318,21 @@ CREATE TABLE IF NOT EXISTS ""PaymentGatewayToggles"" (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_PaymentGatewayToggles_Name"" ON ""PaymentGatewayToggles"" (""Name"");
 CREATE INDEX IF NOT EXISTS ""IX_PaymentGatewayToggles_Region_IsEnabled_DisplayOrder"" ON ""PaymentGatewayToggles"" (""Region"", ""IsEnabled"", ""DisplayOrder"");
+
+-- Firebase SMS OTP transport (not the login authority) -- sync with 20260922090000_AddFirebaseOtp
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FirebaseOtpEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FirebaseOtpSmsEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FirebaseOtpEmailLinksEnabled"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FirebaseOtpFallbackToBrevo"" boolean;
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FirebaseOtpProjectId"" character varying(128);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FirebaseOtpAuthDomain"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""FirebaseOtpWebApiKeyEncrypted"" text;
+
+ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""Provider"" character varying(32);
+ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""DeliveryChannel"" character varying(16);
+ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""DestinationHint"" character varying(64);
+ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""ExternalSessionInfoEncrypted"" text;
+UPDATE ""EmailOtpChallenges"" SET ""Provider"" = COALESCE(""Provider"", 'brevo_email');
+UPDATE ""EmailOtpChallenges"" SET ""DeliveryChannel"" = COALESCE(""DeliveryChannel"", 'email');
 ";
 }
