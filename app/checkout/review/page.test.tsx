@@ -11,6 +11,22 @@ vi.mock('@/lib/api', () => ({
   apiClient: {
     get: vi.fn().mockResolvedValue({ whatsAppNumber: null, whatsAppProofTemplate: null }),
   },
+  ApiError: class ApiError extends Error {
+    status: number;
+    code: string;
+    retryable: boolean;
+    userMessage: string;
+    fieldErrors: Array<{ field: string; code: string; message: string }>;
+    constructor(status: number, code: string, message: string, retryable = false) {
+      super(message);
+      this.name = 'ApiError';
+      this.status = status;
+      this.code = code;
+      this.retryable = retryable;
+      this.userMessage = message;
+      this.fieldErrors = [];
+    }
+  },
   fetchBillingQuote: mockFetchBillingQuote,
   createBillingCheckoutSession: mockCreateBillingCheckoutSession,
   fetchAvailablePaymentGateways: vi.fn().mockResolvedValue({
@@ -34,6 +50,7 @@ vi.mock('@/lib/api/billing-region', () => ({
   detectBillingRegion: vi.fn().mockResolvedValue({ region: 'ROW', country: 'GB', currency: 'GBP', source: 'default' }),
 }));
 
+import { ApiError } from '@/lib/api';
 import CheckoutReviewPage from './page';
 import { renderWithRouter } from '@/tests/test-utils';
 
@@ -126,6 +143,67 @@ describe('Checkout review page', () => {
     const cta = await screen.findByRole('link', { name: /i['’]ve paid.*upload proof.*activate/i });
     expect(cta.getAttribute('href')).toContain('/billing/manual-payment');
     expect(cta.getAttribute('href')).toContain('region=egypt');
+  });
+
+  it('renders official Whop embed instead of a raw purchase-url iframe', async () => {
+    mockCreateBillingCheckoutSession.mockResolvedValue({
+      checkoutUrl: 'https://whop.com/embedded/checkout/ch_live1/',
+      checkoutSessionId: 'chcfg_live1',
+      quoteId: 'quote-1',
+      clientSecret: 'plan_live1',
+      gateway: 'whop',
+    });
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams });
+
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+
+    expect(await screen.findByTestId('whop-embedded-checkout')).toBeInTheDocument();
+    expect(document.querySelector('iframe[title="Secure payment"]')).not.toBeInTheDocument();
+    expect(mockOpenCheckoutUrl).not.toHaveBeenCalled();
+  });
+
+  it('embeds Fawaterak in an on-page iframe after a method switch', async () => {
+    mockCreateBillingCheckoutSession.mockResolvedValue({
+      checkoutUrl: 'https://app.fawaterk.com/pay/99',
+      checkoutSessionId: '2726912869',
+      quoteId: 'quote-1',
+      clientSecret: '272691286929958',
+      gateway: 'fawaterak',
+    });
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams });
+
+    await user.click(await screen.findByText('Fawaterak'));
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+
+    const frame = await screen.findByTitle('Secure payment');
+    expect(frame).toHaveAttribute('src', 'https://app.fawaterk.com/pay/99');
+    expect(screen.queryByTestId('whop-embedded-checkout')).not.toBeInTheDocument();
+  });
+
+  it('refreshes the quote once and retries when the previous checkout session is still attached', async () => {
+    mockCreateBillingCheckoutSession
+      .mockRejectedValueOnce(new ApiError(409, 'billing_quote_already_applied', 'This billing quote is already attached to a checkout session. Refresh your cart before starting a new checkout.', false))
+      .mockResolvedValueOnce({
+        checkoutUrl: 'https://app.fawaterk.com/pay/100',
+        checkoutSessionId: 'invoice-100',
+        quoteId: 'quote-2',
+        gateway: 'fawaterak',
+      });
+    mockFetchBillingQuote
+      .mockResolvedValueOnce(quoteFixture())
+      .mockResolvedValueOnce({ ...quoteFixture(), quoteId: 'quote-2' });
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams });
+
+    await user.click(await screen.findByText('Fawaterak'));
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+
+    expect(await screen.findByTitle('Secure payment')).toHaveAttribute('src', 'https://app.fawaterk.com/pay/100');
+    expect(mockFetchBillingQuote).toHaveBeenCalledTimes(2);
+    expect(mockCreateBillingCheckoutSession).toHaveBeenCalledTimes(2);
+    expect(mockCreateBillingCheckoutSession.mock.calls[1][0].quoteId).toBe('quote-2');
   });
 
   it('excludes EasyCash from customer checkout while supporting other enabled payment methods', async () => {

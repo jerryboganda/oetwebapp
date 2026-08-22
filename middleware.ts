@@ -63,12 +63,24 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     'https://apis.google.com',
     'https://*.firebaseapp.com',
   ];
+  // Whop embedded checkout (js.whop.com loader + whop.com / whop.io iframes).
+  // Fawaterak on-page invoice iframe lives on app.fawaterk.com.
+  const paymentEmbedOrigins = [
+    'https://js.whop.com',
+    'https://whop.com',
+    'https://*.whop.com',
+    'https://whop.io',
+    'https://*.whop.io',
+    'https://app.fawaterk.com',
+    'https://*.fawaterk.com',
+  ];
   const scriptSrc = [
     "'self'",
     `'nonce-${nonce}'`,
     ...zoomHttpOrigins,
     ...paypalHttpOrigins,
     ...recaptchaOrigins,
+    'https://js.whop.com',
     ...(isDev ? ["'unsafe-eval'"] : []),
   ].join(' ');
 
@@ -80,6 +92,7 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     ...zoomHttpOrigins,
     ...zoomWsOrigins,
     ...paypalHttpOrigins,
+    ...paymentEmbedOrigins,
     // Bunny Stream. Two distinct hosts:
     //  - playback CDN (vz-*.b-cdn.net): hls.js fetches HLS playlists/segments via
     //    XHR inside the native app WebViews (which load this same remote origin).
@@ -100,7 +113,7 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], m
     `connect-src ${connectSrc}`,
     `media-src 'self' blob: ${apiOrigins.join(' ')} ${zoomHttpOrigins.join(' ')} ${mediaCdnOrigins.join(' ')}`,
     `worker-src 'self' blob: ${zoomHttpOrigins.join(' ')}`,
-    `frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${bunnyPlayerOrigins.join(' ')} ${recaptchaOrigins.join(' ')}`,
+    `frame-src 'self' ${zoomHttpOrigins.join(' ')} ${paypalHttpOrigins.join(' ')} ${bunnyPlayerOrigins.join(' ')} ${recaptchaOrigins.join(' ')} ${paymentEmbedOrigins.join(' ')}`,
     "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",

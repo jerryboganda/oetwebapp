@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PayPalExpandedCheckout } from '@/components/billing/paypal-expanded-checkout';
 import { SendProofOnWhatsAppButton } from '@/components/billing/send-proof-whatsapp-button';
 import { CheckoutPayRegion, type PayRegion } from '@/components/checkout/checkout-pay-region';
+import { isWhopPlanId, WhopEmbeddedCheckout } from '@/components/checkout/whop-embedded-checkout';
 import { detectBillingRegion } from '@/lib/api/billing-region';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -108,6 +109,12 @@ function CheckoutReviewContent() {
   // (no public client id), fall back to the hosted-portal redirect button.
   const [paypalUnavailable, setPaypalUnavailable] = useState(false);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [whopCheckout, setWhopCheckout] = useState<{
+    planId: string;
+    checkoutUrl: string;
+    checkoutSessionId: string;
+    quoteId: string;
+  } | null>(null);
   // Unified payment-method picker: the methods the backend says are usable here, plus
   // the learner's current selection.
   const [methods, setMethods] = useState<PaymentMethodOption[]>([]);
@@ -282,43 +289,98 @@ function CheckoutReviewContent() {
     return () => window.clearInterval(timer);
   }, [busy, loadQuote, quote?.expiresAt]);
 
+  const beginHostedCheckout = async (
+    checkoutUrl: string,
+    checkoutSessionId: string,
+    quoteId: string,
+  ) => {
+    const opened = await openCheckoutUrl(checkoutUrl);
+    if (opened === 'noop') {
+      setError('Could not open the secure payment window. Please try again.');
+      setBusy(false);
+      return;
+    }
+    if (opened === 'window-open' || opened === 'capacitor-browser') {
+      const params = new URLSearchParams();
+      params.set('quote', quoteId);
+      params.set('session', checkoutSessionId);
+      router.replace(`/billing/payment-return?${params.toString()}`);
+    }
+  };
+
+  const applyCheckoutResult = async (
+    checkout: Awaited<ReturnType<typeof createBillingCheckoutSession>>,
+    currentQuoteId: string,
+  ) => {
+    const quoteId = checkout.quoteId ?? currentQuoteId;
+    if (selectedGateway === 'whop') {
+      if (isWhopPlanId(checkout.clientSecret) && checkout.checkoutUrl) {
+        setWhopCheckout({
+          planId: checkout.clientSecret,
+          checkoutUrl: checkout.checkoutUrl,
+          checkoutSessionId: checkout.checkoutSessionId,
+          quoteId,
+        });
+        setBusy(false);
+        return;
+      }
+      await beginHostedCheckout(checkout.checkoutUrl, checkout.checkoutSessionId, quoteId);
+      return;
+    }
+    if ((selectedGateway === 'fawaterak' || selectedMode === 'iframe') && checkout.checkoutUrl) {
+      setEmbedUrl(checkout.checkoutUrl);
+      setBusy(false);
+      return;
+    }
+    await beginHostedCheckout(checkout.checkoutUrl, checkout.checkoutSessionId, quoteId);
+  };
+
   const startCheckout = async () => {
     if (!quote || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const checkout = await createBillingCheckoutSession({
-        productType,
-        quantity,
-        priceId,
-        couponCode: couponCode.trim() || null,
-        addOnCodes,
-        parentSubscriptionId,
-        quoteId: quote.quoteId,
-        gateway: selectedGateway,
-        idempotencyKey: newIdempotencyKey(),
-      });
-      if (usesOnSiteCheckout && checkout.checkoutUrl) {
-        setEmbedUrl(checkout.checkoutUrl);
-        setBusy(false);
-        return;
+      let activeQuote = quote;
+      let checkout;
+      try {
+        checkout = await createBillingCheckoutSession({
+          productType,
+          quantity,
+          priceId,
+          couponCode: couponCode.trim() || null,
+          addOnCodes,
+          parentSubscriptionId,
+          quoteId: activeQuote.quoteId,
+          gateway: selectedGateway,
+          idempotencyKey: newIdempotencyKey(),
+        });
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.code !== 'billing_quote_already_applied') {
+          throw err;
+        }
+        const refreshed = await fetchBillingQuote({
+          productType,
+          quantity,
+          priceId,
+          couponCode: couponCode.trim() || null,
+          addOnCodes,
+          parentSubscriptionId,
+        });
+        setQuote(refreshed);
+        activeQuote = refreshed;
+        checkout = await createBillingCheckoutSession({
+          productType,
+          quantity,
+          priceId,
+          couponCode: couponCode.trim() || null,
+          addOnCodes,
+          parentSubscriptionId,
+          quoteId: refreshed.quoteId,
+          gateway: selectedGateway,
+          idempotencyKey: newIdempotencyKey(),
+        });
       }
-      const opened = await openCheckoutUrl(checkout.checkoutUrl);
-      if (opened === 'noop') {
-        setError('Could not open the secure payment window. Please try again.');
-        setBusy(false);
-        return;
-      }
-      if (opened === 'window-open' || opened === 'capacitor-browser') {
-        // Payment continues in another window. Turn this tab into the
-        // payment-status poller so the learner gets confirmation here even
-        // if the hosted portal's redirect never lands.
-        const params = new URLSearchParams();
-        params.set('quote', checkout.quoteId ?? quote.quoteId);
-        params.set('session', checkout.checkoutSessionId);
-        router.replace(`/billing/payment-return?${params.toString()}`);
-      }
-      // 'window-assign' navigates this tab to the portal itself — leave busy on.
+      await applyCheckoutResult(checkout, activeQuote.quoteId);
     } catch (err) {
       // The profession/content gate re-runs against the saved quote, so it can fire
       // here too — the learner's profession may have changed since the quote was built.
@@ -459,6 +521,7 @@ function CheckoutReviewContent() {
                                     onChange={() => {
                                       setSelectedGateway(method.name);
                                       setEmbedUrl(null);
+                                      setWhopCheckout(null);
                                     }}
                                     className="sr-only"
                                   />
@@ -508,6 +571,25 @@ function CheckoutReviewContent() {
                           Pay securely without leaving this page. Your account unlocks the moment your payment is confirmed.
                         </p>
                       </div>
+                    ) : selectedGateway === 'whop' && whopCheckout ? (
+                      <WhopEmbeddedCheckout
+                        planId={whopCheckout.planId}
+                        checkoutUrl={whopCheckout.checkoutUrl}
+                        sessionId={whopCheckout.checkoutSessionId}
+                        returnUrl={`${typeof window !== 'undefined' ? window.location.origin : ''}/billing/payment-return?status=success&gateway=whop&quote=${encodeURIComponent(whopCheckout.quoteId)}&session=${encodeURIComponent(whopCheckout.checkoutSessionId)}`}
+                        onComplete={() => {
+                          router.replace(
+                            `/billing/payment-return?status=success&gateway=whop&quote=${encodeURIComponent(whopCheckout.quoteId)}&session=${encodeURIComponent(whopCheckout.checkoutSessionId)}`,
+                          );
+                        }}
+                        onUnavailable={() => {
+                          void beginHostedCheckout(
+                            whopCheckout.checkoutUrl,
+                            whopCheckout.checkoutSessionId,
+                            whopCheckout.quoteId,
+                          );
+                        }}
+                      />
                     ) : embedUrl ? (
                       <div className="mt-4">
                         <iframe
@@ -515,6 +597,13 @@ function CheckoutReviewContent() {
                           src={embedUrl}
                           className="h-[640px] w-full rounded-xl border border-border bg-white"
                           allow="payment *"
+                          onError={() => {
+                            void beginHostedCheckout(
+                              embedUrl,
+                              quote.quoteId,
+                              quote.quoteId,
+                            );
+                          }}
                         />
                         <p className="mt-3 text-xs leading-5 text-muted">
                           Pay on this page. Access unlocks after the payment provider confirms the charge.

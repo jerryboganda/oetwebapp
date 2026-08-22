@@ -160,6 +160,167 @@ public class BillingCheckoutSessionGuardTests : IClassFixture<TestWebApplication
     }
 
     [Fact]
+    public async Task CheckoutSession_AppliedUnpaidQuote_SameGateway_ReusesExistingSession()
+    {
+        var userId = $"chk-reuse-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var quoteId = $"quote-reuse-{Guid.NewGuid():N}";
+        var checkoutSessionId = $"whop_sandbox_{Guid.NewGuid():N}";
+        var checkoutUrl = $"https://app.example.test/sandbox/whop?ref={quoteId}";
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            db.BillingQuotes.Add(CreateOpenQuote(quoteId, userId, subscription.Id, subscription.PlanId, now, BillingQuoteStatus.Applied, checkoutSessionId));
+            db.PaymentTransactions.Add(new PaymentTransaction
+            {
+                LearnerUserId = userId,
+                Gateway = "whop",
+                GatewayTransactionId = checkoutSessionId,
+                TransactionType = "one_time_purchase",
+                Status = "pending",
+                Amount = 20m,
+                Currency = "AUD",
+                ProductType = "addon",
+                ProductId = quoteId,
+                QuoteId = quoteId,
+                MetadataJson = JsonSerializer.Serialize(new
+                {
+                    quoteId,
+                    productType = "review_credits",
+                    providerIntentId = "plan_reuse1",
+                    checkoutUrl
+                }),
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "review_credits",
+            quantity = 1,
+            quoteId,
+            gateway = "whop",
+            idempotencyKey = $"reuse-{Guid.NewGuid():N}"[..36]
+        });
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal(checkoutSessionId, json.RootElement.GetProperty("checkoutSessionId").GetString());
+        Assert.Equal(checkoutUrl, json.RootElement.GetProperty("checkoutUrl").GetString());
+        Assert.Equal("plan_reuse1", json.RootElement.GetProperty("clientSecret").GetString());
+
+        await using var assertScope = _factory.Services.CreateAsyncScope();
+        var assertDb = assertScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(1, await assertDb.PaymentTransactions.CountAsync(x => x.QuoteId == quoteId));
+        var quote = await assertDb.BillingQuotes.SingleAsync(x => x.Id == quoteId);
+        Assert.Equal(BillingQuoteStatus.Applied, quote.Status);
+        Assert.Equal(checkoutSessionId, quote.CheckoutSessionId);
+    }
+
+    [Fact]
+    public async Task CheckoutSession_AppliedUnpaidQuote_OtherGateway_ReplacesSession()
+    {
+        var userId = $"chk-switch-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var quoteId = $"quote-switch-{Guid.NewGuid():N}";
+        var originalSessionId = $"whop_sandbox_{Guid.NewGuid():N}";
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            db.BillingQuotes.Add(CreateOpenQuote(quoteId, userId, subscription.Id, subscription.PlanId, now, BillingQuoteStatus.Applied, originalSessionId));
+            db.PaymentTransactions.Add(new PaymentTransaction
+            {
+                LearnerUserId = userId,
+                Gateway = "whop",
+                GatewayTransactionId = originalSessionId,
+                TransactionType = "one_time_purchase",
+                Status = "pending",
+                Amount = 20m,
+                Currency = "AUD",
+                ProductType = "addon",
+                ProductId = quoteId,
+                QuoteId = quoteId,
+                MetadataJson = JsonSerializer.Serialize(new
+                {
+                    quoteId,
+                    productType = "review_credits",
+                    providerIntentId = "plan_switch1",
+                    checkoutUrl = $"https://app.example.test/sandbox/whop?ref={quoteId}"
+                }),
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "review_credits",
+            quantity = 1,
+            quoteId,
+            gateway = "fawaterak",
+            idempotencyKey = $"switch-{Guid.NewGuid():N}"[..36]
+        });
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+        using var json = JsonDocument.Parse(body);
+        var newSessionId = json.RootElement.GetProperty("checkoutSessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(newSessionId));
+        Assert.NotEqual(originalSessionId, newSessionId);
+        Assert.Equal("fawaterak", json.RootElement.GetProperty("gateway").GetString());
+
+        await using var assertScope = _factory.Services.CreateAsyncScope();
+        var assertDb = assertScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var transactions = await assertDb.PaymentTransactions.Where(x => x.QuoteId == quoteId).ToListAsync();
+        Assert.Equal(2, transactions.Count);
+        var original = Assert.Single(transactions, x => x.GatewayTransactionId == originalSessionId);
+        Assert.Equal("pending", original.Status);
+        Assert.DoesNotContain("completed", original.Status, StringComparison.OrdinalIgnoreCase);
+        var replacement = Assert.Single(transactions, x => x.GatewayTransactionId == newSessionId);
+        Assert.Equal("fawaterak", replacement.Gateway);
+        Assert.Equal("pending", replacement.Status);
+        var quote = await assertDb.BillingQuotes.SingleAsync(x => x.Id == quoteId);
+        Assert.Equal(BillingQuoteStatus.Applied, quote.Status);
+        Assert.Equal(newSessionId, quote.CheckoutSessionId);
+    }
+
+    [Fact]
+    public async Task CheckoutSession_CompletedQuote_StillConflicts()
+    {
+        var userId = $"chk-done-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var quoteId = $"quote-done-{Guid.NewGuid():N}";
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            db.BillingQuotes.Add(CreateOpenQuote(quoteId, userId, subscription.Id, subscription.PlanId, now, BillingQuoteStatus.Completed, $"paid_{Guid.NewGuid():N}"));
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "review_credits",
+            quantity = 1,
+            quoteId,
+            gateway = "fawaterak"
+        });
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("billing_quote_already_consumed", json.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
     public async Task PaymentStatus_AppliedQuote_ReturnsPendingByQuoteOrProviderSession()
     {
         var userId = $"chk-status-{Guid.NewGuid():N}";
@@ -238,6 +399,38 @@ public class BillingCheckoutSessionGuardTests : IClassFixture<TestWebApplication
         Assert.Equal("pending", bySessionJson.RootElement.GetProperty("status").GetString());
         Assert.Equal(quoteId, bySessionJson.RootElement.GetProperty("quoteId").GetString());
     }
+
+    private static BillingQuote CreateOpenQuote(
+        string quoteId,
+        string userId,
+        string subscriptionId,
+        string? planId,
+        DateTimeOffset now,
+        BillingQuoteStatus status,
+        string? checkoutSessionId)
+        => new()
+        {
+            Id = quoteId,
+            UserId = userId,
+            SubscriptionId = subscriptionId,
+            PlanCode = planId,
+            Currency = "AUD",
+            SubtotalAmount = 20m,
+            DiscountAmount = 0m,
+            TotalAmount = 20m,
+            Status = status,
+            CreatedAt = now,
+            ExpiresAt = now.AddMinutes(30),
+            CheckoutSessionId = checkoutSessionId,
+            SnapshotJson = JsonSerializer.Serialize(new
+            {
+                summary = "Review credits.",
+                items = new[]
+                {
+                    new BillingQuoteLineItem("addon", "review-credits", "Review credits", 20m, "AUD", 1, "Locked quote")
+                }
+            })
+        };
 
     private async Task<HttpClient> CreateClientForUserAsync(string userId)
     {

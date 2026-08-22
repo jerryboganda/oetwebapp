@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
@@ -234,4 +236,180 @@ public partial class LearnerService
             "invoice_number_allocation_failed",
             "Could not allocate a unique invoice number after multiple attempts.");
     }
+
+    private async Task<object?> TryReuseUnpaidCheckoutSessionAsync(
+        string userId,
+        BillingQuote quoteEntity,
+        BillingQuoteResponse quoteResponse,
+        string productType,
+        int quantity,
+        string gatewayLabel,
+        CancellationToken cancellationToken)
+    {
+        var pending = await FindLatestOwnerCheckoutTransactionAsync(userId, quoteEntity, cancellationToken);
+        if (pending is null)
+        {
+            return null;
+        }
+
+        if (string.Equals(pending.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Conflict(
+                "billing_quote_already_consumed",
+                "This billing quote has already been fulfilled.");
+        }
+
+        if (!string.Equals(pending.Status, "pending", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!string.Equals(pending.Gateway, gatewayLabel, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        var metadata = JsonSupport.Deserialize<Dictionary<string, object?>>(pending.MetadataJson, []);
+        if (ReadMetadataFlag(metadata, "superseded"))
+        {
+            return null;
+        }
+
+        var checkoutUrl = ResolveReusableCheckoutUrl(pending, metadata);
+        if (string.IsNullOrWhiteSpace(checkoutUrl))
+        {
+            return null;
+        }
+
+        return BuildCheckoutSessionClientResponse(
+            quoteEntity,
+            quoteResponse,
+            productType,
+            quantity,
+            pending.Gateway,
+            pending.GatewayTransactionId,
+            checkoutUrl,
+            ReadMetadataString(metadata, "providerIntentId"),
+            "open");
+    }
+
+    private async Task SupersedeUnpaidCheckoutSessionAsync(
+        string userId,
+        BillingQuote quoteEntity,
+        CancellationToken cancellationToken)
+    {
+        var pending = await FindLatestOwnerCheckoutTransactionAsync(userId, quoteEntity, cancellationToken);
+        if (pending is null || !string.Equals(pending.Status, "pending", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var metadata = JsonSupport.Deserialize<Dictionary<string, object?>>(pending.MetadataJson, []);
+        metadata["superseded"] = true;
+        pending.MetadataJson = JsonSupport.Serialize(metadata);
+        pending.UpdatedAt = DateTimeOffset.UtcNow;
+    }
+
+    private async Task<PaymentTransaction?> FindLatestOwnerCheckoutTransactionAsync(
+        string userId,
+        BillingQuote quoteEntity,
+        CancellationToken cancellationToken)
+    {
+        var matches = await db.PaymentTransactions
+            .Where(transaction =>
+                transaction.LearnerUserId == userId
+                && (transaction.QuoteId == quoteEntity.Id
+                    || transaction.GatewayTransactionId == quoteEntity.CheckoutSessionId))
+            .OrderByDescending(transaction => transaction.UpdatedAt)
+            .ThenByDescending(transaction => transaction.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return matches.FirstOrDefault(transaction =>
+                   string.Equals(transaction.GatewayTransactionId, quoteEntity.CheckoutSessionId, StringComparison.Ordinal))
+               ?? matches.FirstOrDefault();
+    }
+
+    private static string? ResolveReusableCheckoutUrl(
+        PaymentTransaction pending,
+        IReadOnlyDictionary<string, object?> metadata)
+    {
+        var storedUrl = ReadMetadataString(metadata, "checkoutUrl");
+        if (!string.IsNullOrWhiteSpace(storedUrl))
+        {
+            return storedUrl;
+        }
+
+        if (string.Equals(pending.Gateway, PaymentGatewayNames.Whop, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(pending.GatewayTransactionId))
+        {
+            return $"https://whop.com/embedded/checkout/{Uri.EscapeDataString(pending.GatewayTransactionId)}/";
+        }
+
+        return null;
+    }
+
+    private static string? ReadMetadataString(IReadOnlyDictionary<string, object?> metadata, string key)
+        => metadata.TryGetValue(key, out var value) ? value?.ToString() : null;
+
+    private static bool ReadMetadataFlag(IReadOnlyDictionary<string, object?> metadata, string key)
+        => metadata.TryGetValue(key, out var value) && value switch
+        {
+            bool flag => flag,
+            JsonElement element when element.ValueKind is JsonValueKind.True => true,
+            JsonElement element when element.ValueKind is JsonValueKind.String
+                && bool.TryParse(element.GetString(), out var parsed) => parsed,
+            string text when bool.TryParse(text, out var parsed) => parsed,
+            _ => false
+        };
+
+    private static object BuildCheckoutSessionClientResponse(
+        BillingQuote quoteEntity,
+        BillingQuoteResponse quoteResponse,
+        string productType,
+        int quantity,
+        string gatewayLabel,
+        string checkoutSessionId,
+        string checkoutUrl,
+        string? clientSecret,
+        string state)
+        => new
+        {
+            checkoutSessionId,
+            quoteId = quoteEntity.Id,
+            productType,
+            quantity,
+            targetPlanId = quoteEntity.PlanCode,
+            couponCode = quoteEntity.CouponCode,
+            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+            subtotalAmount = quoteEntity.SubtotalAmount,
+            discountAmount = quoteEntity.DiscountAmount,
+            totalAmount = quoteEntity.TotalAmount,
+            currency = quoteEntity.Currency,
+            gateway = gatewayLabel,
+            quote = quoteResponse,
+            checkoutUrl,
+            clientSecret,
+            state
+        };
+
+    private static string SerializeCheckoutPaymentMetadata(
+        BillingQuote quoteEntity,
+        string productType,
+        string? providerIntentId,
+        string? purchaseTarget,
+        string checkoutUrl)
+        => JsonSupport.Serialize(new
+        {
+            quoteId = quoteEntity.Id,
+            productType,
+            providerIntentId,
+            purchaseTarget,
+            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+            planCode = quoteEntity.PlanCode,
+            couponCode = quoteEntity.CouponCode,
+            planVersionId = quoteEntity.PlanVersionId,
+            addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
+            couponVersionId = quoteEntity.CouponVersionId,
+            checkoutUrl
+        });
 }

@@ -62,3 +62,29 @@ describe('middleware CSP — Firebase Phone Auth / reCAPTCHA', () => {
     expect(frameSrc).toContain('https://*.firebaseapp.com');
   });
 });
+
+describe('middleware CSP — Whop and Fawaterak checkout', () => {
+  it('allows official Whop embed and Fawaterak iframe hosts', () => {
+    const response = middleware(new NextRequest('https://app.oetwithdrhesham.co.uk/checkout/review'));
+    const csp = response.headers.get('content-security-policy') ?? '';
+    const scriptSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('script-src')) ?? '';
+    const frameSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('frame-src')) ?? '';
+    const connectSrc = csp
+      .split(';')
+      .map((directive) => directive.trim())
+      .find((directive) => directive.startsWith('connect-src')) ?? '';
+
+    expect(scriptSrc).toContain('https://js.whop.com');
+    expect(frameSrc).toContain('https://js.whop.com');
+    expect(frameSrc).toContain('https://*.whop.com');
+    expect(frameSrc).toContain('https://app.fawaterk.com');
+    expect(connectSrc).toContain('https://js.whop.com');
+    expect(connectSrc).toContain('https://app.fawaterk.com');
+  });
+});

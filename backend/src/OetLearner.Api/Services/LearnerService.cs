@@ -4173,12 +4173,6 @@ public partial class LearnerService(
                 throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
             }
             EnsureQuoteIsFulfillable(quoteEntity, now);
-            if (quoteEntity.Status == BillingQuoteStatus.Applied && !string.IsNullOrWhiteSpace(quoteEntity.CheckoutSessionId))
-            {
-                throw ApiException.Conflict(
-                    "billing_quote_already_applied",
-                    "This billing quote is already attached to a checkout session. Refresh your cart before starting a new checkout.");
-            }
 
             // Bind the quote snapshot to the inbound request so a stale or swapped
             // quoteId cannot be reused with a different product, plan, coupon, or add-on.
@@ -4249,6 +4243,38 @@ public partial class LearnerService(
 
         var purchaseTarget = quoteResponse.Items.FirstOrDefault()?.Code ?? quoteEntity.PlanCode ?? request.PriceId;
         await EnsureCheckoutGatewayAsync(gatewayLabel, cancellationToken);
+
+        if (quoteEntity.Status == BillingQuoteStatus.Applied && !string.IsNullOrWhiteSpace(quoteEntity.CheckoutSessionId))
+        {
+            var reusedCheckout = await TryReuseUnpaidCheckoutSessionAsync(
+                userId,
+                quoteEntity,
+                quoteResponse,
+                normalizedProductType,
+                request.Quantity,
+                gatewayLabel,
+                cancellationToken);
+            if (reusedCheckout is not null)
+            {
+                if (idempotencyKey is not null && idempotencyRequestHash is not null)
+                {
+                    await CompletePaymentIdempotencyAsync(
+                        "checkout-session",
+                        idempotencyKey,
+                        userId,
+                        idempotencyRequestHash,
+                        reusedCheckout,
+                        cancellationToken);
+                }
+
+                await db.SaveChangesAsync(cancellationToken);
+                idempotencyCompleted = true;
+                return reusedCheckout;
+            }
+
+            await SupersedeUnpaidCheckoutSessionAsync(userId, quoteEntity, cancellationToken);
+        }
+
         PaymentIntentResult checkoutIntent;
         try
         {
@@ -4309,34 +4335,26 @@ public partial class LearnerService(
         quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
         quoteEntity.Status = BillingQuoteStatus.Applied;
 
-        var response = new
-        {
-            checkoutSessionId = checkoutIntent.GatewayTransactionId,
-            quoteId = quoteEntity.Id,
-            productType = normalizedProductType,
-            quantity = request.Quantity,
-            targetPlanId = quoteEntity.PlanCode,
-            couponCode = quoteEntity.CouponCode,
-            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-            subtotalAmount = quoteEntity.SubtotalAmount,
-            discountAmount = quoteEntity.DiscountAmount,
-            totalAmount = quoteEntity.TotalAmount,
-            currency = quoteEntity.Currency,
-            gateway = gatewayLabel,
-            quote = quoteResponse,
-            checkoutUrl = string.IsNullOrWhiteSpace(checkoutIntent.CheckoutUrl)
-                ? platformLinks.BuildCheckoutUrl(
-                    checkoutIntent.GatewayTransactionId,
-                    normalizedProductType,
-                    request.Quantity,
-                    planId: quoteEntity.PlanCode,
-                    couponCode: quoteEntity.CouponCode,
-                    addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                    quoteId: quoteEntity.Id)
-                : checkoutIntent.CheckoutUrl,
-            clientSecret = checkoutIntent.ClientSecret,
-            state = checkoutIntent.Status
-        };
+        var checkoutUrl = string.IsNullOrWhiteSpace(checkoutIntent.CheckoutUrl)
+            ? platformLinks.BuildCheckoutUrl(
+                checkoutIntent.GatewayTransactionId,
+                normalizedProductType,
+                request.Quantity,
+                planId: quoteEntity.PlanCode,
+                couponCode: quoteEntity.CouponCode,
+                addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                quoteId: quoteEntity.Id)
+            : checkoutIntent.CheckoutUrl;
+        var response = BuildCheckoutSessionClientResponse(
+            quoteEntity,
+            quoteResponse,
+            normalizedProductType,
+            request.Quantity,
+            gatewayLabel,
+            checkoutIntent.GatewayTransactionId,
+            checkoutUrl,
+            checkoutIntent.ClientSecret,
+            checkoutIntent.Status);
         idempotencyResponse = response;
 
         var paymentTransaction = await db.PaymentTransactions.FirstOrDefaultAsync(
@@ -4363,19 +4381,12 @@ public partial class LearnerService(
                 PlanVersionId = quoteEntity.PlanVersionId,
                 AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson,
                 CouponVersionId = quoteEntity.CouponVersionId,
-                MetadataJson = JsonSupport.Serialize(new
-                {
-                    quoteId = quoteEntity.Id,
-                    productType = normalizedProductType,
-                    providerIntentId = checkoutIntent.ClientSecret,
+                MetadataJson = SerializeCheckoutPaymentMetadata(
+                    quoteEntity,
+                    normalizedProductType,
+                    checkoutIntent.ClientSecret,
                     purchaseTarget,
-                    addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                    planCode = quoteEntity.PlanCode,
-                    couponCode = quoteEntity.CouponCode,
-                    planVersionId = quoteEntity.PlanVersionId,
-                    addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
-                    couponVersionId = quoteEntity.CouponVersionId
-                }),
+                    checkoutUrl),
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -4386,19 +4397,12 @@ public partial class LearnerService(
         paymentTransaction.PlanVersionId = quoteEntity.PlanVersionId;
         paymentTransaction.AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson;
         paymentTransaction.CouponVersionId = quoteEntity.CouponVersionId;
-        paymentTransaction.MetadataJson = JsonSupport.Serialize(new
-        {
-            quoteId = quoteEntity.Id,
-            productType = normalizedProductType,
-            providerIntentId = checkoutIntent.ClientSecret,
+        paymentTransaction.MetadataJson = SerializeCheckoutPaymentMetadata(
+            quoteEntity,
+            normalizedProductType,
+            checkoutIntent.ClientSecret,
             purchaseTarget,
-            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-            planCode = quoteEntity.PlanCode,
-            couponCode = quoteEntity.CouponCode,
-            planVersionId = quoteEntity.PlanVersionId,
-            addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
-            couponVersionId = quoteEntity.CouponVersionId
-        });
+            checkoutUrl);
 
         var reservedRedemptions = await db.BillingCouponRedemptions
             .Where(redemption => redemption.QuoteId == quoteEntity.Id && redemption.Status == BillingRedemptionStatus.Reserved)
@@ -10585,6 +10589,11 @@ public partial class LearnerService(
             var paymentTransaction = await db.PaymentTransactions
                 .FirstOrDefaultAsync(x => x.GatewayTransactionId == gatewayTransactionId
                     || (x.MetadataJson != null && x.MetadataJson.Contains(gatewayTransactionId)), ct);
+
+            paymentTransaction ??= await db.PaymentTransactions
+                .Where(x => x.QuoteId == gatewayTransactionId)
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefaultAsync(ct);
 
             if (paymentTransaction is null)
             {

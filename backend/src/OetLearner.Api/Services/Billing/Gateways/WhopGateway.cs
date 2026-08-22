@@ -87,6 +87,7 @@ public sealed class WhopGateway : IPaymentGateway
             ["metadata"] = new Dictionary<string, string>
             {
                 ["order_id"] = quoteId,
+                ["quote_id"] = request.ProductId ?? quoteId,
             },
         };
 
