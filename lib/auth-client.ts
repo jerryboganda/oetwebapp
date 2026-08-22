@@ -532,10 +532,14 @@ export async function deleteAccount(password: string, reason?: string): Promise<
   await postJson<void>('/v1/auth/account/delete', { password, reason }, accessToken);
 }
 
-export async function sendEmailVerificationOtp(email: string): Promise<OtpChallenge> {
+export async function sendEmailVerificationOtp(
+  email: string,
+  options?: { forceNew?: boolean },
+): Promise<OtpChallenge> {
   return postJson<OtpChallenge>('/v1/auth/email/send-verification-otp', {
     email,
     purpose: 'verify_email',
+    forceNew: options?.forceNew === true,
   });
 }
 

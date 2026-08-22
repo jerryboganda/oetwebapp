@@ -28,7 +28,10 @@ public sealed class EmailOtpService(
 
     private readonly TimeSpan _otpLifetime = authTokenOptions.Value.OtpLifetime;
 
-    public async Task<OtpChallengeResponse> RequestEmailVerificationOtpAsync(string email, CancellationToken cancellationToken = default)
+    public async Task<OtpChallengeResponse> RequestEmailVerificationOtpAsync(
+        string email,
+        CancellationToken cancellationToken = default,
+        bool forceNew = false)
     {
         var normalizedEmail = AuthEmailAddress.NormalizeOrThrow(email);
         var account = await db.ApplicationUserAccounts
@@ -51,10 +54,33 @@ public sealed class EmailOtpService(
                 RetryAfterSeconds);
         }
 
-        var challengeId = Guid.NewGuid();
         var pendingChallenges = await db.EmailOtpChallenges
             .Where(x => x.ApplicationUserAccountId == account.Id && x.Purpose == EmailVerificationPurpose && x.VerifiedAt == null)
             .ToListAsync(cancellationToken);
+
+        // Remounts / auto-send must not rotate a still-valid code. Students
+        // were typing the first email into a newer challenge. Explicit Resend
+        // (forceNew) still issues a fresh code.
+        if (!forceNew)
+        {
+            var reusable = pendingChallenges
+                .Where(x => x.ExpiresAt > now && x.AttemptCount < MaxOtpAttempts)
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefault();
+
+            if (reusable is not null)
+            {
+                return new OtpChallengeResponse(
+                    reusable.Id.ToString(),
+                    EmailVerificationPurpose,
+                    "email",
+                    AuthEmailAddress.Mask(account.Email),
+                    reusable.ExpiresAt,
+                    RetryAfterSeconds);
+            }
+        }
+
+        var challengeId = Guid.NewGuid();
 
         if (pendingChallenges.Count > 0)
         {
