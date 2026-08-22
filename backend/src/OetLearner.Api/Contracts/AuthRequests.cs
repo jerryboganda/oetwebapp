@@ -35,7 +35,8 @@ public record SignOutRequest(string? RefreshToken);
 
 public record SendEmailOtpRequest(
     string Email,
-    string Purpose);
+    string Purpose,
+    bool ForceNew = false);
 
 public record VerifyEmailOtpRequest(
     string Email,

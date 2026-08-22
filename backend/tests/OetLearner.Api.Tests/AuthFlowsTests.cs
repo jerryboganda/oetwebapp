@@ -63,6 +63,31 @@ public class AuthFlowsTests
     }
 
     [Fact]
+    public async Task AuthEndpoints_SendVerificationOtp_ReusesPendingChallengeWithoutForceNew()
+    {
+        await using var harness = CreateAuthApiHarness();
+        await RegisterLearnerAsync(harness.Client);
+
+        var firstResponse = await harness.Client.PostAsJsonAsync("/v1/auth/email/send-verification-otp",
+            new SendEmailOtpRequest("learner@example.com", "verify_email"));
+        firstResponse.EnsureSuccessStatusCode();
+        var firstChallenge = await firstResponse.Content.ReadFromJsonAsync<OtpChallengeResponse>(JsonSupport.Options);
+        var firstCode = harness.ExtractLatestOtpCode();
+
+        var secondResponse = await harness.Client.PostAsJsonAsync("/v1/auth/email/send-verification-otp",
+            new SendEmailOtpRequest("learner@example.com", "verify_email"));
+        secondResponse.EnsureSuccessStatusCode();
+        var secondChallenge = await secondResponse.Content.ReadFromJsonAsync<OtpChallengeResponse>(JsonSupport.Options);
+
+        Assert.Equal(firstChallenge!.ChallengeId, secondChallenge!.ChallengeId);
+        Assert.Single(harness.Sender.SentMessages);
+
+        var verifyResponse = await harness.Client.PostAsJsonAsync("/v1/auth/email/verify-otp",
+            new VerifyEmailOtpRequest("learner@example.com", "verify_email", firstCode));
+        verifyResponse.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
     public async Task AuthEndpoints_VerifyEmailOtp_RejectsInvalidCode()
     {
         await using var harness = CreateAuthApiHarness();
@@ -1103,18 +1128,50 @@ public class AuthFlowsTests
     }
 
     [Fact]
-    public async Task EmailOtpService_RequestEmailVerificationOtp_ReplacesPendingChallengeOnRepeatRequest()
+    public async Task EmailOtpService_RequestEmailVerificationOtp_ReusesValidPendingChallengeOnRepeatRequest()
     {
         var harness = CreateEmailOtpHarness();
         await harness.SeedAccountAsync();
 
         var firstResponse = await harness.Service.RequestEmailVerificationOtpAsync("learner@example.com");
+        var firstCode = harness.ExtractLatestOtpCode();
         harness.Advance(TimeSpan.FromMinutes(1));
         var secondResponse = await harness.Service.RequestEmailVerificationOtpAsync("learner@example.com");
+
+        Assert.Equal(firstResponse.ChallengeId, secondResponse.ChallengeId);
+        Assert.Equal(firstResponse.ExpiresAt, secondResponse.ExpiresAt);
+        Assert.Single(harness.Sender.SentMessages);
+
+        var account = await harness.Service.VerifyEmailVerificationOtpAsync("learner@example.com", firstCode);
+        Assert.NotNull(account.EmailVerifiedAt);
+
+        await using var readDb = new LearnerDbContext(harness.DbOptions);
+        var challenges = await readDb.EmailOtpChallenges.ToListAsync();
+        Assert.Single(challenges);
+        Assert.Equal(firstResponse.ChallengeId, challenges[0].Id.ToString());
+    }
+
+    [Fact]
+    public async Task EmailOtpService_RequestEmailVerificationOtp_ReplacesPendingChallengeWhenForceNew()
+    {
+        var harness = CreateEmailOtpHarness();
+        await harness.SeedAccountAsync();
+
+        var firstResponse = await harness.Service.RequestEmailVerificationOtpAsync("learner@example.com");
+        var firstCode = harness.ExtractLatestOtpCode();
+        harness.Advance(TimeSpan.FromMinutes(1));
+        var secondResponse = await harness.Service.RequestEmailVerificationOtpAsync(
+            "learner@example.com",
+            cancellationToken: default,
+            forceNew: true);
 
         Assert.NotEqual(firstResponse.ChallengeId, secondResponse.ChallengeId);
         Assert.Equal(harness.Now.AddMinutes(10), secondResponse.ExpiresAt);
         Assert.Equal(2, harness.Sender.SentMessages.Count);
+
+        var invalid = await Assert.ThrowsAsync<ApiException>(() =>
+            harness.Service.VerifyEmailVerificationOtpAsync("learner@example.com", firstCode));
+        Assert.Equal("invalid_otp_code", invalid.Code);
 
         await using var readDb = new LearnerDbContext(harness.DbOptions);
         var challenges = await readDb.EmailOtpChallenges.ToListAsync();
@@ -1131,7 +1188,8 @@ public class AuthFlowsTests
         var firstResponse = await harness.Service.RequestEmailVerificationOtpAsync("learner@example.com");
         var failingService = harness.CreateService(new ThrowingEmailSender());
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => failingService.RequestEmailVerificationOtpAsync("learner@example.com"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            failingService.RequestEmailVerificationOtpAsync("learner@example.com", forceNew: true));
 
         await using var readDb = new LearnerDbContext(harness.DbOptions);
         var challenges = await readDb.EmailOtpChallenges.ToListAsync();
@@ -1272,7 +1330,7 @@ public class AuthFlowsTests
         yield return new object[]
         {
             new SendEmailOtpRequest("learner@example.com", "verify_email"),
-            new[] { "email", "purpose" }
+            new[] { "email", "purpose", "forceNew" }
         };
 
         yield return new object[]
@@ -1650,6 +1708,14 @@ public class AuthFlowsTests
         }
 
         public void Advance(TimeSpan amount) => TimeProvider.Advance(amount);
+
+        public string ExtractLatestOtpCode()
+        {
+            var message = Sender.SentMessages.Last();
+            var match = Regex.Match(message.TextBody, @"\b\d{6}\b");
+            Assert.True(match.Success);
+            return match.Value;
+        }
 
         public EmailOtpService CreateService(IEmailSender sender)
             => new(new LearnerDbContext(DbOptions), Options.Create(new AuthTokenOptions

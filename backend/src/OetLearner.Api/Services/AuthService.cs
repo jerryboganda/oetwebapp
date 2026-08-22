@@ -514,7 +514,8 @@ public sealed class AuthService(
             }
         }
 
-        return await emailOtpService.RequestEmailVerificationOtpAsync(request.Email, cancellationToken);
+        return await emailOtpService.RequestEmailVerificationOtpAsync(
+            request.Email, cancellationToken, request.ForceNew);
     }
 
     public async Task<CurrentUserResponse> VerifyEmailOtpAsync(VerifyEmailOtpRequest request, CancellationToken cancellationToken = default)

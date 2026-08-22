@@ -14,6 +14,53 @@ import { useAuth } from '@/contexts/auth-context';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
 import { loadStoredSession } from '@/lib/auth-storage';
 import { readErrorMessage } from '@/lib/read-error-message';
+import type { OtpChallenge } from '@/lib/types/auth';
+
+const VERIFY_EMAIL_CHALLENGE_KEY = 'oet.verify-email.challenge';
+
+function challengeStorageKey(email: string) {
+  return `${VERIFY_EMAIL_CHALLENGE_KEY}:${email.trim().toLowerCase()}`;
+}
+
+function readStoredVerificationChallenge(email: string): Pick<OtpChallenge, 'destinationHint' | 'expiresAt'> | null {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(challengeStorageKey(email));
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as Partial<OtpChallenge>;
+    if (!parsed.expiresAt || Date.parse(parsed.expiresAt) <= Date.now()) {
+      window.sessionStorage.removeItem(challengeStorageKey(email));
+      return null;
+    }
+
+    return {
+      destinationHint: parsed.destinationHint ?? '',
+      expiresAt: parsed.expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredVerificationChallenge(email: string, challenge: OtpChallenge) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.sessionStorage.setItem(
+    challengeStorageKey(email),
+    JSON.stringify({
+      destinationHint: challenge.destinationHint,
+      expiresAt: challenge.expiresAt,
+    }),
+  );
+}
 
 export default function VerifyEmailPage() {
   return (
@@ -48,6 +95,7 @@ function VerifyEmailContent() {
   const [otp, setOtp] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const requestedForEmail = React.useRef<string | null>(null);
 
   useEffect(() => {
     if (user?.isEmailVerified) {
@@ -64,12 +112,25 @@ function VerifyEmailContent() {
     let cancelled = false;
 
     const sendCode = async () => {
-      if (!email || user?.isEmailVerified) {
+      if (!email || user?.isEmailVerified || requestedForEmail.current === email) {
+        return;
+      }
+
+      requestedForEmail.current = email;
+
+      const stored = readStoredVerificationChallenge(email);
+      if (stored) {
+        if (!cancelled) {
+          setNotice(
+            `Enter the 6 digit verification code sent to ${stored.destinationHint || email}.`
+          );
+        }
         return;
       }
 
       try {
         const challenge = await sendEmailVerificationOtp(email);
+        writeStoredVerificationChallenge(email, challenge);
         if (cancelled) {
           return;
         }
@@ -89,6 +150,7 @@ function VerifyEmailContent() {
           `Enter the 6 digit verification code sent to ${challenge.destinationHint || email}.`
         );
       } catch (error) {
+        requestedForEmail.current = null;
         if (!cancelled) {
           setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
         }
@@ -107,7 +169,9 @@ function VerifyEmailContent() {
     setErrorMessage(null);
 
     try {
-      const challenge = await sendEmailVerificationOtp(email);
+      const challenge = await sendEmailVerificationOtp(email, { forceNew: true });
+      writeStoredVerificationChallenge(email, challenge);
+      requestedForEmail.current = email;
       setNotice(
         `Enter the 6 digit verification code sent to ${challenge.destinationHint || email}.`
       );
