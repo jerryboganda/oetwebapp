@@ -189,12 +189,12 @@ if (brevoOptions.Enabled)
         var configuredBrevoOptions = serviceProvider.GetRequiredService<IOptions<BrevoOptions>>().Value;
         client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configuredBrevoOptions.BaseUrl) ? "https://api.brevo.com/v3" : configuredBrevoOptions.BaseUrl);
     })
-    // Transient Brevo outages must not cascade into 5xx from our API. The standard
-    // resilience handler adds rate limiting, retry with exponential backoff + jitter,
-    // a circuit breaker, and total + per-attempt timeouts. Defaults (3 retries, 30s
-    // total timeout, 10s per attempt) are safe for transactional email and honour any
-    // CancellationToken the caller passes.
-    .AddStandardResilienceHandler();
+    // NO automatic retries here. Brevo accepts a send and can still deliver it
+    // after our client times out — retrying then produces the SAME email two or
+    // three times in the student's inbox (the duplicate-OTP bug). A failed send
+    // is recoverable instead: EmailOtpService persists SentAt == null and the
+    // next request completes that send, so at most one email ever leaves.
+    ;
     builder.Services.AddTransient<IEmailSender, BrevoEmailSender>();
 }
 else

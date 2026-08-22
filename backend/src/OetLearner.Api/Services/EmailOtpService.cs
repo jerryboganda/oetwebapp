@@ -34,6 +34,10 @@ public sealed class EmailOtpService(
 
     private readonly TimeSpan _otpLifetime = authTokenOptions.Value.OtpLifetime;
 
+    // Server-side anti-flood: one OTP email per account per minute. Client
+    // double-clicks and network retries can never beat this.
+    private static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(60);
+
     public async Task<OtpChallengeResponse> RequestEmailVerificationOtpAsync(
         string email,
         CancellationToken cancellationToken = default,
@@ -67,10 +71,32 @@ public sealed class EmailOtpService(
         // Remounts / auto-send must not rotate a still-valid code. Students
         // were typing the first email into a newer challenge. Explicit Resend
         // (forceNew) still issues a fresh code.
+        var latest = pendingChallenges
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+
+        if (latest is { SentAt: null })
+        {
+            // A previous request created this challenge but died before the
+            // email went out (timeout, crash, Brevo outage). Finish that send
+            // instead of silently returning a code that never arrived.
+            await SendVerificationEmailAsync(latest.Id, account.Email, cancellationToken);
+            latest.SentAt = now;
+            await db.SaveChangesAsync(cancellationToken);
+
+            return new OtpChallengeResponse(
+                latest.Id.ToString(),
+                EmailVerificationPurpose,
+                "email",
+                AuthEmailAddress.Mask(account.Email),
+                latest.ExpiresAt,
+                RetryAfterSeconds);
+        }
+
         if (!forceNew)
         {
             var reusable = pendingChallenges
-                .Where(x => x.ExpiresAt > now && x.AttemptCount < MaxOtpAttempts)
+                .Where(x => x.SentAt != null && x.ExpiresAt > now && x.AttemptCount < MaxOtpAttempts)
                 .OrderByDescending(x => x.CreatedAt)
                 .FirstOrDefault();
 
@@ -84,6 +110,15 @@ public sealed class EmailOtpService(
                     reusable.ExpiresAt,
                     RetryAfterSeconds);
             }
+        }
+
+        // Cooldown: one email per minute per account, enforced server-side so
+        // double-clicks and client retries can never flood the inbox.
+        if (latest?.SentAt is { } sentAt && now - sentAt < ResendCooldown)
+        {
+            throw ApiException.Validation(
+                "otp_send_cooldown",
+                $"A verification code was just sent. Please wait {(int)Math.Ceiling((ResendCooldown - (now - sentAt)).TotalSeconds)} seconds before requesting another.");
         }
 
         var challengeId = Guid.NewGuid();
@@ -108,28 +143,15 @@ public sealed class EmailOtpService(
             DestinationHint = AuthEmailAddress.Mask(account.Email)
         };
 
-        var subject = "Verify your email address";
-        var textBody = BuildTextBody(account.Email, otpCode, expiresAt);
-        await emailSender.SendAsync(new EmailMessage(
-            account.Email,
-            subject,
-            textBody,
-            HtmlBody: BuildHtmlBody(subject, account.Email, otpCode, expiresAt),
-            TemplateKey: EmailTemplateKeys.EmailVerificationOtp,
-            TemplateParameters: new Dictionary<string, object?>
-            {
-                ["email"] = account.Email,
-                ["displayName"] = BuildDisplayName(account.Email),
-                ["otpCode"] = otpCode,
-                ["expiresAt"] = expiresAt.ToString("O")
-            }), cancellationToken);
-
-        if (pendingChallenges.Count > 0)
-        {
-            db.EmailOtpChallenges.RemoveRange(pendingChallenges);
-        }
-
+        // Save BEFORE sending. If the process dies mid-send, the next request
+        // sees SentAt == null and completes the send instead of issuing a
+        // second code — the old order could orphan a challenge whose email
+        // never left the building.
         db.EmailOtpChallenges.Add(challenge);
+        await db.SaveChangesAsync(cancellationToken);
+
+        await SendVerificationEmailAsync(challengeId, account.Email, cancellationToken);
+        challenge.SentAt = timeProvider.GetUtcNow();
         await db.SaveChangesAsync(cancellationToken);
 
         return new OtpChallengeResponse(
@@ -139,6 +161,44 @@ public sealed class EmailOtpService(
             AuthEmailAddress.Mask(account.Email),
             expiresAt,
             RetryAfterSeconds);
+    }
+
+    /// <summary>
+    /// Sends the verification email for an already-persisted challenge.
+    /// Centralised so both the fresh-send and unsent-recovery paths share one
+    /// template/parameter set — a mismatch there would produce codes that
+    /// verify against a different hash than the email shows.
+    /// </summary>
+    private async Task SendVerificationEmailAsync(Guid challengeId, string toEmail, CancellationToken cancellationToken)
+    {
+        var normalizedEmail = AuthEmailAddress.NormalizeOrThrow(toEmail);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken)
+            ?? throw new InvalidOperationException($"OTP send for missing account {normalizedEmail}");
+
+        var challenge = await db.EmailOtpChallenges
+            .SingleAsync(x => x.Id == challengeId, cancellationToken);
+
+        var now = timeProvider.GetUtcNow();
+        var otpCode = GenerateSixDigitCode();
+        challenge.CodeHash = HashOtp(challenge.Id, otpCode, account.Id, EmailVerificationPurpose);
+        challenge.AttemptCount = 0;
+        await db.SaveChangesAsync(cancellationToken);
+
+        const string subject = "Verify your email address";
+        await emailSender.SendAsync(new EmailMessage(
+            account.Email,
+            subject,
+            BuildTextBody(account.Email, otpCode, challenge.ExpiresAt),
+            HtmlBody: BuildHtmlBody(subject, account.Email, otpCode, challenge.ExpiresAt),
+            TemplateKey: EmailTemplateKeys.EmailVerificationOtp,
+            TemplateParameters: new Dictionary<string, object?>
+            {
+                ["email"] = account.Email,
+                ["displayName"] = BuildDisplayName(account.Email),
+                ["otpCode"] = otpCode,
+                ["expiresAt"] = challenge.ExpiresAt.ToString("O")
+            }), cancellationToken);
     }
 
     public async Task<ApplicationUserAccount> VerifyEmailVerificationOtpAsync(string email, string code, CancellationToken cancellationToken = default)

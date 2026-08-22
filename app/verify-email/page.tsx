@@ -95,7 +95,19 @@ function VerifyEmailContent() {
   const [otp, setOtp] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // Seconds until Resend unlocks. Mirrors the server's 60s cooldown so the
+  // button never invites a request the backend will reject.
+  const [resendIn, setResendIn] = useState(0);
   const requestedForEmail = React.useRef<string | null>(null);
+  const formRef = React.useRef<HTMLFormElement | null>(null);
+
+  useEffect(() => {
+    if (resendIn <= 0) {
+      return;
+    }
+    const timer = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
 
   useEffect(() => {
     if (user?.isEmailVerified) {
@@ -164,7 +176,13 @@ function VerifyEmailContent() {
     };
   }, [email, nextHref, refreshSession, router, user, user?.isEmailVerified]);
 
+  const startCooldown = () => setResendIn(60);
+
   const handleResend = async () => {
+    if (resendIn > 0) {
+      return;
+    }
+
     setOtp('');
     setErrorMessage(null);
 
@@ -172,11 +190,20 @@ function VerifyEmailContent() {
       const challenge = await sendEmailVerificationOtp(email, { forceNew: true });
       writeStoredVerificationChallenge(email, challenge);
       requestedForEmail.current = email;
+      startCooldown();
       setNotice(
         `Enter the 6 digit verification code sent to ${challenge.destinationHint || email}.`
       );
     } catch (error) {
-      setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
+      // Server enforces the same 60s cooldown; surface its remaining time
+      // instead of a generic failure so the learner knows exactly what to do.
+      const message = readErrorMessage(error, 'Unable to verify the OTP code.');
+      if (/cooldown|wait \d+ seconds/i.test(message)) {
+        startCooldown();
+        setNotice(message);
+        return;
+      }
+      setErrorMessage(message);
     }
   };
 
@@ -233,22 +260,33 @@ function VerifyEmailContent() {
       footer={
         <p className={styles.resend}>
           Did not receive a code?{' '}
-          <button
-            type="button"
-            className={styles.link}
-            onClick={() => void handleResend()}
-          >
-            Resend it
-          </button>
+          {resendIn > 0 ? (
+            <span className={styles.resendCountdown}>
+              Resend available in {resendIn}s
+            </span>
+          ) : (
+            <button
+              type="button"
+              className={styles.link}
+              onClick={() => void handleResend()}
+            >
+              Resend it
+            </button>
+          )}
         </p>
       }
     >
-      <form onSubmit={handleSubmit} className={styles.passwordFlowForm}>
+      <form ref={formRef} onSubmit={handleSubmit} className={styles.passwordFlowForm}>
         <OtpCodeInput
           value={otp}
           onChange={(value) => {
-            setOtp(value.replace(/\D/g, '').slice(0, 6));
+            const next = value.replace(/\D/g, '').slice(0, 6);
+            setOtp(next);
             setErrorMessage(null);
+            // Auto-submit the moment all six digits are in — no extra click.
+            if (next.length === 6 && !isSubmitting) {
+              void formRef.current?.requestSubmit();
+            }
           }}
           length={6}
         />
