@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
 import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
 import { GroundedListeningQuestionQna } from '@/components/domain/results/grounded-listening-question-qna';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
@@ -19,7 +20,7 @@ import { ListeningPartBreakdown } from '@/components/domain/results/listening-pa
 import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
-import { getListeningReview, type ListeningReviewDto } from '@/lib/listening-api';
+import { getListeningReview, listListeningAnswerKeyReports, type ListeningReviewDto } from '@/lib/listening-api';
 import { hasApprovedListeningConversion } from '@/lib/listening-result-display';
 import { getListeningExpertFeedback } from '@/lib/expert-listening-api';
 import type { ListeningExpertBundle } from '@/lib/types/expert';
@@ -109,6 +110,7 @@ export default function ListeningReviewPage() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const evidenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [review, setReview] = useState<ListeningReviewDto | null>(null);
+  const [reportedQuestionIds, setReportedQuestionIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tutorFeedback, setTutorFeedback] = useState<ListeningExpertBundle['existingFeedback'] | null>(null);
@@ -125,10 +127,12 @@ export default function ListeningReviewPage() {
     Promise.all([
       getListeningReview(attemptId),
       getListeningExpertFeedback(attemptId),
+      listListeningAnswerKeyReports(attemptId).catch(() => ({ items: [] })),
     ])
-      .then(([reviewData, feedback]) => {
+      .then(([reviewData, feedback, reports]) => {
         setReview(reviewData);
         setTutorFeedback(feedback ?? null);
+        setReportedQuestionIds(new Set((reports.items ?? []).map((item) => item.questionId)));
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load transcript-backed review.'))
       .finally(() => setLoading(false));
@@ -480,6 +484,12 @@ export default function ListeningReviewPage() {
                     <GroundedListeningQuestionQna
                       attemptId={attemptId ?? ''}
                       questionId={question.questionId}
+                    />
+                    <ReportAnswerControl
+                      assessment="listening"
+                      attemptId={attemptId ?? ''}
+                      questionId={question.questionId}
+                      alreadyReported={reportedQuestionIds.has(question.questionId)}
                     />
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
                       {question.speakerAttitude ? (

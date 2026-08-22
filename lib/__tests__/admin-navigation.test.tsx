@@ -33,6 +33,7 @@ describe('admin navigation registry', () => {
       ['Video Library', '/admin/content/videos'],
       ['Recalls', '/admin/recalls'],
       ['Materials', '/admin/content/materials'],
+      ['Answer reports', '/admin/content/answer-reports'],
     ]);
   });
 

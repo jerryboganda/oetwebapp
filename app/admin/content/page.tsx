@@ -89,6 +89,7 @@ const hubSections: HubSection[] = [
       { href: '/admin/content/quality', title: 'Quality Review', description: 'Review automated QA status for recent content before human review and publishing.', icon: <FileSearch className="h-5 w-5" /> },
       { href: '/admin/content/dedup', title: 'Deduplication', description: 'Detect and merge near-duplicate items before they reach learners.', icon: <Copy className="h-5 w-5" /> },
       { href: '/admin/rulebooks', title: 'Rulebooks', description: 'The single source of truth that grounds every grade and AI prompt.', icon: <BookOpenText className="h-5 w-5" /> },
+      { href: '/admin/content/answer-reports', title: 'Answer reports', description: 'Review candidate reports that an official Reading or Listening answer looks wrong, then open the editor or re-mark tools.', icon: <FileSearch className="h-5 w-5" /> },
       { href: '/admin/content/scoring-system', title: 'Scoring System', description: 'Edit the learner-facing scoring policy reference and structured threshold document.', icon: <Calculator className="h-5 w-5" /> },
       { href: '/admin/content/result-templates', title: 'Result Templates', description: 'Upload and activate OET-style score-report images for learner mock-result pages.', icon: <ImageIcon className="h-5 w-5" /> },
       { href: '/admin/criteria', title: 'Rubrics & Criteria', description: 'Writing and Speaking criterion definitions per profession.', icon: <ScrollText className="h-5 w-5" /> },

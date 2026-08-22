@@ -442,6 +442,22 @@ public static class ListeningLearnerEndpoints
             .WithName("AskListeningQuestionGroundedAi")
             .WithSummary("Ask grounded advisory AI about a submitted Listening question");
 
+        group.MapPost("/attempts/{attemptId}/answer-reports", async (
+            string attemptId,
+            AnswerKeyReportCreateRequest request,
+            AnswerKeyReportService reports,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(await reports.CreateListeningAsync(http.UserId(), attemptId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        group.MapGet("/attempts/{attemptId}/answer-reports", async (
+            string attemptId,
+            AnswerKeyReportService reports,
+            HttpContext http,
+            CancellationToken ct) =>
+            Results.Ok(new { items = await reports.ListListeningForAttemptAsync(http.UserId(), attemptId, ct) }));
+
         group.MapGet("/attempts/{attemptId}/review", async (
             string attemptId,
             HttpContext http,

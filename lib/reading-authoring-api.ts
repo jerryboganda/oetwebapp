@@ -1207,6 +1207,42 @@ export const readingAnnotationsApi = {
 export const getReadingAttemptReview = (attemptId: string) =>
   api<ReadingAttemptReviewDto>(`/v1/reading-papers/attempts/${attemptId}/review`);
 
+export type AnswerKeyReportReasonCode =
+  | 'wrong_official_answer'
+  | 'missing_accepted_variant'
+  | 'other';
+
+export interface LearnerAnswerKeyReport {
+  id: string;
+  assessment: 'reading' | 'listening';
+  attemptId: string;
+  paperId: string;
+  questionId: string;
+  questionNumber: number;
+  partCode: string;
+  reasonCode: AnswerKeyReportReasonCode | string;
+  details: string | null;
+  status: 'open' | 'investigating' | 'resolved' | 'dismissed' | string;
+  createdAt: string;
+}
+
+export const listReadingAnswerKeyReports = (attemptId: string) =>
+  api<{ items: LearnerAnswerKeyReport[] }>(
+    `/v1/reading-papers/attempts/${encodeURIComponent(attemptId)}/answer-reports`,
+  );
+
+export const createReadingAnswerKeyReport = (
+  attemptId: string,
+  body: { questionId: string; reasonCode: AnswerKeyReportReasonCode | string; details?: string },
+) =>
+  api<LearnerAnswerKeyReport>(
+    `/v1/reading-papers/attempts/${encodeURIComponent(attemptId)}/answer-reports`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  );
+
 export interface ReadingGroundedAiExplanationDto {
   explanation: {
     whyCorrect: string;

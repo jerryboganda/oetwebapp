@@ -10211,6 +10211,65 @@ export async function updateAdminMockLeakReport(
   );
 }
 
+export type AdminAnswerKeyReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
+export type AdminAnswerKeyReportAssessment = 'reading' | 'listening';
+
+export interface AdminAnswerKeyReport {
+  id: string;
+  assessment: AdminAnswerKeyReportAssessment | string;
+  attemptId: string;
+  paperId: string;
+  paperTitle: string;
+  questionId: string;
+  questionNumber: number;
+  partCode: string;
+  questionStemSnapshot: string;
+  learnerAnswerSnapshot: string;
+  officialAnswerSnapshot: string;
+  reasonCode: string;
+  details: string | null;
+  status: AdminAnswerKeyReportStatus;
+  resolutionNote: string | null;
+  reportedByUserId: string;
+  reportedByUserDisplayName: string;
+  editorUrl: string;
+  scoringSystemUrl: string;
+  resolvedByAdminId: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function listAdminAnswerKeyReports(
+  params?: {
+    status?: AdminAnswerKeyReportStatus | string;
+    assessment?: AdminAnswerKeyReportAssessment | string;
+    limit?: number;
+  },
+): Promise<{ items: AdminAnswerKeyReport[] }> {
+  const q = new URLSearchParams();
+  if (params?.status) q.set('status', params.status);
+  if (params?.assessment) q.set('assessment', params.assessment);
+  if (typeof params?.limit === 'number') q.set('limit', String(params.limit));
+  const qs = q.toString();
+  return apiRequest<{ items: AdminAnswerKeyReport[] }>(
+    `/v1/admin/answer-key-reports${qs ? `?${qs}` : ''}`,
+  );
+}
+
+export async function updateAdminAnswerKeyReport(
+  id: string,
+  body: { status: AdminAnswerKeyReportStatus | string; resolutionNote?: string },
+): Promise<AdminAnswerKeyReport> {
+  return apiRequest<AdminAnswerKeyReport>(
+    `/v1/admin/answer-key-reports/${encodeURIComponent(id)}`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    },
+  );
+}
+
 export async function fetchAdminMockAnalytics() {
   return apiRequest('/v1/admin/mocks/analytics');
 }

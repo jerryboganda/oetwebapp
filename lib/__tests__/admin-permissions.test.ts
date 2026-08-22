@@ -121,6 +121,8 @@ describe('sidebarPermissionMap', () => {
     expect(sidebarPermissionMap['/admin/content/dedup']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/analytics']).toEqual([AdminPermission.ContentRead]);
     expect(sidebarPermissionMap['/admin/content/quality']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/content/answer-reports']).toEqual([AdminPermission.ContentRead]);
+    expect(canAccessAdminRoute([AdminPermission.ContentRead], '/admin/content/answer-reports')).toBe(true);
     expect(sidebarPermissionMap['/admin/content/grammar/topics']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/grammar/ai-draft']).toEqual([AdminPermission.ContentWrite]);
     expect(sidebarPermissionMap['/admin/content/grammar/lessons/new']).toEqual([AdminPermission.ContentWrite]);

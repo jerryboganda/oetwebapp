@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
@@ -638,6 +639,29 @@ public static class ReadingLearnerEndpoints
                 });
             }
         }).RequireRateLimiting("PerUser");
+
+        group.MapPost("/attempts/{attemptId}/answer-reports", async (
+            string attemptId,
+            AnswerKeyReportCreateRequest request,
+            AnswerKeyReportService reports,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            return Results.Ok(await reports.CreateReadingAsync(userId, attemptId, request, ct));
+        }).RequireRateLimiting("PerUserWrite");
+
+        group.MapGet("/attempts/{attemptId}/answer-reports", async (
+            string attemptId,
+            AnswerKeyReportService reports,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            return Results.Ok(new { items = await reports.ListReadingForAttemptAsync(userId, attemptId, ct) });
+        });
 
         group.MapGet("/attempts/{attemptId}/review", async (
             string attemptId,

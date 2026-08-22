@@ -1,0 +1,399 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import { AdminOperationsLayout } from '@/components/admin/layout/admin-operations-layout';
+import { Card, CardContent } from '@/components/admin/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/form-controls';
+import { Toast } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-error';
+import { Modal } from '@/components/ui/modal';
+import {
+  listAdminAnswerKeyReports,
+  updateAdminAnswerKeyReport,
+  type AdminAnswerKeyReport,
+  type AdminAnswerKeyReportAssessment,
+  type AdminAnswerKeyReportStatus,
+} from '@/lib/api';
+
+type StatusFilter = '' | AdminAnswerKeyReportStatus;
+type AssessmentFilter = '' | AdminAnswerKeyReportAssessment;
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'open', label: 'Open' },
+  { value: 'investigating', label: 'Investigating' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'dismissed', label: 'Dismissed' },
+];
+
+const ASSESSMENT_FILTERS: { value: AssessmentFilter; label: string }[] = [
+  { value: '', label: 'All subtests' },
+  { value: 'reading', label: 'Reading' },
+  { value: 'listening', label: 'Listening' },
+];
+
+const STATUS_BADGE: Record<AdminAnswerKeyReportStatus, { label: string; variant: 'danger' | 'warning' | 'success' | 'muted' }> = {
+  open: { label: 'Open', variant: 'danger' },
+  investigating: { label: 'Investigating', variant: 'warning' },
+  resolved: { label: 'Resolved', variant: 'success' },
+  dismissed: { label: 'Dismissed', variant: 'muted' },
+};
+
+const REASON_LABELS: Record<string, string> = {
+  wrong_official_answer: 'Official answer looks wrong',
+  missing_accepted_variant: 'Missing accepted variant',
+  other: 'Other',
+};
+
+type ActionMode = 'investigating' | 'resolved' | 'dismissed';
+
+const ACTION_LABELS: Record<ActionMode, string> = {
+  investigating: 'Mark investigating',
+  resolved: 'Mark resolved',
+  dismissed: 'Dismiss report',
+};
+
+function formatDateTime(value: string | null): string {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+export default function AdminAnswerKeyReportsPage() {
+  const [rows, setRows] = useState<AdminAnswerKeyReport[]>([]);
+  const [filter, setFilter] = useState<StatusFilter>('open');
+  const [assessment, setAssessment] = useState<AssessmentFilter>('');
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+
+  const [actionTarget, setActionTarget] = useState<AdminAnswerKeyReport | null>(null);
+  const [actionMode, setActionMode] = useState<ActionMode | null>(null);
+  const [actionNote, setActionNote] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await listAdminAnswerKeyReports({
+        status: filter || undefined,
+        assessment: assessment || undefined,
+        limit: 50,
+      });
+      setRows(response.items ?? []);
+    } catch (err) {
+      setToast({
+        variant: 'error',
+        message: err instanceof Error ? err.message : 'Failed to load answer reports.',
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [filter, assessment]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const counts = useMemo(() => {
+    const out: Record<string, number> = { open: 0, investigating: 0, resolved: 0, dismissed: 0 };
+    for (const row of rows) {
+      out[row.status] = (out[row.status] ?? 0) + 1;
+    }
+    return out;
+  }, [rows]);
+
+  function openAction(row: AdminAnswerKeyReport, mode: ActionMode) {
+    setActionTarget(row);
+    setActionMode(mode);
+    setActionNote(row.resolutionNote ?? '');
+  }
+
+  function closeAction() {
+    setActionTarget(null);
+    setActionMode(null);
+    setActionNote('');
+    setSubmitting(false);
+  }
+
+  async function handleSubmit() {
+    if (!actionTarget || !actionMode) return;
+    setSubmitting(true);
+    try {
+      await updateAdminAnswerKeyReport(actionTarget.id, {
+        status: actionMode,
+        resolutionNote: actionNote.trim() ? actionNote.trim() : undefined,
+      });
+      setToast({ variant: 'success', message: `Report marked ${actionMode}.` });
+      closeAction();
+      await load();
+    } catch (err) {
+      setToast({
+        variant: 'error',
+        message: err instanceof Error ? err.message : 'Update failed.',
+      });
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <>
+      <AdminOperationsLayout
+        eyebrow="Content integrity"
+        title="Answer-key report queue"
+        description="Review candidate reports that an official Reading or Listening answer looks wrong. Fix the key in the question editor, then optionally re-mark the named attempt."
+        breadcrumbs={[
+          { label: 'Admin', href: '/admin' },
+          { label: 'Content', href: '/admin/content' },
+          { label: 'Answer reports' },
+        ]}
+        actions={
+          <Link
+            href="/admin/content"
+            className="inline-flex items-center text-sm font-bold text-[var(--admin-primary)] hover:underline"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" /> Back to Content Home
+          </Link>
+        }
+      >
+        <Card>
+          <CardContent className="p-5 space-y-4">
+            <div
+              className="flex flex-wrap gap-2"
+              role="toolbar"
+              aria-label="Filter answer reports by status"
+            >
+              {STATUS_FILTERS.map((option) => {
+                const isActive = filter === option.value;
+                const count = isActive
+                  ? option.value === '' ? rows.length : counts[option.value] ?? 0
+                  : null;
+                return (
+                  <Button
+                    key={option.value || 'all'}
+                    variant={isActive ? 'primary' : 'secondary'}
+                    onClick={() => setFilter(option.value)}
+                    aria-pressed={isActive}
+                    aria-label={count === null ? `${option.label} reports` : `${option.label} reports (${count} loaded)`}
+                  >
+                    {option.label}
+                    {count === null ? null : (
+                      <span className="ml-2 rounded-full bg-white/30 px-2 py-0.5 text-xs">
+                        {count}
+                      </span>
+                    )}
+                  </Button>
+                );
+              })}
+            </div>
+
+            <div
+              className="flex flex-wrap gap-2"
+              role="toolbar"
+              aria-label="Filter answer reports by assessment"
+            >
+              {ASSESSMENT_FILTERS.map((option) => (
+                <Button
+                  key={option.value || 'all-assessments'}
+                  variant={assessment === option.value ? 'primary' : 'secondary'}
+                  onClick={() => setAssessment(option.value)}
+                  aria-pressed={assessment === option.value}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+
+            <p
+              className="sr-only"
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              {loading
+                ? 'Loading answer reports.'
+                : `${rows.length} answer report${rows.length === 1 ? '' : 's'} loaded for the current filter.`}
+            </p>
+
+            {loading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : rows.length === 0 ? (
+              <EmptyState
+                title="No answer reports"
+                description="No reports match the current filter."
+                icon={<AlertTriangle className="h-8 w-8" />}
+              />
+            ) : (
+              <div className="overflow-x-auto rounded-admin border border-admin-border">
+                <table
+                  className="min-w-full divide-y divide-admin-border text-sm"
+                  aria-label="Answer-key reports queue"
+                >
+                  <caption className="sr-only">
+                    Answer-key reports queue. Each row is one candidate report of a potentially incorrect official answer.
+                  </caption>
+                  <thead className="bg-admin-bg-subtle">
+                    <tr className="text-left text-xs font-black uppercase tracking-widest text-admin-fg-muted">
+                      <th scope="col" className="px-4 py-3">Paper</th>
+                      <th scope="col" className="px-4 py-3">Question</th>
+                      <th scope="col" className="px-4 py-3">Answers</th>
+                      <th scope="col" className="px-4 py-3">Reason</th>
+                      <th scope="col" className="px-4 py-3">Reporter</th>
+                      <th scope="col" className="px-4 py-3">Created</th>
+                      <th scope="col" className="px-4 py-3">Status</th>
+                      <th scope="col" className="px-4 py-3">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-admin-border bg-admin-bg-surface">
+                    {rows.map((row) => {
+                      const isTerminal = row.status === 'resolved' || row.status === 'dismissed';
+                      const statusBadge = STATUS_BADGE[row.status];
+                      return (
+                        <tr key={row.id} className="align-top">
+                          <td className="px-4 py-3">
+                            <p className="font-bold text-admin-fg-strong">{row.paperTitle || row.paperId}</p>
+                            <p className="text-xs uppercase tracking-widest text-admin-fg-muted">{row.assessment}</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <Link
+                                href={row.editorUrl}
+                                className="text-xs font-bold text-[var(--admin-primary)] hover:underline"
+                              >
+                                Open editor
+                              </Link>
+                              <Link
+                                href={row.scoringSystemUrl}
+                                className="text-xs font-bold text-[var(--admin-primary)] hover:underline"
+                              >
+                                Re-mark
+                              </Link>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-admin-fg-strong">
+                              Part {row.partCode} · Q{row.questionNumber}
+                            </p>
+                            <p className="mt-1 max-w-xs text-xs text-admin-fg-muted">{row.questionStemSnapshot || '-'}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="text-xs text-admin-fg-muted">Learner</p>
+                            <p className="font-medium text-admin-fg-strong">{row.learnerAnswerSnapshot || '-'}</p>
+                            <p className="mt-2 text-xs text-admin-fg-muted">Official</p>
+                            <p className="font-medium text-admin-fg-strong">{row.officialAnswerSnapshot || '-'}</p>
+                          </td>
+                          <td className="px-4 py-3">
+                            <p className="font-medium text-admin-fg-strong">{REASON_LABELS[row.reasonCode] ?? row.reasonCode}</p>
+                            {row.details ? (
+                              <p className="mt-1 max-w-xs text-xs text-admin-fg-muted">{row.details}</p>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3 text-admin-fg-strong">
+                            {row.reportedByUserDisplayName || row.reportedByUserId}
+                          </td>
+                          <td className="px-4 py-3 text-admin-fg-muted">{formatDateTime(row.createdAt)}</td>
+                          <td className="px-4 py-3">
+                            <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
+                            {row.resolvedAt ? (
+                              <p className="mt-1 text-xs text-admin-fg-muted">
+                                {formatDateTime(row.resolvedAt)}
+                              </p>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div
+                              className="flex flex-wrap gap-2"
+                              role="group"
+                              aria-label={`Triage actions for report ${row.id}`}
+                            >
+                              <Button
+                                variant="secondary"
+                                onClick={() => openAction(row, 'investigating')}
+                                disabled={isTerminal}
+                                aria-label={`Mark report ${row.id} as investigating`}
+                              >
+                                Investigate
+                              </Button>
+                              <Button
+                                variant="primary"
+                                onClick={() => openAction(row, 'resolved')}
+                                disabled={isTerminal}
+                                aria-label={`Mark report ${row.id} as resolved`}
+                              >
+                                Resolve
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                onClick={() => openAction(row, 'dismissed')}
+                                disabled={isTerminal}
+                                aria-label={`Dismiss report ${row.id}`}
+                              >
+                                Dismiss
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </AdminOperationsLayout>
+
+      <Modal
+        open={actionTarget !== null && actionMode !== null}
+        onClose={closeAction}
+        title={actionMode ? ACTION_LABELS[actionMode] : ''}
+      >
+        <div className="space-y-4">
+          {actionTarget ? (
+            <div className="rounded-admin border border-admin-border bg-admin-bg-subtle p-3 text-sm">
+              <p className="font-bold text-admin-fg-strong">
+                {actionTarget.paperTitle || actionTarget.paperId}
+              </p>
+              <p className="text-xs text-admin-fg-muted">
+                Reported by {actionTarget.reportedByUserDisplayName || actionTarget.reportedByUserId}
+              </p>
+              <p className="mt-1 text-xs">
+                Part {actionTarget.partCode} · Q{actionTarget.questionNumber}
+              </p>
+            </div>
+          ) : null}
+          <Textarea
+            label="Resolution note"
+            value={actionNote}
+            onChange={(e) => setActionNote(e.target.value)}
+            rows={4}
+            placeholder="Add an internal note explaining the decision."
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={closeAction} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleSubmit} disabled={submitting}>
+              {submitting ? 'Saving…' : 'Confirm'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {toast ? (
+        <Toast
+          variant={toast.variant}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      ) : null}
+    </>
+  );
+}

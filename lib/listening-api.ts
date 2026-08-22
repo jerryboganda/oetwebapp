@@ -635,6 +635,42 @@ export const getListeningResult = (attemptId: string) =>
 
 export const getListeningReview = getListeningResult;
 
+export type ListeningAnswerKeyReportReasonCode =
+  | 'wrong_official_answer'
+  | 'missing_accepted_variant'
+  | 'other';
+
+export interface LearnerListeningAnswerKeyReport {
+  id: string;
+  assessment: 'reading' | 'listening';
+  attemptId: string;
+  paperId: string;
+  questionId: string;
+  questionNumber: number;
+  partCode: string;
+  reasonCode: ListeningAnswerKeyReportReasonCode | string;
+  details: string | null;
+  status: 'open' | 'investigating' | 'resolved' | 'dismissed' | string;
+  createdAt: string;
+}
+
+export const listListeningAnswerKeyReports = (attemptId: string) =>
+  api<{ items: LearnerListeningAnswerKeyReport[] }>(
+    `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/answer-reports`,
+  );
+
+export const createListeningAnswerKeyReport = (
+  attemptId: string,
+  body: { questionId: string; reasonCode: ListeningAnswerKeyReportReasonCode | string; details?: string },
+) =>
+  api<LearnerListeningAnswerKeyReport>(
+    `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/answer-reports`,
+    {
+      method: 'POST',
+      body: JSON.stringify(body),
+    },
+  );
+
 export interface ListeningGroundedAiExplanationDto {
   explanation: {
     whyCorrect: string;

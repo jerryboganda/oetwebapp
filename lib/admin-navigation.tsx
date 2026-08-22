@@ -16,6 +16,7 @@ import {
   Flag,
   FolderOpen,
   Headphones,
+  MessageSquare,
   LayoutDashboard,
   Library,
   Mic,
@@ -167,6 +168,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         label: 'Materials',
         icon: <FolderOpen className={iconClassName} />,
         matchPrefix: '/admin/content/materials',
+        requiredPermissions: [AdminPermission.ContentRead],
+      },
+      {
+        href: '/admin/content/answer-reports',
+        label: 'Answer reports',
+        icon: <MessageSquare className={iconClassName} />,
+        matchPrefix: '/admin/content/answer-reports',
         requiredPermissions: [AdminPermission.ContentRead],
       },
     ],
@@ -434,6 +442,7 @@ export function isContentWorkspace(pathname: string | null | undefined): boolean
 
   const hubSubRoutes = [
     'analytics',
+    'answer-reports',
     'conversation',
     'dedup',
     'generation',
@@ -488,6 +497,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/content/import', title: 'Content Import' },
   { prefix: '/admin/content/generation', title: 'Content Generation' },
   { prefix: '/admin/content/hierarchy', title: 'Content Hierarchy' },
+  { prefix: '/admin/content/answer-reports', title: 'Answer reports' },
   { prefix: '/admin/content/materials', title: 'Materials Library' },
   { prefix: '/admin/content/media', title: 'Media Assets' },
   { prefix: '/admin/content/dedup', title: 'Deduplication' },

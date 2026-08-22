@@ -12,12 +12,13 @@ import { ResultsScorePanel } from '@/components/domain/results/results-score-pan
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
 import { GroundedListeningQuestionQna } from '@/components/domain/results/grounded-listening-question-qna';
+import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { ListeningPartBreakdown } from '@/components/domain/results/listening-part-breakdown';
 import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { getListeningResult, type ListeningReviewDto } from '@/lib/listening-api';
+import { getListeningResult, listListeningAnswerKeyReports, type ListeningReviewDto } from '@/lib/listening-api';
 import { hasApprovedListeningConversion } from '@/lib/listening-result-display';
 
 function firstParam(value: string | string[] | undefined) {
@@ -59,6 +60,7 @@ function ListeningResultsContent() {
   const params = useParams<{ id?: string | string[] }>();
   const id = firstParam(params?.id);
   const [result, setResult] = useState<ListeningReviewDto | null>(null);
+  const [reportedQuestionIds, setReportedQuestionIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
@@ -81,7 +83,12 @@ function ListeningResultsContent() {
         if (cancelled) return null;
         if (delay > 0) await new Promise((r) => setTimeout(r, delay));
         try {
-          return await getListeningResult(id);
+          const review = await getListeningResult(id);
+          const reports = await listListeningAnswerKeyReports(id).catch(() => ({ items: [] }));
+          if (!cancelled) {
+            setReportedQuestionIds(new Set((reports.items ?? []).map((item) => item.questionId)));
+          }
+          return review;
         } catch (err) {
           lastErr = err;
         }
@@ -390,10 +397,15 @@ function ListeningResultsContent() {
                                 questionId={item.questionId}
                                 unanswered={!item.learnerAnswer}
                               />
-
                               <GroundedListeningQuestionQna
                                 attemptId={id ?? ''}
                                 questionId={item.questionId}
+                              />
+                              <ReportAnswerControl
+                                assessment="listening"
+                                attemptId={id ?? ''}
+                                questionId={item.questionId}
+                                alreadyReported={reportedQuestionIds.has(item.questionId)}
                               />
                             </>
                           ) : null}

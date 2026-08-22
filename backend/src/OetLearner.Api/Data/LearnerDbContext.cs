@@ -230,6 +230,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<LaunchReadinessSettings> LaunchReadinessSettings => Set<LaunchReadinessSettings>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<CustomerSupportCase> CustomerSupportCases => Set<CustomerSupportCase>();
+    public DbSet<AssessmentAnswerKeyReport> AssessmentAnswerKeyReports => Set<AssessmentAnswerKeyReport>();
 
     // Security spec §4.4: machine-generated security telemetry (auth
     // lifecycle, session/device changes, playback, risk signals, admin
@@ -1368,6 +1369,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Ticket-linked, time-limited customer-support candidate access.
         OnModelCreatingCustomerSupport(modelBuilder);
 
+        // Candidate reports of a potentially incorrect official answer key.
+        OnModelCreatingAnswerKeyReports(modelBuilder);
+
         // Billing region pricing + gateway routing (partial; see LearnerDbContext.BillingRegion.cs).
         OnModelCreatingBillingRegion(modelBuilder);
 
@@ -1523,6 +1527,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     partial void OnModelCreatingUserAccess(ModelBuilder modelBuilder);
 
     partial void OnModelCreatingCustomerSupport(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AnswerKeyReports.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAnswerKeyReports(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Defined in <see cref="LearnerDbContext"/>.BillingRegion.cs (partial).

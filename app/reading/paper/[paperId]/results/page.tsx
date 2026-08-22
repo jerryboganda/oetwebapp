@@ -8,6 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
+import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
 import { GroundedReadingPassageQna } from '@/components/domain/results/grounded-reading-passage-qna';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
@@ -23,6 +24,7 @@ import {
   getReadingAttemptReview,
   getReadingPaperAnnotations,
   getReadingStructureLearner,
+  listReadingAnswerKeyReports,
   type ReadingGroundedAiExplanationDto,
   type ReadingAttemptReviewDto,
   type ReadingLearnerStructureDto,
@@ -94,6 +96,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   const [review, setReview] = useState<ReadingReviewData | null>(null);
   const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
   const [pdfAnnotations, setPdfAnnotations] = useState<ReadingPaperAnnotationDto[]>([]);
+  const [reportedQuestionIds, setReportedQuestionIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorBankToast, setErrorBankToast] = useState<string | null>(null);
@@ -111,14 +114,16 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
         setLoading(true);
         setError(null);
         const data = await getReadingAttemptReview(attemptId);
-        const [loadedStructure, loadedAnnotations] = await Promise.all([
+        const [loadedStructure, loadedAnnotations, loadedReports] = await Promise.all([
           getReadingStructureLearner(paperId).catch(() => null),
           getReadingPaperAnnotations(paperId).catch(() => [] as ReadingPaperAnnotationDto[]),
+          listReadingAnswerKeyReports(attemptId).catch(() => ({ items: [] })),
         ]);
         if (!cancelled) {
           setReview(data as ReadingReviewData);
           setStructure(loadedStructure);
           setPdfAnnotations(loadedAnnotations);
+          setReportedQuestionIds(new Set((loadedReports.items ?? []).map((item) => item.questionId)));
         }
       } catch (err) {
         if (!cancelled) setError(readErrorMessage(err, 'Failed to load Reading review.'));
@@ -495,7 +500,12 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               />
               <div className="space-y-3">
                 {review.items.map((item) => (
-                  <ReviewItemDetails key={item.questionId} attemptId={attemptId} item={item} />
+                  <ReviewItemDetails
+                    key={item.questionId}
+                    attemptId={attemptId}
+                    item={item}
+                    alreadyReported={reportedQuestionIds.has(item.questionId)}
+                  />
                 ))}
               </div>
             </section>
@@ -534,7 +544,15 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   );
 }
 
-function ReviewItemDetails({ attemptId, item }: { attemptId: string; item: ReviewItem }) {
+function ReviewItemDetails({
+  attemptId,
+  item,
+  alreadyReported,
+}: {
+  attemptId: string;
+  item: ReviewItem;
+  alreadyReported: boolean;
+}) {
   const invalid = item.isInvalid === true;
   const missReason = invalid
     ? { title: 'Invalid for automated marking', detail: 'Multiple options were persisted for this single-answer question. An administrator must review it before any converted score can be issued.' }
@@ -597,6 +615,12 @@ function ReviewItemDetails({ attemptId, item }: { attemptId: string; item: Revie
       ) : null}
       <GroundedReadingExplanation attemptId={attemptId} item={item} unanswered={unanswered || invalid} />
       {item.passageId ? <GroundedReadingPassageQna attemptId={attemptId} passageId={item.passageId} /> : null}
+      <ReportAnswerControl
+        assessment="reading"
+        attemptId={attemptId}
+        questionId={item.questionId}
+        alreadyReported={alreadyReported}
+      />
     </AnswerComparisonCard>
   );
 }

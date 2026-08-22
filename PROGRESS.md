@@ -1,6 +1,13 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-20
+Last updated: 2026-08-22
+
+## Current Checkpoint - Answer-key reports
+
+- Candidates can report a potentially incorrect official Reading or Listening answer from official results/review. Flag stays a private bookmark. Escalations is unchanged.
+- Admin queue lives at `/admin/content/answer-reports` (`content:read` to view, `content:write` to triage). Correction stays in the existing question editor; optional one-attempt re-mark stays on `/admin/content/scoring-system`.
+- Backend: `AssessmentAnswerKeyReports` + `/v1/{reading,listening}-papers/attempts/{id}/answer-reports` + `/v1/admin/answer-key-reports`.
+- Next: owner verifies on production after deploy. Reading-upload Atlas next-step is unchanged.
 
 ## Current Checkpoint - Reading B/C visible + production data pinned
 
