@@ -1,16 +1,16 @@
 ﻿# Agent State (local)
 
-## Current task — Antigravity SDK gateway (SHIPPED, commit 8250ddb8b, pushed)
-- `agent-gateway/` Python 3.12 service hosting google-antigravity v0.1.14: OpenAI-compatible `/v1/chat/completions` + native SSE sessions; 8 OET personas with rulebook skills; auth modes A gemini-key (hardened: budgets/cache/backoff) · B local-oauth (opt-in personal AI Pro quota, risk notice docs/antigravity/auth.md) · C sdk-oauth flip-day stub. 20 pytest tests green; live boot verified on host (healthz + /v1/agents).
-- Backend: `AntigravityGatewaySeeder` (additive provider row `antigravity-gateway` + 18 route rows, `agent:<name>` model convention) + Program.cs hosted service. `dotnet build` green.
-- Ops: agent-gateway service in dev/desktop/vps/production compose (Mode B hard-disabled in prod); deploy.yml GHCR build job + rollout script updated (gateway optional image, health-gated).
-- Next: owner pastes GEMINI_API_KEY into VPS `.env.production` + internal token into `/admin/ai-providers` row, then flip a low-risk route (e.g. `card.draft.v1`) via admin route editor. Golden-set parity harness + Redis cache are Phase 3b/6 (docs/antigravity/roadmap.md).
+## Current task — Fawaterak return missing checkout reference (SHIPPED)
+- Live error was `/billing/payment-return` with no quote/session after Fawaterak iframe pay.
+- Fix: Fawaterak success/fail/pending URLs always carry quote+session; payment-return accepts invoice_id/payLoad and sessionStorage; review iframe stores refs + "I've finished paying"; middleware keeps return query on sign-in. Browser never marks paid.
+- Shipped `7938c879` via Actions `32662910596` (success). Repo private again.
+- Next: owner live-verify Fawaterak on `/checkout/review`. After pay they should see "Confirming your payment" (poll), not missing checkout reference. "I've finished paying" is the fallback.
 
 ## Previous — Auth/OTP mail isolated from marketing unsubscribe
 - Root cause of missing password-reset OTP: Brevo accepted `/smtp/email` then blocked as unsubscribed. Marketing unsubscribe must never gate OTP.
 - Code: four From lanes (`auth@`, `updates@`, `no-reply@`, `support@`). Webhook `unsubscribed` writes `__marketing__` only (never `EventKey=null`). Reputation events write `__non_auth__`. Admin inspect/unblock is one email; keeps marketing opt-out; never mass-unblock.
-- Validation: `dotnet test --filter FullyQualifiedName~EmailLaneAndMailboxTests` 5/5.
-- Next after this ship: owner unblocks only `drhagermurad2026@gmail.com` and `mindreader420123@gmail.com` in Admin → Notifications → Transactional Mailbox. In Brevo console confirm marketing unsubscribe does not add Transactional Blocklist, and OTP templates stay transactional From `auth@`.
+- Validation: `dotnet test --filter FullyQualifiedName~EmailLaneAndMailboxTests` 5/5. Shipped `dc92bbcc` via Actions `32652938029` (success). Repo private again.
+- Next: owner unblocks only `drhagermurad2026@gmail.com` and `mindreader420123@gmail.com` in Admin → Notifications → Transactional Mailbox. In Brevo console confirm marketing unsubscribe does not add Transactional Blocklist, and OTP templates stay transactional From `auth@`.
 
 ## Previous — Mobile OTP auto-rotation on resume (FIXED + DEPLOYED)
 - Fix commit `c512a4e4` deployed to production 2026-08-23 via rerun of Actions `32640038373`. Prod probe: /verify-email returns 200.

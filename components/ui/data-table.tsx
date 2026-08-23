@@ -156,7 +156,7 @@ export function DataTable<T>({
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
                 {primaryColumn?.header ?? 'Item'}
               </p>
-              <div id={`${rowKey}-mobile-title`} className="mt-1 break-words text-sm font-bold text-navy">
+              <div id={`${rowKey}-mobile-title`} className="mt-1 break-words text-sm font-bold text-navy dark:text-slate-100">
                 {primaryColumn?.render(row, index)}
               </div>
             </div>
@@ -168,14 +168,14 @@ export function DataTable<T>({
                 <div
                   key={column.key}
                   className={cn(
-                    'flex items-start justify-between gap-3 rounded-xl bg-background-light px-3 py-2',
+                    'flex items-start justify-between gap-3 rounded-xl bg-background-light px-3 py-2 dark:bg-slate-900/60',
                     column.className,
                   )}
                 >
                   <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">
                     {column.header}
                   </span>
-                  <div className="text-right text-sm text-navy">{column.render(row, index)}</div>
+                  <div className="text-right text-sm text-navy dark:text-slate-100">{column.render(row, index)}</div>
                 </div>
               ))}
             </div>
@@ -189,7 +189,7 @@ export function DataTable<T>({
     <div className={cn('overflow-hidden rounded-2xl border border-border bg-surface shadow-sm', className)}>
       <div className="md:hidden p-3">
         {selectable ? (
-          <label className="mb-3 flex items-center gap-2 rounded-xl bg-background-light px-3 py-2 text-sm font-semibold text-navy">
+          <label className="mb-3 flex items-center gap-2 rounded-xl bg-background-light px-3 py-2 text-sm font-semibold text-navy dark:bg-slate-900/60 dark:text-slate-100">
             <input
               type="checkbox"
               checked={allSelected}

@@ -91,7 +91,7 @@ export function LearnerBreadcrumbs({ className, labelOverrides }: { className?: 
         <li>
           <Link
             href="/"
-            className="inline-flex min-h-7 items-center gap-1 rounded-full px-2 text-muted transition-colors hover:bg-white/80 hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            className="inline-flex min-h-7 items-center gap-1 rounded-full px-2 text-muted transition-colors hover:bg-white/80 hover:text-navy dark:hover:bg-white/10 dark:hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           >
             <Home className="h-3.5 w-3.5" aria-hidden="true" />
             Dashboard
@@ -101,13 +101,13 @@ export function LearnerBreadcrumbs({ className, labelOverrides }: { className?: 
           <li key={crumb.href} className="flex min-w-0 items-center gap-1.5">
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted/60" aria-hidden="true" />
             {crumb.current ? (
-              <span className="truncate rounded-full bg-white/70 px-2 py-1 text-navy" aria-current="page">
+              <span className="truncate rounded-full bg-white/70 px-2 py-1 text-navy dark:bg-slate-900/70 dark:text-slate-100" aria-current="page">
                 {crumb.label}
               </span>
             ) : (
               <Link
                 href={crumb.href}
-                className="truncate rounded-full px-2 py-1 text-muted transition-colors hover:bg-white/80 hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                className="truncate rounded-full px-2 py-1 text-muted transition-colors hover:bg-white/80 hover:text-navy dark:hover:bg-white/10 dark:hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 {crumb.label}
               </Link>

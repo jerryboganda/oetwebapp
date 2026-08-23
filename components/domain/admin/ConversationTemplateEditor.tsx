@@ -30,9 +30,9 @@ interface TemplateForm {
   roleDescription: string;
   patientContext: string;
   expectedOutcomes: string;
-  objectives: string[];
-  expectedRedFlags: string[];
-  keyVocabulary: string[];
+  objectives: Array<{ id: string; value: string }>;
+  expectedRedFlags: Array<{ id: string; value: string }>;
+  keyVocabulary: Array<{ id: string; value: string }>;
   patientVoiceGender: string;
   patientVoiceAge: string;
   patientVoiceAccent: string;
@@ -40,10 +40,13 @@ interface TemplateForm {
   estimatedDurationSeconds: number;
 }
 
+// FE-020: stable row ids so React keys survive mid-list removals.
+const row = (value: string = '') => ({ id: crypto.randomUUID(), value });
+
 const EMPTY: TemplateForm = {
   title: '', taskTypeCode: 'oet-roleplay', professionId: 'medicine', difficulty: 'medium',
   scenario: '', roleDescription: '', patientContext: '', expectedOutcomes: '',
-  objectives: [''], expectedRedFlags: [''], keyVocabulary: [''],
+  objectives: [row()], expectedRedFlags: [row()], keyVocabulary: [row()],
   patientVoiceGender: 'female', patientVoiceAge: '45',
   patientVoiceAccent: 'en-GB', patientVoiceTone: 'neutral',
   estimatedDurationSeconds: 300,
@@ -73,9 +76,9 @@ export function ConversationTemplateEditor({ templateId }: Props) {
           roleDescription: (d.roleDescription as string) ?? '',
           patientContext: (d.patientContext as string) ?? '',
           expectedOutcomes: (d.expectedOutcomes as string) ?? '',
-          objectives: Array.isArray(d.objectives) ? (d.objectives as string[]) : [''],
-          expectedRedFlags: Array.isArray(d.expectedRedFlags) ? (d.expectedRedFlags as string[]) : [''],
-          keyVocabulary: Array.isArray(d.keyVocabulary) ? (d.keyVocabulary as string[]) : [''],
+          objectives: Array.isArray(d.objectives) ? (d.objectives as string[]).map(row) : [row()],
+          expectedRedFlags: Array.isArray(d.expectedRedFlags) ? (d.expectedRedFlags as string[]).map(row) : [row()],
+          keyVocabulary: Array.isArray(d.keyVocabulary) ? (d.keyVocabulary as string[]).map(row) : [row()],
           patientVoiceGender: String((d.patientVoice as Record<string, unknown>)?.gender ?? 'female'),
           patientVoiceAge: String((d.patientVoice as Record<string, unknown>)?.age ?? '45'),
           patientVoiceAccent: String((d.patientVoice as Record<string, unknown>)?.accent ?? 'en-GB'),
@@ -95,9 +98,9 @@ export function ConversationTemplateEditor({ templateId }: Props) {
       difficulty: form.difficulty, scenario: form.scenario, roleDescription: form.roleDescription,
       patientContext: form.patientContext, expectedOutcomes: form.expectedOutcomes,
       estimatedDurationSeconds: form.estimatedDurationSeconds,
-      objectives: form.objectives.map((s) => s.trim()).filter(Boolean),
-      expectedRedFlags: form.expectedRedFlags.map((s) => s.trim()).filter(Boolean),
-      keyVocabulary: form.keyVocabulary.map((s) => s.trim()).filter(Boolean),
+      objectives: form.objectives.map((r) => r.value.trim()).filter(Boolean),
+      expectedRedFlags: form.expectedRedFlags.map((r) => r.value.trim()).filter(Boolean),
+      keyVocabulary: form.keyVocabulary.map((r) => r.value.trim()).filter(Boolean),
       patientVoice: {
         gender: form.patientVoiceGender,
         age: Number(form.patientVoiceAge) || null,
@@ -141,14 +144,14 @@ export function ConversationTemplateEditor({ templateId }: Props) {
     } catch { setToast({ variant: 'error', message: 'Archive failed.' }); }
   }
 
-  function updateListItem(field: 'objectives' | 'expectedRedFlags' | 'keyVocabulary', index: number, value: string) {
-    setForm((prev) => ({ ...prev, [field]: prev[field].map((v, i) => (i === index ? value : v)) }));
+  function updateListItem(field: 'objectives' | 'expectedRedFlags' | 'keyVocabulary', id: string, value: string) {
+    setForm((prev) => ({ ...prev, [field]: prev[field].map((r) => (r.id === id ? { ...r, value } : r)) }));
   }
   function addListItem(field: 'objectives' | 'expectedRedFlags' | 'keyVocabulary') {
-    setForm((prev) => ({ ...prev, [field]: [...prev[field], ''] }));
+    setForm((prev) => ({ ...prev, [field]: [...prev[field], row()] }));
   }
-  function removeListItem(field: 'objectives' | 'expectedRedFlags' | 'keyVocabulary', index: number) {
-    setForm((prev) => ({ ...prev, [field]: prev[field].filter((_, i) => i !== index) }));
+  function removeListItem(field: 'objectives' | 'expectedRedFlags' | 'keyVocabulary', id: string) {
+    setForm((prev) => ({ ...prev, [field]: prev[field].filter((r) => r.id !== id) }));
   }
 
   if (loading) {
@@ -232,19 +235,19 @@ export function ConversationTemplateEditor({ templateId }: Props) {
           </div>
 
           <ListEditor label="Objectives (min 3 for publish gate)" values={form.objectives}
-            onChange={(i, v) => updateListItem('objectives', i, v)}
+            onChange={(id, v) => updateListItem('objectives', id, v)}
             onAdd={() => addListItem('objectives')}
-            onRemove={(i) => removeListItem('objectives', i)} />
+            onRemove={(id) => removeListItem('objectives', id)} />
 
           <ListEditor label="Expected Red Flags" values={form.expectedRedFlags}
-            onChange={(i, v) => updateListItem('expectedRedFlags', i, v)}
+            onChange={(id, v) => updateListItem('expectedRedFlags', id, v)}
             onAdd={() => addListItem('expectedRedFlags')}
-            onRemove={(i) => removeListItem('expectedRedFlags', i)} />
+            onRemove={(id) => removeListItem('expectedRedFlags', id)} />
 
           <ListEditor label="Key Vocabulary" values={form.keyVocabulary}
-            onChange={(i, v) => updateListItem('keyVocabulary', i, v)}
+            onChange={(id, v) => updateListItem('keyVocabulary', id, v)}
             onAdd={() => addListItem('keyVocabulary')}
-            onRemove={(i) => removeListItem('keyVocabulary', i)} />
+            onRemove={(id) => removeListItem('keyVocabulary', id)} />
 
           <div className="mt-6 grid grid-cols-2 gap-6 md:grid-cols-4">
             <Input label="Voice gender" value={form.patientVoiceGender}
@@ -266,10 +269,10 @@ export function ConversationTemplateEditor({ templateId }: Props) {
 
 interface ListEditorProps {
   label: string;
-  values: string[];
-  onChange: (index: number, value: string) => void;
+  values: Array<{ id: string; value: string }>;
+  onChange: (id: string, value: string) => void;
   onAdd: () => void;
-  onRemove: (index: number) => void;
+  onRemove: (id: string) => void;
 }
 
 function ListEditor({ label, values, onChange, onAdd, onRemove }: ListEditorProps) {
@@ -280,11 +283,11 @@ function ListEditor({ label, values, onChange, onAdd, onRemove }: ListEditorProp
         <Button variant="secondary" onClick={onAdd}>Add</Button>
       </div>
       <div className="space-y-2">
-        {values.map((value, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <input value={value} onChange={(e) => onChange(i, e.target.value)}
+        {values.map((item) => (
+          <div key={item.id} className="flex items-center gap-2">
+            <input value={item.value} onChange={(e) => onChange(item.id, e.target.value)}
               className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm" />
-            <Button variant="secondary" onClick={() => onRemove(i)}>Remove</Button>
+            <Button variant="secondary" onClick={() => onRemove(item.id)}>Remove</Button>
           </div>
         ))}
       </div>

@@ -74,3 +74,27 @@ export const Cell = dynamic(
   () => import('recharts').then((m) => m.Cell),
   { ssr: false },
 );
+export const ReferenceLine = dynamic(
+  () => import('recharts').then((m) => m.ReferenceLine),
+  { ssr: false },
+);
+export const RadarChart = dynamic(
+  () => import('recharts').then((m) => m.RadarChart),
+  { ssr: false },
+);
+export const Radar = dynamic(
+  () => import('recharts').then((m) => m.Radar),
+  { ssr: false },
+);
+export const PolarGrid = dynamic(
+  () => import('recharts').then((m) => m.PolarGrid),
+  { ssr: false },
+);
+export const PolarAngleAxis = dynamic(
+  () => import('recharts').then((m) => m.PolarAngleAxis),
+  { ssr: false },
+);
+export const PolarRadiusAxis = dynamic(
+  () => import('recharts').then((m) => m.PolarRadiusAxis),
+  { ssr: false },
+);

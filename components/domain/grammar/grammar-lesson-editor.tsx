@@ -43,6 +43,10 @@ export interface LessonDraft {
   exercises: ExerciseDraft[];
 }
 
+function withRowIds<T extends { id?: string }>(items: T[]): T[] {
+  return items.map((it) => ({ ...it, id: it.id ?? crypto.randomUUID() }));
+}
+
 export function emptyDraft(): LessonDraft {
   return {
     examTypeCode: 'oet',
@@ -84,7 +88,12 @@ export function GrammarLessonEditor({
   saving?: boolean;
   publishErrors?: string[] | null;
 }) {
-  const [draft, setDraft] = useState<LessonDraft>(initial);
+  // FE-020: normalize rows with stable ids so React keys survive mid-list removals.
+  const [draft, setDraft] = useState<LessonDraft>(() => ({
+    ...initial,
+    contentBlocks: withRowIds(initial.contentBlocks),
+    exercises: withRowIds(initial.exercises),
+  }));
 
   const update = useCallback(<K extends keyof LessonDraft>(key: K, value: LessonDraft[K]) => {
     setDraft((prev) => ({ ...prev, [key]: value }));
@@ -95,7 +104,7 @@ export function GrammarLessonEditor({
       ...prev,
       contentBlocks: [
         ...prev.contentBlocks,
-        { sortOrder: prev.contentBlocks.length + 1, type: 'prose', contentMarkdown: '' },
+        { id: crypto.randomUUID(), sortOrder: prev.contentBlocks.length + 1, type: 'prose', contentMarkdown: '' },
       ],
     }));
   }, []);
@@ -108,10 +117,10 @@ export function GrammarLessonEditor({
     });
   }, []);
 
-  const removeBlock = useCallback((i: number) => {
+  const removeBlock = useCallback((id: string) => {
     setDraft((prev) => ({
       ...prev,
-      contentBlocks: prev.contentBlocks.filter((_, idx) => idx !== i),
+      contentBlocks: prev.contentBlocks.filter((b) => b.id !== id),
     }));
   }, []);
 
@@ -121,6 +130,7 @@ export function GrammarLessonEditor({
       exercises: [
         ...prev.exercises,
         {
+          id: crypto.randomUUID(),
           sortOrder: prev.exercises.length + 1,
           type,
           promptMarkdown: '',
@@ -145,10 +155,10 @@ export function GrammarLessonEditor({
     });
   }, []);
 
-  const removeExercise = useCallback((i: number) => {
+  const removeExercise = useCallback((id: string) => {
     setDraft((prev) => ({
       ...prev,
-      exercises: prev.exercises.filter((_, idx) => idx !== i),
+      exercises: prev.exercises.filter((ex) => ex.id !== id),
     }));
   }, []);
 
@@ -202,7 +212,7 @@ export function GrammarLessonEditor({
           </Button>
         </div>
         {draft.contentBlocks.map((b, i) => (
-          <Card key={i} className="space-y-2 border border-border p-3">
+          <Card key={b.id ?? i} className="space-y-2 border border-border p-3">
             <div className="flex items-center justify-between">
               <Select
                 label=""
@@ -216,7 +226,7 @@ export function GrammarLessonEditor({
                   { value: 'note', label: 'Note' },
                 ]}
               />
-              <Button size="sm" variant="outline" onClick={() => removeBlock(i)}>
+              <Button size="sm" variant="outline" onClick={() => b.id && removeBlock(b.id)}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
@@ -245,11 +255,11 @@ export function GrammarLessonEditor({
         </div>
         {draft.exercises.map((ex, i) => (
           <ExerciseCard
-            key={i}
+            key={ex.id ?? i}
             index={i}
             exercise={ex}
             onUpdate={(p) => updateExercise(i, p)}
-            onRemove={() => removeExercise(i)}
+            onRemove={() => ex.id && removeExercise(ex.id)}
           />
         ))}
       </Card>

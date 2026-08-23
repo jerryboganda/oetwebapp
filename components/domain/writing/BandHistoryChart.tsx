@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
   Legend,
-} from 'recharts';
+} from '@/components/charts/dynamic-recharts';
 import { cn } from '@/lib/utils';
 
 export interface BandHistoryDataPoint {

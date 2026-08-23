@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
   Tooltip,
-} from 'recharts';
+} from '@/components/charts/dynamic-recharts';
 import { cn } from '@/lib/utils';
 import type { WritingCriteriaScoresDto } from '@/lib/writing/types';
 
