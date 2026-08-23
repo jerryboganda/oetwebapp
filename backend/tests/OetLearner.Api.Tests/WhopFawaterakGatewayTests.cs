@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Services;
@@ -356,6 +357,61 @@ public class WhopFawaterakGatewayTests
         Assert.Equal("272691286929958", result.ClientSecret);
         Assert.Equal("https://app.fawaterk.com/ts/demo", result.CheckoutUrl);
         Assert.Equal("https://app.fawaterk.com/api/v2/invoiceInitPay", handler.LastUri?.ToString());
+    }
+
+    [Fact]
+    public async Task FawaterakCreateIntent_SendsQuoteAndSessionOnRedirectionUrls()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"status":"success","data":{"invoice_id":2726912869,"invoice_key":"272691286929958","payment_data":{"redirectTo":"https://app.fawaterk.com/ts/demo"}}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings(
+                "https://app.fawaterk.com",
+                "hash-secret",
+                "FAWATERAK.1",
+                "https://dashboard.example/billing/payment-return",
+                "https://dashboard.example/fail",
+                "https://dashboard.example/pending"),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        await gateway.CreatePaymentIntentAsync(new CreatePaymentIntentRequest(
+            "user-1",
+            10m,
+            "USD",
+            "plan_purchase",
+            "quote-1",
+            "OET",
+            null,
+            SuccessUrl: "https://app.example/billing/payment-return?status=success&gateway=fawaterak&quote=quote-1&session={CHECKOUT_SESSION_ID}",
+            CancelUrl: "https://app.example/billing/payment-return?status=cancelled&gateway=fawaterak&quote=quote-1"), default);
+
+        Assert.Contains("\"payLoad\":\"quote-1\"", handler.LastBody);
+        Assert.DoesNotContain("{CHECKOUT_SESSION_ID}", handler.LastBody);
+
+        using var doc = JsonDocument.Parse(handler.LastBody ?? "{}");
+        var urls = doc.RootElement.GetProperty("redirectionUrls");
+        AssertRedirectionKeepsQuote(urls.GetProperty("successUrl").GetString(), "success");
+        AssertRedirectionKeepsQuote(urls.GetProperty("failUrl").GetString(), "cancelled");
+        AssertRedirectionKeepsQuote(urls.GetProperty("pendingUrl").GetString(), "pending");
+    }
+
+    private static void AssertRedirectionKeepsQuote(string? url, string status)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(url));
+        var parsed = new Uri(url!);
+        var query = QueryHelpers.ParseQuery(parsed.Query);
+        Assert.Equal(status, query["status"].ToString());
+        Assert.Equal("fawaterak", query["gateway"].ToString());
+        Assert.Equal("quote-1", query["quote"].ToString());
+        Assert.Equal("quote-1", query["session"].ToString());
+        Assert.False(string.IsNullOrWhiteSpace(query["session"].ToString()));
+        Assert.DoesNotContain("{CHECKOUT_SESSION_ID}", url);
+        Assert.DoesNotContain("session=&", url);
+        Assert.DoesNotContain("session=?", url);
     }
 
     [Fact]

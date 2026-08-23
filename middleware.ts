@@ -276,7 +276,8 @@ export function middleware(request: NextRequest) {
 
   if (!authCookie) {
     const signInUrl = new URL('/sign-in', request.url);
-    signInUrl.searchParams.set('next', pathname);
+    const nextPath = `${pathname}${request.nextUrl.search}`;
+    signInUrl.searchParams.set('next', nextPath);
     return withCsp(NextResponse.redirect(signInUrl));
   }
 

@@ -8,6 +8,12 @@ import { AlertCircle, ArrowRight, CheckCircle2, Clock, Loader2, RefreshCw } from
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { fetchBillingPaymentStatus } from '@/lib/api';
+import {
+  buildPaymentReturnHref,
+  readCheckoutReturnRef,
+  resolveCheckoutReturnRefsFromSearch,
+  type CheckoutReturnRef,
+} from '@/lib/billing/checkout-return-ref';
 import type { BillingPaymentStatus } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
 
@@ -31,26 +37,50 @@ const POLL_BACKOFF_AFTER_MS = 15_000;
 
 function BillingPaymentReturnContent() {
   const searchParams = useSearchParams();
-  const quoteId = searchParams?.get('quote') ?? searchParams?.get('quoteId') ?? null;
-  const sessionId = searchParams?.get('session') ?? searchParams?.get('session_id') ?? null;
+  const urlRefs = resolveCheckoutReturnRefsFromSearch(searchParams);
+  const [storedRefs, setStoredRefs] = useState<CheckoutReturnRef | null | undefined>(undefined);
+  const quoteId = urlRefs.quoteId ?? storedRefs?.quoteId ?? null;
+  const sessionId = urlRefs.sessionId ?? storedRefs?.sessionId ?? null;
   const initialStatus = searchParams?.get('status') ?? null;
-  const missingReference = !quoteId && !sessionId;
   const cancelledByLearner = initialStatus === 'cancelled';
-  const [phase, setPhase] = useState<Phase>(() => {
-    if (cancelledByLearner) return 'cancelled';
-    return missingReference ? 'failed' : 'polling';
-  });
+  const storageReady = storedRefs !== undefined || Boolean(urlRefs.quoteId || urlRefs.sessionId);
+  const missingReference = storageReady && !quoteId && !sessionId;
+  const [phase, setPhase] = useState<Phase>(() => (cancelledByLearner ? 'cancelled' : 'polling'));
   const [status, setStatus] = useState<BillingPaymentStatus | null>(null);
   const [pollAttempt, setPollAttempt] = useState(0);
-  const [error, setError] = useState<string | null>(() =>
-    missingReference && !cancelledByLearner
-      ? 'Missing checkout reference. Please open Billing to confirm your purchase status.'
-      : null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setStoredRefs(readCheckoutReturnRef());
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !storageReady) return;
+    if (!quoteId && !sessionId) return;
+    try {
+      if (window.top && window.top !== window.self) {
+        window.top.location.replace(buildPaymentReturnHref({
+          status: initialStatus,
+          gateway: searchParams?.get('gateway') ?? storedRefs?.gateway ?? 'fawaterak',
+          quoteId,
+          sessionId,
+        }));
+      }
+    } catch {
+      // Cross-origin parent — keep polling in this frame.
+    }
+  }, [initialStatus, quoteId, searchParams, sessionId, storageReady, storedRefs?.gateway]);
+
+  useEffect(() => {
+    if (cancelledByLearner || !missingReference) return;
+    setPhase('failed');
+    setError('Missing checkout reference. Please open Billing to confirm your purchase status.');
+  }, [cancelledByLearner, missingReference]);
 
   useEffect(() => {
     // A learner-cancelled checkout stays on the cancelled screen — the
     // backend may still report the session as pending until it expires.
-    if (missingReference || cancelledByLearner) {
+    if (!storageReady || missingReference || cancelledByLearner) {
       return;
     }
 
@@ -92,7 +122,7 @@ function BillingPaymentReturnContent() {
     return () => {
       cancelled = true;
     };
-  }, [cancelledByLearner, missingReference, pollAttempt, quoteId, sessionId]);
+  }, [cancelledByLearner, missingReference, pollAttempt, quoteId, sessionId, storageReady]);
 
   return (
     <PaymentReturnShell

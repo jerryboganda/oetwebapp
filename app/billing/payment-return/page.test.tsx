@@ -15,6 +15,7 @@ import { renderWithRouter } from '@/tests/test-utils';
 describe('Billing payment return page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
   });
 
   it('polls the quote status and shows the completed order destination', async () => {
@@ -92,6 +93,72 @@ describe('Billing payment return page', () => {
       'href',
       'https://wa.me/447961725989',
     );
+  });
+
+  it('polls when Fawaterak returns invoice_id and payLoad instead of quote and session', async () => {
+    mockFetchBillingPaymentStatus.mockResolvedValue({
+      status: 'pending',
+      quoteId: 'quote-1',
+      checkoutSessionId: '2726912869',
+      productType: 'plan_purchase',
+      targetPlanId: 'nursing-complete',
+      addOnCodes: [],
+      items: [],
+      totalAmount: 199,
+      currency: 'AUD',
+      invoiceId: null,
+      subscriptionId: null,
+      failureReason: null,
+      fulfilledAt: null,
+      expiresAt: null,
+    });
+
+    renderWithRouter(<BillingPaymentReturnPage />, {
+      searchParams: new URLSearchParams('status=success&invoice_id=2726912869&payLoad=quote-1'),
+    });
+
+    expect(await screen.findByText('Confirming your payment')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockFetchBillingPaymentStatus).toHaveBeenCalledWith({
+        quoteId: 'quote-1',
+        sessionId: '2726912869',
+      });
+    });
+  });
+
+  it('recovers a stored checkout reference when the return URL has none', async () => {
+    window.sessionStorage.setItem(
+      'oet.checkout.return-ref',
+      JSON.stringify({ quoteId: 'quote-1', sessionId: 'inv-99', gateway: 'fawaterak' }),
+    );
+    mockFetchBillingPaymentStatus.mockResolvedValue({
+      status: 'pending',
+      quoteId: 'quote-1',
+      checkoutSessionId: 'inv-99',
+      productType: 'plan_purchase',
+      targetPlanId: 'nursing-complete',
+      addOnCodes: [],
+      items: [],
+      totalAmount: 199,
+      currency: 'AUD',
+      invoiceId: null,
+      subscriptionId: null,
+      failureReason: null,
+      fulfilledAt: null,
+      expiresAt: null,
+    });
+
+    renderWithRouter(<BillingPaymentReturnPage />, {
+      searchParams: new URLSearchParams('status=success'),
+    });
+
+    expect(await screen.findByText('Confirming your payment')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockFetchBillingPaymentStatus).toHaveBeenCalledWith({
+        quoteId: 'quote-1',
+        sessionId: 'inv-99',
+      });
+    });
   });
 
   it('renders a cancellable retry state without polling when no reference is present', async () => {

@@ -78,6 +78,21 @@ describe('middleware CSP — Firebase Phone Auth / reCAPTCHA', () => {
   });
 });
 
+describe('middleware auth bounce', () => {
+  it('keeps payment-return query params on the sign-in next path', () => {
+    const response = middleware(
+      new NextRequest('https://app.oetwithdrhesham.co.uk/billing/payment-return?status=success&quote=quote-1&session=inv-99'),
+    );
+
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get('location') ?? '');
+    expect(location.pathname).toBe('/sign-in');
+    expect(location.searchParams.get('next')).toBe(
+      '/billing/payment-return?status=success&quote=quote-1&session=inv-99',
+    );
+  });
+});
+
 describe('middleware CSP — Whop and Fawaterak checkout', () => {
   it('allows official Whop embed and Fawaterak iframe hosts', () => {
     const response = middleware(new NextRequest('https://app.oetwithdrhesham.co.uk/checkout/review'));

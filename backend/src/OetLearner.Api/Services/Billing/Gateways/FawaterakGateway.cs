@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -85,11 +86,9 @@ public sealed class FawaterakGateway : IPaymentGateway
             },
             ["redirectionUrls"] = new Dictionary<string, string?>
             {
-                ["successUrl"] = StripStripeSessionPlaceholder(request.SuccessUrl) ?? opts.SuccessUrl,
-                ["failUrl"] = StripStripeSessionPlaceholder(request.CancelUrl) ?? opts.FailUrl,
-                ["pendingUrl"] = opts.PendingUrl
-                    ?? StripStripeSessionPlaceholder(request.SuccessUrl)
-                    ?? opts.SuccessUrl,
+                ["successUrl"] = BuildLearnerReturnUrl(request.SuccessUrl ?? opts.SuccessUrl, "success", quoteId),
+                ["failUrl"] = BuildLearnerReturnUrl(request.CancelUrl ?? opts.FailUrl, "cancelled", quoteId),
+                ["pendingUrl"] = BuildLearnerReturnUrl(request.SuccessUrl ?? opts.PendingUrl ?? opts.SuccessUrl, "pending", quoteId),
             },
             ["cartItems"] = new object[]
             {
@@ -300,6 +299,67 @@ public sealed class FawaterakGateway : IPaymentGateway
 
     private static string? StripStripeSessionPlaceholder(string? url)
         => url?.Replace("{CHECKOUT_SESSION_ID}", string.Empty, StringComparison.Ordinal);
+
+    /// <summary>
+    /// Fawaterak must land on payment-return with a pollable quote/session.
+    /// Browser redirects never mark paid; they only carry lookup ids.
+    /// </summary>
+    internal static string BuildLearnerReturnUrl(string? candidate, string status, string quoteId)
+    {
+        var cleaned = StripStripeSessionPlaceholder(candidate)?.Trim();
+        var builder = TryCreateUriBuilder(cleaned) ?? new UriBuilder("https://app.oetwithdrhesham.co.uk/billing/payment-return");
+        builder.Path = "/billing/payment-return";
+
+        var existing = QueryHelpers.ParseQuery(builder.Query);
+        var next = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var pair in existing)
+        {
+            if (string.Equals(pair.Key, "session", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pair.Key, "session_id", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pair.Key, "status", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pair.Key, "gateway", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pair.Key, "quote", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pair.Key, "quoteId", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var value = pair.Value.ToString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                next[pair.Key] = value;
+            }
+        }
+
+        next["status"] = status;
+        next["gateway"] = PaymentGatewayNames.Fawaterak;
+        next["quote"] = quoteId;
+        next["session"] = quoteId;
+        builder.Query = string.Empty;
+        return QueryHelpers.AddQueryString(builder.Uri.GetLeftPart(UriPartial.Path), next);
+    }
+
+    private static UriBuilder? TryCreateUriBuilder(string? candidate)
+    {
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            return null;
+        }
+
+        if (Uri.TryCreate(candidate, UriKind.Absolute, out var absolute) &&
+            (absolute.Scheme == Uri.UriSchemeHttps || absolute.Scheme == Uri.UriSchemeHttp))
+        {
+            return new UriBuilder(absolute);
+        }
+
+        if (candidate.StartsWith('/') && !candidate.StartsWith("//") &&
+            Uri.TryCreate("https://app.oetwithdrhesham.co.uk" + candidate, UriKind.Absolute, out var relative))
+        {
+            return new UriBuilder(relative);
+        }
+
+        return null;
+    }
 
     private static Uri Combine(string baseUrl, string path)
         => new(new Uri(EnsureTrailingSlash(baseUrl)), path);

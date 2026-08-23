@@ -24,6 +24,7 @@ import {
   type PaymentMethodOption,
 } from '@/lib/api';
 import type { BillingProductType, BillingQuote } from '@/lib/billing-types';
+import { buildPaymentReturnHref, saveCheckoutReturnRef } from '@/lib/billing/checkout-return-ref';
 import { formatMoney } from '@/lib/money';
 import { openCheckoutUrl } from '@/lib/mobile/web-checkout';
 import { cn } from '@/lib/utils';
@@ -109,6 +110,11 @@ function CheckoutReviewContent() {
   // (no public client id), fall back to the hosted-portal redirect button.
   const [paypalUnavailable, setPaypalUnavailable] = useState(false);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [fawaterakCheckout, setFawaterakCheckout] = useState<{
+    checkoutUrl: string;
+    checkoutSessionId: string;
+    quoteId: string;
+  } | null>(null);
   const [whopCheckout, setWhopCheckout] = useState<{
     planId: string;
     checkoutUrl: string;
@@ -328,6 +334,17 @@ function CheckoutReviewContent() {
       return;
     }
     if ((selectedGateway === 'fawaterak' || selectedMode === 'iframe') && checkout.checkoutUrl) {
+      const checkoutSessionId = checkout.checkoutSessionId || quoteId;
+      saveCheckoutReturnRef({
+        quoteId,
+        sessionId: checkoutSessionId,
+        gateway: selectedGateway || 'fawaterak',
+      });
+      setFawaterakCheckout({
+        checkoutUrl: checkout.checkoutUrl,
+        checkoutSessionId,
+        quoteId,
+      });
       setEmbedUrl(checkout.checkoutUrl);
       setBusy(false);
       return;
@@ -522,6 +539,7 @@ function CheckoutReviewContent() {
                                       setSelectedGateway(method.name);
                                       setEmbedUrl(null);
                                       setWhopCheckout(null);
+                                      setFawaterakCheckout(null);
                                     }}
                                     className="sr-only"
                                   />
@@ -597,17 +615,33 @@ function CheckoutReviewContent() {
                           src={embedUrl}
                           className="h-[640px] w-full rounded-xl border border-border bg-white"
                           allow="payment *"
+                          referrerPolicy="origin"
                           onError={() => {
                             void beginHostedCheckout(
                               embedUrl,
-                              quote.quoteId,
-                              quote.quoteId,
+                              fawaterakCheckout?.checkoutSessionId ?? quote.quoteId,
+                              fawaterakCheckout?.quoteId ?? quote.quoteId,
                             );
                           }}
                         />
                         <p className="mt-3 text-xs leading-5 text-muted">
                           Pay on this page. Access unlocks after the payment provider confirms the charge.
                         </p>
+                        <Button
+                          className="mt-3"
+                          variant="outline"
+                          fullWidth
+                          onClick={() => {
+                            router.replace(buildPaymentReturnHref({
+                              status: 'success',
+                              gateway: selectedGateway || 'fawaterak',
+                              quoteId: fawaterakCheckout?.quoteId ?? quote.quoteId,
+                              sessionId: fawaterakCheckout?.checkoutSessionId ?? quote.quoteId,
+                            }));
+                          }}
+                        >
+                          I&apos;ve finished paying
+                        </Button>
                       </div>
                     ) : methods.length === 0 ? (
                       <InlineAlert variant="info" className="mt-4">

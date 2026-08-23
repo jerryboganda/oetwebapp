@@ -87,6 +87,7 @@ const searchParams = new URLSearchParams('productType=plan_purchase&priceId=nurs
 describe('Checkout review page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
     mockFetchBillingQuote.mockResolvedValue(quoteFixture());
     mockCreateBillingCheckoutSession.mockResolvedValue({
       checkoutUrl: 'https://pay.example.test/cs_test_123',
@@ -180,6 +181,29 @@ describe('Checkout review page', () => {
     const frame = await screen.findByTitle('Secure payment');
     expect(frame).toHaveAttribute('src', 'https://app.fawaterk.com/pay/99');
     expect(screen.queryByTestId('whop-embedded-checkout')).not.toBeInTheDocument();
+    expect(window.sessionStorage.getItem('oet.checkout.return-ref')).toContain('quote-1');
+    expect(screen.getByRole('button', { name: /i['’]ve finished paying/i })).toBeInTheDocument();
+  });
+
+  it('routes Fawaterak finished-paying to payment-return with quote and session', async () => {
+    mockCreateBillingCheckoutSession.mockResolvedValue({
+      checkoutUrl: 'https://app.fawaterk.com/pay/99',
+      checkoutSessionId: '2726912869',
+      quoteId: 'quote-1',
+      clientSecret: '272691286929958',
+      gateway: 'fawaterak',
+    });
+    const replace = vi.fn();
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams, router: { replace } });
+
+    await user.click(await screen.findByText('Fawaterak'));
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+    await user.click(await screen.findByRole('button', { name: /i['’]ve finished paying/i }));
+
+    expect(replace).toHaveBeenCalledWith(
+      '/billing/payment-return?status=success&gateway=fawaterak&quote=quote-1&session=2726912869',
+    );
   });
 
   it('refreshes the quote once and retries when the previous checkout session is still attached', async () => {
