@@ -271,6 +271,12 @@ function redirectToSignInAfterSessionLoss(reason?: string): void {
   if (typeof window === 'undefined') return;
   const currentPath = window.location.pathname;
   if (isOnPublicAuthPath(currentPath)) return;
+  // Payment confirmation must never be interrupted by a background auth
+  // hiccup: the learner is watching the poll on /billing/payment-return and a
+  // hard redirect here would abandon an in-flight purchase. The page carries
+  // quote/session in its URL, so deferring the bounce until the user leaves
+  // (or the poll resolves) loses nothing.
+  if (currentPath.startsWith('/billing/payment-return')) return;
   const next = encodeURIComponent(currentPath + window.location.search);
   const reasonParam = reason ? `&reason=${encodeURIComponent(reason)}` : '';
   // Hard navigation so the Next.js middleware sees the cleared auth cookie and
@@ -310,6 +316,28 @@ function refreshSessionDeduped(refreshToken: string | null | undefined): Promise
   return promise;
 }
 
+const REFRESH_TRANSIENT_RETRIES = 2;
+const REFRESH_RETRY_BASE_DELAY_MS = 750;
+
+function isTransientRefreshFailure(error: unknown): boolean {
+  if (error instanceof AuthClientError) {
+    // Confirmed rejections from the auth server: the refresh token really is
+    // dead — do not retry, do not keep the session alive.
+    if (error.status === 400 || error.status === 401 || error.status === 403 || error.status === 404) {
+      return false;
+    }
+    // 5xx / 429 / explicit retryable flag → transient.
+    return error.retryable || error.status >= 500 || error.status === 429;
+  }
+  // Network errors, timeouts, aborts — anything that never reached the auth
+  // server cannot prove the session is invalid.
+  return true;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function ensureFreshSession(): Promise<AuthSession | null> {
   await hydrateAuthStorage();
   const record = loadStoredSessionRecord();
@@ -321,10 +349,28 @@ export async function ensureFreshSession(): Promise<AuthSession | null> {
   let session = record.session;
 
   if (!session.accessToken || isExpiredOrCloseToExpiry(session.accessTokenExpiresAt)) {
-    try {
-      session = await refreshSessionDeduped(session.refreshToken);
-      saveStoredSession(session, record.persistence);
-    } catch {
+    let lastError: unknown = null;
+    for (let attempt = 0; attempt <= REFRESH_TRANSIENT_RETRIES; attempt += 1) {
+      try {
+        session = await refreshSessionDeduped(session.refreshToken);
+        saveStoredSession(session, record.persistence);
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!isTransientRefreshFailure(error)) {
+          break;
+        }
+        // Transient failure: back off and retry. The learner keeps their
+        // session — a flaky network on resume must not sign them out
+        // mid-exam or mid-payment.
+        if (attempt < REFRESH_TRANSIENT_RETRIES) {
+          await delay(REFRESH_RETRY_BASE_DELAY_MS * (attempt + 1));
+        }
+      }
+    }
+
+    if (lastError !== null) {
       clearStoredSession();
       redirectToSignInAfterSessionLoss();
       return null;

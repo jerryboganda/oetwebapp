@@ -16,6 +16,7 @@ import {
   verifyEmailOtp as verifyEmailOtpRequest,
 } from '@/lib/auth-client';
 import { clearPendingDeviceChallenge } from '@/lib/auth-storage';
+import { loadStoredSessionRecord } from '@/lib/auth-storage';
 import type {
   AuthSession,
   AuthenticatorSetup,
@@ -50,6 +51,14 @@ export interface AuthContextValue extends AuthState {
   signUp: (input: RegisterLearnerInput) => Promise<AuthSession>;
   signOut: () => Promise<void>;
   refreshSession: () => Promise<AuthSession | null>;
+  /**
+   * Silent (stale-while-revalidate) session revalidation for mobile resume.
+   * Unlike `refreshSession`, it NEVER flips `loading` — the UI keeps showing
+   * its current state while tokens are refreshed in the background — and it
+   * does NOT wipe the session on transient failures (offline resume, flaky
+   * network). Only a confirmed auth rejection clears local state.
+   */
+  revalidateSessionSilent: () => Promise<AuthSession | null>;
   sendVerificationOtp: () => Promise<OtpChallenge>;
   verifyEmailOtp: (code: string) => Promise<CurrentUser>;
   beginAuthenticatorSetup: () => Promise<AuthenticatorSetup>;
@@ -259,6 +268,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           pendingDeviceChallenge: getPendingDeviceChallenge(),
         });
         throw error;
+      }
+    },
+    async revalidateSessionSilent() {
+      // Stale-while-revalidate: keep whatever is on screen mounted. No
+      // `loading` flip, no skeleton swap, no context-value identity churn
+      // beyond the actual session payload change.
+      try {
+        const session = await restoreSession();
+        if (session || state.session) {
+          setState((current) => ({
+            ...current,
+            session,
+            user: session?.currentUser ?? null,
+            error: null,
+          }));
+        }
+        return session;
+      } catch {
+        // Transient failure (offline resume, timeout, gateway hiccup): the
+        // learner keeps their current screen and session. A confirmed
+        // auth rejection is handled inside restoreSession/ensureFreshSession,
+        // which clear storage before throwing — surface that as a real
+        // sign-out only when the stored record is actually gone.
+        if (!loadStoredSessionRecord()) {
+          setState((current) => ({
+            ...current,
+            session: null,
+            user: null,
+            error: null,
+          }));
+        }
+        return null;
       }
     },
     async sendVerificationOtp() {

@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { initializeMobileRuntime } from '@/lib/mobile/runtime';
 import { triggerResumeMotion } from '@/lib/mobile/lifecycle-motion';
+import { consumeRestorableRoute, rememberCurrentRoute } from '@/lib/mobile/route-restore';
 import { registerPushNotifications } from '@/lib/mobile/push-notifications';
 import { initializeDeepLinkHandler } from '@/lib/mobile/deep-link-handler';
 import { removeAllDeliveredNotifications } from '@/lib/mobile/push-notifications';
@@ -206,11 +207,11 @@ function toInternalRoute(value: unknown): string | null {
 
 /**
  * Public auth screens where a resume-time session refresh does more harm than
- * good: refreshSession() flips AuthContext into `loading`, which re-renders
- * these screens into their skeleton/fallback state — the learner sees the OTP
- * screen visibly "reload" the moment they come back from their mail app.
- * Nothing on these routes needs a fresh access token, so skip the refresh
- * there entirely.
+ * good: the refresh round-trip can race with in-flight OTP/challenge flows and
+ * (before the silent-revalidate fix) flipped AuthContext into `loading`,
+ * re-rendering these screens into their skeleton/fallback state — the learner
+ * saw the OTP screen visibly "reload" when returning from their mail app.
+ * Nothing on these routes needs a fresh access token, so skip entirely there.
  */
 const RESUME_REFRESH_SKIP_PATHS = new Set([
   '/verify-email',
@@ -232,14 +233,47 @@ function shouldSkipResumeRefresh(): boolean {
 }
 
 export function MobileRuntimeBridge() {
-  const { refreshSession, isAuthenticated, loading } = useAuth();
+  const { revalidateSessionSilent, isAuthenticated, loading } = useAuth();
   const router = useRouter();
-  const authStateRef = useRef({ isAuthenticated, loading, refreshSession });
+  const authStateRef = useRef({ isAuthenticated, loading, revalidateSessionSilent });
   const lastNativePushTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    authStateRef.current = { isAuthenticated, loading, refreshSession };
-  }, [isAuthenticated, loading, refreshSession]);
+    authStateRef.current = { isAuthenticated, loading, revalidateSessionSilent };
+  }, [isAuthenticated, loading, revalidateSessionSilent]);
+
+  // ── Route persistence (true-reload recovery) ────────────────────────
+  // Remember the learner's location continuously so that if the OS kills the
+  // WebView renderer/process while backgrounded, the cold boot can silently
+  // return them to the same screen instead of the trampoline landing on `/`.
+  useEffect(() => {
+    // Restore once per document load: only rescues a trampoline/root landing.
+    const restoreTarget = consumeRestorableRoute();
+    if (restoreTarget) {
+      router.replace(restoreTarget);
+    }
+
+    rememberCurrentRoute();
+
+    // Track every client-side navigation.
+    const originalPushState = window.history.pushState.bind(window.history);
+    const originalReplaceState = window.history.replaceState.bind(window.history);
+    const recordRoute = () => rememberCurrentRoute();
+
+    window.history.pushState = (...args: Parameters<typeof originalPushState>) => {
+      originalPushState(...args);
+      recordRoute();
+    };
+    window.history.replaceState = (...args: Parameters<typeof originalReplaceState>) => {
+      originalReplaceState(...args);
+      recordRoute();
+    };
+
+    return () => {
+      window.history.pushState = originalPushState;
+      window.history.replaceState = originalReplaceState;
+    };
+  }, [router]);
 
   const sendNativePushToken = useCallback(async () => {
     const token = lastNativePushTokenRef.current;
@@ -272,20 +306,27 @@ export function MobileRuntimeBridge() {
         onResume: () => {
           triggerResumeMotion();
           const currentState = authStateRef.current;
-          // Skip the resume refresh on OTP/auth screens: the global `loading`
-          // flip re-renders them into their fallback state, which looks like
-          // the app reloading itself and (before the verify-email fix) went
-          // hand-in-hand with an unwanted fresh OTP request. The session is
-          // refreshed normally on every other screen.
+          // Silent stale-while-revalidate: refresh tokens in the background
+          // WITHOUT flipping AuthContext into `loading`. The screen the learner
+          // left stays exactly as it was — no skeleton swap, no payment/checkout
+          // reset — while the session is refreshed underneath. Transient
+          // failures (offline resume, flaky network) keep the current session;
+          // only a confirmed auth rejection clears state.
           if (
             !shouldSkipResumeRefresh() &&
             !currentState.loading &&
             currentState.isAuthenticated
           ) {
-            void currentState.refreshSession();
+            void currentState.revalidateSessionSilent();
           }
           // Clear badge notifications when app is resumed
           void removeAllDeliveredNotifications();
+        },
+        onPause: () => {
+          // Snapshot the current route before the OS may kill the WebView
+          // renderer/process in the background — this is what makes recovery
+          // after a true reload land on the same screen.
+          rememberCurrentRoute();
         },
       });
       cleanupFns.push(runtimeCleanup);
@@ -366,7 +407,10 @@ export function MobileRuntimeBridge() {
             }
 
             await redeemDevicePairingCode(code);
-            await authStateRef.current.refreshSession();
+            // Pairing replaces the account on this device — a full, blocking
+            // refresh is correct here (unlike resume, where we use the silent
+            // variant) because the UI must reflect the new account immediately.
+            await authStateRef.current.revalidateSessionSilent();
             toast.success('Device paired successfully.');
             router.push('/dashboard');
           } catch (error) {

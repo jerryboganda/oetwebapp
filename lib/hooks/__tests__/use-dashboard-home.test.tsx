@@ -74,6 +74,7 @@ describe('useDashboardHome', () => {
       signUp: vi.fn(),
       signOut: mockSignOut,
       refreshSession: vi.fn(),
+      revalidateSessionSilent: vi.fn(),
       sendVerificationOtp: vi.fn(),
       verifyEmailOtp: vi.fn(),
       beginAuthenticatorSetup: vi.fn(),
