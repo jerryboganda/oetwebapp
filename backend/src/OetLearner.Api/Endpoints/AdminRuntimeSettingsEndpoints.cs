@@ -209,6 +209,14 @@ public static class AdminRuntimeSettingsEndpoints
                 smtpPassword = MaskPlainSecret(settings.Email.SmtpPassword),
                 smtpFromAddress = settings.Email.SmtpFromAddress,
                 smtpFromName = settings.Email.SmtpFromName,
+                authFromAddress = settings.Email.AuthFromAddress,
+                authFromName = settings.Email.AuthFromName,
+                marketingFromAddress = settings.Email.MarketingFromAddress,
+                marketingFromName = settings.Email.MarketingFromName,
+                productFromAddress = settings.Email.ProductFromAddress,
+                productFromName = settings.Email.ProductFromName,
+                supportFromAddress = settings.Email.SupportFromAddress,
+                supportFromName = settings.Email.SupportFromName,
                 // ── Email partial-coverage gap (Wave 3) ──
                 brevoWelcomeTemplateId = settings.Email.BrevoWelcomeTemplateId,
                 brevoPasswordChangedTemplateId = settings.Email.BrevoPasswordChangedTemplateId,
@@ -674,6 +682,14 @@ public static class AdminRuntimeSettingsEndpoints
                 smtpPassword = MaskSecret(r.SmtpPasswordEncrypted),
                 smtpFromAddress = r.SmtpFromAddress,
                 smtpFromName = r.SmtpFromName,
+                authFromAddress = r.AuthFromAddress,
+                authFromName = r.AuthFromName,
+                marketingFromAddress = r.MarketingFromAddress,
+                marketingFromName = r.MarketingFromName,
+                productFromAddress = r.ProductFromAddress,
+                productFromName = r.ProductFromName,
+                supportFromAddress = r.SupportFromAddress,
+                supportFromName = r.SupportFromName,
             },
             billing = new
             {
@@ -836,6 +852,14 @@ public static class AdminRuntimeSettingsEndpoints
         if (TrySetSecret(d.SmtpPassword, p, v => row.SmtpPasswordEncrypted = v, "email.smtpPassword", changed)) { }
         if (TrySetPlain(d.SmtpFromAddress, v => row.SmtpFromAddress = v, "email.smtpFromAddress", changed)) { }
         if (TrySetPlain(d.SmtpFromName, v => row.SmtpFromName = v, "email.smtpFromName", changed)) { }
+        if (TrySetPlain(d.AuthFromAddress, v => row.AuthFromAddress = v, "email.authFromAddress", changed)) { }
+        if (TrySetPlain(d.AuthFromName, v => row.AuthFromName = v, "email.authFromName", changed)) { }
+        if (TrySetPlain(d.MarketingFromAddress, v => row.MarketingFromAddress = v, "email.marketingFromAddress", changed)) { }
+        if (TrySetPlain(d.MarketingFromName, v => row.MarketingFromName = v, "email.marketingFromName", changed)) { }
+        if (TrySetPlain(d.ProductFromAddress, v => row.ProductFromAddress = v, "email.productFromAddress", changed)) { }
+        if (TrySetPlain(d.ProductFromName, v => row.ProductFromName = v, "email.productFromName", changed)) { }
+        if (TrySetPlain(d.SupportFromAddress, v => row.SupportFromAddress = v, "email.supportFromAddress", changed)) { }
+        if (TrySetPlain(d.SupportFromName, v => row.SupportFromName = v, "email.supportFromName", changed)) { }
         // ── Email partial-coverage gap (Wave 3) ──
         if (TrySetNullableInt(d.BrevoWelcomeTemplateId, v => row.BrevoWelcomeTemplateId = v, "email.brevoWelcomeTemplateId", changed)) { }
         if (TrySetNullableInt(d.BrevoPasswordChangedTemplateId, v => row.BrevoPasswordChangedTemplateId = v, "email.brevoPasswordChangedTemplateId", changed)) { }
@@ -2603,6 +2627,14 @@ public sealed class RuntimeSettingsSpeakingWhisperUpdate
 public sealed class RuntimeSettingsEmailUpdate
 {
     public string? BrevoApiKey { get; set; }
+    public string? AuthFromAddress { get; set; }
+    public string? AuthFromName { get; set; }
+    public string? MarketingFromAddress { get; set; }
+    public string? MarketingFromName { get; set; }
+    public string? ProductFromAddress { get; set; }
+    public string? ProductFromName { get; set; }
+    public string? SupportFromAddress { get; set; }
+    public string? SupportFromName { get; set; }
     public JsonElement? BrevoEmailVerificationTemplateId { get; set; }
     public JsonElement? BrevoPasswordResetTemplateId { get; set; }
     public string? SmtpHost { get; set; }

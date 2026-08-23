@@ -334,5 +334,19 @@ ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""DestinationHint"" 
 ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""ExternalSessionInfoEncrypted"" text;
 UPDATE ""EmailOtpChallenges"" SET ""Provider"" = COALESCE(""Provider"", 'brevo_email');
 UPDATE ""EmailOtpChallenges"" SET ""DeliveryChannel"" = COALESCE(""DeliveryChannel"", 'email');
+
+-- Transactional / marketing sender split -- sync with 20260923120000_AddEmailLaneSendersAndOtpDelivery
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AuthFromAddress"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""AuthFromName"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""MarketingFromAddress"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""MarketingFromName"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ProductFromAddress"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""ProductFromName"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SupportFromAddress"" character varying(256);
+ALTER TABLE ""RuntimeSettings"" ADD COLUMN IF NOT EXISTS ""SupportFromName"" character varying(256);
+
+ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""DeliveryStatus"" character varying(32);
+ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""DeliveryReason"" character varying(512);
+ALTER TABLE ""EmailOtpChallenges"" ADD COLUMN IF NOT EXISTS ""DeliveryUpdatedAt"" timestamp with time zone;
 ";
 }

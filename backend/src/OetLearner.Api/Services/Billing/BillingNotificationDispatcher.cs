@@ -25,7 +25,7 @@ public sealed record BillingNotificationEvent(
 public interface IBillingNotificationChannel
 {
     string Channel { get; }
-    Task SendAsync(string userId, string subject, string body, CancellationToken ct);
+    Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null);
 }
 
 public sealed class BillingNotificationDispatcher : IBillingNotificationDispatcher
@@ -85,7 +85,7 @@ public sealed class BillingNotificationDispatcher : IBillingNotificationDispatch
             {
                 if (_channels.TryGetValue(template.Channel, out var channel))
                 {
-                    await channel.SendAsync(evt.UserId, renderedSubject ?? string.Empty, renderedBody, ct);
+                    await channel.SendAsync(evt.UserId, renderedSubject ?? string.Empty, renderedBody, ct, evt.EventCode);
                     log.Status = "sent";
                     log.SentAt = DateTimeOffset.UtcNow;
                 }
@@ -138,7 +138,7 @@ public sealed class EmailBillingChannel : IBillingNotificationChannel
         _logger = logger;
     }
 
-    public async Task SendAsync(string userId, string subject, string body, CancellationToken ct)
+    public async Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
     {
         var email = await _db.ApplicationUserAccounts
             .Where(u => u.Id == userId && u.DeletedAt == null)
@@ -154,7 +154,9 @@ public sealed class EmailBillingChannel : IBillingNotificationChannel
             To: email,
             Subject: subject,
             TextBody: body,
-            HtmlBody: body), ct);
+            HtmlBody: body,
+            Category: EmailLanes.IsMarketing(null, eventCode) ? "marketing" : "billing",
+            EventKey: eventCode), ct);
     }
 }
 
@@ -163,7 +165,7 @@ public sealed class StubSmsBillingChannel : IBillingNotificationChannel
     public string Channel => "sms";
     private readonly ILogger<StubSmsBillingChannel> _logger;
     public StubSmsBillingChannel(ILogger<StubSmsBillingChannel> logger) => _logger = logger;
-    public Task SendAsync(string userId, string subject, string body, CancellationToken ct)
+    public Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
     {
         _logger.LogInformation("[stub sms] user={UserId}", userId);
         return Task.CompletedTask;
@@ -175,7 +177,7 @@ public sealed class StubWhatsAppBillingChannel : IBillingNotificationChannel
     public string Channel => "whatsapp";
     private readonly ILogger<StubWhatsAppBillingChannel> _logger;
     public StubWhatsAppBillingChannel(ILogger<StubWhatsAppBillingChannel> logger) => _logger = logger;
-    public Task SendAsync(string userId, string subject, string body, CancellationToken ct)
+    public Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
     {
         _logger.LogInformation("[stub whatsapp] user={UserId}", userId);
         return Task.CompletedTask;

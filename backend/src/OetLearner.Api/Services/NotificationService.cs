@@ -813,15 +813,18 @@ public sealed class NotificationService(
         return MapSuppression(suppression);
     }
 
-    // Brevo hard-bounces/blocks/spam-complains against an address but this app never
-    // learned about it — NotificationSuppressions existed and was already checked by
-    // ResolveChannelComplianceAsync, but nothing ever populated it from Brevo, so
-    // permanently-dead addresses were re-emailed by every digest run forever, which is
-    // what drove the account's bounce rate to 12.99% (Brevo recommends <1%) and put
-    // domain sending reputation at risk for every learner on this domain.
-    private static readonly HashSet<string> BrevoSuppressingEvents = new(StringComparer.OrdinalIgnoreCase)
+    // Delivery events we persist even when they do not create a suppression.
+    // API "Sent" only means Brevo accepted the request — later blocked/bounce
+    // events are the real delivery outcome.
+    private static readonly HashSet<string> BrevoTrackedEvents = new(StringComparer.OrdinalIgnoreCase)
     {
-        "hard_bounce", "blocked", "spam", "invalid_email", "unsubscribed"
+        "hard_bounce", "blocked", "spam", "invalid_email", "unsubscribed",
+        "soft_bounce", "delivered", "unique_opened", "opened", "click", "error"
+    };
+
+    private static readonly HashSet<string> BrevoReputationEvents = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "hard_bounce", "blocked", "spam", "invalid_email"
     };
 
     public async Task<int> HandleBrevoWebhookEventsAsync(string rawPayload, string? providedSecret, CancellationToken ct)
@@ -840,7 +843,7 @@ public sealed class NotificationService(
         foreach (var webhookEvent in events)
         {
             if (string.IsNullOrWhiteSpace(webhookEvent.Email) || string.IsNullOrWhiteSpace(webhookEvent.Event)
-                || !BrevoSuppressingEvents.Contains(webhookEvent.Event))
+                || !BrevoTrackedEvents.Contains(webhookEvent.Event))
             {
                 continue;
             }
@@ -862,8 +865,38 @@ public sealed class NotificationService(
                 continue;
             }
 
+            await RecordOtpDeliveryOutcomeAsync(account.Id, webhookEvent, now, ct);
+            await RecordNotificationDeliveryOutcomeAsync(account.Id, webhookEvent, now, ct);
+
+            var eventName = webhookEvent.Event.ToLowerInvariant();
+            var isUnsubscribe = string.Equals(eventName, "unsubscribed", StringComparison.OrdinalIgnoreCase);
+            var isReputation = BrevoReputationEvents.Contains(eventName);
+            if (!isUnsubscribe && !isReputation)
+            {
+                continue;
+            }
+
+            // Marketing unsubscribe must never become a global email kill-switch.
+            // Auth/OTP/password-reset keep sending from auth@ regardless.
+            var scopedEventKey = isUnsubscribe
+                ? EmailLanes.MarketingSuppressionEventKey
+                : EmailLanes.NonAuthSuppressionEventKey;
+
+            if (isUnsubscribe)
+            {
+                var registration = await db.LearnerRegistrationProfiles
+                    .FirstOrDefaultAsync(profile => profile.ApplicationUserAccountId == account.Id, ct);
+                if (registration is { MarketingOptIn: true })
+                {
+                    registration.MarketingOptIn = false;
+                }
+            }
+
             var alreadySuppressed = await db.NotificationSuppressions.AnyAsync(
-                s => s.AuthAccountId == account.Id && s.Channel == NotificationChannel.Email && s.IsActive && s.EventKey == null,
+                s => s.AuthAccountId == account.Id
+                    && s.Channel == NotificationChannel.Email
+                    && s.IsActive
+                    && s.EventKey == scopedEventKey,
                 ct);
             if (alreadySuppressed)
             {
@@ -875,9 +908,9 @@ public sealed class NotificationService(
                 Id = Guid.NewGuid(),
                 AuthAccountId = account.Id,
                 Channel = NotificationChannel.Email,
-                EventKey = null,
+                EventKey = scopedEventKey,
                 IsActive = true,
-                ReasonCode = $"brevo_{webhookEvent.Event.ToLowerInvariant()}",
+                ReasonCode = $"brevo_{eventName}",
                 Reason = string.IsNullOrWhiteSpace(webhookEvent.Reason)
                     ? $"Brevo reported '{webhookEvent.Event}' for this address."
                     : $"Brevo reported '{webhookEvent.Event}': {webhookEvent.Reason}",
@@ -894,11 +927,80 @@ public sealed class NotificationService(
         if (suppressedCount > 0)
         {
             await db.SaveChangesAsync(ct);
-            logger.LogInformation("Brevo webhook suppressed email delivery for {Count} account(s).", suppressedCount);
+            logger.LogInformation("Brevo webhook recorded scoped email suppression for {Count} account(s).", suppressedCount);
+        }
+        else
+        {
+            await db.SaveChangesAsync(ct);
         }
 
         return suppressedCount;
     }
+
+    private async Task RecordOtpDeliveryOutcomeAsync(
+        string authAccountId,
+        BrevoWebhookEvent webhookEvent,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var challenge = await db.EmailOtpChallenges
+            .Where(item => item.ApplicationUserAccountId == authAccountId
+                && item.DeliveryChannel == "email"
+                && item.VerifiedAt == null)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (challenge is null)
+        {
+            return;
+        }
+
+        challenge.DeliveryStatus = webhookEvent.Event.ToLowerInvariant();
+        challenge.DeliveryReason = string.IsNullOrWhiteSpace(webhookEvent.Reason) ? null : webhookEvent.Reason.Trim();
+        challenge.DeliveryUpdatedAt = now;
+    }
+
+    private async Task RecordNotificationDeliveryOutcomeAsync(
+        string authAccountId,
+        BrevoWebhookEvent webhookEvent,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var status = MapBrevoDeliveryStatus(webhookEvent.Event);
+        if (status is null)
+        {
+            return;
+        }
+
+        var recent = await db.NotificationDeliveryAttempts
+            .Where(attempt =>
+                attempt.AuthAccountId == authAccountId
+                && attempt.Channel == NotificationChannel.Email
+                && attempt.Status == NotificationDeliveryStatus.Sent
+                && attempt.AttemptedAt >= now.AddHours(-24))
+            .OrderByDescending(attempt => attempt.AttemptedAt)
+            .FirstOrDefaultAsync(ct);
+        if (recent is null)
+        {
+            return;
+        }
+
+        recent.Status = status.Value;
+        recent.ErrorCode = $"brevo_{webhookEvent.Event.ToLowerInvariant()}";
+        recent.ErrorMessage = string.IsNullOrWhiteSpace(webhookEvent.Reason) ? webhookEvent.Event : webhookEvent.Reason;
+        recent.CompletedAt = now;
+    }
+
+    private static NotificationDeliveryStatus? MapBrevoDeliveryStatus(string eventName)
+        => eventName.ToLowerInvariant() switch
+        {
+            "delivered" => NotificationDeliveryStatus.Delivered,
+            "unique_opened" or "opened" => NotificationDeliveryStatus.Opened,
+            "click" => NotificationDeliveryStatus.Clicked,
+            "hard_bounce" or "soft_bounce" or "blocked" or "invalid_email" or "error" => NotificationDeliveryStatus.Bounced,
+            "unsubscribed" => NotificationDeliveryStatus.Unsubscribed,
+            "spam" => NotificationDeliveryStatus.Failed,
+            _ => null
+        };
 
     private static bool FixedTimeSecretEquals(string configured, string provided)
     {
@@ -1423,12 +1525,15 @@ public sealed class NotificationService(
         var body = NotificationCatalog.BuildBody(eventKey, sampleTokens);
         var actionUrl = NormalizeActionUrl(NotificationCatalog.BuildActionUrl(eventKey, sampleTokens));
 
+        var catalogEntry = NotificationCatalog.Get(eventKey);
         await emailSender.SendAsync(
             new EmailMessage(
                 request.RecipientEmail,
                 subject,
                 BuildPlainTextEmailBody(subject, body, actionUrl),
-                BuildHtmlEmailBody(subject, body, actionUrl)),
+                BuildHtmlEmailBody(subject, body, actionUrl),
+                Category: catalogEntry.Category,
+                EventKey: request.EventKey),
             ct);
 
         db.AuditEvents.Add(new AuditEvent
@@ -1777,7 +1882,13 @@ public sealed class NotificationService(
 
         try
         {
-            await emailSender.SendAsync(new EmailMessage(account.Email, subject, textBody, htmlBody), ct);
+            await emailSender.SendAsync(new EmailMessage(
+                account.Email,
+                subject,
+                textBody,
+                htmlBody,
+                Category: "product",
+                EventKey: "daily_digest"), ct);
             foreach (var notificationEvent in digestEvents)
             {
                 db.NotificationDeliveryAttempts.Add(new NotificationDeliveryAttempt
@@ -2588,6 +2699,32 @@ public sealed class NotificationService(
     private static bool RequiresExplicitConsent(NotificationChannel channel)
         => channel is NotificationChannel.Sms or NotificationChannel.WhatsApp;
 
+    private static bool SuppressionAppliesToEvent(string? suppressionEventKey, string eventKey, string category)
+    {
+        if (string.IsNullOrWhiteSpace(suppressionEventKey))
+        {
+            // Legacy global email suppressions must never block OTP / verification / reset.
+            return !EmailLanes.IsAuthEvent(eventKey);
+        }
+
+        if (string.Equals(suppressionEventKey, eventKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (string.Equals(suppressionEventKey, EmailLanes.MarketingSuppressionEventKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return EmailLanes.IsMarketing(category, eventKey);
+        }
+
+        if (string.Equals(suppressionEventKey, EmailLanes.NonAuthSuppressionEventKey, StringComparison.OrdinalIgnoreCase))
+        {
+            return !EmailLanes.IsAuthEvent(eventKey);
+        }
+
+        return false;
+    }
+
     private async Task<NotificationConsentItem> UpsertNotificationConsentAsync(
         string authAccountId,
         NotificationChannel channel,
@@ -2658,7 +2795,10 @@ public sealed class NotificationService(
                 suppression.AuthAccountId == authAccountId
                 && suppression.Channel == channel
                 && suppression.IsActive
-                && (suppression.EventKey == null || suppression.EventKey == eventKey))
+                && (suppression.EventKey == null
+                    || suppression.EventKey == eventKey
+                    || suppression.EventKey == EmailLanes.MarketingSuppressionEventKey
+                    || suppression.EventKey == EmailLanes.NonAuthSuppressionEventKey))
             .Select(suppression => new
             {
                 suppression.EventKey,
@@ -2672,7 +2812,8 @@ public sealed class NotificationService(
         var activeSuppression = suppressionCandidates
             .Where(suppression =>
                 (!suppression.StartsAt.HasValue || suppression.StartsAt <= now)
-                && (!suppression.ExpiresAt.HasValue || suppression.ExpiresAt > now))
+                && (!suppression.ExpiresAt.HasValue || suppression.ExpiresAt > now)
+                && SuppressionAppliesToEvent(suppression.EventKey, eventKey, category))
             .OrderByDescending(suppression => string.Equals(suppression.EventKey, eventKey, StringComparison.OrdinalIgnoreCase))
             .ThenBy(suppression => suppression.ExpiresAt ?? DateTimeOffset.MaxValue)
             .FirstOrDefault();
@@ -3298,7 +3439,13 @@ public sealed class NotificationService(
 
         try
         {
-            await emailSender.SendAsync(new EmailMessage(account.Email, subject, textBody, htmlBody), ct);
+            await emailSender.SendAsync(new EmailMessage(
+                account.Email,
+                subject,
+                textBody,
+                htmlBody,
+                Category: notificationEvent.Category,
+                EventKey: notificationEvent.EventKey), ct);
             db.NotificationDeliveryAttempts.Add(new NotificationDeliveryAttempt
             {
                 Id = $"nda-{Guid.NewGuid():N}",

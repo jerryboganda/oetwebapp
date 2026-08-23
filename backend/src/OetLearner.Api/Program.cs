@@ -196,11 +196,19 @@ if (brevoOptions.Enabled)
     // next request completes that send, so at most one email ever leaves.
     ;
     builder.Services.AddTransient<IEmailSender, BrevoEmailSender>();
+    builder.Services.AddHttpClient<IBrevoTransactionalMailbox, BrevoTransactionalMailbox>((serviceProvider, client) =>
+    {
+        var configuredBrevoOptions = serviceProvider.GetRequiredService<IOptions<BrevoOptions>>().Value;
+        client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configuredBrevoOptions.BaseUrl) ? "https://api.brevo.com/v3" : configuredBrevoOptions.BaseUrl);
+        client.Timeout = TimeSpan.FromSeconds(20);
+    });
 }
 else
 {
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+    builder.Services.AddSingleton<IBrevoTransactionalMailbox, DisabledBrevoTransactionalMailbox>();
 }
+builder.Services.AddScoped<EmailDeliveryMailboxService>();
 builder.Services.AddScoped<EmailOtpService>();
 builder.Services.AddHttpClient<IFirebaseSmsOtpClient, FirebaseSmsOtpClient>(client =>
 {

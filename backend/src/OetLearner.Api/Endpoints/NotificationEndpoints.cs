@@ -228,6 +228,21 @@ public static class NotificationEndpoints
             Results.Ok(await service.ReleaseAdminSuppressionAsync(http.AdminId(), http.AdminName(), suppressionId, ct)))
             .WithAdminWrite("AdminSystemAdmin");
 
+        admin.MapGet("/email-delivery", async (
+            EmailDeliveryMailboxService mailbox,
+            CancellationToken ct,
+            [FromQuery] string email) =>
+            Results.Ok(await mailbox.InspectAsync(email, ct)))
+            .WithAdminRead("AdminSystemAdmin");
+
+        admin.MapPost("/email-delivery/unblock", async (
+            HttpContext http,
+            AdminEmailDeliveryUnblockRequest request,
+            EmailDeliveryMailboxService mailbox,
+            CancellationToken ct) =>
+            Results.Ok(await mailbox.UnblockAsync(http.AdminId(), http.AdminName(), request.Email, ct)))
+            .WithAdminWrite("AdminSystemAdmin");
+
         admin.MapPost("/test-email", async (
             HttpContext http,
             AdminNotificationTestEmailRequest request,

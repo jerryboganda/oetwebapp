@@ -28,6 +28,14 @@ export interface EmailSettings {
   smtpPassword: string;
   smtpFromAddress: string;
   smtpFromName: string;
+  authFromAddress: string;
+  authFromName: string;
+  marketingFromAddress: string;
+  marketingFromName: string;
+  productFromAddress: string;
+  productFromName: string;
+  supportFromAddress: string;
+  supportFromName: string;
   // ── Email partial-coverage gap (Wave 3) ──
   brevoWelcomeTemplateId: number | null;
   brevoPasswordChangedTemplateId: number | null;
@@ -541,8 +549,16 @@ const EMAIL_FIELDS: FieldDef<EmailSettings>[] = [
   { key: 'smtpPort', label: 'SMTP Port', type: 'number', hint: 'Typically 587 (STARTTLS) or 465 (TLS).' },
   { key: 'smtpUsername', label: 'SMTP Username' },
   { key: 'smtpPassword', label: 'SMTP Password', secret: true },
-  { key: 'smtpFromAddress', label: 'From Address', hint: 'Address used in the From header of outgoing email.' },
-  { key: 'smtpFromName', label: 'From Name' },
+  { key: 'smtpFromAddress', label: 'Fallback From Address', hint: 'Used only when a lane-specific From address is empty.' },
+  { key: 'smtpFromName', label: 'Fallback From Name' },
+  { key: 'authFromAddress', label: 'Auth From Address', hint: 'OTP, verification, password reset, and security mail. Default: auth@oetwithdrhesham.co.uk' },
+  { key: 'authFromName', label: 'Auth From Name' },
+  { key: 'marketingFromAddress', label: 'Marketing From Address', hint: 'Promotions and credits-low digests. Default: updates@oetwithdrhesham.co.uk' },
+  { key: 'marketingFromName', label: 'Marketing From Name' },
+  { key: 'productFromAddress', label: 'Product From Address', hint: 'Transactional product notifications. Default: no-reply@oetwithdrhesham.co.uk' },
+  { key: 'productFromName', label: 'Product From Name' },
+  { key: 'supportFromAddress', label: 'Support From Address', hint: 'Ops and admin alerts. Default: support@oetwithdrhesham.co.uk' },
+  { key: 'supportFromName', label: 'Support From Name' },
   // ── Email partial-coverage gap (Wave 3) ──
   { key: 'brevoEnabled', label: 'Brevo Enabled', type: 'checkbox', hint: 'Master toggle for the Brevo email service.' },
   { key: 'smtpEnabled', label: 'SMTP Enabled', type: 'checkbox', hint: 'Master toggle for the SMTP email service.' },
@@ -1047,6 +1063,14 @@ function emptyResponse(): RuntimeSettingsResponse {
       smtpPassword: '',
       smtpFromAddress: '',
       smtpFromName: '',
+      authFromAddress: '',
+      authFromName: '',
+      marketingFromAddress: '',
+      marketingFromName: '',
+      productFromAddress: '',
+      productFromName: '',
+      supportFromAddress: '',
+      supportFromName: '',
       brevoWelcomeTemplateId: null,
       brevoPasswordChangedTemplateId: null,
       brevoMfaEnabledTemplateId: null,

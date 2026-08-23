@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.AiAssistant;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Writing.Configuration;
@@ -316,7 +317,15 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             BrevoWebhookSecret: Unprotect(r.BrevoWebhookSecretEncrypted) ?? NullIfEmpty(brevo.WebhookSecret),
             BrevoEnabled: r.BrevoEnabled ?? brevo.Enabled,
             SmtpEnabled: r.SmtpEnabled ?? smtp.Enabled,
-            SmtpEnableSsl: r.SmtpEnableSsl ?? smtp.EnableSsl);
+            SmtpEnableSsl: r.SmtpEnableSsl ?? smtp.EnableSsl,
+            AuthFromAddress: Coalesce(r.AuthFromAddress, EmailLanes.DefaultAuthFromAddress),
+            AuthFromName: Coalesce(r.AuthFromName, EmailLanes.DefaultAuthFromName),
+            MarketingFromAddress: Coalesce(r.MarketingFromAddress, EmailLanes.DefaultMarketingFromAddress),
+            MarketingFromName: Coalesce(r.MarketingFromName, EmailLanes.DefaultMarketingFromName),
+            ProductFromAddress: Coalesce(r.ProductFromAddress, EmailLanes.DefaultProductFromAddress),
+            ProductFromName: Coalesce(r.ProductFromName, EmailLanes.DefaultProductFromName),
+            SupportFromAddress: Coalesce(r.SupportFromAddress, EmailLanes.DefaultSupportFromAddress),
+            SupportFromName: Coalesce(r.SupportFromName, EmailLanes.DefaultSupportFromName));
 
         var bill = new BillingSettings(
             StripeSecretKey: NullIfEmpty(stripeProfileSecret) ?? Unprotect(r.StripeSecretKeyEncrypted) ?? NullIfEmpty(stripeOptions.SecretKey),

@@ -55,6 +55,16 @@ public class RuntimeSettingsRow
     public bool? SmtpEnabled { get; set; }
     public bool? SmtpEnableSsl { get; set; }
 
+    // ── Transactional / marketing sender split ─────────────────────
+    [MaxLength(256)] public string? AuthFromAddress { get; set; }
+    [MaxLength(256)] public string? AuthFromName { get; set; }
+    [MaxLength(256)] public string? MarketingFromAddress { get; set; }
+    [MaxLength(256)] public string? MarketingFromName { get; set; }
+    [MaxLength(256)] public string? ProductFromAddress { get; set; }
+    [MaxLength(256)] public string? ProductFromName { get; set; }
+    [MaxLength(256)] public string? SupportFromAddress { get; set; }
+    [MaxLength(256)] public string? SupportFromName { get; set; }
+
     // ── Billing / Stripe ───────────────────────────────────────────
     public string? StripeSecretKeyEncrypted { get; set; }
     [MaxLength(256)] public string? StripePublishableKey { get; set; }

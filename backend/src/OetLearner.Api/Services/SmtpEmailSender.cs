@@ -22,7 +22,10 @@ public sealed record EmailMessage(
     string? HtmlBody = null,
     string? TemplateKey = null,
     IReadOnlyDictionary<string, object?>? TemplateParameters = null,
-    IReadOnlyCollection<EmailAttachment>? Attachments = null);
+    IReadOnlyCollection<EmailAttachment>? Attachments = null,
+    EmailLane? Lane = null,
+    string? Category = null,
+    string? EventKey = null);
 
 public interface IEmailSender
 {
@@ -60,7 +63,9 @@ public sealed class SmtpEmailSender(
             throw new InvalidOperationException("SMTP:Host must be configured when SMTP is enabled.");
         }
 
-        if (string.IsNullOrWhiteSpace(emailSettings.SmtpFromAddress))
+        var lane = EmailLanes.Resolve(message);
+        var (fromAddress, fromName) = EmailLanes.ResolveSender(emailSettings.ToSnapshot(), lane);
+        if (string.IsNullOrWhiteSpace(fromAddress))
         {
             throw new InvalidOperationException("SMTP:FromEmail must be configured when SMTP is enabled.");
         }
@@ -68,17 +73,18 @@ public sealed class SmtpEmailSender(
         var port = emailSettings.SmtpPort ?? 587;
 
         logger.LogInformation(
-            "SMTP sending email: To={To} Subject={Subject} Host={Host}:{Port} From={From} SSL={Ssl}",
-            message.To, message.Subject, emailSettings.SmtpHost, emailSettings.SmtpPort, emailSettings.SmtpFromAddress, emailSettings.SmtpEnableSsl);
+            "SMTP sending email: To={To} Subject={Subject} Host={Host}:{Port} From={From} Lane={Lane} SSL={Ssl}",
+            message.To, message.Subject, emailSettings.SmtpHost, emailSettings.SmtpPort, fromAddress, lane, emailSettings.SmtpEnableSsl);
 
         var sw = Stopwatch.StartNew();
 
         // MimeKit owns UTF-8 encoding by default; the BodyBuilder assembles a
-        // multipart/alternative (text + html) with any attachments.
-        using var mimeMessage = new MimeMessage();
-        mimeMessage.From.Add(new MailboxAddress(emailSettings.SmtpFromName ?? string.Empty, emailSettings.SmtpFromAddress));
+        // multipart/alternative (text + html) when both bodies are present.
+        var mimeMessage = new MimeMessage();
+        mimeMessage.From.Add(new MailboxAddress(fromName, fromAddress));
         mimeMessage.To.Add(MailboxAddress.Parse(message.To));
         mimeMessage.Subject = message.Subject ?? string.Empty;
+        mimeMessage.Headers.Add("X-OET-Email-Lane", lane.ToString().ToLowerInvariant());
 
         var bodyBuilder = new BodyBuilder { TextBody = message.TextBody };
         if (!string.IsNullOrWhiteSpace(message.HtmlBody))

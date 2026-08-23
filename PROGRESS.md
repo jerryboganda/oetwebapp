@@ -1,6 +1,12 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-09-22
+Last updated: 2026-08-23
+
+## Current Checkpoint - Auth email isolated from marketing unsubscribe
+
+- OTP / verify / password-reset send from `auth@oetwithdrhesham.co.uk`. Marketing (`updates@`) unsubscribe must never block those.
+- Brevo `unsubscribed` webhook now writes `__marketing__` only. Admin can inspect/unblock one address; no mass-unblock.
+- Validation: `EmailLaneAndMailboxTests` 5/5. Owner still confirms Brevo automations and unblocks the two known blocked inboxes after deploy.
 
 ## Current Checkpoint - Firebase SMS OTP + Brevo fallback
 

@@ -96,6 +96,47 @@ public sealed record AdminNotificationSuppressionResponse(
     int Page,
     int PageSize);
 
+public sealed record AdminEmailDeliveryInspectRequest(string Email);
+
+public sealed record AdminEmailDeliveryUnblockRequest(string Email);
+
+public sealed record AdminEmailOtpDeliveryItem(
+    Guid ChallengeId,
+    string Purpose,
+    string? DeliveryStatus,
+    string? DeliveryReason,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? SentAt,
+    DateTimeOffset? DeliveryUpdatedAt);
+
+public sealed record AdminBrevoBlocklistItem(
+    bool Found,
+    string? Email,
+    string? ReasonCode,
+    string? ReasonMessage,
+    string? SenderEmail,
+    DateTimeOffset? BlockedAt,
+    string? LookupError);
+
+public sealed record AdminEmailDeliveryInspectResponse(
+    string Email,
+    string NormalizedEmail,
+    string? AuthAccountId,
+    bool? MarketingOptIn,
+    bool AuthOtpUnblocked,
+    IReadOnlyList<NotificationSuppressionItem> ActiveSuppressions,
+    AdminEmailOtpDeliveryItem? LatestOtp,
+    AdminBrevoBlocklistItem BrevoBlocklist);
+
+public sealed record AdminEmailDeliveryUnblockResponse(
+    string Email,
+    string NormalizedEmail,
+    string? AuthAccountId,
+    bool BrevoUnblocked,
+    bool BrevoWasBlocked,
+    int ReleasedSuppressionCount,
+    IReadOnlyList<string> ReleasedSuppressionIds);
+
 public sealed record NotificationPreferencePatchRequest(
     string? Timezone,
     bool? GlobalInAppEnabled,

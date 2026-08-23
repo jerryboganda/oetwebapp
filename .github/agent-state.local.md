@@ -1,8 +1,14 @@
 ﻿# Agent State (local)
 
-## Current task — Mobile OTP auto-rotation on resume (FIXED)
-- Shipped `c512a4e4` on `main`: /verify-email challenge now persisted in localStorage (survives WebView process death), module-scoped auto-send guard (`app/verify-email/auto-send-guard.ts`), resume-time refreshSession skipped on auth/OTP screens in MobileRuntimeBridge. Validation: vitest app/verify-email 4/4; tsc errors all pre-existing/unrelated.
-- Next: owner verifies on production Android/iOS build — request OTP, background app to check mail, return: screen must NOT reload or request a new OTP.
+## Current task — Auth/OTP mail isolated from marketing unsubscribe
+- Root cause of missing password-reset OTP: Brevo accepted `/smtp/email` then blocked as unsubscribed. Marketing unsubscribe must never gate OTP.
+- Code: four From lanes (`auth@`, `updates@`, `no-reply@`, `support@`). Webhook `unsubscribed` writes `__marketing__` only (never `EventKey=null`). Reputation events write `__non_auth__`. Admin inspect/unblock is one email; keeps marketing opt-out; never mass-unblock.
+- Validation: `dotnet test --filter FullyQualifiedName~EmailLaneAndMailboxTests` 5/5.
+- Next after this ship: owner unblocks only `drhagermurad2026@gmail.com` and `mindreader420123@gmail.com` in Admin → Notifications → Transactional Mailbox. In Brevo console confirm marketing unsubscribe does not add Transactional Blocklist, and OTP templates stay transactional From `auth@`.
+
+## Previous — Mobile OTP auto-rotation on resume (FIXED + DEPLOYED)
+- Fix commit `c512a4e4` deployed to production 2026-08-23 via rerun of Actions `32640038373`. Prod probe: /verify-email returns 200.
+- No fresh app release needed: Capacitor `server.url` is remote-only.
 
 ## Goal
 Continue official OET Reading uploads on production for **oetwebapp**.

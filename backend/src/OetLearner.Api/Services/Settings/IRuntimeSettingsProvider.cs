@@ -266,7 +266,18 @@ public sealed record EmailSettings(
     string? BrevoWebhookSecret = null,
     bool BrevoEnabled = false,
     bool SmtpEnabled = false,
-    bool SmtpEnableSsl = true);
+    bool SmtpEnableSsl = true,
+    // ── Transactional / marketing sender split ─────────────────────
+    // Auth OTP and security mail must leave from a dedicated verified
+    // sender so a marketing unsubscribe never blocks verification.
+    string? AuthFromAddress = null,
+    string? AuthFromName = null,
+    string? MarketingFromAddress = null,
+    string? MarketingFromName = null,
+    string? ProductFromAddress = null,
+    string? ProductFromName = null,
+    string? SupportFromAddress = null,
+    string? SupportFromName = null);
 
 public sealed record BillingSettings(
     string? StripeSecretKey,

@@ -268,3 +268,44 @@ export interface AdminNotificationTestEmailRequest {
   eventKey: string;
   audienceRole: NotificationAudienceRole;
 }
+
+export interface AdminEmailOtpDeliveryItem {
+  challengeId: string;
+  purpose: string;
+  deliveryStatus: string | null;
+  deliveryReason: string | null;
+  createdAt: string;
+  sentAt: string | null;
+  deliveryUpdatedAt: string | null;
+}
+
+export interface AdminBrevoBlocklistItem {
+  found: boolean;
+  email: string | null;
+  reasonCode: string | null;
+  reasonMessage: string | null;
+  senderEmail: string | null;
+  blockedAt: string | null;
+  lookupError: string | null;
+}
+
+export interface AdminEmailDeliveryInspectResponse {
+  email: string;
+  normalizedEmail: string;
+  authAccountId: string | null;
+  marketingOptIn: boolean | null;
+  authOtpUnblocked: boolean;
+  activeSuppressions: NotificationSuppressionItem[];
+  latestOtp: AdminEmailOtpDeliveryItem | null;
+  brevoBlocklist: AdminBrevoBlocklistItem;
+}
+
+export interface AdminEmailDeliveryUnblockResponse {
+  email: string;
+  normalizedEmail: string;
+  authAccountId: string | null;
+  brevoUnblocked: boolean;
+  brevoWasBlocked: boolean;
+  releasedSuppressionCount: number;
+  releasedSuppressionIds: string[];
+}

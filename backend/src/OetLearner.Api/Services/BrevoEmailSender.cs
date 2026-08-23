@@ -54,16 +54,23 @@ public sealed class BrevoEmailSender(
             throw new InvalidOperationException("Brevo:ApiKey must be configured when Brevo is enabled.");
         }
 
-        if (string.IsNullOrWhiteSpace(emailSettings.SmtpFromAddress))
+        var lane = EmailLanes.Resolve(message);
+        var (fromAddress, fromName) = EmailLanes.ResolveSender(emailSettings.ToSnapshot(), lane);
+        if (string.IsNullOrWhiteSpace(fromAddress))
         {
             throw new InvalidOperationException("Brevo:FromEmail must be configured when Brevo is enabled.");
         }
 
         var request = new BrevoSendRequest
         {
-            Sender = new BrevoSender(emailSettings.SmtpFromAddress, emailSettings.SmtpFromName ?? "OET Learner"),
+            Sender = new BrevoSender(fromAddress, fromName),
             To = [new BrevoRecipient(message.To)],
-            Subject = string.IsNullOrWhiteSpace(message.Subject) ? "OET Learner" : message.Subject
+            Subject = string.IsNullOrWhiteSpace(message.Subject) ? "OET Learner" : message.Subject,
+            Tags = EmailLanes.TagsFor(lane, message),
+            Headers = new Dictionary<string, string>
+            {
+                ["X-OET-Email-Lane"] = lane.ToString().ToLowerInvariant()
+            }
         };
 
         if (message.TemplateKey is not null)
@@ -126,6 +133,8 @@ public sealed class BrevoEmailSender(
         public int? TemplateId { get; set; }
         public Dictionary<string, object?>? Params { get; set; }
         public IReadOnlyCollection<BrevoAttachment>? Attachment { get; set; }
+        public IReadOnlyCollection<string>? Tags { get; set; }
+        public Dictionary<string, string>? Headers { get; set; }
     }
 
     private sealed record BrevoSender(string Email, string Name);

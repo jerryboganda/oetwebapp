@@ -82,6 +82,8 @@ public sealed class EmailOtpService(
             // instead of silently returning a code that never arrived.
             await SendVerificationEmailAsync(latest.Id, account.Email, cancellationToken);
             latest.SentAt = now;
+            latest.DeliveryStatus = "accepted";
+            latest.DeliveryUpdatedAt = now;
             await db.SaveChangesAsync(cancellationToken);
 
             return new OtpChallengeResponse(
@@ -152,6 +154,8 @@ public sealed class EmailOtpService(
 
         await SendVerificationEmailAsync(challengeId, account.Email, cancellationToken);
         challenge.SentAt = timeProvider.GetUtcNow();
+        challenge.DeliveryStatus = "accepted";
+        challenge.DeliveryUpdatedAt = challenge.SentAt;
         await db.SaveChangesAsync(cancellationToken);
 
         return new OtpChallengeResponse(
@@ -499,6 +503,9 @@ public sealed class EmailOtpService(
                     ["expiresAt"] = expiresAt.ToString("O")
                 }), cancellationToken);
 
+            challenge.SentAt = now;
+            challenge.DeliveryStatus = "accepted";
+            challenge.DeliveryUpdatedAt = now;
             deliveryChannel = "email";
             destinationHint = AuthEmailAddress.Mask(account.Email);
         }

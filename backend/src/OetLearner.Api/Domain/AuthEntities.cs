@@ -159,6 +159,18 @@ public class EmailOtpChallenge
     // retry must re-send instead of silently returning an unusable code.
     public DateTimeOffset? SentAt { get; set; }
 
+    /// <summary>
+    /// Later Brevo webhook status for this challenge. API "Sent" is only
+    /// accepted-by-provider — blocked/hard-bounce must be recorded here.
+    /// </summary>
+    [MaxLength(32)]
+    public string? DeliveryStatus { get; set; }
+
+    [MaxLength(512)]
+    public string? DeliveryReason { get; set; }
+
+    public DateTimeOffset? DeliveryUpdatedAt { get; set; }
+
     public ApplicationUserAccount ApplicationUserAccount { get; set; } = default!;
 }
 

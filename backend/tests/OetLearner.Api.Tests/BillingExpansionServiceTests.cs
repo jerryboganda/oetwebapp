@@ -565,7 +565,7 @@ internal sealed class CapturingBillingChannel : IBillingNotificationChannel
     public string Channel => "email";
     public List<(string userId, string subject, string body)> Sent { get; } = new();
 
-    public Task SendAsync(string userId, string subject, string body, CancellationToken ct)
+    public Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
     {
         Sent.Add((userId, subject, body));
         return Task.CompletedTask;

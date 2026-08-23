@@ -8,6 +8,8 @@ import type {
   AdminNotificationSuppressionCreateRequest,
   AdminNotificationSuppressionResponse,
   AdminNotificationTestEmailRequest,
+  AdminEmailDeliveryInspectResponse,
+  AdminEmailDeliveryUnblockResponse,
   NotificationAudienceRole,
   NotificationChannel,
   NotificationConsentChannel,
@@ -298,4 +300,22 @@ export async function sendAdminNotificationTestEmail(
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function inspectAdminEmailDelivery(email: string): Promise<AdminEmailDeliveryInspectResponse> {
+  const searchParams = new URLSearchParams({ email });
+  return requestJson<AdminEmailDeliveryInspectResponse>(
+    `/v1/admin/notifications/email-delivery?${searchParams.toString()}`,
+    { method: 'GET' },
+  );
+}
+
+export async function unblockAdminEmailDelivery(email: string): Promise<AdminEmailDeliveryUnblockResponse> {
+  return requestJson<AdminEmailDeliveryUnblockResponse>(
+    '/v1/admin/notifications/email-delivery/unblock',
+    {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    },
+  );
 }

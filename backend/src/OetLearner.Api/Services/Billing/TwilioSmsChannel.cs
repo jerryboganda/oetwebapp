@@ -28,7 +28,7 @@ public sealed class TwilioSmsChannel : IBillingNotificationChannel
         _logger = logger;
     }
 
-    public async Task SendAsync(string userId, string subject, string body, CancellationToken ct)
+    public async Task SendAsync(string userId, string subject, string body, CancellationToken ct, string? eventCode = null)
     {
         var opts = (await _runtimeSettings.GetAsync(ct)).Messaging;
         if (!opts.IsTwilioConfigured)

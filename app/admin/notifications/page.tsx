@@ -18,14 +18,17 @@ import {
   fetchAdminNotificationDeliveries,
   fetchAdminNotificationHealth,
   fetchAdminNotificationPolicies,
+  inspectAdminEmailDelivery,
   resetAdminNotificationPolicyOverride,
   sendAdminNotificationTestEmail,
+  unblockAdminEmailDelivery,
   updateAdminNotificationPolicy,
 } from '@/lib/notifications-api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type {
   AdminNotificationAudienceChannelPolicy,
   AdminNotificationCatalogEntry,
+  AdminEmailDeliveryInspectResponse,
   AdminNotificationHealthSnapshot,
   AdminNotificationPolicyRow,
   NotificationAudienceRole,
@@ -176,6 +179,10 @@ export default function AdminNotificationsPage() {
   const [testRecipientEmail, setTestRecipientEmail] = useState('');
   const [testAudienceRole, setTestAudienceRole] = useState<NotificationAudienceRole>('learner');
   const [testEventKey, setTestEventKey] = useState('');
+  const [mailboxEmail, setMailboxEmail] = useState('');
+  const [mailboxInspect, setMailboxInspect] = useState<AdminEmailDeliveryInspectResponse | null>(null);
+  const [inspectingMailbox, setInspectingMailbox] = useState(false);
+  const [unblockingMailbox, setUnblockingMailbox] = useState(false);
 
   const catalogByAudience = useMemo(() => ({
     learner: catalog.filter((entry) => entry.audienceRole === 'learner'),
@@ -665,6 +672,48 @@ export default function AdminNotificationsPage() {
     }
   }
 
+  async function handleInspectMailbox() {
+    if (!mailboxEmail.trim()) {
+      setToast({ variant: 'error', message: 'Enter one email address to inspect.' });
+      return;
+    }
+
+    setInspectingMailbox(true);
+    try {
+      const response = await inspectAdminEmailDelivery(mailboxEmail.trim());
+      setMailboxInspect(response);
+      setToast({ variant: 'success', message: `Inspected ${response.email}.` });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to inspect that mailbox.' });
+    } finally {
+      setInspectingMailbox(false);
+    }
+  }
+
+  async function handleUnblockMailbox() {
+    if (!mailboxEmail.trim()) {
+      setToast({ variant: 'error', message: 'Enter one email address to unblock.' });
+      return;
+    }
+
+    setUnblockingMailbox(true);
+    try {
+      const response = await unblockAdminEmailDelivery(mailboxEmail.trim());
+      setToast({
+        variant: 'success',
+        message: `Unblocked ${response.email}. Released ${response.releasedSuppressionCount} suppression(s).`,
+      });
+      const inspected = await inspectAdminEmailDelivery(mailboxEmail.trim());
+      setMailboxInspect(inspected);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to unblock that mailbox.' });
+    } finally {
+      setUnblockingMailbox(false);
+    }
+  }
+
   if (!isAuthenticated || role !== 'admin') {
     return null;
   }
@@ -783,6 +832,80 @@ export default function AdminNotificationsPage() {
           </CardContent>
         </Card>
       ))}
+
+      <Card>
+        <CardHeader className="flex-col items-start gap-1">
+          <CardTitle>Transactional Mailbox</CardTitle>
+          <CardDescription>
+            Inspect one address and unblock it from the Brevo transactional blocklist. Marketing unsubscribe stays independent of OTP, verification, and password-reset mail. Do not mass-unblock.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Input
+            label="Learner email"
+            type="email"
+            value={mailboxEmail}
+            onChange={(event) => setMailboxEmail(event.target.value)}
+            placeholder="learner@example.com"
+          />
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleInspectMailbox()}
+              loading={inspectingMailbox}
+            >
+              Inspect
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleUnblockMailbox()}
+              loading={unblockingMailbox}
+            >
+              Unblock this address
+            </Button>
+          </div>
+          {mailboxInspect ? (
+            <div className="space-y-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-4 text-sm">
+              <p className="font-semibold text-admin-fg-strong">{mailboxInspect.email}</p>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={mailboxInspect.authOtpUnblocked ? 'success' : 'danger'}>
+                  Auth OTP {mailboxInspect.authOtpUnblocked ? 'not gated by marketing' : 'blocked'}
+                </Badge>
+                <Badge variant={mailboxInspect.marketingOptIn ? 'info' : 'warning'}>
+                  Marketing {mailboxInspect.marketingOptIn ? 'opted in' : 'opted out / unknown'}
+                </Badge>
+                <Badge variant={mailboxInspect.brevoBlocklist.found ? 'danger' : 'success'}>
+                  Brevo {mailboxInspect.brevoBlocklist.found ? 'blocked' : 'not on transactional blocklist'}
+                </Badge>
+              </div>
+              {mailboxInspect.brevoBlocklist.reasonMessage ? (
+                <p className="text-admin-fg-muted">{mailboxInspect.brevoBlocklist.reasonMessage}</p>
+              ) : null}
+              {mailboxInspect.latestOtp ? (
+                <p className="text-admin-fg-muted">
+                  Latest OTP {mailboxInspect.latestOtp.purpose}: {mailboxInspect.latestOtp.deliveryStatus || 'accepted by provider only'}
+                  {mailboxInspect.latestOtp.deliveryReason ? ` — ${mailboxInspect.latestOtp.deliveryReason}` : ''}
+                </p>
+              ) : (
+                <p className="text-admin-fg-muted">No email OTP challenge recorded for this account.</p>
+              )}
+              {mailboxInspect.activeSuppressions.length > 0 ? (
+                <ul className="space-y-1 text-admin-fg-muted">
+                  {mailboxInspect.activeSuppressions.map((suppression) => (
+                    <li key={suppression.id}>
+                      {suppression.eventKey || 'legacy-global'} · {suppression.reasonCode}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-admin-fg-muted">No active email suppressions.</p>
+              )}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card>
