@@ -130,6 +130,7 @@ public sealed class WhopGateway : IPaymentGateway
             return new WebhookProcessResult("whop_unconfigured", "signature_missing", false, "Whop is not configured");
         }
 
+        var signatureVerified = false;
         if (!string.IsNullOrWhiteSpace(opts.WebhookSecret))
         {
             if (!TryGetHeader(headers, "webhook-signature", out var signature)
@@ -152,6 +153,8 @@ public sealed class WhopGateway : IPaymentGateway
             {
                 return new WebhookProcessResult("whop_bad_sig", "signature_invalid", false, "Signature mismatch");
             }
+
+            signatureVerified = true;
         }
 
         JsonDocument doc;
@@ -189,11 +192,17 @@ public sealed class WhopGateway : IPaymentGateway
 
             if (!string.IsNullOrWhiteSpace(opts.ApiKey) && !paymentId.StartsWith("whop_sandbox_", StringComparison.OrdinalIgnoreCase))
             {
-                var confirmed = await ConfirmPaymentAsync(opts, paymentId, ct);
-                if (confirmed is false)
+                var probe = await ProbePaymentAsync(opts, paymentId, ct);
+                if (probe is WhopPaymentProbe.NotConfirmed
+                    || (probe is WhopPaymentProbe.NotFound && !signatureVerified))
                 {
                     return new WebhookProcessResult(paymentId, type, false, "Whop API did not confirm this payment");
                 }
+
+                // NotFound with a verified signature: Whop's dashboard test events
+                // reference placeholder payments that do not exist in the API. The
+                // delivery is trusted because Whop signed it; fulfilment ignores it
+                // when no local quote matches.
             }
 
             var succeeded = type.Contains("succeeded", StringComparison.OrdinalIgnoreCase)
@@ -332,76 +341,93 @@ public sealed class WhopGateway : IPaymentGateway
     private static string? StripStripeSessionPlaceholder(string? url)
         => url?.Replace("{CHECKOUT_SESSION_ID}", string.Empty, StringComparison.Ordinal);
 
-    private async Task<bool?> ConfirmPaymentAsync(WhopSettings opts, string paymentId, CancellationToken ct)
+    private enum WhopPaymentProbe
+    {
+        Confirmed,
+        NotFound,
+        NotConfirmed,
+    }
+
+    private async Task<WhopPaymentProbe> ProbePaymentAsync(WhopSettings opts, string paymentId, CancellationToken ct)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(opts.ApiKey) || paymentId.StartsWith("whop_sandbox_", StringComparison.OrdinalIgnoreCase))
             {
-                return true;
+                return WhopPaymentProbe.Confirmed;
             }
 
-            using var message = new HttpRequestMessage(HttpMethod.Get, Combine(opts.ApiBaseUrl, $"payments/{Uri.EscapeDataString(paymentId)}"))
-            {
-                Version = HttpVersion.Version11,
-                VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
-            };
-            message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey!.Trim());
-            using var response = await _http.SendAsync(message, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                // If base URL has /v1 and returns 404, fallback check on /v2
-                if (response.StatusCode == HttpStatusCode.NotFound && opts.ApiBaseUrl.Contains("/v1"))
-                {
-                    try
-                    {
-                        var v2Url = opts.ApiBaseUrl.Replace("/v1", "/v2");
-                        using var v2Msg = new HttpRequestMessage(HttpMethod.Get, Combine(v2Url, $"payments/{Uri.EscapeDataString(paymentId)}"))
-                        {
-                            Version = HttpVersion.Version11,
-                            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
-                        };
-                        v2Msg.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey!.Trim());
-                        using var v2Resp = await _http.SendAsync(v2Msg, ct);
-                        if (v2Resp.IsSuccessStatusCode)
-                        {
-                            await using var v2Stream = await v2Resp.Content.ReadAsStreamAsync(ct);
-                            using var v2Doc = await JsonDocument.ParseAsync(v2Stream, cancellationToken: ct);
-                            var v2Root = v2Doc.RootElement.TryGetProperty("data", out var v2Data) ? v2Data : v2Doc.RootElement;
-                            var v2Status = ReadString(v2Root, "status");
-                            return string.IsNullOrWhiteSpace(v2Status)
-                                || v2Status.Contains("paid", StringComparison.OrdinalIgnoreCase)
-                                || v2Status.Contains("succeed", StringComparison.OrdinalIgnoreCase)
-                                || v2Status.Contains("complete", StringComparison.OrdinalIgnoreCase)
-                                || v2Status.Contains("valid", StringComparison.OrdinalIgnoreCase);
-                        }
-                    }
-                    catch
-                    {
-                        // Fallback failed
-                    }
-                }
-                return false;
-            }
-
-            await using var stream = await response.Content.ReadAsStreamAsync(ct);
-            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
-            var root = doc.RootElement.TryGetProperty("data", out var data) ? data : doc.RootElement;
-            var status = ReadString(root, "status");
-            if (string.IsNullOrWhiteSpace(status))
-            {
-                return true;
-            }
-
-            return status.Contains("paid", StringComparison.OrdinalIgnoreCase)
-                || status.Contains("succeed", StringComparison.OrdinalIgnoreCase)
-                || status.Contains("complete", StringComparison.OrdinalIgnoreCase)
-                || status.Contains("valid", StringComparison.OrdinalIgnoreCase);
+            using var response = await SendPaymentGetAsync(opts.ApiBaseUrl, opts, paymentId, ct);
+            return await EvaluatePaymentResponseAsync(response, opts, paymentId, ct);
         }
         catch (Exception)
         {
-            return false;
+            return WhopPaymentProbe.NotConfirmed;
         }
+    }
+
+    private async Task<WhopPaymentProbe> EvaluatePaymentResponseAsync(
+        HttpResponseMessage response,
+        WhopSettings opts,
+        string paymentId,
+        CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode)
+        {
+            return await ReadPaymentProbeAsync(response, ct);
+        }
+
+        if (response.StatusCode != HttpStatusCode.NotFound)
+        {
+            return WhopPaymentProbe.NotConfirmed;
+        }
+
+        // Whop only exposes the payments resource on /api/v2; retry there when
+        // the configured base URL still points at /api/v1.
+        if (!opts.ApiBaseUrl.Contains("/v1"))
+        {
+            return WhopPaymentProbe.NotFound;
+        }
+
+        using var v2Response = await SendPaymentGetAsync(opts.ApiBaseUrl.Replace("/v1", "/v2"), opts, paymentId, ct);
+        if (v2Response.IsSuccessStatusCode)
+        {
+            return await ReadPaymentProbeAsync(v2Response, ct);
+        }
+
+        return v2Response.StatusCode == HttpStatusCode.NotFound
+            ? WhopPaymentProbe.NotFound
+            : WhopPaymentProbe.NotConfirmed;
+    }
+
+    private async Task<HttpResponseMessage> SendPaymentGetAsync(string baseUrl, WhopSettings opts, string paymentId, CancellationToken ct)
+    {
+        using var message = new HttpRequestMessage(HttpMethod.Get, Combine(baseUrl, $"payments/{Uri.EscapeDataString(paymentId)}"))
+        {
+            Version = HttpVersion.Version11,
+            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+        };
+        message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey!.Trim());
+        return await _http.SendAsync(message, ct);
+    }
+
+    private static async Task<WhopPaymentProbe> ReadPaymentProbeAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        var root = doc.RootElement.TryGetProperty("data", out var data) ? data : doc.RootElement;
+        var status = ReadString(root, "status");
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return WhopPaymentProbe.Confirmed;
+        }
+
+        return status.Contains("paid", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("succeed", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("complete", StringComparison.OrdinalIgnoreCase)
+            || status.Contains("valid", StringComparison.OrdinalIgnoreCase)
+            ? WhopPaymentProbe.Confirmed
+            : WhopPaymentProbe.NotConfirmed;
     }
 
     private static Uri Combine(string baseUrl, string path)

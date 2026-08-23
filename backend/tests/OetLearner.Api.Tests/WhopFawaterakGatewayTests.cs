@@ -178,6 +178,79 @@ public class WhopFawaterakGatewayTests
     }
 
     [Fact]
+    public async Task WhopWebhook_SignedEventWithUnknownPayment_IsAccepted()
+    {
+        // Whop dashboard test deliveries reference placeholder payments that do
+        // not exist in the API; a verified signature proves Whop sent them.
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_test_01";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_testdummy","status":"paid","metadata":{"quote_id":"quote-no-match"}}}""";
+        var signature = PaymentCallbackHmac.HmacSha256Base64(secret, $"{msgId}.{timestamp}.{payload}");
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.NotFound };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{signature}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        }, default);
+
+        Assert.True(result.Processed, $"Rejected with: {result.EventType} {result.Error}");
+        Assert.Equal("completed", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_UnsignedEventWithUnknownPayment_IsStillRejected()
+    {
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_testdummy","status":"paid","metadata":{"quote_id":"quote-no-match"}}}""";
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.NotFound };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.False(result.Processed);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_SignedEventWithUnpaidRealPayment_IsRejected()
+    {
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_unpaid_01";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_unpaid123","status":"paid"}}""";
+        var signature = PaymentCallbackHmac.HmacSha256Base64(secret, $"{msgId}.{timestamp}.{payload}");
+
+        var handler = new StubHandler { Response = """{"id":"pay_unpaid123","status":"pending"}""" };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{signature}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        }, default);
+
+        Assert.False(result.Processed);
+        Assert.Equal("Whop API did not confirm this payment", result.Error);
+    }
+
+    [Fact]
     public async Task WhopSandboxCheckout_ReturnsEmbeddedIntent()
     {
         var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base());
@@ -323,6 +396,7 @@ public class WhopFawaterakGatewayTests
     private sealed class StubHandler : HttpMessageHandler
     {
         public string Response { get; set; } = "{}";
+        public System.Net.HttpStatusCode StatusCode { get; set; } = System.Net.HttpStatusCode.OK;
         public Uri? LastUri { get; private set; }
         public string? LastAuthorization { get; private set; }
         public string? LastBody { get; private set; }
@@ -333,7 +407,7 @@ public class WhopFawaterakGatewayTests
            LastAuthorization = request.Headers.Authorization?.ToString()
                ?? (request.Headers.TryGetValues("Authorization", out var values) ? values.FirstOrDefault() : null);
            LastBody = request.Content is null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
-           return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+           return new HttpResponseMessage(StatusCode)
            {
                Content = new StringContent(Response, System.Text.Encoding.UTF8, "application/json"),
            };
