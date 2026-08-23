@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oet-agent-gateway"
+version = "0.1.0"
+description = "OET agent gateway: Google Antigravity SDK runtime exposed as OpenAI-compatible + native streaming API for the OET prep platform"
+requires-python = ">=3.10"
+dependencies = [
+    "google-antigravity>=0.1.14",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic-settings>=2.5",
+    "keyring>=25",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+oet_agent_gateway = ["skills/**/*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"

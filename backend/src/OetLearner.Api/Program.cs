@@ -1773,6 +1773,7 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Voice.AiVoiceProviderS
 // admins can paste a key in /admin/ai-providers and the integration just works.
 builder.Services.AddHostedService<OetLearner.Api.Services.Ai.CoreAiProviderSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiAssistant.AiAssistantFeatureRouteSeeder>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Seeding.AntigravityGatewaySeedHostedService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
     OetLearner.Api.Services.Grammar.GrammarDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDraftService,

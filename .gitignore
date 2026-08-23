@@ -205,6 +205,11 @@ _create_users.sql
 __pycache__/
 *.pyc
 
+# Antigravity agent gateway (Python) — venv + local env only
+agent-gateway/.venv/
+agent-gateway/.env
+agent-gateway/**/*.egg-info/
+
 # Linked git worktrees (separate checkouts — never commit)
 .worktrees/
 

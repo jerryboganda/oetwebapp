@@ -30,6 +30,7 @@ env:
   WEB_IMAGE: ghcr.io/${{ github.repository }}-web:${{ github.sha }}
   API_IMAGE: ghcr.io/${{ github.repository }}-api:${{ github.sha }}
   DB_BACKUP_IMAGE: ghcr.io/${{ github.repository }}-db-backup:${{ github.sha }}
+  AGENT_GATEWAY_IMAGE: ghcr.io/${{ github.repository }}-agent-gateway:${{ github.sha }}
 
 jobs:
   build-web:
@@ -126,6 +127,29 @@ jobs:
           cache-from: type=gha,scope=db-backup
           cache-to: type=gha,mode=max,scope=db-backup
 
+  build-agent-gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push agent gateway (Google Antigravity SDK runtime)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agent-gateway
+          file: ./Dockerfile
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/${{ github.repository }}-agent-gateway:${{ github.sha }}
+            ghcr.io/${{ github.repository }}-agent-gateway:latest
+          cache-from: type=gha,scope=agent-gateway
+          cache-to: type=gha,mode=max,scope=agent-gateway
+
   migrate-production:
     needs: [build-web, build-api, build-backup]
     runs-on: ubuntu-latest
@@ -198,7 +222,7 @@ jobs:
             < output/oet-production-migrations.sql
 
   deploy:
-    needs: [build-web, build-api, build-backup, migrate-production]
+    needs: [build-web, build-api, build-backup, build-agent-gateway, migrate-production]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -255,6 +279,7 @@ jobs:
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
             "set -e; echo '$GHCR_TOKEN' | docker login ghcr.io -u '$GHCR_USER' --password-stdin; \
              WEB_IMAGE='$WEB_IMAGE' API_IMAGE='$API_IMAGE' DB_BACKUP_IMAGE='$DB_BACKUP_IMAGE' \
+             AGENT_GATEWAY_IMAGE='$AGENT_GATEWAY_IMAGE' \
              VPS_APP_DIR='$APP_DIR' VPS_COMPOSE_FILE='$REMOTE_COMPOSE' VPS_VALIDATE_ENV_SCRIPT='$REMOTE_VALIDATE' \
              NGINX_TEMPLATE_SRC='$REMOTE_NGINX' \
                bash '$REMOTE_SCRIPT'; \
@@ -266,4 +291,5 @@ jobs:
           echo "- web: \`$WEB_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- api: \`$API_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- backup: \`$DB_BACKUP_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- agent-gateway: \`$AGENT_GATEWAY_IMAGE\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- result: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"

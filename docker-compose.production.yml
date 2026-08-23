@@ -274,6 +274,36 @@ services:
     <<: *learner-api-slot
     container_name: oet-api-green
 
+  agent-gateway:
+    image: ${AGENT_GATEWAY_IMAGE:-oetwebsite-agent-gateway:local}
+    pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
+    container_name: oet-agent-gateway
+    restart: unless-stopped
+    # Mode B (local-oauth / personal Antigravity OAuth session) is HARD-DISABLED
+    # here. Production always runs on the official Gemini API key (Mode A),
+    # or the SDK's OAuth Mode C once Google ships it.
+    environment:
+      AGENTGATEWAY_AUTH_MODE: ${AGENTGATEWAY_AUTH_MODE:-gemini-key}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      AGENTGATEWAY_INTERNAL_SERVICE_TOKEN: ${AGENTGATEWAY_INTERNAL_SERVICE_TOKEN:-}
+      AGENTGATEWAY_BUDGET_TOKENS_PER_DAY: ${AGENTGATEWAY_BUDGET_TOKENS_PER_DAY:-4000000}
+      AGENTGATEWAY_BUDGET_BY_ROUTE: ${AGENTGATEWAY_BUDGET_BY_ROUTE:-{}}
+      AGENTGATEWAY_CACHE_TTL_SECONDS: ${AGENTGATEWAY_CACHE_TTL_SECONDS:-3600}
+      AGENTGATEWAY_MAX_SESSIONS: ${AGENTGATEWAY_MAX_SESSIONS:-16}
+      AGENTGATEWAY_LOCAL_OAUTH_ALLOWED: "false"
+      AGENTGATEWAY_LOCAL_OAUTH_SERVICE: ${AGENTGATEWAY_LOCAL_OAUTH_SERVICE:-gemini}
+      AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT: ${AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT:-antigravity}
+    expose:
+      - "8305"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8305/v1/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
+
   web:
     image: ${ROUTER_IMAGE:-nginx:1.27-alpine}
     container_name: oet-web

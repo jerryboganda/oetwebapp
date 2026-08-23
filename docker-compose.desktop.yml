@@ -54,6 +54,29 @@ services:
     ports:
       - "5198:8080"
 
+  agent-gateway:
+    build:
+      context: agent-gateway
+      dockerfile: Dockerfile
+    container_name: oet-desktop-agent-gateway
+    restart: unless-stopped
+    environment:
+      AGENTGATEWAY_AUTH_MODE: ${AGENTGATEWAY_AUTH_MODE:-gemini-key}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      AGENTGATEWAY_INTERNAL_SERVICE_TOKEN: ${AGENTGATEWAY_INTERNAL_SERVICE_TOKEN:-}
+      AGENTGATEWAY_BUDGET_TOKENS_PER_DAY: ${AGENTGATEWAY_BUDGET_TOKENS_PER_DAY:-2000000}
+      AGENTGATEWAY_CACHE_TTL_SECONDS: ${AGENTGATEWAY_CACHE_TTL_SECONDS:-3600}
+      AGENTGATEWAY_MAX_SESSIONS: ${AGENTGATEWAY_MAX_SESSIONS:-8}
+      # Mode B (personal Antigravity OAuth) is NOT pre-set here: desktop users
+      # can home-set AGENTGATEWAY_AUTH_MODE=local-oauth + LOCAL_OAUTH_ALLOWED=true
+      # in their own .env for the owner's personal AI Pro quota (opt-in; risk notice
+      # in docs/antigravity/auth.md).
+      AGENTGATEWAY_LOCAL_OAUTH_ALLOWED: ${AGENTGATEWAY_LOCAL_OAUTH_ALLOWED:-false}
+      AGENTGATEWAY_LOCAL_OAUTH_SERVICE: ${AGENTGATEWAY_LOCAL_OAUTH_SERVICE:-gemini}
+      AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT: ${AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT:-antigravity}
+    ports:
+      - "8305:8305"
+
   web:
     build:
       context: .

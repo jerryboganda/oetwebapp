@@ -22,12 +22,16 @@ API_PUBLIC_URL="${API_PUBLIC_URL:-https://api.oetwithdrhesham.co.uk}"
 : "${WEB_IMAGE:?Set WEB_IMAGE to the GHCR web image ref}"
 : "${API_IMAGE:?Set API_IMAGE to the GHCR api image ref}"
 : "${DB_BACKUP_IMAGE:?Set DB_BACKUP_IMAGE to the GHCR backup image ref}"
+# The Antigravity agent gateway is a shared (non-slotted) service. Optional for
+# rollback compatibility: when unset the gateway container is left untouched.
+: "${AGENT_GATEWAY_IMAGE:=}"
 cd "$APP_DIR"
 export VPS_APP_DIR
 
 echo "=== AUTO_DEPLOY_START $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
 echo "WEB_IMAGE=$WEB_IMAGE"
 echo "API_IMAGE=$API_IMAGE"
+[ -n "$AGENT_GATEWAY_IMAGE" ] && echo "AGENT_GATEWAY_IMAGE=$AGENT_GATEWAY_IMAGE"
 
 mkdir -p /var/opt/oet-learner/releases
 if [ -n "${NGINX_TEMPLATE_SRC:-}" ] && [ -f "$NGINX_TEMPLATE_SRC" ]; then
@@ -63,7 +67,8 @@ echo "active slot: ${prev_slot:-none} -> deploying to: $target_slot"
 
 # --- persist image refs so any future manual compose op uses them too ---
 mkdir -p .deploy
-for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE" "DB_BACKUP_IMAGE=$DB_BACKUP_IMAGE"; do
+for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE" "DB_BACKUP_IMAGE=$DB_BACKUP_IMAGE" \
+  ${AGENT_GATEWAY_IMAGE:+""}; do
   key="${kv%%=*}"
   if grep -q "^${key}=" .env.production 2>/dev/null; then
     sed -i "s#^${key}=.*#${kv}#" .env.production
@@ -71,8 +76,16 @@ for kv in "WEB_IMAGE=$WEB_IMAGE" "API_IMAGE=$API_IMAGE" "DB_BACKUP_IMAGE=$DB_BAC
     echo "$kv" >> .env.production
   fi
 done
+if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
+  key="AGENT_GATEWAY_IMAGE"
+  if grep -q "^${key}=" .env.production 2>/dev/null; then
+    sed -i "s#^${key}=.*#${key}=${AGENT_GATEWAY_IMAGE}#" .env.production
+  else
+    echo "${key}=${AGENT_GATEWAY_IMAGE}" >> .env.production
+  fi
+fi
 
-export WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE
+export WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE AGENT_GATEWAY_IMAGE
 compose() {
   local slot="$1"
   shift
@@ -111,12 +124,15 @@ echo "--- pulling images ---"
 pull_with_retry "$WEB_IMAGE"
 pull_with_retry "$API_IMAGE"
 pull_with_retry "$DB_BACKUP_IMAGE"
+if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
+  pull_with_retry "$AGENT_GATEWAY_IMAGE"
+fi
 
 # Recreate ONLY the inactive web/API slot + backup sidecar.
 # Never recreate postgres. Never pass -v. Named volumes stay mounted.
 echo "--- starting target slot ($target_slot) ---"
 compose "$target_slot" up -d --no-build --force-recreate \
-  "web-$target_slot" "learner-api-$target_slot" db-backup
+  "web-$target_slot" "learner-api-$target_slot" db-backup agent-gateway
 
 # --- health gate on the target slot (prod still served by $prev_slot) ---
 healthcheck() {
@@ -134,6 +150,9 @@ healthcheck() {
 echo "--- health-gating target slot ---"
 healthcheck "oet-api-$target_slot" "curl --fail --silent http://127.0.0.1:8080/health/ready" "API ($target_slot)"
 healthcheck "oet-web-$target_slot" "wget -qO- http://127.0.0.1:3000/api/health" "WEB ($target_slot)"
+if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
+  healthcheck "oet-agent-gateway" "wget -qO- http://127.0.0.1:8305/v1/healthz" "AGENT GATEWAY"
+fi
 
 # --- flip routers to the target slot ---
 echo "--- switching routers to $target_slot ---"
@@ -181,8 +200,10 @@ fi
 
 # --- record + keep previous slot warm for instant rollback ---
 {
-  printf '%s\t%s\tweb=%s\tapi=%s\n' \
+  printf '%s\t%s\tweb=%s\tapi=%s' \
     "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$target_slot" "$WEB_IMAGE" "$API_IMAGE"
+  [ -n "$AGENT_GATEWAY_IMAGE" ] && printf '\tagent-gateway=%s' "$AGENT_GATEWAY_IMAGE"
+  printf '\n'
 } >> .deploy/auto-deploy-history.tsv
 
 echo "=== AUTO_DEPLOY_DONE: live on $target_slot (previous slot $prev_slot kept for rollback) ==="
