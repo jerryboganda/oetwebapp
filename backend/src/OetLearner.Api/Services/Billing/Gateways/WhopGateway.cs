@@ -182,6 +182,10 @@ public sealed class WhopGateway : IPaymentGateway
                 ?? ReadNestedString(data, "custom_fields", "order_id")
                 ?? ReadNestedString(root, "metadata", "quote_id")
                 ?? ReadNestedString(root, "metadata", "order_id");
+            // Whop payments carry checkout_configuration_id — the id stored as
+            // GatewayTransactionId when the checkout session was created. It is a
+            // reliable match even when metadata did not propagate to the payment.
+            var checkoutConfigurationId = ReadString(data, "checkout_configuration_id");
 
             if (!string.IsNullOrWhiteSpace(opts.ApiKey) && !paymentId.StartsWith("whop_sandbox_", StringComparison.OrdinalIgnoreCase))
             {
@@ -195,7 +199,6 @@ public sealed class WhopGateway : IPaymentGateway
             var succeeded = type.Contains("succeeded", StringComparison.OrdinalIgnoreCase)
                 || type.Contains("paid", StringComparison.OrdinalIgnoreCase)
                 || type.Contains("went_valid", StringComparison.OrdinalIgnoreCase)
-                || type.Contains("valid", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(statusRaw, "paid", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(statusRaw, "succeeded", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(statusRaw, "complete", StringComparison.OrdinalIgnoreCase)
@@ -206,7 +209,7 @@ public sealed class WhopGateway : IPaymentGateway
                 EventType: type,
                 Processed: true,
                 Error: null,
-                GatewayTransactionId: quoteId ?? paymentId,
+                GatewayTransactionId: quoteId ?? checkoutConfigurationId ?? paymentId,
                 NormalizedStatus: succeeded ? "completed" : "pending",
                 SafePayloadJson: JsonSerializer.Serialize(new
                 {

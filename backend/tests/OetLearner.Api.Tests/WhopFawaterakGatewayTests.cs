@@ -143,6 +143,41 @@ public class WhopFawaterakGatewayTests
     }
 
     [Fact]
+    public async Task WhopWebhook_MissingMetadata_MatchesByCheckoutConfigurationId()
+    {
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_1","status":"paid","checkout_configuration_id":"ch_live1"}}""";
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { AllowSandboxFallbacks = true }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("ch_live1", result.GatewayTransactionId);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_WentInvalidEvent_IsNotTreatedAsSucceeded()
+    {
+        const string payload = """{"event":"membership.went_invalid","data":{"id":"mem_1","status":"invalid","checkout_configuration":{"metadata":{"quote_id":"quote-1"}}}}""";
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { AllowSandboxFallbacks = true }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("pending", result.NormalizedStatus);
+    }
+
+    [Fact]
     public async Task WhopSandboxCheckout_ReturnsEmbeddedIntent()
     {
         var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base());
