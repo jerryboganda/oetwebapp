@@ -209,6 +209,8 @@ const PUBLIC_PATHS = new Set([
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;
   if (pathname.startsWith('/auth/callback/')) return true;
+  // External payment gateway webhooks (Whop, Stripe, PayPal, Fawaterak, etc.) are server-to-server callbacks
+  if (pathname.startsWith('/v1/payment/webhooks/') || pathname === '/v1/payment/webhooks') return true;
   return false;
 }
 

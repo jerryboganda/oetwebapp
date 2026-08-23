@@ -1,5 +1,9 @@
 ﻿# Agent State (local)
 
+## Current task — Mobile OTP auto-rotation on resume (FIXED)
+- Shipped `c512a4e4` on `main`: /verify-email challenge now persisted in localStorage (survives WebView process death), module-scoped auto-send guard (`app/verify-email/auto-send-guard.ts`), resume-time refreshSession skipped on auth/OTP screens in MobileRuntimeBridge. Validation: vitest app/verify-email 4/4; tsc errors all pre-existing/unrelated.
+- Next: owner verifies on production Android/iOS build — request OTP, background app to check mail, return: screen must NOT reload or request a new OTP.
+
 ## Goal
 Continue official OET Reading uploads on production for **oetwebapp**.
 Publish live. Same five book folders for Full Exam and Part A/B/C.

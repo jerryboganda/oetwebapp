@@ -15,6 +15,21 @@ describe('middleware mobile association files', () => {
   });
 });
 
+describe('middleware payment webhooks', () => {
+  it.each([
+    '/v1/payment/webhooks/whop',
+    '/v1/payment/webhooks/stripe',
+    '/v1/payment/webhooks/paypal',
+    '/v1/payment/webhooks/fawaterak',
+    '/v1/payment/webhooks/easykash',
+  ])('allows %s without authentication redirect', (pathname) => {
+    const response = middleware(new NextRequest(`https://app.oetwithdrhesham.co.uk${pathname}`, { method: 'POST' }));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+  });
+});
+
 describe('middleware sponsor launch gate', () => {
   it('redirects sponsor routes to support while the sponsor portal is disabled', () => {
     const response = middleware(new NextRequest('https://app.oetwithdrhesham.co.uk/sponsor/billing'));

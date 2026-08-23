@@ -52,9 +52,25 @@ function isSignalRHubRequest(request: Request): boolean {
   }
 }
 
+/**
+ * Payment webhook endpoints (Whop, Stripe, etc.) are server-to-server callbacks
+ * and do not send browser cookies or CSRF tokens.
+ */
+const PAYMENT_WEBHOOK_PATH_PATTERN = /^\/?api\/backend\/v1\/payment\/webhooks(\/|$|\?)/i;
+
+function isPaymentWebhookRequest(request: Request): boolean {
+  try {
+    const { pathname } = new URL(request.url);
+    return PAYMENT_WEBHOOK_PATH_PATTERN.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function validateRequestOrigin(request: Request): boolean {
   const method = request.method.toUpperCase();
   if (CSRF_SAFE_METHODS.has(method)) return true;
+  if (isPaymentWebhookRequest(request)) return true;
 
   const origin = request.headers.get('origin');
   const referer = request.headers.get('referer');
@@ -95,6 +111,9 @@ export function validateProxyCsrf(request: Request): boolean {
   // hub bearer JWT enforces auth at the backend; CSRF here would only break
   // real-time connectivity without adding meaningful protection.
   if (isSignalRHubRequest(request)) return true;
+
+  // Payment gateway webhooks are server-to-server POST callbacks
+  if (isPaymentWebhookRequest(request)) return true;
 
   const cookies = parseCookieHeader(request.headers.get('cookie'));
   if (!cookies.has(REFRESH_COOKIE)) {

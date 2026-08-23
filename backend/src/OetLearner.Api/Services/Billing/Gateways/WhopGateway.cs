@@ -139,8 +139,16 @@ public sealed class WhopGateway : IPaymentGateway
                 return new WebhookProcessResult("whop_no_sig", "signature_missing", false, "Missing Whop signature header");
             }
 
+            TryGetHeader(headers, "webhook-id", out var webhookId);
+            if (string.IsNullOrWhiteSpace(webhookId))
+            {
+                TryGetHeader(headers, "msg_id", out webhookId);
+            }
+
+            TryGetHeader(headers, "webhook-timestamp", out var webhookTimestamp);
+
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            if (!PaymentCallbackHmac.WhopSignatureMatches(opts.WebhookSecret, payload, signature, now, _billing.Value.WebhookMaxAgeSeconds))
+            if (!PaymentCallbackHmac.WhopSignatureMatches(opts.WebhookSecret, payload, signature, webhookId, webhookTimestamp, now, _billing.Value.WebhookMaxAgeSeconds))
             {
                 return new WebhookProcessResult("whop_bad_sig", "signature_invalid", false, "Signature mismatch");
             }
@@ -168,6 +176,10 @@ public sealed class WhopGateway : IPaymentGateway
             var statusRaw = ReadString(data, "status") ?? type;
             var quoteId = ReadNestedString(data, "metadata", "quote_id")
                 ?? ReadNestedString(data, "metadata", "order_id")
+                ?? ReadNestedString(data, "checkout_configuration", "metadata", "quote_id")
+                ?? ReadNestedString(data, "checkout_configuration", "metadata", "order_id")
+                ?? ReadNestedString(data, "custom_fields", "quote_id")
+                ?? ReadNestedString(data, "custom_fields", "order_id")
                 ?? ReadNestedString(root, "metadata", "quote_id")
                 ?? ReadNestedString(root, "metadata", "order_id");
 
@@ -182,9 +194,12 @@ public sealed class WhopGateway : IPaymentGateway
 
             var succeeded = type.Contains("succeeded", StringComparison.OrdinalIgnoreCase)
                 || type.Contains("paid", StringComparison.OrdinalIgnoreCase)
+                || type.Contains("went_valid", StringComparison.OrdinalIgnoreCase)
+                || type.Contains("valid", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(statusRaw, "paid", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(statusRaw, "succeeded", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(statusRaw, "complete", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(statusRaw, "complete", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(statusRaw, "valid", StringComparison.OrdinalIgnoreCase);
 
             return new WebhookProcessResult(
                 EventId: paymentId,
@@ -318,6 +333,11 @@ public sealed class WhopGateway : IPaymentGateway
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(opts.ApiKey) || paymentId.StartsWith("whop_sandbox_", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             using var message = new HttpRequestMessage(HttpMethod.Get, Combine(opts.ApiBaseUrl, $"payments/{Uri.EscapeDataString(paymentId)}"))
             {
                 Version = HttpVersion.Version11,
@@ -327,6 +347,37 @@ public sealed class WhopGateway : IPaymentGateway
             using var response = await _http.SendAsync(message, ct);
             if (!response.IsSuccessStatusCode)
             {
+                // If base URL has /v1 and returns 404, fallback check on /v2
+                if (response.StatusCode == HttpStatusCode.NotFound && opts.ApiBaseUrl.Contains("/v1"))
+                {
+                    try
+                    {
+                        var v2Url = opts.ApiBaseUrl.Replace("/v1", "/v2");
+                        using var v2Msg = new HttpRequestMessage(HttpMethod.Get, Combine(v2Url, $"payments/{Uri.EscapeDataString(paymentId)}"))
+                        {
+                            Version = HttpVersion.Version11,
+                            VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+                        };
+                        v2Msg.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.ApiKey!.Trim());
+                        using var v2Resp = await _http.SendAsync(v2Msg, ct);
+                        if (v2Resp.IsSuccessStatusCode)
+                        {
+                            await using var v2Stream = await v2Resp.Content.ReadAsStreamAsync(ct);
+                            using var v2Doc = await JsonDocument.ParseAsync(v2Stream, cancellationToken: ct);
+                            var v2Root = v2Doc.RootElement.TryGetProperty("data", out var v2Data) ? v2Data : v2Doc.RootElement;
+                            var v2Status = ReadString(v2Root, "status");
+                            return string.IsNullOrWhiteSpace(v2Status)
+                                || v2Status.Contains("paid", StringComparison.OrdinalIgnoreCase)
+                                || v2Status.Contains("succeed", StringComparison.OrdinalIgnoreCase)
+                                || v2Status.Contains("complete", StringComparison.OrdinalIgnoreCase)
+                                || v2Status.Contains("valid", StringComparison.OrdinalIgnoreCase);
+                        }
+                    }
+                    catch
+                    {
+                        // Fallback failed
+                    }
+                }
                 return false;
             }
 
@@ -341,7 +392,8 @@ public sealed class WhopGateway : IPaymentGateway
 
             return status.Contains("paid", StringComparison.OrdinalIgnoreCase)
                 || status.Contains("succeed", StringComparison.OrdinalIgnoreCase)
-                || status.Contains("complete", StringComparison.OrdinalIgnoreCase);
+                || status.Contains("complete", StringComparison.OrdinalIgnoreCase)
+                || status.Contains("valid", StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception)
         {
@@ -395,5 +447,15 @@ public sealed class WhopGateway : IPaymentGateway
         }
 
         return ReadString(nested, child);
+    }
+
+    private static string? ReadNestedString(JsonElement element, string level1, string level2, string level3)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(level1, out var n1) || n1.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return ReadNestedString(n1, level2, level3);
     }
 }

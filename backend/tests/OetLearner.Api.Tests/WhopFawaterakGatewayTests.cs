@@ -71,11 +71,75 @@ public class WhopFawaterakGatewayTests
 
         var result = await gateway.HandleWebhookAsync(
             """{"type":"payment.succeeded","data":{"id":"pay_1"}}""",
-            new Dictionary<string, string> { ["webhook-signature"] = "t=1,v1=deadbeef" },
+            new Dictionary<string, string> { ["webhook-signature"] = "v1,badSignatureBase64=" },
             default);
 
         Assert.False(result.Processed);
         Assert.Equal("signature_invalid", result.EventType);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_AcceptsStandardWebhookSignature_CompletesPayment()
+    {
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_01HZY987654";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"action":"payment.succeeded","data":{"id":"pay_valid123","status":"paid","metadata":{"quote_id":"quote-whop-success"}}}""";
+
+        var signedData = $"{msgId}.{timestamp}.{payload}";
+        var validBase64Sig = PaymentCallbackHmac.HmacSha256Base64(secret, signedData);
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var headers = new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{validBase64Sig}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        };
+
+        var result = await gateway.HandleWebhookAsync(payload, headers, default);
+
+        Assert.True(result.Processed, $"Failed with: EventId={result.EventId}, EventType={result.EventType}, Error={result.Error}");
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("quote-whop-success", result.GatewayTransactionId);
+        Assert.Equal("pay_valid123", result.GatewayObjectId);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_MembershipWentValid_ExtractsNestedQuoteId()
+    {
+        const string payload = """
+        {
+            "event": "membership.went_valid",
+            "data": {
+                "id": "mem_998877",
+                "status": "valid",
+                "checkout_configuration": {
+                    "metadata": {
+                        "quote_id": "quote-membership-123"
+                    }
+                }
+            }
+        }
+        """;
+
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", null, "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(), Options.Create(new BillingOptions { AllowSandboxFallbacks = true }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("completed", result.NormalizedStatus);
+        Assert.Equal("quote-membership-123", result.GatewayTransactionId);
+        Assert.Equal("mem_998877", result.GatewayObjectId);
     }
 
     [Fact]

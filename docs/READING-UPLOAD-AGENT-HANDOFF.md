@@ -208,8 +208,9 @@ Shared component: `components/domain/reading/reading-exam-folder-browser.tsx`.
 Do **not** redirect those routes to `/mocks`. `/reading/mocks` is a different
 surface (mock bundles). An empty Mocks page is expected.
 
-Live web-blue at handoff time: image from commit `6eb4f075`.
-Last good Actions deploy: run `32114213139`.
+Live web-blue at last docs/rules ship: commit `6a9ae1e6`, Actions
+`32165468361`. Folder-browser UI shipped earlier as `6eb4f075` /
+`32114213139`. Repo is **private** again after that run.
 
 If a UI change is not live, the web slot is stale. Redeploy with GitHub
 Actions. Confirm the **web** image commit, not only the API slot.
@@ -264,6 +265,7 @@ On the public API, for each new paper:
 
 - `anna-hartford-import\` — AH PDFs, printed keys, published JSON, prod importer
 - `anna-hartford-extract\` — `pdftotext` output
+- `part-pdfs\` — split AH/JB part PDFs, `split_reading_parts.py`, `replace-part-pdfs.mjs`
 - `READING-MODULE-UNDERSTANDING.md` — earlier locked understanding
 
 Use them as examples. Do not re-publish AH from them.
