@@ -204,6 +204,33 @@ function toInternalRoute(value: unknown): string | null {
   }
 }
 
+/**
+ * Public auth screens where a resume-time session refresh does more harm than
+ * good: refreshSession() flips AuthContext into `loading`, which re-renders
+ * these screens into their skeleton/fallback state — the learner sees the OTP
+ * screen visibly "reload" the moment they come back from their mail app.
+ * Nothing on these routes needs a fresh access token, so skip the refresh
+ * there entirely.
+ */
+const RESUME_REFRESH_SKIP_PATHS = new Set([
+  '/verify-email',
+  '/sign-in',
+  '/register',
+  '/register/success',
+  '/forgot-password',
+  '/forgot-password/verify',
+  '/reset-password',
+  '/reset-password/success',
+  '/mfa/challenge',
+  '/mfa/recovery',
+  '/device/verify',
+]);
+
+function shouldSkipResumeRefresh(): boolean {
+  if (typeof window === 'undefined') return true;
+  return RESUME_REFRESH_SKIP_PATHS.has(window.location.pathname);
+}
+
 export function MobileRuntimeBridge() {
   const { refreshSession, isAuthenticated, loading } = useAuth();
   const router = useRouter();
@@ -245,7 +272,16 @@ export function MobileRuntimeBridge() {
         onResume: () => {
           triggerResumeMotion();
           const currentState = authStateRef.current;
-          if (!currentState.loading && currentState.isAuthenticated) {
+          // Skip the resume refresh on OTP/auth screens: the global `loading`
+          // flip re-renders them into their fallback state, which looks like
+          // the app reloading itself and (before the verify-email fix) went
+          // hand-in-hand with an unwanted fresh OTP request. The session is
+          // refreshed normally on every other screen.
+          if (
+            !shouldSkipResumeRefresh() &&
+            !currentState.loading &&
+            currentState.isAuthenticated
+          ) {
             void currentState.refreshSession();
           }
           // Clear badge notifications when app is resumed

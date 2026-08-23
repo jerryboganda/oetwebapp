@@ -15,9 +15,22 @@ import { AUTH_ROUTES } from '@/lib/auth/routes';
 import { loadStoredSession } from '@/lib/auth-storage';
 import { readErrorMessage } from '@/lib/read-error-message';
 import type { OtpChallenge } from '@/lib/types/auth';
+import {
+  clearAutoSendRequest,
+  hasAutoSendRequested,
+  markAutoSendRequested,
+} from './auto-send-guard';
 
 const VERIFY_EMAIL_CHALLENGE_KEY = 'oet.verify-email.challenge';
 
+// Challenge state lives in LOCALSTORAGE, not sessionStorage. On Android/iOS the
+// OS routinely kills the backgrounded WebView while the learner checks their
+// mail app; Capacitor then cold-reloads the page on return and sessionStorage
+// is wiped — which used to make this effect see "no challenge" and silently
+// request a NEW OTP, invalidating the code sitting in the learner's inbox.
+// localStorage survives WebView process death on both platforms, so the
+// original OTP session stays active until it truly expires or the learner
+// explicitly taps Resend.
 function challengeStorageKey(email: string) {
   return `${VERIFY_EMAIL_CHALLENGE_KEY}:${email.trim().toLowerCase()}`;
 }
@@ -28,14 +41,14 @@ function readStoredVerificationChallenge(email: string): Pick<OtpChallenge, 'des
   }
 
   try {
-    const raw = window.sessionStorage.getItem(challengeStorageKey(email));
+    const raw = window.localStorage.getItem(challengeStorageKey(email));
     if (!raw) {
       return null;
     }
 
     const parsed = JSON.parse(raw) as Partial<OtpChallenge>;
     if (!parsed.expiresAt || Date.parse(parsed.expiresAt) <= Date.now()) {
-      window.sessionStorage.removeItem(challengeStorageKey(email));
+      window.localStorage.removeItem(challengeStorageKey(email));
       return null;
     }
 
@@ -53,13 +66,25 @@ function writeStoredVerificationChallenge(email: string, challenge: OtpChallenge
     return;
   }
 
-  window.sessionStorage.setItem(
+  window.localStorage.setItem(
     challengeStorageKey(email),
     JSON.stringify({
       destinationHint: challenge.destinationHint,
       expiresAt: challenge.expiresAt,
     }),
   );
+}
+
+function clearStoredVerificationChallenge(email: string) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.removeItem(challengeStorageKey(email));
+  } catch {
+    // Storage unavailable — nothing to clean up.
+  }
 }
 
 export default function VerifyEmailPage() {
@@ -140,7 +165,22 @@ function VerifyEmailContent() {
         return;
       }
 
+      // A challenge was already auto-sent for this email earlier in this
+      // WebView session but its storage record is gone (private mode,
+      // blocked storage, etc.). Do NOT silently rotate the OTP — the learner
+      // may still have a valid code in their inbox. Show the notice and let
+      // them use Resend explicitly if they truly need a new code. (The
+      // backend additionally reuses any still-valid challenge when
+      // forceNew is false.)
+      if (hasAutoSendRequested(email)) {
+        if (!cancelled) {
+          setNotice(`Enter the 6 digit verification code sent to ${email}.`);
+        }
+        return;
+      }
+
       try {
+        markAutoSendRequested(email);
         const challenge = await sendEmailVerificationOtp(email);
         writeStoredVerificationChallenge(email, challenge);
         if (cancelled) {
@@ -163,6 +203,7 @@ function VerifyEmailContent() {
         );
       } catch (error) {
         requestedForEmail.current = null;
+        clearAutoSendRequest();
         if (!cancelled) {
           setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
         }
@@ -190,6 +231,7 @@ function VerifyEmailContent() {
       const challenge = await sendEmailVerificationOtp(email, { forceNew: true });
       writeStoredVerificationChallenge(email, challenge);
       requestedForEmail.current = email;
+      markAutoSendRequested(email);
       startCooldown();
       setNotice(
         `Enter the 6 digit verification code sent to ${challenge.destinationHint || email}.`
@@ -227,6 +269,11 @@ function VerifyEmailContent() {
       const currentUser = user
         ? await verifyEmailOtp(normalizedOtp)
         : await verifyEmailOtpRequest(email, normalizedOtp);
+
+      // The challenge is consumed — drop its record so a later visit to this
+      // screen for the same email starts clean instead of showing a stale
+      // "code sent to …" notice.
+      clearStoredVerificationChallenge(email);
 
       if (user) {
         router.replace(resolveAuthenticatedDestination(currentUser, nextHref));
