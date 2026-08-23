@@ -122,7 +122,7 @@ function Tag({ label, gold = false }: { label: string; gold?: boolean }) {
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
-        gold ? 'bg-[#D4A44F]/15 text-[#996F1F]' : 'bg-background-light text-muted'
+        gold ? 'bg-gold/15 text-gold-fg' : 'bg-background-light text-muted'
       }`}
     >
       {label}

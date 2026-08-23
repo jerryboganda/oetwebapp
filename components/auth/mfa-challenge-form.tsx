@@ -102,15 +102,15 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
           </div>
 
           <div className={styles.field}>
-            <label>Authenticator code</label>
-            <OtpCodeInput value={code} onChange={(next) => {
+            <label htmlFor="mfa-code">Authenticator code</label>
+            <OtpCodeInput id="mfa-code" autoFocus value={code} onChange={(next) => {
               setCode(next.replace(/\D/g, '').slice(0, 6));
               setError(null);
             }} disabled={!pendingMfaChallenge || isSubmittingCode} />
             <p className={styles.fieldHint}>Use the live code from your authenticator app.</p>
           </div>
 
-          {error ? <div className={`${styles.notice} ${styles.noticeDanger}`.trim()}>{error}</div> : null}
+          {error ? <div role="alert" aria-live="assertive" className={`${styles.notice} ${styles.noticeDanger}`.trim()}>{error}</div> : null}
 
           <button
             type="submit"

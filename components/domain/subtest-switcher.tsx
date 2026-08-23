@@ -19,6 +19,8 @@ interface SubtestSwitcherProps {
   className?: string;
 }
 
+const SUBTEST_ORDER: SubTest[] = ['writing', 'speaking', 'reading', 'listening'];
+
 export function SubtestSwitcher({ active, onChange, className }: SubtestSwitcherProps) {
   return (
     <div className={cn('flex gap-2 overflow-x-auto -mx-1 px-1 scrollbar-hide', className)} role="tablist">
@@ -27,6 +29,24 @@ export function SubtestSwitcher({ active, onChange, className }: SubtestSwitcher
           key={key}
           role="tab"
           aria-selected={active === key}
+          tabIndex={active === key ? 0 : -1}
+          onKeyDown={(event) => {
+            // FE-035: roving-tabindex arrow navigation for the tablist pattern.
+            const currentIndex = SUBTEST_ORDER.indexOf(active);
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+              event.preventDefault();
+              onChange(SUBTEST_ORDER[(currentIndex + 1) % SUBTEST_ORDER.length]);
+            } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              onChange(SUBTEST_ORDER[(currentIndex - 1 + SUBTEST_ORDER.length) % SUBTEST_ORDER.length]);
+            } else if (event.key === 'Home') {
+              event.preventDefault();
+              onChange(SUBTEST_ORDER[0]);
+            } else if (event.key === 'End') {
+              event.preventDefault();
+              onChange(SUBTEST_ORDER[SUBTEST_ORDER.length - 1]);
+            }
+          }}
           onClick={() => onChange(key)}
           className={cn(
             'flex items-center gap-1.5 px-3.5 py-2.5 rounded-full text-xs font-bold border transition-colors shrink-0',

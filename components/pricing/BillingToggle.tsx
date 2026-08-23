@@ -56,7 +56,7 @@ export function BillingToggle({
         >
           Annual
           {annualDiscountPct ? (
-            <span className="ml-1.5 rounded-full bg-[#D4A44F]/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[#996F1F]">
+            <span className="ml-1.5 rounded-full bg-gold/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-gold-fg">
               -{annualDiscountPct}%
             </span>
           ) : null}

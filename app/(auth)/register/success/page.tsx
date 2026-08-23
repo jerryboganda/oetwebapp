@@ -102,7 +102,7 @@ export default function RegisterSuccessPage() {
 
         <div className={styles.successContentGrid}>
           <section className={styles.successSummaryCard}>
-            <h4>Registration Summary</h4>
+            <h2>Registration Summary</h2>
             <div className={styles.successSummaryGrid}>
               <div className={styles.successSummaryItem}>
                 <span className={styles.summaryIcon}>
@@ -144,7 +144,7 @@ export default function RegisterSuccessPage() {
           </section>
 
           <section className={styles.successChecklistCard}>
-            <h4>Priority Actions</h4>
+            <h2>Priority Actions</h2>
             <ul className={styles.successChecklistList}>
               <li>
                 Your registration record is now active in the OET workspace.

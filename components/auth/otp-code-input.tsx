@@ -8,6 +8,9 @@ interface OtpCodeInputProps {
   onChange: (value: string) => void;
   length?: number;
   disabled?: boolean;
+  /** Accessible name for the group; digits get `${id}-digit-N` aria-labels. */
+  id?: string;
+  autoFocus?: boolean;
 }
 
 function updateCodeAtIndex(code: string, index: number, character: string, length: number): string {
@@ -16,7 +19,7 @@ function updateCodeAtIndex(code: string, index: number, character: string, lengt
   return next.join('');
 }
 
-export function OtpCodeInput({ value, onChange, length = 6, disabled = false }: OtpCodeInputProps) {
+export function OtpCodeInput({ value, onChange, length = 6, disabled = false, id, autoFocus = false }: OtpCodeInputProps) {
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   const focusIndex = (index: number) => {
@@ -54,7 +57,8 @@ export function OtpCodeInput({ value, onChange, length = 6, disabled = false }: 
           maxLength={1}
           value={value[index] ?? ''}
           disabled={disabled}
-          aria-label={`OTP digit ${index + 1}`}
+          aria-label={id ? `${id}-digit-${index + 1}` : `OTP digit ${index + 1}`}
+          autoFocus={autoFocus && index === 0}
           onChange={(event) => {
             const digits = event.target.value.replace(/\D/g, '');
 

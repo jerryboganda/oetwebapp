@@ -33,7 +33,7 @@ export function Hero({
   return (
     <section className="relative overflow-hidden bg-navy px-4 pb-20 pt-24 text-white">
       <div className="mx-auto max-w-5xl text-center">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">{eyebrow}</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-[0.3em] text-gold">{eyebrow}</p>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">{title}</h1>
         <p className="mx-auto mt-4 max-w-2xl text-lg text-white/80">{subtitle}</p>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-2 text-sm">
@@ -52,7 +52,7 @@ function FlagBadge({ label, tooltip }: PricingHeroBadge) {
       title={tooltip}
       className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white"
     >
-      <span className="inline-block h-2 w-2 rounded-full bg-[#D4A44F]" /> {label}
+      <span className="inline-block h-2 w-2 rounded-full bg-gold" /> {label}
     </span>
   );
 }

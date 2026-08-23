@@ -81,7 +81,7 @@ export function AddonPurchaseModal({
       >
         <header className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#996F1F]">Add-on</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-fg">Add-on</p>
             <h2 className="text-xl font-bold text-navy">
               {addOnLabel ?? addOnCode ?? 'Add-on purchase'}
             </h2>
@@ -131,7 +131,7 @@ export function AddonPurchaseModal({
                     router.push(`/marketplace/packages/${encodeURIComponent(quote.redirectSku!)}`);
                     onClose();
                   }}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4A44F] px-4 py-2.5 text-sm font-bold text-[#0E2841] transition-colors hover:bg-[#bf8e3d]"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-4 py-2.5 text-sm font-bold text-oet-navy transition-colors hover:bg-gold-dark"
                 >
                   View the eligible course <ArrowRight className="h-4 w-4" />
                 </button>
@@ -171,7 +171,7 @@ export function AddonPurchaseModal({
               )}
 
               {isTutorBook && (
-                <div className="rounded-lg border border-[#D4A44F]/40 bg-[#D4A44F]/10 p-3 text-xs text-navy">
+                <div className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-xs text-navy">
                   Pay normally online, then contact us on WhatsApp to receive your personalised Tutor Book.
                   This purchase does not unlock Tutor Book, Recalls, courses, or subtests on the platform.
                 </div>
@@ -218,7 +218,7 @@ function ParentRow({
         onClick={onSelect}
         className={`flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors ${
           selected
-            ? 'border-[#D4A44F] bg-[#D4A44F]/10 text-navy'
+            ? 'border-gold bg-gold/10 text-navy'
             : 'border-border bg-surface text-navy hover:border-border-hover'
         }`}
       >
@@ -230,7 +230,7 @@ function ParentRow({
             </div>
           )}
         </div>
-        {selected && <Check className="h-4 w-4 flex-none text-[#996F1F]" />}
+        {selected && <Check className="h-4 w-4 flex-none text-gold-fg" />}
       </button>
     </li>
   );

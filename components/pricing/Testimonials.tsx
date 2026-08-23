@@ -54,11 +54,11 @@ export function Testimonials({ items = DEFAULT_ITEMS }: TestimonialsProps) {
               key={item.name}
               className="rounded-2xl border border-border bg-surface p-5 shadow-sm"
             >
-              <Quote className="h-5 w-5 text-[#D4A44F]" aria-hidden="true" />
+              <Quote className="h-5 w-5 text-gold" aria-hidden="true" />
               <blockquote className="mt-3 text-sm text-navy">{item.quote}</blockquote>
               <figcaption className="mt-4 text-xs text-muted">
                 <span className="font-semibold text-navy">{item.name}</span> - {item.role}
-                {item.band ? <span className="ml-1.5 text-[#996F1F]">- {item.band}</span> : null}
+                {item.band ? <span className="ml-1.5 text-gold-fg">- {item.band}</span> : null}
               </figcaption>
             </figure>
           ))}

@@ -24,7 +24,7 @@ export function GuaranteeBanner({
   return (
     <section className="border-t border-border bg-navy px-4 py-12 text-white">
       <div className="mx-auto flex max-w-5xl flex-col items-start gap-4 sm:flex-row sm:items-center">
-        <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#D4A44F]/15 text-[#D4A44F]">
+        <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold">
           <ShieldCheck className="h-6 w-6" aria-hidden="true" />
         </span>
         <div className="flex-1">
