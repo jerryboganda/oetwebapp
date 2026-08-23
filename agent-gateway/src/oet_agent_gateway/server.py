@@ -33,6 +33,22 @@ from .quota import QuotaGovernor, estimate_tokens
 logger = logging.getLogger("oet_agent_gateway")
 
 
+class _UnavailableAuthAdapter:
+    """Stand-in when get_adapter() cannot initialize (e.g. missing GEMINI_API_KEY).
+
+    Process stays up so /v1/healthz can return HTTP 200. Agent calls fail on apply().
+    """
+
+    mode = "unavailable"
+
+    def __init__(self, error: AuthAdapterError) -> None:
+        self._error = error
+
+    def apply(self, config: Any, model: str) -> Any:
+        raise AuthAdapterError(str(self._error)) from self._error
+
+
+
 @dataclass
 class _Session:
     id: str
@@ -69,9 +85,9 @@ class _AgentPool:
         else:
             await self._evict_if_needed()
             session = _Session(id=uuid.uuid4().hex, agent_name=agent_name)
-            config = build_config(spec, self._settings)
-            config = self._adapter.apply(config, spec.model)
             try:
+                config = build_config(spec, self._settings)
+                config = self._adapter.apply(config, spec.model)
                 from google.antigravity import Agent
 
                 agent = Agent(config)
@@ -142,7 +158,20 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.settings = settings
-        app.state.adapter = adapter or get_adapter(settings)
+        if adapter is not None:
+            app.state.adapter = adapter
+            app.state.auth_ready = True
+        else:
+            try:
+                app.state.adapter = get_adapter(settings)
+                app.state.auth_ready = True
+            except AuthAdapterError as exc:
+                logger.error(
+                    "Auth adapter failed to initialize; serving degraded healthz: %s",
+                    exc,
+                )
+                app.state.adapter = _UnavailableAuthAdapter(exc)
+                app.state.auth_ready = False
         app.state.pool = pool or _AgentPool(settings, app.state.adapter)
         app.state.quota = quota_governor or QuotaGovernor(settings)
         app.state.cache = cache or SemanticResponseCache(
@@ -179,10 +208,12 @@ def create_app(
     @app.get("/v1/healthz")
     async def healthz():
         q = await request_state_quota(app)
+        auth_ready = bool(getattr(app.state, "auth_ready", True))
         return {
-            "status": "ok",
+            "status": "ok" if auth_ready else "degraded",
             "version": __version__,
             "auth_mode": settings.auth_mode,
+            "auth_ready": auth_ready,
             "agents": len(list_specs(settings)),
             "pool": app.state.pool.stats,
             "quota": q,

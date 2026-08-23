@@ -1,8 +1,8 @@
 # Agent State (local)
 
-## Current task — production deploy of cc6cc07b+fix
-- Ship deploy blockers so origin/main (cc6cc07b + this fix) reaches production.
-- Fixes: agent-gateway image from `agent-gateway/Dockerfile`, compute-offload `needs` regex, `wget` in image, unauthenticated `GET /v1/healthz`.
+## Current task — production deploy of ff29552c+fix
+- Deploy blocked on missing GEMINI_API_KEY: gateway crashed in lifespan so routers did not flip.
+- Gateway now degrades (healthz HTTP 200, auth_ready=false) so web/API can promote without a Gemini key.
 
 ## Previous — Auth/OTP mail isolated from marketing unsubscribe
 - Root cause of missing password-reset OTP: Brevo accepted `/smtp/email` then blocked as unsubscribed. Marketing unsubscribe must never gate OTP.

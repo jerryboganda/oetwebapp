@@ -95,6 +95,21 @@ def test_agents_listing(app):
     assert "drill-author" not in names  # filtered by agents_enabled in fixture settings
 
 
+def test_healthz_ok_when_gemini_key_missing():
+    s = Settings(
+        auth_mode="gemini-key",
+        gemini_api_key="",
+        agents_enabled="*",
+    )
+    app = create_app(s)
+    with _client(app) as client:
+        r = client.get("/v1/healthz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["auth_ready"] is False
+    assert body["status"] in {"ok", "degraded"}
+
+
 def test_internal_token_guard():
     s = Settings(
         auth_mode="gemini-key",
