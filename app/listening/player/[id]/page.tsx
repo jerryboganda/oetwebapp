@@ -103,6 +103,13 @@ function formatQuestionNumberList(numbers: number[]) {
   return numbers.map((number) => `Q${number}`).join(', ');
 }
 
+function isPartialSourceGapListeningSession(session: { questions: Array<{ number: number; partCode: string }> }) {
+  if (session.questions.length === 0) return false;
+  const maxNumber = Math.max(...session.questions.map((question) => question.number));
+  const hasC2 = session.questions.some((question) => question.partCode.toUpperCase() === 'C2');
+  return maxNumber === 36 && !hasC2;
+}
+
 // A Part B/C question card is "authored inline" when its stem is real prose (not
 // the "See PDF" sentinel) AND every option is real prose (not the generic
 // "Option A/B/C" placeholder). Once every MCQ question in a section is inline, the
@@ -1855,6 +1862,11 @@ function PlayerContent() {
       ) : null}
 
       <div ref={rootRef} className="mx-auto max-w-3xl px-4 py-8 pb-24 sm:px-6 lg:px-8">
+        {isPartialSourceGapListeningSession(session) ? (
+          <InlineAlert variant="warning" className="mb-5">
+            Questions 37–42 are unavailable. The supplied Atlas Sample Test 9 source ends at Question 36, so Part C extract 2 is not included. Score this paper as 36 items, not a full 42-item OET Listening paper.
+          </InlineAlert>
+        ) : null}
         {!hasStarted ? (
           <ListeningIntroCard
             session={session}

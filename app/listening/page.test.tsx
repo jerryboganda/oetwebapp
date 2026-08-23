@@ -149,4 +149,26 @@ describe('Listening hub — available papers library (Reading parity)', () => {
 
     expect(await screen.findByText('best score: 18 / 42 • 365 / 500 • Grade B')).toBeInTheDocument();
   });
+
+  it('shows a partial badge for a 36-question paper titled Q37–42 unavailable', async () => {
+    mockGetListeningHome.mockResolvedValue(
+      buildHome([
+        buildPaper({
+          id: 'atlas-st9',
+          title: 'Atlas Practice Series — Listening Sample Test 9 (Q37–42 unavailable)',
+          route: '/listening/paper/atlas-st9',
+          questionCount: 36,
+        }),
+      ]),
+    );
+    render(<ListeningHome />);
+
+    const title = await screen.findByText('Atlas Practice Series — Listening Sample Test 9 (Q37–42 unavailable)');
+    const card = title.closest('a');
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent('Partial · Q37–42 unavailable');
+    expect(card).not.toHaveTextContent('Full exam');
+    expect(screen.getByText(/Questions 37–42 are unavailable in the supplied source/i)).toBeInTheDocument();
+    expect(screen.getByText(/This paper is 36 items \(Parts A, B, and C extract 1 only\)/i)).toBeInTheDocument();
+  });
 });

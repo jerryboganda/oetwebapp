@@ -343,8 +343,17 @@ export default function ListeningHome() {
   );
 }
 
+function isPartialListeningExam(paper: Pick<ListeningHomePaperDto, 'questionCount' | 'title'>) {
+  return (
+    paper.questionCount !== 42
+    || paper.title.includes('Q37–42 unavailable')
+    || paper.title.includes('Q37-42 unavailable')
+  );
+}
+
 function PaperCard({ paper }: { paper: ListeningHomePaperDto }) {
   const locked = paper.requiresSubscription === true;
+  const partial = isPartialListeningExam(paper);
   return (
     <Link
       href={paper.route}
@@ -361,6 +370,10 @@ function PaperCard({ paper }: { paper: ListeningHomePaperDto }) {
               <Lock className="h-3 w-3" aria-hidden />
               Premium
             </span>
+          ) : partial ? (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+              Partial · Q37–42 unavailable
+            </span>
           ) : (
             <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
               Full exam
@@ -375,6 +388,11 @@ function PaperCard({ paper }: { paper: ListeningHomePaperDto }) {
             {paper.estimatedDurationMinutes} min
           </span>
         </p>
+        {partial ? (
+          <p className="mt-2 text-xs text-muted">
+            Questions 37–42 are unavailable in the supplied source. This paper is 36 items (Parts A, B, and C extract 1 only).
+          </p>
+        ) : null}
       </div>
       <ArrowRight
         className="h-4 w-4 self-center text-violet-400 opacity-0 transition-opacity group-hover:opacity-100"
