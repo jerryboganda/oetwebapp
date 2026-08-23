@@ -1,10 +1,8 @@
-﻿# Agent State (local)
+# Agent State (local)
 
-## Current task — Fawaterak return missing checkout reference (SHIPPED)
-- Live error was `/billing/payment-return` with no quote/session after Fawaterak iframe pay.
-- Fix: Fawaterak success/fail/pending URLs always carry quote+session; payment-return accepts invoice_id/payLoad and sessionStorage; review iframe stores refs + "I've finished paying"; middleware keeps return query on sign-in. Browser never marks paid.
-- Shipped `7938c879` via Actions `32662910596` (success). Repo private again.
-- Next: owner live-verify Fawaterak on `/checkout/review`. After pay they should see "Confirming your payment" (poll), not missing checkout reference. "I've finished paying" is the fallback.
+## Current task — production deploy of cc6cc07b+fix
+- Ship deploy blockers so origin/main (cc6cc07b + this fix) reaches production.
+- Fixes: agent-gateway image from `agent-gateway/Dockerfile`, compute-offload `needs` regex, `wget` in image, unauthenticated `GET /v1/healthz`.
 
 ## Previous — Auth/OTP mail isolated from marketing unsubscribe
 - Root cause of missing password-reset OTP: Brevo accepted `/smtp/email` then blocked as unsubscribed. Marketing unsubscribe must never gate OTP.

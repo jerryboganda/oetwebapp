@@ -141,7 +141,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./agent-gateway
-          file: ./Dockerfile
+          file: ./agent-gateway/Dockerfile
           push: true
           provenance: false
           tags: |

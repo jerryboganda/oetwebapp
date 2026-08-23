@@ -66,7 +66,7 @@ require_match 'apply-migrations-from-ci\.sh' "$WORKFLOW" \
   "production migration application must use the reviewed stdin wrapper."
 require_literal "$WORKFLOW" 'needs: [build-web, build-api, build-backup]' \
   "migration application must wait for all pre-built images."
-require_match 'needs: \[build-web, build-api, build-backup, (build-agent-gateway, )?migrate-production\]' "$WORKFLOW" \
+require_match 'needs: \[build-web, build-api, build-backup, build-agent-gateway, migrate-production\]' "$WORKFLOW" \
   "deploy must wait for the Actions migration gate."
 require_match '--no-build' "$ROLLOUT" \
   "the active VPS rollout must start containers with --no-build."

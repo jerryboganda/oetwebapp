@@ -162,6 +162,8 @@ def create_app(
     @app.middleware("http")
     async def internal_auth(request: Request, call_next):
         if settings.internal_service_token:
+            if request.method == "GET" and request.url.path == "/v1/healthz":
+                return await call_next(request)
             provided = request.headers.get("x-oet-internal-token", "")
             if provided != settings.internal_service_token:
                 return JSONResponse(status_code=401, content={"error": "invalid internal token"})
