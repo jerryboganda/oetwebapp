@@ -1351,7 +1351,6 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private static int DaysLeft(DateTimeOffset? expiresAt, DateTimeOffset now)
         => expiresAt is null ? -1 : Math.Max(0, (int)Math.Ceiling((expiresAt.Value - now).TotalDays));
-}
 
     private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
     {

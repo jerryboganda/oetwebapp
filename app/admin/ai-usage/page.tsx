@@ -573,13 +573,13 @@ function AnomaliesPanel({ onToast }: { onToast: (t: ToastState) => void }) {
   );
 }
 
-// -------------------------------------------------------------------------
-// Provider capacity & refill monitoring (Master Catalogue §7 / A33).
+// ---------------------------------------------------------------------------
+// Provider capacity & refill monitoring (Master Catalogue S7 / A33).
 // Platform-level ONLY: shows provider/API request capacity vs used vs
 // remaining per account so admins know when to top up or renew the provider
 // subscription. Candidate credit balances are a different ledger and are
 // never shown here.
-// -------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
 type CapacityRow = AiProviderAccountRow & { providerName: string };
 
 function ProviderCapacitySection({ onToast }: { onToast: (t: ToastState) => void }) {
@@ -634,7 +634,7 @@ function ProviderCapacitySection({ onToast }: { onToast: (t: ToastState) => void
       header: 'Remaining',
       render: (r) =>
         r.monthlyRequestCap === null ? (
-          <span className="text-admin-fg-muted">—</span>
+          <span className="text-admin-fg-muted">--</span>
         ) : (
           <span className={r.monthlyRequestCap - r.requestsUsedThisMonth <= r.monthlyRequestCap * 0.1 ? 'font-semibold text-danger' : ''}>
             {fmt(Math.max(0, r.monthlyRequestCap - r.requestsUsedThisMonth))}
