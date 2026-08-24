@@ -10,14 +10,15 @@ AiFeatureRouteResolver) to an Antigravity agent configuration:
 """
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass, field
+import dataclasses
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from google.antigravity import BuiltinTools, CapabilitiesConfig, LocalAgentConfig
 
 from .config import Settings
+from .schemas import SCHEMAS
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 SKILLS_ROOT = PACKAGE_ROOT / "skills"
@@ -71,6 +72,10 @@ class AgentSpec:
     allow_filesystem: bool = False
     allow_subagents: bool = False
     response_schema: type | None = None
+    # SCHEMAS key (schemas.py). When the agent is listed in
+    # settings.structured_output_agents, list_specs() promotes this schema
+    # onto response_schema so the SDK enforces it server-side.
+    structured_schema: str = ""
     budget_route: str = ""
 
     @property
@@ -103,6 +108,7 @@ def register_default_specs() -> None:
             name="writing-examiner",
             description="OET Writing scoring / dual assessment (writing.grade, writing.sample_score, writing.drill.grade.v1)",
             skills=("writing-examiner",),
+            structured_schema="writing-scoring",
             budget_route="writing-examiner",
         ),
         AgentSpec(
@@ -110,6 +116,7 @@ def register_default_specs() -> None:
             description="AI patient role-play loop (speaking.patient.turn.v1, conversation.opening/reply)",
             skills=("speaking-interlocutor",),
             model="gemini-3.7-flash",
+            structured_schema="patient-utterance",
         ),
         AgentSpec(
             name="pronunciation-coach",
@@ -151,10 +158,24 @@ register_default_specs()
 
 
 def list_specs(settings: Settings) -> dict[str, AgentSpec]:
+    specs = AGENT_SPECS
     allowed = settings.enabled_agent_names
-    if allowed is None:
-        return dict(AGENT_SPECS)
-    return {name: spec for name, spec in AGENT_SPECS.items() if name in allowed}
+    if allowed is not None:
+        specs = {name: spec for name, spec in specs.items() if name in allowed}
+    structured = settings.structured_agents
+    if structured:
+        promoted = {}
+        for name, spec in specs.items():
+            if (
+                spec.response_schema is None
+                and spec.structured_schema
+                and name in structured
+                and spec.structured_schema in SCHEMAS
+            ):
+                spec = dataclasses.replace(spec, response_schema=SCHEMAS[spec.structured_schema])
+            promoted[name] = spec
+        specs = promoted
+    return dict(specs)
 
 
 def build_config(spec: AgentSpec, settings: Settings) -> LocalAgentConfig:
@@ -177,7 +198,7 @@ def specs_manifest(settings: Settings) -> list[dict[str, Any]]:
             "model": spec.model,
             "budget_route": spec.budget_route or spec.name,
             "structured": spec.response_schema is not None,
-            "schema": (json.loads(spec.response_schema.model_json_schema()) if spec.response_schema else None),
+            "schema": (spec.response_schema.model_json_schema() if spec.response_schema else None),
         }
         for spec in list_specs(settings).values()
     ]

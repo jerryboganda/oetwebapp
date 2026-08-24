@@ -281,6 +281,9 @@ services:
     pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
     container_name: oet-agent-gateway
     restart: unless-stopped
+    # Graceful drain: the gateway finishes in-flight agent turns (bounded by
+    # AGENTGATEWAY_DRAIN_TIMEOUT_SECONDS) before SIGKILL during blue/green swaps.
+    stop_grace_period: 45s
     # Mode B (local-oauth / personal Antigravity OAuth session) is HARD-DISABLED
     # here. Production always runs on the official Gemini API key (Mode A),
     # or the SDK's OAuth Mode C once Google ships it.
@@ -292,6 +295,16 @@ services:
       AGENTGATEWAY_BUDGET_BY_ROUTE: ${AGENTGATEWAY_BUDGET_BY_ROUTE:-{}}
       AGENTGATEWAY_CACHE_TTL_SECONDS: ${AGENTGATEWAY_CACHE_TTL_SECONDS:-3600}
       AGENTGATEWAY_MAX_SESSIONS: ${AGENTGATEWAY_MAX_SESSIONS:-16}
+      # Resilience hardening (v0.2): turn timeout, circuit breaker -> fast 503
+      # so AiFeatureRouteResolver falls back instantly on upstream failure.
+      AGENTGATEWAY_TURN_TIMEOUT_SECONDS: ${AGENTGATEWAY_TURN_TIMEOUT_SECONDS:-120}
+      AGENTGATEWAY_CIRCUIT_FAILURE_THRESHOLD: ${AGENTGATEWAY_CIRCUIT_FAILURE_THRESHOLD:-8}
+      AGENTGATEWAY_CIRCUIT_COOLDOWN_SECONDS: ${AGENTGATEWAY_CIRCUIT_COOLDOWN_SECONDS:-90}
+      AGENTGATEWAY_SSE_KEEPALIVE_SECONDS: ${AGENTGATEWAY_SSE_KEEPALIVE_SECONDS:-15}
+      AGENTGATEWAY_DRAIN_TIMEOUT_SECONDS: ${AGENTGATEWAY_DRAIN_TIMEOUT_SECONDS:-30}
+      # Optional shared response cache for multi-replica deployments.
+      AGENTGATEWAY_REDIS_URL: ${AGENTGATEWAY_REDIS_URL:-}
+      AGENTGATEWAY_LOG_JSON: ${AGENTGATEWAY_LOG_JSON:-false}
       AGENTGATEWAY_LOCAL_OAUTH_ALLOWED: "false"
       AGENTGATEWAY_LOCAL_OAUTH_SERVICE: ${AGENTGATEWAY_LOCAL_OAUTH_SERVICE:-gemini}
       AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT: ${AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT:-antigravity}

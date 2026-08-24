@@ -49,7 +49,7 @@ class FakeAgent:
 
 
 class FakePool:
-    """Mirrors the server pool surface (sessions dict keyed by agent name)."""
+    """Mirrors the server pool surface (public accessors keyed by agent name)."""
 
     def __init__(self) -> None:
         self._sessions: dict[str, _Session] = {}
@@ -62,9 +62,15 @@ class FakePool:
             self._created += 1
         return self._sessions[agent_name]
 
+    def get(self, agent_name: str):
+        return self._sessions.get(agent_name)
+
+    def all_sessions(self):
+        return list(self._sessions.values())
+
     @property
     def stats(self) -> dict[str, int]:
-        return {"alive": len(self._sessions), "created": self._created, "evicted": self._evicted}
+        return {"alive": len(self._sessions), "created": self._created, "evicted": self._evicted, "reaped": 0}
 
 
 @pytest.fixture

@@ -1,8 +1,16 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-23
+Last updated: 2026-08-24
 
-## Current Checkpoint - Auth email isolated from marketing unsubscribe
+## Current Checkpoint - Antigravity gateway hardening (v0.2)
+
+- `agent-gateway` audited + hardened: per-route circuit breaker (8 fails → 90s open, fast-fail 503 so AiFeatureRouteResolver falls back instantly), 120s turn timeout → 504 with lock release, constant-time internal-token compare, request caps (32 msgs / 100k chars → 413), SSE keepalives, idle-session reaper (900s), eviction never drops in-flight sessions, graceful-shutdown drain (`stop_grace_period: 45s` on prod/vps compose), accurate enriched-prompt usage accounting, opt-in SDK structured outputs (`AGENTGATEWAY_STRUCTURED_OUTPUT_AGENTS`), optional shared Redis cache with in-memory fallback, Prometheus `/v1/metrics`, JSON logs.
+- Fixed latent bugs: `/v1/agents` schema crash when structured output enabled (`json.loads(dict)`), non-reentrant lock deadlock risk in native SSE path, backoff keyed inconsistently vs reset.
+- Compose: dev/desktop/vps/production gateway blocks carry the new env knobs. `.env.example` documents all of them. Runbook has metrics/alert table + new error classes; roadmap marks Phase 6 code-side items done.
+- Validation: `pytest agent-gateway/tests` 38/38 green (no network/harness).
+- Next: Phase 3b admin route-editor 10% rollout watch, then 3c golden-set parity harness.
+
+## Previous Checkpoint - Auth email isolated from marketing unsubscribe
 
 - OTP / verify / password-reset send from `auth@oetwithdrhesham.co.uk`. Marketing (`updates@`) unsubscribe must never block those.
 - Brevo `unsubscribed` webhook now writes `__marketing__` only. Admin can inspect/unblock one address; no mass-unblock.

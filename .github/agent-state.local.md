@@ -1,6 +1,12 @@
 # Agent State (local)
 
-## Current task — production deploy of ff29552c+fix
+## Current task — Antigravity gateway hardening (v0.2)
+- Audited + hardened `agent-gateway`: circuit breaker per route (fast-fail 503 → resolver fallback), turn timeout → 504, constant-time token compare, request caps 413, SSE keepalive, idle-session reaper, lock-safe eviction, graceful drain, accurate usage accounting, opt-in structured outputs (fixed manifest `json.loads(dict)` crash), optional Redis cache, Prometheus `/v1/metrics`, JSON logs.
+- Compose dev/desktop/vps/production carry new env knobs; prod/vps got `stop_grace_period: 45s`. `.env.example` + runbook + roadmap updated. Gateway version 0.2.0.
+- Validation: `pytest agent-gateway/tests` 38/38 green.
+- Next: push triggers GHCR gateway image rebuild; verify `/v1/healthz` shows circuits+cache fields after deploy; then Phase 3b (10% route rollout watch) and 3c (golden-set parity harness).
+
+## Previous — production deploy of ff29552c+fix
 - Deploy blocked on missing GEMINI_API_KEY: gateway crashed in lifespan so routers did not flip.
 - Gateway now degrades (healthz HTTP 200, auth_ready=false) so web/API can promote without a Gemini key.
 
