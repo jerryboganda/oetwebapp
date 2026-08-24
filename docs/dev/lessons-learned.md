@@ -5,6 +5,9 @@ Add new entries at the top; keep each entry to: **Mistake → Lesson → Action*
 
 ## 2026-08-24 — Antigravity gateway hardening + phases 3c–7
 
+- **PowerShell 5.1 `Set-Content -Encoding UTF8` wrote a BOM into `package.json`** → pnpm in the Linux Docker build failed instantly with "Invalid package.json" (node on Windows tolerates the BOM, so local `node -e require()` checks pass — silent until CI).
+  → NEVER patch JSON with `Set-Content -Encoding UTF8`. Use `[System.IO.File]::WriteAllText($path, $text)` (BOM-less UTF-8) or the Edit tool. After any JSON edit, check the first bytes: `[IO.File]::ReadAllBytes($p)[0..2]` must not be `EF BB BF`.
+  → This broke the web image build for `f6ad1d090`/`5958debdb`; fixed in the BOM-strip commit.
 - **Module-level function called a closure that lived inside `create_app()`** → `NameError` at runtime, caught only by tests.
   → When a helper is used by both endpoint closures *and* module-level functions (e.g. SSE generators), define it **module-scope taking `app`** from the start. Don't mix scopes.
 - **Wrapped a stream that already acquires `session.lock` with another `async with session.lock`** → guaranteed deadlock (asyncio locks are non-reentrant).
