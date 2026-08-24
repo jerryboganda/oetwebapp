@@ -103,11 +103,7 @@ export function LearnerDashboardDetails({
   const anyAddonFlagOn = writingAddonsEnabled || speakingAddonsEnabled || tutorBookDiscountEnabled;
 
   useEffect(() => {
-    if (!anyAddonFlagOn) {
-      setCatalogAddOns([]);
-      setCatalogLoading(false);
-      return;
-    }
+    if (!anyAddonFlagOn) return;
 
     let cancelled = false;
     setCatalogLoading(true);
@@ -200,11 +196,9 @@ export function LearnerDashboardDetails({
           </div>
         </section>
 
-        {upcomingTasks.length > writingAddonsEnabled}
-          speakingAddonsEnabled={speakingAddonsEnabled}
-          tutorBookDiscountEnabled={tutorBookDiscountEnabled}
-          addOns={catalogAddOns}
-          loading={catalogLoading
+        {upcomingTasks.length > 0 ? (
+          <section>
+            <LearnerSurfaceSectionHeader
               eyebrow="This Week"
               title="What&apos;s coming up"
               description="See the work scheduled after today so you can plan ahead."
@@ -233,9 +227,11 @@ export function LearnerDashboardDetails({
         ) : null}
 
         <DashboardAddonsWidget
-          writingAddonsEnabled={entitlement?.writingAddonsEnabled ?? false}
-          speakingAddonsEnabled={entitlement?.speakingAddonsEnabled ?? false}
-          tutorBookDiscountEnabled={entitlement?.tutorBookDiscountEnabled ?? false}
+          writingAddonsEnabled={writingAddonsEnabled}
+          speakingAddonsEnabled={speakingAddonsEnabled}
+          tutorBookDiscountEnabled={tutorBookDiscountEnabled}
+          addOns={catalogAddOns}
+          loading={catalogLoading}
         />
       </div>
 
