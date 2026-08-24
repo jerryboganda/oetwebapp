@@ -73,3 +73,8 @@ pnpm run backend:build          # compiles the seeder + Program.cs registration
 docker compose -f docker-compose.desktop.yml config --quiet
 docker compose -f docker-compose.dev.yml config --quiet
 ```
+
+Production route takeover is deliberately gated by
+`ANTIGRAVITY_GATEWAY_ROUTES_ENABLED=false`. Set it to `true` only after both
+the gateway Gemini key and the encrypted `antigravity-gateway` backend token
+are configured and a smoke request has passed.

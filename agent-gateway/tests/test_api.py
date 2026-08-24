@@ -104,10 +104,13 @@ def test_healthz_ok_when_gemini_key_missing():
     app = create_app(s)
     with _client(app) as client:
         r = client.get("/v1/healthz")
+        ready = client.get("/v1/readyz")
     assert r.status_code == 200
     body = r.json()
     assert body["auth_ready"] is False
     assert body["status"] in {"ok", "degraded"}
+    assert ready.status_code == 503
+    assert ready.json()["auth_ready"] is False
 
 
 def test_internal_token_guard():

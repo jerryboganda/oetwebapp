@@ -227,6 +227,14 @@ def create_app(
             "quota": q,
         }
 
+    @app.get("/v1/readyz")
+    async def readyz():
+        """Readiness gate used by Docker and blue/green deployment health checks."""
+        payload = await healthz()
+        if not payload["auth_ready"]:
+            return JSONResponse(status_code=503, content=payload)
+        return payload
+
     async def request_state_quota(app: FastAPI) -> dict[str, object]:
         try:
             return await app.state.quota.health()

@@ -151,7 +151,7 @@ echo "--- health-gating target slot ---"
 healthcheck "oet-api-$target_slot" "curl --fail --silent http://127.0.0.1:8080/health/ready" "API ($target_slot)"
 healthcheck "oet-web-$target_slot" "wget -qO- http://127.0.0.1:3000/api/health" "WEB ($target_slot)"
 if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
-  healthcheck "oet-agent-gateway" "wget -qO- http://127.0.0.1:8305/v1/healthz" "AGENT GATEWAY"
+  healthcheck "oet-agent-gateway" "wget -qO- http://127.0.0.1:8305/v1/readyz" "AGENT GATEWAY"
 fi
 
 # --- flip routers to the target slot ---

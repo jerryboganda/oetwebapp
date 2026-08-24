@@ -49,6 +49,7 @@ services:
       Proxy__EnforceHttps: "false"
       Features__EnableSwagger: "true"
       Storage__LocalRootPath: /var/opt/oet-learner/storage
+      ANTIGRAVITY_GATEWAY_ROUTES_ENABLED: ${ANTIGRAVITY_GATEWAY_ROUTES_ENABLED:-false}
     volumes:
       - oet_desktop_storage:/var/opt/oet-learner/storage
     ports:
@@ -76,6 +77,12 @@ services:
       AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT: ${AGENTGATEWAY_LOCAL_OAUTH_ACCOUNT:-antigravity}
     ports:
       - "8305:8305"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8305/v1/readyz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 5
 
   web:
     build:

@@ -44,6 +44,11 @@ adapter modes shipped by the gateway.
 
 ## Quota reality (multi-user SaaS)
 
+`ANTIGRAVITY_GATEWAY_ROUTES_ENABLED` is an explicit route-takeover gate. The
+production default is `false`; the startup seeder creates an inactive provider
+placeholder but does not redirect learner features until this flag is enabled
+and the backend provider token exists.
+
 One personal AI Pro subscription cannot serve all paying students at peak:
 - quota refreshes every ~5 hours with a weekly cap;
 - plan = tiered usage: reserve Antigravity for high-value scoring routes,

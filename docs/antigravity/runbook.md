@@ -13,6 +13,9 @@ docker logs --tail=100 oet-agent-gateway
 per-route remaining). `status != ok` means the auth adapter failed at
 startup — check `GEMINI_API_KEY` / mode env vars and restart.
 
+`/v1/readyz` is stricter than liveness: Docker and the blue/green rollout use
+it, and it returns HTTP 503 while the configured auth adapter is unavailable.
+
 ## Error classes
 
 | Symptom | Meaning | Action |

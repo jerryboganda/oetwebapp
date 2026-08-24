@@ -130,6 +130,7 @@ services:
       SpeakingCompliance__RetentionDaysWhenTutorReviewed: '${SPEAKINGCOMPLIANCE__RETENTIONDAYSWHENTUTORREVIEWED:-365}'
       SpeakingCompliance__AuditLogRetentionDays: '${SPEAKINGCOMPLIANCE__AUDITLOGRETENTIONDAYS:-2555}'
       Features__SpeakingV2: '${FEATURES__SPEAKINGV2:-false}'
+      ANTIGRAVITY_GATEWAY_ROUTES_ENABLED: '${ANTIGRAVITY_GATEWAY_ROUTES_ENABLED:-false}'
     ports:
       - '8080:8080'
     volumes:
@@ -160,7 +161,7 @@ services:
     ports:
       - '8305:8305'
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8305/v1/healthz || exit 1']
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:8305/v1/readyz || exit 1']
       interval: 30s
       timeout: 5s
       retries: 5

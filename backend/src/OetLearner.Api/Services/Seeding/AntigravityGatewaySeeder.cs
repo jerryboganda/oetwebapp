@@ -30,6 +30,16 @@ public static class AntigravityGatewayRouteDefaults
     public const string ProviderCode = "antigravity-gateway";
     public const string GatewayBaseUrl = "http://oet-agent-gateway:8305/v1";
 
+    /// <summary>
+    /// Route takeover is an explicit rollout gate. Keep it false until the
+    /// gateway Gemini key and the encrypted backend service token are both
+    /// configured and a smoke test is ready.
+    /// </summary>
+    public static bool RoutesEnabled => string.Equals(
+        Environment.GetEnvironmentVariable("ANTIGRAVITY_GATEWAY_ROUTES_ENABLED"),
+        "true",
+        StringComparison.OrdinalIgnoreCase);
+
     public static readonly IReadOnlyList<(string FeatureCode, string Agent)> Routes = new[]
     {
         (AiFeatureCodes.WritingGrade, "writing-examiner"),
@@ -62,9 +72,10 @@ public static class AntigravityGatewaySeeder
         var now = DateTimeOffset.UtcNow;
         var inserted = 0;
 
-        var providerExists = await db.AiProviders.AsNoTracking()
-            .AnyAsync(p => p.Code == AntigravityGatewayRouteDefaults.ProviderCode, ct);
-        if (!providerExists)
+        var provider = await db.AiProviders
+            .FirstOrDefaultAsync(p => p.Code == AntigravityGatewayRouteDefaults.ProviderCode, ct);
+        var providerReady = provider is not null && !string.IsNullOrWhiteSpace(provider.EncryptedApiKey);
+        if (provider is null)
         {
             db.AiProviders.Add(new AiProvider
             {
@@ -81,28 +92,36 @@ public static class AntigravityGatewaySeeder
                 PricePer1kPromptTokens = 0m,
                 PricePer1kCompletionTokens = 0m,
                 FailoverPriority = 60,
-                IsActive = true,
+                IsActive = false,
             });
             inserted++;
         }
 
-        foreach (var (featureCode, agent) in AntigravityGatewayRouteDefaults.Routes)
+        if (AntigravityGatewayRouteDefaults.RoutesEnabled && providerReady)
         {
-            var exists = await db.AiFeatureRoutes
-                .AnyAsync(r => r.FeatureCode == featureCode, ct);
-            if (exists) continue;
-
-            db.AiFeatureRoutes.Add(new AiFeatureRoute
+            if (provider is not null && !provider.IsActive)
             {
-                Id = Guid.NewGuid().ToString("N"),
-                FeatureCode = featureCode,
-                ProviderCode = AntigravityGatewayRouteDefaults.ProviderCode,
-                Model = $"agent:{agent}",
-                IsActive = true,
-                CreatedAt = now,
-                UpdatedAt = now,
-            });
-            inserted++;
+                provider.IsActive = true;
+            }
+
+            foreach (var (featureCode, agent) in AntigravityGatewayRouteDefaults.Routes)
+            {
+                var exists = await db.AiFeatureRoutes
+                    .AnyAsync(r => r.FeatureCode == featureCode, ct);
+                if (exists) continue;
+
+                db.AiFeatureRoutes.Add(new AiFeatureRoute
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    FeatureCode = featureCode,
+                    ProviderCode = AntigravityGatewayRouteDefaults.ProviderCode,
+                    Model = $"agent:{agent}",
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+                inserted++;
+            }
         }
 
         if (inserted > 0)
