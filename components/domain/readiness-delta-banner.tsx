@@ -1,50 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { TrendingUp, TrendingDown, ArrowRight, Minus } from 'lucide-react';
-import { fetchReadiness } from '@/lib/api';
 
 interface ReadinessDeltaBannerProps {
-  /**
-   * Mounted after a triggering event (mock submitted, tutor review applied).
-   * Fetches readiness twice — once on mount, once after the configured delay —
-   * so the second fetch can surface any change introduced by the background
-   * compute that runs server-side after the trigger.
-   */
-  pollAfterMs?: number;
+  before: number | null;
+  after?: number | null;
+  risk?: string;
+  loading?: boolean;
 }
 
-export function ReadinessDeltaBanner({ pollAfterMs = 4000 }: ReadinessDeltaBannerProps) {
-  const [before, setBefore] = useState<number | null>(null);
-  const [after, setAfter] = useState<number | null>(null);
-  const [risk, setRisk] = useState<string>('Unknown');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchReadiness()
-      .then((r) => {
-        if (cancelled) return;
-        setBefore(r.overallReadiness ?? null);
-        setRisk(r.overallRisk);
-      })
-      .catch(() => { /* non-critical */ });
-
-    const handle = setTimeout(() => {
-      fetchReadiness()
-        .then((r) => {
-          if (cancelled) return;
-          setAfter(r.overallReadiness ?? null);
-          setRisk(r.overallRisk);
-          setLoading(false);
-        })
-        .catch(() => { if (!cancelled) setLoading(false); });
-    }, pollAfterMs);
-
-    return () => { cancelled = true; clearTimeout(handle); };
-  }, [pollAfterMs]);
-
+export function ReadinessDeltaBanner({
+  before,
+  after = null,
+  risk = 'Unknown',
+  loading = false,
+}: ReadinessDeltaBannerProps) {
   if (before == null) return null;
   const delta = after != null && before != null ? Math.round(after - before) : 0;
   const current = after ?? before;

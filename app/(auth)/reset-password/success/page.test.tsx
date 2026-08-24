@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import { act } from 'react';
 
-import ResetPasswordSuccessPage from './page';
+import { ResetPasswordSuccessPageContent } from './page-content';
 import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ResetPasswordSuccessPage', () => {
@@ -13,7 +13,7 @@ describe('ResetPasswordSuccessPage', () => {
   });
 
   it('shows the password reset success state and redirects to sign in after the countdown', () => {
-    renderWithRouter(<ResetPasswordSuccessPage />, {
+    renderWithRouter(<ResetPasswordSuccessPageContent />, {
       router: { replace: mockReplace },
       searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
     });

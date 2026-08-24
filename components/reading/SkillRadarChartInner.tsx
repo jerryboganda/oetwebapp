@@ -8,7 +8,7 @@ import {
   Legend,
   ResponsiveContainer,
   Tooltip,
-} from 'recharts';
+} from '@/components/charts/dynamic-recharts';
 import type { SkillRadarDto } from '@/lib/reading-pathway-api';
 
 interface SkillRadarChartInnerProps {

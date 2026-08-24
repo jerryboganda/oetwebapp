@@ -1,11 +1,11 @@
 import { screen } from '@testing-library/react';
 
-import ForgotPasswordVerifyPage from './page';
+import { ForgotPasswordVerifyPageContent } from './page-content';
 import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ForgotPasswordVerifyPage', () => {
   it('renders the reset-code verification step', () => {
-    renderWithRouter(<ForgotPasswordVerifyPage />, {
+    renderWithRouter(<ForgotPasswordVerifyPageContent />, {
       searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
     });
 

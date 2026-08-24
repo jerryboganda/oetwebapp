@@ -31,6 +31,7 @@ import {
   updateAdminBillingCoupon,
 } from '@/lib/api';
 import type { AdminBillingCoupon } from '@/lib/types/admin';
+import { isDateRangeInvalid } from '@/lib/domain/datetime';
 
 /**
  * Coupon editor. Routes to `new` create a new coupon, all other codes
@@ -118,6 +119,12 @@ export default function AdminCouponEditorPage() {
     setSaving(true);
     setSaveError(null);
     try {
+      if (isDateRangeInvalid(form.startsAt, form.endsAt)) {
+        const message = 'End date must be on or after the start date.';
+        setSaveError(message);
+        toast.error(message, { id: 'coupon-date-range' });
+        return;
+      }
       const payload = {
         code: form.code.trim().toUpperCase(),
         name: form.name.trim(),
@@ -138,17 +145,17 @@ export default function AdminCouponEditorPage() {
       };
       if (existing) {
         await updateAdminBillingCoupon(existing.id, payload);
-        toast.success(`Coupon "${form.code}" updated.`);
+        toast.success(`Coupon "${form.code}" updated.`, { id: `coupon-save-${form.code}` });
       } else {
         await createAdminBillingCoupon(payload);
-        toast.success(`Coupon "${form.code}" created.`);
+        toast.success(`Coupon "${form.code}" created.`, { id: `coupon-create-${form.code}` });
         router.push(`/admin/billing/coupons/${encodeURIComponent(form.code)}`);
       }
     } catch (err) {
       console.error(err);
       const message = err instanceof Error ? err.message : 'Save failed.';
       setSaveError(message);
-      toast.error(message);
+      toast.error(message, { id: 'coupon-save-error' });
     } finally {
       setSaving(false);
     }

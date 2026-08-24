@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { fetchAdminBillingCoupons } from '@/lib/api';
 import type { AdminBillingCoupon } from '@/lib/types/admin';
+import { formatDate } from '@/lib/domain/datetime';
 
 /**
  * Admin coupons index — lists every coupon with quick filters by
@@ -87,8 +88,8 @@ export default function AdminCouponsPage() {
       header: 'Window',
       cell: ({ row }) => (
         <div className="text-xs text-admin-fg-muted">
-          <p>{row.original.startsAt ? new Date(row.original.startsAt).toLocaleDateString() : '-'}</p>
-          <p>{row.original.endsAt ? new Date(row.original.endsAt).toLocaleDateString() : 'No expiry'}</p>
+          <p>{row.original.startsAt ? formatDate(row.original.startsAt) : '-'}</p>
+          <p>{row.original.endsAt ? formatDate(row.original.endsAt) : 'No expiry'}</p>
         </div>
       ),
     },

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowRight, Check, Loader2, ShoppingBag } from 'lucide-react';
 import { quoteAddonEligibility } from '@/lib/api';
 import type { AddonQuoteResponse, AddonEligibleParent } from '@/lib/types/admin';
+import { Modal } from '@/components/ui/modal';
+import { formatDate } from '@/lib/domain/datetime';
 
 type Status = 'idle' | 'loading' | 'eligible' | 'ineligible' | 'error';
 
@@ -66,38 +68,17 @@ export function AddonPurchaseModal({
     })();
   }, [open, addOnCode]);
 
-  if (!open) return null;
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      className="overlay-safe-area fixed inset-0 z-50 flex items-center justify-center bg-navy/40"
-      onClick={onClose}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={addOnLabel ?? addOnCode ?? 'Add-on purchase'}
+      size="md"
     >
-      <div
-        className="max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-lg overflow-y-auto rounded-2xl bg-surface p-6 shadow-2xl border border-border"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <header className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold-fg">Add-on</p>
-            <h2 className="text-xl font-bold text-navy">
-              {addOnLabel ?? addOnCode ?? 'Add-on purchase'}
-            </h2>
-            {typeof addOnPriceGbp === 'number' && (
-              <p className="mt-1 text-2xl font-bold text-navy">£{addOnPriceGbp.toFixed(0)}</p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-muted hover:text-navy"
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </header>
+      <div>
+        {typeof addOnPriceGbp === 'number' && (
+          <p className="text-2xl font-bold text-navy">£{addOnPriceGbp.toFixed(0)}</p>
+        )}
 
         <div className="mt-5 min-h-[160px]">
           {status === 'loading' && (
@@ -198,7 +179,7 @@ export function AddonPurchaseModal({
           )}
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -226,7 +207,7 @@ function ParentRow({
           <div className="font-medium">{parent.planName}</div>
           {parent.expiresAt && (
             <div className="text-xs text-muted">
-              Access until {new Date(parent.expiresAt).toLocaleDateString()}
+              Access until {formatDate(parent.expiresAt)}
             </div>
           )}
         </div>

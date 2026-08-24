@@ -235,33 +235,60 @@ the live browser sweep is unblocked on the backend side (still pending a browser
 
 # Part 3 — Remediation Status
 
-Implemented as small, verified commits (lint + `tsc` + affected tests green), now on branch
-**`fix/frontend-remediation-cont`** — created in an isolated git worktree off the team's
-`fix/liveclass-tutor-idor` (so it carries all this work + the cart fix) and worked there to avoid
-disturbing a parallel session active in the same checkout. Findings were **re-verified before fixing**;
-several turned out to be false positives / already-fixed / backend gaps and are recorded honestly.
+This is **not 100% done**. Earlier “all tasks complete” claims were wrong: many
+findings were only partially landed (presentational lift without a parent, docs
+without a rename, Speaking-only axe, client pages without a sitemap). Status
+below is code-grounded as of the latest leftover close-out.
 
-### ✅ Fixed & committed (~28)
-FE-001 (logout state leak +test) · FE-002 (coach realtime fallback) · FE-003 (tutor-book port) ·
-FE-004 (mock-bookings "sample data" banner) · FE-005 (reminders fake-save → honest gate) ·
-FE-006 #1 (`useApiMutation` infra + listening read flows → `useQuery`, +test) · FE-008 (conversation
-reduced-motion, partial) · FE-009/039 (brand/OET/gold tokens) · FE-011 (admin billing inline save
-errors) · FE-012 (pdf measurement-image alt) · **FE-017 (cart contract: `mapCart` + `cartId` threading
-— tsc-verified; needs a live smoke-test)** · FE-019 (campaigns base path + drop unsupported actions) ·
-FE-021 (listening error states) · FE-022 (lazy SignalR) · FE-025 (ai-config honest "not built" state) ·
-FE-026 (marketplace PATCH) · FE-027 (hide community edit/delete — no backend route) · FE-029 (7 api
-modules → shared `apiClient`/`ApiError`) · FE-030 (dup Toasters) · FE-031 (ref-counted scroll-lock) ·
-FE-032 (AI panel + grid/popover/table mobile fixes) · FE-036 (Card consolidation, 5 exact-match
-surfaces) · FE-038 (optimizePackageImports) · FE-041 (broken PWA screenshots).
+### ✅ Landed in tree (historical + this leftover batch)
+FE-001 · FE-002 · FE-003 · FE-004 · FE-005 · FE-006 #1 · FE-008 (conversation
+partial) · FE-009/039 · FE-011 · FE-012 · **FE-017 cart mapper (needs live
+checkout smoke)** · FE-019 · FE-021 · FE-022 · FE-025 · FE-026 · FE-027 ·
+FE-029 (7 modules) · FE-030 · FE-031 · FE-032 (listed clips) · FE-036 (5 Card
+surfaces only) · FE-038 · FE-041 screenshots.
+
+**This leftover batch (landed in tree, not fully verified live):**
+- **FE-016** — `middleware.ts` renamed to `proxy.ts` (`export function proxy`).
+  Needs a live CSP/CSRF/auth-redirect check after deploy.
+- **FE-007** — axe specs added for `/sign-in`, `/`, `/reading`, `/writing`,
+  `/listening`, `/billing`, `/admin`. Specs exist; Playwright axe has **not**
+  been run in this pass.
+- **FE-013** — `app/robots.ts` + `app/sitemap.ts` for public app URLs. Per-page
+  `metadata` on remaining auth/learner client pages is still open.
+- **FE-040** — unused `@tabler/icons-react` dependency removed (auth already
+  lucide). Visual icon sweep not re-run.
+- **FE-020** — grammar matching/MCQ rows get a UUID at create; keys use
+  `id || index`. Conversation template editor still uses index keys.
+- **FE-034** — settings native fields now set `aria-invalid` from empty-required
+  / `actionError`. Other FE-034 form sites still open.
+- **FE-047** — 11 auth `useSearchParams` pages split into server `page.tsx` +
+  client `page-content.tsx` under `<Suspense>`.
+- **FE-024** — `app/exam-guide/page.tsx` is a server module composing client
+  islands. Remaining ~500 `'use client'` pages are still open.
+- **FE-037** — three parents wired (`mocks/report/[id]`, writing result,
+  dashboard add-ons). Remaining ~30 fetching leaves still open.
 
 ### 🟡 Re-assessed — not a defect / already resolved
 - **FE-035 CanonViolationCard** — FALSE POSITIVE (already `dark:text-white`).
 - **FE-032 metric-grid-2x2** — 2-col tiles are mobile-fine; no change.
 - **FE-028 TTS proxy bypass** — already resolved upstream (uses `apiBlobRequest`/proxy now).
-- **FE-020 key={index}** — controlled inputs → focus glitch, not value corruption; safe fix is a
-  content-editor `_uid` refactor best done with live testing.
 - **FE-029 reading-authoring-api** — its migration was reverted (it regressed a results-page test); the
   other 7 modules migrated cleanly.
+
+### 🔴 Still needs a human / live check
+- **FE-017/018** — cart→checkout click-through. Do not mark done without that smoke.
+- **FE-016** live CSP/CSRF after the `proxy.ts` rename.
+- **FE-007** axe run against a running app (specs only).
+- Per-route runtime/responsive/console/keyboard sweep.
+
+### 🟠 Still open (not claimed)
+- **FE-010** reading cooldown/duration/errorBankCleared DTO consume.
+- **FE-024** remainder (~500 client pages).
+- **FE-036 / FE-037** remainder (~50 Card surfaces / ~30 fetching leaves).
+- **FE-013** per-page metadata on remaining client routes.
+- **FE-006** remainder, **FE-014** dark-mode, **FE-023** remaining charts,
+  **FE-034** other forms, **FE-042** z-index/toast ids, **FE-043** wavesurfer /
+  country-select dynamic import.
 
 ### 🔴 Needs the live browser (reconnect the Chrome extension)
 - **FE-017/018** — a ~2-min cart→checkout click-through to confirm the contract fix end-to-end.

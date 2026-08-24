@@ -12,7 +12,7 @@ vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-import SignInPage from './page';
+import { SignInPageContent } from './page-content';
 import { renderWithRouter } from '@/tests/test-utils';
 
 describe('SignInPage', () => {
@@ -32,7 +32,7 @@ describe('SignInPage', () => {
       },
     });
 
-    renderWithRouter(<SignInPage />, { router: { replace: mockReplace } });
+    renderWithRouter(<SignInPageContent />, { router: { replace: mockReplace } });
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/expert');

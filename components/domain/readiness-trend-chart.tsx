@@ -1,6 +1,7 @@
 'use client';
 
-import { AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from 'recharts';
+import { AreaChart, Area, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, ReferenceLine } from '@/components/charts/dynamic-recharts';
+import { seriesColor } from '@/lib/domain/chart-palette';
 import type { ReadinessHistoryPoint } from '@/lib/mock-data';
 
 interface ReadinessTrendChartProps {
@@ -10,12 +11,12 @@ interface ReadinessTrendChartProps {
 }
 
 const SERIES_COLOR: Record<NonNullable<ReadinessTrendChartProps['series']>, string> = {
-  overall: '#4f46e5',
-  writing: '#e11d48',
-  speaking: '#7c3aed',
-  reading: '#2563eb',
-  listening: '#4f46e5',
-  vocabulary: '#0d9488',
+  overall: seriesColor('overall'),
+  writing: seriesColor('writing'),
+  speaking: seriesColor('speaking'),
+  reading: seriesColor('reading'),
+  listening: seriesColor('listening'),
+  vocabulary: seriesColor('vocabulary'),
 };
 
 export function ReadinessTrendChart({ data, series = 'overall', target = 70 }: ReadinessTrendChartProps) {

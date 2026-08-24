@@ -12,7 +12,7 @@ vi.mock('@/components/auth/auth-screen-shell', () => ({
   AuthScreenShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-import ExternalAuthCallbackPage from './page';
+import { ExternalAuthCallbackPageContent } from './page-content';
 import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ExternalAuthCallbackPage', () => {
@@ -44,7 +44,7 @@ describe('ExternalAuthCallbackPage', () => {
       registration: null,
     });
 
-    renderWithRouter(<ExternalAuthCallbackPage />, {
+    renderWithRouter(<ExternalAuthCallbackPageContent />, {
       router: { replace: mockReplace },
       params: { provider: 'google' },
       searchParams: new URLSearchParams({ token: 'oauth-exchange-token', next: '/expert/queue?assignment=assigned' }),
@@ -82,7 +82,7 @@ describe('ExternalAuthCallbackPage', () => {
     // Simulate the backend redirect: token lives in the fragment, ?next= in the query.
     window.history.replaceState(null, '', '/auth/callback/google?next=%2Fdashboard#token=fragment-token');
 
-    renderWithRouter(<ExternalAuthCallbackPage />, {
+    renderWithRouter(<ExternalAuthCallbackPageContent />, {
       router: { replace: mockReplace },
       params: { provider: 'google' },
       searchParams: new URLSearchParams({ next: '/dashboard' }),

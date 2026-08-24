@@ -79,10 +79,10 @@ export default function TutorBookPage() {
 
   return (
     <div className="min-h-screen bg-background text-navy">
-      <header className="border-b border-border bg-gradient-to-r from-[#0E2841] to-[#156082] px-6 py-8 text-white">
+      <header className="border-b border-border bg-gradient-to-r from-oet-navy to-oet-teal px-6 py-8 text-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">OET 2026 · Reader</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">OET 2026 · Reader</p>
             <h1 className="mt-1 text-3xl font-bold">The Tutor Book: First Edition 2026</h1>
             <p className="mt-1 text-sm text-white/75">Personalised PDF, audio scripts and live updates.</p>
           </div>
@@ -90,7 +90,7 @@ export default function TutorBookPage() {
             href={tutorBookDownloadUrl()}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#D4A44F] px-4 py-2 text-sm font-bold text-[#0E2841] transition-colors hover:bg-[#bf8e3d]"
+            className="inline-flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-bold text-oet-navy transition-colors hover:bg-gold-dark"
           >
             <Download className="h-4 w-4" /> Download my copy
           </a>
@@ -126,7 +126,7 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
       type="button"
       onClick={onClick}
       className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
-        active ? 'border-[#D4A44F] text-[#0E2841]' : 'border-transparent text-muted hover:text-navy'
+        active ? 'border-gold text-oet-navy' : 'border-transparent text-muted hover:text-navy'
       }`}
     >
       {icon} {label}
@@ -158,7 +158,7 @@ function ReaderTab({
             {Array.from({ length: 18 }).map((_, i) => (
               <span
                 key={i}
-                className="rotate-[-30deg] whitespace-nowrap text-center text-xs font-semibold text-[#0E2841]"
+                className="rotate-[-30deg] whitespace-nowrap text-center text-xs font-semibold text-oet-navy"
               >
                 {buyerName || 'OET 2026'} · {buyerEmail || 'tutor-book'}
               </span>

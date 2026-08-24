@@ -2,15 +2,25 @@
 
 import { cn } from '@/lib/utils';
 import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, forwardRef } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
-import { motionTokens } from '@/lib/motion';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 
-const errorReveal = {
-  initial: { opacity: 0, y: -4, height: 0 },
-  animate: { opacity: 1, y: 0, height: 'auto' },
-  exit: { opacity: 0, y: -4, height: 0 },
-  transition: { duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance },
-};
+function useErrorReveal() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  return reducedMotion
+    ? {
+        initial: false as const,
+        animate: { opacity: 1, y: 0, height: 'auto' },
+        exit: { opacity: 0 },
+        transition: { duration: 0 },
+      }
+    : {
+        initial: { opacity: 0, y: -4, height: 0 },
+        animate: { opacity: 1, y: 0, height: 'auto' },
+        exit: { opacity: 0, y: -4, height: 0 },
+        transition: { duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance },
+      };
+}
 
 /* ─── Input ─── */
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -22,6 +32,7 @@ export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, hint, className, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+    const errorReveal = useErrorReveal();
     return (
       <div className="flex flex-col gap-1.5">
         {label && <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-navy">{label}</label>}
@@ -62,6 +73,7 @@ export interface TextareaProps extends TextareaHTMLAttributes<HTMLTextAreaElemen
 export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   ({ label, error, hint, className, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+    const errorReveal = useErrorReveal();
     return (
       <div className="flex flex-col gap-1.5">
         {label && <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-navy">{label}</label>}
@@ -104,6 +116,7 @@ export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(
   ({ label, error, hint, options, placeholder, className, id, ...props }, ref) => {
     const inputId = id ?? label?.toLowerCase().replace(/\s+/g, '-');
+    const errorReveal = useErrorReveal();
     return (
       <div className="flex flex-col gap-1.5">
         {label && <label htmlFor={inputId} className="text-sm font-semibold tracking-tight text-navy">{label}</label>}

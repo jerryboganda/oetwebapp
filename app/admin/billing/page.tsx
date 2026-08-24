@@ -67,6 +67,7 @@ import {
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useAuth } from '@/contexts/auth-context';
 import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
+import { formatDateTime as formatSharedDateTime } from '@/lib/domain/datetime';
 import type {
   AdminBillingAddOn,
   AdminBillingCatalogVersionHistory,
@@ -347,9 +348,7 @@ function formatSummaryValue(value: unknown): string {
 }
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return 'Not recorded';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? 'Not recorded' : date.toLocaleString();
+  return formatSharedDateTime(value);
 }
 
 function evidenceGapLabel(value: string): string {

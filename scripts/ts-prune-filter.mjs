@@ -53,6 +53,7 @@ const NEXT_FRAMEWORK_EXPORTS = new Set([
   'preferredRegion',
   'maxDuration',
   'middleware',
+  'proxy',
   'config',
   // Route handler HTTP methods
   'GET',
@@ -99,6 +100,7 @@ const IGNORED_PATH_SUBSTRINGS = [
   'capacitor.config.ts',
   '/instrumentation.ts',
   '/middleware.ts',
+  '/proxy.ts',
   // Platform shells
   'capacitor-web/',
 ];

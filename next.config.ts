@@ -7,10 +7,10 @@ import createNextIntlPlugin from 'next-intl/plugin';
 // URLs — i18n here is content-only so existing routes stay untouched.
 const withNextIntl = createNextIntlPlugin('./i18n.ts');
 
-// NOTE: Content-Security-Policy is emitted by middleware.ts on a per-request basis
+// NOTE: Content-Security-Policy is emitted by proxy.ts on a per-request basis
 // so each response carries a unique nonce. Do NOT add a CSP here — a static CSP
 // would either override the nonced one (bad) or be overridden by it (dead code).
-// API-origin resolution likewise moved to middleware.ts to co-locate with connect-src.
+// API-origin resolution likewise moved to proxy.ts to co-locate with connect-src.
 
 const readNextBuildWorkers = () => {
   const rawValue = process.env.NEXT_BUILD_WORKERS;
@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
     // FE-038: rewrite barrel imports (lucide-react is imported by ~250 files,
     // plus tabler/recharts/motion) to deep imports so unused members tree-shake
     // out of each route bundle.
-    optimizePackageImports: ['lucide-react', '@tabler/icons-react', 'recharts', 'motion'],
+    optimizePackageImports: ['lucide-react', 'recharts', 'motion'],
     ...(nextBuildWorkers ? { cpus: nextBuildWorkers } : {}),
   },
   reactStrictMode: true,
@@ -90,7 +90,7 @@ const nextConfig: NextConfig = {
           { key: 'X-Frame-Options', value: 'DENY' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
           { key: 'Permissions-Policy', value: 'camera=(self), microphone=(self), geolocation=()' },
-          // Content-Security-Policy is set dynamically by middleware.ts (nonce-based).
+          // Content-Security-Policy is set dynamically by proxy.ts (nonce-based).
         ],
       },
     ];

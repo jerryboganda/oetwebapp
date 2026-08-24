@@ -1,0 +1,65 @@
+import type { MetadataRoute } from 'next';
+
+const PUBLIC_ORIGIN = 'https://app.oetwithdrhesham.co.uk';
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: '*',
+        allow: [
+          '/',
+          '/sign-in',
+          '/register',
+          '/register/success',
+          '/forgot-password',
+          '/forgot-password/verify',
+          '/reset-password',
+          '/reset-password/success',
+          '/privacy',
+          '/terms',
+          '/support',
+          '/get-app',
+          '/exam-guide',
+        ],
+        disallow: [
+          '/admin',
+          '/admin/',
+          '/expert',
+          '/expert/',
+          '/tutor',
+          '/tutor/',
+          '/sponsor',
+          '/sponsor/',
+          '/billing',
+          '/billing/',
+          '/checkout',
+          '/checkout/',
+          '/settings',
+          '/settings/',
+          '/account',
+          '/account/',
+          '/reading',
+          '/reading/',
+          '/writing',
+          '/writing/',
+          '/listening',
+          '/listening/',
+          '/speaking',
+          '/speaking/',
+          '/mocks',
+          '/mocks/',
+          '/progress',
+          '/dashboard',
+          '/api/',
+          '/auth/callback',
+          '/auth/callback/',
+          '/mfa/',
+          '/device/',
+        ],
+      },
+    ],
+    sitemap: `${PUBLIC_ORIGIN}/sitemap.xml`,
+    host: PUBLIC_ORIGIN,
+  };
+}

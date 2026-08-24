@@ -10,8 +10,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { AnimatePresence, motion } from 'motion/react';
-import { motionTokens } from '@/lib/motion';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
 import { buildExternalAuthStartHref, registerLearner } from '@/lib/auth-client';
 import AuthModeSwitch from '@/components/auth/auth-mode-switch';
@@ -41,6 +41,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
   const { examTypes, professions, targetCountryOptions } = useSignupCatalog();
   const nextPath = searchParams?.get('next') ?? null;
   const registrationToken = searchParams?.get('registrationToken') ?? null;
@@ -283,10 +284,10 @@ export function RegisterForm() {
           {errorMessage ? (
             <motion.p
               key="error"
-              initial={{ opacity: 0, y: -6, height: 0 }}
+              initial={reducedMotion ? false : { opacity: 0, y: -6, height: 0 }}
               animate={{ opacity: 1, y: 0, height: 'auto' }}
-              exit={{ opacity: 0, y: -6, height: 0 }}
-              transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, height: 0 }}
+              transition={reducedMotion ? { duration: 0 } : { duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance }}
               className={`${styles.notice} ${styles.noticeDanger}`.trim()}
             >
               {errorMessage}

@@ -89,7 +89,8 @@ describe('Mock report page', () => {
   it('surfaces ethical readiness guidance and teacher-review gating', async () => {
     renderWithRouter(<MockReportPage />);
 
-    expect(await screen.findByText('Borderline readiness')).toBeInTheDocument();
+    expect(await screen.findByText('Assessment conversion pending')).toBeInTheDocument();
+    expect(screen.getByText(/Your readiness/i)).toBeInTheDocument();
     expect(screen.getByText('Estimated academy report')).toBeInTheDocument();
     expect(screen.getByText(/do not treat mock results as a guaranteed pass/i)).toBeInTheDocument();
     expect(screen.getByText('Teacher-marked sections still affect the final readiness report')).toBeInTheDocument();

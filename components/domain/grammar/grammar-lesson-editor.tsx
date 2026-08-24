@@ -135,7 +135,7 @@ export function GrammarLessonEditor({
           type,
           promptMarkdown: '',
           options: type === 'mcq' ? [{ id: 'a', label: '' }, { id: 'b', label: '' }, { id: 'c', label: '' }]
-                   : type === 'matching' ? [{ left: '', right: '' }]
+                   : type === 'matching' ? [{ id: crypto.randomUUID(), left: '', right: '' }]
                    : [],
           correctAnswer: type === 'matching' ? [] : '',
           acceptedAnswers: [],
@@ -378,7 +378,7 @@ function McqOptionsEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; onU
   return (
     <div className="space-y-2">
       {opts.map((o, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={o.id || i} className="flex items-center gap-2">
           <Input label="" value={o.id} onChange={(e) => setOpt(i, { id: e.target.value })} className="w-16" />
           <Input label="" value={o.label} onChange={(e) => setOpt(i, { label: e.target.value })} placeholder="Option text" className="flex-1" />
           <label className="inline-flex items-center gap-1 text-xs text-muted">
@@ -427,7 +427,9 @@ function TextAnswerEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; onU
 }
 
 function MatchingPairsEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; onUpdate: (p: Partial<ExerciseDraft>) => void }) {
-  const options = Array.isArray(exercise.options) ? (exercise.options as Array<{ left: string; right: string }>) : [];
+  const options = Array.isArray(exercise.options)
+    ? (exercise.options as Array<{ id?: string; left: string; right: string }>)
+    : [];
 
   function setPair(i: number, patch: { left?: string; right?: string }) {
     const next = options.slice();
@@ -435,7 +437,7 @@ function MatchingPairsEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; 
     onUpdate({ options: next, correctAnswer: next });
   }
   function addPair() {
-    const next = [...options, { left: '', right: '' }];
+    const next = [...options, { id: crypto.randomUUID(), left: '', right: '' }];
     onUpdate({ options: next, correctAnswer: next });
   }
   function removePair(i: number) {
@@ -445,7 +447,7 @@ function MatchingPairsEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; 
   return (
     <div className="space-y-2">
       {options.map((p, i) => (
-        <div key={i} className="flex items-center gap-2">
+        <div key={p.id || i} className="flex items-center gap-2">
           <Input label="" value={p.left} onChange={(e) => setPair(i, { left: e.target.value })} placeholder="Left item" className="flex-1" />
           <span className="text-muted">→</span>
           <Input label="" value={p.right} onChange={(e) => setPair(i, { right: e.target.value })} placeholder="Matching right item" className="flex-1" />

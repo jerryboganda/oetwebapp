@@ -20,7 +20,7 @@ import {
   Legend,
   ResponsiveContainer,
   Tooltip,
-} from 'recharts';
+} from '@/components/charts/dynamic-recharts';
 import type { SkillScore } from '@/lib/listening-pathway-api';
 
 export interface SkillRadarChartInnerProps {

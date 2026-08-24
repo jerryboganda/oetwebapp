@@ -761,6 +761,15 @@ function SettingsSectionHelperCard({
   );
 }
 
+function isNativeFieldInvalid(field: FieldConfig, value: string | boolean, sectionInvalid: boolean): boolean {
+  if (field.type === 'toggle') return false;
+  const empty = String(value).trim().length === 0;
+  if (empty && (field.key === 'displayName' || field.key === 'email' || field.key === 'professionId' || field.secondaryTag === 'Required')) {
+    return true;
+  }
+  return sectionInvalid;
+}
+
 function SettingsSectionForm({
   accent,
   data,
@@ -769,6 +778,7 @@ function SettingsSectionForm({
   originalEmail,
   emailPassword = '',
   onEmailPasswordChange,
+  invalid = false,
 }: {
   accent: LearnerSurfaceAccent;
   data: SettingsSectionData;
@@ -779,6 +789,7 @@ function SettingsSectionForm({
   originalEmail?: string;
   emailPassword?: string;
   onEmailPasswordChange?: (value: string) => void;
+  invalid?: boolean;
 }) {
   const { options: professionOptions } = useProfessions();
   const config = SECTION_CONFIG[data.section];
@@ -805,6 +816,8 @@ function SettingsSectionForm({
             const emailChanged = isEmailField
               && originalEmail !== undefined
               && String(value).trim().toLowerCase() !== originalEmail.trim().toLowerCase();
+            const fieldInvalid = isNativeFieldInvalid(field, value, invalid);
+            const passwordInvalid = emailChanged && !emailPassword.trim();
 
             return (
               <div key={field.key} className={cn('transition-colors duration-300 hover:bg-background-light', i !== config.fields.length - 1 && 'border-b border-border')}>
@@ -837,6 +850,7 @@ function SettingsSectionForm({
                         )}
                         value={String(value)}
                         disabled={isLocked}
+                        aria-invalid={fieldInvalid}
                         aria-describedby={isLocked ? `${field.key}-lock` : undefined}
                         onChange={(event) => onChange(field.key, event.target.value)}
                       >
@@ -851,6 +865,7 @@ function SettingsSectionForm({
                         type={field.type}
                         className={cn(inputClasses(accent), 'font-bold h-14')}
                         value={String(value)}
+                        aria-invalid={fieldInvalid}
                         onChange={(event) => onChange(field.key, event.target.value)}
                         placeholder={`Enter your ${field.label.toLowerCase()}`}
                       />
@@ -871,6 +886,7 @@ function SettingsSectionForm({
                         type="password"
                         autoComplete="current-password"
                         value={emailPassword}
+                        aria-invalid={passwordInvalid}
                         onChange={(event) => onEmailPasswordChange?.(event.target.value)}
                         placeholder="Current password"
                         className={cn(inputClasses(accent), 'mt-3 h-12 font-bold')}
@@ -897,6 +913,7 @@ function SettingsSectionForm({
         const value = fieldValue(data.values, field);
         const status = fieldStatus(field, value);
         const FieldIcon = field.icon;
+        const fieldInvalid = isNativeFieldInvalid(field, value, invalid);
 
         return (
           <div key={field.key} className={cn('rounded-[2rem] bg-surface p-6 sm:p-8 shadow-sm border transition-[box-shadow,border-color,transform] duration-300 hover:shadow-clinical hover:border-border-hover hoverable:-translate-y-1 group relative', status.label === 'Not set' ? 'border-dashed border-border' : 'border-border')}>
@@ -947,6 +964,7 @@ function SettingsSectionForm({
                     id={field.key}
                     className={cn(inputClasses(accent), 'appearance-none cursor-pointer bg-no-repeat bg-[right_1rem_center] bg-[length:1.2em] font-bold')}
                     value={String(value)}
+                    aria-invalid={fieldInvalid}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   >
                     <option value="" disabled className="text-navy/30">Select an option…</option>
@@ -962,6 +980,7 @@ function SettingsSectionForm({
                     id={field.key}
                     className={cn('min-h-32 resize-y font-bold p-6', inputClasses(accent))}
                     value={String(value)}
+                    aria-invalid={fieldInvalid}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   />
                 ) : (
@@ -972,6 +991,7 @@ function SettingsSectionForm({
                     max={field.max}
                     className={cn(inputClasses(accent), 'font-bold h-14')}
                     value={String(value)}
+                    aria-invalid={fieldInvalid}
                     onChange={(event) => onChange(field.key, event.target.value)}
                   />
                 )}
@@ -1056,7 +1076,7 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
             <p className="max-w-xl text-sm leading-relaxed text-navy/70 font-medium">
               Shown across your account. JPG, PNG, GIF, or WEBP up to 10 MB. Optional — a picture isn&apos;t required.
             </p>
-            {error ? <p className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
+            {error ? <p id="avatar-upload-error" className="mt-2 text-sm font-semibold text-danger">{error}</p> : null}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-3">
@@ -1073,6 +1093,8 @@ function AvatarUploadCard({ accent }: { accent: LearnerSurfaceAccent }) {
               accept={AVATAR_ALLOWED_TYPES.join(',')}
               className="sr-only"
               disabled={busy}
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'avatar-upload-error' : undefined}
               onChange={(event) => { void handleFileSelected(event); }}
             />
           </label>
@@ -1190,6 +1212,8 @@ function DangerZoneDeleteSection() {
               autoComplete="current-password"
               placeholder="Enter your password to confirm"
               value={password}
+              aria-invalid={Boolean(deleteError)}
+              aria-describedby={deleteError ? 'delete-account-error' : undefined}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1.5 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
             />
@@ -1203,12 +1227,17 @@ function DangerZoneDeleteSection() {
               id="delete-reason"
               placeholder="Why are you leaving? (optional)"
               value={reason}
+              aria-invalid={false}
               onChange={(e) => setReason(e.target.value)}
               className="mt-1.5 min-h-24 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
             />
           </div>
 
-          {deleteError ? <InlineAlert variant="error">{deleteError}</InlineAlert> : null}
+          {deleteError ? (
+            <div id="delete-account-error">
+              <InlineAlert variant="error">{deleteError}</InlineAlert>
+            </div>
+          ) : null}
 
           <button
             type="button"
@@ -1468,6 +1497,7 @@ export default function LearnerSettingsSectionPage() {
                 originalEmail={section === 'profile' ? storedEmail : undefined}
                 emailPassword={emailPassword}
                 onEmailPasswordChange={setEmailPassword}
+                invalid={Boolean(actionError)}
               />
 
               <div className="rounded-[2rem] border border-border bg-surface px-6 py-5 shadow-sm relative overflow-hidden mt-10">

@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { formatMoney } from '@/lib/money';
+import { formatDate } from '@/lib/domain/datetime';
 import { BillingPortalLauncher } from '@/components/billing/BillingPortalLauncher';
 
 /**
@@ -89,7 +90,7 @@ export default function AccountBillingPage() {
                 {formatMoney(subscription.price, { currency: subscription.currency })} / {subscription.interval}
               </p>
               <p className="mt-2 text-xs text-muted">
-                Next renewal: {subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleDateString() : 'Not scheduled'}
+                Next renewal: {subscription.nextRenewalAt ? formatDate(subscription.nextRenewalAt) : 'Not scheduled'}
               </p>
             </>
           ) : (
@@ -152,7 +153,7 @@ export default function AccountBillingPage() {
                 <div>
                   <p className="font-medium text-navy">{invoice.number ?? invoice.invoiceId}</p>
                   <p className="text-xs text-muted">
-                    {invoice.date ? new Date(invoice.date).toLocaleDateString() : '-'} - {invoice.status}
+                    {invoice.date ? formatDate(invoice.date) : '-'} - {invoice.status}
                   </p>
                 </div>
                 <p className="font-semibold text-navy">

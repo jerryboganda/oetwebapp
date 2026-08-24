@@ -225,7 +225,7 @@ export function WritingEditorV2({
     <div
       className={cn(
         'relative flex flex-col h-full min-h-[24rem] rounded-2xl border border-border bg-surface shadow-sm overflow-hidden',
-        'focus-within:ring-2 focus-within:ring-[#156082]/30 focus-within:ring-offset-1',
+        'focus-within:ring-2 focus-within:ring-oet-teal/30 focus-within:ring-offset-1',
         className,
       )}
     >

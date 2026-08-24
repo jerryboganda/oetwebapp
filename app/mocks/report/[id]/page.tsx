@@ -31,6 +31,7 @@ import { ResultsScorePanel } from '@/components/domain/results/results-score-pan
 import { ResultGauge } from '@/components/domain/results/gauge';
 import {
   fetchMockReport,
+  fetchReadiness,
   reportMockLeak,
   fetchRemediationPlan,
   generateRemediationPlan,
@@ -111,12 +112,52 @@ function MockReportContent() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [resultTemplate, setResultTemplate] = useState<LearnerResultTemplateDto | null>(null);
   const [resultTemplateUrl, setResultTemplateUrl] = useState<string | null>(null);
+  const [readinessBefore, setReadinessBefore] = useState<number | null>(null);
+  const [readinessAfter, setReadinessAfter] = useState<number | null>(null);
+  const [readinessRisk, setReadinessRisk] = useState('Unknown');
+  const [readinessLoading, setReadinessLoading] = useState(true);
 
   useEffect(() => {
     analytics.track('evaluation_viewed', { type: 'mock_report', id });
     fetchMockReport(id)
       .then(setReport)
       .catch(() => setError('Could not load report.'));
+  }, [id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const applySnapshot = (snapshot: { overallReadiness?: number; overallRisk?: string }, isFollowUp: boolean) => {
+      const score = typeof snapshot.overallReadiness === 'number' ? snapshot.overallReadiness : null;
+      const risk = snapshot.overallRisk?.trim() || 'Unknown';
+      if (cancelled) return;
+      if (!isFollowUp) {
+        setReadinessBefore(score);
+        setReadinessAfter(null);
+      } else {
+        setReadinessAfter(score);
+      }
+      setReadinessRisk(risk);
+      setReadinessLoading(isFollowUp ? false : true);
+    };
+
+    const load = async (isFollowUp: boolean) => {
+      try {
+        const snapshot = await fetchReadiness();
+        applySnapshot(snapshot, isFollowUp);
+      } catch {
+        if (!cancelled) setReadinessLoading(false);
+      }
+    };
+
+    void load(false);
+    timer = setTimeout(() => { void load(true); }, 4000);
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [id]);
 
   useEffect(() => {
@@ -283,7 +324,12 @@ function MockReportContent() {
         {/* Readiness delta banner — surfaces the change this mock made
             to the learner's overall readiness and links into the
             full readiness centre for the "see why" follow-up. */}
-        <ReadinessDeltaBanner />
+        <ReadinessDeltaBanner
+          before={readinessBefore}
+          after={readinessAfter}
+          risk={readinessRisk}
+          loading={readinessLoading}
+        />
 
         {/* 0. OET Statement of Results — pixel-faithful CBLA format.
             Mission-critical: this is the single place the "official" OET

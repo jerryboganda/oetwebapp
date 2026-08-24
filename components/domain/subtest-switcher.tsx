@@ -28,6 +28,8 @@ export function SubtestSwitcher({ active, onChange, className }: SubtestSwitcher
         <button
           key={key}
           role="tab"
+          id={`subtest-tab-${key}`}
+          aria-controls={`subtest-panel-${key}`}
           aria-selected={active === key}
           tabIndex={active === key ? 0 : -1}
           onKeyDown={(event) => {

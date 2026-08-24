@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDateTime } from '@/lib/domain/datetime';
 
 type LearnerFreshnessIndicatorProps = {
   updatedAt?: string | Date | null;
@@ -72,7 +73,7 @@ export function LearnerFreshnessIndicator({
           : 'text-muted/70',
         className,
       )}
-      title={date ? date.toLocaleString() : 'No freshness timestamp available'}
+      title={date ? formatDateTime(date) : 'No freshness timestamp available'}
     >
       <Clock className="h-3 w-3 opacity-60" aria-hidden="true" />
       <time dateTime={date?.toISOString()}>{label}</time>

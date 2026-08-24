@@ -119,7 +119,7 @@ export default function PackageDetailPage() {
           </Link>
           <div className="mt-3 flex flex-wrap items-start justify-between gap-6">
             <div className="flex-1 min-w-[260px]">
-              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-[#D4A44F]">
+              <p className="text-xs font-semibold uppercase tracking-[0.3em] text-gold">
                 {websitePackage ? `Package ${websitePackage.packageNo} · ${websitePackage.category}` : plan.productCategory.replace(/_/g, ' ')}
               </p>
               <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{websitePackage?.name ?? plan.name}</h1>
@@ -150,7 +150,7 @@ export default function PackageDetailPage() {
                       : `/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`,
                   )
                 }
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#D4A44F] px-5 py-2.5 text-sm font-bold text-[#0E2841] shadow-sm transition-colors hover:bg-[#bf8e3d]"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-bold text-oet-navy shadow-sm transition-colors hover:bg-gold-dark"
               >
                 {websitePackage?.code === 'tutor-book'
                   ? 'Contact admin to enable'
@@ -191,8 +191,8 @@ export default function PackageDetailPage() {
               plan.bundledAiCredits > 0 ||
               plan.bundledTutorBook ||
               plan.bundledBasicEnglish) && (
-              <div className="mt-8 rounded-2xl border border-[#D4A44F]/40 bg-[#D4A44F]/5 p-5">
-                <h3 className="flex items-center gap-2 text-sm font-bold text-[#996F1F]">
+              <div className="mt-8 rounded-2xl border border-gold/40 bg-gold/5 p-5">
+                <h3 className="flex items-center gap-2 text-sm font-bold text-gold-fg">
                   <Sparkles className="h-4 w-4" /> Bonuses included with this package
                 </h3>
                 <ul className="mt-2 space-y-1.5 text-sm">
@@ -356,7 +356,7 @@ function HeroTag({ children, gold = false }: { children: React.ReactNode; gold?:
   return (
     <span
       className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs ${
-        gold ? 'bg-[#D4A44F]/20 text-[#FFE9BD]' : 'bg-white/10 text-white/80'
+        gold ? 'bg-gold/20 text-[#FFE9BD]' : 'bg-white/10 text-white/80'
       }`}
     >
       {children}

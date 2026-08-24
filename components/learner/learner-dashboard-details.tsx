@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
@@ -28,9 +28,10 @@ import { SafeRichText } from '@/components/domain/grammar/grammar-content-render
 import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-widget';
 import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { MotionList } from '@/components/ui/motion-primitives';
-import type { learnerGetScoringPolicy, MyEntitlementSnapshot } from '@/lib/api';
+import { fetchPublicCatalog, type learnerGetScoringPolicy, type MyEntitlementSnapshot } from '@/lib/api';
 import type { EngagementData } from '@/lib/hooks/use-dashboard-home';
 import type { ReadinessData, StudyPlanTask, SubTest } from '@/lib/mock-data';
+import type { PublicCatalogAddOnRow } from '@/lib/types/admin';
 
 const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Writing: FilePenLine,
@@ -94,6 +95,37 @@ export function LearnerDashboardDetails({
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
   const [scoringExpanded, setScoringExpanded] = useState(false);
+  const [catalogAddOns, setCatalogAddOns] = useState<PublicCatalogAddOnRow[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const writingAddonsEnabled = entitlement?.writingAddonsEnabled ?? false;
+  const speakingAddonsEnabled = entitlement?.speakingAddonsEnabled ?? false;
+  const tutorBookDiscountEnabled = entitlement?.tutorBookDiscountEnabled ?? false;
+  const anyAddonFlagOn = writingAddonsEnabled || speakingAddonsEnabled || tutorBookDiscountEnabled;
+
+  useEffect(() => {
+    if (!anyAddonFlagOn) {
+      setCatalogAddOns([]);
+      setCatalogLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setCatalogLoading(true);
+    fetchPublicCatalog()
+      .then((catalog) => {
+        if (!cancelled) setCatalogAddOns(catalog.addOns ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogAddOns([]);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [anyAddonFlagOn]);
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -168,9 +200,11 @@ export function LearnerDashboardDetails({
           </div>
         </section>
 
-        {upcomingTasks.length > 0 ? (
-          <section>
-            <LearnerSurfaceSectionHeader
+        {upcomingTasks.length > writingAddonsEnabled}
+          speakingAddonsEnabled={speakingAddonsEnabled}
+          tutorBookDiscountEnabled={tutorBookDiscountEnabled}
+          addOns={catalogAddOns}
+          loading={catalogLoading
               eyebrow="This Week"
               title="What&apos;s coming up"
               description="See the work scheduled after today so you can plan ahead."

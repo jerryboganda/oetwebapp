@@ -240,7 +240,7 @@ function applyAffiliateCookie(request: NextRequest, response: NextResponse): Nex
   return response;
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isDev = process.env.NODE_ENV !== 'production';
 

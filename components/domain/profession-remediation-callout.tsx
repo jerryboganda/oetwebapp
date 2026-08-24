@@ -1,31 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Stethoscope, Lightbulb } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { getProfessionRemediationTips, type ProfessionRemediationTip } from '@/lib/writing-remediation-professions';
-import { fetchUserProfile } from '@/lib/api';
 
-export default function ProfessionRemediationCallout() {
-  const [tips, setTips] = useState<ProfessionRemediationTip[]>([]);
-  const [profession, setProfession] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchUserProfile()
-      .then((profile) => {
-        const prof = profile.profession || '';
-        setProfession(prof);
-        setTips(getProfessionRemediationTips(prof));
-      })
-      .catch(() => {
-        setTips([]);
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading || tips.length === 0) return null;
+export default function ProfessionRemediationCallout({
+  profession = '',
+  tips,
+}: {
+  profession?: string;
+  tips?: ProfessionRemediationTip[];
+}) {
+  const resolvedTips = tips ?? getProfessionRemediationTips(profession);
+  if (resolvedTips.length === 0) return null;
 
   return (
     <MotionSection delayIndex={4}>
@@ -40,7 +28,7 @@ export default function ProfessionRemediationCallout() {
           These tips are tailored to your profession. They highlight the most common writing gaps for your field and show how a strong response differs from a weak one.
         </p>
         <div className="space-y-4">
-          {tips.map((tip) => (
+          {resolvedTips.map((tip) => (
             <div key={tip.criterionCode} className="rounded-xl border border-border bg-background-light p-4">
               <div className="flex items-center gap-2 mb-2">
                 <Lightbulb className="w-4 h-4 text-primary shrink-0" />

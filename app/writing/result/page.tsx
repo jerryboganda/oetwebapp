@@ -221,7 +221,7 @@ function WritingResultContent() {
           <TutorVoiceNotePlayer submissionId={resultId} />
         </MotionSection>
 
-        <ProfessionRemediationCallout />
+        <ProfessionRemediationCallout profession={result.profession} />
 
         <LearnerSurfaceSectionHeader
           eyebrow="What to do next"

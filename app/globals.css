@@ -82,6 +82,13 @@
   --color-gold-fg: #996f1f;
   --color-oet-navy: #0e2841;
   --color-oet-teal: #156082;
+
+  /* FE-042: stacking scale. overlay < modal < drawer < popover < toast. */
+  --z-overlay: 40;
+  --z-modal: 50;
+  --z-drawer: 60;
+  --z-popover: 70;
+  --z-toast: 80;
   
   --color-admin-surface:           #ffffff;
   --color-admin-surface-raised:    #f8fafc;

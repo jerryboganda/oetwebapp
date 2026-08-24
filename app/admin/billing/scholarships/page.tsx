@@ -33,6 +33,7 @@ import {
   revokeScholarship,
   type ScholarshipDto,
 } from '@/lib/api';
+import { formatDate } from '@/lib/domain/datetime';
 
 const REASON_OPTIONS = ['need_based', 'partner_institute', 'testimonial', 'goodwill', 'other'];
 const TIER_OPTIONS = ['basic', 'premium', 'intensive'];
@@ -104,7 +105,7 @@ export default function AdminScholarshipsPage() {
     {
       id: 'granted',
       header: 'Granted',
-      cell: ({ row }) => new Date(row.original.grantedAt).toLocaleDateString(),
+      cell: ({ row }) => formatDate(row.original.grantedAt),
     },
     { id: 'user', accessorKey: 'userId', header: 'User' },
     { id: 'reason', accessorKey: 'reason', header: 'Reason' },
@@ -112,7 +113,7 @@ export default function AdminScholarshipsPage() {
     {
       id: 'expires',
       header: 'Expires',
-      cell: ({ row }) => (row.original.expiresAt ? new Date(row.original.expiresAt).toLocaleDateString() : '-'),
+      cell: ({ row }) => (row.original.expiresAt ? formatDate(row.original.expiresAt) : '-'),
     },
     {
       id: 'status',

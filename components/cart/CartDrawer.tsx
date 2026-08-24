@@ -43,6 +43,23 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onClose]);
 
+  useEffect(() => {
+    if (!open || !mounted) return;
+    const marked: HTMLElement[] = [];
+    for (const child of Array.from(document.body.children)) {
+      if (!(child instanceof HTMLElement)) continue;
+      if (child.getAttribute('aria-labelledby') === 'cart-drawer-title') continue;
+      child.setAttribute('inert', '');
+      marked.push(child);
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      for (const el of marked) el.removeAttribute('inert');
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open, mounted]);
+
   const onCheckout = useCallback(() => {
     if (items.length === 0) return;
     setCheckoutBusy(true);

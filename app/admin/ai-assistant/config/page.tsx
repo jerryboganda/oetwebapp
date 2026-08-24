@@ -68,7 +68,7 @@ export default function AiAssistantConfigPage() {
   }, [isAuthenticated, role, loadConfig]);
 
   const handleSave = useCallback(async () => {
-    if (!config) return;
+    if (!config || status === 'error') return;
     try {
       setSaving(true);
       // Only the model and tool grants have storage in this schema; the
@@ -140,7 +140,7 @@ export default function AiAssistantConfigPage() {
       eyebrow="AI Assistant"
       breadcrumbs={breadcrumbs}
       actions={
-        <Button variant="primary" onClick={handleSave} disabled={saving || !config} size="sm">
+        <Button variant="primary" onClick={handleSave} disabled={saving || !config || status === 'error'} size="sm">
           <Save className="h-4 w-4" />
           {saving ? 'Saving…' : 'Save Configuration'}
         </Button>

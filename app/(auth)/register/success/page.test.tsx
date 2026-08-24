@@ -1,7 +1,7 @@
 import { screen } from '@testing-library/react';
 import { act } from 'react';
 
-import RegisterSuccessPage from './page';
+import { RegisterSuccessPageContent } from './page-content';
 import { renderWithRouter } from '@/tests/test-utils';
 
 describe('RegisterSuccessPage', () => {
@@ -13,7 +13,7 @@ describe('RegisterSuccessPage', () => {
   });
 
   it('shows the success message and redirects to sign in after 10 seconds', () => {
-    renderWithRouter(<RegisterSuccessPage />, {
+    renderWithRouter(<RegisterSuccessPageContent />, {
       router: { replace: mockReplace },
       searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
     });

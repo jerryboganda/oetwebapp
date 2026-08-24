@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ShoppingBag, Sparkles, Tag } from 'lucide-react';
-import { fetchPublicCatalog } from '@/lib/api';
 import type { PublicCatalogAddOnRow } from '@/lib/types/admin';
 import { Card } from '@/components/ui/card';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
@@ -19,6 +18,8 @@ interface DashboardAddonsWidgetProps {
   writingAddonsEnabled?: boolean;
   speakingAddonsEnabled?: boolean;
   tutorBookDiscountEnabled?: boolean;
+  addOns?: PublicCatalogAddOnRow[];
+  loading?: boolean;
 }
 
 /**
@@ -30,31 +31,14 @@ export function DashboardAddonsWidget({
   writingAddonsEnabled = false,
   speakingAddonsEnabled = false,
   tutorBookDiscountEnabled = false,
+  addOns = [],
+  loading = false,
 }: DashboardAddonsWidgetProps) {
-  const [addOns, setAddOns] = useState<PublicCatalogAddOnRow[]>([]);
-  const [loading, setLoading] = useState(true);
   const [modalCode, setModalCode] = useState<string | null>(null);
   const [modalLabel, setModalLabel] = useState<string | null>(null);
   const [modalPrice, setModalPrice] = useState<number | null>(null);
 
   const anyFlagOn = writingAddonsEnabled || speakingAddonsEnabled || tutorBookDiscountEnabled;
-
-  useEffect(() => {
-    if (!anyFlagOn) {
-      setLoading(false);
-      return;
-    }
-    void (async () => {
-      try {
-        const response = await fetchPublicCatalog();
-        setAddOns(response.addOns ?? []);
-      } catch {
-        // Silent fail — widget hides
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [anyFlagOn]);
 
   const visibleAddOns = useMemo(() => {
     return addOns.filter((addon) => {

@@ -39,12 +39,12 @@ const adminFont = Montserrat({
 const zoomHttpOrigins = ['https://zoom.us', 'https://*.zoom.us', 'https://zoom.com', 'https://*.zoom.com', 'https://source.zoom.us'];
 const zoomWebSocketOrigins = ['wss://zoom.us', 'wss://*.zoom.us', 'wss://zoom.com', 'wss://*.zoom.com'];
 // PayPal embedded checkout SDK + Smart Buttons + card-field iframes. Must match the
-// middleware.ts response-header CSP — the browser enforces the INTERSECTION of this
+// proxy.ts response-header CSP — the browser enforces the INTERSECTION of this
 // meta CSP and the header, so omitting PayPal here blocks the SDK even though the
 // header allows it (the "script-src ... violates" console error on /checkout/review).
 const paypalHttpOrigins = ['https://*.paypal.com', 'https://*.paypalobjects.com', 'https://*.venmo.com'];
 // Bunny Stream CDN — Video Library HLS playback. hls.js fetches the playlist + segments
-// from the pull-zone host (vz-*.b-cdn.net) via connect-src. Must match the middleware.ts
+// from the pull-zone host (vz-*.b-cdn.net) via connect-src. Must match the proxy.ts
 // response-header CSP: the browser enforces the INTERSECTION of this meta CSP and the
 // header, so omitting Bunny here blocks EVERY native video (connect-src violation →
 // hls.js manifestLoadError code=0 → black frame) even though the header allows it.

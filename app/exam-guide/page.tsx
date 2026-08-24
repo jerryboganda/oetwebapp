@@ -1,5 +1,4 @@
-'use client';
-
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { BookOpen, Clock, Headphones, PenLine, Mic, ArrowRight } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -24,6 +23,11 @@ const SCORING_GUIDE = [
   { grade: 'D', range: '100–190', level: 'Limited', description: 'Communication is restricted with frequent errors.' },
   { grade: 'E', range: '0–90', level: 'Very Limited', description: 'Very limited communication ability.' },
 ];
+
+export const metadata: Metadata = {
+  title: 'OET Exam Guide · OET with Dr Ahmed Hesham',
+  description: 'OET exam format, timing, scoring bands, and strategies for Listening, Reading, Writing, and Speaking.',
+};
 
 export default function ExamGuidePage() {
   return (

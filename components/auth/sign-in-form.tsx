@@ -3,8 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AnimatePresence, motion } from 'motion/react';
-import { motionTokens } from '@/lib/motion';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 import {
   Facebook,
   Linkedin,
@@ -93,6 +93,7 @@ export function SignInForm({ nextHref, initialEmail, externalError, reason }: Si
   const [desktopRuntimeInfo, setDesktopRuntimeInfo] = useState<Awaited<ReturnType<NonNullable<typeof window.desktopBridge>['runtime']['info']>> | null>(null);
   const emailHintId = 'sign-in-email-hint';
   const errorMessageId = 'sign-in-error';
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
 
   React.useEffect(() => {
     let cancelled = false;
@@ -277,10 +278,10 @@ export function SignInForm({ nextHref, initialEmail, externalError, reason }: Si
               role="alert"
               aria-live="assertive"
               key="error"
-              initial={{ opacity: 0, y: -6, height: 0 }}
+              initial={reducedMotion ? false : { opacity: 0, y: -6, height: 0 }}
               animate={{ opacity: 1, y: 0, height: 'auto' }}
-              exit={{ opacity: 0, y: -6, height: 0 }}
-              transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance }}
+              exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -6, height: 0 }}
+              transition={reducedMotion ? { duration: 0 } : { duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance }}
               className={`${styles.notice} ${styles.noticeDanger}`.trim()}
             >
               {error}

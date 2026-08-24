@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from '@/components/charts/dynamic-recharts';
 import { LearnerDashboardShell } from '@/components/layout';
 import { useAuth } from '@/contexts/auth-context';
 import { getVocabStats, type VocabStatsDto } from '@/lib/reading-pathway-api';
