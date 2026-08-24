@@ -30,14 +30,14 @@ class Settings(BaseSettings):
     #              (tracked: google-antigravity/antigravity-sdk-python issue #20).
     auth_mode: AuthMode = "gemini-key"
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
-    gemini_model: str = "gemini-3-flash"
+    gemini_model: str = "gemini-3.7-flash"
     gemini_thinking_level: Literal["MINIMAL", "LOW", "HIGH"] = "MINIMAL"
 
     # Mode B knobs
     local_oauth_token: str = Field(default="", alias="LOCAL_OAUTH_TOKEN")
     local_oauth_service: str = "gemini"
     local_oauth_account: str = "antigravity"
-    local_oauth_model: str = "gemini-3-flash"
+    local_oauth_model: str = "gemini-3.7-flash"
     local_oauth_base_url: str = "https://daily-cloudcode-pa.googleapis.com/v1internal"
     local_oauth_allowed: bool = False
 

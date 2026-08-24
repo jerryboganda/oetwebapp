@@ -64,7 +64,7 @@ class AgentSpec:
     description: str
     persona: str = ""
     skills: tuple[str, ...] = ()
-    model: str = "gemini-3-flash"
+    model: str = "gemini-3.7-flash"
     thinking_level: str = "MINIMAL"
     tools: tuple[Any, ...] = "*"
     disabled_tools: tuple[BuiltinTools, ...] = ()
@@ -109,7 +109,7 @@ def register_default_specs() -> None:
             name="speaking-interlocutor",
             description="AI patient role-play loop (speaking.patient.turn.v1, conversation.opening/reply)",
             skills=("speaking-interlocutor",),
-            model="gemini-3-flash",
+            model="gemini-3.7-flash",
         ),
         AgentSpec(
             name="pronunciation-coach",
@@ -135,7 +135,7 @@ def register_default_specs() -> None:
             name="drill-author",
             description="Speaking role-play card & drill drafting (card.draft.v1, drill.draft.v1)",
             skills=("drill-author",),
-            model="gemini-3-flash",
+            model="gemini-3.7-flash",
         ),
         AgentSpec(
             name="mock-analysis",

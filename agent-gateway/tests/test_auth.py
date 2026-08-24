@@ -53,8 +53,8 @@ def test_local_oauth_apply_sets_cloudcode_endpoint():
         agents_enabled="*",
     )
     adapter = LocalOAuthAuth(s)
-    config = LocalAgentConfig(model="gemini-3-flash")
-    out = adapter.apply(config, "gemini-3-flash")
+    config = LocalAgentConfig(model="gemini-3.7-flash")
+    out = adapter.apply(config, "gemini-3.7-flash")
     assert out.models and isinstance(out.models[0], types.ModelTarget)
     assert out.models[0].endpoint.base_url.startswith("https://daily-cloudcode")
     assert out.models[0].endpoint.http_headers["Authorization"] == "Bearer Bearer.testtoken"

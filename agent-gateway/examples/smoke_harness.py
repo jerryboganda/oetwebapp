@@ -21,7 +21,7 @@ async def main() -> int:
     print(f"agent: google-antigravity import OK")
     print(f"GEMINI_API_KEY present: {bool(os.environ.get('GEMINI_API_KEY'))}")
     config = LocalAgentConfig(
-        model="gemini-3-flash",
+        model="gemini-3.7-flash",
         system_instructions="You are a smoke-test agent. Reply with exactly: PONG",
     )
     print("starting Agent (localharness discovery) ...")
