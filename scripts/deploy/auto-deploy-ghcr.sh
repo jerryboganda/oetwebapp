@@ -151,7 +151,9 @@ echo "--- health-gating target slot ---"
 healthcheck "oet-api-$target_slot" "curl --fail --silent http://127.0.0.1:8080/health/ready" "API ($target_slot)"
 healthcheck "oet-web-$target_slot" "wget -qO- http://127.0.0.1:3000/api/health" "WEB ($target_slot)"
 if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
-  healthcheck "oet-agent-gateway" "wget -qO- http://127.0.0.1:8305/v1/readyz" "AGENT GATEWAY"
+  # Liveness only: /v1/readyz stays 503 when GEMINI_API_KEY is empty.
+  # Do not invent a key; web/API must still promote in that degraded state.
+  healthcheck "oet-agent-gateway" "wget -qO- http://127.0.0.1:8305/v1/healthz" "AGENT GATEWAY"
 fi
 
 # --- flip routers to the target slot ---
