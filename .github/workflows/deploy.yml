@@ -305,6 +305,20 @@ jobs:
              NGINX_TEMPLATE_SRC='$REMOTE_NGINX' \
                bash '$REMOTE_SCRIPT'; \
              docker logout ghcr.io >/dev/null 2>&1 || true"
+      - name: Prune stale OET images on VPS
+        if: success()
+        env:
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh_opts=(-i ~/.ssh/deploy_key -p "$PORT" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" 'bash -s' -- 24 < scripts/deploy/prune-stale-images.sh
       - name: Summary
         if: always()
         run: |
