@@ -86,7 +86,8 @@ public partial class LearnerService(
     ILogger<LearnerService>? logger = null,
     IAssessmentScoreConversionService? scoreConversionService = null,
     IAssessmentMarkingPolicyService? markingPolicyService = null,
-    IPaymentGatewayCatalog? paymentGatewayCatalog = null)
+    IPaymentGatewayCatalog? paymentGatewayCatalog = null,
+    global::OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettings = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
     private const int PaymentIdempotencyKeyMaxLength = 38;
@@ -2352,10 +2353,10 @@ public partial class LearnerService(
         var evaluationId = $"we-{Guid.NewGuid():N}";
         if (aiPackageCreditService is not null)
         {
-            // A Writing exam (one letter — no parts) costs two grading credits,
-            // taken atomically in one debit so a failed grade refunds both.
+            // One graded letter = one submission. The service resolves the
+            // §1 cost by source pool (dedicated 1 / Flexible W/S 1 / Shared 2).
             var debit = await aiPackageCreditService.DeductGradingCreditAsync(
-                userId, "writing", evaluationId, AiGradingCreditCost.WritingExam, cancellationToken);
+                userId, "writing", evaluationId, 1, cancellationToken);
             if (!debit.Debited)
             {
                 throw ApiException.PaymentRequired(
@@ -3754,6 +3755,38 @@ public partial class LearnerService(
                 && DeliveryMethods.RequiresManualFulfilment(
                     await ResolvePlanDeliveryMethodAsync(quote.PlanVersionId, quote.PlanCode, cancellationToken)));
 
+        // Master Catalogue Flow A: a completed gateway payment for a regular
+        // package (Products 1-29) still needs admin verification before the
+        // package unlocks. Surface that state so the learner return page shows
+        // "Pending Verification" + Send-on-WhatsApp instead of "access granted".
+        var verificationRequired = false;
+        if (!string.IsNullOrWhiteSpace(quote.PlanCode) && status == "completed" && resolvedSubscriptionId is not null)
+        {
+            var purchasedSubscription = await db.Subscriptions.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == resolvedSubscriptionId, cancellationToken);
+            verificationRequired = string.Equals(
+                purchasedSubscription?.FulfilmentStatus,
+                FulfilmentStatuses.PendingVerification,
+                StringComparison.OrdinalIgnoreCase)
+                && purchasedSubscription?.Status != SubscriptionStatus.Active;
+        }
+
+        // Runtime-configurable support number (Admin > Settings > Support);
+        // never hard-code the wa.me link here.
+        string? whatsAppLink = null;
+        if (manualDeliveryRequired || verificationRequired)
+        {
+            const string fallbackNumber = "447961725989";
+            var configuredNumber = runtimeSettings is null
+                ? null
+                : (await runtimeSettings.GetAsync(cancellationToken)).Support.WhatsAppNumber;
+            var digits = string.Concat((configuredNumber ?? fallbackNumber).Where(char.IsDigit));
+            if (digits.Length == 0) digits = fallbackNumber;
+            var proofMessage = Uri.EscapeDataString(
+                $"Hello OET with Dr. Hesham, I have paid for {quote.PlanCode ?? "my package"} (order {quote.Id}). Here is my payment receipt.");
+            whatsAppLink = $"https://wa.me/{digits}?text={proofMessage}";
+        }
+
         return new BillingPaymentStatusResponse(
             status,
             quote.Id,
@@ -3770,7 +3803,12 @@ public partial class LearnerService(
             status == "completed" ? transaction?.UpdatedAt ?? invoice?.IssuedAt : null,
             quote.ExpiresAt,
             manualDeliveryRequired,
-            manualDeliveryRequired ? "https://wa.me/447961725989" : null);
+            manualDeliveryRequired ? whatsAppLink : null,
+            verificationRequired,
+            verificationRequired ? whatsAppLink : null,
+            verificationRequired
+                ? "Payment received — your order is Pending Verification. An admin will approve it shortly; you can also send your receipt on WhatsApp."
+                : null);
     }
 
     public async Task<object> GetBillingExtrasAsync()
@@ -6757,6 +6795,37 @@ public partial class LearnerService(
         {
             throw ApiException.Conflict("content_not_available", "This practice content is not currently available.");
         }
+
+        // Master Catalogue §5 profession isolation: a candidate must never open
+        // another profession's content through a direct URL/API call. A null
+        // ContentItem.ProfessionId means the item applies to all professions.
+        if (!string.IsNullOrWhiteSpace(contentForAttempt.ProfessionId))
+        {
+            var learnerProfession = await db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.ActiveProfessionId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!string.Equals(contentForAttempt.ProfessionId, learnerProfession, StringComparison.OrdinalIgnoreCase))
+            {
+                throw ApiException.NotFound("content_not_found", "Practice content not found.");
+            }
+        }
+
+        // Master Catalogue §5 authorization model: starting a graded Writing or
+        // Speaking activity requires an applicable balance (dedicated pool,
+        // Flexible W/S, or Shared at the subtest rate) or an active unlimited
+        // entitlement. The actual debit still happens once, downstream.
+        if ((subtest is "writing" or "speaking") && aiPackageCreditService is not null)
+        {
+            var eligible = await aiPackageCreditService.CheckGradingCreditAsync(userId, subtest, 1, cancellationToken);
+            if (!eligible.Debited && !eligible.Bypassed)
+            {
+                throw ApiException.PaymentRequired(
+                    eligible.ErrorCode ?? "no_ai_package_credits",
+                    eligible.ErrorMessage ?? "You do not have enough credits to start this activity.");
+            }
+        }
+
         var context = request.Context ?? "practice";
         var mode = request.Mode ?? (subtest is "reading" or "listening" ? "exam" : "practice");
         var existingAttempts = await db.Attempts
@@ -9171,7 +9240,14 @@ public partial class LearnerService(
             || string.Equals(validation["deliveryMethod"]?.ToString(), DeliveryMethods.ManualMaterial, StringComparison.OrdinalIgnoreCase);
         if ((bool)validation["manualDeliveryRequired"])
         {
-            validation["whatsAppUrl"] = "https://wa.me/447961725989";
+            // Support number is runtime-configurable (Admin > Settings > Support).
+            const string quoteFallbackNumber = "447961725989";
+            var configuredSupportNumber = runtimeSettings is null
+                ? null
+                : (await runtimeSettings.GetAsync(cancellationToken)).Support.WhatsAppNumber;
+            var supportDigits = string.Concat((configuredSupportNumber ?? quoteFallbackNumber).Where(char.IsDigit));
+            if (supportDigits.Length == 0) supportDigits = quoteFallbackNumber;
+            validation["whatsAppUrl"] = $"https://wa.me/{supportDigits}";
         }
 
         var addOnVersions = new Dictionary<string, BillingCatalogVersionRef>(StringComparer.OrdinalIgnoreCase);
@@ -11334,6 +11410,7 @@ public partial class LearnerService(
         var catalogSnapshot = DeserializeQuoteCatalogSnapshot(quote);
         var addOnVersionIds = DeserializeAddOnVersionIds(quote);
         var now = DateTimeOffset.UtcNow;
+        var planPendingVerification = false;
         EnsureQuoteIsFulfillable(quote, now);
         await EnsureQuoteSnapshotMatchesCurrentCatalogAsync(quote, ct);
 
@@ -11364,9 +11441,13 @@ public partial class LearnerService(
                 subscription.PlanId = targetPlan.Code;
                 subscription.PlanVersionId = quote.PlanVersionId;
 
-                // Delivery method decides whether payment alone releases access. The quote
-                // snapshot carries pricing only, so read it from the immutable version row
-                // locked to this purchase, falling back to the live plan.
+                // Master Catalogue §6 Flow A: regular packages (Products 1-29)
+                // use a verification flow. Payment alone never releases access:
+                // the order parks at Pending Verification and a gateway-receipt
+                // proof row (written below via TryWriteGatewayReceiptAsync) waits
+                // in Admin > Billing > Orders & Payments for Approve/Accept.
+                // Only plans explicitly configured for Telegram/manual delivery
+                // take the older pending_manual hand-over path instead.
                 var deliveryMethod = await ResolvePlanDeliveryMethodAsync(quote.PlanVersionId, quote.PlanCode, ct);
                 if (DeliveryMethods.RequiresManualFulfilment(deliveryMethod))
                 {
@@ -11380,9 +11461,13 @@ public partial class LearnerService(
                 }
                 else
                 {
-                    subscription.FulfilmentStatus = FulfilmentStatuses.Auto;
-                    SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
+                    subscription.FulfilmentStatus = FulfilmentStatuses.PendingVerification;
                 }
+
+                planPendingVerification = string.Equals(
+                    subscription.FulfilmentStatus,
+                    FulfilmentStatuses.PendingVerification,
+                    StringComparison.OrdinalIgnoreCase);
 
                 subscription.PriceAmount = targetPlan.Price;
                 subscription.Currency = targetPlan.Currency;
@@ -11398,47 +11483,50 @@ public partial class LearnerService(
                     subscription.NextRenewalAt = now.AddMonths(Math.Max(1, targetPlan.DurationMonths));
                 }
 
-                user.CurrentPlanId = targetPlan.Code;
-
-                if (targetPlan.IncludedCredits > 0)
+                if (!planPendingVerification)
                 {
-                    await CreditWalletForPaymentAsync(
-                        transaction.LearnerUserId,
-                        targetPlan.IncludedCredits,
-                        "plan_grant",
-                        "subscription",
-                        quote.Id,
-                        $"Included credits for {targetPlan.Name}",
-                        ct);
-                }
+                    user.CurrentPlanId = targetPlan.Code;
 
-                if (targetPlan.BundledAiCredits > 0)
-                {
-                    var inserted = await CreditAiLedgerForPlanPaymentAsync(
-                        transaction.LearnerUserId,
-                        targetPlan,
-                        targetPlan.BundledAiCredits,
-                        quote.Id,
-                        now,
-                        ct);
-                    if (inserted)
+                    if (targetPlan.IncludedCredits > 0)
                     {
-                        subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + targetPlan.BundledAiCredits);
+                        await CreditWalletForPaymentAsync(
+                            transaction.LearnerUserId,
+                            targetPlan.IncludedCredits,
+                            "plan_grant",
+                            "subscription",
+                            quote.Id,
+                            $"Included credits for {targetPlan.Name}",
+                            ct);
                     }
 
-                    if (aiPackageCreditService is not null)
+                    if (targetPlan.BundledAiCredits > 0)
                     {
-                        var giftExpiry = targetPlan.DurationMonths > 0
-                            ? now.AddMonths(targetPlan.DurationMonths)
-                            : now.AddDays(180);
-                        await aiPackageCreditService.GrantCourseGiftCreditsAsync(
+                        var inserted = await CreditAiLedgerForPlanPaymentAsync(
                             transaction.LearnerUserId,
-                            targetPlan.Code,
-                            targetPlan.Name,
+                            targetPlan,
                             targetPlan.BundledAiCredits,
-                            $"plan:{quote.Id}:{targetPlan.Code}",
-                            giftExpiry,
+                            quote.Id,
+                            now,
                             ct);
+                        if (inserted)
+                        {
+                            subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + targetPlan.BundledAiCredits);
+                        }
+
+                        if (aiPackageCreditService is not null)
+                        {
+                            var giftExpiry = targetPlan.DurationMonths > 0
+                                ? now.AddMonths(targetPlan.DurationMonths)
+                                : now.AddDays(180);
+                            await aiPackageCreditService.GrantCourseGiftCreditsAsync(
+                                transaction.LearnerUserId,
+                                targetPlan.Code,
+                                targetPlan.Name,
+                                targetPlan.BundledAiCredits,
+                                $"plan:{quote.Id}:{targetPlan.Code}",
+                                giftExpiry,
+                                ct);
+                        }
                     }
                 }
 
@@ -11482,12 +11570,15 @@ public partial class LearnerService(
         // first-time learner whose scaffold subscription was created Pending in
         // BuildBillingQuoteAsync and never runs the plan block. Guarded on Pending so it
         // is a strict no-op for a returning learner's existing Active/Cancelled/Frozen
-        // subscription. Pending now has TWO producers — the checkout scaffold, and a
-        // manual-delivery plan purchase parked above — so the pending_manual conjunct is
-        // load-bearing: without it this would activate a WhatsApp/manual order that an
-        // admin has not yet fulfilled.
+        // subscription. Pending now has THREE producers — the checkout scaffold, a
+        // manual-delivery plan purchase parked at pending_manual, and a regular
+        // Products 1-29 order parked at pending_verification — so both conjuncts are
+        // load-bearing: without them this would activate an order an admin has not yet
+        // verified/fulfilled. Add-on-only AI package purchases (Products 30-47) keep
+        // instant activation per Flow B.
         if (subscription.Status == SubscriptionStatus.Pending
-            && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingManual, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingManual, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingVerification, StringComparison.OrdinalIgnoreCase))
         {
             SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
         }

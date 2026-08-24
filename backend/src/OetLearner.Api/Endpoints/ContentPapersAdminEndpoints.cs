@@ -188,6 +188,42 @@ public static class ContentPapersAdminEndpoints
         .RequireAuthorization("AdminContentPublish")
         .RequireRateLimiting("PerUserWrite");
 
+        // ── Candidate visibility toggle (Master Catalogue §5) ─────────────
+        // Explicit publish+visible control: hidden papers stay published in
+        // admin but are removed from every candidate surface and start route.
+        group.MapPost("/{id}/candidate-visible", async (
+            string id,
+            bool visible,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == id, ct);
+            if (paper is null)
+            {
+                return Results.NotFound(new { error = "Paper not found." });
+            }
+
+            paper.CandidateVisible = visible;
+            paper.UpdatedAt = DateTimeOffset.UtcNow;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = adminId,
+                ActorName = adminId,
+                Action = visible ? "ContentPaperMadeCandidateVisible" : "ContentPaperHiddenFromCandidates",
+                ResourceType = "ContentPaper",
+                ResourceId = paper.Id,
+                Details = $"{paper.Title} — CandidateVisible={(visible ? "true" : "false")}",
+            });
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite");
+
         // ── Draft → InReview → Published workflow (spec §1E) ──────────────
         group.MapPost("/{id}/submit-for-review", async (
             string id, IContentPaperService svc, HttpContext http, CancellationToken ct) =>
@@ -600,6 +636,7 @@ public static class ContentPapersAdminEndpoints
     {
         p.Id, p.SubtestCode, p.Title, p.Slug, p.ProfessionId, p.AppliesToAllProfessions,
         p.Difficulty, p.EstimatedDurationMinutes, status = p.Status.ToString(),
+        p.CandidateVisible,
         p.PublishedRevisionId, p.CardType, p.LetterType, p.Priority, p.TagsCsv,
         p.SourceProvenance, p.CreatedAt, p.UpdatedAt, p.PublishedAt, p.ArchivedAt,
         p.IntegrityAcknowledgedByAdminId, p.IntegrityAcknowledgedAt,

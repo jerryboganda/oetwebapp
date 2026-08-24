@@ -14,16 +14,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   fetchMyAiCredentials,
   fetchMyAiPreferences,
-  fetchMyAiUsage,
-  fetchMyAiCredits,
   revokeMyAiCredential,
   saveMyAiCredential,
   updateMyAiPreferences,
   type AiCredentialItem,
   type AiCredentialMode,
-  type AiUserPolicySnapshot,
-  type AiCreditBalance,
 } from '@/lib/ai-management-api';
+import { fetchMyAiPackageCredits, type AiPackageCreditSnapshot } from '@/lib/api';
 
 const PROVIDER_PRESETS: { code: string; name: string; hint: string }[] = [
   { code: 'openai-platform', name: 'OpenAI Platform', hint: 'platform.openai.com · keys starting sk-…' },
@@ -37,8 +34,7 @@ export default function AiSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [credentials, setCredentials] = useState<AiCredentialItem[]>([]);
   const [prefs, setPrefs] = useState<{ mode: AiCredentialMode; allowPlatformFallback: boolean } | null>(null);
-  const [usage, setUsage] = useState<AiUserPolicySnapshot | null>(null);
-  const [balance, setBalance] = useState<AiCreditBalance | null>(null);
+  const [aiCredits, setAiCredits] = useState<AiPackageCreditSnapshot | null>(null);
 
   // New credential form
   const [showAdd, setShowAdd] = useState(false);
@@ -51,16 +47,14 @@ export default function AiSettingsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [creds, p, u, c] = await Promise.all([
+      const [creds, p, pkg] = await Promise.all([
         fetchMyAiCredentials(),
         fetchMyAiPreferences(),
-        fetchMyAiUsage(),
-        fetchMyAiCredits(),
+        fetchMyAiPackageCredits().catch(() => null),
       ]);
       setCredentials(creds);
       setPrefs({ mode: p.mode, allowPlatformFallback: p.allowPlatformFallback });
-      setUsage(u);
-      setBalance(c.balance);
+      setAiCredits(pkg);
     } catch (e) {
       setError(`Failed to load AI settings: ${(e as Error).message}`);
     } finally {
@@ -104,10 +98,6 @@ export default function AiSettingsPage() {
     }
   };
 
-  const monthlyPct = usage && usage.monthlyTokenCap > 0
-    ? Math.min(100, Math.round((usage.tokensUsedThisMonth / usage.monthlyTokenCap) * 100))
-    : 0;
-
   return (
     <LearnerDashboardShell>
       <div className="relative min-h-[calc(100dvh-4rem)] bg-background-light">
@@ -127,7 +117,7 @@ export default function AiSettingsPage() {
               title="AI Settings"
               description="Bring your own AI provider key or use your platform allowance. Keys are encrypted at rest; we only ever show the last 4 characters."
               highlights={[
-                { icon: Cpu, label: 'Plan', value: usage?.planName ?? (loading ? '…' : '-') },
+                { icon: Cpu, label: 'Plan', value: aiCredits?.writingUnlimited ? 'OET Mastery' : (loading ? '…' : 'AI packages') },
                 { icon: Shield, label: 'Mode', value: prefs?.mode ?? (loading ? '…' : '-') },
               ]}
             />
@@ -135,7 +125,9 @@ export default function AiSettingsPage() {
 
           {error && <InlineAlert variant="error" className="shadow-sm">{error}</InlineAlert>}
 
-          {/* Usage meter */}
+          {/* AI credit balances — Credits / Attempts / Unlimited only. Raw
+              provider token quotas are platform-level operational data and are
+              never shown on candidate surfaces. */}
           <section className="bg-surface rounded-[2.5rem] border border-border p-6 sm:p-8 shadow-sm hover:shadow-clinical hover:border-border-hover transition-[box-shadow,border-color] duration-300 overflow-hidden relative">
             <div className="relative z-10 space-y-4">
               <div className="flex flex-wrap items-center gap-3 justify-between">
@@ -143,45 +135,52 @@ export default function AiSettingsPage() {
                   <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-lavender">
                     <Cpu className="h-5 w-5 text-primary" />
                   </div>
-                  <h2 className="text-xl font-black text-navy tracking-tight">AI credit usage</h2>
+                  <h2 className="text-xl font-black text-navy tracking-tight">AI credit balances</h2>
                 </div>
-                <Badge className="bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-[10px] uppercase tracking-widest shadow-sm">Quota</Badge>
+                <Badge className="bg-primary/5 text-primary border-primary/10 rounded-full px-3 py-1 font-black text-[10px] uppercase tracking-widest shadow-sm">Credits</Badge>
               </div>
 
               {loading ? (
                 <Skeleton className="h-24 w-full rounded-2xl mt-4" />
-              ) : usage ? (
-                <div className="space-y-5 mt-4 bg-background-light p-6 rounded-[2rem] border border-border shadow-inner">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="text-sm font-black text-muted tracking-tight">
-                      This month: <strong className="text-navy text-lg">{usage.tokensUsedThisMonth.toLocaleString()}</strong> /
-                      {' '}{usage.monthlyTokenCap > 0 ? usage.monthlyTokenCap.toLocaleString() : 'unlimited'} tokens
-                    </span>
-                    <span className="text-xs font-bold text-muted bg-surface px-3 py-1.5 rounded-full shadow-sm border border-border">Today: {usage.tokensUsedToday.toLocaleString()}</span>
-                  </div>
-
-                  <div className="w-full h-3 bg-surface rounded-full overflow-hidden shadow-inner border border-border p-0.5">
-                    <div
-                      className={`h-full rounded-full transition-[width,background-color] duration-700 ease-out ${monthlyPct > 85 ? 'bg-danger' : monthlyPct > 60 ? 'bg-warning' : 'bg-primary'}`}
-                      style={{ width: `${monthlyPct}%` }}
-                    />
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 text-xs font-bold">
-                    <Badge variant="muted" className="rounded-full bg-surface shadow-sm">{usage.overagePolicy}</Badge>
-                    {usage.killSwitchActive && <Badge variant="danger" className="rounded-full shadow-sm">Platform AI paused</Badge>}
-                    {usage.aiDisabled && <Badge variant="danger" className="rounded-full shadow-sm">Account AI disabled</Badge>}
-                  </div>
-                  
-                  {balance && balance.tokensAvailable > 0 && (
-                    <div className="mt-2 p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                      <p className="text-sm font-black text-primary">
-                        Credits available: {balance.tokensAvailable.toLocaleString()} tokens
-                      </p>
-                    </div>
-                  )}
+              ) : aiCredits ? (
+                <div className="mt-4 bg-background-light p-6 rounded-[2rem] border border-border shadow-inner">
+                  <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {(
+                      [
+                        { label: 'Reading Credits', value: aiCredits.readingTestsRemaining },
+                        { label: 'Listening Credits', value: aiCredits.listeningTestsRemaining },
+                        { label: 'Writing Credits', value: aiCredits.writingUnlimited ? null : aiCredits.writingOnlyCredits },
+                        { label: 'Speaking Credits', value: aiCredits.speakingUnlimited ? null : aiCredits.speakingOnlyCredits },
+                        { label: 'Shared Credits', value: aiCredits.sharedCredits ?? 0 },
+                      ] as const
+                    ).map((row) => (
+                      <li key={row.label} className="flex items-baseline justify-between rounded-xl bg-surface px-4 py-3 border border-border">
+                        <span className="text-sm font-bold text-muted">{row.label}</span>
+                        <span className={`text-sm font-black tabular-nums ${row.value === null ? 'text-emerald-700' : 'text-navy'}`}>
+                          {row.value === null ? 'Unlimited' : row.value}
+                        </span>
+                      </li>
+                    ))}
+                    {(aiCredits.flexibleCredits > 0 || (aiCredits.sharedCredits ?? 0) === 0) && (
+                      <li className="flex items-baseline justify-between rounded-xl bg-surface px-4 py-3 border border-border">
+                        <span className="text-sm font-bold text-muted">Flexible W/S Credits</span>
+                        <span className="text-sm font-black tabular-nums text-navy">{aiCredits.flexibleCredits}</span>
+                      </li>
+                    )}
+                    {aiCredits.mockExamsRemaining > 0 && (
+                      <li className="flex items-baseline justify-between rounded-xl bg-surface px-4 py-3 border border-border">
+                        <span className="text-sm font-bold text-muted">Full Mock Attempts</span>
+                        <span className="text-sm font-black tabular-nums text-navy">{aiCredits.mockExamsRemaining}</span>
+                      </li>
+                    )}
+                  </ul>
+                  <p className="mt-4 text-xs font-medium text-muted">
+                    Shared credits work across all four subtests: Reading 1 · Listening 1 · Writing 2 · Speaking 2.
+                  </p>
                 </div>
-              ) : null}
+              ) : (
+                <p className="mt-4 text-sm font-bold text-muted">No active AI credit packages.</p>
+              )}
             </div>
           </section>
 

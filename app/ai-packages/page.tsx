@@ -253,9 +253,10 @@ export default function AiPackagesPage() {
           </div>
 
           {credits ? (
-            <div className="grid gap-3 rounded-lg border border-border bg-background-light p-4 text-sm md:grid-cols-4">
-              <div><span className="text-muted">Flexible</span><p className="font-semibold">{credits.flexibleCredits}</p></div>
-              <div><span className="text-muted">Writing / Speaking</span><p className="font-semibold">{credits.writingOnlyCredits} / {credits.speakingOnlyCredits}</p></div>
+            <div className="grid gap-3 rounded-lg border border-border bg-background-light p-4 text-sm md:grid-cols-5">
+              <div><span className="text-muted">Shared</span><p className="font-semibold">{credits.sharedCredits ?? 0}</p></div>
+              <div><span className="text-muted">Flexible W/S</span><p className="font-semibold">{credits.flexibleCredits}</p></div>
+              <div><span className="text-muted">Writing / Speaking</span><p className="font-semibold">{credits.writingUnlimited ? 'Unlimited' : credits.writingOnlyCredits} / {credits.speakingUnlimited ? 'Unlimited' : credits.speakingOnlyCredits}</p></div>
               <div><span className="text-muted">Listening / Reading</span><p className="font-semibold">{formatAllowance(credits.listeningTestsRemaining, 'L')} / {formatAllowance(credits.readingTestsRemaining, 'R')}</p></div>
               <div><span className="text-muted">Mocks / Expiry</span><p className="font-semibold">{credits.mockExamsRemaining} / {formatDate(credits.expiresAt)}</p></div>
             </div>

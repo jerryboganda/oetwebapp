@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Billing;
@@ -138,6 +139,29 @@ public sealed class ManualPaymentService : IManualPaymentService
 
         var hashHex = Convert.ToHexString(SHA256.HashData(proofBytes)).ToLowerInvariant();
         var courseId = string.IsNullOrWhiteSpace(request.CourseId) ? null : request.CourseId.Trim();
+
+        // Master Catalogue §6 Flow B: AI / practice / mock packages (Products
+        // 30-47) never use the proof + admin-approval route. Their access is
+        // granted instantly after a server-confirmed payment, so a manual
+        // payment submission for them cannot be fulfilled and is rejected up
+        // front with a clear message instead of stalling in the queue.
+        var submittedQuote = string.IsNullOrWhiteSpace(request.QuoteId)
+            ? null
+            : await _db.BillingQuotes.AsNoTracking().FirstOrDefaultAsync(q => q.Id == request.QuoteId, ct);
+        var referencesAiPackage =
+            (courseId?.StartsWith("pkg_", StringComparison.OrdinalIgnoreCase) ?? false)
+            || (submittedQuote?.PlanCode?.StartsWith("pkg_", StringComparison.OrdinalIgnoreCase) ?? false);
+        if (!referencesAiPackage && submittedQuote is not null && !string.IsNullOrWhiteSpace(submittedQuote.AddOnCodesJson))
+        {
+            var addOnCodes = JsonSupport.Deserialize<List<string>>(submittedQuote.AddOnCodesJson, []) ?? [];
+            referencesAiPackage = addOnCodes.Count > 0
+                && addOnCodes.All(code => code.StartsWith("pkg_", StringComparison.OrdinalIgnoreCase));
+        }
+        if (referencesAiPackage)
+        {
+            throw new InvalidOperationException(
+                "AI, practice and mock packages are activated instantly online and cannot be purchased via bank transfer or payment proof. Please complete the checkout with an online payment method.");
+        }
 
         // A proof file is evidence for exactly one order. Reject it when it has already
         // been used by anyone else, or by this learner against a *different* order —
@@ -280,7 +304,8 @@ public sealed class ManualPaymentService : IManualPaymentService
         // manual packages are paid but not delivered: the entitlement resolver grants
         // nothing on Pending, so access stays shut until an admin marks the order
         // fulfilled. The Active guard means re-approving an order never revokes access
-        // a learner already has.
+        // a learner already has. A gateway order parked at pending_verification
+        // (Master Catalogue Flow A) activates here — this approval IS the verification.
         var deliveryMethod = planVersion?.DeliveryMethod ?? plan?.DeliveryMethod ?? DeliveryMethods.AutomaticWeb;
         if (DeliveryMethods.RequiresManualFulfilment(deliveryMethod)
             && subscription.FulfilmentStatus != FulfilmentStatuses.Fulfilled
@@ -289,55 +314,81 @@ public sealed class ManualPaymentService : IManualPaymentService
             subscription.FulfilmentStatus = FulfilmentStatuses.PendingManual;
             subscription.Status = SubscriptionStatus.Pending;
         }
+        else if (subscription.Status == SubscriptionStatus.Active)
+        {
+            // Already active — keep it active.
+        }
         else
         {
+            subscription.FulfilmentStatus = FulfilmentStatuses.Auto;
             subscription.Status = SubscriptionStatus.Active;
         }
         subscription.ChangedAt = now;
+
+        // Deferred Flow-A grants the webhook skipped while the order was Pending
+        // Verification: wallet review credits included with legacy plans, plus the
+        // current-plan pointer. Idempotent via the (type,type-ref,id) uniqueness check.
+        var includedCredits = planVersion?.IncludedCredits ?? plan?.IncludedCredits ?? 0;
+        if (includedCredits > 0)
+        {
+            var wallet = await _db.Wallets.FirstAsync(w => w.UserId == row.UserId, ct);
+            var existingWalletGrant = await _db.WalletTransactions.FirstOrDefaultAsync(
+                x => x.WalletId == wallet.Id
+                     && x.TransactionType == "plan_grant"
+                     && x.ReferenceType == "subscription"
+                     && x.ReferenceId == row.Id, ct);
+            if (existingWalletGrant is null)
+            {
+                wallet.CreditBalance += includedCredits;
+                wallet.LastUpdatedAt = now;
+                _db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    WalletId = wallet.Id,
+                    TransactionType = "plan_grant",
+                    Amount = includedCredits,
+                    BalanceAfter = wallet.CreditBalance,
+                    ReferenceType = "subscription",
+                    ReferenceId = row.Id,
+                    Description = $"Included credits for {plan?.Name ?? row.CourseName}",
+                    CreatedBy = "admin",
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        var approverUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == row.UserId, ct);
+        if (approverUser is not null && !string.IsNullOrWhiteSpace(plan?.Code))
+        {
+            approverUser.CurrentPlanId = plan!.Code;
+        }
 
         // AI-credit parity with the Stripe webhook fulfillment path: the
         // ApplyPlanEntitlements calls above deliberately leave AiCreditsRemaining
         // untouched (the AI-credit ledger is the single source of truth), so the
         // bundled AI credits must be granted here, with the same idempotency
-        // guard the webhook uses (see CreditAiLedgerForPlanPaymentAsync). Keyed
-        // on the manual request id so re-approval never double-grants.
+        // guard the webhook uses. Keyed on the manual request id so re-approval
+        // never double-grants.
+        // NOTE: the legacy raw-token AiCreditLedger write was removed —
+        // candidate entitlements are Credits/Attempts/Unlimited only
+        // (Master Catalogue §2); the old TokensDelta rows are no longer written.
         var aiCredits = planVersion?.BundledAiCredits ?? plan?.BundledAiCredits ?? 0;
         if (aiCredits > 0)
         {
             var planCodeForCredit = plan?.Code ?? planVersion!.Code;
             var creditReferenceId = $"manual:{row.Id}:{planCodeForCredit}";
-            var alreadyGranted = await _db.AiCreditLedger.AnyAsync(
-                e => e.UserId == row.UserId
-                     && e.Source == AiCreditSource.Purchase
-                     && e.ReferenceId == creditReferenceId, ct);
-            if (!alreadyGranted)
+            if (_aiPackageCredits is not null)
             {
                 var durationMonths = plan?.DurationMonths ?? planVersion?.DurationMonths ?? 0;
-                _db.AiCreditLedger.Add(new AiCreditLedgerEntry
-                {
-                    Id = Guid.NewGuid().ToString("N"),
-                    UserId = row.UserId,
-                    TokensDelta = aiCredits,
-                    CostDeltaUsd = 0m,
-                    Source = AiCreditSource.Purchase,
-                    Description = $"{plan?.Name ?? row.CourseName} bundled AI grading credits (manual payment)",
-                    ReferenceId = creditReferenceId,
-                    ExpiresAt = durationMonths > 0 ? now.AddMonths(durationMonths) : null,
-                    CreatedAt = now,
-                });
-                subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + aiCredits);
-                if (_aiPackageCredits is not null)
-                {
-                    var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
-                    await _aiPackageCredits.GrantCourseGiftCreditsAsync(
-                        row.UserId,
-                        planCodeForCredit,
-                        plan?.Name ?? row.CourseName,
-                        aiCredits,
-                        creditReferenceId,
-                        giftExpiry,
-                        ct);
-                }
+                var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
+                await _aiPackageCredits.GrantCourseGiftCreditsAsync(
+                    row.UserId,
+                    planCodeForCredit,
+                    plan?.Name ?? row.CourseName,
+                    aiCredits,
+                    creditReferenceId,
+                    giftExpiry,
+                    ct);
             }
         }
 

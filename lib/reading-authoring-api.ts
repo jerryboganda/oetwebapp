@@ -1109,7 +1109,15 @@ export const startReadingAttempt = (
   if (options.mockAttemptId) params.set('mockAttemptId', options.mockAttemptId);
   if (options.mockSectionId) params.set('mockSectionId', options.mockSectionId);
   const suffix = params.toString() ? `?${params.toString()}` : '';
-  return api<ReadingAttemptStarted>(`/v1/reading-papers/papers/${paperId}/attempts${suffix}`, { method: 'POST' });
+  return api<ReadingAttemptStarted>(`/v1/reading-papers/papers/${paperId}/attempts${suffix}`, { method: 'POST' })
+    .then((attempt) => {
+      if (!options.mockAttemptId && !options.mockSectionId) {
+        // Live balance feedback (Rule E): announce the debit; mocks spend
+        // their separate allowance.
+        void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('reading'));
+      }
+      return attempt;
+    });
 };
 
 /**

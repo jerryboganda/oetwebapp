@@ -35,6 +35,7 @@ import { Button } from '@/components/admin/ui/button';
 import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { AiCreditSummary } from '@/components/admin/user-access/ai-credit-summary';
+import { CreditBucketAdjuster } from '@/components/admin/user-access/credit-bucket-adjuster';
 import { ManageAccessPanel } from '@/components/admin/user-access/manage-access-panel';
 import { QuickGrantModal } from '@/components/admin/user-access/quick-grant-modal';
 import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
@@ -1481,6 +1482,7 @@ export default function UserDetailPage() {
                   >
                     <div className="space-y-3">
                      <AiCreditSummary snapshot={aiCredits} loading={aiCreditsLoading} />
+                      <CreditBucketAdjuster userId={user.id} onAdjusted={(snapshot) => setAiCredits(snapshot)} />
                     </div>
                     <button
                      type="button"

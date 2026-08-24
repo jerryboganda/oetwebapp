@@ -103,6 +103,7 @@ export const learnerMainNavItems: NavItem[] = [
   { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials', moduleKey: 'MaterialsLibrary' },
   { href: '/videos', label: 'Videos', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos', featureFlag: 'video_library', moduleKey: 'VideoLibrary' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
+  { href: '/submissions', label: 'History', icon: <History className="w-5 h-5" />, matchPrefix: '/submissions' },
   { href: '/subscriptions', label: 'Subscriptions & Packages', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/subscriptions' },
   { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
 ];

@@ -90,6 +90,16 @@ public class ContentPaper
 
     public ContentStatus Status { get; set; } = ContentStatus.Draft;
 
+    /// <summary>
+    /// Master Catalogue §5: publish status alone is not enough — candidate
+    /// surfaces must filter on an explicit visibility decision. False hides
+    /// the paper from every candidate surface (web/Android/iOS catalogue AND
+    /// direct URL/API start routes) while keeping it editable in admin.
+    /// Test/demo/staging content (e.g. the Reading "Other papers" series)
+    /// ships with false.
+    /// </summary>
+    public bool CandidateVisible { get; set; } = true;
+
     /// <summary>FK to <see cref="ContentRevision"/> — the currently-published
     /// snapshot. Null until first publish.</summary>
     [MaxLength(64)]

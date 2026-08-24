@@ -196,7 +196,15 @@ function PaymentReturnShell({ phase, status, error, onCheckAgain }: { phase: Pha
 
           <div className="mt-6 flex flex-wrap gap-3">
             {phase === 'completed' ? (
-              status?.manualDeliveryRequired && status.whatsAppUrl ? (
+              status?.verificationRequired ? (
+                status?.verificationWhatsAppUrl || status?.whatsAppUrl ? (
+                  <Button asChild>
+                    <a href={status.verificationWhatsAppUrl ?? status.whatsAppUrl ?? '#'} target="_blank" rel="noreferrer">
+                      Send receipt on WhatsApp <ArrowRight className="h-4 w-4" />
+                    </a>
+                  </Button>
+                ) : null
+              ) : status?.manualDeliveryRequired && status.whatsAppUrl ? (
                 <Button asChild>
                   <a href={status.whatsAppUrl} target="_blank" rel="noreferrer">
                     Contact us on WhatsApp <ArrowRight className="h-4 w-4" />
@@ -241,6 +249,10 @@ function StatusIcon({ phase }: { phase: Phase }) {
 }
 
 function messageFor(phase: Phase, status?: BillingPaymentStatus | null) {
+  if (phase === 'completed' && status?.verificationRequired) {
+    return status.verificationMessage
+      ?? 'Payment received — your order is Pending Verification. An admin will approve it shortly; you can also send your receipt on WhatsApp.';
+  }
   if (phase === 'completed' && status?.manualDeliveryRequired) {
     return 'Your payment has been received. No Tutor Book access is activated automatically. Please contact us on WhatsApp so we can prepare and send your personalised package.';
   }

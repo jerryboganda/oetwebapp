@@ -382,12 +382,19 @@ public static class FulfilmentStatuses
     /// <summary>Paid, awaiting the admin hand-over step.</summary>
     public const string PendingManual = "pending_manual";
 
+    /// <summary>
+    /// Master Catalogue Flow A (Products 1-29): payment succeeded but the order
+    /// is Pending Verification — access stays blocked until an admin
+    /// Approves/Accepts in Admin &gt; Billing &gt; Orders &amp; Payments.
+    /// </summary>
+    public const string PendingVerification = "pending_verification";
+
     /// <summary>Admin has handed the package over; access released.</summary>
     public const string Fulfilled = "fulfilled";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        Auto, PendingManual, Fulfilled,
+        Auto, PendingManual, Fulfilled, PendingVerification,
     };
 
     public static bool IsValid(string? value) => value is not null && All.Contains(value);

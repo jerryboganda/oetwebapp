@@ -1520,6 +1520,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCreditService
     OetLearner.Api.Services.AiManagement.AiCreditService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiPackageCreditService,
     OetLearner.Api.Services.Billing.AiPackageCreditService>();
+builder.Services.AddScoped<OetLearner.Api.Services.ILearnerAttemptHistoryService,
+    OetLearner.Api.Services.LearnerAttemptHistoryService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditRenewalWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiAccountQuotaResetWorker>();
 
@@ -2383,7 +2385,8 @@ app.MapBillingCartEndpoints();
 app.MapBillingCheckoutEndpoints();
 app.MapBillingSubscriptionEndpoints();
 app.MapBillingPromoCodeEndpoints();
-app.MapAiPackageCreditEndpoints();
+        app.MapAiPackageCreditEndpoints();
+        app.MapLearnerAttemptHistoryEndpoints();
 app.MapStripeWebhookEndpoints();
 app.MapBrevoWebhookEndpoints();
 // Video Library — learner catalog + attested playback, admin CRUD, Bunny webhook.

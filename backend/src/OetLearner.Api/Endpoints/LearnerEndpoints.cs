@@ -748,6 +748,7 @@ public static class LearnerEndpoints
         var policy = await policyService.ResolveForUserAsync(userId, ct);
         var publishedReadingPapers = await db.ContentPapers.AsNoTracking()
             .Where(p => p.Status == ContentStatus.Published
+                && p.CandidateVisible
                 && p.SubtestCode.ToLower() == "reading")
             .OrderByDescending(p => p.Priority)
             .ThenByDescending(p => p.PublishedAt)

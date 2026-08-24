@@ -57,6 +57,7 @@ public static class ReadingLearnerEndpoints
             var paper = await db.ContentPapers.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == paperId
                     && p.SubtestCode == "reading"
+                    && p.CandidateVisible
                     && (p.Status == ContentStatus.Published
                         || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
             if (paper is null)
@@ -1013,6 +1014,7 @@ public static class ReadingLearnerEndpoints
             var paper = await db.ContentPapers.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == paperId
                     && p.SubtestCode == "reading"
+                    && p.CandidateVisible
                     && (p.Status == ContentStatus.Published
                         || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
             if (paper is null || !await CanLearnerSeePaperAsync(db, http, userId, paper, ct))

@@ -68,11 +68,12 @@ export default function LearnerAiUsagePage() {
         <Skeleton className="h-48 w-full" />
       ) : (
         <div className="space-y-6">
-          {/* Headline cards */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+          {/* Headline cards — Credits / Attempts only. Raw provider token
+              counts and platform cost data are operational data shown only in
+              the admin AI/API Usage & Billing view. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Card label="AI calls (30d)" value={summary.totalCalls.toLocaleString()} />
-            <Card label="Tokens (30d)" value={summary.totalTokens.toLocaleString()} />
-            <Card label="Cost (USD, 30d)" value={`$${summary.totalCostUsd.toFixed(2)}`} />
+            <Card label="Credits used (30d)" value={`${summary.creditsUsed.toLocaleString()} credits`} />
             <Card label="Wallet balance" value={`${summary.walletBalance} credits`} />
           </div>
 
@@ -83,10 +84,9 @@ export default function LearnerAiUsagePage() {
                 <TrendingUp className="h-5 w-5" aria-hidden="true" />
                 <h2 className="text-lg font-semibold">Forecast: next 30 days</h2>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Mini label="Predicted calls" value={forecast.forecastCalls.toLocaleString()} />
                 <Mini label="Predicted credits" value={forecast.forecastCredits.toLocaleString()} />
-                <Mini label="Predicted cost" value={`$${forecast.forecastCostUsd.toFixed(2)}`} />
               </div>
               {forecast.suggestedTopUpCredits > 0 && (
                 <div className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950 dark:text-amber-100">
@@ -123,8 +123,6 @@ export default function LearnerAiUsagePage() {
                     <tr>
                       <th className="px-4 py-2">Feature</th>
                       <th className="px-4 py-2 text-right">Calls</th>
-                      <th className="px-4 py-2 text-right">Tokens</th>
-                      <th className="px-4 py-2 text-right">Cost USD</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -132,8 +130,6 @@ export default function LearnerAiUsagePage() {
                       <tr key={f.featureCode} className="border-t border-border">
                         <td className="px-4 py-2 font-mono text-xs">{f.featureCode}</td>
                         <td className="px-4 py-2 text-right">{f.calls.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-right">{f.totalTokens.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-right">${f.costUsd.toFixed(4)}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -2302,8 +2302,10 @@ public sealed class MockService(
             .ThenBy(x => x.Title)
             .ToListAsync(ct);
 
-        var bundle = candidates.FirstOrDefault(x => x.AppliesToAllProfessions || x.ProfessionId == null || x.ProfessionId == profession)
-            ?? candidates.FirstOrDefault();
+        // Master Catalogue §7 profession isolation: never fall back to another
+        // profession's bundle. Only universal bundles (all-professions or
+        // unscoped) may serve a learner whose exact profession has no bundle.
+        var bundle = candidates.FirstOrDefault(x => x.AppliesToAllProfessions || x.ProfessionId == null || x.ProfessionId == profession);
 
         return bundle ?? throw ApiException.NotFound(
             "mock_bundle_not_found",

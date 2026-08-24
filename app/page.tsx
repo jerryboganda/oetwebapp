@@ -35,6 +35,7 @@ import {
 } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
+import { CreditBalanceCard, hasVisibleCreditActivity } from '@/components/domain/billing/credit-balance-card';
 import { AsyncStateWrapper } from '@/components/state';
 import { OnboardingChecklist } from '@/components/onboarding/onboarding-checklist';
 import { AppDownloadPromo, PostLoginAppModal } from '@/components/marketing/app-download-promo';
@@ -258,7 +259,7 @@ export default function Dashboard() {
     queryKey: queryKeys.dashboard.aiPackageCredits(queryUserId),
     queryFn: fetchMyAiPackageCredits,
     staleTime: 30_000,
-    enabled: supplementalQueriesEnabled && purchaseSuccess,
+    enabled: supplementalQueriesEnabled,
   });
   const scoringPolicy = scoringPolicyQuery.data ?? null;
   const entitlement = entitlementQuery.data ?? null;
@@ -434,9 +435,13 @@ export default function Dashboard() {
           {purchaseSuccess ? (
             <InlineAlert variant="success">
               AI package purchase received. Current balances: {aiPackageCredits
-                ? `${aiPackageCredits.flexibleCredits} flexible, ${aiPackageCredits.writingOnlyCredits} writing, ${aiPackageCredits.speakingOnlyCredits} speaking, ${aiPackageCredits.mockExamsRemaining} mocks.`
+                ? `${aiPackageCredits.readingTestsRemaining ?? 'unlimited'} reading, ${aiPackageCredits.listeningTestsRemaining ?? 'unlimited'} listening, ${aiPackageCredits.writingUnlimited ? 'unlimited' : aiPackageCredits.writingOnlyCredits + aiPackageCredits.flexibleCredits} writing, ${aiPackageCredits.speakingUnlimited ? 'unlimited' : aiPackageCredits.speakingOnlyCredits + aiPackageCredits.flexibleCredits} speaking, ${(aiPackageCredits.sharedCredits ?? 0)} shared, ${aiPackageCredits.mockExamsRemaining} mocks.`
                 : 'refreshing your package balance.'}
             </InlineAlert>
+          ) : null}
+
+          {aiPackageCredits && hasVisibleCreditActivity(aiPackageCredits) ? (
+            <CreditBalanceCard snapshot={aiPackageCredits} />
           ) : null}
 
           <OnboardingChecklist />

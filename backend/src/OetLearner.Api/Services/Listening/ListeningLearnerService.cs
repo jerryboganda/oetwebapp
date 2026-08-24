@@ -53,6 +53,7 @@ public sealed class ListeningLearnerService(
             .Include(p => p.Assets.Where(a => a.IsPrimary))
                 .ThenInclude(a => a.MediaAsset)
             .Where(p => p.Status == ContentStatus.Published
+                && p.CandidateVisible
                 && p.SubtestCode == Subtest
                 && (p.AppliesToAllProfessions
                     || (!string.IsNullOrWhiteSpace(profession) && p.ProfessionId == profession)))
@@ -2478,8 +2479,11 @@ public sealed class ListeningLearnerService(
             return;
         }
 
-        if (paper.Status != ContentStatus.Published)
+        if (paper.Status != ContentStatus.Published || !paper.CandidateVisible)
         {
+            // Hidden test/demo/staging papers are indistinguishable from
+            // missing ones: direct URLs and API calls get a 404, never the
+            // content.
             throw ApiException.NotFound("listening_paper_not_found", "Listening paper not found.");
         }
 

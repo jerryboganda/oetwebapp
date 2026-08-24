@@ -200,6 +200,7 @@ public sealed class ReadingAttemptService(
         var paper = await db.ContentPapers.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == paperId
                 && p.SubtestCode == "reading"
+                && p.CandidateVisible
                 && (p.Status == ContentStatus.Published
                     || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct)
             ?? throw new InvalidOperationException("Paper not found.");

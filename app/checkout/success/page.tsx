@@ -41,6 +41,12 @@ function CheckoutSuccessContent() {
   const delivery = searchParams?.get('delivery') ?? '';
   const amount = amountParam != null && amountParam !== '' ? Number(amountParam) : null;
   const isManualDelivery = MANUAL_DELIVERY.has(delivery);
+  // AI / practice / mock packages (Products 30-47) activate instantly and
+  // never use the proof-of-payment verification route.
+  const isAiPackage =
+    reference.startsWith('pkg_') ||
+    (searchParams?.get('addons') ?? '').split(',').filter(Boolean).every((code) => code.startsWith('pkg_'))
+      && Boolean(searchParams?.get('addons'));
 
   return (
     <div className="min-h-screen bg-background-light text-navy">
@@ -62,19 +68,21 @@ function CheckoutSuccessContent() {
           <PaymentReceived course={course} />
         )}
 
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <h2 className="text-sm font-bold text-navy">Need to send us your receipt?</h2>
-          <p className="mt-1 text-xs leading-5 text-muted">
-            Message us on WhatsApp with your proof of payment and we&apos;ll pick it up from there.
-          </p>
-          <SendProofOnWhatsAppButton
-            className="mt-3"
-            course={course}
-            amount={amount}
-            currency={currency}
-            reference={reference}
-          />
-        </div>
+        {!isAiPackage && (
+          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <h2 className="text-sm font-bold text-navy">Need to send us your receipt?</h2>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Message us on WhatsApp with your proof of payment and we&apos;ll pick it up from there.
+            </p>
+            <SendProofOnWhatsAppButton
+              className="mt-3"
+              course={course}
+              amount={amount}
+              currency={currency}
+              reference={reference}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -88,7 +96,7 @@ function CheckoutSuccessContent() {
 function PendingManualFulfilment({ delivery, course }: { delivery: string; course: string }) {
   const handover =
     delivery === 'whatsapp' || delivery === 'telegram'
-      ? 'Once our team verifies your payment, contact us on WhatsApp at +44 7961 725989. The clickable WhatsApp link appears with your order details.'
+      ? 'Once our team verifies your payment, message us on WhatsApp using the button below — it reaches our support desk directly.'
       : delivery === 'manual_material'
         ? 'Once our team verifies your payment we will arrange delivery of your materials and confirm the details with you.'
         : 'Once our team verifies your payment we will switch your access on and confirm it with you.';

@@ -1467,7 +1467,7 @@
         "requiresEligibleParent":  false,
         "lettersGranted":  0,
         "sessionsGranted":  0,
-        "grantCredits":  3,
+        "grantCredits":  0,
         "mockEntitlements":  0,
         "priorityQueue":  false,
         "isStackable":  true,
@@ -1482,7 +1482,7 @@
                            "Detailed per-criterion feedback",
                            "30-day validity"
                        ],
-        "writingOnlyCredits":  6,
+        "writingOnlyCredits":  3,
         "writingItems":  3
     },
     {
@@ -1496,7 +1496,7 @@
         "requiresEligibleParent":  false,
         "lettersGranted":  0,
         "sessionsGranted":  0,
-        "grantCredits":  8,
+        "grantCredits":  0,
         "mockEntitlements":  0,
         "priorityQueue":  false,
         "isStackable":  true,
@@ -1511,7 +1511,7 @@
                            "Detailed per-criterion feedback",
                            "90-day validity"
                        ],
-        "writingOnlyCredits":  16,
+        "writingOnlyCredits":  8,
         "writingItems":  8
     },
     {
@@ -1525,7 +1525,7 @@
         "requiresEligibleParent":  false,
         "lettersGranted":  0,
         "sessionsGranted":  0,
-        "grantCredits":  15,
+        "grantCredits":  0,
         "mockEntitlements":  0,
         "priorityQueue":  false,
         "isStackable":  true,
@@ -1540,7 +1540,7 @@
                            "Detailed per-criterion feedback",
                            "6-month validity"
                        ],
-        "writingOnlyCredits":  30,
+        "writingOnlyCredits":  15,
         "writingItems":  15
     },
     {
@@ -1554,7 +1554,7 @@
         "requiresEligibleParent":  false,
         "lettersGranted":  0,
         "sessionsGranted":  0,
-        "grantCredits":  3,
+        "grantCredits":  0,
         "mockEntitlements":  0,
         "priorityQueue":  false,
         "isStackable":  true,
@@ -1583,7 +1583,7 @@
         "requiresEligibleParent":  false,
         "lettersGranted":  0,
         "sessionsGranted":  0,
-        "grantCredits":  8,
+        "grantCredits":  0,
         "mockEntitlements":  0,
         "priorityQueue":  false,
         "isStackable":  true,
@@ -1612,7 +1612,7 @@
         "requiresEligibleParent":  false,
         "lettersGranted":  0,
         "sessionsGranted":  0,
-        "grantCredits":  15,
+        "grantCredits":  0,
         "mockEntitlements":  0,
         "priorityQueue":  false,
         "isStackable":  true,

@@ -2,6 +2,16 @@
 
 Last updated: 2026-08-24
 
+## Current Checkpoint - OET 2026 Master Catalogue conformance wave 1
+
+- Spec installed at docs/OET_2026_MASTER_CATALOGUE_AI_CREDITS_ACCESS.md; AGENTS.md invariant points at it.
+- Wallet split: SharedCredits (universal R1/L1/W2/S2) vs restricted FlexibleCredits (Quick Check/Exam Prep Pro, W/S only). Migration 20260906090000 reclassifies balances by source package and corrects Writing packs to exact 3/8/15 (live rows previously granted double via writing_only_credits 6/16/30).
+- Consumption priority enforced server-side: dedicated pool -> Flexible W/S -> Shared for graded subtests (dedicated/FlexWS = 1 per submission, Shared = 2); Reading/Listening draw own allowance then Shared(1), never FlexWS. Debit results carry balanceSource/creditsUsed/remaining/feedbackMessage; FE announces them via lib/credit-feedback.ts at ensureAttempt/reading/listening/mock choke points.
+- Candidate surfaces: dashboard CreditBalanceCard (per-bucket Total/Used/Remaining/Unlimited + source + validity + days-left), token meters removed (AiUsageWidget deleted; settings/ai and ai-usage credits-only), unified GET /v1/me/attempts history rendered on /submissions with Resume/Review links; History added to learner sidebar.
+- Payments: Products 1-29 gateway completions park at FulfilmentStatuses.PendingVerification (no activation/grants until admin approval; approval completes deferred IncludedCredits/gifts and stamps approver); payment-status exposes verificationRequired + runtime-configurable WhatsApp link (hardcoded wa.me removed). Products 30-47: pkg_* manual-payment submissions rejected server-side; proof/WhatsApp/offline CTAs hidden for AI packages; instant webhook grant unchanged.
+- Content: ContentPaper.CandidateVisible flag + admin toggle POST /v1/admin/papers/{id}/candidate-visible?visible=; migration 20260906100000 hides published Reading papers outside the five official series (Other papers cleanup); flag enforced in reading home/structure/start/practice-part, listening home/session gate, generic paper list/detail, media access. Profession isolation added to legacy CreateAttemptAsync + mock bundle fallback removed + legacy cart checkout profession gate.
+- Admin: per-user credit table parity (buckets w/ totals/source/validity/days-left) reading same ledger endpoint as candidate; CreditBucketAdjuster wired to POST /v1/admin/ai-package-credits/{userId}/adjust; per-user raw-token admin page + lib clients deleted; legacy TokensDelta writes stopped; platform view retitled AI/API Usage & Billing with ProviderCapacitySection (capacity vs used vs remaining + reset/refill).
+- Tests: AiPackageCreditMasterCatalogueTests.cs added; AiPackageCreditServiceTests updated to the corrected cost matrix. Validation intentionally not run locally (owner verifies).
 ## Current Checkpoint - Antigravity integration COMPLETE (all phases)
 
 - **Live state (plain language):** students are still served by existing providers (Anthropic/OpenAI-compatible). Gateway runs Mode A (normal Gemini API key) in standby. AI Pro Antigravity subscription quota is NOT used in production (Mode B = owner's PC only; Mode C awaits Google, watch `pnpm ai:flipday-watch`).

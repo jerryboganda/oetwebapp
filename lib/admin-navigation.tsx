@@ -271,7 +271,7 @@ export const adminNavGroups: AdminNavGroup[] = [
     items: [
       {
         href: '/admin/ai-usage',
-        label: 'AI Usage & Budget',
+        label: 'AI/API Usage & Billing',
         icon: <Cpu className={iconClassName} />,
         matchPrefix: '/admin/ai-usage',
         requiredPermissions: [AdminPermission.AiConfig],
@@ -346,7 +346,7 @@ export const adminNavGroups: AdminNavGroup[] = [
       },
       {
         href: '/admin/billing/manual-payments',
-        label: 'Payment Proofs',
+        label: 'Orders & Payments',
         icon: <Receipt className={iconClassName} />,
         matchPrefix: '/admin/billing/manual-payments',
         requiredPermissions: [AdminPermission.BillingRead],
@@ -543,7 +543,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/ai-assistant', title: 'AI Assistant' },
   { prefix: '/admin/ai-config', title: 'AI Eval Config' },
   { prefix: '/admin/ai-providers', title: 'AI Providers' },
-  { prefix: '/admin/ai-usage', title: 'AI Usage & Budget' },
+  { prefix: '/admin/ai-usage', title: 'AI/API Usage & Billing' },
   { prefix: '/admin/ai-analytics', title: 'AI Analytics' },
   { prefix: '/admin/voice-design', title: 'Voice Design' },
   { prefix: '/admin/notifications/templates', title: 'Notification Templates' },
@@ -554,7 +554,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/billing/storefront', title: 'Catalog Storefront' },
   { prefix: '/admin/billing/subscriptions-packages', title: 'Subscriptions & Packages' },
   { prefix: '/admin/billing/wallet-tiers', title: 'Wallet Tiers' },
-  { prefix: '/admin/billing/manual-payments', title: 'Payment Proofs' },
+  { prefix: '/admin/billing/manual-payments', title: 'Orders & Payments' },
   { prefix: '/admin/billing/payment-methods', title: 'Payment Methods' },
   { prefix: '/admin/billing/payment-gateways', title: 'Payment Gateways' },
   { prefix: '/admin/billing/stripe-accounts', title: 'Stripe Accounts' },

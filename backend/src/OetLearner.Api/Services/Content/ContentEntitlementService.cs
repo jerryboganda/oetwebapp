@@ -247,12 +247,20 @@ public sealed class ContentEntitlementService(
         var code = (subtestCode ?? string.Empty).Trim().ToLowerInvariant();
         return code switch
         {
-            "listening" => snapshot.ListeningTestsRemaining is null or > 0,
-            "reading" => snapshot.ReadingTestsRemaining is null or > 0,
+            // Deterministic subtests: own allowance first, then Shared at cost 1.
+            // The restricted Flexible W/S pool never covers Reading/Listening.
+            "listening" => snapshot.ListeningTestsRemaining is null or > 0 || snapshot.SharedCredits >= AiGradingCreditCost.ListeningExam,
+            "reading" => snapshot.ReadingTestsRemaining is null or > 0 || snapshot.SharedCredits >= AiGradingCreditCost.ReadingExam,
+            // Graded subtests (§1 matrix): dedicated ≥1, Flexible W/S ≥1, or
+            // universal Shared at the 2-credit rate.
             "writing" => snapshot.WritingUnlimited
-                || snapshot.WritingOnlyCredits + snapshot.FlexibleCredits >= AiGradingCreditCost.WritingExam,
+                || snapshot.WritingOnlyCredits >= 1
+                || snapshot.FlexibleCredits >= 1
+                || snapshot.SharedCredits >= AiGradingCreditCost.WritingExam,
             "speaking" => snapshot.SpeakingUnlimited
-                || snapshot.SpeakingOnlyCredits + snapshot.FlexibleCredits >= AiGradingCreditCost.SpeakingExam,
+                || snapshot.SpeakingOnlyCredits >= 1
+                || snapshot.FlexibleCredits >= 1
+                || snapshot.SharedCredits >= AiGradingCreditCost.SpeakingExam,
             _ => snapshot.MockExamsRemaining > 0
         };
     }

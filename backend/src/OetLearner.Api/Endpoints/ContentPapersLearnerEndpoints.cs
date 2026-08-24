@@ -43,7 +43,7 @@ public static class ContentPapersLearnerEndpoints
             }
 
             var q = db.ContentPapers.AsNoTracking()
-                .Where(p => p.Status == ContentStatus.Published);
+                .Where(p => p.Status == ContentStatus.Published && p.CandidateVisible);
 
             // Profession scope: user sees papers that apply to all, or match their profession.
             if (!string.IsNullOrWhiteSpace(profession))
@@ -101,7 +101,8 @@ public static class ContentPapersLearnerEndpoints
                     .ThenInclude(a => a.MediaAsset)
                 .FirstOrDefaultAsync(p =>
                     (p.Id == slugOrId || p.Slug == slugOrId)
-                    && p.Status == ContentStatus.Published, ct);
+                    && p.Status == ContentStatus.Published
+                    && p.CandidateVisible, ct);
             if (paper is null) return Results.NotFound();
 
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);

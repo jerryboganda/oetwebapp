@@ -1068,6 +1068,11 @@ async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'list
     body: JSON.stringify({ contentId, context, mode: attemptMode, deviceType: 'web', parentAttemptId: null }),
   });
   cacheSet(key, created.attemptId);
+  if (subtest === 'writing' || subtest === 'speaking') {
+    // Graded activities consume credits at submit/card-reveal, not here.
+  } else {
+    void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage(subtest));
+  }
   return created;
 }
 
@@ -3183,6 +3188,7 @@ export async function createMockSession(config: {
       strictness: config.strictness ?? null,
     }),
   }));
+  void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('mock'));
   return mapMockSession(response);
 }
 
@@ -4565,9 +4571,63 @@ export async function fetchMyAiPackageCredits(): Promise<AiPackageCreditSnapshot
   return mapAiPackageCreditSnapshot(data);
 }
 
+export interface LearnerAttemptHistoryItem {
+  attemptId: string;
+  subtest: string;
+  title: string;
+  contentRef?: string | null;
+  startedAt: string;
+  submittedAt?: string | null;
+  status: 'in_progress' | 'completed';
+  balanceSource?: string | null;
+  creditsUsed: number;
+  route: string;
+}
+
+/** Unified all-four-subtest activity history (Master Catalogue §2). */
+export async function fetchMyAttemptHistory(limit = 100): Promise<LearnerAttemptHistoryItem[]> {
+  const data = await apiRequest<ApiRecord>(`/v1/me/attempts?limit=${limit}`);
+  return asArray((data as ApiRecord).items).map((item) => ({
+    attemptId: String(item.attemptId ?? ''),
+    subtest: String(item.subtest ?? ''),
+    title: String(item.title ?? ''),
+    contentRef: item.contentRef == null ? null : String(item.contentRef),
+    startedAt: String(item.startedAt ?? ''),
+    submittedAt: item.submittedAt == null ? null : String(item.submittedAt),
+    status: item.status === 'completed' ? 'completed' : 'in_progress',
+    balanceSource: item.balanceSource == null ? null : String(item.balanceSource),
+    creditsUsed: Number(item.creditsUsed ?? 0),
+    route: String(item.route ?? '/submissions'),
+  }));
+}
+
 export async function fetchAdminUserAiCredits(userId: string): Promise<AiPackageCreditSnapshot> {
   const data = await apiRequest<ApiRecord>(
     `/v1/admin/users/${encodeURIComponent(userId)}/ai-credits?pageSize=100`,
+  );
+  return mapAiPackageCreditSnapshot(data);
+}
+
+export interface AiPackageCreditAdjustmentPayload {
+  sharedCreditsDelta?: number;
+  flexibleCreditsDelta?: number;
+  writingOnlyCreditsDelta?: number;
+  speakingOnlyCreditsDelta?: number;
+  listeningTestsDelta?: number;
+  readingTestsDelta?: number;
+  mockExamsDelta?: number;
+  expiresAt?: string | null;
+  reason?: string | null;
+}
+
+/** Per-bucket credit adjustment — every change is written to the ledger. */
+export async function adjustAdminUserAiCredits(
+  userId: string,
+  payload: AiPackageCreditAdjustmentPayload,
+): Promise<AiPackageCreditSnapshot> {
+  const data = await apiRequest<ApiRecord>(
+    `/v1/admin/ai-package-credits/${encodeURIComponent(userId)}/adjust`,
+    { method: 'POST', body: JSON.stringify(payload) },
   );
   return mapAiPackageCreditSnapshot(data);
 }

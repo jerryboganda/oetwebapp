@@ -106,38 +106,39 @@ public sealed class AiPackageCreditServiceTests
     }
 
     [Fact]
-    public async Task WritingExam_DeductsTwoCredits_FromWritingPoolFirst()
+    public async Task WritingSubmission_DeductsOneCredit_FromWritingPoolFirst()
     {
         await using var db = NewContext();
         var service = NewService(db);
         await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_starter", 30, 3, """{"package_type":"writing","writing_only_credits":3}"""), 1, "cs_writing", null, CancellationToken.None);
 
-        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-2credit", 2, CancellationToken.None);
+        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-one-submission", 1, CancellationToken.None);
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
 
         Assert.True(debit.Debited);
-        Assert.Equal(1, snapshot.WritingOnlyCredits); // 3 - 2
+        Assert.Equal("dedicated", debit.BalanceSource);
+        Assert.Equal(2, snapshot.WritingOnlyCredits); // 3 - 1
         Assert.Equal(0, snapshot.FlexibleCredits);
     }
 
     [Fact]
-    public async Task WritingStarter_SixDebitUnits_FundExactlyThreeAdvertisedLetters()
+    public async Task WritingStarter_ExactlyThreeAdvertisedLetters_ThenBlocked()
     {
         await using var db = NewContext();
         var service = NewService(db);
         await service.GrantPackageAsync(
             "learner-1",
             AddOn("pkg_writing_starter", 30, 3,
-                """{"package_type":"writing","writing_only_credits":6,"writing_items":3}"""),
+                """{"package_type":"writing","writing_only_credits":3,"writing_items":3}"""),
             1,
             "cs_writing_truthful",
             null,
             CancellationToken.None);
 
-        var first = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-1", 2, CancellationToken.None);
-        var second = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-2", 2, CancellationToken.None);
-        var third = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-3", 2, CancellationToken.None);
-        var fourth = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-4", 2, CancellationToken.None);
+        var first = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-1", 1, CancellationToken.None);
+        var second = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-2", 1, CancellationToken.None);
+        var third = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-3", 1, CancellationToken.None);
+        var fourth = await service.DeductGradingCreditAsync("learner-1", "writing", "letter-4", 1, CancellationToken.None);
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
 
         Assert.True(first.Debited);
@@ -273,64 +274,75 @@ public sealed class AiPackageCreditServiceTests
     }
 
     [Fact]
-    public async Task WritingExam_SpillsFromWritingThenFlexible()
+    public async Task WritingSubmission_FallsBackToFlexibleWs_WhenDedicatedExhausted()
     {
         await using var db = NewContext();
         var service = NewService(db);
         await service.GrantPackageAsync("learner-1", AddOn("pkg_quick_check", 30, 5, """{"package_type":"full","flexible_credits":5}"""), 1, "cs_full", null, CancellationToken.None);
         await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing", null, CancellationToken.None);
 
-        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-spill", 2, CancellationToken.None);
+        var first = await service.DeductGradingCreditAsync("learner-1", "writing", "we-dedicated", 1, CancellationToken.None);
+        var second = await service.DeductGradingCreditAsync("learner-1", "writing", "we-flexws", 1, CancellationToken.None);
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
 
-        Assert.True(debit.Debited);
-        Assert.Equal(0, snapshot.WritingOnlyCredits); // dedicated pool drained first
-        Assert.Equal(4, snapshot.FlexibleCredits);    // then 1 from flexible
+        Assert.True(first.Debited);
+        Assert.Equal("dedicated", first.BalanceSource);
+        Assert.True(second.Debited);
+        Assert.Equal("flexible_ws", second.BalanceSource); // restricted pool, 1 per submission
+        Assert.Equal(0, snapshot.WritingOnlyCredits);
+        Assert.Equal(4, snapshot.FlexibleCredits);
     }
 
     [Fact]
-    public async Task WritingExam_AllOrNothing_WhenOnlyOneCreditAvailable()
+    public async Task WritingSubmission_AllOrNothing_WhenOnlyOneSharedCreditAvailable()
     {
         await using var db = NewContext();
         var service = NewService(db);
-        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing", null, CancellationToken.None);
+        // A single universal Shared credit cannot fund a graded submission (§1: Shared W/S rate = 2).
+        await service.GrantCourseGiftCreditsAsync(
+            "learner-1", "single-gift", "Single Gift", 1,
+            "plan:one-shared:gift", null, CancellationToken.None);
 
-        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-short", 2, CancellationToken.None);
+        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-short", 1, CancellationToken.None);
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
 
         Assert.False(debit.Debited);
         Assert.Equal("no_ai_package_credits", debit.ErrorCode);
-        Assert.Equal(1, snapshot.WritingOnlyCredits); // untouched — no partial debit
+        Assert.Equal(1, snapshot.SharedCredits); // untouched — no partial debit
     }
 
     [Fact]
-    public async Task CheckGradingCredit_WithQuantityTwo_RequiresTwoCredits()
+    public async Task CheckGradingCredit_SharedRate_RequiresTwoUniversalCredits()
     {
         await using var db = NewContext();
         var service = NewService(db);
-        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing_1", null, CancellationToken.None);
+        await service.GrantCourseGiftCreditsAsync(
+            "learner-1", "tiny-gift", "Tiny Gift", 1,
+            "plan:one:gift", null, CancellationToken.None);
+        var withOneShared = await service.CheckGradingCreditAsync("learner-1", "writing", 2, CancellationToken.None);
 
-        var withOne = await service.CheckGradingCreditAsync("learner-1", "writing", 2, CancellationToken.None);
-        await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""), 1, "cs_writing_2", null, CancellationToken.None);
-        var withTwo = await service.CheckGradingCreditAsync("learner-1", "writing", 2, CancellationToken.None);
+        await service.GrantCourseGiftCreditsAsync(
+            "learner-1", "second-gift", "Second Gift", 1,
+            "plan:two:gift", null, CancellationToken.None);
+        var withTwoShared = await service.CheckGradingCreditAsync("learner-1", "writing", 2, CancellationToken.None);
 
-        Assert.False(withOne.Debited);
-        Assert.True(withTwo.Debited);
+        Assert.False(withOneShared.Debited);
+        Assert.True(withTwoShared.Debited);
     }
 
     [Fact]
-    public async Task RefundGradingCredit_RestoresBothCreditsOfATwoCreditExam()
+    public async Task RefundGradingCredit_RestoresTheDedicatedCreditOfASubmission()
     {
         await using var db = NewContext();
         var service = NewService(db);
         await service.GrantPackageAsync("learner-1", AddOn("pkg_writing_starter", 30, 3, """{"package_type":"writing","writing_only_credits":3}"""), 1, "cs_writing", null, CancellationToken.None);
 
-        await service.DeductGradingCreditAsync("learner-1", "writing", "we-refundable", 2, CancellationToken.None);
+        await service.DeductGradingCreditAsync("learner-1", "writing", "we-refundable", 1, CancellationToken.None);
         var refunded = await service.RefundAsync("learner-1", "we-refundable", "refund:we-refundable", "grading failed", CancellationToken.None);
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
 
         Assert.True(refunded);
-        Assert.Equal(3, snapshot.WritingOnlyCredits); // 3 - 2 + 2
+        Assert.Equal(3, snapshot.WritingOnlyCredits); // 3 - 1 + 1
     }
 
     [Fact]
@@ -445,7 +457,7 @@ public sealed class AiPackageCreditServiceTests
     }
 
     [Fact]
-    public async Task FullCourseGift_FiveCredits_PaysWriting2Speaking1Listening1Reading1()
+    public async Task FullCourseGift_SharedRates_Writing2Speaking2Listening1Reading1()
     {
         await using var db = NewContext();
         var service = NewService(db);
@@ -468,26 +480,29 @@ public sealed class AiPackageCreditServiceTests
             expiry,
             CancellationToken.None);
 
+        // §1 shared rates: Writing 2, Speaking 2, Listening 1, Reading 1.
+        // With 5 shared credits the candidate can fund W + S (4) plus one
+        // deterministic subtest (1); the next graded subtest is blocked.
         var writing = await service.DeductGradingCreditAsync(
-            "learner-1", "writing", "gift-writing", AiGradingCreditCost.WritingExam, CancellationToken.None);
+            "learner-1", "writing", "gift-writing", 1, CancellationToken.None);
         var speaking = await service.DeductGradingCreditAsync(
-            "learner-1", "speaking", "gift-speaking", AiGradingCreditCost.SpeakingCard, CancellationToken.None);
-        var listening = await service.DeductObjectivePracticeAsync(
-            "learner-1", "listening", "gift-listening-paper", CancellationToken.None);
+            "learner-1", "speaking", "gift-speaking", 1, CancellationToken.None);
         var reading = await service.DeductObjectivePracticeAsync(
             "learner-1", "reading", "gift-reading-paper", CancellationToken.None);
-        var extra = await service.DeductGradingCreditAsync(
-            "learner-1", "writing", "gift-writing-2", AiGradingCreditCost.WritingExam, CancellationToken.None);
+        var extraWriting = await service.DeductGradingCreditAsync(
+            "learner-1", "writing", "gift-writing-2", 1, CancellationToken.None);
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
 
         Assert.True(granted);
         Assert.False(duplicate);
         Assert.True(writing.Debited);
+        Assert.Equal("shared", writing.BalanceSource);
         Assert.True(speaking.Debited);
-        Assert.True(listening.Debited);
         Assert.True(reading.Debited);
-        Assert.False(extra.Debited);
+        Assert.False(extraWriting.Debited);
+        Assert.Equal("no_ai_package_credits", extraWriting.ErrorCode);
         Assert.Equal(0, snapshot.FlexibleCredits);
+        Assert.Equal(0, snapshot.SharedCredits);
         Assert.Equal(5, snapshot.CreditsGranted);
         Assert.Equal(5, snapshot.CreditsUsed);
         Assert.Equal(0, snapshot.CreditsRemaining);

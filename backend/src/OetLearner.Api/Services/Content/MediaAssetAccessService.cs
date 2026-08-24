@@ -121,7 +121,8 @@ public sealed class MediaAssetAccessService(
                 .AsNoTracking()
                 .Where(asset => asset.MediaAssetId == media.Id
                     && asset.Paper != null
-                    && asset.Paper.Status == ContentStatus.Published)
+                    && asset.Paper.Status == ContentStatus.Published
+                    && asset.Paper.CandidateVisible)
                 .Select(asset => new
                 {
                     asset.Role,

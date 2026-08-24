@@ -530,6 +530,13 @@ export const startListeningAttempt = (paperId: string, mode: ListeningSessionMod
       mockAttemptId: options.mockAttemptId ?? undefined,
       mockSectionId: options.mockSectionId ?? undefined,
     }),
+  }).then((attempt) => {
+    if (!options.mockAttemptId && !options.mockSectionId) {
+      // Live balance feedback (Rule E): announce the debit, never for mocks
+      // which spend their separate allowance.
+      void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('listening'));
+    }
+    return attempt;
   });
 
 export const saveListeningAnswer = (attemptId: string, questionId: string, userAnswer: string) =>

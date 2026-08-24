@@ -170,6 +170,15 @@ function CheckoutReviewContent() {
     [manualPaymentHref],
   );
 
+  // Master Catalogue Flow B: AI / practice / mock packages (Products 30-47)
+  // grant instantly after a confirmed payment — no proof upload, WhatsApp
+  // submission, or admin approval. Hide the offline routes for them.
+  const isAiPackageCheckout = useMemo(() => {
+    if (productType !== 'addon_purchase') return false;
+    const codes = [priceId ?? '', ...(addOnCodes ?? [])].filter(Boolean);
+    return codes.length > 0 && codes.every((code) => code.startsWith('pkg_'));
+  }, [addOnCodes, priceId, productType]);
+
   const loadQuote = useCallback(async (couponOverride = couponCode) => {
     if (!priceId) {
       setError('Choose a product before checkout.');
@@ -505,6 +514,7 @@ function CheckoutReviewContent() {
                 egyptHref={egyptHref}
                 manualPaymentHref={manualPaymentHref}
                 disabled={!quote}
+                hideOfflineRoutes={isAiPackageCheckout}
               >
                 {!quote ? (
                   <InlineAlert variant="warning">
@@ -733,21 +743,25 @@ function CheckoutReviewContent() {
             </div>
           </div>
 
-          {/* Every package carries a proof-of-payment WhatsApp route (spec §7) — it sits
-              outside the region tabs so it is there whichever way the learner pays. */}
-          <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-            <h2 className="text-sm font-bold text-navy">Already paid, or need a hand?</h2>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Send us your payment proof on WhatsApp and we&apos;ll verify it and activate your access.
-            </p>
-            <SendProofOnWhatsAppButton
-              className="mt-3 w-full"
-              course={courseLabel}
-              amount={quote?.totalAmount}
-              currency={quote?.currency}
-              reference={quote?.quoteId}
-            />
-          </div>
+          {/* Regular packages (Products 1-29) carry the proof-of-payment WhatsApp
+              route — it sits outside the region tabs so it is there whichever way
+              the learner pays. AI/practice/mock packages (30-47) are excluded:
+              they activate instantly and never use the verification flow. */}
+          {!isAiPackageCheckout && (
+            <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+              <h2 className="text-sm font-bold text-navy">Already paid, or need a hand?</h2>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Send us your payment proof on WhatsApp and we&apos;ll verify it and activate your access.
+              </p>
+              <SendProofOnWhatsAppButton
+                className="mt-3 w-full"
+                course={courseLabel}
+                amount={quote?.totalAmount}
+                currency={quote?.currency}
+                reference={quote?.quoteId}
+              />
+            </div>
+          )}
 
           <div className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-xs text-muted">
             <ShieldCheck className="h-4 w-4 text-success" /> Encrypted, secure checkout

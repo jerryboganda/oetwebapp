@@ -13,9 +13,9 @@ public interface IAiPackageCreditService
     Task<AiPackageCreditSnapshot> GrantPackageAsync(string userId, BillingAddOn addOn, int quantity, string stripeSessionId, string? quoteId, CancellationToken ct);
 
     /// <summary>
-    /// Grant the Full Course gifted AI credits into the wallet exams actually
-    /// debit (flexible pool). Idempotent on <paramref name="referenceId"/>.
-    /// Writing letter = 2, Speaking exam = 2 (1/card), Listening/Reading = 1.
+    /// Grant the Full Course gifted AI credits into the universal Shared
+    /// wallet (Reading 1, Listening 1, Writing 2, Speaking 2). Idempotent on
+    /// <paramref name="referenceId"/>.
     /// </summary>
     Task<bool> GrantCourseGiftCreditsAsync(
         string userId,
@@ -85,13 +85,43 @@ public sealed record AiPackageCreditSnapshot(
     int CreditsUsed = 0,
     int CreditsRemaining = 0,
     bool WritingUnlimited = false,
-    bool SpeakingUnlimited = false);
+    bool SpeakingUnlimited = false,
+    int SharedCredits = 0,
+    int SharedCreditsGranted = 0,
+    int SharedCreditsUsed = 0,
+    IReadOnlyList<AiPackageCreditBucketDto>? Buckets = null);
+
+/// <summary>
+/// Candidate/admin-visible per-bucket balance conforming to the Master
+/// Catalogue dashboard card: Total granted/purchased, Used, Remaining (or
+/// Unlimited), source package(s), validity window and days left.
+/// </summary>
+public sealed record AiPackageCreditBucketDto(
+    string Key,
+    string Label,
+    bool Unlimited,
+    int TotalGranted,
+    int Used,
+    int Remaining,
+    string? SourcePackages,
+    DateTimeOffset? ValidFrom,
+    DateTimeOffset? ExpiresAt,
+    int DaysLeft,
+    IReadOnlyList<AiPackageCreditGrantSourceDto> Grants);
+
+public sealed record AiPackageCreditGrantSourceDto(
+    string? PackageId,
+    string Description,
+    int TotalGranted,
+    DateTimeOffset GrantedAt,
+    DateTimeOffset? ExpiresAt);
 
 public sealed record AiPackageCreditTransactionDto(
     string Id,
     string? PackageId,
     string? PackageType,
     string Reason,
+    int SharedCreditsDelta,
     int FlexibleCreditsDelta,
     int WritingOnlyCreditsDelta,
     int SpeakingOnlyCreditsDelta,
@@ -103,7 +133,16 @@ public sealed record AiPackageCreditTransactionDto(
     DateTimeOffset? ExpiresAt,
     DateTimeOffset CreatedAt);
 
-public sealed record AiPackageDebitResult(bool Debited, string? ErrorCode, string? ErrorMessage, string? DebitReferenceId, bool Bypassed = false);
+public sealed record AiPackageDebitResult(
+    bool Debited,
+    string? ErrorCode,
+    string? ErrorMessage,
+    string? DebitReferenceId,
+    bool Bypassed = false,
+    string? BalanceSource = null,
+    int CreditsUsed = 0,
+    int? RemainingAfter = null,
+    string? FeedbackMessage = null);
 
 public sealed record AiPackageCreditAdjustmentRequest(
     int FlexibleCreditsDelta,
@@ -112,8 +151,9 @@ public sealed record AiPackageCreditAdjustmentRequest(
     int ListeningTestsDelta,
     int ReadingTestsDelta,
     int MockExamsDelta,
-    DateTimeOffset? ExpiresAt,
-    string? Reason);
+    DateTimeOffset? ExpiresAt = null,
+    string? Reason = null,
+    int SharedCreditsDelta = 0);
 
 public sealed record LearnerExamOutcomeRequest(bool Passed, DateTimeOffset ExamDate, string? EvidenceNote);
 
@@ -212,7 +252,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return false;
         }
 
-        account.FlexibleCredits += credits;
+        account.SharedCredits += credits;
         account.ExpiredBecausePassed = false;
         account.PassedAt = null;
         if (expiresAt is { } expiry && expiry > now)
@@ -221,7 +261,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
 
         // Null L/R means unlimited on paid AI packages. A course gift must not
-        // inherit that: empty finite pools so Listening/Reading spend flexible.
+        // inherit that: empty finite pools so Listening/Reading spend Shared.
         // Leave an existing paid unlimited allowance (pkg_*) intact.
         if (account.ListeningTestsRemaining is null || account.ReadingTestsRemaining is null)
         {
@@ -245,7 +285,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             Id = NewId("aipkg-tx"),
             PackageId = planCode,
             PackageType = "full",
-            FlexibleCreditsDelta = credits,
+            SharedCreditsDelta = credits,
             Reason = AiPackageCreditReason.Purchase,
             ReferenceId = referenceId,
             Description = $"{planName} gifted AI practice credits",
@@ -384,56 +424,86 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(true, null, null, referenceId);
         }
 
-        // The dedicated subtest pool (Writing-only / Speaking-only) is drawn
-        // down first, then the flexible pool covers the remainder. All-or-
-        // nothing: if the combined balance cannot fund the full quantity we
-        // debit nothing and report insufficient credits, so a multi-credit
-        // exam (e.g. a 2-credit Writing letter) never leaves a learner
-        // half-charged. Debiting quantity units in one ledger row keeps the
-        // charge atomic and refundable in a single RefundAsync call.
-        var dedicated = normalized == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
-        if (dedicated + account.FlexibleCredits < quantity)
+        // Master Catalogue §1 credit-cost matrix for ONE graded submission:
+        //   dedicated Writing-only / Speaking-only pool → 1 credit,
+        //   restricted Flexible W/S pool               → 1 credit,
+        //   universal Shared Credits                   → 2 credits.
+        // Priority follows §2: dedicated first, then Flexible W/S, then
+        // Shared. All-or-nothing: if no single source can fund the full
+        // activity we debit nothing and report insufficient credits, keeping
+        // the charge atomic and refundable in one RefundAsync call.
+        // <paramref name="quantity"/> is the submission count (callers pass 1).
+        quantity = 1;
+        var label = normalized == "writing" ? "Writing" : "Speaking";
+        var dedicatedAvailable = normalized == "writing"
+            ? account.WritingOnlyCredits
+            : account.SpeakingOnlyCredits;
+
+        int usedDedicated = 0, usedFlexible = 0, usedShared = 0;
+        string? balanceSource;
+        string feedbackMessage;
+
+        if (dedicatedAvailable >= 1)
+        {
+            usedDedicated = 1;
+            balanceSource = "dedicated";
+            if (normalized == "writing")
+            {
+                account.WritingOnlyCredits -= 1;
+                feedbackMessage = $"1 Writing Credit used. {account.WritingOnlyCredits} Writing Credits remaining.";
+            }
+            else
+            {
+                account.SpeakingOnlyCredits -= 1;
+                feedbackMessage = $"1 Speaking Credit used. {account.SpeakingOnlyCredits} Speaking Credits remaining.";
+            }
+        }
+        else if (account.FlexibleCredits >= 1)
+        {
+            usedFlexible = 1;
+            balanceSource = "flexible_ws";
+            account.FlexibleCredits -= 1;
+            feedbackMessage = $"1 Flexible W/S Credit used for {label}. {account.FlexibleCredits} Flexible W/S Credits remaining.";
+        }
+        else if (account.SharedCredits >= AiGradingCreditCost.WritingExam)
+        {
+            usedShared = AiGradingCreditCost.WritingExam;
+            balanceSource = "shared";
+            account.SharedCredits -= usedShared;
+            feedbackMessage = $"{usedShared} Shared Credits used for {label}. {account.SharedCredits} Shared Credits remaining.";
+        }
+        else
         {
             return new(false, "no_ai_package_credits", NoCreditsMessage, null);
         }
 
-        var fromDedicated = Math.Min(dedicated, quantity);
-        var fromFlexible = quantity - fromDedicated;
-        var writingDelta = 0;
-        var speakingDelta = 0;
-        if (normalized == "writing")
-        {
-            account.WritingOnlyCredits -= fromDedicated;
-            writingDelta = -fromDedicated;
-        }
-        else
-        {
-            account.SpeakingOnlyCredits -= fromDedicated;
-            speakingDelta = -fromDedicated;
-        }
-        account.FlexibleCredits -= fromFlexible;
-        var flexibleDelta = -fromFlexible;
+        var writingDelta = -usedDedicated * (normalized == "writing" ? 1 : 0);
+        var speakingDelta = -usedDedicated * (normalized == "speaking" ? 1 : 0);
 
         account.UpdatedAt = DateTimeOffset.UtcNow;
         AddTransaction(account, new AiPackageCreditTransaction
         {
             Id = NewId("aipkg-tx"),
             PackageType = normalized,
-            FlexibleCreditsDelta = flexibleDelta,
+            SharedCreditsDelta = -usedShared,
+            FlexibleCreditsDelta = -usedFlexible,
             WritingOnlyCreditsDelta = writingDelta,
             SpeakingOnlyCreditsDelta = speakingDelta,
             Reason = AiPackageCreditReason.GradingDeduct,
             ReferenceId = referenceId,
             JobId = referenceId,
-            Description = quantity == 1
-                ? $"{normalized} AI grading credit deducted"
-                : $"{normalized} AI grading credits deducted ({quantity})",
+            Description = $"{label} AI grading credit deducted",
             CreatedAt = DateTimeOffset.UtcNow
         });
 
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
-        return new(true, null, null, referenceId);
+
+        return new(true, null, null, referenceId, Bypassed: false,
+            BalanceSource: balanceSource,
+            CreditsUsed: usedDedicated + usedFlexible + usedShared,
+            RemainingAfter: account.WritingOnlyCredits + account.SpeakingOnlyCredits + account.FlexibleCredits + account.SharedCredits,
+            FeedbackMessage: feedbackMessage);
     }
 
     public Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct)
@@ -468,12 +538,13 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(true, null, null, null);
         }
 
-        // Mirror DeductGradingCreditAsync's pool sizing so the start-of-exam
-        // gate blocks a learner who cannot cover the full quantity (e.g. a
-        // 2-credit Writing exam) rather than letting them start and fail at
-        // submit.
-        var dedicated = normalized == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
-        var hasCredit = dedicated + account.FlexibleCredits >= quantity;
+        // Mirror DeductGradingCreditAsync's eligibility rule so the
+        // start-of-exam gate blocks a learner who cannot fund one submission:
+        // dedicated pool ≥ 1, or Flexible W/S ≥ 1, or Shared ≥ 2.
+        var dedicatedAvailable = normalized == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
+        var hasCredit = dedicatedAvailable >= 1
+            || account.FlexibleCredits >= 1
+            || account.SharedCredits >= AiGradingCreditCost.WritingExam;
 
         return hasCredit
             ? new(true, null, null, null)
@@ -492,6 +563,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var account = await GetOrCreateAccountAsync(userId, ct);
         await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
         if (account.ExpiresAt is null
+            && account.SharedCredits <= 0
             && account.FlexibleCredits <= 0
             && account.ListeningTestsRemaining.GetValueOrDefault() == 0
             && account.ReadingTestsRemaining.GetValueOrDefault() == 0)
@@ -514,37 +586,60 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
         }
 
+        // Master Catalogue priority for deterministic subtests: the
+        // subtest-specific allowance first, then universal Shared Credits at
+        // cost 1. The restricted Flexible W/S pool is NEVER consumed by
+        // Reading/Listening.
         var listeningDelta = 0;
         var readingDelta = 0;
-        var flexibleDelta = 0;
-        if (normalized == "listening" && account.ListeningTestsRemaining is not null)
+        var sharedDelta = 0;
+        string? balanceSource = null;
+        string? feedbackMessage = null;
+        var label = normalized == "listening" ? "Listening" : "Reading";
+        if (normalized == "listening")
         {
-            if (account.ListeningTestsRemaining > 0)
+            if (account.ListeningTestsRemaining is null)
+            {
+                // Unlimited Listening for package validity: no debit.
+            }
+            else if (account.ListeningTestsRemaining > 0)
             {
                 account.ListeningTestsRemaining--;
                 listeningDelta = -AiGradingCreditCost.ListeningExam;
+                balanceSource = "listening";
+                feedbackMessage = $"1 Listening Credit used. {account.ListeningTestsRemaining} Listening Credits remaining.";
             }
-            else if (account.FlexibleCredits >= AiGradingCreditCost.ListeningExam)
+            else if (account.SharedCredits >= AiGradingCreditCost.ListeningExam)
             {
-                account.FlexibleCredits -= AiGradingCreditCost.ListeningExam;
-                flexibleDelta = -AiGradingCreditCost.ListeningExam;
+                account.SharedCredits -= AiGradingCreditCost.ListeningExam;
+                sharedDelta = -AiGradingCreditCost.ListeningExam;
+                balanceSource = "shared";
+                feedbackMessage = $"{AiGradingCreditCost.ListeningExam} Shared Credit used for Listening. {account.SharedCredits} Shared Credits remaining.";
             }
             else
             {
                 return new(false, "no_listening_tests", "You have no Listening practice tests remaining. Purchase a package to continue.", null);
             }
         }
-        if (normalized == "reading" && account.ReadingTestsRemaining is not null)
+        if (normalized == "reading")
         {
-            if (account.ReadingTestsRemaining > 0)
+            if (account.ReadingTestsRemaining is null)
+            {
+                // Unlimited Reading for package validity: no debit.
+            }
+            else if (account.ReadingTestsRemaining > 0)
             {
                 account.ReadingTestsRemaining--;
                 readingDelta = -AiGradingCreditCost.ReadingExam;
+                balanceSource = "reading";
+                feedbackMessage = $"1 Reading Credit used. {account.ReadingTestsRemaining} Reading Credits remaining.";
             }
-            else if (account.FlexibleCredits >= AiGradingCreditCost.ReadingExam)
+            else if (account.SharedCredits >= AiGradingCreditCost.ReadingExam)
             {
-                account.FlexibleCredits -= AiGradingCreditCost.ReadingExam;
-                flexibleDelta = -AiGradingCreditCost.ReadingExam;
+                account.SharedCredits -= AiGradingCreditCost.ReadingExam;
+                sharedDelta = -AiGradingCreditCost.ReadingExam;
+                balanceSource = "shared";
+                feedbackMessage = $"{AiGradingCreditCost.ReadingExam} Shared Credit used for Reading. {account.SharedCredits} Shared Credits remaining.";
             }
             else
             {
@@ -557,20 +652,24 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         {
             Id = NewId("aipkg-tx"),
             PackageType = normalized,
-            FlexibleCreditsDelta = flexibleDelta,
+            SharedCreditsDelta = sharedDelta,
             ListeningTestsDelta = listeningDelta,
             ReadingTestsDelta = readingDelta,
             Reason = AiPackageCreditReason.ObjectivePracticeDeduct,
             ReferenceId = referenceId,
-            Description = flexibleDelta < 0
-                ? $"{normalized} exam used {Math.Abs(flexibleDelta)} gifted AI credit"
+            Description = sharedDelta < 0
+                ? $"{normalized} exam used {Math.Abs(sharedDelta)} Shared credit"
                 : $"{normalized} deterministic practice allowance used",
             CreatedAt = DateTimeOffset.UtcNow
         });
 
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
-        return new(true, null, null, referenceId);
+        return new(true, null, null, referenceId, Bypassed: false,
+            BalanceSource: balanceSource,
+            CreditsUsed: Math.Abs(listeningDelta + readingDelta + sharedDelta),
+            RemainingAfter: (account.ListeningTestsRemaining ?? 0) + (account.ReadingTestsRemaining ?? 0) + account.SharedCredits,
+            FeedbackMessage: feedbackMessage ?? $"Unlimited {label} practice — no credits consumed.");
     }
 
     public async Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct)
@@ -614,7 +713,11 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         await db.SaveChangesAsync(ct);
         if (tx is not null) await tx.CommitAsync(ct);
-        return new(true, null, null, referenceId);
+        return new(true, null, null, referenceId, Bypassed: false,
+            BalanceSource: "mock",
+            CreditsUsed: 1,
+            RemainingAfter: account.MockExamsRemaining,
+            FeedbackMessage: $"1 Full Mock attempt used. {account.MockExamsRemaining} Mock Attempts remaining.");
     }
 
     public async Task<bool> RefundAsync(string userId, string originalReferenceId, string refundReferenceId, string description, CancellationToken ct)
@@ -641,6 +744,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var reason = debit.Reason == AiPackageCreditReason.MockDeduct
             ? AiPackageCreditReason.MockRefundOnFailure
             : AiPackageCreditReason.RefundOnFailure;
+        account.SharedCredits += Math.Abs(debit.SharedCreditsDelta);
         account.FlexibleCredits += Math.Abs(debit.FlexibleCreditsDelta);
         account.WritingOnlyCredits += Math.Abs(debit.WritingOnlyCreditsDelta);
         account.SpeakingOnlyCredits += Math.Abs(debit.SpeakingOnlyCreditsDelta);
@@ -651,6 +755,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         {
             Id = NewId("aipkg-tx"),
             PackageType = debit.PackageType,
+            SharedCreditsDelta = Math.Abs(debit.SharedCreditsDelta),
             FlexibleCreditsDelta = Math.Abs(debit.FlexibleCreditsDelta),
             WritingOnlyCreditsDelta = Math.Abs(debit.WritingOnlyCreditsDelta),
             SpeakingOnlyCreditsDelta = Math.Abs(debit.SpeakingOnlyCreditsDelta),
@@ -671,6 +776,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
     {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
+        account.SharedCredits = Math.Max(0, account.SharedCredits + request.SharedCreditsDelta);
         account.FlexibleCredits = Math.Max(0, account.FlexibleCredits + request.FlexibleCreditsDelta);
         account.WritingOnlyCredits = Math.Max(0, account.WritingOnlyCredits + request.WritingOnlyCreditsDelta);
         account.SpeakingOnlyCredits = Math.Max(0, account.SpeakingOnlyCredits + request.SpeakingOnlyCreditsDelta);
@@ -683,6 +789,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         AddTransaction(account, new AiPackageCreditTransaction
         {
             Id = NewId("aipkg-tx"),
+            SharedCreditsDelta = request.SharedCreditsDelta,
             FlexibleCreditsDelta = request.FlexibleCreditsDelta,
             WritingOnlyCreditsDelta = request.WritingOnlyCreditsDelta,
             SpeakingOnlyCreditsDelta = request.SpeakingOnlyCreditsDelta,
@@ -721,12 +828,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var account = await GetOrCreateAccountAsync(userId, ct);
         if (request.Passed)
         {
+            var shared = -account.SharedCredits;
             var flexible = -account.FlexibleCredits;
             var writing = -account.WritingOnlyCredits;
             var speaking = -account.SpeakingOnlyCredits;
             var listening = -(account.ListeningTestsRemaining ?? 0);
             var reading = -(account.ReadingTestsRemaining ?? 0);
             var mocks = -account.MockExamsRemaining;
+            account.SharedCredits = 0;
             account.FlexibleCredits = 0;
             account.WritingOnlyCredits = 0;
             account.SpeakingOnlyCredits = 0;
@@ -741,6 +850,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             AddTransaction(account, new AiPackageCreditTransaction
             {
                 Id = NewId("aipkg-tx"),
+                SharedCreditsDelta = shared,
                 FlexibleCreditsDelta = flexible,
                 WritingOnlyCreditsDelta = writing,
                 SpeakingOnlyCreditsDelta = speaking,
@@ -793,12 +903,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return;
         }
 
+        var shared = -account.SharedCredits;
         var flexible = -account.FlexibleCredits;
         var writing = -account.WritingOnlyCredits;
         var speaking = -account.SpeakingOnlyCredits;
         var listening = -(account.ListeningTestsRemaining ?? 0);
         var reading = -(account.ReadingTestsRemaining ?? 0);
         var mocks = -account.MockExamsRemaining;
+        account.SharedCredits = 0;
         account.FlexibleCredits = 0;
         account.WritingOnlyCredits = 0;
         account.SpeakingOnlyCredits = 0;
@@ -809,6 +921,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         AddTransaction(account, new AiPackageCreditTransaction
         {
             Id = NewId("aipkg-tx"),
+            SharedCreditsDelta = shared,
             FlexibleCreditsDelta = flexible,
             WritingOnlyCreditsDelta = writing,
             SpeakingOnlyCreditsDelta = speaking,
@@ -859,6 +972,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return false;
         }
 
+        var shared = -Math.Min(account.SharedCredits, Math.Max(0, purchase.SharedCreditsDelta));
         var flexible = -Math.Min(account.FlexibleCredits, Math.Max(0, purchase.FlexibleCreditsDelta));
         var writing = -Math.Min(account.WritingOnlyCredits, Math.Max(0, purchase.WritingOnlyCreditsDelta));
         var speaking = -Math.Min(account.SpeakingOnlyCredits, Math.Max(0, purchase.SpeakingOnlyCreditsDelta));
@@ -876,6 +990,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             account.ReadingTestsRemaining = readingRemaining + reading;
         }
 
+        account.SharedCredits += shared;
         account.FlexibleCredits += flexible;
         account.WritingOnlyCredits += writing;
         account.SpeakingOnlyCredits += speaking;
@@ -887,6 +1002,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             Id = NewId("aipkg-tx"),
             PackageId = purchase.PackageId,
             PackageType = purchase.PackageType,
+            SharedCreditsDelta = shared,
             FlexibleCreditsDelta = flexible,
             WritingOnlyCreditsDelta = writing,
             SpeakingOnlyCreditsDelta = speaking,
@@ -975,7 +1091,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private async Task<bool> ShouldBypassGradingDebitForLegacyAccountAsync(AiPackageCreditAccount account, CancellationToken ct)
     {
-        if (account.FlexibleCredits != 0
+        if (account.SharedCredits != 0
+            || account.FlexibleCredits != 0
             || account.WritingOnlyCredits != 0
             || account.SpeakingOnlyCredits != 0)
         {
@@ -985,6 +1102,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         return !await db.AiPackageCreditTransactions.AsNoTracking()
             .AnyAsync(row => row.AccountId == account.Id
                              && (row.Reason == AiPackageCreditReason.Purchase
+                                 || row.SharedCreditsDelta > 0
                                  || row.FlexibleCreditsDelta > 0
                                  || row.WritingOnlyCreditsDelta > 0
                                  || row.SpeakingOnlyCreditsDelta > 0), ct);
@@ -1016,6 +1134,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                     row.PackageId,
                     row.PackageType,
                     row.Reason.ToString(),
+                    row.SharedCreditsDelta,
                     row.FlexibleCreditsDelta,
                     row.WritingOnlyCreditsDelta,
                     row.SpeakingOnlyCreditsDelta,
@@ -1028,20 +1147,48 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                     row.CreatedAt))
                 .ToListAsync(ct);
 
-        var practiceRows = await db.AiPackageCreditTransactions.AsNoTracking()
+        var ledgerRows = await db.AiPackageCreditTransactions.AsNoTracking()
             .Where(row => row.UserId == userId)
-            .Select(row => new { row.Reason, row.FlexibleCreditsDelta, row.WritingOnlyCreditsDelta, row.SpeakingOnlyCreditsDelta })
+            .Select(row => new LedgerRow(
+                row.PackageId,
+                row.Description,
+                row.Reason,
+                row.SharedCreditsDelta,
+                row.FlexibleCreditsDelta,
+                row.WritingOnlyCreditsDelta,
+                row.SpeakingOnlyCreditsDelta,
+                row.ListeningTestsDelta,
+                row.ReadingTestsDelta,
+                row.MockExamsDelta,
+                row.ExpiresAt,
+                row.CreatedAt))
             .ToListAsync(ct);
-        var creditsGranted = Math.Max(0, practiceRows
-            .Where(row => row.Reason is AiPackageCreditReason.Purchase
+
+        static bool IsGrantReason(AiPackageCreditReason reason)
+            => reason is AiPackageCreditReason.Purchase
                 or AiPackageCreditReason.AdminAdjustment
-                or AiPackageCreditReason.GrantReversed)
-            .Sum(row => row.FlexibleCreditsDelta + row.WritingOnlyCreditsDelta + row.SpeakingOnlyCreditsDelta));
-        var creditsUsed = practiceRows
-            .Where(row => row.Reason is AiPackageCreditReason.GradingDeduct or AiPackageCreditReason.ObjectivePracticeDeduct)
-            .Sum(row => Math.Max(0, -row.FlexibleCreditsDelta) + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta));
-        var creditsRemaining = account.FlexibleCredits + account.WritingOnlyCredits + account.SpeakingOnlyCredits;
+                or AiPackageCreditReason.GrantReversed;
+
+        static bool IsDebitReason(AiPackageCreditReason reason)
+            => reason is AiPackageCreditReason.GradingDeduct
+                or AiPackageCreditReason.ObjectivePracticeDeduct
+                or AiPackageCreditReason.MockDeduct;
+
+        var grantRows = ledgerRows.Where(row => IsGrantReason(row.Reason)).ToList();
+        var debitRows = ledgerRows.Where(row => IsDebitReason(row.Reason)).ToList();
+
+        var creditsGranted = grantRows.Sum(row =>
+            Math.Max(0, row.SharedCreditsDelta) + Math.Max(0, row.FlexibleCreditsDelta)
+            + Math.Max(0, row.WritingOnlyCreditsDelta) + Math.Max(0, row.SpeakingOnlyCreditsDelta));
+        var creditsUsed = debitRows.Sum(row =>
+            Math.Max(0, -row.SharedCreditsDelta) + Math.Max(0, -row.FlexibleCreditsDelta)
+            + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta));
+        var sharedGranted = grantRows.Sum(row => Math.Max(0, row.SharedCreditsDelta));
+        var creditsRemaining = account.SharedCredits + account.FlexibleCredits
+            + account.WritingOnlyCredits + account.SpeakingOnlyCredits;
         var unlimitedGrading = await HasActiveUnlimitedGradingAsync(userId, DateTimeOffset.UtcNow, ct);
+
+        var buckets = BuildBucketDtos(account, grantRows, unlimitedGrading);
 
         return new AiPackageCreditSnapshot(
             account.UserId,
@@ -1059,8 +1206,152 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             creditsUsed,
             creditsRemaining,
             unlimitedGrading,
-            unlimitedGrading);
+            unlimitedGrading,
+            account.SharedCredits,
+            sharedGranted,
+            debitRows.Sum(row => Math.Max(0, -row.SharedCreditsDelta)),
+            buckets);
     }
+
+    private sealed record LedgerRow(
+        string? PackageId,
+        string Description,
+        AiPackageCreditReason Reason,
+        int SharedCreditsDelta,
+        int FlexibleCreditsDelta,
+        int WritingOnlyCreditsDelta,
+        int SpeakingOnlyCreditsDelta,
+        int ListeningTestsDelta,
+        int ReadingTestsDelta,
+        int MockExamsDelta,
+        DateTimeOffset? ExpiresAt,
+        DateTimeOffset CreatedAt);
+
+    private static IReadOnlyList<AiPackageCreditBucketDto> BuildBucketDtos(
+        AiPackageCreditAccount account,
+        List<LedgerRow> grantRows,
+        bool writingSpeakingUnlimited)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        List<AiPackageCreditGrantSourceDto> GrantsFor(Func<LedgerRow, int> deltaSelector)
+            => grantRows
+                .Where(row => deltaSelector(row) > 0)
+                .GroupBy(row => row.PackageId ?? row.Description)
+                .Select(group =>
+                {
+                    var first = group.First();
+                    return new AiPackageCreditGrantSourceDto(
+                        first.PackageId,
+                        first.Description,
+                        group.Sum(row => deltaSelector(row)),
+                        group.Min(row => row.CreatedAt),
+                        group.Max(row => row.ExpiresAt));
+                })
+                .OrderBy(source => source.GrantedAt)
+                .ToList();
+
+        AiPackageCreditBucketDto Bucket(string key, string label, int remaining, bool unlimited, List<AiPackageCreditGrantSourceDto> grants)
+        {
+            var totalGranted = grants.Sum(source => source.TotalGranted);
+            var activeGrants = grants.Where(source => source.ExpiresAt is null || source.ExpiresAt > now).ToList();
+            var validFrom = activeGrants.Count > 0 ? activeGrants.Min(source => source.GrantedAt) : null;
+            DateTimeOffset? expiresAt = activeGrants.Any(source => source.ExpiresAt is null)
+                ? null
+                : activeGrants.Select(source => source.ExpiresAt).Max();
+            var used = unlimited ? 0 : Math.Clamp(totalGranted - remaining, 0, int.MaxValue);
+            return new(
+                key,
+                label,
+                unlimited,
+                totalGranted,
+                used,
+                remaining,
+                grants.Count == 0 ? null : string.Join(", ", grants
+                    .Select(source => HumanizePackageName(source.PackageId, source.Description))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)),
+                validFrom,
+                expiresAt ?? account.ExpiresAt,
+                DaysLeft(expiresAt ?? account.ExpiresAt, now),
+                grants);
+        }
+
+        var buckets = new List<AiPackageCreditBucketDto>
+        {
+            Bucket("reading", "Reading Credits", account.ReadingTestsRemaining ?? 0, account.ReadingTestsRemaining is null, GrantsFor(row => row.ReadingTestsDelta)),
+            Bucket("listening", "Listening Credits", account.ListeningTestsRemaining ?? 0, account.ListeningTestsRemaining is null, GrantsFor(row => row.ListeningTestsDelta)),
+            Bucket("writing", "Writing Credits",
+                writingSpeakingUnlimited ? 0 : account.WritingOnlyCredits,
+                writingSpeakingUnlimited,
+                MergeGradingGrants(grantRows, "writing")),
+            Bucket("speaking", "Speaking Credits",
+                writingSpeakingUnlimited ? 0 : account.SpeakingOnlyCredits,
+                writingSpeakingUnlimited,
+                MergeGradingGrants(grantRows, "speaking")),
+            Bucket("shared", "Shared Credits", account.SharedCredits, false, GrantsFor(row => row.SharedCreditsDelta)),
+        };
+
+        var flexibleWsGrants = GrantsFor(row => row.FlexibleCreditsDelta);
+        if (account.FlexibleCredits > 0 || flexibleWsGrants.Count > 0)
+        {
+            buckets.Add(Bucket("flexible_ws", "Flexible W/S Credits", account.FlexibleCredits, false, flexibleWsGrants));
+        }
+
+        var mockGrants = GrantsFor(row => row.MockExamsDelta);
+        if (account.MockExamsRemaining > 0 || mockGrants.Count > 0)
+        {
+            buckets.Add(Bucket("mock", "Full Mock Attempts", account.MockExamsRemaining, false, mockGrants));
+        }
+
+        return buckets;
+    }
+
+    /// <summary>
+    /// Writing/Speaking dedicated-pool grants come from writing_only_credits /
+    /// speaking_only_credits ledger deltas; legacy purchases that granted the
+    /// same pool through the old flexible column are folded in so the bucket
+    /// still shows a truthful Total.
+    /// </summary>
+    private static List<AiPackageCreditGrantSourceDto> MergeGradingGrants(List<LedgerRow> grantRows, string subtest)
+    {
+        Func<LedgerRow, int> dedicated = subtest == "writing"
+            ? (Func<LedgerRow, int>)(row => row.WritingOnlyCreditsDelta)
+            : row => row.SpeakingOnlyCreditsDelta;
+        return grantRows
+            .Where(row => dedicated(row) > 0)
+            .GroupBy(row => row.PackageId ?? row.Description)
+            .Select(group =>
+            {
+                var first = group.First();
+                return new AiPackageCreditGrantSourceDto(
+                    first.PackageId,
+                    first.Description,
+                    group.Sum(row => dedicated(row)),
+                    group.Min(row => row.CreatedAt),
+                    group.Max(row => row.ExpiresAt));
+            })
+            .OrderBy(source => source.GrantedAt)
+            .ToList();
+    }
+
+    private static string HumanizePackageName(string? packageId, string description)
+    {
+        if (string.IsNullOrWhiteSpace(packageId))
+        {
+            return description;
+        }
+
+        if (packageId.StartsWith("pkg_", StringComparison.OrdinalIgnoreCase))
+        {
+            packageId = packageId["pkg_".Length..];
+        }
+
+        return packageId.Replace('_', ' ').Replace('-', ' ');
+    }
+
+    private static int DaysLeft(DateTimeOffset? expiresAt, DateTimeOffset now)
+        => expiresAt is null ? -1 : Math.Max(0, (int)Math.Ceiling((expiresAt.Value - now).TotalDays));
+}
 
     private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
     {

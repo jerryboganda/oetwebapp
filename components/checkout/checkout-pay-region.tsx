@@ -14,6 +14,8 @@ interface CheckoutPayRegionProps {
   /** Pre-filled link to /billing/manual-payment for uploading an offline transfer receipt. */
   manualPaymentHref?: string;
   disabled?: boolean;
+  /** AI/practice/mock packages (Products 30-47): instant online payment only. */
+  hideOfflineRoutes?: boolean;
   /** The card / PayPal flow rendered inside the "Pay globally" route. */
   children: React.ReactNode;
 }
@@ -24,8 +26,13 @@ export function CheckoutPayRegion({
   egyptHref,
   manualPaymentHref,
   disabled,
+  hideOfflineRoutes,
   children,
 }: CheckoutPayRegionProps) {
+  if (hideOfflineRoutes) {
+    return <div>{children}</div>;
+  }
+
   return (
     <div>
       {/* Two prominent, mutually-exclusive payment routes */}

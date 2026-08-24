@@ -111,6 +111,34 @@ public sealed class CheckoutService : ICheckoutService
                 .AsNoTracking()
                 .ToListAsync(ct);
 
+            // Master Catalogue §7 profession isolation: this legacy cart route
+            // must enforce the same gate as /v1/billing/checkout-sessions so a
+            // direct API call cannot buy another profession's package.
+            var learnerProfession = await _db.Users.AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.ActiveProfessionId)
+                .FirstOrDefaultAsync(ct);
+            var productCodes = billingPrices
+                .Select(p => p.BillingProduct.Code)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            var planProfessions = await _db.BillingPlans.AsNoTracking()
+                .Where(pl => productCodes.Contains(pl.Code))
+                .Select(pl => new { pl.Code, pl.Profession })
+                .ToDictionaryAsync(pl => pl.Code, pl => pl.Profession, StringComparer.Ordinal, ct);
+            foreach (var price in billingPrices)
+            {
+                if (planProfessions.TryGetValue(price.BillingProduct.Code, out var planProfession)
+                    && !string.IsNullOrWhiteSpace(planProfession)
+                    && !string.Equals(planProfession, "all", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(planProfession, learnerProfession, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw ApiException.Forbidden(
+                        "profession_mismatch",
+                        "This package is built for a different profession. Choose the package for your registered profession.");
+                }
+            }
+
             var stripeLineItems = cart.Items
                 .Select(i =>
                 {

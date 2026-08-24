@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import {
   FileText,
@@ -15,13 +16,14 @@ import {
   CheckCircle2,
   AlertCircle,
   History,
+  Play,
 } from 'lucide-react';
 import React from 'react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Button } from '@/components/ui/button';
-import { fetchSubmissions } from '@/lib/api';
+import { fetchSubmissions, fetchMyAttemptHistory, type LearnerAttemptHistoryItem } from '@/lib/api';
 import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
@@ -78,6 +80,7 @@ function ReviewBadge({ status }: { status: ReviewStatus }) {
 export default function SubmissionHistory() {
   const router = useRouter();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [attempts, setAttempts] = useState<LearnerAttemptHistoryItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +89,11 @@ export default function SubmissionHistory() {
     fetchSubmissions()
       .then((data) => { setSubmissions(data); setLoading(false); })
       .catch(() => { setError('Failed to load submissions. Please try again.'); setLoading(false); });
+    // Unified all-four-subtest attempt history (Master Catalogue §2). Best
+    // effort: the review list below still renders if this endpoint fails.
+    fetchMyAttemptHistory()
+      .then((items) => setAttempts(items))
+      .catch(() => setAttempts([]));
   }, []);
 
   const pendingReviewCount = submissions.filter((submission) => submission.reviewStatus === 'pending').length;
@@ -110,6 +118,78 @@ export default function SubmissionHistory() {
             { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
           ]}
         />
+
+        {/* Unified attempt activity — Reading / Listening / Writing / Speaking
+            plus full mocks: exact item title/ID, subtest, start time, status,
+            balance source and credits used; reopening never deducts again. */}
+        {attempts && attempts.length > 0 ? (
+          <section aria-label="Attempt activity" className="space-y-3">
+            <LearnerSurfaceSectionHeader
+              eyebrow="All Subtests"
+              title="Attempt activity"
+              description="Every opened exam or card, its balance source, credits used and where to resume."
+            />
+            <ul className="space-y-2">
+              {attempts.map((attempt) => {
+                const styleKeyMap: Record<string, SubTest> = {
+                  reading: 'Reading',
+                  listening: 'Listening',
+                  writing: 'Writing',
+                  speaking: 'Speaking',
+                };
+                const styleKey = styleKeyMap[attempt.subtest] ?? 'Reading';
+                const style = SUBTEST_STYLE[styleKey];
+                const Icon = attempt.subtest === 'mock' ? GitCompare : style.icon;
+                return (
+                  <li
+                    key={`${attempt.subtest}-${attempt.attemptId}`}
+                    className="flex flex-col gap-2 rounded-[20px] border border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="flex min-w-0 items-start gap-3">
+                      <span className={`mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${style.badge}`}>
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-navy">
+                          {attempt.title}
+                          <span className="ml-2 font-mono text-[11px] font-medium text-muted">{attempt.attemptId}</span>
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted">
+                          <span className="capitalize">{attempt.subtest}</span>
+                          {' · '}started {formatSubmissionAttemptDate(attempt.startedAt)}
+                          {' · '}
+                          <span className={attempt.status === 'in_progress' ? 'font-bold text-amber-600' : 'font-bold text-green-700'}>
+                            {attempt.status === 'in_progress' ? 'In progress' : 'Completed'}
+                          </span>
+                          {attempt.balanceSource || attempt.creditsUsed > 0 ? (
+                            <>
+                              {' · '}
+                              {attempt.balanceSource === 'shared'
+                                ? 'Shared Credits'
+                                : attempt.balanceSource === 'flexible_ws'
+                                  ? 'Flexible W/S'
+                                  : attempt.balanceSource === 'mock'
+                                    ? 'Mock allowance'
+                                    : `${attempt.subtest} balance`}
+                              {attempt.creditsUsed > 0 ? ` · ${attempt.creditsUsed} credit${attempt.creditsUsed === 1 ? '' : 's'} used` : ''}
+                            </>
+                          ) : null}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href={attempt.route}
+                      className="inline-flex shrink-0 items-center gap-1.5 self-start rounded-full border border-border bg-background-light px-3 py-1.5 text-xs font-bold text-navy transition-colors hover:border-primary hover:text-primary sm:self-center"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      {attempt.status === 'in_progress' ? 'Resume' : 'Review'}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        ) : null}
 
         {loading ? (
           <div className="space-y-4">

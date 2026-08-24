@@ -27,7 +27,19 @@ public class AiPackageCreditAccount
     [MaxLength(64)]
     public string UserId { get; set; } = default!;
 
+    /// <summary>
+    /// Restricted flexible pool usable only for Writing or Speaking
+    /// (Quick Check / Exam Prep Pro credits). Never consumed by
+    /// Listening/Reading attempts.
+    /// </summary>
     public int FlexibleCredits { get; set; }
+
+    /// <summary>
+    /// Universal Shared AI Credits (Full Course gift currency). Usable across
+    /// all four subtests: Reading 1, Listening 1, Writing 2, Speaking 2.
+    /// </summary>
+    public int SharedCredits { get; set; }
+
     public int WritingOnlyCredits { get; set; }
     public int SpeakingOnlyCredits { get; set; }
     public int? ListeningTestsRemaining { get; set; }
@@ -62,6 +74,7 @@ public class AiPackageCreditTransaction
     [MaxLength(32)]
     public string? PackageType { get; set; }
 
+    public int SharedCreditsDelta { get; set; }
     public int FlexibleCreditsDelta { get; set; }
     public int WritingOnlyCreditsDelta { get; set; }
     public int SpeakingOnlyCreditsDelta { get; set; }

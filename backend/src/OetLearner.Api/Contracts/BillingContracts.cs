@@ -50,7 +50,10 @@ public record BillingPaymentStatusResponse(
     DateTimeOffset? FulfilledAt,
     DateTimeOffset? ExpiresAt,
     bool ManualDeliveryRequired,
-    string? WhatsAppUrl);
+    string? WhatsAppUrl,
+    bool VerificationRequired = false,
+    string? VerificationWhatsAppUrl = null,
+    string? VerificationMessage = null);
 
 public record NativeIapProductMappingUpsertRequest(
     string Platform,

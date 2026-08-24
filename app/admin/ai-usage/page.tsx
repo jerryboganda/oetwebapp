@@ -22,12 +22,16 @@ import {
   fetchAiUsage,
   fetchAiUsageSummary,
   fetchAiUsageTrend,
+  fetchAiProviders,
+  fetchAiProviderAccounts,
+  resetAiProviderAccount,
   toggleAiKillSwitch,
   updateAiGlobalPolicy,
   createAiPlan,
   updateAiPlan,
   deactivateAiPlan,
   type AiGlobalPolicy,
+  type AiProviderAccountRow,
   type AiQuotaPlan,
   type AiUsagePage,
   type AiUsageSummaryRow,
@@ -85,11 +89,11 @@ export default function AiUsagePage() {
         <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />
       )}
       <AdminOperationsLayout
-        title="AI Usage & Budget"
-        description="Platform-wide control over AI spend, quota plans, providers, and per-user credentials. See docs/AI-USAGE-POLICY.md."
+        title="AI/API Usage & Billing"
+        description="Platform-level provider token capacity, spend, quota plans, and refill/renewal monitoring. Candidate-facing balances use Credits / Attempts / Unlimited only â€” this is the only surface where raw provider tokens appear. See docs/AI-USAGE-POLICY.md."
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
-          { label: 'AI Usage & Budget' },
+          { label: 'AI/API Usage & Billing' },
         ]}
         primaryGrid={
           <>
@@ -220,6 +224,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
 
   return (
     <AsyncStateWrapper status={status}>
+      <ProviderCapacitySection onToast={onToast} />
       <KpiStrip className="mt-4">
         <KpiTile label="Total calls this month" value={fmt(totals.calls)} icon={<Gauge className="w-4 h-4" />} />
         <KpiTile label="Total tokens this month" value={fmt(totals.tokens)} icon={<Cpu className="w-4 h-4" />} />
@@ -564,6 +569,116 @@ function AnomaliesPanel({ onToast }: { onToast: (t: ToastState) => void }) {
             )}
         </Panel>
       )}
+    </AsyncStateWrapper>
+  );
+}
+
+// -------------------------------------------------------------------------
+// Provider capacity & refill monitoring (Master Catalogue §7 / A33).
+// Platform-level ONLY: shows provider/API request capacity vs used vs
+// remaining per account so admins know when to top up or renew the provider
+// subscription. Candidate credit balances are a different ledger and are
+// never shown here.
+// -------------------------------------------------------------------------
+type CapacityRow = AiProviderAccountRow & { providerName: string };
+
+function ProviderCapacitySection({ onToast }: { onToast: (t: ToastState) => void }) {
+  const [rows, setRows] = useState<CapacityRow[]>([]);
+  const [status, setStatus] = useState<PageStatus>('loading');
+
+  const load = useCallback(async () => {
+    setStatus('loading');
+    try {
+      const providers = await fetchAiProviders();
+      const accountLists = await Promise.all(
+        providers.map(async (provider) => {
+          try {
+            const accounts = await fetchAiProviderAccounts(provider.id);
+            return accounts.map((account) => ({ ...account, providerName: provider.name }));
+          } catch {
+            return [];
+          }
+        }),
+      );
+      setRows(accountLists.flat());
+      setStatus('success');
+    } catch (e) {
+      setStatus('error');
+      onToast({ variant: 'error', message: `Failed to load provider capacity: ${(e as Error).message}` });
+    }
+  }, [onToast]);
+
+  useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
+
+  const resetCounter = async (row: CapacityRow) => {
+    try {
+      await resetAiProviderAccount(row.providerId, row.id);
+      onToast({ variant: 'success', message: `${row.label} counter reset (manual refill).` });
+      await load();
+    } catch (e) {
+      onToast({ variant: 'error', message: `Reset failed: ${(e as Error).message}` });
+    }
+  };
+
+  const columns: Column<CapacityRow>[] = [
+    { key: 'label', header: 'Account', render: (r) => <span className="font-medium">{r.label}</span> },
+    { key: 'provider', header: 'Provider', render: (r) => r.providerName },
+    { key: 'used', header: 'Used this period', render: (r) => fmt(r.requestsUsedThisMonth) },
+    {
+      key: 'cap',
+      header: 'Capacity',
+      render: (r) => (r.monthlyRequestCap === null ? <span className="text-admin-fg-muted">No cap</span> : fmt(r.monthlyRequestCap)),
+    },
+    {
+      key: 'remaining',
+      header: 'Remaining',
+      render: (r) =>
+        r.monthlyRequestCap === null ? (
+          <span className="text-admin-fg-muted">—</span>
+        ) : (
+          <span className={r.monthlyRequestCap - r.requestsUsedThisMonth <= r.monthlyRequestCap * 0.1 ? 'font-semibold text-danger' : ''}>
+            {fmt(Math.max(0, r.monthlyRequestCap - r.requestsUsedThisMonth))}
+          </span>
+        ),
+    },
+    {
+      key: 'period',
+      header: 'Billing period',
+      render: (r) => r.periodMonthKey,
+    },
+    {
+      key: 'state',
+      header: 'State',
+      render: (r) =>
+        r.exhaustedUntil && new Date(r.exhaustedUntil) > new Date() ? (
+          <Badge variant="danger">Exhausted</Badge>
+        ) : (
+          <Badge variant={r.isActive ? 'success' : 'muted'}>{r.isActive ? 'Active' : 'Inactive'}</Badge>
+        ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (r) => (
+        <Button size="sm" variant="outline" onClick={() => void resetCounter(r)}>
+          <RefreshCw className="mr-1 h-3.5 w-3.5" /> Reset counter
+        </Button>
+      ),
+    },
+  ];
+
+  return (
+    <AsyncStateWrapper status={status}>
+      <Panel
+        title="Provider capacity & refill"
+        description="Requests used against each provider account's purchased capacity this billing period. Reset the counter after topping up or renewing the provider plan."
+      >
+        {rows.length === 0 ? (
+          <p className="text-sm text-admin-fg-muted">No provider accounts configured.</p>
+        ) : (
+          <DataTable data={rows} columns={columns} keyExtractor={(r) => `${r.providerId}:${r.id}`} />
+        )}
+      </Panel>
     </AsyncStateWrapper>
   );
 }

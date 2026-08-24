@@ -162,6 +162,9 @@ export interface BillingPaymentStatus {
   expiresAt: string | null;
   manualDeliveryRequired: boolean;
   whatsAppUrl: string | null;
+  verificationRequired?: boolean;
+  verificationWhatsAppUrl?: string | null;
+  verificationMessage?: string | null;
 }
 
 export interface WalletTransactionDto {
@@ -216,6 +219,7 @@ export interface AiPackageCreditTransaction {
   packageId?: string | null;
   packageType?: string | null;
   reason: string;
+  sharedCreditsDelta?: number;
   flexibleCreditsDelta: number;
   writingOnlyCreditsDelta: number;
   speakingOnlyCreditsDelta: number;
@@ -226,6 +230,37 @@ export interface AiPackageCreditTransaction {
   description: string;
   expiresAt?: string | null;
   createdAt: string;
+}
+
+export interface AiPackageCreditGrantSource {
+  packageId?: string | null;
+  description: string;
+  totalGranted: number;
+  grantedAt: string;
+  expiresAt?: string | null;
+}
+
+export type AiPackageCreditBucketKey =
+  | 'reading'
+  | 'listening'
+  | 'writing'
+  | 'speaking'
+  | 'shared'
+  | 'flexible_ws'
+  | 'mock';
+
+export interface AiPackageCreditBucket {
+  key: AiPackageCreditBucketKey;
+  label: string;
+  unlimited: boolean;
+  totalGranted: number;
+  used: number;
+  remaining: number;
+  sourcePackages?: string | null;
+  validFrom?: string | null;
+  expiresAt?: string | null;
+  daysLeft: number; // -1 = no expiry
+  grants: AiPackageCreditGrantSource[];
 }
 
 export interface AiPackageCreditSnapshot {
@@ -245,4 +280,8 @@ export interface AiPackageCreditSnapshot {
   creditsRemaining: number;
   writingUnlimited?: boolean;
   speakingUnlimited?: boolean;
+  sharedCredits?: number;
+  sharedCreditsGranted?: number;
+  sharedCreditsUsed?: number;
+  buckets?: AiPackageCreditBucket[] | null;
 }

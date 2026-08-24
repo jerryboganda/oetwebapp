@@ -19,7 +19,6 @@ import {
   Trophy,
 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardLink, CardTitle, ProgressBar } from '@/components/ui';
-import { AiUsageWidget } from '@/components/domain/AiUsageWidget';
 import { LearnerSurfaceSectionHeader, ReadinessMeter, WeakestLinkCard } from '@/components/domain';
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerFreshnessIndicator } from '@/components/domain/learner-freshness-indicator';
@@ -311,7 +310,6 @@ export function LearnerDashboardDetails({
           />
         ) : null}
 
-        <AiUsageWidget />
         <PronunciationDashboardTile />
         <ExtendAccessCta
           hasEligibleSubscription={entitlement?.hasEligibleSubscription ?? false}

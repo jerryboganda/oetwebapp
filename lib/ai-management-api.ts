@@ -514,21 +514,14 @@ export const bulkRouteFeaturesToCopilot = () =>
 
 // ═════════════════════════════════════════════════════════════════════════
 // Admin — credit ledger per user
+// REMOVED (Master Catalogue §2/§7): per-user raw provider-token ledgers and
+// token grant forms are no longer part of any admin UI. Per-candidate
+// entitlements use the package-credit wallet (credits/attempts/unlimited)
+// via lib/api.ts fetchAdminUserAiCredits / adjustAdminUserAiCredits; raw
+// provider capacity lives only in the platform-level AI/API Usage & Billing
+// view (AiProviderAccount caps + budget).
 // ═════════════════════════════════════════════════════════════════════════
 
-export const fetchUserCredits = (userId: string) =>
-  aiApi<{ balance: AiCreditBalance; entries: AiCreditLedgerRow[] }>(`/v1/admin/ai/users/${userId}/credits`);
-
-export const grantUserCredits = (userId: string, body: {
-  tokens: number;
-  costUsd: number;
-  source: 'promo' | 'purchase' | 'admin';
-  description?: string;
-  referenceId?: string;
-  expiresAt?: string;
-}) => aiApi<AiCreditLedgerRow>(`/v1/admin/ai/users/${userId}/credits/grant`, {
-  method: 'POST', body: JSON.stringify(body),
-});
 // ═════════════════════════════════════════════════════════════════════════
 // Admin — per-user AI quota / policy overrides
 // ═════════════════════════════════════════════════════════════════════════
