@@ -90,7 +90,16 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
                               || row.Reason == AiPackageCreditReason.MockDeduct))
             .OrderByDescending(row => row.CreatedAt)
             .Take(600)
-            .Select(row => new { row.ReferenceId, row.PackageType, row.SharedCreditsDelta, row.FlexibleCreditsDelta, row.WritingOnlyCreditsDelta, row.SpeakingOnlyCreditsDelta, row.ListeningTestsDelta, row.ReadingTestsDelta, row.MockExamsDelta })
+            .Select(row => new DebitRow(
+                row.ReferenceId,
+                row.PackageType,
+                row.SharedCreditsDelta,
+                row.FlexibleCreditsDelta,
+                row.WritingOnlyCreditsDelta,
+                row.SpeakingOnlyCreditsDelta,
+                row.ListeningTestsDelta,
+                row.ReadingTestsDelta,
+                row.MockExamsDelta))
             .ToListAsync(ct);
 
         var items = new List<LearnerAttemptHistoryItem>(generic.Count + readingAttempts.Count + listeningAttempts.Count + mockAttempts.Count);

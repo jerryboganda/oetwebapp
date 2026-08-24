@@ -1255,7 +1255,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         {
             var totalGranted = grants.Sum(source => source.TotalGranted);
             var activeGrants = grants.Where(source => source.ExpiresAt is null || source.ExpiresAt > now).ToList();
-            var validFrom = activeGrants.Count > 0 ? activeGrants.Min(source => source.GrantedAt) : null;
+            DateTimeOffset? validFrom = activeGrants.Count > 0 ? activeGrants.Min(source => source.GrantedAt) : null;
             DateTimeOffset? expiresAt = activeGrants.Any(source => source.ExpiresAt is null)
                 ? null
                 : activeGrants.Select(source => source.ExpiresAt).Max();
