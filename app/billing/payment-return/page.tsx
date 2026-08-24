@@ -126,10 +126,10 @@ function BillingPaymentReturnContent() {
     };
 
     void poll();
-    return () => {, user?.userId
+    return () => {
       cancelled = true;
     };
-  }, [cancelledByLearner, missingReference, pollAttempt, quoteId, sessionId, storageReady]);
+  }, [cancelledByLearner, missingReference, pollAttempt, quoteId, sessionId, storageReady, user?.userId]);
 
   return (
     <PaymentReturnShell

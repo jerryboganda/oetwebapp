@@ -703,6 +703,7 @@ public sealed class AiPackageCreditServiceTests
         Assert.False(reading.Debited);
         Assert.Equal(5, snapshot.FlexibleCredits);
         Assert.Equal(0, snapshot.SharedCredits);
+    }
 
     [Fact]
     public async Task WritingSubmission_FallsBackToFlexibleWs_WhenDedicatedExhausted()
@@ -741,6 +742,5 @@ public sealed class AiPackageCreditServiceTests
 
         Assert.False(withOneShared.Debited);
         Assert.True(withTwoShared.Debited);
-    }
     }
 }
