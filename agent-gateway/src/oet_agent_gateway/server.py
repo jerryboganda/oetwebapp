@@ -194,6 +194,14 @@ def create_app(
             if request.method == "GET" and request.url.path == "/v1/healthz":
                 return await call_next(request)
             provided = request.headers.get("x-oet-internal-token", "")
+            # RegistryBackedProvider uses the existing OpenAI-compatible
+            # contract and sends the provider key as Authorization: Bearer.
+            # Accept it as the service token without requiring a new .NET
+            # provider implementation.
+            if not provided:
+                authorization = request.headers.get("authorization", "")
+                if authorization.lower().startswith("bearer "):
+                    provided = authorization[7:].strip()
             if provided != settings.internal_service_token:
                 return JSONResponse(status_code=401, content={"error": "invalid internal token"})
         return await call_next(request)

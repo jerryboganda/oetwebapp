@@ -122,6 +122,7 @@ def test_internal_token_guard():
         assert client.get("/v1/healthz").status_code == 200
         assert client.get("/v1/agents").status_code == 401
         assert client.get("/v1/agents", headers={"x-oet-internal-token": "secret-token"}).status_code == 200
+        assert client.get("/v1/agents", headers={"authorization": "Bearer secret-token"}).status_code == 200
 
 
 def test_unknown_agent_rejected(app):
