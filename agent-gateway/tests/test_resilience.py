@@ -409,6 +409,20 @@ def test_request_ids_unique_per_response():
     assert r1.headers["x-request-id"] != r2.headers["x-request-id"]
 
 
+def test_create_app_production_path_no_args_serves_healthz():
+    """Regression: the deployed entrypoint calls create_app() with no arguments
+    (uvicorn factory). Must not raise at startup even without a Gemini key —
+    it must degrade, not crash (a crash here blocked a blue/green promote)."""
+    app = create_app()
+    with client(app) as c:
+        r = c.get("/v1/healthz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["version"]
+    assert body["auth_mode"] in ("gemini-key", "local-oauth", "sdk-oauth")
+    assert isinstance(body["circuits"], dict)
+
+
 @pytest.fixture(scope="module")
 def _sanity():
     # Import side-effect sanity: resilience helpers classify correctly.

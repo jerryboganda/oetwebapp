@@ -5,6 +5,9 @@ Add new entries at the top; keep each entry to: **Mistake → Lesson → Action*
 
 ## 2026-08-24 — Antigravity gateway hardening + phases 3c–7
 
+- **"Unused import" cleanup removed `get_settings` from server.py while `create_app()` still called it** → gateway crash-looped on the VPS and the blue/green health gate correctly blocked promotion. All 38 tests stayed green because every test passes `settings` explicitly — the production-only `create_app()` no-args path was never exercised.
+  → When a factory/function has default-arg production paths, there must be a test that calls it **exactly the way production does** (`create_app()` with no args). Added `test_create_app_production_path_no_args_serves_healthz`.
+  → Before deleting any import, grep the whole file, not just the visible section.
 - **PowerShell 5.1 `Set-Content -Encoding UTF8` wrote a BOM into `package.json`** → pnpm in the Linux Docker build failed instantly with "Invalid package.json" (node on Windows tolerates the BOM, so local `node -e require()` checks pass — silent until CI).
   → NEVER patch JSON with `Set-Content -Encoding UTF8`. Use `[System.IO.File]::WriteAllText($path, $text)` (BOM-less UTF-8) or the Edit tool. After any JSON edit, check the first bytes: `[IO.File]::ReadAllBytes($p)[0..2]` must not be `EF BB BF`.
   → This broke the web image build for `f6ad1d090`/`5958debdb`; fixed in the BOM-strip commit.

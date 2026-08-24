@@ -36,7 +36,7 @@ from . import __version__
 from .agents import AgentSpec, build_config, list_specs, specs_manifest
 from .auth import AuthAdapter, AuthAdapterError, get_adapter
 from .cache import cache_key, create_cache
-from .config import Settings
+from .config import Settings, get_settings
 from .metrics import Metrics
 from .quota import QuotaGovernor, estimate_tokens
 from .resilience import CircuitBreaker, is_quota_related, is_timeout_exception
