@@ -1,10 +1,12 @@
 # Agent State (local)
 
-## Current task — Antigravity integration COMPLETE; idle for next task
-- All code phases shipped: v0.2 hardening (`d73c999a8`) + phases 3c–7 (`f6ad1d090`). Gateway pytest 38/38; cargo check OK.
-- Live state: students on existing providers; gateway Mode A (Gemini API key) standby; AI Pro Antigravity quota unused in prod (Mode B = owner PC only; Mode C awaits Google — `pnpm ai:flipday-watch`).
-- Owner-side ops pending (manual): `pnpm ai:parity` → 10% route flips in `/admin/ai-providers` (provider `antigravity-gateway`, model `agent:<name>`) → 100%; desktop clean-PC smoke; mobile device pass (`docs/antigravity/mobile-validation.md`); install `ops/prometheus/alerts-oet-gateway.yml` on VPS monitoring.
-- Plain-language status + admin switch guide: `docs/antigravity/README.md` (Current status section). Lessons + env gotchas for future agents: `docs/dev/lessons-learned.md` (python via agent-gateway venv only, no docker locally, cargo check with space-free CARGO_TARGET_DIR, cargo test impossible on this host).
+## Current task — Antigravity integration DEPLOYED TO PRODUCTION; idle for next task
+- **Production runs `451e7bb6c`** (deploy run 32745085131 success, 2026-08-24). Blue/green health gates passed; gateway v0.2 live in degraded standby (no GEMINI_API_KEY on VPS yet — set it in `.env.production` + restart gateway to activate Mode A).
+- Two deploy incidents fixed en route (both in `docs/dev/lessons-learned.md`): (1) PS5.1 `Set-Content -Encoding UTF8` wrote a BOM into package.json → pnpm docker build died; (2) "unused import" cleanup removed `get_settings` still used by the production-only `create_app()` no-args path → gateway crash-loop, health gate blocked promote. Regression test added for the no-args path.
+- All code phases shipped: v0.2 hardening (`d73c999a8`) + phases 3c–7 (`f6ad1d090`). Gateway pytest 39/39.
+- Live state: students on existing providers; gateway Mode A standby; AI Pro Antigravity quota unused in prod (Mode B = owner PC only; Mode C awaits Google — `pnpm ai:flipday-watch`).
+- Owner-side ops pending (manual): set GEMINI_API_KEY on VPS → `pnpm ai:parity` → 10% route flips in `/admin/ai-providers` (provider `antigravity-gateway`, model `agent:<name>`) → 100%; desktop clean-PC smoke; mobile device pass (`docs/antigravity/mobile-validation.md`); install `ops/prometheus/alerts-oet-gateway.yml` on VPS monitoring.
+- Plain-language status + admin switch guide: `docs/antigravity/README.md` (Current status section). Env gotchas: `docs/dev/lessons-learned.md` (python via agent-gateway venv only, no docker locally, cargo check with space-free CARGO_TARGET_DIR, never Set-Content UTF8 on JSON).
 
 ## Previous — Antigravity gateway hardening (v0.2)
 - Circuit breaker per route (fast-fail 503 → resolver fallback), turn timeout → 504, constant-time token compare, request caps 413, SSE keepalive, idle-session reaper, lock-safe eviction, graceful drain, accurate usage accounting, opt-in structured outputs (fixed manifest `json.loads(dict)` crash), optional Redis cache, Prometheus `/v1/metrics`, JSON logs.
