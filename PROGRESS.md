@@ -2,13 +2,22 @@
 
 Last updated: 2026-08-24
 
-## Current Checkpoint - Antigravity gateway hardening (v0.2)
+## Current Checkpoint - Antigravity integration phases 3c-7 completed
 
-- `agent-gateway` audited + hardened: per-route circuit breaker (8 fails → 90s open, fast-fail 503 so AiFeatureRouteResolver falls back instantly), 120s turn timeout → 504 with lock release, constant-time internal-token compare, request caps (32 msgs / 100k chars → 413), SSE keepalives, idle-session reaper (900s), eviction never drops in-flight sessions, graceful-shutdown drain (`stop_grace_period: 45s` on prod/vps compose), accurate enriched-prompt usage accounting, opt-in SDK structured outputs (`AGENTGATEWAY_STRUCTURED_OUTPUT_AGENTS`), optional shared Redis cache with in-memory fallback, Prometheus `/v1/metrics`, JSON logs.
+- **3c parity harness**: `scripts/antigravity/parity/` — static golden sets (50 writing + 30 speaking, deterministic generator `_generate_golden.py`), stdlib-only dual-provider runner with structural (100% gate) + composite parity (≥ baseline − 0.05) gates, markdown report; rubric in `docs/antigravity/parity-rubric.md`; `pnpm ai:parity`.
+- **4 desktop**: `DesktopRuntimeConfig.agentGatewayBaseUrl` (+ env `OET_DESKTOP_GATEWAY_URL`) merged resource/userData/env, surfaced via `runtime_info.agentGatewayUrl`; unit test added. `cargo check` clean (full cargo test blocked by pre-existing env: tauri-winres/mingw vs repo path spaces — not this diff).
+- **5 mobile**: validation matrix + quota-exhaustion/circuit-open drills in `docs/antigravity/mobile-validation.md`.
+- **6 alerting**: `ops/prometheus/alerts-oet-gateway.yml` (breaker trips, budget 80%, timeouts, error burst, auth failures).
+- **7 flip-day**: checklist `docs/antigravity/flip-day-checklist.md` + live watcher (`pnpm ai:flipday-watch`) — verified working: PyPI 0.1.14 = pin, issue #20 still open.
+- Validation: gateway pytest 38/38; scripts py_compile OK; cargo check OK; watch script ran live.
+- Next (owner-side): run `pnpm ai:parity` before each 10% route flip (3b); desktop install smoke; mobile device pass.
+
+## Previous Checkpoint - Antigravity gateway hardening (v0.2)
+
+- `agent-gateway` audited + hardened: per-route circuit breaker (8 fails → 90s open, fast-fail 503 so AiFeatureRouteResolver falls back instantly), 120s turn timeout → 504, constant-time internal-token compare, request caps (32 msgs / 100k chars → 413), SSE keepalives, idle-session reaper (900s), eviction never drops in-flight sessions, graceful-shutdown drain (`stop_grace_period: 45s` on prod/vps compose), accurate enriched-prompt usage accounting, opt-in SDK structured outputs (`AGENTGATEWAY_STRUCTURED_OUTPUT_AGENTS`), optional shared Redis cache with in-memory fallback, Prometheus `/v1/metrics`, JSON logs.
 - Fixed latent bugs: `/v1/agents` schema crash when structured output enabled (`json.loads(dict)`), non-reentrant lock deadlock risk in native SSE path, backoff keyed inconsistently vs reset.
 - Compose: dev/desktop/vps/production gateway blocks carry the new env knobs. `.env.example` documents all of them. Runbook has metrics/alert table + new error classes; roadmap marks Phase 6 code-side items done.
 - Validation: `pytest agent-gateway/tests` 38/38 green (no network/harness).
-- Next: Phase 3b admin route-editor 10% rollout watch, then 3c golden-set parity harness.
 
 ## Previous Checkpoint - Auth email isolated from marketing unsubscribe
 

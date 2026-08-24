@@ -1,10 +1,15 @@
 # Agent State (local)
 
-## Current task — Antigravity gateway hardening (v0.2)
-- Audited + hardened `agent-gateway`: circuit breaker per route (fast-fail 503 → resolver fallback), turn timeout → 504, constant-time token compare, request caps 413, SSE keepalive, idle-session reaper, lock-safe eviction, graceful drain, accurate usage accounting, opt-in structured outputs (fixed manifest `json.loads(dict)` crash), optional Redis cache, Prometheus `/v1/metrics`, JSON logs.
-- Compose dev/desktop/vps/production carry new env knobs; prod/vps got `stop_grace_period: 45s`. `.env.example` + runbook + roadmap updated. Gateway version 0.2.0.
-- Validation: `pytest agent-gateway/tests` 38/38 green.
-- Next: push triggers GHCR gateway image rebuild; verify `/v1/healthz` shows circuits+cache fields after deploy; then Phase 3b (10% route rollout watch) and 3c (golden-set parity harness).
+## Current task — Antigravity phases 3c–7 completed
+- 3c: parity harness shipped (`scripts/antigravity/parity/`, 50+30 golden items, gated runner, `pnpm ai:parity`, rubric doc).
+- 4: desktop runtime config gained optional `agentGatewayBaseUrl` (env `OET_DESKTOP_GATEWAY_URL`) → `runtime_info.agentGatewayUrl`; cargo check green (cargo test blocked by pre-existing env toolchain, not the diff).
+- 5/6/7: mobile validation matrix doc, Prometheus alert rules `ops/prometheus/alerts-oet-gateway.yml`, flip-day checklist + working live watcher (`pnpm ai:flipday-watch`: PyPI 0.1.14 = pin, issue #20 open).
+- Validation: gateway pytest 38/38, scripts compile, cargo check OK.
+- Next (owner-side ops): `pnpm ai:parity` gate → 10% route flips in /admin/ai-providers (3b); desktop clean-machine install smoke; Android/iOS device pass; install alert rules on VPS monitoring stack.
+
+## Previous — Antigravity gateway hardening (v0.2)
+- Circuit breaker per route (fast-fail 503 → resolver fallback), turn timeout → 504, constant-time token compare, request caps 413, SSE keepalive, idle-session reaper, lock-safe eviction, graceful drain, accurate usage accounting, opt-in structured outputs (fixed manifest `json.loads(dict)` crash), optional Redis cache, Prometheus `/v1/metrics`, JSON logs.
+- Compose dev/desktop/vps/production carry new env knobs; prod/vps got `stop_grace_period: 45s`. Gateway version 0.2.0. Commit `d73c999a8`.
 
 ## Previous — production deploy of ff29552c+fix
 - Deploy blocked on missing GEMINI_API_KEY: gateway crashed in lifespan so routers did not flip.

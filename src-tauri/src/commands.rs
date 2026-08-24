@@ -76,6 +76,9 @@ pub fn runtime_info(app: AppHandle, state: State<'_, RuntimeState>) -> Value {
         "isPackaged": !tauri::is_dev(),
         "activeBackendUrl": *state.active_backend_url.lock().unwrap(),
         "ignoredPackagedLoopbackApiTarget": Value::Null,
+        // Local agent-gateway endpoint (desktop compose mode only; null in the
+        // production thin-client where AI flows through the remote API).
+        "agentGatewayUrl": *state.agent_gateway_url.lock().unwrap(),
         // Surfaced so the web app can read the installed shell version and drive
         // the forced-update gate (client-version.ts) without a privileged call.
         "appVersion": env!("CARGO_PKG_VERSION"),

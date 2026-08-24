@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "oet-prep",
   "version": "0.1.0",
   "packageManager": "pnpm@10.33.0",
@@ -50,6 +50,8 @@
     "docker:tsc:setup": "docker volume create oet_web_node_modules_node22 && docker run --rm -v .:/src:ro -v oet_web_node_modules_node22:/src/node_modules -w /src node:22-alpine sh -c \"corepack enable && pnpm install --frozen-lockfile --ignore-scripts\"",
     "docker:build:check": "docker compose -f docker-compose.local.yml --env-file .env.docker-local build",
     "ai:gateway:smoke": "powershell -ExecutionPolicy Bypass -File ./scripts/test-cf-gateway.ps1",
+    "ai:parity": "agent-gateway/.venv/Scripts/python.exe scripts/antigravity/parity/run_parity.py",
+    "ai:flipday-watch": "agent-gateway/.venv/Scripts/python.exe scripts/antigravity/watch_flipday.py",
     "ai:workers:smoke": "powershell -ExecutionPolicy Bypass -File ./scripts/test-cf-workers-ai.ps1",
     "qa:a11y:signoff-template": "node ./scripts/qa/create-accessibility-signoff-template.mjs",
     "qa:a11y:signoff:validate": "node ./scripts/qa/validate-accessibility-signoff.mjs",

@@ -18,6 +18,10 @@ pub struct RuntimeState {
     /// Remote web app base URL the window navigates to (the origin the tray
     /// routes within).
     pub renderer_url: Mutex<Option<String>>,
+    /// Antigravity agent-gateway base URL for LOCAL-COMPOSE desktop runs
+    /// (docker-compose.desktop.yml exposes localhost:8305). None = server-side
+    /// gateway routing via the remote API (production thin-client default).
+    pub agent_gateway_url: Mutex<Option<String>>,
 }
 
 impl Default for RuntimeState {
@@ -25,17 +29,20 @@ impl Default for RuntimeState {
         Self {
             active_backend_url: Mutex::new(None),
             renderer_url: Mutex::new(None),
+            agent_gateway_url: Mutex::new(None),
         }
     }
 }
 
 /// The bundled `desktop-runtime-config.json`: the production web + API URLs the
-/// thin client points at. Both are overridable by env for dev/staging.
+/// thin client points at. All are overridable by env for dev/staging.
 #[derive(Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct DesktopRuntimeConfig {
     pub public_api_base_url: Option<String>,
     pub public_web_base_url: Option<String>,
+    /// Optional local agent-gateway endpoint (desktop compose mode only).
+    pub agent_gateway_base_url: Option<String>,
 }
 
 /// Default production web URL, used if the bundled config is missing/unreadable.
@@ -68,6 +75,9 @@ pub fn load_runtime_config(resource_dir: &Path, user_data: &Path) -> DesktopRunt
                 if cfg.public_web_base_url.is_some() {
                     merged.public_web_base_url = cfg.public_web_base_url;
                 }
+                if cfg.agent_gateway_base_url.is_some() {
+                    merged.agent_gateway_base_url = cfg.agent_gateway_base_url;
+                }
             }
         }
     }
@@ -88,6 +98,14 @@ pub fn load_runtime_config(resource_dir: &Path, user_data: &Path) -> DesktopRunt
         if let Ok(v) = std::env::var(var) {
             if let Some(v) = normalize(&v) {
                 merged.public_web_base_url = Some(v);
+                break;
+            }
+        }
+    }
+    for var in ["OET_DESKTOP_GATEWAY_URL", "AGENT_GATEWAY_URL"] {
+        if let Ok(v) = std::env::var(var) {
+            if let Some(v) = normalize(&v) {
+                merged.agent_gateway_base_url = Some(v);
                 break;
             }
         }
@@ -164,7 +182,28 @@ mod tests {
         let cfg = DesktopRuntimeConfig {
             public_api_base_url: None,
             public_web_base_url: Some("ftp://nope".into()),
+            agent_gateway_base_url: None,
         };
         assert_eq!(resolve_web_url(&cfg), DEFAULT_WEB_URL);
+    }
+
+    #[test]
+    fn load_runtime_config_reads_agent_gateway_section() {
+        let tmp = unique_tmp("rc-gateway");
+        let res = tmp.join("res");
+        let ud = tmp.join("ud");
+        std::fs::create_dir_all(&res).unwrap();
+        std::fs::create_dir_all(&ud).unwrap();
+        std::fs::write(
+            res.join("desktop-runtime-config.json"),
+            "{\"publicWebBaseUrl\":\"https://app.example.com\",\"agentGatewayBaseUrl\":\"http://localhost:8305\"}",
+        )
+        .unwrap();
+        let cfg = load_runtime_config(&res, &ud);
+        assert_eq!(
+            cfg.agent_gateway_base_url.as_deref(),
+            Some("http://localhost:8305")
+        );
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }

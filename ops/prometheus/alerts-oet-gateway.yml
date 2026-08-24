@@ -1,0 +1,66 @@
+# Prometheus alert rules for the OET agent gateway (v0.2 metrics).
+# Scrape target: the gateway's /v1/metrics (internal token required - configure
+# the bearer token in the Prometheus scrape_config for this job).
+# Install: copy to the Prometheus rules dir on the VPS monitoring stack, or
+# merge into the existing rule group file.
+groups:
+  - name: oet-agent-gateway
+    rules:
+      # Breaker opened = students silently served by fallback providers.
+      - alert: OetGatewayCircuitOpened
+        expr: increase(oetgw_circuit_opened_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Antigravity circuit opened for route {{ $labels.route }}"
+          description: "Upstream failing repeatedly; AiFeatureRouteResolver is serving fallbacks. Check Gemini quota/status."
+
+      # Sustained breaker-open means Antigravity is effectively out of the path.
+      - alert: OetGatewayCircuitSustainedOpen
+        expr: increase(oetgw_circuit_opened_total[30m]) >= 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Antigravity circuit keeps re-opening ({{ $labels.route }})"
+          description: "3+ breaker trips in 30m. Investigate before the daily budget window resets."
+
+      # Budget burn: alert at 80% of the configured global daily budget.
+      - alert: OetGatewayBudget80Percent
+        expr: oetgw_quota_global_remaining_tokens < (0.2 * 4000000)
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Gateway daily budget 80% burned"
+          description: "Less than 20% of AGENTGATEWAY_BUDGET_TOKENS_PER_DAY remains. Adjust budgets or let fallback absorb."
+
+      # Timeouts signal harness hangs / VPS resource pressure.
+      - alert: OetGatewayTurnTimeouts
+        expr: increase(oetgw_turns_total{outcome="timeout"}[15m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "5+ agent turn timeouts in 15m"
+          description: "Harness calls exceeding AGENTGATEWAY_TURN_TIMEOUT_SECONDS. Check container resources and Gemini status."
+
+      # Error burst (non-timeout, non-quota failures).
+      - alert: OetGatewayErrorBurst
+        expr: increase(oetgw_turns_total{outcome="error"}[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Agent error burst"
+          description: "See docker logs oet-agent-gateway; correlate with oetgw_retries_total."
+
+      # Auth failures on the internal token endpoint.
+      - alert: OetGatewayAuthFailures
+        expr: increase(oetgw_auth_failures_total[15m]) > 20
+        labels:
+          severity: info
+        annotations:
+          summary: "Elevated internal-token auth failures"
+          description: "Possible token mismatch after rotation or stray traffic hitting the internal network."

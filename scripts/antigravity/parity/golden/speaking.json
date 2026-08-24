@@ -1,0 +1,456 @@
+{
+ "suite": "speaking-interlocutor",
+ "contract": "patient-utterance-v1",
+ "items": [
+  {
+   "id": "s001",
+   "scenarioTopic": "chest pain on climbing stairs",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'chest pain on climbing stairs'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "high",
+    "roleplayElements": [
+     "mentions the exertion trigger",
+     "describes when it started",
+     "agrees to urgent checks"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s002",
+   "scenarioTopic": "persistent dry cough for three weeks",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'persistent dry cough for three weeks'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "states duration clearly",
+     "denies fever",
+     "agrees to examination"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s003",
+   "scenarioTopic": "wrist pain after falling on ice",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'wrist pain after falling on ice'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "describes mechanism of injury",
+     "reports swelling",
+     "worried about a fracture"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s004",
+   "scenarioTopic": "recurrent migraines with visual aura",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'recurrent migraines with visual aura'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "describes the visual disturbance",
+     "mentions increasing frequency",
+     "reports missed workdays"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s005",
+   "scenarioTopic": "sore throat with swollen glands",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'sore throat with swollen glands'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "localises the pain",
+     "denies breathing difficulty",
+     "accepts simple pain relief"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s006",
+   "scenarioTopic": "blood noticed in the urine",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'blood noticed in the urine'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "high",
+    "roleplayElements": [
+     "reports visible blood",
+     "admits some discomfort",
+     "agrees to urgent tests"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s007",
+   "scenarioTopic": "dizziness on standing quickly",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'dizziness on standing quickly'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "links dizziness to standing",
+     "mentions a new medication",
+     "reports one near-fall"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s008",
+   "scenarioTopic": "child with fever and a rash",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'child with fever and a rash'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "high",
+    "roleplayElements": [
+     "anxious parent speaks first",
+     "reports rash not fading under pressure",
+     "confirms fluid intake"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s009",
+   "scenarioTopic": "tingling in both feet",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'tingling in both feet'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "describes sock-like distribution",
+     "mentions long-standing diabetes",
+     "asks about nerve tests"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s010",
+   "scenarioTopic": "difficulty sleeping after job loss",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'difficulty sleeping after job loss'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "links mood to redundancy",
+     "denies hopelessness when asked",
+     "open to sleep advice"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s011",
+   "scenarioTopic": "knee locking and giving way",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'knee locking and giving way'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "describes locking episodes",
+     "mentions an old football injury",
+     "requests specialist opinion"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s012",
+   "scenarioTopic": "palpitations while resting",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'palpitations while resting'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "high",
+    "roleplayElements": [
+     "describes pounding heartbeat",
+     "reports episodes lasting minutes",
+     "mentions high caffeine intake"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s013",
+   "scenarioTopic": "bloating with alternating constipation",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'bloating with alternating constipation'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "describes a months-long pattern",
+     "denies weight loss",
+     "asks about diet changes"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s014",
+   "scenarioTopic": "breathlessness lying flat",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'breathlessness lying flat'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "high",
+    "roleplayElements": [
+     "now needs two pillows",
+     "reports ankle swelling",
+     "mentions a past heart problem"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s015",
+   "scenarioTopic": "ear pain after a swimming holiday",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'ear pain after a swimming holiday'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "localises pain to one ear",
+     "gives recent swimming history",
+     "accepts explanation about drops"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s016",
+   "scenarioTopic": "excessive thirst and urination",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'excessive thirst and urination'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "quantifies night-time trips",
+     "mentions family diabetes",
+     "asks whether it is diabetes"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s017",
+   "scenarioTopic": "joint pain worse in the morning",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'joint pain worse in the morning'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "stiffness eases with movement",
+     "small joints affected",
+     "mother had similar symptoms"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s018",
+   "scenarioTopic": "sudden blurred vision in one eye",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'sudden blurred vision in one eye'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "high",
+    "roleplayElements": [
+     "states sudden onset",
+     "describes a curtain effect",
+     "agrees to emergency referral"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s019",
+   "scenarioTopic": "anxiety before public speaking",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'anxiety before public speaking'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "normalises the fear at first",
+     "reports physical symptoms",
+     "asks for coping techniques"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s020",
+   "scenarioTopic": "heel pain with the first step in the morning",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'heel pain with the first step in the morning'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "describes classic heel pattern",
+     "mentions a new running routine",
+     "accepts stretching advice"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s021",
+   "scenarioTopic": "night sweats and fatigue",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'night sweats and fatigue'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "needs to change bedsheets",
+     "reports low-grade temperature",
+     "mentions slight weight loss"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s022",
+   "scenarioTopic": "difficulty swallowing food",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'difficulty swallowing food'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "distinguishes pills from food sticking",
+     "denies painful swallowing",
+     "worried about blockage"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s023",
+   "scenarioTopic": "evening confusion episodes",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'evening confusion episodes'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "high",
+    "roleplayElements": [
+     "family member describes evenings",
+     "reports one wandering incident",
+     "asks about a safety plan"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s024",
+   "scenarioTopic": "itchy raised wheals after a new antibiotic",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'itchy raised wheals after a new antibiotic'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "links rash to the new drug",
+     "describes wheals moving",
+     "already stopped the medication"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s025",
+   "scenarioTopic": "loss of smell after a head cold",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'loss of smell after a head cold'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "notices food tastes bland",
+     "cold resolved weeks ago",
+     "asks whether it is permanent"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s026",
+   "scenarioTopic": "leg cramps at night",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'leg cramps at night'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "describes calf cramping",
+     "relieved by stretching",
+     "mentions a water tablet"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s027",
+   "scenarioTopic": "weak voice by end of teaching day",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'weak voice by end of teaching day'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "low",
+    "roleplayElements": [
+     "professional voice user",
+     "no pain reported",
+     "drinks more water on good days"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s028",
+   "scenarioTopic": "bruising easily without injury",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'bruising easily without injury'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "shows forearm bruises",
+     "started a blood thinner recently",
+     "denies nosebleeds"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s029",
+   "scenarioTopic": "burning urination with frequency",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'burning urination with frequency'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "describes stinging sensation",
+     "states increased frequency",
+     "denies back pain"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  },
+  {
+   "id": "s030",
+   "scenarioTopic": "tremor in the right hand at rest",
+   "candidatePrompt": "The candidate is role-playing a healthcare professional. The patient has just raised: 'tremor in the right hand at rest'. Produce the patient's next turn.",
+   "expected": {
+    "severityExpected": "medium",
+    "roleplayElements": [
+     "noticed by family first",
+     "worse when resting",
+     "grandfather had a tremor"
+    ],
+    "minChars": 40,
+    "maxChars": 900
+   }
+  }
+ ]
+}

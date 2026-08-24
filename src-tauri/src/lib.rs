@@ -271,6 +271,7 @@ pub fn run() {
                 let state = handle.state::<RuntimeState>();
                 *state.renderer_url.lock().unwrap() = Some(remote_url.clone());
                 *state.active_backend_url.lock().unwrap() = config.public_api_base_url.clone();
+                *state.agent_gateway_url.lock().unwrap() = config.agent_gateway_base_url.clone();
             }
 
             // The window starts on the bundled splash (index.html), which probes

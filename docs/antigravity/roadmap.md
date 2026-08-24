@@ -21,19 +21,19 @@
   completion usage accounting, opt-in SDK structured outputs, optional
   shared Redis cache, Prometheus `/v1/metrics`, JSON logs; 38 tests.
 
-## Next phases (scheduled, not yet started)
+## Next phases
 
-| Phase | Work | Gate |
+| Phase | Status | What remains |
 |---|---|---|
-| 3b | Admin route-editor rollout: flip `writing.sample_score` → agent 10% → 100%; Grafana + cost dashboard watch | parity ≥ current provider |
-| 3c | Golden-set parity harness: 50-item writing + 30-item speaking patient-turn sets vs Anthropic baseline | parity rubric in `docs/antigravity/` |
-| 4 | Desktop bundle: desktop runtime config gains `agentGateway` section; Mode B opt-in end-to-end on owner machine | offline-from-cloud AI works |
-| 5 | Mobile validation (Capacitor Android/iOS vs staged backend; SignalR streaming) | device pass |
-| 6 | Production hardening leftovers: scrape `/v1/metrics` into Grafana, alert rules from runbook table, OTel export if needed | dashboards live |
+| 3b | Ready | Admin route-editor rollout: flip `writing.sample_score` → agent 10% → watch Grafana/cost dashboards → 100% (`pnpm ai:parity` gate before each flip) |
+| 3c | **Shipped** | Golden-set parity harness: `scripts/antigravity/parity/` (50 writing + 30 speaking items), `run_parity.py` dual-provider runner + gate, rubric in `docs/antigravity/parity-rubric.md`, `pnpm ai:parity` |
+| 4 | **Shipped (code)** | Desktop: `DesktopRuntimeConfig.agentGatewayBaseUrl` (+ env `OET_DESKTOP_GATEWAY_URL`) wired through `runtime_info`; compose desktop entry already runs the local gateway. Owner device pass pending. |
+| 5 | **Ready** | Mobile validation matrix in `docs/antigravity/mobile-validation.md` (incl. quota-exhaustion + circuit-open drills); owner device pass pending |
+| 6 | **Shipped (gateway side)** | Prometheus alert rules `ops/prometheus/alerts-oet-gateway.yml` (breaker, budget-80%, timeouts, error burst); install on VPS monitoring stack |
+| 7 | **Ready** | Flip-day checklist `docs/antigravity/flip-day-checklist.md` + live watcher `pnpm ai:flipday-watch` (PyPI pin vs latest, issue #20 state) |
 
-Note: the v0.2 hardening closed the code-side Phase 6 items that live in the
-gateway itself (shared Redis cache option, metrics surface, alertable
-signals). Remaining Phase 6 work is scraping/alerting wiring on the VPS.
+Operational sign-offs that remain owner-side: 3b route flips, Phase 4 desktop
+install smoke on a clean machine, Phase 5 physical Android/iOS pass.
 
 ## Flip-day (Mode C activation)
 

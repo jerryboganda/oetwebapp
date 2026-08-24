@@ -1,0 +1,1756 @@
+{
+ "suite": "writing-examiner",
+ "contract": "criteria-array-v1",
+ "items": [
+  {
+   "id": "w001",
+   "profession": "nursing",
+   "letterType": "discharge",
+   "recipient": "Community Nurse",
+   "patientInitials": "Mrs AB",
+   "patientAge": 67,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mrs AB, aged 67, admitted on day 3 with cellulitis of the left lower leg. Key management: oral antibiotics for seven days; daily wound measurement and dressing change; elevate the leg when resting. Safety-netting: return if spreading redness or fever. Current medications: flucloxacillin 500 mg, paracetamol. Write the discharge letter to the Community Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "oral antibiotics for seven days",
+     "daily wound measurement and dressing change",
+     "elevate the leg when resting",
+     "return if spreading redness or fever"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w002",
+   "profession": "medicine",
+   "letterType": "referral",
+   "recipient": "Dermatologist",
+   "patientInitials": "Mrs AB",
+   "patientAge": 68,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mrs AB, aged 68, admitted on day 5 with a suspicious changing mole on the upper back. Key management: mole enlarged over three months; irregular border and two shades of brown; no bleeding or itching reported. Safety-netting: family history of skin cancer in father. Current medications: emollient only, sun-protection advice. Write the referral letter to the Dermatologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "mole enlarged over three months",
+     "irregular border and two shades of brown",
+     "no bleeding or itching reported",
+     "family history of skin cancer in father"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w003",
+   "profession": "nursing",
+   "letterType": "information",
+   "recipient": "School Nurse",
+   "patientInitials": "Mrs AB",
+   "patientAge": 69,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mrs AB, aged 69, admitted on day 7 with newly diagnosed type 1 diabetes in a ten-year-old. Key management: blood glucose checks four times daily; insulin injections before breakfast and dinner; hypo signs include shaking and sweating. Safety-netting: snack needed after sport. Current medications: insulin aspart, glucose tablets. Write the information letter to the School Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "blood glucose checks four times daily",
+     "insulin injections before breakfast and dinner",
+     "hypo signs include shaking and sweating",
+     "snack needed after sport"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w004",
+   "profession": "physiotherapy",
+   "letterType": "discharge",
+   "recipient": "General Practitioner",
+   "patientInitials": "Mrs AB",
+   "patientAge": 70,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mrs AB, aged 70, admitted on day 10 with low back pain following a lifting injury. Key management: core stability exercises twice daily; gradual return to lifting over four weeks; pain improved from seven to two out of ten. Safety-netting: advised to avoid prolonged sitting. Current medications: ibuprofen 400 mg, heat pack advice. Write the discharge letter to the General Practitioner.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "core stability exercises twice daily",
+     "gradual return to lifting over four weeks",
+     "pain improved from seven to two out of ten",
+     "advised to avoid prolonged sitting"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w005",
+   "profession": "occupational therapy",
+   "letterType": "referral",
+   "recipient": "Social Services Coordinator",
+   "patientInitials": "Mrs AB",
+   "patientAge": 71,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mrs AB, aged 71, admitted on day 14 with post-stroke difficulty with kitchen tasks. Key management: left-sided weakness limits grip; kettle tipper and jar opener recommended; one fall in the kitchen last week. Safety-netting: lives alone in a two-storey house. Current medications: aspirin 75 mg, atorvastatin 40 mg. Write the referral letter to the Social Services Coordinator.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "left-sided weakness limits grip",
+     "kettle tipper and jar opener recommended",
+     "one fall in the kitchen last week",
+     "lives alone in a two-storey house"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w006",
+   "profession": "pharmacy",
+   "letterType": "information",
+   "recipient": "Practice Nurse",
+   "patientInitials": "Mrs AB",
+   "patientAge": 67,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mrs AB, aged 67, admitted on day 3 with warfarin counselling after atrial fibrillation diagnosis. Key management: same time each evening dose; avoid new over-the-counter anti-inflammatories; report unusual bruising or nosebleeds. Safety-netting: green leafy vegetables in consistent amounts only. Current medications: warfarin 3 mg, beta-blocker. Write the information letter to the Practice Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "same time each evening dose",
+     "avoid new over-the-counter anti-inflammatories",
+     "report unusual bruising or nosebleeds",
+     "green leafy vegetables in consistent amounts only"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w007",
+   "profession": "radiography",
+   "letterType": "referral",
+   "recipient": "Orthopaedic Surgeon",
+   "patientInitials": "Mrs AB",
+   "patientAge": 68,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mrs AB, aged 68, admitted on day 5 with persistent wrist pain after a fall. Key management: tenderness over the anatomical snuffbox; initial X-ray reported as normal; wrist splint worn for two weeks. Safety-netting: repeat imaging requested. Current medications: codeine 30 mg, paracetamol. Write the referral letter to the Orthopaedic Surgeon.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "tenderness over the anatomical snuffbox",
+     "initial X-ray reported as normal",
+     "wrist splint worn for two weeks",
+     "repeat imaging requested"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w008",
+   "profession": "nursing",
+   "letterType": "discharge",
+   "recipient": "District Nurse",
+   "patientInitials": "Mrs AB",
+   "patientAge": 69,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mrs AB, aged 69, admitted on day 7 with venous leg ulcer showing early granulation. Key management: four-layer compression bandaging weekly; ankle-brachial pressure index 0.9; moisture balance dressings applied. Safety-netting: weight-bearing encouraged with stockings. Current medications: paracetamol, zinc supplement. Write the discharge letter to the District Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "four-layer compression bandaging weekly",
+     "ankle-brachial pressure index 0.9",
+     "moisture balance dressings applied",
+     "weight-bearing encouraged with stockings"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w009",
+   "profession": "medicine",
+   "letterType": "referral",
+   "recipient": "Gastroenterologist",
+   "patientInitials": "Mrs AB",
+   "patientAge": 70,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mrs AB, aged 70, admitted on day 10 with iron deficiency anaemia with occult blood loss. Key management: haemoglobin nine grams per decilitre; positive faecal occult blood test; two-week wait referral criteria met. Safety-netting: no weight loss or change in bowel habit. Current medications: ferrous sulfate 200 mg, omeprazole 20 mg. Write the referral letter to the Gastroenterologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "haemoglobin nine grams per decilitre",
+     "positive faecal occult blood test",
+     "two-week wait referral criteria met",
+     "no weight loss or change in bowel habit"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w010",
+   "profession": "podiatry",
+   "letterType": "information",
+   "recipient": "Diabetes Specialist Nurse",
+   "patientInitials": "Mrs AB",
+   "patientAge": 71,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mrs AB, aged 71, admitted on day 14 with annual diabetic foot screening results. Key management: loss of protective sensation both feet; dorsalis pedis pulses present; annual review recommended. Safety-netting: custom insoles provided. Current medications: metformin 1 g, simvastatin. Write the information letter to the Diabetes Specialist Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "loss of protective sensation both feet",
+     "dorsalis pedis pulses present",
+     "annual review recommended",
+     "custom insoles provided"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w011",
+   "profession": "speech therapy",
+   "letterType": "referral",
+   "recipient": "Ear Nose Throat Consultant",
+   "patientInitials": "Mrs AB",
+   "patientAge": 67,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mrs AB, aged 67, admitted on day 3 with hoarseness persisting beyond six weeks. Key management: teacher with heavy voice use; no difficulty swallowing reported; vocal hygiene advice already given. Safety-netting: smoker of ten cigarettes daily. Current medications: none prescribed, proton pump inhibitor trial. Write the referral letter to the Ear Nose Throat Consultant.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "teacher with heavy voice use",
+     "no difficulty swallowing reported",
+     "vocal hygiene advice already given",
+     "smoker of ten cigarettes daily"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w012",
+   "profession": "nursing",
+   "letterType": "advice",
+   "recipient": "Practice Manager",
+   "patientInitials": "Mrs AB",
+   "patientAge": 68,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mrs AB, aged 68, admitted on day 5 with needle stick injury protocol update. Key management: immediate washing for five minutes; wound covered with waterproof dressing; occupational health review same day. Safety-netting: hepatitis B status up to date. Current medications: none required, tetanus booster considered. Write the advice letter to the Practice Manager.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "immediate washing for five minutes",
+     "wound covered with waterproof dressing",
+     "occupational health review same day",
+     "hepatitis B status up to date"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w013",
+   "profession": "physiotherapy",
+   "letterType": "referral",
+   "recipient": "Rheumatologist",
+   "patientInitials": "Mrs AB",
+   "patientAge": 69,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mrs AB, aged 69, admitted on day 7 with inflammatory arthritis suspected in both hands. Key management: morning stiffness lasting one hour; symmetrical swelling of the finger joints; rheumatoid factor negative. Safety-netting: symptoms began twelve weeks ago. Current medications: naproxen 500 mg, omeprazole. Write the referral letter to the Rheumatologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "morning stiffness lasting one hour",
+     "symmetrical swelling of the finger joints",
+     "rheumatoid factor negative",
+     "symptoms began twelve weeks ago"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w014",
+   "profession": "occupational therapy",
+   "letterType": "discharge",
+   "recipient": "Care Home Manager",
+   "patientInitials": "Mrs AB",
+   "patientAge": 70,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mrs AB, aged 70, admitted on day 10 with seating assessment completed. Key management: pressure-relieving cushion fitted; chair height raised by five centimetres; staff repositioning plan agreed. Safety-netting: review in three months. Current medications: analgesia as prescribed, none added. Write the discharge letter to the Care Home Manager.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "pressure-relieving cushion fitted",
+     "chair height raised by five centimetres",
+     "staff repositioning plan agreed",
+     "review in three months"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w015",
+   "profession": "medicine",
+   "letterType": "discharge",
+   "recipient": "Home Visit Nurse",
+   "patientInitials": "Mrs AB",
+   "patientAge": 71,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mrs AB, aged 71, admitted on day 14 with heart failure exacerbation stabilised. Key management: weight down two kilograms since admission; daily weights recorded each morning; fluid restriction of one and a half litres daily. Safety-netting: report breathlessness at night urgently. Current medications: furosemide 40 mg, bisoprolol 5 mg. Write the discharge letter to the Home Visit Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "weight down two kilograms since admission",
+     "daily weights recorded each morning",
+     "fluid restriction of one and a half litres daily",
+     "report breathlessness at night urgently"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w016",
+   "profession": "nursing",
+   "letterType": "referral",
+   "recipient": "Continence Advisor",
+   "patientInitials": "Mrs AB",
+   "patientAge": 67,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mrs AB, aged 67, admitted on day 3 with stress incontinence after prostate surgery. Key management: leakage on coughing and lifting; pelvic floor exercises taught incorrectly; pad use of two per day. Safety-netting: onset six weeks after operation. Current medications: none prescribed, anticholinergic avoided. Write the referral letter to the Continence Advisor.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "leakage on coughing and lifting",
+     "pelvic floor exercises taught incorrectly",
+     "pad use of two per day",
+     "onset six weeks after operation"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w017",
+   "profession": "paramedicine",
+   "letterType": "information",
+   "recipient": "Falls Clinic Coordinator",
+   "patientInitials": "Mrs AB",
+   "patientAge": 68,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mrs AB, aged 68, admitted on day 5 with elderly patient found on the floor overnight. Key management: low body temperature treated at scene; no fracture identified; carpet burns to the hip noted. Safety-netting: medication review requested. Current medications: donepezil, bendroflumethiazide. Write the information letter to the Falls Clinic Coordinator.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "low body temperature treated at scene",
+     "no fracture identified",
+     "carpet burns to the hip noted",
+     "medication review requested"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w018",
+   "profession": "dietetics",
+   "letterType": "referral",
+   "recipient": "Paediatrician",
+   "patientInitials": "Mrs AB",
+   "patientAge": 69,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mrs AB, aged 69, admitted on day 7 with faltering growth in an eighteen-month-old. Key management: weight crossed two centile lines downward; three milk feeds replacing meals; iron studies within normal range. Safety-netting: food diary shows grazing pattern. Current medications: vitamin D drops, multivitamin syrup. Write the referral letter to the Paediatrician.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "weight crossed two centile lines downward",
+     "three milk feeds replacing meals",
+     "iron studies within normal range",
+     "food diary shows grazing pattern"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w019",
+   "profession": "mental health",
+   "letterType": "discharge",
+   "recipient": "General Practitioner",
+   "patientInitials": "Mrs AB",
+   "patientAge": 70,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mrs AB, aged 70, admitted on day 10 with adjustment disorder following bereavement. Key management: sleep restored to six hours; part-time return to work planned next month; bereavement support group joined. Safety-netting: no current thoughts of self-harm. Current medications: mirtazapine 15 mg, sleeping tablet stopped. Write the discharge letter to the General Practitioner.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "sleep restored to six hours",
+     "part-time return to work planned next month",
+     "bereavement support group joined",
+     "no current thoughts of self-harm"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w020",
+   "profession": "nursing",
+   "letterType": "information",
+   "recipient": "Travel Clinic Nurse",
+   "patientInitials": "Mrs AB",
+   "patientAge": 71,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mrs AB, aged 71, admitted on day 14 with pre-travel vaccination schedule. Key management: combined hepatitis A and typhoid vaccine given; yellow fever certificate valid ten days after vaccination; malaria tablets start one week before travel. Safety-netting: mosquito bite precautions listed. Current medications: atovaquone-proguanil, anti-diarrhoeal kit. Write the information letter to the Travel Clinic Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "combined hepatitis A and typhoid vaccine given",
+     "yellow fever certificate valid ten days after vaccination",
+     "malaria tablets start one week before travel",
+     "mosquito bite precautions listed"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w021",
+   "profession": "nursing",
+   "letterType": "discharge",
+   "recipient": "Community Nurse",
+   "patientInitials": "Mr CD",
+   "patientAge": 54,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mr CD, aged 54, admitted on day 3 with cellulitis of the left lower leg. Key management: oral antibiotics for seven days; daily wound measurement and dressing change; elevate the leg when resting. Safety-netting: return if spreading redness or fever. Current medications: flucloxacillin 500 mg, paracetamol. Write the discharge letter to the Community Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "oral antibiotics for seven days",
+     "daily wound measurement and dressing change",
+     "elevate the leg when resting",
+     "return if spreading redness or fever"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w022",
+   "profession": "medicine",
+   "letterType": "referral",
+   "recipient": "Dermatologist",
+   "patientInitials": "Mr CD",
+   "patientAge": 55,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mr CD, aged 55, admitted on day 5 with a suspicious changing mole on the upper back. Key management: mole enlarged over three months; irregular border and two shades of brown; no bleeding or itching reported. Safety-netting: family history of skin cancer in father. Current medications: emollient only, sun-protection advice. Write the referral letter to the Dermatologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "mole enlarged over three months",
+     "irregular border and two shades of brown",
+     "no bleeding or itching reported",
+     "family history of skin cancer in father"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w023",
+   "profession": "nursing",
+   "letterType": "information",
+   "recipient": "School Nurse",
+   "patientInitials": "Mr CD",
+   "patientAge": 56,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mr CD, aged 56, admitted on day 7 with newly diagnosed type 1 diabetes in a ten-year-old. Key management: blood glucose checks four times daily; insulin injections before breakfast and dinner; hypo signs include shaking and sweating. Safety-netting: snack needed after sport. Current medications: insulin aspart, glucose tablets. Write the information letter to the School Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "blood glucose checks four times daily",
+     "insulin injections before breakfast and dinner",
+     "hypo signs include shaking and sweating",
+     "snack needed after sport"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w024",
+   "profession": "physiotherapy",
+   "letterType": "discharge",
+   "recipient": "General Practitioner",
+   "patientInitials": "Mr CD",
+   "patientAge": 57,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mr CD, aged 57, admitted on day 10 with low back pain following a lifting injury. Key management: core stability exercises twice daily; gradual return to lifting over four weeks; pain improved from seven to two out of ten. Safety-netting: advised to avoid prolonged sitting. Current medications: ibuprofen 400 mg, heat pack advice. Write the discharge letter to the General Practitioner.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "core stability exercises twice daily",
+     "gradual return to lifting over four weeks",
+     "pain improved from seven to two out of ten",
+     "advised to avoid prolonged sitting"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w025",
+   "profession": "occupational therapy",
+   "letterType": "referral",
+   "recipient": "Social Services Coordinator",
+   "patientInitials": "Mr CD",
+   "patientAge": 58,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mr CD, aged 58, admitted on day 14 with post-stroke difficulty with kitchen tasks. Key management: left-sided weakness limits grip; kettle tipper and jar opener recommended; one fall in the kitchen last week. Safety-netting: lives alone in a two-storey house. Current medications: aspirin 75 mg, atorvastatin 40 mg. Write the referral letter to the Social Services Coordinator.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "left-sided weakness limits grip",
+     "kettle tipper and jar opener recommended",
+     "one fall in the kitchen last week",
+     "lives alone in a two-storey house"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w026",
+   "profession": "pharmacy",
+   "letterType": "information",
+   "recipient": "Practice Nurse",
+   "patientInitials": "Mr CD",
+   "patientAge": 54,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mr CD, aged 54, admitted on day 3 with warfarin counselling after atrial fibrillation diagnosis. Key management: same time each evening dose; avoid new over-the-counter anti-inflammatories; report unusual bruising or nosebleeds. Safety-netting: green leafy vegetables in consistent amounts only. Current medications: warfarin 3 mg, beta-blocker. Write the information letter to the Practice Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "same time each evening dose",
+     "avoid new over-the-counter anti-inflammatories",
+     "report unusual bruising or nosebleeds",
+     "green leafy vegetables in consistent amounts only"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w027",
+   "profession": "radiography",
+   "letterType": "referral",
+   "recipient": "Orthopaedic Surgeon",
+   "patientInitials": "Mr CD",
+   "patientAge": 55,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mr CD, aged 55, admitted on day 5 with persistent wrist pain after a fall. Key management: tenderness over the anatomical snuffbox; initial X-ray reported as normal; wrist splint worn for two weeks. Safety-netting: repeat imaging requested. Current medications: codeine 30 mg, paracetamol. Write the referral letter to the Orthopaedic Surgeon.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "tenderness over the anatomical snuffbox",
+     "initial X-ray reported as normal",
+     "wrist splint worn for two weeks",
+     "repeat imaging requested"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w028",
+   "profession": "nursing",
+   "letterType": "discharge",
+   "recipient": "District Nurse",
+   "patientInitials": "Mr CD",
+   "patientAge": 56,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mr CD, aged 56, admitted on day 7 with venous leg ulcer showing early granulation. Key management: four-layer compression bandaging weekly; ankle-brachial pressure index 0.9; moisture balance dressings applied. Safety-netting: weight-bearing encouraged with stockings. Current medications: paracetamol, zinc supplement. Write the discharge letter to the District Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "four-layer compression bandaging weekly",
+     "ankle-brachial pressure index 0.9",
+     "moisture balance dressings applied",
+     "weight-bearing encouraged with stockings"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w029",
+   "profession": "medicine",
+   "letterType": "referral",
+   "recipient": "Gastroenterologist",
+   "patientInitials": "Mr CD",
+   "patientAge": 57,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mr CD, aged 57, admitted on day 10 with iron deficiency anaemia with occult blood loss. Key management: haemoglobin nine grams per decilitre; positive faecal occult blood test; two-week wait referral criteria met. Safety-netting: no weight loss or change in bowel habit. Current medications: ferrous sulfate 200 mg, omeprazole 20 mg. Write the referral letter to the Gastroenterologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "haemoglobin nine grams per decilitre",
+     "positive faecal occult blood test",
+     "two-week wait referral criteria met",
+     "no weight loss or change in bowel habit"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w030",
+   "profession": "podiatry",
+   "letterType": "information",
+   "recipient": "Diabetes Specialist Nurse",
+   "patientInitials": "Mr CD",
+   "patientAge": 58,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mr CD, aged 58, admitted on day 14 with annual diabetic foot screening results. Key management: loss of protective sensation both feet; dorsalis pedis pulses present; annual review recommended. Safety-netting: custom insoles provided. Current medications: metformin 1 g, simvastatin. Write the information letter to the Diabetes Specialist Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "loss of protective sensation both feet",
+     "dorsalis pedis pulses present",
+     "annual review recommended",
+     "custom insoles provided"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w031",
+   "profession": "speech therapy",
+   "letterType": "referral",
+   "recipient": "Ear Nose Throat Consultant",
+   "patientInitials": "Mr CD",
+   "patientAge": 54,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mr CD, aged 54, admitted on day 3 with hoarseness persisting beyond six weeks. Key management: teacher with heavy voice use; no difficulty swallowing reported; vocal hygiene advice already given. Safety-netting: smoker of ten cigarettes daily. Current medications: none prescribed, proton pump inhibitor trial. Write the referral letter to the Ear Nose Throat Consultant.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "teacher with heavy voice use",
+     "no difficulty swallowing reported",
+     "vocal hygiene advice already given",
+     "smoker of ten cigarettes daily"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w032",
+   "profession": "nursing",
+   "letterType": "advice",
+   "recipient": "Practice Manager",
+   "patientInitials": "Mr CD",
+   "patientAge": 55,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mr CD, aged 55, admitted on day 5 with needle stick injury protocol update. Key management: immediate washing for five minutes; wound covered with waterproof dressing; occupational health review same day. Safety-netting: hepatitis B status up to date. Current medications: none required, tetanus booster considered. Write the advice letter to the Practice Manager.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "immediate washing for five minutes",
+     "wound covered with waterproof dressing",
+     "occupational health review same day",
+     "hepatitis B status up to date"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w033",
+   "profession": "physiotherapy",
+   "letterType": "referral",
+   "recipient": "Rheumatologist",
+   "patientInitials": "Mr CD",
+   "patientAge": 56,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mr CD, aged 56, admitted on day 7 with inflammatory arthritis suspected in both hands. Key management: morning stiffness lasting one hour; symmetrical swelling of the finger joints; rheumatoid factor negative. Safety-netting: symptoms began twelve weeks ago. Current medications: naproxen 500 mg, omeprazole. Write the referral letter to the Rheumatologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "morning stiffness lasting one hour",
+     "symmetrical swelling of the finger joints",
+     "rheumatoid factor negative",
+     "symptoms began twelve weeks ago"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w034",
+   "profession": "occupational therapy",
+   "letterType": "discharge",
+   "recipient": "Care Home Manager",
+   "patientInitials": "Mr CD",
+   "patientAge": 57,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mr CD, aged 57, admitted on day 10 with seating assessment completed. Key management: pressure-relieving cushion fitted; chair height raised by five centimetres; staff repositioning plan agreed. Safety-netting: review in three months. Current medications: analgesia as prescribed, none added. Write the discharge letter to the Care Home Manager.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "pressure-relieving cushion fitted",
+     "chair height raised by five centimetres",
+     "staff repositioning plan agreed",
+     "review in three months"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w035",
+   "profession": "medicine",
+   "letterType": "discharge",
+   "recipient": "Home Visit Nurse",
+   "patientInitials": "Mr CD",
+   "patientAge": 58,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mr CD, aged 58, admitted on day 14 with heart failure exacerbation stabilised. Key management: weight down two kilograms since admission; daily weights recorded each morning; fluid restriction of one and a half litres daily. Safety-netting: report breathlessness at night urgently. Current medications: furosemide 40 mg, bisoprolol 5 mg. Write the discharge letter to the Home Visit Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "weight down two kilograms since admission",
+     "daily weights recorded each morning",
+     "fluid restriction of one and a half litres daily",
+     "report breathlessness at night urgently"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w036",
+   "profession": "nursing",
+   "letterType": "referral",
+   "recipient": "Continence Advisor",
+   "patientInitials": "Mr CD",
+   "patientAge": 54,
+   "dayOfAdmission": 3,
+   "taskNotes": "Mr CD, aged 54, admitted on day 3 with stress incontinence after prostate surgery. Key management: leakage on coughing and lifting; pelvic floor exercises taught incorrectly; pad use of two per day. Safety-netting: onset six weeks after operation. Current medications: none prescribed, anticholinergic avoided. Write the referral letter to the Continence Advisor.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "leakage on coughing and lifting",
+     "pelvic floor exercises taught incorrectly",
+     "pad use of two per day",
+     "onset six weeks after operation"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w037",
+   "profession": "paramedicine",
+   "letterType": "information",
+   "recipient": "Falls Clinic Coordinator",
+   "patientInitials": "Mr CD",
+   "patientAge": 55,
+   "dayOfAdmission": 5,
+   "taskNotes": "Mr CD, aged 55, admitted on day 5 with elderly patient found on the floor overnight. Key management: low body temperature treated at scene; no fracture identified; carpet burns to the hip noted. Safety-netting: medication review requested. Current medications: donepezil, bendroflumethiazide. Write the information letter to the Falls Clinic Coordinator.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "low body temperature treated at scene",
+     "no fracture identified",
+     "carpet burns to the hip noted",
+     "medication review requested"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w038",
+   "profession": "dietetics",
+   "letterType": "referral",
+   "recipient": "Paediatrician",
+   "patientInitials": "Mr CD",
+   "patientAge": 56,
+   "dayOfAdmission": 7,
+   "taskNotes": "Mr CD, aged 56, admitted on day 7 with faltering growth in an eighteen-month-old. Key management: weight crossed two centile lines downward; three milk feeds replacing meals; iron studies within normal range. Safety-netting: food diary shows grazing pattern. Current medications: vitamin D drops, multivitamin syrup. Write the referral letter to the Paediatrician.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "weight crossed two centile lines downward",
+     "three milk feeds replacing meals",
+     "iron studies within normal range",
+     "food diary shows grazing pattern"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w039",
+   "profession": "mental health",
+   "letterType": "discharge",
+   "recipient": "General Practitioner",
+   "patientInitials": "Mr CD",
+   "patientAge": 57,
+   "dayOfAdmission": 10,
+   "taskNotes": "Mr CD, aged 57, admitted on day 10 with adjustment disorder following bereavement. Key management: sleep restored to six hours; part-time return to work planned next month; bereavement support group joined. Safety-netting: no current thoughts of self-harm. Current medications: mirtazapine 15 mg, sleeping tablet stopped. Write the discharge letter to the General Practitioner.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "sleep restored to six hours",
+     "part-time return to work planned next month",
+     "bereavement support group joined",
+     "no current thoughts of self-harm"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w040",
+   "profession": "nursing",
+   "letterType": "information",
+   "recipient": "Travel Clinic Nurse",
+   "patientInitials": "Mr CD",
+   "patientAge": 58,
+   "dayOfAdmission": 14,
+   "taskNotes": "Mr CD, aged 58, admitted on day 14 with pre-travel vaccination schedule. Key management: combined hepatitis A and typhoid vaccine given; yellow fever certificate valid ten days after vaccination; malaria tablets start one week before travel. Safety-netting: mosquito bite precautions listed. Current medications: atovaquone-proguanil, anti-diarrhoeal kit. Write the information letter to the Travel Clinic Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "combined hepatitis A and typhoid vaccine given",
+     "yellow fever certificate valid ten days after vaccination",
+     "malaria tablets start one week before travel",
+     "mosquito bite precautions listed"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w041",
+   "profession": "nursing",
+   "letterType": "discharge",
+   "recipient": "Community Nurse",
+   "patientInitials": "Ms EF",
+   "patientAge": 38,
+   "dayOfAdmission": 3,
+   "taskNotes": "Ms EF, aged 38, admitted on day 3 with cellulitis of the left lower leg. Key management: oral antibiotics for seven days; daily wound measurement and dressing change; elevate the leg when resting. Safety-netting: return if spreading redness or fever. Current medications: flucloxacillin 500 mg, paracetamol. Write the discharge letter to the Community Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "oral antibiotics for seven days",
+     "daily wound measurement and dressing change",
+     "elevate the leg when resting",
+     "return if spreading redness or fever"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w042",
+   "profession": "medicine",
+   "letterType": "referral",
+   "recipient": "Dermatologist",
+   "patientInitials": "Ms EF",
+   "patientAge": 39,
+   "dayOfAdmission": 5,
+   "taskNotes": "Ms EF, aged 39, admitted on day 5 with a suspicious changing mole on the upper back. Key management: mole enlarged over three months; irregular border and two shades of brown; no bleeding or itching reported. Safety-netting: family history of skin cancer in father. Current medications: emollient only, sun-protection advice. Write the referral letter to the Dermatologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "mole enlarged over three months",
+     "irregular border and two shades of brown",
+     "no bleeding or itching reported",
+     "family history of skin cancer in father"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w043",
+   "profession": "nursing",
+   "letterType": "information",
+   "recipient": "School Nurse",
+   "patientInitials": "Ms EF",
+   "patientAge": 40,
+   "dayOfAdmission": 7,
+   "taskNotes": "Ms EF, aged 40, admitted on day 7 with newly diagnosed type 1 diabetes in a ten-year-old. Key management: blood glucose checks four times daily; insulin injections before breakfast and dinner; hypo signs include shaking and sweating. Safety-netting: snack needed after sport. Current medications: insulin aspart, glucose tablets. Write the information letter to the School Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "blood glucose checks four times daily",
+     "insulin injections before breakfast and dinner",
+     "hypo signs include shaking and sweating",
+     "snack needed after sport"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w044",
+   "profession": "physiotherapy",
+   "letterType": "discharge",
+   "recipient": "General Practitioner",
+   "patientInitials": "Ms EF",
+   "patientAge": 41,
+   "dayOfAdmission": 10,
+   "taskNotes": "Ms EF, aged 41, admitted on day 10 with low back pain following a lifting injury. Key management: core stability exercises twice daily; gradual return to lifting over four weeks; pain improved from seven to two out of ten. Safety-netting: advised to avoid prolonged sitting. Current medications: ibuprofen 400 mg, heat pack advice. Write the discharge letter to the General Practitioner.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "core stability exercises twice daily",
+     "gradual return to lifting over four weeks",
+     "pain improved from seven to two out of ten",
+     "advised to avoid prolonged sitting"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w045",
+   "profession": "occupational therapy",
+   "letterType": "referral",
+   "recipient": "Social Services Coordinator",
+   "patientInitials": "Ms EF",
+   "patientAge": 42,
+   "dayOfAdmission": 14,
+   "taskNotes": "Ms EF, aged 42, admitted on day 14 with post-stroke difficulty with kitchen tasks. Key management: left-sided weakness limits grip; kettle tipper and jar opener recommended; one fall in the kitchen last week. Safety-netting: lives alone in a two-storey house. Current medications: aspirin 75 mg, atorvastatin 40 mg. Write the referral letter to the Social Services Coordinator.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "left-sided weakness limits grip",
+     "kettle tipper and jar opener recommended",
+     "one fall in the kitchen last week",
+     "lives alone in a two-storey house"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w046",
+   "profession": "pharmacy",
+   "letterType": "information",
+   "recipient": "Practice Nurse",
+   "patientInitials": "Ms EF",
+   "patientAge": 38,
+   "dayOfAdmission": 3,
+   "taskNotes": "Ms EF, aged 38, admitted on day 3 with warfarin counselling after atrial fibrillation diagnosis. Key management: same time each evening dose; avoid new over-the-counter anti-inflammatories; report unusual bruising or nosebleeds. Safety-netting: green leafy vegetables in consistent amounts only. Current medications: warfarin 3 mg, beta-blocker. Write the information letter to the Practice Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "same time each evening dose",
+     "avoid new over-the-counter anti-inflammatories",
+     "report unusual bruising or nosebleeds",
+     "green leafy vegetables in consistent amounts only"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w047",
+   "profession": "radiography",
+   "letterType": "referral",
+   "recipient": "Orthopaedic Surgeon",
+   "patientInitials": "Ms EF",
+   "patientAge": 39,
+   "dayOfAdmission": 5,
+   "taskNotes": "Ms EF, aged 39, admitted on day 5 with persistent wrist pain after a fall. Key management: tenderness over the anatomical snuffbox; initial X-ray reported as normal; wrist splint worn for two weeks. Safety-netting: repeat imaging requested. Current medications: codeine 30 mg, paracetamol. Write the referral letter to the Orthopaedic Surgeon.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "tenderness over the anatomical snuffbox",
+     "initial X-ray reported as normal",
+     "wrist splint worn for two weeks",
+     "repeat imaging requested"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w048",
+   "profession": "nursing",
+   "letterType": "discharge",
+   "recipient": "District Nurse",
+   "patientInitials": "Ms EF",
+   "patientAge": 40,
+   "dayOfAdmission": 7,
+   "taskNotes": "Ms EF, aged 40, admitted on day 7 with venous leg ulcer showing early granulation. Key management: four-layer compression bandaging weekly; ankle-brachial pressure index 0.9; moisture balance dressings applied. Safety-netting: weight-bearing encouraged with stockings. Current medications: paracetamol, zinc supplement. Write the discharge letter to the District Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "four-layer compression bandaging weekly",
+     "ankle-brachial pressure index 0.9",
+     "moisture balance dressings applied",
+     "weight-bearing encouraged with stockings"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w049",
+   "profession": "medicine",
+   "letterType": "referral",
+   "recipient": "Gastroenterologist",
+   "patientInitials": "Ms EF",
+   "patientAge": 41,
+   "dayOfAdmission": 10,
+   "taskNotes": "Ms EF, aged 41, admitted on day 10 with iron deficiency anaemia with occult blood loss. Key management: haemoglobin nine grams per decilitre; positive faecal occult blood test; two-week wait referral criteria met. Safety-netting: no weight loss or change in bowel habit. Current medications: ferrous sulfate 200 mg, omeprazole 20 mg. Write the referral letter to the Gastroenterologist.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "haemoglobin nine grams per decilitre",
+     "positive faecal occult blood test",
+     "two-week wait referral criteria met",
+     "no weight loss or change in bowel habit"
+    ],
+    "minTotalScore": 16
+   }
+  },
+  {
+   "id": "w050",
+   "profession": "podiatry",
+   "letterType": "information",
+   "recipient": "Diabetes Specialist Nurse",
+   "patientInitials": "Ms EF",
+   "patientAge": 42,
+   "dayOfAdmission": 14,
+   "taskNotes": "Ms EF, aged 42, admitted on day 14 with annual diabetic foot screening results. Key management: loss of protective sensation both feet; dorsalis pedis pulses present; annual review recommended. Safety-netting: custom insoles provided. Current medications: metformin 1 g, simvastatin. Write the information letter to the Diabetes Specialist Nurse.",
+   "expected": {
+    "criterionCodes": [
+     "purpose",
+     "content",
+     "conciseness",
+     "genre",
+     "organization",
+     "language"
+    ],
+    "maxScores": {
+     "purpose": 3,
+     "content": 7,
+     "conciseness": 7,
+     "genre": 7,
+     "organization": 7,
+     "language": 7
+    },
+    "mustCoverFacts": [
+     "loss of protective sensation both feet",
+     "dorsalis pedis pulses present",
+     "annual review recommended",
+     "custom insoles provided"
+    ],
+    "minTotalScore": 16
+   }
+  }
+ ]
+}
