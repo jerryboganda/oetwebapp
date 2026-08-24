@@ -23,7 +23,7 @@ namespace OetLearner.Api.Data.Migrations;
 [Migration("20260906100000_HideNonSeriesReadingPapers")]
 public partial class HideNonSeriesReadingPapers : Migration
 {
-    public override void Up(MigrationBuilder migrationBuilder)
+    protected override void Up(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.Sql("""ALTER TABLE "ContentPapers" ADD COLUMN IF NOT EXISTS "CandidateVisible" boolean NOT NULL DEFAULT true;""");
 
@@ -64,7 +64,7 @@ WHERE p."Id" = flagged."Id";
 """);
     }
 
-    public override void Down(MigrationBuilder migrationBuilder)
+    protected override void Down(MigrationBuilder migrationBuilder)
     {
         migrationBuilder.Sql("""ALTER TABLE "ContentPapers" DROP COLUMN IF EXISTS "CandidateVisible";""");
     }
