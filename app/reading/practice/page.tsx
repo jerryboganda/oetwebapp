@@ -65,6 +65,7 @@ import {
   isInsufficientCreditsError,
   readInsufficientCreditsMessage,
 } from '@/components/domain/InsufficientCreditsModal';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 
 /**
  * Fallback mini-test duration (minutes), used until the reading pathway API
@@ -150,6 +151,7 @@ export default function ReadingPracticePage() {
       setErrorMsg(null);
       try {
         const started = await startReadingLearningAttempt(paper.id);
+        showCreditFeedback(started.feedbackMessage);
         router.push(started.playerRoute);
       } catch (err) {
         if (isInsufficientCreditsError(err)) {
@@ -175,6 +177,7 @@ export default function ReadingPracticePage() {
       setBusyKey(key);
       setErrorMsg(null);
       try {
+        showCreditFeedback(started.feedbackMessage);
         const started = await startReadingDrill(paperId, drillCode);
         router.push(started.playerRoute);
       } catch (err) {
@@ -196,6 +199,7 @@ export default function ReadingPracticePage() {
       setBusyKey(key);
       setErrorMsg(null);
       try {
+        showCreditFeedback(started.feedbackMessage);
         const started = await startReadingMiniTest(paperId, minutes);
         router.push(started.playerRoute);
       } catch (err) {
@@ -215,6 +219,7 @@ export default function ReadingPracticePage() {
     setBusyKey('retest');
     setErrorMsg(null);
     try {
+      showCreditFeedback(started.feedbackMessage);
       const started = await startReadingErrorBankRetest({ partCode: focusPart ?? undefined, limit: 10 });
       router.push(started.playerRoute);
     } catch (err) {
@@ -246,6 +251,7 @@ export default function ReadingPracticePage() {
               return;
             }
             const started = await startReadingDrill(paperId, nextAction.drillCode);
+            showCreditFeedback(started.feedbackMessage);
             router.push(started.playerRoute);
             return;
           }
@@ -261,6 +267,7 @@ export default function ReadingPracticePage() {
           }
           // TODO: use pathway-recommended duration when API exposes it (ReadingPathwayAction has no durationMinutes yet)
           const started = await startReadingMiniTest(paperId, DEFAULT_MINI_TEST_DURATION_MINUTES);
+          showCreditFeedback(started.feedbackMessage);
           router.push(started.playerRoute);
           return;
         }

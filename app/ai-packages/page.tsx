@@ -31,8 +31,12 @@ const SEPARATE_SECTIONS: Array<{ key: SeparateKey; label: string; icon: React.Re
   { key: 'speaking', label: 'Separate Speaking Packages', icon: <Mic2 className="h-4 w-4" /> },
 ];
 
-function formatAllowance(value: number | null, label: string) {
-  return value === null ? `Unlimited ${label}` : `${value} ${label}`;
+function formatAllowance(
+  unlimited: boolean | undefined,
+  value: number | null | undefined,
+  label: string,
+) {
+  return unlimited ? `Unlimited ${label}` : `${value ?? 0} ${label}`;
 }
 
 function formatDate(value?: string | null) {
@@ -257,7 +261,7 @@ export default function AiPackagesPage() {
               <div><span className="text-muted">Shared</span><p className="font-semibold">{credits.sharedCredits ?? 0}</p></div>
               <div><span className="text-muted">Flexible W/S</span><p className="font-semibold">{credits.flexibleCredits}</p></div>
               <div><span className="text-muted">Writing / Speaking</span><p className="font-semibold">{credits.writingUnlimited ? 'Unlimited' : credits.writingOnlyCredits} / {credits.speakingUnlimited ? 'Unlimited' : credits.speakingOnlyCredits}</p></div>
-              <div><span className="text-muted">Listening / Reading</span><p className="font-semibold">{formatAllowance(credits.listeningTestsRemaining, 'L')} / {formatAllowance(credits.readingTestsRemaining, 'R')}</p></div>
+              <div><span className="text-muted">Listening / Reading</span><p className="font-semibold">{formatAllowance(credits.listeningUnlimited, credits.listeningTestsRemaining, 'L')} / {formatAllowance(credits.readingUnlimited, credits.readingTestsRemaining, 'R')}</p></div>
               <div><span className="text-muted">Mocks / Expiry</span><p className="font-semibold">{credits.mockExamsRemaining} / {formatDate(credits.expiresAt)}</p></div>
             </div>
           ) : null}

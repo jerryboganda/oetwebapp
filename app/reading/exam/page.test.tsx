@@ -96,7 +96,7 @@ describe('Reading full exam page', () => {
     expect(screen.getByRole('button', { name: /atlas practice series/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /nova practice series/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /very difficult reading exams/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /other papers/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /other papers/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Jayden Book 01 — Bed Bugs')).not.toBeInTheDocument();
     expect(screen.queryByText(/no mock bundles/i)).not.toBeInTheDocument();
 

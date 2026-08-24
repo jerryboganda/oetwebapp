@@ -1,6 +1,11 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-24
+Last updated: 2026-09-25
+
+## Current Checkpoint - Shared wallet screenshot close-out
+
+- Start debit + screenshot remaining copy now surface on billed Reading, Listening, Speaking, and Writing starts. Writing paper direct launches hit eligibility first; mocks stay unpaid.
+- Unlimited Listening/Reading is lot-flag based. Owner verifies live.
 
 ## Current Checkpoint - OET 2026 Master Catalogue conformance wave 1
 

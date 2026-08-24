@@ -193,6 +193,7 @@ export interface AiPackage {
   price: number;
   currency: string;
   credits: number;
+  sharedCredits?: number;
   writingCredits: number;
   speakingCredits: number;
   mocks: number;
@@ -232,6 +233,27 @@ export interface AiPackageCreditTransaction {
   createdAt: string;
 }
 
+export interface AiPackageCreditNamedBucket {
+  totalGranted: number;
+  used: number;
+  remaining: number;
+  unlimited: boolean;
+  sourcePackages: string[];
+  expiresAt?: string | null;
+  daysLeft?: number | null;
+}
+
+export interface AiPackageOpenedActivity {
+  id: string;
+  title: string;
+  subtest: string;
+  status: string;
+  startedAt: string;
+  authorizingPackage?: string | null;
+  creditsUsed: number;
+  remainingAfterStart: number;
+}
+
 export interface AiPackageCreditGrantSource {
   packageId?: string | null;
   description: string;
@@ -265,6 +287,7 @@ export interface AiPackageCreditBucket {
 
 export interface AiPackageCreditSnapshot {
   userId: string;
+  sharedCredits: number;
   flexibleCredits: number;
   writingOnlyCredits: number;
   speakingOnlyCredits: number;
@@ -280,8 +303,17 @@ export interface AiPackageCreditSnapshot {
   creditsRemaining: number;
   writingUnlimited?: boolean;
   speakingUnlimited?: boolean;
-  sharedCredits?: number;
   sharedCreditsGranted?: number;
   sharedCreditsUsed?: number;
   buckets?: AiPackageCreditBucket[] | null;
+  listeningUnlimited?: boolean;
+  readingUnlimited?: boolean;
+  shared?: AiPackageCreditNamedBucket | null;
+  flexible?: AiPackageCreditNamedBucket | null;
+  writing?: AiPackageCreditNamedBucket | null;
+  speaking?: AiPackageCreditNamedBucket | null;
+  listening?: AiPackageCreditNamedBucket | null;
+  reading?: AiPackageCreditNamedBucket | null;
+  mocks?: AiPackageCreditNamedBucket | null;
+  activities?: AiPackageOpenedActivity[];
 }

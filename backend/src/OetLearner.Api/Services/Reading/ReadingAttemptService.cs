@@ -137,7 +137,8 @@ public sealed record ReadingAttemptStarted(
     DateTimeOffset? PartBCTimerPausedAt,
     int PartBCPausedSeconds,
     int PartABreakMaxSeconds,
-    DateTimeOffset ServerNow);
+    DateTimeOffset ServerNow,
+    string? FeedbackMessage = null);
 
 public sealed record ReadingAttemptBreakState(
     string AttemptId,
@@ -317,6 +318,7 @@ public sealed class ReadingAttemptService(
         // test and every other part / re-attempt of that same paper is free.
         // Skipped for mock sections (billObjectivePractice == false), which are
         // billed once via the mock credit instead.
+        string? feedbackMessage = null;
         if (billObjectivePractice && aiPackageCreditService is not null)
         {
             var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
@@ -324,6 +326,7 @@ public sealed class ReadingAttemptService(
                 CreditGateExtensions.ObjectivePaperReference("reading", userId, paperId),
                 ct);
             creditResult.EnsureDebited();
+            feedbackMessage = creditResult.FeedbackMessage;
         }
 
         var maxRaw = ReadingStructureService.CanonicalMaxRawScore;
@@ -419,7 +422,8 @@ public sealed class ReadingAttemptService(
             PartBCTimerPausedAt: attempt.PartBCTimerPausedAt,
             PartBCPausedSeconds: attempt.PartBCPausedSeconds,
             PartABreakMaxSeconds: mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0,
-            ServerNow: DateTimeOffset.UtcNow);
+            ServerNow: DateTimeOffset.UtcNow,
+            FeedbackMessage: feedbackMessage);
     }
 
     private async Task<string> ResolveReadingRulebookVersionAsync(CancellationToken ct)

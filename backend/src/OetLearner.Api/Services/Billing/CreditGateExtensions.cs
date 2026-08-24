@@ -12,7 +12,7 @@ public static class CreditGateExtensions
         if (result.Debited) return;
         throw ApiException.PaymentRequired(
             result.ErrorCode ?? "no_credits",
-            result.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
+            result.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
     }
 
     /// <summary>

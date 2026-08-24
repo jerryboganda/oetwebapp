@@ -336,6 +336,7 @@ export interface ListeningAttemptDto {
   audioResumeAtMs?: number | null;
   audioPlaybackSection?: string | null;
   audioQuestionIndex?: number | null;
+  feedbackMessage?: string | null;
 }
 
 /**

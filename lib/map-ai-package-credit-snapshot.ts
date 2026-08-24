@@ -14,16 +14,33 @@ function toNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+function mapNamedBucket(value: unknown) {
+  const data = asRecord(value);
+  if (!data || Object.keys(data).length === 0) return null;
+  return {
+    totalGranted: Number(data.totalGranted ?? 0),
+    used: Number(data.used ?? 0),
+    remaining: Number(data.remaining ?? 0),
+    unlimited: data.unlimited === true,
+    sourcePackages: Array.isArray(data.sourcePackages)
+      ? data.sourcePackages.filter((item): item is string => typeof item === 'string')
+      : [],
+    expiresAt: toNullableString(data.expiresAt),
+    daysLeft: data.daysLeft == null ? null : Number(data.daysLeft),
+  };
+}
+
 export function mapAiPackageCreditSnapshot(data: ApiRecord): AiPackageCreditSnapshot {
-  const flexibleCredits = Number(data.flexibleCredits ?? 0);
   const sharedCredits = Number(data.sharedCredits ?? 0);
+  const flexibleCredits = Number(data.flexibleCredits ?? 0);
   const writingOnlyCredits = Number(data.writingOnlyCredits ?? 0);
   const speakingOnlyCredits = Number(data.speakingOnlyCredits ?? 0);
   const creditsRemaining = Number(
-    data.creditsRemaining ?? flexibleCredits + sharedCredits + writingOnlyCredits + speakingOnlyCredits,
+    data.creditsRemaining ?? sharedCredits + flexibleCredits + writingOnlyCredits + speakingOnlyCredits,
   );
   return {
     userId: String(data.userId ?? ''),
+    sharedCredits,
     flexibleCredits,
     writingOnlyCredits,
     speakingOnlyCredits,
@@ -55,10 +72,28 @@ export function mapAiPackageCreditSnapshot(data: ApiRecord): AiPackageCreditSnap
     creditsRemaining,
     writingUnlimited: data.writingUnlimited === true,
     speakingUnlimited: data.speakingUnlimited === true,
-    sharedCredits,
     sharedCreditsGranted: Number(data.sharedCreditsGranted ?? 0),
     sharedCreditsUsed: Number(data.sharedCreditsUsed ?? 0),
     buckets: mapBuckets(data.buckets),
+    listeningUnlimited: data.listeningUnlimited === true,
+    readingUnlimited: data.readingUnlimited === true,
+    shared: mapNamedBucket(data.shared),
+    flexible: mapNamedBucket(data.flexible),
+    writing: mapNamedBucket(data.writing),
+    speaking: mapNamedBucket(data.speaking),
+    listening: mapNamedBucket(data.listening),
+    reading: mapNamedBucket(data.reading),
+    mocks: mapNamedBucket(data.mocks),
+    activities: asArray(data.activities).map((item) => ({
+      id: String(item.id ?? ''),
+      title: String(item.title ?? ''),
+      subtest: String(item.subtest ?? ''),
+      status: String(item.status ?? 'opened'),
+      startedAt: String(item.startedAt ?? ''),
+      authorizingPackage: toNullableString(item.authorizingPackage),
+      creditsUsed: Number(item.creditsUsed ?? 0),
+      remainingAfterStart: Number(item.remainingAfterStart ?? 0),
+    })),
   };
 }
 

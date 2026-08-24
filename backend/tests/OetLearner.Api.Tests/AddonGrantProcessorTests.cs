@@ -508,7 +508,8 @@ public sealed class AddonGrantProcessorTests
         Assert.True(result.Applied);
         Assert.Equal(5, snapshot.CreditsGranted);
         Assert.Equal(5, snapshot.CreditsRemaining);
-        Assert.Equal(5, snapshot.FlexibleCredits);
+        Assert.Equal(5, snapshot.SharedCredits);
+        Assert.Equal(0, snapshot.FlexibleCredits);
     }
 
     [Fact]

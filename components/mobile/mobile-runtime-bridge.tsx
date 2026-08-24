@@ -4,8 +4,10 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Capacitor } from '@capacitor/core';
 import { toast } from 'sonner';
+import { getQueryClient } from '@/components/providers/query-provider';
 import { useAuth } from '@/contexts/auth-context';
 import { initializeMobileRuntime } from '@/lib/mobile/runtime';
+import { queryKeys } from '@/lib/query/keys';
 import { triggerResumeMotion } from '@/lib/mobile/lifecycle-motion';
 import { consumeRestorableRoute, rememberCurrentRoute } from '@/lib/mobile/route-restore';
 import { registerPushNotifications } from '@/lib/mobile/push-notifications';
@@ -161,10 +163,17 @@ interface BillingPushPayload {
 function handleBillingPush(
   data: Record<string, string>,
   navigate: (path: string) => void,
+  userId?: string,
 ): boolean {
   const payload = data as BillingPushPayload;
   if (payload.kind !== 'billing.event') return false;
   if (!isBillingEventKind(payload.event)) return false;
+
+  if (payload.event === 'payment.success') {
+    getQueryClient().invalidateQueries({
+      queryKey: queryKeys.dashboard.aiPackageCredits(userId ?? 'current'),
+    });
+  }
 
   const routing = BILLING_ROUTING[payload.event];
   const message = payload.message?.trim().length ? payload.message : routing.message;
@@ -233,14 +242,14 @@ function shouldSkipResumeRefresh(): boolean {
 }
 
 export function MobileRuntimeBridge() {
-  const { revalidateSessionSilent, isAuthenticated, loading } = useAuth();
+  const { revalidateSessionSilent, isAuthenticated, loading, user } = useAuth();
   const router = useRouter();
-  const authStateRef = useRef({ isAuthenticated, loading, revalidateSessionSilent });
+  const authStateRef = useRef({ isAuthenticated, loading, revalidateSessionSilent, userId: user?.userId });
   const lastNativePushTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    authStateRef.current = { isAuthenticated, loading, revalidateSessionSilent };
-  }, [isAuthenticated, loading, revalidateSessionSilent]);
+    authStateRef.current = { isAuthenticated, loading, revalidateSessionSilent, userId: user?.userId };
+  }, [isAuthenticated, loading, revalidateSessionSilent, user?.userId]);
 
   // ── Route persistence (true-reload recovery) ────────────────────────
   // Remember the learner's location continuously so that if the OS kills the
@@ -349,7 +358,7 @@ export function MobileRuntimeBridge() {
           if (notification.data.kind === 'billing.event') {
             handleBillingPush(notification.data, () => {
               /* foreground: skip navigation */
-            });
+            }, authStateRef.current.userId);
             return;
           }
           if (notification.data.kind === 'writing.event') {
@@ -361,7 +370,7 @@ export function MobileRuntimeBridge() {
         onNotificationActionPerformed: (notification) => {
           // First check the billing routing matrix (Wave B3); falls through
           // to the legacy route handler if not a billing event.
-          if (handleBillingPush(notification.data, (path) => router.push(path))) {
+          if (handleBillingPush(notification.data, (path) => router.push(path), authStateRef.current.userId)) {
             return;
           }
 

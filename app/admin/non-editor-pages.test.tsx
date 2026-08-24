@@ -94,6 +94,7 @@ const api = vi.hoisted(() => ({
   deleteAdminUser: vi.fn(),
   restoreAdminUser: vi.fn(),
   adjustAdminUserCredits: vi.fn(),
+  adjustAdminAiPackageCredits: vi.fn(),
   restoreAdminContentRevision: vi.fn(),
   retryWebhook: vi.fn(),
 }));

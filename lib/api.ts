@@ -1085,6 +1085,7 @@ export interface WritingAttemptSession {
   startedAt: string;
   draftVersion: number;
   draftContent: string;
+  feedbackMessage?: string | null;
 }
 
 export type WritingAttemptMode = 'exam' | 'learning' | 'diagnostic';
@@ -1104,6 +1105,7 @@ export async function ensureWritingAttempt(taskId: string, mode: WritingAttemptM
     state: String(attempt.state ?? 'in_progress'),
     startedAt,
     draftVersion: Number(attempt.draftVersion ?? 1),
+    feedbackMessage: typeof attempt.feedbackMessage === 'string' ? attempt.feedbackMessage : null,
     draftContent: typeof attempt.draftContent === 'string' ? attempt.draftContent : '',
   };
 }
@@ -4544,6 +4546,7 @@ export async function fetchAiPackages(): Promise<AiPackagesResponse> {
     price: Number(p.price ?? 0),
     currency: String(p.currency ?? 'GBP'),
     credits: Number(p.credits ?? 0),
+    sharedCredits: Number(p.sharedCredits ?? 0),
     writingCredits: Number(p.writingCredits ?? 0),
     speakingCredits: Number(p.speakingCredits ?? 0),
     mocks: Number(p.mocks ?? 0),
@@ -4628,6 +4631,52 @@ export async function adjustAdminUserAiCredits(
   const data = await apiRequest<ApiRecord>(
     `/v1/admin/ai-package-credits/${encodeURIComponent(userId)}/adjust`,
     { method: 'POST', body: JSON.stringify(payload) },
+  );
+  return mapAiPackageCreditSnapshot(data);
+}
+
+export async function adjustAdminAiPackageCredits(
+  userId: string,
+  payload: {
+    sharedCreditsDelta?: number;
+    sharedCreditsSet?: number;
+    writingOnlyCreditsDelta?: number;
+    writingOnlyCreditsSet?: number;
+    speakingOnlyCreditsDelta?: number;
+    speakingOnlyCreditsSet?: number;
+    flexibleCreditsDelta?: number;
+    flexibleCreditsSet?: number;
+    listeningTestsDelta?: number;
+    listeningTestsSet?: number;
+    readingTestsDelta?: number;
+    readingTestsSet?: number;
+    mockExamsDelta?: number;
+    mockExamsSet?: number;
+    reason?: string;
+  },
+): Promise<AiPackageCreditSnapshot> {
+  const data = await apiRequest<ApiRecord>(
+    `/v1/admin/ai-package-credits/${encodeURIComponent(userId)}/adjust`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        flexibleCreditsDelta: payload.flexibleCreditsDelta ?? 0,
+        writingOnlyCreditsDelta: payload.writingOnlyCreditsDelta ?? 0,
+        speakingOnlyCreditsDelta: payload.speakingOnlyCreditsDelta ?? 0,
+        listeningTestsDelta: payload.listeningTestsDelta ?? 0,
+        readingTestsDelta: payload.readingTestsDelta ?? 0,
+        mockExamsDelta: payload.mockExamsDelta ?? 0,
+        sharedCreditsDelta: payload.sharedCreditsDelta ?? 0,
+        sharedCreditsSet: payload.sharedCreditsSet ?? null,
+        flexibleCreditsSet: payload.flexibleCreditsSet ?? null,
+        writingOnlyCreditsSet: payload.writingOnlyCreditsSet ?? null,
+        speakingOnlyCreditsSet: payload.speakingOnlyCreditsSet ?? null,
+        listeningTestsSet: payload.listeningTestsSet ?? null,
+        readingTestsSet: payload.readingTestsSet ?? null,
+        mockExamsSet: payload.mockExamsSet ?? null,
+        reason: payload.reason ?? 'admin adjustment',
+      }),
+    },
   );
   return mapAiPackageCreditSnapshot(data);
 }
@@ -7795,6 +7844,7 @@ export async function postExpertSpeakingTranscriptComment(
 export interface SpeakingSelfPracticeStartResult {
   sessionId: string;
   redirectPath: string;
+  feedbackMessage?: string | null;
 }
 
 export async function startSpeakingSelfPracticeSession(
@@ -7809,7 +7859,8 @@ export async function startSpeakingSelfPracticeSession(
   const redirectPath = typeof json.redirectPath === 'string' && json.redirectPath
     ? json.redirectPath
     : `/conversation/${sessionId}`;
-  return { sessionId, redirectPath };
+  const feedbackMessage = typeof json.feedbackMessage === 'string' ? json.feedbackMessage : null;
+  return { sessionId, redirectPath, feedbackMessage };
 }
 
 // Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills bank.

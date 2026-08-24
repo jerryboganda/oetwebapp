@@ -1990,7 +1990,50 @@ public partial class LearnerService(
     }
 
     public async Task<object> CreateWritingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken)
-        => await CreateAttemptAsync(userId, request, "writing", cancellationToken);
+    {
+        var existingAttempts = await db.Attempts
+            .AsNoTracking()
+            .Where(x => x.UserId == userId
+                        && x.ContentId == request.ContentId
+                        && x.SubtestCode == "writing"
+                        && x.Context == (request.Context ?? "practice")
+                        && x.State == AttemptState.InProgress)
+            .ToListAsync(cancellationToken);
+        if (existingAttempts.Count > 0)
+        {
+            return await CreateAttemptAsync(userId, request, "writing", cancellationToken);
+        }
+
+        var created = await CreateAttemptAsync(userId, request, "writing", cancellationToken);
+        if (aiPackageCreditService is null)
+        {
+            return created;
+        }
+
+        var attemptId = created.GetType().GetProperty("attemptId")?.GetValue(created) as string;
+        if (string.IsNullOrWhiteSpace(attemptId))
+        {
+            return created;
+        }
+
+        var debit = await aiPackageCreditService.DeductGradingCreditAsync(
+            userId, "writing", attemptId, AiGradingCreditCost.WritingExam, cancellationToken);
+        if (debit.Debited)
+        {
+            return MergeWritingAttemptWithFeedback(created, debit.FeedbackMessage);
+        }
+
+        var attempt = await db.Attempts.FirstOrDefaultAsync(row => row.Id == attemptId, cancellationToken);
+        if (attempt is not null)
+        {
+            db.Attempts.Remove(attempt);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        throw ApiException.PaymentRequired(
+            debit.ErrorCode ?? "no_ai_package_credits",
+            debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+    }
 
     public async Task<object> GetWritingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
@@ -2351,20 +2394,6 @@ public partial class LearnerService(
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Evaluating, cancellationToken);
 
         var evaluationId = $"we-{Guid.NewGuid():N}";
-        if (aiPackageCreditService is not null)
-        {
-            // One graded letter = one submission. The service resolves the
-            // §1 cost by source pool (dedicated 1 / Flexible W/S 1 / Shared 2).
-            var debit = await aiPackageCreditService.DeductGradingCreditAsync(
-                userId, "writing", evaluationId, 1, cancellationToken);
-            if (!debit.Debited)
-            {
-                throw ApiException.PaymentRequired(
-                    debit.ErrorCode ?? "no_ai_package_credits",
-                    debit.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
-            }
-        }
-
         var evaluation = new Evaluation
         {
             Id = evaluationId,
@@ -3896,6 +3925,7 @@ public partial class LearnerService(
             price = v.Price,
             currency = v.Currency,
             credits = v.Credits,
+            sharedCredits = v.SharedCredits,
             writingCredits = v.WritingCredits,
             speakingCredits = v.SpeakingCredits,
             mocks = v.Mocks,
@@ -3930,10 +3960,11 @@ public partial class LearnerService(
         var group = string.IsNullOrWhiteSpace(x.AiPackageGroup)
             ? ResolveAiPackageGroup(x.Code)
             : x.AiPackageGroup.Trim().ToLowerInvariant();
-        var credits = extras.FlexibleCredits ?? x.GrantCredits;
-        // Writing balance units are deliberately twice the advertised item
-        // count because a WritingExam debit costs two units. Keep the public
-        // numeric fields aligned to the 3/8/15 letters candidates purchase.
+        var credits = extras.SharedCredits
+            ?? extras.FlexibleCredits
+            ?? x.GrantCredits;
+        // Writing/Speaking activities cost 1 dedicated or Flexible unit.
+        // Shared AI credits cost 2 per Writing/Speaking activity.
         var writingCredits = extras.WritingItems ?? extras.WritingCredits ?? x.LettersGranted;
         var speakingCredits = extras.SpeakingItems ?? extras.SpeakingCredits ?? x.SessionsGranted;
         if (group == "writing" && writingCredits == 0) writingCredits = credits;
@@ -3954,7 +3985,7 @@ public partial class LearnerService(
             x.Price, x.Currency, credits, writingCredits,
             speakingCredits, extras.Mocks, x.DurationDays, extras.PriorityQueue,
             extras.UnlimitedGrading, extras.UnlimitedListening, extras.UnlimitedReading,
-            group, features);
+            group, features, extras.SharedCredits ?? 0);
     }
 
     private static string ResolveAiPackageGroup(string code)
@@ -3983,7 +4014,9 @@ public partial class LearnerService(
         switch (group)
         {
             case "full":
-                features.Add($"{credits} flexible grading credits (Writing or Speaking)");
+                features.Add(credits > 0
+                    ? $"{credits} Shared AI credits (Writing, Speaking, Listening or Reading)"
+                    : "Unlimited AI assessment for Writing and Speaking");
                 if (mocks > 0) features.Add($"{mocks} full mock exam{(mocks == 1 ? string.Empty : "s")} included");
                 // Only advertise unlimited L&R when the package actually grants it (both allowances null = unlimited).
                 if (listeningTests is null && readingTests is null)
@@ -4056,20 +4089,23 @@ public partial class LearnerService(
     private static AiPackageExtras ReadAiPackageExtras(string? grantEntitlementsJson)
     {
         if (string.IsNullOrWhiteSpace(grantEntitlementsJson))
-            return new(null, null, null, null, null, null, null, 0, false, false, false, false);
+            return new(null, null, null, null, null, null, null, null, 0, false, false, false, false);
         try
         {
             using var doc = JsonDocument.Parse(grantEntitlementsJson);
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
-                return new(null, null, null, null, null, null, null, 0, false, false, false, false);
+                return new(null, null, null, null, null, null, null, null, 0, false, false, false, false);
             var root = doc.RootElement;
             var mocks = ReadInt(root, "mock_exams") ?? ReadInt(root, "mockFull") ?? 0;
             var pq = root.TryGetProperty("priority_queue", out var p) && p.ValueKind == JsonValueKind.True;
             var unlimitedGrading = root.TryGetProperty("unlimited_grading", out var grading)
                                    && grading.ValueKind == JsonValueKind.True;
-            var unlimitedListening = IsExplicitNull(root, "listening_tests");
-            var unlimitedReading = IsExplicitNull(root, "reading_tests");
+            var unlimitedListening = IsExplicitNull(root, "listening_tests")
+                || (root.TryGetProperty("unlimited_listening", out var ul) && ul.ValueKind == JsonValueKind.True);
+            var unlimitedReading = IsExplicitNull(root, "reading_tests")
+                || (root.TryGetProperty("unlimited_reading", out var ur) && ur.ValueKind == JsonValueKind.True);
             return new(
+                ReadInt(root, "shared_credits"),
                 ReadInt(root, "flexible_credits"),
                 ReadInt(root, "writing_only_credits"),
                 ReadInt(root, "speaking_only_credits"),
@@ -4085,7 +4121,7 @@ public partial class LearnerService(
         }
         catch (JsonException)
         {
-            return new(null, null, null, null, null, null, null, 0, false, false, false, false);
+            return new(null, null, null, null, null, null, null, null, 0, false, false, false, false);
         }
     }
 
@@ -4107,6 +4143,7 @@ public partial class LearnerService(
         => root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Null;
 
     private sealed record AiPackageExtras(
+        int? SharedCredits,
         int? FlexibleCredits,
         int? WritingCredits,
         int? SpeakingCredits,
@@ -4124,7 +4161,7 @@ public partial class LearnerService(
         string Code, string Name, string Description, decimal Price, string Currency,
         int Credits, int WritingCredits, int SpeakingCredits, int Mocks, int ValidityDays,
         bool PriorityQueue, bool UnlimitedGrading, bool UnlimitedListening, bool UnlimitedReading,
-        string Group, IReadOnlyList<string> Features);
+        string Group, IReadOnlyList<string> Features, int SharedCredits);
 
     public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
     {
@@ -6955,8 +6992,26 @@ public partial class LearnerService(
             audioUploadState = ToUploadState(attempt.AudioUploadState),
             transcript = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(attempt.TranscriptJson, []),
             analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>()),
-            content = contentPayload
+            content = contentPayload,
+            feedbackMessage = (string?)null
         };
+    }
+
+    private static object MergeWritingAttemptWithFeedback(object created, string? feedbackMessage)
+    {
+        if (string.IsNullOrWhiteSpace(feedbackMessage))
+        {
+            return created;
+        }
+
+        var payload = new Dictionary<string, object?>(StringComparer.Ordinal);
+        foreach (var property in created.GetType().GetProperties())
+        {
+            payload[property.Name] = property.GetValue(created);
+        }
+
+        payload["feedbackMessage"] = feedbackMessage;
+        return payload;
     }
 
     private async Task<object> GetGenericTaskAsync(string contentId, string subtest, CancellationToken cancellationToken)

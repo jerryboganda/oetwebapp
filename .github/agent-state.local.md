@@ -1,6 +1,12 @@
 # Agent State (local)
 
-## Current task � OET 2026 Master Catalogue conformance (IN PROGRESS, local edits not yet committed)
+## Current task — Shared wallet screenshot close-out + Master Catalogue merge
+- Debit-on-start + screenshot remaining copy now wired: reading exam/paper/practice/parts, listening paper/player, speaking warmup + self-practice, writing V2 eligibility, writing paper direct launch.
+- Unlimited L/R comes from live lot flags, not null remaining. Writing V2 eligibility deducts once on `writing-v2:{userId}:{scenarioId}`.
+- Catalogue split kept: Shared vs restricted Flexible W/S; dedicated → Flex W/S → Shared; R/L never Flex W/S.
+- Next: owner verifies live start toasts and spend priority. Apply SQL-only `20260924`/`20260925` on prod if not applied. Never `.impeccable/`. Never VPS compute.
+
+## Previous — OET 2026 Master Catalogue conformance (IN PROGRESS, local edits not yet committed)
 Implemented on working tree (branch main): SharedCredits vs restricted Flexible W/S split (migration 20260906090000 incl. exact W3/8/15 caps + balance reclassification by source package), consumption priority rewrite in AiPackageCreditService (dedicated?FlexWS?Shared; R/L never FlexWS), debit feedback messages + FE announcer (lib/credit-feedback.ts), dashboard CreditBalanceCard, candidate token-surface removal (AiUsageWidget deleted; settings/ai + ai-usage credits-only), unified GET /v1/me/attempts history + /submissions section + sidebar History link, strict Products 1-29 PendingVerification gate (webhook parks plan orders; gateway-receipt rows already feed admin Orders & Payments queue renamed from Payment Proofs; ApproveAsync completes deferred grants incl. IncludedCredits), pkg_* manual-payment submissions blocked + checkout CTAs hidden for AI packages, ContentPaper.CandidateVisible flag (+migration hiding non-series published Reading papers) enforced across reading/listening/generic/media/start routes with admin toggle endpoint, writing/speaking start eligibility gate + profession isolation on CreateAttemptAsync, mock bundle profession fallback removed, legacy cart checkout profession gate, per-user token admin page removed + legacy TokensDelta writes stopped, platform AI/API Usage & Billing retitled with ProviderCapacitySection, admin CreditBucketAdjuster UI wired to adjust endpoint.
 Validation NOT run locally per owner instruction (owner will verify). Next: owner runs checks/reports errors; then commit/push via Actions deploy.
 
@@ -21,6 +27,7 @@ Validation NOT run locally per owner instruction (owner will verify). Next: owne
 ## Previous — production deploy of ff29552c+fix
 - Deploy blocked on missing GEMINI_API_KEY: gateway crashed in lifespan so routers did not flip.
 - Gateway now degrades (healthz HTTP 200, auth_ready=false) so web/API can promote without a Gemini key.
+
 
 ## Previous — Auth/OTP mail isolated from marketing unsubscribe
 - Root cause of missing password-reset OTP: Brevo accepted `/smtp/email` then blocked as unsubscribed. Marketing unsubscribe must never gate OTP.

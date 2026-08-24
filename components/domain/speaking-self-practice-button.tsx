@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import { startSpeakingSelfPracticeSession } from '@/lib/api';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
   InsufficientCreditsModal,
   isInsufficientCreditsError,
@@ -40,6 +41,7 @@ export function SpeakingSelfPracticeButton({
     setError(null);
     try {
       const result = await startSpeakingSelfPracticeSession(taskId);
+      showCreditFeedback(result.feedbackMessage);
       router.push(result.redirectPath);
     } catch (err) {
       // A 402 here means the SpeakingOnlyCredits/FlexibleCredits wallet is

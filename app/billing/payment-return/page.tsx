@@ -8,6 +8,8 @@ import { AlertCircle, ArrowRight, CheckCircle2, Clock, Loader2, RefreshCw } from
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { fetchBillingPaymentStatus } from '@/lib/api';
+import { getQueryClient } from '@/components/providers/query-provider';
+import { useAuth } from '@/contexts/auth-context';
 import {
   buildPaymentReturnHref,
   readCheckoutReturnRef,
@@ -16,6 +18,7 @@ import {
 } from '@/lib/billing/checkout-return-ref';
 import type { BillingPaymentStatus } from '@/lib/billing-types';
 import { formatMoney } from '@/lib/money';
+import { queryKeys } from '@/lib/query/keys';
 
 type Phase = 'polling' | 'completed' | 'failed' | 'expired' | 'cancelled' | 'timeout';
 
@@ -37,6 +40,7 @@ const POLL_BACKOFF_AFTER_MS = 15_000;
 
 function BillingPaymentReturnContent() {
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const urlRefs = resolveCheckoutReturnRefsFromSearch(searchParams);
   const [storedRefs, setStoredRefs] = useState<CheckoutReturnRef | null | undefined>(undefined);
   const quoteId = urlRefs.quoteId ?? storedRefs?.quoteId ?? null;
@@ -95,6 +99,9 @@ function BillingPaymentReturnContent() {
         setStatus(result);
         if (result.status === 'completed') {
           setPhase('completed');
+          getQueryClient().invalidateQueries({
+            queryKey: queryKeys.dashboard.aiPackageCredits(user?.userId ?? 'current'),
+          });
           return;
         }
         if (result.status === 'cancelled' || result.status === 'failed') {
@@ -119,7 +126,7 @@ function BillingPaymentReturnContent() {
     };
 
     void poll();
-    return () => {
+    return () => {, user?.userId
       cancelled = true;
     };
   }, [cancelledByLearner, missingReference, pollAttempt, quoteId, sessionId, storageReady]);

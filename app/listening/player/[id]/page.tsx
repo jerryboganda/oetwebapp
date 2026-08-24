@@ -36,6 +36,7 @@ import {
 } from '@/lib/listening/transitions';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { InsufficientCreditsModal, isInsufficientCreditsError, readInsufficientCreditsMessage } from '@/components/domain/InsufficientCreditsModal';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
@@ -786,6 +787,7 @@ function PlayerContent() {
     if (!session) throw new Error('Listening session is not ready.');
     if (attempt) return attempt;
     const started = await startListeningAttempt(session.paper.id, mode, { pathwayStage, mockAttemptId, mockSectionId });
+    showCreditFeedback(started.feedbackMessage);
     syncServerClock(started.serverNow);
     setAttempt(started);
     if (id && mockAttemptId && mockSectionId && !attemptIdFromRoute) {

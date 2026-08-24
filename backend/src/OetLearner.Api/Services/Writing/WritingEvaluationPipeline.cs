@@ -344,8 +344,8 @@ public sealed class WritingEvaluationPipeline(
 
         await aiPackageCreditService.RefundAsync(
             attempt.UserId,
-            evaluation.Id,
-            $"refund:{evaluation.Id}:{reasonCode}",
+            attempt.Id,
+            $"refund:{attempt.Id}:{reasonCode}",
             "Writing grading failed before completion. Your AI package credit was refunded.",
             cancellationToken);
     }

@@ -12,7 +12,7 @@ namespace OetLearner.Api.Tests;
 public class ContentEntitlementAiPackageTests
 {
     [Fact]
-    public async Task ListeningPaper_Allowed_WhenStandaloneAiPackageHasRemainingTests()
+    public async Task ListeningPaper_Blocked_WhenOnlyStandaloneAiPackageHasRemainingTests()
     {
         await using var db = new LearnerDbContext(new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -22,7 +22,7 @@ public class ContentEntitlementAiPackageTests
         {
             Id = "acct-l",
             UserId = "user-ai",
-            FlexibleCredits = 5,
+            SharedCredits = 5,
             ListeningTestsRemaining = 3,
             ReadingTestsRemaining = 3,
             CreatedAt = now,
@@ -44,8 +44,8 @@ public class ContentEntitlementAiPackageTests
 
         var result = await svc.AllowAccessAsync("user-ai", paper, default);
 
-        Assert.True(result.Allowed);
-        Assert.Equal("ai_package_grants", result.Reason);
+        Assert.False(result.Allowed);
+        Assert.Equal("no_active_subscription", result.Reason);
     }
 
     [Fact]

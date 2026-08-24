@@ -13,6 +13,7 @@ import { WritingReadingWindowOverlay } from '@/components/domain/writing/Writing
 import type { Highlight } from '@/components/domain/writing/WritingStimulusViewer';
 import {
   beginWritingMockWriting,
+  checkWritingScenarioEligibility,
   createWritingSubmission,
   getWritingHighlights,
   getWritingMockSession,
@@ -21,6 +22,12 @@ import {
   putWritingHighlights,
   submitWritingMock,
 } from '@/lib/writing/api';
+import { showCreditFeedback } from '@/lib/credit-feedback';
+import {
+  InsufficientCreditsModal,
+  isInsufficientCreditsError,
+  readInsufficientCreditsMessage,
+} from '@/components/domain/InsufficientCreditsModal';
 import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { getWritingTask } from '@/lib/writing/exam-api';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
@@ -155,6 +162,7 @@ export default function WritingPaperSessionPage() {
   const [submitted, setSubmitted] = useState(false);
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
   // Case Notes highlights, lifted so they persist across the reading window and
   // the booklet writing view, and so the page can save/restore them per scenario.
   const [pdfHighlights, setPdfHighlights] = useState<Record<number, Highlight[]>>({});
@@ -232,10 +240,12 @@ export default function WritingPaperSessionPage() {
         return;
       }
 
-      // 2) Treat the id as a scenario/task id (direct launch). No server session
-      //    to anchor against — open a client-only reading window with a deadline
-      //    fixed now (mirrors the practice page, but allowSkip is false because
-      //    paper mode is an exam simulation).
+      // 2) Treat the id as a scenario/task id (direct launch). Debit first so
+      //    a learner without enough AI credits never sees the paper content.
+      //    Mocks stay on their own human-graded path above.
+      const eligibility = await checkWritingScenarioEligibility(routeId);
+      if (cancelled) return;
+      showCreditFeedback(eligibility?.feedbackMessage);
       setResolution('scenario');
       setScenarioId(routeId);
       setPhase('reading');
@@ -245,6 +255,10 @@ export default function WritingPaperSessionPage() {
 
     void run().catch((err) => {
       if (!cancelled) {
+        if (isInsufficientCreditsError(err)) {
+          setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
+          return;
+        }
         setError(err instanceof Error ? err.message : t('writing.paper.error.load'));
       }
     });
@@ -417,6 +431,11 @@ export default function WritingPaperSessionPage() {
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.paper.pageTitle')} distractionFree>
+      <InsufficientCreditsModal
+        open={insufficientCreditsMessage !== null}
+        message={insufficientCreditsMessage ?? ''}
+        onClose={() => setInsufficientCreditsMessage(null)}
+      />
       <PaperBookletSimulation
         attemptId={routeId}
         scenarioId={scenarioId}

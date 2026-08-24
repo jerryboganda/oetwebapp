@@ -39,7 +39,7 @@ describe('reading exam categories', () => {
     );
   });
 
-  it('always returns the five official sections and only adds Other when needed', () => {
+  it('always returns the five official sections and never adds Other papers', () => {
     const sections = groupReadingExamPapers([
       { slug: 'jayden-book-01-bed-bugs', title: 'JB1 Bed Bugs' },
       { slug: 'jayden-book-02-obstetric-ultrasound', title: 'JB2 Obstetric Ultrasound' },
@@ -52,12 +52,9 @@ describe('reading exam categories', () => {
       'jayden-book',
       'nova-practice-series',
       'very-difficult-reading-exams',
-      'other',
     ]);
     expect(sections.find((section) => section.id === 'jayden-book')?.papers).toHaveLength(2);
     expect(sections.find((section) => section.id === 'anna-hartford')?.papers).toHaveLength(0);
-    expect(sections.find((section) => section.id === 'other')?.papers[0]?.slug).toBe(
-      'legacy-sample-reading',
-    );
+    expect(sections.some((section) => section.id === 'other')).toBe(false);
   });
 });

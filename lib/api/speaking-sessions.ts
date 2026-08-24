@@ -80,6 +80,8 @@ export interface SpeakingSessionDetail extends SpeakingSessionTimingDetail {
   liveRoomId: string | null;
   mockSetId: string | null;
   bookingId: string | null;
+  /** Wallet copy after a real debit at finish-warmup. */
+  feedbackMessage?: string | null;
 }
 
 export interface CriterionScore {

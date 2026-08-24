@@ -59,6 +59,7 @@ import {
   type OfflineAttempt,
 } from '@/lib/mobile/offline-sync';
 import { reconcileOfflineAnswer, type OfflineAnswerPayload } from '@/lib/mobile/offline-answer-reconciliation';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
   buildListeningExamSubSections,
   LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
@@ -301,6 +302,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     try {
       await submitAudioCheck({ outcome: 'clear' });
       const started = await startListeningAttempt(paperId, mode, { mockAttemptId, mockSectionId });
+      showCreditFeedback(started.feedbackMessage);
       syncServerClock(started.serverNow);
       const probe = await buildTechReadinessProbe({
         audioOk: readiness.audioOk,

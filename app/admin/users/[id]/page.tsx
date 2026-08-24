@@ -1481,7 +1481,7 @@ export default function UserDetailPage() {
                     }
                   >
                     <div className="space-y-3">
-                     <AiCreditSummary snapshot={aiCredits} loading={aiCreditsLoading} />
+                      <AiCreditSummary snapshot={aiCredits} loading={aiCreditsLoading} />
                       <CreditBucketAdjuster userId={user.id} onAdjusted={(snapshot) => setAiCredits(snapshot)} />
                     </div>
                     <button

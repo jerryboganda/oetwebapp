@@ -120,3 +120,10 @@ export async function announceCreditUsage(subtest: MeteredSubtest): Promise<void
     // Balance feedback must never block the activity itself.
   }
 }
+
+/** Show the wallet copy returned after a real debit. Empty/resume payloads stay silent. */
+export function showCreditFeedback(message?: string | null): void {
+  const trimmed = message?.trim();
+  if (!trimmed) return;
+  toast.success(trimmed);
+}

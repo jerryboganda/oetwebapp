@@ -4,6 +4,7 @@ import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 
 const snapshot: AiPackageCreditSnapshot = {
   userId: 'learner-1',
+  sharedCredits: 0,
   flexibleCredits: 3,
   writingOnlyCredits: 0,
   speakingOnlyCredits: 0,
@@ -44,7 +45,7 @@ describe('AiCreditSummary', () => {
 
     expect(screen.getByTestId('writing-ai-credits')).toHaveTextContent('6');
     expect(screen.getByTestId('speaking-ai-credits')).toHaveTextContent('3');
-    expect(screen.queryByTestId('shared-ai-credits')).not.toBeInTheDocument();
+    expect(screen.getByTestId('shared-ai-credits')).toHaveTextContent('0');
   });
 
   it('shows unlimited writing and speaking for OET Mastery and hides the stale generic remaining', () => {

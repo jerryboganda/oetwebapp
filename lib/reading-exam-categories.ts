@@ -104,15 +104,5 @@ export function groupReadingExamPapers<T extends ReadingExamCategoryPaper>(
     papers: grouped.get(category.id) ?? [],
   }));
 
-  const other = grouped.get('other') ?? [];
-  if (other.length > 0) {
-    sections.push({
-      id: 'other',
-      title: 'Other papers',
-      description: 'Published Reading papers that are not in a named book series yet.',
-      papers: other,
-    });
-  }
-
   return sections;
 }

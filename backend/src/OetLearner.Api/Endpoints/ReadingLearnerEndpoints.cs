@@ -972,6 +972,7 @@ public static class ReadingLearnerEndpoints
                     started.PaperTitle,
                     started.PartATimerMinutes,
                     started.PartBCTimerMinutes,
+                    started.FeedbackMessage,
                     playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=learning",
                 });
             }
@@ -1066,6 +1067,7 @@ public static class ReadingLearnerEndpoints
                     minutes,
                     questionCount = questionIds.Count,
                     partPractice = new { partCode = parsedPart.ToString(), title = $"Part {parsedPart} practice" },
+                    started.FeedbackMessage,
                     playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=part-practice&part={parsedPart}",
                 });
             }
@@ -1248,6 +1250,7 @@ public static class ReadingLearnerEndpoints
                     started.PaperTitle,
                     minutes = template.Minutes,
                     questionCount = sample.Count,
+                    started.FeedbackMessage,
                     drill = new { template.Code, template.Title, partCode = template.PartCode.ToString() },
                     playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=drill",
                 });
@@ -1309,6 +1312,7 @@ public static class ReadingLearnerEndpoints
                     started.DeadlineAt,
                     started.PaperTitle,
                     minutes = dto.Minutes,
+                    started.FeedbackMessage,
                     questionCount = sample.Count,
                     playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=mini-test",
                 });
@@ -1386,6 +1390,7 @@ public static class ReadingLearnerEndpoints
                     started.StartedAt,
                     started.DeadlineAt,
                     minutes,
+                    started.FeedbackMessage,
                     questionCount = inPaper.Count,
                     playerRoute = $"/reading/paper/{topPaperId}?attemptId={started.AttemptId}&mode=error-bank",
                 });

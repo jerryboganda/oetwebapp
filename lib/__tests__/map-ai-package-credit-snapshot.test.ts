@@ -4,6 +4,7 @@ describe('mapAiPackageCreditSnapshot', () => {
   it('keeps OET Mastery writing and speaking unlimited flags from the API', () => {
     const snapshot = mapAiPackageCreditSnapshot({
       userId: 'learner-1',
+      sharedCredits: 0,
       flexibleCredits: 0,
       writingOnlyCredits: 0,
       speakingOnlyCredits: 0,

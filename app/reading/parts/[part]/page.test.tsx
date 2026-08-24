@@ -73,7 +73,7 @@ describe('Reading part practice dispatcher', () => {
 
     render(<ReadingPartPracticePage />);
 
-    await user.click(await screen.findByRole('button', { name: /other papers/i }));
+    await user.click(await screen.findByRole('button', { name: /anna hartford/i }));
     await user.click(await screen.findByRole('button', { name: /start part a practice/i }));
 
     await waitFor(() => {
@@ -122,8 +122,8 @@ function buildHome() {
     papers: [
       {
         id: 'paper-1',
-        title: 'Reading Sample Paper 1',
-        slug: 'reading-sample-paper-1',
+        title: 'Anna Hartford 1 — Cigarette Smoking and Lung Cancer',
+        slug: 'anna-hartford-01-cigarette-smoking-lung-cancer',
         difficulty: 'standard',
         estimatedDurationMinutes: 60,
         publishedAt: '2026-04-20T00:00:00Z',

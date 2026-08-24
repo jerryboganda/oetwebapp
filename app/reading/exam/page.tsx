@@ -27,6 +27,7 @@ import {
   isInsufficientCreditsError,
   readInsufficientCreditsMessage,
 } from '@/components/domain/InsufficientCreditsModal';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 
 // Full Reading Exam uses the same book-folder list as Reading materials.
 // New published papers appear automatically. Mock bundles stay on /mocks.
@@ -90,6 +91,7 @@ export default function ReadingFullExamPage() {
     setInsufficientCreditsMessage(null);
     try {
       const started = await startReadingAttempt(paper.id);
+      showCreditFeedback(started.feedbackMessage);
       router.push(`/reading/paper/${paper.id}?attemptId=${started.attemptId}`);
     } catch (caught) {
       if (isInsufficientCreditsError(caught)) {

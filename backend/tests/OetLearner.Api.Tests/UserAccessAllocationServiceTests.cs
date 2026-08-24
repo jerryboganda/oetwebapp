@@ -114,7 +114,8 @@ public class UserAccessAllocationServiceTests
             default);
 
         var snapshot = await credits.GetSnapshotAsync("learner-gift", 20, default);
-        Assert.Equal(5, snapshot.FlexibleCredits);
+        Assert.Equal(5, snapshot.SharedCredits);
+        Assert.Equal(0, snapshot.FlexibleCredits);
         var writing = await credits.CheckGradingCreditAsync(
             "learner-gift", "writing", AiGradingCreditCost.WritingExam, default);
         Assert.True(writing.Debited);
@@ -147,14 +148,15 @@ public class UserAccessAllocationServiceTests
             OverrideProfessionMismatch: false);
 
         await svc.GrantPackageAsync("admin", "Admin", "learner-regrant-gift", req, default);
-        Assert.Equal(0, (await credits.GetSnapshotAsync("learner-regrant-gift", 20, default)).FlexibleCredits);
+        Assert.Equal(0, (await credits.GetSnapshotAsync("learner-regrant-gift", 20, default)).SharedCredits);
 
         plan.BundledAiCredits = 5;
         await db.SaveChangesAsync();
         await svc.GrantPackageAsync("admin", "Admin", "learner-regrant-gift", req, default);
 
         var snapshot = await credits.GetSnapshotAsync("learner-regrant-gift", 20, default);
-        Assert.Equal(5, snapshot.FlexibleCredits);
+        Assert.Equal(5, snapshot.SharedCredits);
+        Assert.Equal(0, snapshot.FlexibleCredits);
         Assert.Equal(5, snapshot.CreditsGranted);
         Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.UserId == "learner-regrant-gift"));
     }
@@ -759,7 +761,7 @@ public class UserAccessAllocationServiceTests
             AddonKind = "ai_package",
             RequiresEligibleParent = false,
             GrantCredits = 5,
-            GrantEntitlementsJson = """{"package_type":"full","flexible_credits":5,"listening_tests":3,"reading_tests":3}""",
+            GrantEntitlementsJson = """{"package_type":"full","shared_credits":5,"listening_tests":3,"reading_tests":3}""",
             DurationDays = 30,
             CreatedAt = now,
             UpdatedAt = now,
@@ -774,6 +776,7 @@ public class UserAccessAllocationServiceTests
         await service.RemoveAddonAsync("admin", "Admin", userId, "pkg_quick_check", null, default);
         var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
 
+        Assert.Equal(0, snapshot.SharedCredits);
         Assert.Equal(0, snapshot.FlexibleCredits);
         Assert.Equal(0, snapshot.ListeningTestsRemaining);
         Assert.Equal(0, snapshot.ReadingTestsRemaining);
@@ -874,7 +877,8 @@ public class UserAccessAllocationServiceTests
             new AdminUserAccessAddonRequest("pkg_writing_starter", subscriptionId, 1), default);
 
         var before = await credits.GetSnapshotAsync(userId, 20, default);
-        Assert.Equal(5, before.FlexibleCredits);
+        Assert.Equal(5, before.SharedCredits);
+        Assert.Equal(0, before.FlexibleCredits);
         Assert.Equal(6, before.WritingOnlyCredits);
         Assert.True((await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).TutorBookUnlocked);
 
@@ -883,6 +887,7 @@ public class UserAccessAllocationServiceTests
 
         Assert.Empty(removed.Subscriptions);
         Assert.Empty(removed.AddOns);
+        Assert.Equal(0, after.SharedCredits);
         Assert.Equal(0, after.FlexibleCredits);
         Assert.Equal(0, after.WritingOnlyCredits);
         Assert.Equal(SubscriptionStatus.Cancelled, (await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).Status);
@@ -1056,12 +1061,14 @@ public class UserAccessAllocationServiceTests
         await db.SaveChangesAsync();
 
         var stale = await credits.GetSnapshotAsync(userId, 0, default);
-        Assert.Equal(5, stale.FlexibleCredits);
+        Assert.Equal(5, stale.SharedCredits);
+        Assert.Equal(0, stale.FlexibleCredits);
         Assert.Null(stale.ListeningTestsRemaining);
 
         await service.GetAccessAsync(userId, default);
         var healed = await credits.GetSnapshotAsync(userId, 20, default);
 
+        Assert.Equal(0, healed.SharedCredits);
         Assert.Equal(0, healed.FlexibleCredits);
         Assert.Equal(0, healed.CreditsGranted);
         Assert.Equal(0, healed.ListeningTestsRemaining);

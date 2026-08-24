@@ -30,6 +30,7 @@ import {
   putWritingDraftV2,
   putWritingHighlights,
 } from '@/lib/writing/api';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
 import { WRITING_READING_WINDOW_SECONDS, WRITING_WINDOW_SECONDS } from '@/lib/writing/workflow';
@@ -132,14 +133,15 @@ export default function WritingPracticeSessionPage() {
     if (!scenarioId) return;
     let cancelled = false;
     void checkWritingScenarioEligibility(scenarioId)
-      .then(() =>
-        Promise.all([
+      .then((eligibility) => {
+        showCreditFeedback(eligibility?.feedbackMessage);
+        return Promise.all([
           getWritingScenario(scenarioId),
           getWritingDraftV2(scenarioId, mode).catch(() => null),
           // Saved Case Notes highlights persist per (user, scenario) across attempts.
           getWritingHighlights(scenarioId).catch(() => null),
-        ]),
-      )
+        ]);
+      })
       .then(([sc, draft, hl]) => {
         if (cancelled) return;
         setScenario(sc);

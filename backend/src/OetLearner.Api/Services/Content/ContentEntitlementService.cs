@@ -95,6 +95,7 @@ public sealed class ContentEntitlementService(
         string? userId, ContentPaper paper, CancellationToken ct)
     {
         if (paper is null) throw new ArgumentNullException(nameof(paper));
+        _ = aiPackageCreditService;
 
         // 1. Paper-level free preview.
         if (HasTag(paper.TagsCsv, AccessFreeTag))
@@ -137,15 +138,6 @@ public sealed class ContentEntitlementService(
         }
 
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
-        if (!entitlement.HasEligibleSubscription
-            && aiPackageCreditService is not null
-            && await AiPackageCoversPaperAsync(userId, paper.SubtestCode, ct))
-        {
-            return new ContentEntitlementResult(
-                Allowed: true, Reason: "ai_package_grants",
-                CurrentTier: "ai_package", RequiredScope: null);
-        }
-
         if (!entitlement.HasEligibleSubscription)
         {
             if (entitlement.SubscriptionStatus == SubscriptionStatus.Frozen)
@@ -235,35 +227,6 @@ public sealed class ContentEntitlementService(
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
-
-    private async Task<bool> AiPackageCoversPaperAsync(string userId, string? subtestCode, CancellationToken ct)
-    {
-        if (aiPackageCreditService is null) return false;
-
-        var snapshot = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
-        if (snapshot.ExpiredBecausePassed) return false;
-        if (snapshot.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow) return false;
-
-        var code = (subtestCode ?? string.Empty).Trim().ToLowerInvariant();
-        return code switch
-        {
-            // Deterministic subtests: own allowance first, then Shared at cost 1.
-            // The restricted Flexible W/S pool never covers Reading/Listening.
-            "listening" => snapshot.ListeningTestsRemaining is null or > 0 || snapshot.SharedCredits >= AiGradingCreditCost.ListeningExam,
-            "reading" => snapshot.ReadingTestsRemaining is null or > 0 || snapshot.SharedCredits >= AiGradingCreditCost.ReadingExam,
-            // Graded subtests (§1 matrix): dedicated ≥1, Flexible W/S ≥1, or
-            // universal Shared at the 2-credit rate.
-            "writing" => snapshot.WritingUnlimited
-                || snapshot.WritingOnlyCredits >= 1
-                || snapshot.FlexibleCredits >= 1
-                || snapshot.SharedCredits >= AiGradingCreditCost.WritingExam,
-            "speaking" => snapshot.SpeakingUnlimited
-                || snapshot.SpeakingOnlyCredits >= 1
-                || snapshot.FlexibleCredits >= 1
-                || snapshot.SharedCredits >= AiGradingCreditCost.SpeakingExam,
-            _ => snapshot.MockExamsRemaining > 0
-        };
-    }
 
     private static bool HasTag(string? tagsCsv, string tag)
     {

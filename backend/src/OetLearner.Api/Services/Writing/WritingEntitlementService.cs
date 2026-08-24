@@ -57,8 +57,7 @@ public sealed class WritingEntitlementService(
             var snapshot = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
             var expired = snapshot.ExpiredBecausePassed
                 || (snapshot.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow);
-            var hasWritingCredits = snapshot.WritingUnlimited
-                || snapshot.WritingOnlyCredits + snapshot.FlexibleCredits >= AiGradingCreditCost.WritingExam;
+            var hasWritingCredits = !snapshot.ExpiredBecausePassed && snapshot.HasWritingActivity;
             if (!expired && hasWritingCredits)
             {
                 return new WritingEntitlement(

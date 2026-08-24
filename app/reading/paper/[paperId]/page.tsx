@@ -46,6 +46,7 @@ import {
   type OfflineAttempt,
 } from '@/lib/mobile/offline-sync';
 import { reconcileOfflineAnswer, type OfflineAnswerPayload } from '@/lib/mobile/offline-answer-reconciliation';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'conflict' | 'error';
 
@@ -643,6 +644,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     setContentLockedMessage(null);
     try {
       const started = await startReadingAttempt(paperId, { mockAttemptId, mockSectionId });
+      showCreditFeedback(started.feedbackMessage);
       syncServerClock(started.serverNow);
       setAttempt(fromStartedAttempt(started));
       if (mockAttemptId && mockSectionId && !resumeAttemptId) {

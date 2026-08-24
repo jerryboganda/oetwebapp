@@ -673,6 +673,7 @@ public sealed class ListeningLearnerService(
         // Keep this after every start gate, including the owner-controlled
         // marking-policy and score-conversion gates, so an unavailable
         // governance record can never consume a learner credit.
+        string? feedbackMessage = null;
         if (billObjectivePractice && aiPackageCreditService is not null)
         {
             var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
@@ -680,6 +681,7 @@ public sealed class ListeningLearnerService(
                 CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
                 ct);
             creditResult.EnsureDebited();
+            feedbackMessage = creditResult.FeedbackMessage;
         }
 
         var attempt = new Attempt
@@ -735,7 +737,7 @@ public sealed class ListeningLearnerService(
         await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
             await conversionResolver.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
-        return AttemptDto(attempt, new Dictionary<string, string?>());
+        return AttemptDto(attempt, new Dictionary<string, string?>(), feedbackMessage);
     }
 
     public async Task<object> GetAttemptAsync(string userId, string attemptId, CancellationToken ct)
@@ -1727,6 +1729,7 @@ public sealed class ListeningLearnerService(
         // Listening test-credit allowance. Governance must be resolved before
         // this debit: failed owner-controlled marking or conversion gates do
         // not create an attempt and therefore must not consume a credit.
+        string? feedbackMessage = null;
         if (billObjectivePractice && aiPackageCreditService is not null)
         {
             var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
@@ -1734,6 +1737,7 @@ public sealed class ListeningLearnerService(
                 CreditGateExtensions.ObjectivePaperReference("listening", userId, source.Id),
                 ct);
             creditResult.EnsureDebited();
+            feedbackMessage = creditResult.FeedbackMessage;
         }
 
         var questionVersionMap = await db.ListeningQuestions.AsNoTracking()
@@ -1813,7 +1817,7 @@ public sealed class ListeningLearnerService(
         await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
             await conversionResolver.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
-        return RelationalAttemptDto(attempt, new Dictionary<string, string?>());
+        return RelationalAttemptDto(attempt, new Dictionary<string, string?>(), feedbackMessage);
     }
 
     private async Task SaveRelationalAnswerAsync(
@@ -3841,34 +3845,38 @@ public sealed class ListeningLearnerService(
         }).ToList()
     };
 
-    private static object AttemptDto(Attempt attempt, Dictionary<string, string?> answers)
+    private static object AttemptDto(
+        Attempt attempt,
+        IReadOnlyDictionary<string, string?> answers,
+        string? feedbackMessage = null)
     {
         var audio = ReadGenericAudioPlayback(answers);
         return new
         {
-        serverNow = DateTimeOffset.UtcNow,
-        attemptId = attempt.Id,
-        paperId = attempt.ContentId,
-        state = ToApiState(attempt.State),
-        attempt.Mode,
-        attempt.StartedAt,
-        attempt.SubmittedAt,
-        attempt.CompletedAt,
-        attempt.ElapsedSeconds,
-        attempt.LastClientSyncAt,
-        attempt.RequiresAdminReview,
-        attempt.AdminReviewReason,
-        attempt.AdminReviewFlaggedAt,
-        expiresAt = ReadGenericDeadline(attempt),
-        // Strip reserved navigation keys (e.g. the one-way section cursor) so
-        // they never leak into the player's answer map or get re-submitted as a
-        // bogus answer. The cursor is surfaced separately via advance-section.
-        answers = StripReservedAnswerKeys(answers),
-        sectionCursor = ReadGenericSectionCursor(answers),
-        audioPlaybackState = audio.State,
-        audioResumeAtMs = audio.ResumeAtMs,
-        audioPlaybackSection = audio.Section,
-        audioQuestionIndex = audio.QuestionIndex,
+            serverNow = DateTimeOffset.UtcNow,
+            attemptId = attempt.Id,
+            paperId = attempt.ContentId,
+            state = ToApiState(attempt.State),
+            attempt.Mode,
+            attempt.StartedAt,
+            attempt.SubmittedAt,
+            attempt.CompletedAt,
+            attempt.ElapsedSeconds,
+            attempt.LastClientSyncAt,
+            attempt.RequiresAdminReview,
+            attempt.AdminReviewReason,
+            attempt.AdminReviewFlaggedAt,
+            expiresAt = ReadGenericDeadline(attempt),
+            // Strip reserved navigation keys (e.g. the one-way section cursor) so
+            // they never leak into the player's answer map or get re-submitted as a
+            // bogus answer. The cursor is surfaced separately via advance-section.
+            answers = StripReservedAnswerKeys(answers),
+            sectionCursor = ReadGenericSectionCursor(answers),
+            audioPlaybackState = audio.State,
+            audioResumeAtMs = audio.ResumeAtMs,
+            audioPlaybackSection = audio.Section,
+            audioQuestionIndex = audio.QuestionIndex,
+            feedbackMessage,
         };
     }
 
@@ -3888,31 +3896,35 @@ public sealed class ListeningLearnerService(
             .Where(kv => !IsReservedAnswerKey(kv.Key))
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
 
-    private static object RelationalAttemptDto(ListeningAttempt attempt, Dictionary<string, string?> answers)
+    private static object RelationalAttemptDto(
+        ListeningAttempt attempt,
+        IReadOnlyDictionary<string, string?> answers,
+        string? feedbackMessage = null)
     {
         var audio = ReadAudioPlaybackSnapshot(attempt.AudioCueTimelineJson);
         return new
         {
-        serverNow = DateTimeOffset.UtcNow,
-        attemptId = attempt.Id,
-        paperId = attempt.PaperId,
-        state = attempt.Status == ListeningAttemptStatus.Submitted ? "completed" : ToApiState(attempt.Status),
-        mode = ToApiMode(attempt.Mode),
-        attempt.StartedAt,
-        attempt.SubmittedAt,
-        completedAt = attempt.SubmittedAt,
-        elapsedSeconds = (int)Math.Max(0, (attempt.LastActivityAt - attempt.StartedAt).TotalSeconds),
-        lastClientSyncAt = attempt.LastActivityAt,
-        requiresAdminReview = attempt.RequiresAdminReview,
-        adminReviewReason = attempt.AdminReviewReason,
-        adminReviewFlaggedAt = attempt.AdminReviewFlaggedAt,
-        expiresAt = attempt.DeadlineAt,
-        answers,
-        sectionCursor = ReadSectionCursor(attempt.NavigationStateJson),
-        audioPlaybackState = audio.State,
-        audioResumeAtMs = audio.ResumeAtMs,
-        audioPlaybackSection = audio.Section,
-        audioQuestionIndex = audio.QuestionIndex,
+            serverNow = DateTimeOffset.UtcNow,
+            attemptId = attempt.Id,
+            paperId = attempt.PaperId,
+            state = attempt.Status == ListeningAttemptStatus.Submitted ? "completed" : ToApiState(attempt.Status),
+            mode = ToApiMode(attempt.Mode),
+            attempt.StartedAt,
+            attempt.SubmittedAt,
+            completedAt = attempt.SubmittedAt,
+            elapsedSeconds = (int)Math.Max(0, (attempt.LastActivityAt - attempt.StartedAt).TotalSeconds),
+            lastClientSyncAt = attempt.LastActivityAt,
+            requiresAdminReview = attempt.RequiresAdminReview,
+            adminReviewReason = attempt.AdminReviewReason,
+            adminReviewFlaggedAt = attempt.AdminReviewFlaggedAt,
+            expiresAt = attempt.DeadlineAt,
+            answers,
+            sectionCursor = ReadSectionCursor(attempt.NavigationStateJson),
+            audioPlaybackState = audio.State,
+            audioResumeAtMs = audio.ResumeAtMs,
+            audioPlaybackSection = audio.Section,
+            audioQuestionIndex = audio.QuestionIndex,
+            feedbackMessage,
         };
     }
 

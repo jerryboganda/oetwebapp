@@ -102,18 +102,17 @@ public sealed class SpeakingExamService(
             var snapshot = await creditService.GetSnapshotAsync(userId, 0, ct);
             if (snapshot.MockExamsRemaining < 1)
             {
-                var available = snapshot.SpeakingOnlyCredits + snapshot.FlexibleCredits;
-                // Legacy/subscription accounts whose package is uninitialised still
-                // pass — the per-card debit later bypasses them the same way grading
-                // did. We only hard-block when a package wallet exists and is short.
+                var available = snapshot.AvailableSpeakingActivities;
                 var hasPackageWallet = snapshot.ExpiresAt is not null
+                    || snapshot.SharedCredits > 0
                     || snapshot.SpeakingOnlyCredits > 0
                     || snapshot.FlexibleCredits > 0
-                    || snapshot.WritingOnlyCredits > 0;
-                if (hasPackageWallet && available < 2)
+                    || snapshot.WritingOnlyCredits > 0
+                    || snapshot.SpeakingUnlimited;
+                if (hasPackageWallet && available < AiGradingCreditCost.SpeakingExam)
                 {
                     throw ApiException.PaymentRequired("speaking_exam_insufficient_credits",
-                        "A Speaking exam needs 2 AI credits, or 1 Full Mock Exam credit. Purchase a package to continue.");
+                        "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
                 }
             }
         }
@@ -845,7 +844,7 @@ public sealed class SpeakingExamService(
             }
             throw ApiException.PaymentRequired(
                 debit.ErrorCode ?? "no_ai_package_credits",
-                debit.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
+                    debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
         }
 
         if (slot == "a") exam.CreditARefId = refId; else exam.CreditBRefId = refId;

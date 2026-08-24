@@ -293,6 +293,8 @@ export interface ReadingAttemptStarted {
    *  the per-user accessibility / rate-limit hints the server already
    *  resolved. Always present in fresh attempts. */
   policy?: ReadingResolvedPolicy;
+  /** Wallet copy after a real debit, e.g. "1 Reading Credit used. 2 Reading Credits remaining." */
+  feedbackMessage?: string | null;
 }
 
 export interface ReadingAttemptBreakState {
@@ -1297,6 +1299,7 @@ export interface ReadingPracticeStartedDto {
   /** Part practice mode only. */
   partPractice?: { partCode: ReadingPartCode; title: string };
   playerRoute: string;
+  feedbackMessage?: string | null;
 }
 
 export interface ReadingDrillCatalogueDto {

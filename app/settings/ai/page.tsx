@@ -147,8 +147,8 @@ export default function AiSettingsPage() {
                   <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {(
                       [
-                        { label: 'Reading Credits', value: aiCredits.readingTestsRemaining },
-                        { label: 'Listening Credits', value: aiCredits.listeningTestsRemaining },
+                        { label: 'Reading Credits', value: aiCredits.readingUnlimited ? null : aiCredits.readingTestsRemaining },
+                        { label: 'Listening Credits', value: aiCredits.listeningUnlimited ? null : aiCredits.listeningTestsRemaining },
                         { label: 'Writing Credits', value: aiCredits.writingUnlimited ? null : aiCredits.writingOnlyCredits },
                         { label: 'Speaking Credits', value: aiCredits.speakingUnlimited ? null : aiCredits.speakingOnlyCredits },
                         { label: 'Shared Credits', value: aiCredits.sharedCredits ?? 0 },

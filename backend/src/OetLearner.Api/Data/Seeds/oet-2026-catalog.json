@@ -1207,7 +1207,7 @@
     {
         "code":  "pkg_quick_check",
         "name":  "Quick Check",
-        "description":  "A targeted one-off readiness package for candidates who want instant AI feedback on Writing or Speaking together with a small Listening and Reading practice allowance. This package includes 5 flexible AI grading credits for Writing letters or Speaking cards, plus 3 Listening exams and 3 Reading exams for focused practice.",
+        "description":  "A targeted one-off readiness package for candidates who want instant AI feedback on Writing or Speaking together with a small Listening and Reading practice allowance. This package includes 5 Shared AI credits, plus 3 Listening exams and 3 Reading exams for focused practice.",
         "price":  15,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1225,17 +1225,18 @@
         "displayOrder":  80,
         "aiPackageGroup":  "full",
         "aiFeatures":  [
-                           "5 flexible AI grading credits for Writing or Speaking",
+                           "5 Shared AI credits for Writing, Speaking, Listening or Reading",
                            "3 Listening practice exams",
                            "3 Reading practice exams",
                            "AI feedback reports for graded Writing or Speaking submissions",
                            "30-day validity"
-                       ]
+                       ],
+        "sharedCredits":  5
     },
     {
         "code":  "pkg_exam_prep_pro",
         "name":  "Exam Prep Pro",
-        "description":  "A larger one-off exam preparation package for candidates who need repeated AI grading and more Listening and Reading practice before the exam. It includes 15 flexible AI grading credits for Writing letters or Speaking cards, plus 6 Listening exams and 6 Reading exams.",
+        "description":  "A larger one-off exam preparation package for candidates who need repeated AI grading and more Listening and Reading practice before the exam. It includes 15 Shared AI credits, plus 6 Listening exams and 6 Reading exams.",
         "price":  32,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1253,12 +1254,13 @@
         "displayOrder":  90,
         "aiPackageGroup":  "full",
         "aiFeatures":  [
-                           "15 flexible AI grading credits for Writing or Speaking",
+                           "15 Shared AI credits for Writing, Speaking, Listening or Reading",
                            "6 Listening practice exams",
                            "6 Reading practice exams",
                            "AI feedback reports for graded Writing or Speaking submissions",
                            "90-day validity"
-                       ]
+                       ],
+        "sharedCredits":  15
     },
     {
         "code":  "pkg_oet_mastery",

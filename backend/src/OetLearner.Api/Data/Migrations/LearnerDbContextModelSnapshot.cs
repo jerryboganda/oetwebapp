@@ -1330,6 +1330,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int?>("ReadingTestsRemaining")
                         .HasColumnType("integer");
 
+                    b.Property<int>("SharedCredits")
+                        .HasColumnType("integer");
+
                     b.Property<int>("SpeakingOnlyCredits")
                         .HasColumnType("integer");
 
@@ -1352,6 +1355,90 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("AiPackageCreditAccounts");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.AiPackageCreditLot", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AccountId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("Expired")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset?>("ExpiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("FlexibleCredits")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ListeningTestsRemaining")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MockExamsRemaining")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PackageId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PackageType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("ReadingTestsRemaining")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SharedCredits")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SpeakingOnlyCredits")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceReferenceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<bool>("UnlimitedGrading")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("UnlimitedListening")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("UnlimitedReading")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("WritingOnlyCredits")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceReferenceId")
+                        .HasDatabaseName("IX_AiPackageCreditLots_SourceReferenceId");
+
+                    b.HasIndex("AccountId", "Expired")
+                        .HasDatabaseName("IX_AiPackageCreditLots_AccountId_Expired");
+
+                    b.HasIndex("UserId", "Expired", "ExpiresAt")
+                        .HasDatabaseName("IX_AiPackageCreditLots_UserId_Expired_ExpiresAt");
+
+                    b.ToTable("AiPackageCreditLots");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.AiPackageCreditTransaction", b =>
                 {
                     b.Property<string>("Id")
@@ -1362,6 +1449,10 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AllocationJson")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1408,6 +1499,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<string>("ReferenceId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<int>("SharedCreditsDelta")
+                        .HasColumnType("integer");
 
                     b.Property<int>("SpeakingOnlyCreditsDelta")
                         .HasColumnType("integer");

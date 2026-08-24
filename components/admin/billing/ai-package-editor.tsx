@@ -35,7 +35,7 @@ interface AdminAddOnRow {
 }
 
 const GROUP_OPTIONS = [
-  { value: 'full', label: 'Full package (Writing or Speaking credits)' },
+  { value: 'full', label: 'Full package (Shared AI credits plus Listening/Reading)' },
   { value: 'writing', label: 'Writing only' },
   { value: 'speaking', label: 'Speaking only' },
   { value: 'listening', label: 'Listening only' },
@@ -62,13 +62,17 @@ interface FormState {
   validityDays: string;
   group: string;
   packageType: string;
+  sharedCredits: string;
   flexibleCredits: string;
   writingCredits: string;
   speakingCredits: string;
   mocks: string;
-  listeningTests: string; // blank = unlimited
-  readingTests: string; // blank = unlimited
+  listeningTests: string;
+  readingTests: string;
   passGuaranteeMonths: string;
+  unlimitedListening: boolean;
+  unlimitedReading: boolean;
+  unlimitedGrading: boolean;
   priorityQueue: boolean;
   feedbackReports: boolean;
   personalisedStudyRecs: boolean;
@@ -88,6 +92,7 @@ function emptyForm(): FormState {
     validityDays: '30',
     group: 'full',
     packageType: '',
+    sharedCredits: '',
     flexibleCredits: '',
     writingCredits: '',
     speakingCredits: '',
@@ -95,6 +100,9 @@ function emptyForm(): FormState {
     listeningTests: '',
     readingTests: '',
     passGuaranteeMonths: '',
+    unlimitedListening: false,
+    unlimitedReading: false,
+    unlimitedGrading: false,
     priorityQueue: false,
     feedbackReports: true,
     personalisedStudyRecs: false,
@@ -121,6 +129,7 @@ function toForm(row: AdminAddOnRow): FormState {
     validityDays: row.durationDays != null ? String(row.durationDays) : '0',
     group: (row.aiPackageGroup && row.aiPackageGroup.trim()) || 'full',
     packageType: typeof ent.package_type === 'string' ? (ent.package_type as string) : '',
+    sharedCredits: readInt('shared_credits'),
     flexibleCredits: readInt('flexible_credits'),
     writingCredits: readInt('writing_only_credits'),
     speakingCredits: readInt('speaking_only_credits'),
@@ -128,6 +137,9 @@ function toForm(row: AdminAddOnRow): FormState {
     listeningTests: ent.listening_tests == null ? '' : readInt('listening_tests'),
     readingTests: ent.reading_tests == null ? '' : readInt('reading_tests'),
     passGuaranteeMonths: readInt('pass_guarantee_extension_months'),
+    unlimitedListening: ent.unlimited_listening === true || (Object.prototype.hasOwnProperty.call(ent, 'listening_tests') && ent.listening_tests == null),
+    unlimitedReading: ent.unlimited_reading === true || (Object.prototype.hasOwnProperty.call(ent, 'reading_tests') && ent.reading_tests == null),
+    unlimitedGrading: ent.unlimited_grading === true,
     priorityQueue: ent.priority_queue === true,
     feedbackReports: ent.feedback_reports !== false,
     personalisedStudyRecs: ent.personalised_study_recs === true,
@@ -145,12 +157,16 @@ function intOrNull(v: string): number | null {
 function buildEntitlementsJson(f: FormState): string {
   const obj: Record<string, unknown> = {
     package_type: f.packageType.trim() || f.group,
-    flexible_credits: intOrNull(f.flexibleCredits),
-    writing_only_credits: intOrNull(f.writingCredits),
-    speaking_only_credits: intOrNull(f.speakingCredits),
-    listening_tests: intOrNull(f.listeningTests), // null = unlimited
-    reading_tests: intOrNull(f.readingTests), // null = unlimited
+    shared_credits: intOrNull(f.sharedCredits) ?? 0,
+    flexible_credits: intOrNull(f.flexibleCredits) ?? 0,
+    writing_only_credits: intOrNull(f.writingCredits) ?? 0,
+    speaking_only_credits: intOrNull(f.speakingCredits) ?? 0,
+    listening_tests: f.unlimitedListening ? null : (intOrNull(f.listeningTests) ?? 0),
+    reading_tests: f.unlimitedReading ? null : (intOrNull(f.readingTests) ?? 0),
     mock_exams: intOrNull(f.mocks) ?? 0,
+    unlimited_grading: f.unlimitedGrading,
+    unlimited_listening: f.unlimitedListening,
+    unlimited_reading: f.unlimitedReading,
     priority_queue: f.priorityQueue,
     feedback_reports: f.feedbackReports,
     personalised_study_recs: f.personalisedStudyRecs,
@@ -253,7 +269,7 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
       currency: form.currency.trim().toUpperCase() || 'GBP',
       interval: 'one_time',
       durationDays: intOrNull(form.validityDays) ?? 0,
-      grantCredits: intOrNull(form.flexibleCredits) ?? 0,
+      grantCredits: intOrNull(form.sharedCredits) ?? intOrNull(form.flexibleCredits) ?? 0,
       displayOrder: intOrNull(form.displayOrder) ?? 0,
       isRecurring: false,
       appliesToAllPlans: true,
@@ -370,7 +386,7 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
               ) : (
                 sortedRows.map((row) => {
                   const ent = (row.grantEntitlements ?? {}) as Record<string, unknown>;
-                  const credits = numOrBlank(ent.flexible_credits) || '0';
+                  const credits = numOrBlank(ent.shared_credits) || numOrBlank(ent.flexible_credits) || numOrBlank(ent.writing_only_credits) || numOrBlank(ent.speaking_only_credits) || '0';
                   return (
                     <tr key={row.id} className="align-middle">
                       <td className="px-3 py-3">
@@ -420,7 +436,7 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
             <Input label="Code" value={form.code} onChange={(e) => setField('code', e.target.value)} placeholder="pkg_quick_check" hint={form.id ? 'Code is immutable after creation.' : 'Leave blank to auto-generate from the name.'} disabled={!!form.id} />
           </div>
 
-          <Textarea label="Description" value={form.description} onChange={(e) => setField('description', e.target.value)} placeholder="5 flexible AI grading credits for Writing or Speaking, valid for 30 days." />
+          <Textarea label="Description" value={form.description} onChange={(e) => setField('description', e.target.value)} placeholder="5 Shared AI credits plus Listening and Reading practice, valid for 30 days." />
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Input label="Price" inputMode="decimal" value={form.price} onChange={(e) => setField('price', e.target.value)} placeholder="19" />
@@ -437,16 +453,20 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
           <div className="rounded-2xl border border-border bg-background-light/50 p-4">
             <p className="mb-3 text-sm font-semibold text-navy">Entitlements granted on purchase</p>
             <div className="grid gap-4 sm:grid-cols-3">
-              <Input label="Flexible credits" inputMode="numeric" value={form.flexibleCredits} onChange={(e) => setField('flexibleCredits', e.target.value)} hint="Writing or Speaking" />
+              <Input label="Shared credits" inputMode="numeric" value={form.sharedCredits} onChange={(e) => setField('sharedCredits', e.target.value)} hint="Any sub-test. Writing/Speaking cost 2 Shared." />
+              <Input label="Flexible W/S credits" inputMode="numeric" value={form.flexibleCredits} onChange={(e) => setField('flexibleCredits', e.target.value)} hint="Writing or Speaking only. Cannot fund Listening/Reading." />
               <Input label="Writing credits" inputMode="numeric" value={form.writingCredits} onChange={(e) => setField('writingCredits', e.target.value)} />
               <Input label="AI Speaking Credits (practice)" inputMode="numeric" value={form.speakingCredits} onChange={(e) => setField('speakingCredits', e.target.value)} hint="Self-practice cards + exam fallback; 1 credit per card" />
               <Input label="Full Mock Exam Credits" inputMode="numeric" value={form.mocks} onChange={(e) => setField('mocks', e.target.value)} hint="For Speaking: 1 credit = 1 whole two-card exam (Card A + B), separate from AI Speaking Credits above" />
-              <Input label="Listening tests" inputMode="numeric" value={form.listeningTests} onChange={(e) => setField('listeningTests', e.target.value)} hint="Blank = unlimited" />
-              <Input label="Reading tests" inputMode="numeric" value={form.readingTests} onChange={(e) => setField('readingTests', e.target.value)} hint="Blank = unlimited" />
+              <Input label="Listening tests" inputMode="numeric" value={form.listeningTests} onChange={(e) => setField('listeningTests', e.target.value)} hint="Blank = none. Use Unlimited Listening instead of a blank count." disabled={form.unlimitedListening} />
+              <Input label="Reading tests" inputMode="numeric" value={form.readingTests} onChange={(e) => setField('readingTests', e.target.value)} hint="Blank = none. Use Unlimited Reading instead of a blank count." disabled={form.unlimitedReading} />
               <Input label="Pass-guarantee (months)" inputMode="numeric" value={form.passGuaranteeMonths} onChange={(e) => setField('passGuaranteeMonths', e.target.value)} />
               <Input label="Package type (advanced)" value={form.packageType} onChange={(e) => setField('packageType', e.target.value)} hint="Defaults to the group." />
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <Checkbox label="Unlimited Listening" checked={form.unlimitedListening} onChange={(e) => setField('unlimitedListening', e.target.checked)} />
+              <Checkbox label="Unlimited Reading" checked={form.unlimitedReading} onChange={(e) => setField('unlimitedReading', e.target.checked)} />
+              <Checkbox label="Unlimited Writing/Speaking grading" checked={form.unlimitedGrading} onChange={(e) => setField('unlimitedGrading', e.target.checked)} />
               <Checkbox label="Priority grading queue" checked={form.priorityQueue} onChange={(e) => setField('priorityQueue', e.target.checked)} />
               <Checkbox label="AI feedback reports" checked={form.feedbackReports} onChange={(e) => setField('feedbackReports', e.target.checked)} />
               <Checkbox label="Personalised study recs" checked={form.personalisedStudyRecs} onChange={(e) => setField('personalisedStudyRecs', e.target.checked)} />

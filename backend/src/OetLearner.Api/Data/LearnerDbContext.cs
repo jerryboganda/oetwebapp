@@ -79,6 +79,7 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<NativeIapProductMapping> NativeIapProductMappings => Set<NativeIapProductMapping>();
     public DbSet<AiPackageCreditAccount> AiPackageCreditAccounts => Set<AiPackageCreditAccount>();
     public DbSet<AiPackageCreditTransaction> AiPackageCreditTransactions => Set<AiPackageCreditTransaction>();
+    public DbSet<AiPackageCreditLot> AiPackageCreditLots => Set<AiPackageCreditLot>();
     public DbSet<LearnerExamOutcome> LearnerExamOutcomes => Set<LearnerExamOutcome>();
 
     // Multi-exam reference entities
@@ -1197,6 +1198,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .IsUnique()
             .HasDatabaseName("UX_AiPackageCreditTransactions_Reference_Reason")
             .HasFilter("\"ReferenceId\" IS NOT NULL");
+
+        modelBuilder.Entity<AiPackageCreditLot>()
+            .HasIndex(x => new { x.UserId, x.Expired, x.ExpiresAt })
+            .HasDatabaseName("IX_AiPackageCreditLots_UserId_Expired_ExpiresAt");
+        modelBuilder.Entity<AiPackageCreditLot>()
+            .HasIndex(x => new { x.AccountId, x.Expired })
+            .HasDatabaseName("IX_AiPackageCreditLots_AccountId_Expired");
+        modelBuilder.Entity<AiPackageCreditLot>()
+            .HasIndex(x => x.SourceReferenceId)
+            .HasDatabaseName("IX_AiPackageCreditLots_SourceReferenceId");
 
         // Payment indexes
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });

@@ -221,9 +221,9 @@ public sealed class Oet2026CatalogManifestTests
         Assert.Equal(JsonValueKind.Null, mastery.GetProperty("readingTests").ValueKind);
         Assert.Equal(0, mastery.GetProperty("grantCredits").GetInt32());
 
-        AssertWritingPackage("pkg_writing_starter", displayedItems: 3, debitUnits: 6);
-        AssertWritingPackage("pkg_writing_standard", displayedItems: 8, debitUnits: 16);
-        AssertWritingPackage("pkg_writing_pro", displayedItems: 15, debitUnits: 30);
+        AssertWritingPackage("pkg_writing_starter", displayedItems: 3, debitUnits: 3);
+        AssertWritingPackage("pkg_writing_standard", displayedItems: 8, debitUnits: 8);
+        AssertWritingPackage("pkg_writing_pro", displayedItems: 15, debitUnits: 15);
 
         void AssertWritingPackage(string code, int displayedItems, int debitUnits)
         {

@@ -22,6 +22,7 @@ import {
   isInsufficientCreditsError,
   readInsufficientCreditsMessage,
 } from '@/components/domain/InsufficientCreditsModal';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 
 // Per the 2026-05-27 OET sample-test alignment, `/reading/parts/[part]` is
 // a thin candidate dispatcher: it lists the published Reading papers that
@@ -116,6 +117,7 @@ export default function ReadingPartPracticePage() {
     setInsufficientCreditsMessage(null);
     try {
       const started = await startReadingPartPracticeAttempt(paper.id, part);
+      showCreditFeedback(started.feedbackMessage);
       router.push(started.playerRoute);
     } catch (caught) {
       if (isInsufficientCreditsError(caught)) {

@@ -24,7 +24,7 @@ describe('ReadingExamFolderBrowser', () => {
     expect(screen.getByRole('button', { name: /jayden book/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /nova practice series/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /very difficult reading exams/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /other papers/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /other papers/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Anna Hartford 1')).not.toBeInTheDocument();
     expect(screen.queryByText('Jayden Book 01 — Bed Bugs')).not.toBeInTheDocument();
   });

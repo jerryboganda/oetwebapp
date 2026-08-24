@@ -382,13 +382,26 @@ public sealed class Oet2026CatalogSeeder(
             {
                 grants["writing_only_credits"] = dto.WritingOnlyCredits;
             }
-            else if (dto.SpeakingOnlyCredits > 0)
+            if (dto.SpeakingOnlyCredits > 0)
             {
                 grants["speaking_only_credits"] = dto.SpeakingOnlyCredits;
             }
-            else if (dto.GrantCredits > 0)
+            if (dto.SharedCredits > 0)
             {
-                grants["flexible_credits"] = dto.GrantCredits;
+                grants["shared_credits"] = dto.SharedCredits;
+            }
+            if (dto.FlexibleCredits > 0)
+            {
+                grants["flexible_credits"] = dto.FlexibleCredits;
+            }
+            else if (dto.GrantCredits > 0
+                     && dto.WritingOnlyCredits <= 0
+                     && dto.SpeakingOnlyCredits <= 0
+                     && dto.SharedCredits <= 0
+                     && dto.FlexibleCredits <= 0
+                     && !dto.UnlimitedGrading)
+            {
+                grants["shared_credits"] = dto.GrantCredits;
             }
         }
         else if (dto.GrantCredits > 0)
@@ -666,6 +679,8 @@ public sealed class Oet2026CatalogSeeder(
         public bool UnlimitedListening { get; set; }
         public bool UnlimitedReading { get; set; }
         public bool UnlimitedGrading { get; set; }
+        public int SharedCredits { get; set; }
+        public int FlexibleCredits { get; set; }
         public int WritingOnlyCredits { get; set; }
         public int SpeakingOnlyCredits { get; set; }
         public int WritingItems { get; set; }

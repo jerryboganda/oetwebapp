@@ -60,21 +60,23 @@ public static class WritingScenarioEndpoints
 
         // Gate for AI-graded practice/paper sessions (NOT mock sessions —
         // mocks never touch the AI grading credit pool, see WritingMockService).
-        // Read-only: does not consume a credit. The real debit still happens
-        // once, at submit, via AiPackageCreditService.DeductGradingCreditAsync.
+        // Debit happens once at session start, idempotent on the scenario id,
+        // so a refresh cannot charge again. Submit must not debit.
         group.MapGet("/{id:guid}/eligibility", async (
             Guid id,
             HttpContext http,
             IAiPackageCreditService aiPackageCreditService,
             CancellationToken ct) =>
         {
-            // A Writing exam costs two credits (AiGradingCreditCost.WritingExam),
-            // so the start gate must confirm both are available — otherwise a
-            // learner with exactly one credit passes here and fails at submit.
-            var result = await aiPackageCreditService.CheckGradingCreditAsync(
-                http.WritingV2UserId(), "writing", AiGradingCreditCost.WritingExam, ct);
+            var userId = http.WritingV2UserId();
+            var result = await aiPackageCreditService.DeductGradingCreditAsync(
+                userId,
+                "writing",
+                $"writing-v2:{userId}:{id:D}",
+                AiGradingCreditCost.WritingExam,
+                ct);
             result.EnsureDebited();
-            return Results.NoContent();
+            return Results.Ok(new { feedbackMessage = result.FeedbackMessage });
         })
         .WithName("CheckWritingScenarioEligibility");
 

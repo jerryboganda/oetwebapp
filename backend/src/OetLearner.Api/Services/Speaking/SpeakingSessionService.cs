@@ -207,6 +207,7 @@ public sealed class SpeakingSessionService(
         // retried finish-warmup never double-charges. Live-tutor practice is
         // pay-per-session (no credit) and AI-exam cards are charged by
         // SpeakingExamService, so only AiSelfPractice debits here.
+        string? feedbackMessage = null;
         if (session.Mode == SpeakingSessionMode.AiSelfPractice && aiPackageCreditService is not null)
         {
             var debit = await aiPackageCreditService.DeductGradingCreditAsync(
@@ -216,8 +217,10 @@ public sealed class SpeakingSessionService(
             {
                 throw ApiException.PaymentRequired(
                     debit.ErrorCode ?? "no_ai_package_credits",
-                    debit.ErrorMessage ?? "You have no credits remaining. Purchase a package to continue.");
+                    debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
             }
+
+            feedbackMessage = debit.FeedbackMessage;
         }
 
         session.WarmupEndedAt = now;
@@ -226,13 +229,14 @@ public sealed class SpeakingSessionService(
         session.UpdatedAt = now;
         await db.SaveChangesAsync(ct);
 
-        return await GetSessionForLearnerAsync(userId, sessionId, ct);
+        return await GetSessionForLearnerAsync(userId, sessionId, ct, feedbackMessage);
     }
 
     public async Task<SpeakingSessionDetail> GetSessionForLearnerAsync(
         string userId,
         string sessionId,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? feedbackMessage = null)
     {
         var session = await LoadOwnedSessionAsync(userId, sessionId, ct);
         var card = await db.RolePlayCards.AsNoTracking()
@@ -253,7 +257,8 @@ public sealed class SpeakingSessionService(
             SubmittedAt: session.SubmittedAt,
             ElapsedSeconds: session.ElapsedSeconds,
             ConsentVersion: session.ConsentVersion,
-            Card: ProjectLearnerCard(card));
+            Card: ProjectLearnerCard(card),
+            FeedbackMessage: feedbackMessage);
     }
 
     public async Task<SpeakingSessionDetail> StartRolePlayAsync(

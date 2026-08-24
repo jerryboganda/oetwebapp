@@ -435,7 +435,7 @@ export default function Dashboard() {
           {purchaseSuccess ? (
             <InlineAlert variant="success">
               AI package purchase received. Current balances: {aiPackageCredits
-                ? `${aiPackageCredits.readingTestsRemaining ?? 'unlimited'} reading, ${aiPackageCredits.listeningTestsRemaining ?? 'unlimited'} listening, ${aiPackageCredits.writingUnlimited ? 'unlimited' : aiPackageCredits.writingOnlyCredits + aiPackageCredits.flexibleCredits} writing, ${aiPackageCredits.speakingUnlimited ? 'unlimited' : aiPackageCredits.speakingOnlyCredits + aiPackageCredits.flexibleCredits} speaking, ${(aiPackageCredits.sharedCredits ?? 0)} shared, ${aiPackageCredits.mockExamsRemaining} mocks.`
+                ? `${aiPackageCredits.readingUnlimited ? 'unlimited' : (aiPackageCredits.readingTestsRemaining ?? 0)} reading, ${aiPackageCredits.listeningUnlimited ? 'unlimited' : (aiPackageCredits.listeningTestsRemaining ?? 0)} listening, ${aiPackageCredits.writingUnlimited ? 'unlimited' : aiPackageCredits.writingOnlyCredits + aiPackageCredits.flexibleCredits} writing, ${aiPackageCredits.speakingUnlimited ? 'unlimited' : aiPackageCredits.speakingOnlyCredits + aiPackageCredits.flexibleCredits} speaking, ${(aiPackageCredits.sharedCredits ?? 0)} shared, ${aiPackageCredits.mockExamsRemaining} mocks.`
                 : 'refreshing your package balance.'}
             </InlineAlert>
           ) : null}
@@ -523,6 +523,7 @@ export default function Dashboard() {
             engagement={engagement}
             entitlement={entitlement}
             scoringPolicy={scoringPolicy}
+            aiPackageCredits={aiPackageCredits}
           />
 
           {/* Keep this optional marketing promotion below the complete

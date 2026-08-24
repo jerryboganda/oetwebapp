@@ -27,6 +27,7 @@ import {
   type SpeakingSessionDetail,
 } from '@/lib/api/speaking-sessions';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 
 const WARMUP_SECONDS = 90;
 
@@ -101,7 +102,8 @@ export default function SpeakingWarmupPage() {
     setBusy(true);
     setError(null);
     try {
-      await finishSpeakingWarmup(sessionId);
+      const finished = await finishSpeakingWarmup(sessionId);
+      showCreditFeedback(finished.feedbackMessage);
       trackSpeaking('warmup_finished', {
         sessionId,
         durationSeconds: WARMUP_SECONDS - secondsLeft,

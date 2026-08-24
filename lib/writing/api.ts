@@ -471,7 +471,7 @@ export const getWritingScenario = (scenarioId: string) =>
  * session — mocks are human-graded and never touch the AI credit pool.
  */
 export const checkWritingScenarioEligibility = (scenarioId: string) =>
-  apiClient.get<void>(
+  apiClient.get<{ feedbackMessage?: string | null }>(
     path('/v1/writing/scenarios/{id}/eligibility', { id: scenarioId }),
   );
 

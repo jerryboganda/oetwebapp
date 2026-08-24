@@ -41,7 +41,9 @@ public class ConversationService(
             : null;
         _ = difficulty;
 
-        var sessionId = $"cs-{Guid.NewGuid():N}";
+        var sessionId = string.IsNullOrWhiteSpace(request.SessionId)
+            ? $"cs-{Guid.NewGuid():N}"
+            : request.SessionId.Trim();
         var now = DateTimeOffset.UtcNow;
 
         var session = new ConversationSession
@@ -530,6 +532,6 @@ public class ConversationService(
 
 public record ConversationCreateSessionRequest(
     string? ContentId, string? ExamFamilyCode, string? TaskTypeCode,
-    string? Profession = null, string? Difficulty = null);
+    string? Profession = null, string? Difficulty = null, string? SessionId = null);
 
 public record ConversationResumeSessionRequest(string? ResumeToken = null);

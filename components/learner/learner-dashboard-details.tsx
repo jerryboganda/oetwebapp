@@ -28,6 +28,7 @@ import { DashboardAddonsWidget } from '@/components/learner/dashboard-addons-wid
 import { ExtendAccessCta } from '@/components/learner/extend-access-cta';
 import { MotionList } from '@/components/ui/motion-primitives';
 import { fetchPublicCatalog, type learnerGetScoringPolicy, type MyEntitlementSnapshot } from '@/lib/api';
+import type { AiPackageCreditSnapshot } from '@/lib/billing-types';
 import type { EngagementData } from '@/lib/hooks/use-dashboard-home';
 import type { ReadinessData, StudyPlanTask, SubTest } from '@/lib/mock-data';
 import type { PublicCatalogAddOnRow } from '@/lib/types/admin';
@@ -68,6 +69,7 @@ type LearnerDashboardDetailsProps = {
   loadedAt: string | null;
   engagement: EngagementData | null;
   entitlement: MyEntitlementSnapshot | null;
+  aiPackageCredits?: AiPackageCreditSnapshot | null;
   scoringPolicy: Awaited<ReturnType<typeof learnerGetScoringPolicy>> | null;
 };
 
@@ -89,6 +91,7 @@ export function LearnerDashboardDetails({
   loadedAt,
   engagement,
   entitlement,
+  aiPackageCredits = null,
   scoringPolicy,
 }: LearnerDashboardDetailsProps) {
   const router = useRouter();

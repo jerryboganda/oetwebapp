@@ -48,7 +48,8 @@ public record SpeakingSessionDetail(
     DateTimeOffset? SubmittedAt,
     int ElapsedSeconds,
     string ConsentVersion,
-    object Card);
+    object Card,
+    string? FeedbackMessage = null);
 
 /// <summary>One criterion in the AI assessment per-criterion drawer.
 /// `Score`/`MaxScore` matches the canonical 0–6 linguistic / 0–3 clinical

@@ -39,31 +39,40 @@ public partial class LearnerService
         // metadata. Task type is the standard OET role-play surface
         // ("oet-roleplay") which the conversation gateway grounds against
         // the conversation rulebook.
+        var sessionId = $"cs-{Guid.NewGuid():N}";
         var request = new ConversationCreateSessionRequest(
             ContentId: content.Id,
             ExamFamilyCode: content.ExamFamilyCode,
             TaskTypeCode: "oet-roleplay",
             Profession: content.ProfessionId,
-            Difficulty: content.Difficulty);
+            Difficulty: content.Difficulty,
+            SessionId: sessionId);
 
         // Credit gate: a live AI conversation has no separate "submit for
-        // grading" moment (unlike Writing), so the SpeakingOnlyCredits /
-        // FlexibleCredits wallet is debited here, at session-start, mirroring
-        // how Reading/Listening consume a credit at attempt-start. Accounts
-        // that have never purchased an AI package bypass harmlessly inside
-        // DeductGradingCreditAsync (unmetered, consistent with every other
-        // module's gate). ConversationService.CreateSessionAsync generates
-        // its own session id internally, so a separate reference id is
-        // minted here (same convention as ReadingAttemptService's
-        // pre-generated attemptId).
+        // grading" moment (unlike Writing), so the wallet is debited here at
+        // session-start against the conversation session id. Accounts that
+        // have never purchased an AI package bypass harmlessly inside
+        // DeductGradingCreditAsync. If debit fails after the session row is
+        // created, the unused session is deleted.
+        var sessionPayload = await conversation.CreateSessionAsync(userId, request, ct);
+        string? feedbackMessage = null;
         if (aiPackageCreditService is not null)
         {
-            var creditReferenceId = Guid.NewGuid().ToString("N");
-            var creditResult = await aiPackageCreditService.DeductGradingCreditAsync(userId, "speaking", creditReferenceId, ct);
-            creditResult.EnsureDebited();
-        }
+            var creditResult = await aiPackageCreditService.DeductGradingCreditAsync(userId, "speaking", sessionId, ct);
+            if (!creditResult.Debited)
+            {
+                var unused = await db.ConversationSessions.FirstOrDefaultAsync(row => row.Id == sessionId, ct);
+                if (unused is not null)
+                {
+                    db.ConversationSessions.Remove(unused);
+                    await db.SaveChangesAsync(ct);
+                }
 
-        var sessionPayload = await conversation.CreateSessionAsync(userId, request, ct);
+                creditResult.EnsureDebited();
+            }
+
+            feedbackMessage = creditResult.FeedbackMessage;
+        }
 
         // Wrap the conversation payload with the deep-link affordances
         // the speaking front-end needs — primarily the route the user
@@ -74,6 +83,7 @@ public partial class LearnerService
             redirectPath = sessionPayload is null
                 ? null
                 : ResolveRedirectPath(sessionPayload),
+            feedbackMessage,
         };
     }
 

@@ -32,7 +32,7 @@ export function isInsufficientCreditsError(
 
 export function readInsufficientCreditsMessage(
   err: unknown,
-  fallback = 'You do not have enough credits to start this. Purchase a package to continue.',
+  fallback = 'You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.',
 ): string {
   if (typeof err !== 'object' || err === null) return fallback;
   const e = err as { message?: string };

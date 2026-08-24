@@ -7,24 +7,30 @@ namespace OetLearner.Api.Services.Billing;
 public static class AiGradingCreditCost
 {
     /// <summary>
-    /// A full AI-graded Writing exam (one letter — Writing has no parts) costs
-    /// two grading credits. Owner rule 2026-07-11.
+    /// One Writing activity costs one dedicated Writing or Flexible W/S unit.
+    /// Shared AI credits cost <see cref="SharedWritingOrSpeaking"/> instead.
     /// </summary>
-    public const int WritingExam = 2;
+    public const int WritingExam = 1;
 
     /// <summary>
-    /// A full AI Speaking exam costs two credits in total — one per card at
-    /// each card reveal in <c>SpeakingExamService</c>. Single-card practice
-    /// stays at <see cref="SpeakingCard"/>.
+    /// A full AI Speaking exam is two activities — one per card at each card
+    /// reveal in <c>SpeakingExamService</c>. Single-card practice stays at
+    /// <see cref="SpeakingCard"/>.
     /// </summary>
     public const int SpeakingExam = 2;
 
-    /// <summary>One AI Speaking card (practice or exam slot) costs one credit.</summary>
+    /// <summary>One AI Speaking card (practice or exam slot) is one activity.</summary>
     public const int SpeakingCard = 1;
 
-    /// <summary>One Listening exam / paper costs one gifted AI credit.</summary>
+    /// <summary>
+    /// Shared pool cost for one Writing letter or one Speaking card.
+    /// Dedicated Writing/Speaking and Flexible W/S still cost 1.
+    /// </summary>
+    public const int SharedWritingOrSpeaking = 2;
+
+    /// <summary>One Listening exam / paper costs one Listening or Shared credit.</summary>
     public const int ListeningExam = 1;
 
-    /// <summary>One Reading exam / paper costs one gifted AI credit.</summary>
+    /// <summary>One Reading exam / paper costs one Reading or Shared credit.</summary>
     public const int ReadingExam = 1;
 }
