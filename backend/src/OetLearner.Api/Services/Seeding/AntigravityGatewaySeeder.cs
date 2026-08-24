@@ -105,6 +105,11 @@ public static class AntigravityGatewaySeeder
             inserted++;
         }
 
+        if (inserted > 0)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+
         return inserted;
     }
 }
