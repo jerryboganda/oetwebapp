@@ -4,38 +4,25 @@ namespace OetLearner.Api.Tests;
 
 public sealed class DatabaseMigrationExecutionPolicyTests
 {
-    [Fact]
-    public void ProductionNeverAppliesMigrationsAtApiStartup()
-    {
-        Assert.False(DatabaseMigrationExecutionPolicy.ShouldApplyAtStartup(
-            environmentName: "Production",
-            isPostgreSql: true,
-            autoMigrate: true));
-    }
-
     [Theory]
-    [InlineData("Production", false, true)]
-    [InlineData("Development", true, false)]
-    [InlineData("Development", false, true)]
-    [InlineData("", true, true)]
-    [InlineData(null, true, true)]
-    public void StartupMigrationRequiresDevelopmentPostgreSqlAndExplicitOptIn(
+    [InlineData("Production", true, false, false)]
+    [InlineData("Production", true, true, true)]
+    [InlineData("Development", true, true, true)]
+    [InlineData("Development", true, false, false)]
+    [InlineData("Staging", true, true, true)]
+    [InlineData("Development", false, true, false)]
+    [InlineData("Production", false, true, false)]
+    [InlineData("", true, false, false)]
+    [InlineData(null, true, false, false)]
+    public void StartupMigrationRequiresPostgreSqlAndExplicitOptIn(
         string? environmentName,
         bool isPostgreSql,
-        bool autoMigrate)
+        bool autoMigrate,
+        bool expected)
     {
-        Assert.False(DatabaseMigrationExecutionPolicy.ShouldApplyAtStartup(
+        Assert.Equal(expected, DatabaseMigrationExecutionPolicy.ShouldApplyAtStartup(
             environmentName,
             isPostgreSql,
             autoMigrate));
-    }
-
-    [Fact]
-    public void DevelopmentExplicitOptInMayApplyMigrationsAtStartup()
-    {
-        Assert.True(DatabaseMigrationExecutionPolicy.ShouldApplyAtStartup(
-            environmentName: "Development",
-            isPostgreSql: true,
-            autoMigrate: true));
     }
 }

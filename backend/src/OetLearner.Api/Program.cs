@@ -1951,16 +1951,17 @@ if (args.Contains("--emit-create-script"))
     return;
 }
 
-// Runtime settings are read by production startup guards below. Development
-// may opt into startup migrations; production schema changes are generated and
-// applied by the GitHub Actions deployment gate before the image is started.
+// Runtime settings are read by production startup guards below. Startup
+// migrations require the explicit Bootstrap:AutoMigrate=true opt-in (set in
+// production compose) and act as a self-healing safety net on top of the
+// GitHub Actions migration gate: any deploy path that brings up a new API
+// container applies pending migrations before serving traffic.
 await using (var migrationScope = app.Services.CreateAsyncScope())
 {
     var db = migrationScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
     // The in-memory provider builds its schema from the model, and SQLite
     // desktop/test runtimes use the compatibility bootstrapper because the
-    // production migration chain contains PostgreSQL-specific DDL. Production
-    // migrations are generated/applied by the GitHub Actions deployment gate.
+    // production migration chain contains PostgreSQL-specific DDL.
     if (db.Database.IsNpgsql())
     {
         if (DatabaseMigrationExecutionPolicy.ShouldApplyAtStartup(

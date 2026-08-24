@@ -1,11 +1,17 @@
-using Microsoft.Extensions.Hosting;
-
 namespace OetLearner.Api.Services;
 
 /// <summary>
-/// Controls the only environment in which the API is allowed to apply EF
-/// migrations during startup. Production migrations are generated and applied
-/// by the GitHub Actions deployment gate instead.
+/// Controls whether the API applies EF Core migrations during startup.
+///
+/// Normal production flow remains the GitHub Actions deployment gate
+/// (idempotent SQL applied before the new image starts). As a permanent
+/// safety net, an explicit <c>Bootstrap:AutoMigrate=true</c> opt-in is now
+/// honored in EVERY environment, including Production: on container start
+/// the API applies any pending migrations before serving traffic, so no
+/// deploy path (CI gate, manual rollout script, blue/green cutover) can
+/// leave schema drift behind again. EF Core 9+ serializes concurrent
+/// migrators through the <c>__EFMigrationsLock</c> table, so simultaneous
+/// blue/green startups are safe.
 /// </summary>
 public static class DatabaseMigrationExecutionPolicy
 {
@@ -14,8 +20,6 @@ public static class DatabaseMigrationExecutionPolicy
         bool isPostgreSql,
         bool autoMigrate)
     {
-        return isPostgreSql
-            && autoMigrate
-            && string.Equals(environmentName, Environments.Development, StringComparison.OrdinalIgnoreCase);
+        return isPostgreSql && autoMigrate;
     }
 }
