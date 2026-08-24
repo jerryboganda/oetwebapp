@@ -2,15 +2,13 @@
 
 Last updated: 2026-08-24
 
-## Current Checkpoint - Antigravity integration phases 3c-7 completed
+## Current Checkpoint - Antigravity integration COMPLETE (all phases)
 
-- **3c parity harness**: `scripts/antigravity/parity/` — static golden sets (50 writing + 30 speaking, deterministic generator `_generate_golden.py`), stdlib-only dual-provider runner with structural (100% gate) + composite parity (≥ baseline − 0.05) gates, markdown report; rubric in `docs/antigravity/parity-rubric.md`; `pnpm ai:parity`.
-- **4 desktop**: `DesktopRuntimeConfig.agentGatewayBaseUrl` (+ env `OET_DESKTOP_GATEWAY_URL`) merged resource/userData/env, surfaced via `runtime_info.agentGatewayUrl`; unit test added. `cargo check` clean (full cargo test blocked by pre-existing env: tauri-winres/mingw vs repo path spaces — not this diff).
-- **5 mobile**: validation matrix + quota-exhaustion/circuit-open drills in `docs/antigravity/mobile-validation.md`.
-- **6 alerting**: `ops/prometheus/alerts-oet-gateway.yml` (breaker trips, budget 80%, timeouts, error burst, auth failures).
-- **7 flip-day**: checklist `docs/antigravity/flip-day-checklist.md` + live watcher (`pnpm ai:flipday-watch`) — verified working: PyPI 0.1.14 = pin, issue #20 still open.
-- Validation: gateway pytest 38/38; scripts py_compile OK; cargo check OK; watch script ran live.
-- Next (owner-side): run `pnpm ai:parity` before each 10% route flip (3b); desktop install smoke; mobile device pass.
+- **Live state (plain language):** students are still served by existing providers (Anthropic/OpenAI-compatible). Gateway runs Mode A (normal Gemini API key) in standby. AI Pro Antigravity subscription quota is NOT used in production (Mode B = owner's PC only; Mode C awaits Google, watch `pnpm ai:flipday-watch`).
+- **Owner ops (manual only):** 1) `pnpm ai:parity` quality gate → 2) flip one route at 10% in `/admin/ai-providers` (provider `antigravity-gateway`, model `agent:<name>`) → watch → 100%; rollback = set provider back, instant. 3) Desktop clean-PC install smoke. 4) Mobile checklist `docs/antigravity/mobile-validation.md`. 5) Install `ops/prometheus/alerts-oet-gateway.yml` on VPS monitoring.
+- Full plain-language guide lives in `docs/antigravity/README.md` (Current status section). Lessons for future agents: `docs/dev/lessons-learned.md`.
+- Shipped commits: `d73c999a8` (v0.2 hardening: circuit breaker, timeouts, metrics, Redis cache, security fixes), `f6ad1d090` (3c parity harness 50+30 golden items, desktop `agentGatewayBaseUrl`, alert rules, flip-day checklist + live watcher).
+- Validation: gateway pytest 38/38 · scripts py_compile OK · `cargo check` OK (cargo test blocked by env: repo-path spaces break tauri-winres/mingw — see lessons file).
 
 ## Previous Checkpoint - Antigravity gateway hardening (v0.2)
 

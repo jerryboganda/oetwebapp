@@ -5,6 +5,28 @@ web app (Next.js), the desktop app (Tauri + local Docker stack), and the
 mobile app (Capacitor, via the backend). One agent gateway, one provider row,
 100% of AI features routeable through Antigravity with zero per-feature code.
 
+## Current status (2026-08-24) — plain language
+
+- **Students right now are served by the existing providers** (Anthropic /
+  OpenAI-compatible). No feature route has been flipped to Antigravity yet.
+- The gateway runs in **Mode A = a normal Gemini API key** (regular API
+  quota — NOT the AI Pro subscription's Antigravity quota).
+- **Mode B** = the real AI Pro Antigravity subscription quota. Only usable on
+  the owner's own PC (signed-in `agy` CLI), opt-in, never for students.
+- **Mode C** = official subscription quota via SDK OAuth. Google has not
+  shipped it yet (watch with `pnpm ai:flipday-watch`).
+
+### Owner operations checklist (manual, code is done)
+
+| # | What | How |
+|---|---|---|
+| 1 | Quality gate before any switch | `pnpm ai:parity` (80 fixed cases vs baseline). PASS → safe to flip. |
+| 2 | Switch a feature to Antigravity | Admin → `/admin/ai-providers` → open the feature route → provider `antigravity-gateway`, model `agent:<name>` → rollout **10%** → watch dashboards a day → **100%**. |
+| 3 | Roll back | Same route editor → set the provider back to the old one. Instant, no deploy. |
+| 4 | Desktop check | Install the desktop app on a clean PC, click through once. |
+| 5 | Mobile check | Follow `docs/antigravity/mobile-validation.md` on real Android + iOS. |
+| 6 | Alerting | Install `ops/prometheus/alerts-oet-gateway.yml` into the VPS monitoring rules. |
+
 ## What was built
 
 ```
@@ -24,7 +46,12 @@ docker-compose.{dev,desktop,vps,production}.yml
                                Mode B hard-disabled in production)
 .github/workflows/deploy.yml + scripts/deploy/auto-deploy-ghcr.sh
                                GHCR image build/push + blue/green rollout includes the gateway
-docs/antigravity/              this doc + auth.md + roadmap.md + runbook.md
+docs/antigravity/              this doc + auth.md + roadmap.md + runbook.md +
+                               parity-rubric.md + mobile-validation.md +
+                               flip-day-checklist.md
+scripts/antigravity/parity/    golden-set parity harness (50 writing + 30 speaking,
+                               `pnpm ai:parity`) · watch_flipday.py (`pnpm ai:flipday-watch`)
+ops/prometheus/                alert rules for the gateway metrics
 ```
 
 ## How routing works (reuses existing machinery)

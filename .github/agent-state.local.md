@@ -1,11 +1,10 @@
 # Agent State (local)
 
-## Current task — Antigravity phases 3c–7 completed
-- 3c: parity harness shipped (`scripts/antigravity/parity/`, 50+30 golden items, gated runner, `pnpm ai:parity`, rubric doc).
-- 4: desktop runtime config gained optional `agentGatewayBaseUrl` (env `OET_DESKTOP_GATEWAY_URL`) → `runtime_info.agentGatewayUrl`; cargo check green (cargo test blocked by pre-existing env toolchain, not the diff).
-- 5/6/7: mobile validation matrix doc, Prometheus alert rules `ops/prometheus/alerts-oet-gateway.yml`, flip-day checklist + working live watcher (`pnpm ai:flipday-watch`: PyPI 0.1.14 = pin, issue #20 open).
-- Validation: gateway pytest 38/38, scripts compile, cargo check OK.
-- Next (owner-side ops): `pnpm ai:parity` gate → 10% route flips in /admin/ai-providers (3b); desktop clean-machine install smoke; Android/iOS device pass; install alert rules on VPS monitoring stack.
+## Current task — Antigravity integration COMPLETE; idle for next task
+- All code phases shipped: v0.2 hardening (`d73c999a8`) + phases 3c–7 (`f6ad1d090`). Gateway pytest 38/38; cargo check OK.
+- Live state: students on existing providers; gateway Mode A (Gemini API key) standby; AI Pro Antigravity quota unused in prod (Mode B = owner PC only; Mode C awaits Google — `pnpm ai:flipday-watch`).
+- Owner-side ops pending (manual): `pnpm ai:parity` → 10% route flips in `/admin/ai-providers` (provider `antigravity-gateway`, model `agent:<name>`) → 100%; desktop clean-PC smoke; mobile device pass (`docs/antigravity/mobile-validation.md`); install `ops/prometheus/alerts-oet-gateway.yml` on VPS monitoring.
+- Plain-language status + admin switch guide: `docs/antigravity/README.md` (Current status section). Lessons + env gotchas for future agents: `docs/dev/lessons-learned.md` (python via agent-gateway venv only, no docker locally, cargo check with space-free CARGO_TARGET_DIR, cargo test impossible on this host).
 
 ## Previous — Antigravity gateway hardening (v0.2)
 - Circuit breaker per route (fast-fail 503 → resolver fallback), turn timeout → 504, constant-time token compare, request caps 413, SSE keepalive, idle-session reaper, lock-safe eviction, graceful drain, accurate usage accounting, opt-in structured outputs (fixed manifest `json.loads(dict)` crash), optional Redis cache, Prometheus `/v1/metrics`, JSON logs.
