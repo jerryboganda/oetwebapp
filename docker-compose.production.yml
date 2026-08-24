@@ -85,9 +85,9 @@ x-learner-api-slot: &learner-api-slot
     AI__ApiKey: ${AI__APIKEY:-}
     AI__DefaultModel: ${AI__DEFAULTMODEL:-}
     AI__ReasoningEffort: ${AI__REASONINGEFFORT:-}
-      AI__DefaultMaxTokens: ${AI__DEFAULTMAXTOKENS:-4096}
-      AI__DefaultTemperature: ${AI__DEFAULTTEMPERATURE:-0.2}
-      ANTIGRAVITY_GATEWAY_ROUTES_ENABLED: ${ANTIGRAVITY_GATEWAY_ROUTES_ENABLED:-false}
+    AI__DefaultMaxTokens: ${AI__DEFAULTMAXTOKENS:-4096}
+    AI__DefaultTemperature: ${AI__DEFAULTTEMPERATURE:-0.2}
+    ANTIGRAVITY_GATEWAY_ROUTES_ENABLED: ${ANTIGRAVITY_GATEWAY_ROUTES_ENABLED:-false}
     Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:-}
     Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:-}
     Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:-}
