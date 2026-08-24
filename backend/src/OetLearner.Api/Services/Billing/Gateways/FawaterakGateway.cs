@@ -186,37 +186,105 @@ public sealed class FawaterakGateway : IPaymentGateway
 
         var invoiceId = First(fields, "invoice_id", "invoiceId", "invoiceid") ?? string.Empty;
         var invoiceKey = First(fields, "invoice_key", "invoiceKey", "invoicekey") ?? string.Empty;
+        var paymentMethod = First(fields, "payment_method", "paymentMethod") ?? string.Empty;
         var providedHash = First(fields, "hashKey", "hash_key", "hash", "hmac") ?? string.Empty;
-        var statusRaw = First(fields, "invoice_status", "payment_status", "status", "paid") ?? string.Empty;
-        var quoteId = First(fields, "payLoad", "payload", "pay_load", "order_id", "quote_id") ?? invoiceId;
+        var statusRaw = First(fields, "invoice_status", "payment_status", "status") ?? string.Empty;
+        var paidFlag = First(fields, "paid") ?? string.Empty;
+        var referenceId = First(fields, "referenceId", "reference_id") ?? string.Empty;
+        var quoteId = NormalizeQuotePayload(First(fields, "payLoad", "payload", "pay_load", "order_id", "quote_id"));
 
-        if (!PaymentCallbackHmac.FawaterakHashMatches(opts.HashApiKey, invoiceId, invoiceKey, providedHash))
+        // Official "paid" callbacks sign InvoiceId/InvoiceKey/PaymentMethod; the
+        // Fawry/Aman/Masary cancel callback signs referenceId/PaymentMethod instead.
+        var verified = PaymentCallbackHmac.FawaterakHashMatches(opts.HashApiKey, invoiceId, invoiceKey, paymentMethod, providedHash)
+            || (!string.IsNullOrWhiteSpace(referenceId)
+                && PaymentCallbackHmac.FawaterakCancelHashMatches(opts.HashApiKey, referenceId, paymentMethod, providedHash));
+        if (!verified)
         {
             return new WebhookProcessResult("fawaterak_bad_sig", "signature_invalid", false, "HASH mismatch");
         }
 
-        var succeeded = statusRaw.Contains("paid", StringComparison.OrdinalIgnoreCase)
-            || statusRaw.Contains("success", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(statusRaw, "true", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(statusRaw, "1", StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(statusRaw);
+        // Strict terminal-status classification. "UNPAID" must never match "paid".
+        var succeeded = statusRaw.Equals("paid", StringComparison.OrdinalIgnoreCase)
+            || statusRaw.Equals("success", StringComparison.OrdinalIgnoreCase)
+            || paidFlag is "1" or "true";
+        var failed = statusRaw.Equals("expired", StringComparison.OrdinalIgnoreCase)
+            || statusRaw.Equals("cancelled", StringComparison.OrdinalIgnoreCase)
+            || statusRaw.Equals("canceled", StringComparison.OrdinalIgnoreCase)
+            || statusRaw.Equals("failed", StringComparison.OrdinalIgnoreCase);
 
-        var eventId = string.IsNullOrWhiteSpace(invoiceId) ? Guid.NewGuid().ToString("N") : invoiceId;
+        var eventId = string.IsNullOrWhiteSpace(invoiceId) ? $"fawaterak-{Guid.NewGuid():N}" : invoiceId;
         return new WebhookProcessResult(
             EventId: eventId,
-            EventType: succeeded ? "payment.succeeded" : "payment.pending",
+            EventType: succeeded ? "payment.succeeded" : failed ? "payment.failed" : "payment.pending",
             Processed: true,
             Error: null,
             GatewayTransactionId: string.IsNullOrWhiteSpace(invoiceId) ? quoteId : invoiceId,
-            NormalizedStatus: succeeded ? "completed" : "pending",
+            NormalizedStatus: succeeded ? "completed" : failed ? "failed" : "pending",
             SafePayloadJson: JsonSerializer.Serialize(new
             {
                 invoiceId,
                 quoteId,
+                paymentMethod,
                 status = statusRaw,
             }),
             EventCategory: PaymentWebhookCategories.Payment,
             GatewayObjectId: invoiceId);
+    }
+
+    /// <summary>Provider-side invoice status used to reconcile missed callbacks.</summary>
+    public sealed record FawaterakInvoiceStatus(string InvoiceId, bool Paid, string? PaidAt, string? RawStatus);
+
+    /// <summary>
+    /// Server-to-server invoice lookup (GET /api/v2/getInvoiceData/{id}). Returns null
+    /// when the provider cannot be reached or the response is unusable — callers must
+    /// treat null as "unknown", never as "unpaid".
+    /// </summary>
+    public async Task<FawaterakInvoiceStatus?> GetInvoiceStatusAsync(string invoiceId, CancellationToken ct)
+    {
+        var opts = (await _runtimeSettings.GetAsync(ct)).Fawaterak;
+        if (string.IsNullOrWhiteSpace(opts.HashApiKey) || string.IsNullOrWhiteSpace(invoiceId))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var message = new HttpRequestMessage(HttpMethod.Get, Combine(opts.ApiBaseUrl, $"api/v2/getInvoiceData/{Uri.EscapeDataString(invoiceId)}"))
+            {
+                Version = HttpVersion.Version11,
+                VersionPolicy = HttpVersionPolicy.RequestVersionOrLower,
+            };
+            message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + opts.HashApiKey.Trim());
+            message.Headers.TryAddWithoutValidation("User-Agent", "OetWithDrHesham/1.0");
+
+            using var response = await _http.SendAsync(message, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger?.LogWarning("Fawaterak getInvoiceData failed with HTTP {Status}", (int)response.StatusCode);
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+            if (!doc.RootElement.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var paidRaw = ReadString(data, "paid");
+            var status = ReadString(data, "invoice_status")
+                ?? ReadString(data, "payment_status")
+                ?? ReadString(data, "status");
+            var paidAt = ReadString(data, "paid_at");
+            var paid = paidRaw is "1" or "true"
+                || (status?.Equals("paid", StringComparison.OrdinalIgnoreCase) ?? false);
+            return new FawaterakInvoiceStatus(invoiceId, paid, paidAt, status);
+        }
+        catch (Exception ex) when (ex is JsonException or HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            _logger?.LogWarning(ex, "Fawaterak getInvoiceData verification failed for invoice {InvoiceId}", invoiceId);
+            return null;
+        }
     }
 
     public Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
@@ -264,6 +332,46 @@ public sealed class FawaterakGateway : IPaymentGateway
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Fawaterak echoes <c>payLoad</c> back as a string, a JSON object, or null.
+    /// Extract our quote id from any of those shapes; null when unusable.
+    /// </summary>
+    private static string? NormalizeQuotePayload(string? raw)
+    {
+        var candidate = raw?.Trim().Trim('"');
+        if (string.IsNullOrWhiteSpace(candidate) || candidate == "null")
+        {
+            return null;
+        }
+
+        if (candidate.StartsWith('{'))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(candidate);
+                var root = doc.RootElement;
+                foreach (var key in new[] { "quote_id", "quoteId", "merchant_reference", "value", "payLoad", "payload" })
+                {
+                    if (root.ValueKind == JsonValueKind.Object
+                        && root.TryGetProperty(key, out var property)
+                        && property.ValueKind == JsonValueKind.String
+                        && !string.IsNullOrWhiteSpace(property.GetString()))
+                    {
+                        return property.GetString();
+                    }
+                }
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+
+            return null;
+        }
+
+        return candidate;
     }
 
     private async Task<(decimal Amount, string Currency)> ResolveChargeCurrencyAsync(

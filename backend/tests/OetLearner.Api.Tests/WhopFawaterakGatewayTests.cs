@@ -23,6 +23,7 @@ public class WhopFawaterakGatewayTests
         {
             invoice_id = "1",
             invoice_key = "k",
+            payment_method = "Card",
             hashKey = "nope",
             invoice_status = "paid",
             payLoad = "quote-1",
@@ -37,9 +38,12 @@ public class WhopFawaterakGatewayTests
     [Fact]
     public async Task FawaterakWebhook_VerifiedPaidCallback_Completes()
     {
+        // Official Fawaterak paid-webhook shape: hashKey = HMAC-SHA256 over
+        // "InvoiceId={id}&InvoiceKey={key}&PaymentMethod={method}" using the vendor key.
         const string hashKey = "hash-secret";
         const string invoiceId = "88";
         const string invoiceKey = "inv-key";
+        const string paymentMethod = "Card";
         var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
         {
             Fawaterak = new FawaterakSettings("https://app.fawaterk.com", hashKey, "FAWATERAK.1", null, null, null),
@@ -49,7 +53,8 @@ public class WhopFawaterakGatewayTests
         {
             invoice_id = invoiceId,
             invoice_key = invoiceKey,
-            hashKey = PaymentCallbackHmac.HmacSha256Hex(hashKey, invoiceId + invoiceKey),
+            payment_method = paymentMethod,
+            hashKey = PaymentCallbackHmac.HmacSha256Hex(hashKey, $"InvoiceId={invoiceId}&InvoiceKey={invoiceKey}&PaymentMethod={paymentMethod}"),
             invoice_status = "paid",
             payLoad = "quote-1",
         });
@@ -59,6 +64,102 @@ public class WhopFawaterakGatewayTests
         Assert.True(result.Processed);
         Assert.Equal("completed", result.NormalizedStatus);
         Assert.Equal(invoiceId, result.GatewayTransactionId);
+    }
+
+    [Fact]
+    public async Task FawaterakWebhook_UnpaidStatus_NeverCompletes()
+    {
+        // Regression: "UNPAID" contains "paid" — the old Contains() check marked it succeeded.
+        const string hashKey = "hash-secret";
+        const string invoiceId = "89";
+        const string invoiceKey = "inv-key-2";
+        const string paymentMethod = "Fawry";
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", hashKey, "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(), Options.Create(new BillingOptions()), runtime);
+        var payload = JsonSerializer.Serialize(new
+        {
+            invoice_id = invoiceId,
+            invoice_key = invoiceKey,
+            payment_method = paymentMethod,
+            hashKey = PaymentCallbackHmac.HmacSha256Hex(hashKey, $"InvoiceId={invoiceId}&InvoiceKey={invoiceKey}&PaymentMethod={paymentMethod}"),
+            invoice_status = "UNPAID",
+            payLoad = "quote-2",
+        });
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.NotEqual("completed", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task FawaterakWebhook_ExpiredStatus_MapsFailed()
+    {
+        const string hashKey = "hash-secret";
+        const string invoiceId = "90";
+        const string invoiceKey = "inv-key-3";
+        const string paymentMethod = "Fawry";
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", hashKey, "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(), Options.Create(new BillingOptions()), runtime);
+        var payload = JsonSerializer.Serialize(new
+        {
+            invoice_id = invoiceId,
+            invoice_key = invoiceKey,
+            payment_method = paymentMethod,
+            hashKey = PaymentCallbackHmac.HmacSha256Hex(hashKey, $"InvoiceId={invoiceId}&InvoiceKey={invoiceKey}&PaymentMethod={paymentMethod}"),
+            invoice_status = "expired",
+        });
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.True(result.Processed);
+        Assert.Equal("failed", result.NormalizedStatus);
+    }
+
+    [Fact]
+    public async Task FawaterakGetInvoiceStatus_ParsesPaidFlag()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"status":"success","data":{"invoice_id":1001267,"invoice_key":"l1aQQG0AzvtnDZH","paid":1,"paid_at":"2021-11-10T12:33:44.000000Z","payment_method":"Credit-Debit Card"}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var status = await gateway.GetInvoiceStatusAsync("1001267", default);
+
+        Assert.NotNull(status);
+        Assert.True(status!.Paid);
+        Assert.Equal("1001267", status.InvoiceId);
+        Assert.Equal("https://app.fawaterk.com/api/v2/getInvoiceData/1001267", handler.LastUri?.ToString());
+    }
+
+    [Fact]
+    public async Task FawaterakGetInvoiceStatus_UnpaidInvoice_IsNotPaid()
+    {
+        var handler = new StubHandler
+        {
+            Response = """{"status":"success","data":{"invoice_id":1001268,"invoice_key":"k2","paid":0,"paid_at":"-","payment_method":"Fawry"}}""",
+        };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Fawaterak = new FawaterakSettings("https://app.fawaterk.com", "hash-secret", "FAWATERAK.1", null, null, null),
+        });
+        var gateway = new FawaterakGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var status = await gateway.GetInvoiceStatusAsync("1001268", default);
+
+        Assert.NotNull(status);
+        Assert.False(status!.Paid);
     }
 
     [Fact]

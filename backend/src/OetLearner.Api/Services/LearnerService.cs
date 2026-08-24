@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -3754,6 +3755,23 @@ public partial class LearnerService(
         if (quote is null)
         {
             throw ApiException.NotFound("billing_payment_not_found", "Payment status was not found for this checkout.");
+        }
+
+        // Fawaterak safety net: the verified gateway callback is the primary fulfilment
+        // path, but if it was missed or rejected the learner would stay "pending" forever
+        // despite a successful charge. Verify the invoice directly with the provider
+        // (server-to-server) and complete through the same idempotent fulfilment a
+        // genuine callback uses. Best-effort — failures fall through to the normal read.
+        if (transaction is not null
+            && !string.Equals(transaction.Status, "completed", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(transaction.Gateway, PaymentGatewayNames.Fawaterak, StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(transaction.GatewayTransactionId)
+            && await TryReconcilePendingFawaterakPaymentAsync(transaction, cancellationToken))
+        {
+            transaction = await db.PaymentTransactions.AsNoTracking()
+                .Where(x => x.LearnerUserId == userId && (x.QuoteId == quote.Id || x.GatewayTransactionId == quote.CheckoutSessionId))
+                .OrderByDescending(x => x.UpdatedAt)
+                .FirstOrDefaultAsync(cancellationToken);
         }
 
         var quoteResponse = DeserializeQuoteResponse(quote);
@@ -10839,6 +10857,100 @@ public partial class LearnerService(
             webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return MapWebhookRetryResult(webhookEvent);
+        }
+    }
+
+    /// <summary>
+    /// Fawaterak reconciliation: when a fawaterak payment transaction is still pending,
+    /// query the provider's getInvoiceData endpoint server-to-server. If the provider
+    /// reports the invoice paid, record an idempotent verified webhook event and run the
+    /// SAME fulfilment path a genuine callback uses. Returns true when the transaction
+    /// was (or already had been) completed by this verification.
+    /// </summary>
+    private async Task<bool> TryReconcilePendingFawaterakPaymentAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        try
+        {
+            if (paymentGateways.GetGateway(PaymentGatewayNames.Fawaterak) is not OetLearner.Api.Services.Billing.Gateways.FawaterakGateway gateway)
+            {
+                return false;
+            }
+
+            // Throttle provider checks so rapid learner polls don't hammer Fawaterak.
+            var metadata = JsonSupport.Deserialize<Dictionary<string, object?>>(transaction.MetadataJson ?? "{}", new Dictionary<string, object?>());
+            var lastVerifyRaw = metadata.TryGetValue("lastFawaterakVerifyAt", out var lastVerifyObj) ? lastVerifyObj?.ToString() : null;
+            if (DateTimeOffset.TryParse(lastVerifyRaw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var lastVerify)
+                && DateTimeOffset.UtcNow - lastVerify < TimeSpan.FromSeconds(15))
+            {
+                return false;
+            }
+
+            var invoiceStatus = await gateway.GetInvoiceStatusAsync(transaction.GatewayTransactionId!, ct);
+
+            var now = DateTimeOffset.UtcNow;
+            metadata["lastFawaterakVerifyAt"] = now.ToString("O", CultureInfo.InvariantCulture);
+            var tracked = await db.PaymentTransactions.FirstAsync(x => x.Id == transaction.Id, ct);
+            tracked.MetadataJson = JsonSerializer.Serialize(metadata);
+            tracked.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+
+            if (invoiceStatus is null || !invoiceStatus.Paid)
+            {
+                return false;
+            }
+
+            var eventId = $"fawaterak-verify-{transaction.GatewayTransactionId}";
+            var webhookEvent = await db.PaymentWebhookEvents
+                .FirstOrDefaultAsync(x => x.Gateway == PaymentGatewayNames.Fawaterak && x.GatewayEventId == eventId, ct);
+            if (webhookEvent is not null && webhookEvent.ProcessingStatus is "completed" or "ignored")
+            {
+                return string.Equals(webhookEvent.NormalizedStatus, "completed", StringComparison.OrdinalIgnoreCase);
+            }
+
+            webhookEvent ??= new PaymentWebhookEvent
+            {
+                Id = Guid.NewGuid(),
+                Gateway = PaymentGatewayNames.Fawaterak,
+                GatewayEventId = eventId,
+                ReceivedAt = now
+            };
+            webhookEvent.EventType = "payment.succeeded";
+            webhookEvent.PayloadJson = JsonSerializer.Serialize(new
+            {
+                invoiceId = transaction.GatewayTransactionId,
+                source = "status-poll-verification",
+                paidAt = invoiceStatus.PaidAt,
+            });
+            webhookEvent.PayloadSha256 = ComputePayloadSha256(webhookEvent.PayloadJson);
+            webhookEvent.ParserVersion = PaymentWebhookParserVersion;
+            webhookEvent.VerificationStatus = "verified";
+            webhookEvent.VerifiedAt = now;
+            webhookEvent.GatewayTransactionId = transaction.GatewayTransactionId;
+            webhookEvent.NormalizedStatus = "completed";
+            webhookEvent.AttemptCount += 1;
+            webhookEvent.LastAttemptedAt = now;
+            webhookEvent.ErrorMessage = null;
+            webhookEvent.ProcessingStatus = "processing";
+            webhookEvent.ProcessedAt = null;
+            if (db.Entry(webhookEvent).State == EntityState.Detached)
+            {
+                db.PaymentWebhookEvents.Add(webhookEvent);
+            }
+            await db.SaveChangesAsync(ct);
+
+            await ApplyVerifiedPaymentWebhookEventAsync(
+                webhookEvent.Id,
+                webhookEvent.GatewayTransactionId,
+                webhookEvent.NormalizedStatus,
+                PaymentWebhookCategories.Payment,
+                webhookEvent.GatewayTransactionId,
+                ct);
+            return true;
+        }
+        catch (Exception)
+        {
+            // Reconciliation is best-effort; never fail the status endpoint over it.
+            return false;
         }
     }
 

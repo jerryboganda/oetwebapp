@@ -74,20 +74,46 @@ public static class PaymentCallbackHmac
     }
 
     /// <summary>
-    /// Fawaterak callback authenticity: HMAC-SHA256(invoiceId + invoiceKey) or
-    /// SHA256(invoiceId + invoiceKey + hashKey), compared constant-time.
+    /// Fawaterak callback authenticity. Official format (per Fawaterak docs):
+    /// HMAC-SHA256 over "InvoiceId={id}&amp;InvoiceKey={key}&amp;PaymentMethod={method}"
+    /// using the vendor key, lowercase hex. Legacy local formats are kept as
+    /// constant-time fallbacks for older stored callbacks.
     /// </summary>
-    public static bool FawaterakHashMatches(string hashApiKey, string invoiceId, string invoiceKey, string providedHash)
+    public static bool FawaterakHashMatches(string hashApiKey, string invoiceId, string invoiceKey, string paymentMethod, string providedHash)
     {
         if (string.IsNullOrWhiteSpace(hashApiKey) || string.IsNullOrWhiteSpace(providedHash))
         {
             return false;
         }
 
+        var officialPayload = FormattableString.Invariant(
+            $"InvoiceId={invoiceId}&InvoiceKey={invoiceKey}&PaymentMethod={paymentMethod}");
+        if (FixedEquals(HmacSha256Hex(hashApiKey, officialPayload), providedHash))
+        {
+            return true;
+        }
+
+        // Legacy fallbacks (pre-2026-08 local formats; never produced by Fawaterak
+        // but kept so historical retries/replays still verify identically).
         var payload = invoiceId + invoiceKey;
         var hmac = HmacSha256Hex(hashApiKey, payload);
         var sha = Sha256Hex(payload + hashApiKey);
         return FixedEquals(hmac, providedHash) || FixedEquals(sha, providedHash);
+    }
+
+    /// <summary>
+    /// Fawaterak cancel/expired callback (Fawry/Aman/Masary) authenticity:
+    /// HMAC-SHA256 over "referenceId={id}&amp;PaymentMethod={method}".
+    /// </summary>
+    public static bool FawaterakCancelHashMatches(string hashApiKey, string referenceId, string paymentMethod, string providedHash)
+    {
+        if (string.IsNullOrWhiteSpace(hashApiKey) || string.IsNullOrWhiteSpace(providedHash))
+        {
+            return false;
+        }
+
+        var payload = FormattableString.Invariant($"referenceId={referenceId}&PaymentMethod={paymentMethod}");
+        return FixedEquals(HmacSha256Hex(hashApiKey, payload), providedHash);
     }
 
     /// <summary>
