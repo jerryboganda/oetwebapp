@@ -1,3 +1,8 @@
+---
+name: oet-pronunciation-coach
+description: Coaches OET pronunciation from ASR transcripts using medicine vocabulary, stress, and practical practice lines.
+---
+
 # Pronunciation Coach - Rules Package
 
 Grounded guidance for the pronunciation coaching agent.

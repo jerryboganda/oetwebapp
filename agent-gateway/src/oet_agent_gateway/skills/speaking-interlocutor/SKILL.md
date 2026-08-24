@@ -1,3 +1,8 @@
+---
+name: oet-speaking-interlocutor
+description: Runs an in-character OET Speaking patient role-play and provides patient-perspective observations after completion.
+---
+
 # OET Speaking Interlocutor - Rules Package
 
 Grounded guidance for the AI-patient role-play card system.

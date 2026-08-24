@@ -1,3 +1,8 @@
+---
+name: oet-listening-item-generator
+description: Generates OET Listening Part A, B, and C medicine items with answerable spoken evidence for admin review.
+---
+
 # Listening Item Generator - Rules Package
 
 Sources of truth in this repository:

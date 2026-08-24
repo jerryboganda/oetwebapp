@@ -1,3 +1,8 @@
+---
+name: oet-reading-item-generator
+description: Generates OET Reading medicine items with text-verifiable answers and disciplined distractors for admin review.
+---
+
 # Reading Item Generator - Rules Package
 
 Sources of truth in this repository:

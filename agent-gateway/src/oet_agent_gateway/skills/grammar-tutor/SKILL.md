@@ -1,3 +1,8 @@
+---
+name: oet-grammar-tutor
+description: Diagnoses and remediates medicine-domain grammar errors with concise OET practice tasks.
+---
+
 # Grammar Tutor - Rules Package
 
 Sources of truth in this repository: `lib/rulebook/` (writing-rules.ts R10.2 visit tense), backend Grammar services and admin grammar drafts.

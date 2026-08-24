@@ -1,3 +1,8 @@
+---
+name: oet-writing-examiner
+description: Grades OET Writing letters against the six official criteria and produces evidence-grounded examiner feedback.
+---
+
 # OET Writing Examiner - Rules Package
 
 Grounded guidance for grading OET Writing (medicine profession).

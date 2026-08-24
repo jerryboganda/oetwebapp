@@ -1,3 +1,8 @@
+---
+name: oet-mock-analysis
+description: Analyses OET mock performance against canonical subtest pass anchors and produces ranked next steps.
+---
+
 # Mock Analysis - Rules Package
 
 Sources of truth in this repository:

@@ -1,3 +1,8 @@
+---
+name: oet-drill-author
+description: Drafts OET Speaking role-play cards and short drills for controlled admin authoring and review.
+---
+
 # Speaking Drill Author - Rules Package
 
 Sources of truth in this repository:
