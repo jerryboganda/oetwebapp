@@ -41,11 +41,13 @@ function Set-RepoVisibility {
 }
 
 if (-not $Sha) {
-    $Sha = (& git rev-parse HEAD).Trim()
+    $Sha = 'HEAD'
 }
-if ($Sha -notmatch '^[0-9a-f]{7,40}$') {
-    throw "Invalid SHA: $Sha"
+$resolved = (& git rev-parse --verify $Sha).Trim()
+if (-not $resolved -or $resolved -notmatch '^[0-9a-f]{40}$') {
+    throw "Cannot resolve full commit SHA from '$Sha'"
 }
+$Sha = $resolved
 
 Write-Output "SHIP-WATCH repo=$Repo sha=$Sha workflow=$Workflow"
 

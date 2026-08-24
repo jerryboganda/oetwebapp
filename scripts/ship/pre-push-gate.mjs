@@ -89,9 +89,9 @@ function stagedImpeccable() {
   );
 }
 
-function loadTypescript() {
+async function loadTypescript() {
   try {
-    return import('typescript');
+    return await import('typescript');
   } catch {
     return null;
   }
@@ -271,7 +271,7 @@ export async function runGate({ ci = false, files = null, readFile = null } = {}
   });
 
   const tsNS = await loadTypescript();
-  const tsMod = tsNS?.default ?? tsNS;
+  const tsMod = tsNS?.default ?? tsNS ?? null;
 
   for (const relPath of targets) {
     const source = reader(relPath);
