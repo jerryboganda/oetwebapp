@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -9,9 +10,10 @@ namespace OetLearner.Api.Services.Seeding;
 //
 // Seeds:
 //   * The `antigravity-gateway` AiProvider row (OpenAiCompatible dialect,
-//     OpenAI-compatible chat/completions base URL). Keys are NOT seeded -
-//     the admin pastes the internal service token in /admin/ai-providers,
-//     exactly like CoreAiProviderSeeder (keyless rows, encrypted on save).
+//     OpenAI-compatible chat/completions base URL). When
+//     AGENTGATEWAY_INTERNAL_SERVICE_TOKEN is present, the token is encrypted
+//     with the same purpose-scoped DataProtection pipeline used by the admin
+//     provider editor; otherwise the row remains an inactive placeholder.
 //   * Feature-route rows pointing the supported AI features at the gateway.
 //
 // Strictly additive - an existing row/route is NEVER overwritten, so admins
@@ -67,10 +69,17 @@ public static class AntigravityGatewayRouteDefaults
 /// and its feature routes.</summary>
 public static class AntigravityGatewaySeeder
 {
-    public static async Task<int> SeedAsync(LearnerDbContext db, CancellationToken ct = default)
+    private const string ProtectorPurpose = "AiProvider.PlatformKey.v1";
+
+    public static async Task<int> SeedAsync(
+        LearnerDbContext db,
+        IDataProtectionProvider dataProtectionProvider,
+        CancellationToken ct = default)
     {
         var now = DateTimeOffset.UtcNow;
         var inserted = 0;
+        var gatewayToken = Environment.GetEnvironmentVariable("AGENTGATEWAY_INTERNAL_SERVICE_TOKEN")?.Trim();
+        var protector = dataProtectionProvider.CreateProtector(ProtectorPurpose);
 
         var provider = await db.AiProviders
             .FirstOrDefaultAsync(p => p.Code == AntigravityGatewayRouteDefaults.ProviderCode, ct);
@@ -86,14 +95,24 @@ public static class AntigravityGatewaySeeder
                 Category = AiProviderCategory.TextChat,
                 BaseUrl = AntigravityGatewayRouteDefaults.GatewayBaseUrl,
                 DefaultModel = "agent:writing-examiner",
-                EncryptedApiKey = string.Empty,
-                ApiKeyHint = "paste the gateway internal service token here",
+                EncryptedApiKey = string.IsNullOrWhiteSpace(gatewayToken)
+                    ? string.Empty
+                    : protector.Protect(gatewayToken),
+                ApiKeyHint = string.IsNullOrWhiteSpace(gatewayToken) ? string.Empty : "gateway-token",
                 AllowedModelsCsv = "agent:writing-examiner,agent:speaking-interlocutor,agent:pronunciation-coach,agent:grammar-tutor,agent:reading-item-generator,agent:listening-item-generator,agent:drill-author,agent:mock-analysis",
                 PricePer1kPromptTokens = 0m,
                 PricePer1kCompletionTokens = 0m,
                 FailoverPriority = 60,
                 IsActive = false,
             });
+            providerReady = !string.IsNullOrWhiteSpace(gatewayToken);
+            inserted++;
+        }
+        else if (!providerReady && !string.IsNullOrWhiteSpace(gatewayToken))
+        {
+            provider.EncryptedApiKey = protector.Protect(gatewayToken);
+            provider.ApiKeyHint = "gateway-token";
+            providerReady = true;
             inserted++;
         }
 
@@ -156,9 +175,10 @@ public sealed class AntigravityGatewaySeedHostedService(
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var dataProtectionProvider = scope.ServiceProvider.GetRequiredService<IDataProtectionProvider>();
         try
         {
-            var added = await AntigravityGatewaySeeder.SeedAsync(db, ct);
+            var added = await AntigravityGatewaySeeder.SeedAsync(db, dataProtectionProvider, ct);
             if (added > 0)
             {
                 logger.LogInformation(

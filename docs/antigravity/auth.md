@@ -47,7 +47,8 @@ adapter modes shipped by the gateway.
 `ANTIGRAVITY_GATEWAY_ROUTES_ENABLED` is an explicit route-takeover gate. The
 production default is `false`; the startup seeder creates an inactive provider
 placeholder but does not redirect learner features until this flag is enabled
-and the backend provider token exists.
+and the backend provider token exists. The token is encrypted automatically
+from `AGENTGATEWAY_INTERNAL_SERVICE_TOKEN`.
 
 One personal AI Pro subscription cannot serve all paying students at peak:
 - quota refreshes every ~5 hours with a weekly cap;

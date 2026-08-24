@@ -88,6 +88,7 @@ x-learner-api-slot: &learner-api-slot
     AI__DefaultMaxTokens: ${AI__DEFAULTMAXTOKENS:-4096}
     AI__DefaultTemperature: ${AI__DEFAULTTEMPERATURE:-0.2}
     ANTIGRAVITY_GATEWAY_ROUTES_ENABLED: ${ANTIGRAVITY_GATEWAY_ROUTES_ENABLED:-false}
+    AGENTGATEWAY_INTERNAL_SERVICE_TOKEN: ${AGENTGATEWAY_INTERNAL_SERVICE_TOKEN:-}
     Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:-}
     Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:-}
     Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:-}

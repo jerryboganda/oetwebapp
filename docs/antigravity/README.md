@@ -59,9 +59,10 @@ providers in this phase — see roadmap.md Phase 3 rollout matrix.
 ## Credentials (NEVER in git)
 
 - Gateway: `GEMINI_API_KEY` env (server-side only) + `AGENTGATEWAY_INTERNAL_SERVICE_TOKEN`.
-- Backend: paste the same internal service token into the `antigravity-gateway`
-  row in `/admin/ai-providers` (encrypted at rest by the existing
-  AiProviderRegistry DataProtection pipeline).
+- Backend: set `AGENTGATEWAY_INTERNAL_SERVICE_TOKEN` in the API/gateway
+  environment; startup encrypts it with the existing AiProviderRegistry
+  DataProtection purpose. The admin provider editor remains available for
+  manual rotation.
 
 ## Validation commands
 

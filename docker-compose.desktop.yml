@@ -50,6 +50,7 @@ services:
       Features__EnableSwagger: "true"
       Storage__LocalRootPath: /var/opt/oet-learner/storage
       ANTIGRAVITY_GATEWAY_ROUTES_ENABLED: ${ANTIGRAVITY_GATEWAY_ROUTES_ENABLED:-false}
+      AGENTGATEWAY_INTERNAL_SERVICE_TOKEN: ${AGENTGATEWAY_INTERNAL_SERVICE_TOKEN:-}
     volumes:
       - oet_desktop_storage:/var/opt/oet-learner/storage
     ports:
