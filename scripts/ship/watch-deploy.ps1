@@ -146,8 +146,15 @@ docker inspect oet-web-blue oet-web-green oet-api-blue oet-api-green oet-agent-g
 "@
         $inspect = & ssh -o BatchMode=yes -o ConnectTimeout=12 -o StrictHostKeyChecking=accept-new root@185.252.233.186 $remote
         Write-Output $inspect
-        if ($inspect -notmatch [regex]::Escape($Sha)) {
-            Write-Output "LIVE_SHA_MISMATCH expected image tag to contain $Sha"
+        # Join first. PowerShell -match/-notmatch on a string[] filters the
+        # array; leftover green lines would look like a miss even when blue
+        # already carries this SHA.
+        $inspectText = @($inspect | ForEach-Object { [string]$_ }) -join "`n"
+        $escaped = [regex]::Escape($Sha)
+        $hasWeb = $inspectText -match ("NAME=/oet-web-(blue|green).*" + $escaped)
+        $hasApi = $inspectText -match ("NAME=/oet-api-(blue|green).*" + $escaped)
+        if (-not ($hasWeb -and $hasApi)) {
+            Write-Output "LIVE_SHA_MISMATCH expected a web+api slot tagged $Sha"
             $healthFailed = $true
         } else {
             Write-Output "LIVE_SHA_OK $Sha"
