@@ -377,6 +377,43 @@ public sealed class ReadinessComputationService(
         CancellationToken ct)
     {
         var weekStart = StartOfIsoWeek(DateOnly.FromDateTime(now.UtcDateTime));
+        var overallRounded = Round2(overall);
+        var writing = Round2(subtests["writing"].Current ?? 0);
+        var speaking = Round2(subtests["speaking"].Current ?? 0);
+        var reading = Round2(subtests["reading"].Current ?? 0);
+        var listening = Round2(subtests["listening"].Current ?? 0);
+        var vocabulary = Round2(vocab.Current);
+
+        if (db.Database.IsNpgsql())
+        {
+            // Atomic upsert: concurrent first-visit requests race on
+            // IX_ReadinessHistories_UserId_WeekStartDate. ON CONFLICT makes the
+            // loser update the winner's row in the same statement instead of
+            // failing the request with 23505.
+            var historyId = $"rh-{Guid.NewGuid():N}";
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO "ReadinessHistories"
+                    ("Id", "UserId", "WeekStartDate", "RecordedAt",
+                     "Overall", "Writing", "Speaking", "Reading", "Listening", "Vocabulary",
+                     "Risk", "TargetDateProbability")
+                VALUES ({historyId}, {userId}, {weekStart}, {now},
+                        {overallRounded}, {writing}, {speaking}, {reading}, {listening}, {vocabulary},
+                        {risk}, {probability})
+                ON CONFLICT ("UserId", "WeekStartDate") DO UPDATE SET
+                    "RecordedAt" = EXCLUDED."RecordedAt",
+                    "Overall" = EXCLUDED."Overall",
+                    "Writing" = EXCLUDED."Writing",
+                    "Speaking" = EXCLUDED."Speaking",
+                    "Reading" = EXCLUDED."Reading",
+                    "Listening" = EXCLUDED."Listening",
+                    "Vocabulary" = EXCLUDED."Vocabulary",
+                    "Risk" = EXCLUDED."Risk",
+                    "TargetDateProbability" = EXCLUDED."TargetDateProbability";
+                """,
+                ct);
+            return;
+        }
+
         var existing = await db.ReadinessHistories
             .FirstOrDefaultAsync(h => h.UserId == userId && h.WeekStartDate == weekStart, ct);
 
@@ -388,12 +425,12 @@ public sealed class ReadinessComputationService(
         };
 
         entry.RecordedAt = now;
-        entry.Overall = Round2(overall);
-        entry.Writing = Round2(subtests["writing"].Current ?? 0);
-        entry.Speaking = Round2(subtests["speaking"].Current ?? 0);
-        entry.Reading = Round2(subtests["reading"].Current ?? 0);
-        entry.Listening = Round2(subtests["listening"].Current ?? 0);
-        entry.Vocabulary = Round2(vocab.Current);
+        entry.Overall = overallRounded;
+        entry.Writing = writing;
+        entry.Speaking = speaking;
+        entry.Reading = reading;
+        entry.Listening = listening;
+        entry.Vocabulary = vocabulary;
         entry.Risk = risk;
         entry.TargetDateProbability = probability;
 
