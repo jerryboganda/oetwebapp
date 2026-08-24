@@ -219,7 +219,6 @@ export default function ReadingPracticePage() {
     setBusyKey('retest');
     setErrorMsg(null);
     try {
-      showCreditFeedback(started.feedbackMessage);
       const started = await startReadingErrorBankRetest({ partCode: focusPart ?? undefined, limit: 10 });
       router.push(started.playerRoute);
     } catch (err) {

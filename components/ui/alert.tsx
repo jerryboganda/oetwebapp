@@ -17,7 +17,7 @@ const alertConfig: Record<AlertVariant, { icon: typeof Info; bgClass: string; te
   error: { icon: AlertCircle, bgClass: 'bg-red-50 dark:bg-red-950', textClass: 'text-red-800 dark:text-red-200', borderClass: 'border-red-200 dark:border-red-800' },
 };
 
-interface InlineAlertProps {
+interface InlineAlertProps extends React.HTMLAttributes<HTMLDivElement> {
   variant?: AlertVariant;
   title?: string;
   children: ReactNode;
@@ -26,7 +26,7 @@ interface InlineAlertProps {
   action?: ReactNode;
 }
 
-export function InlineAlert({ variant = 'info', title, children, dismissible, className, action }: InlineAlertProps) {
+export function InlineAlert({ variant = 'info', title, children, dismissible, className, action, ...rest }: InlineAlertProps) {
   const [visible, setVisible] = useState(true);
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const motionProps = getSurfaceMotion('item', reducedMotion);
@@ -39,6 +39,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
       {visible && (
         <motion.div
           role="alert"
+          {...rest}
           {...motionProps}
           className={cn('flex items-start gap-3 rounded-2xl border px-4 py-4 shadow-sm', config.bgClass, config.borderClass, className)}
         >

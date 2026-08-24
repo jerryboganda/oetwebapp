@@ -208,7 +208,12 @@ describe('Admin Listening preview', () => {
     expect(screen.getByText('Correct answer: severe')).toBeInTheDocument();
     expect(screen.getByText('Accepted variants')).toBeInTheDocument();
     expect(screen.getByText('intense')).toBeInTheDocument();
-    expect(screen.getByText('Approved rationale')).toBeInTheDocument();
+    // Both marking questions expose an approved rationale; assert per-question
+    // instead of globally to avoid an ambiguous text match.
+    const rationaleBlocks = screen.getAllByText('Approved rationale');
+    expect(rationaleBlocks).toHaveLength(2);
+    expect(rationaleBlocks[0].parentElement).toHaveTextContent('The transcript uses severe.');
+    expect(rationaleBlocks[1].parentElement).toHaveTextContent('The speaker recommends an immediate review.');
     expect(screen.getByText('The transcript uses severe.')).toBeInTheDocument();
     expect(screen.getByText('Distractor authoring')).toBeInTheDocument();
     expect(screen.getByText('Distractor explanation')).toBeInTheDocument();

@@ -45,7 +45,7 @@ describe('ListeningPlayerSkinShell', () => {
       </ListeningPlayerSkinShell>,
     );
     expect(screen.getByText(/OET@Home/i)).toBeInTheDocument();
-    expect(screen.getByText(/kiosk mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/guidance mode/i)).toBeInTheDocument();
     expect(document.querySelector('[data-listening-skin="home"]')).not.toBeNull();
   });
 

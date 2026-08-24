@@ -45,7 +45,8 @@ describe('AdminContentHubPage', () => {
     expect(screen.getByRole('link', { name: /Content Library Open workspace/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Grammar Lessons Open workspace/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Quality & governance' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Scoring System Open workspace/i })).toBeInTheDocument();
+    // Scoring System now requires AssessmentGovernanceRead, which read-only content admins lack.
+    expect(screen.queryByRole('link', { name: /Scoring System Open workspace/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Quality Review Open workspace/i })).toBeInTheDocument();
 
     expect(screen.queryByRole('button', { name: /new content/i })).not.toBeInTheDocument();
