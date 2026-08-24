@@ -1,6 +1,10 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-09-25
+Last updated: 2026-08-24
+
+## Current Checkpoint - Push no longer stops at "deploy initiated"
+
+- `pnpm run ship:gate` + `pnpm run ship:watch` + `deploy.yml` `syntax-gate` now own leftover rebase syntax and Build & Deploy for this SHA. Agent must dump logs, fix, and re-push without waiting. Private flip only after that deploy succeeds.
 
 ## Current Checkpoint - Shared wallet screenshot close-out
 

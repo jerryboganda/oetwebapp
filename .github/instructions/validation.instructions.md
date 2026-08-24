@@ -15,6 +15,8 @@ Host toolchain is installed and verified: Node 22.x, pnpm 10.33.0, .NET 10.x.
 ## Command ladder (run the smallest credible subset first)
 
 ```powershell
+pnpm run ship:gate          # REQUIRED before every main push (seconds)
+pnpm run ship:watch         # REQUIRED after every main push (Build & Deploy only)
 pnpm exec tsc --noEmit      # type-check frontend
 pnpm run lint               # eslint
 pnpm test                   # vitest unit tests
@@ -24,6 +26,8 @@ pnpm run backend:test       # dotnet test
 pnpm run check:encoding     # encoding guard
 pnpm run test:e2e:smoke     # Playwright smoke (when UI flows change)
 ```
+
+Ship-it default is `ship:gate` only. Do not run the rest of this ladder unless the change needs it or the user asked. Never treat "pushed" as done.
 
 If a script misbehaves under PowerShell quoting, fall back to `cmd /c "pnpm run <script>"`.
 

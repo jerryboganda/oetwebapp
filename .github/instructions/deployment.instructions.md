@@ -1,7 +1,7 @@
 ---
 name: "Deployment And Packaging"
 description: "Use when editing Docker, CI/CD, release workflows, deployment docs, production/staging configuration, storage persistence, Electron packaging, or Capacitor build surfaces."
-applyTo: "Dockerfile*,docker-compose*.yml,.github/workflows/*.yml,scripts/deploy/**,DEPLOYMENT.md,DEPLOY-MANUAL.md,electron/**,capacitor.config.ts,android/**,ios/**"
+applyTo: "Dockerfile*,docker-compose*.yml,.github/workflows/*.yml,scripts/deploy/**,scripts/ship/**,DEPLOYMENT.md,DEPLOY-MANUAL.md,electron/**,capacitor.config.ts,android/**,ios/**"
 ---
 
 # Deployment And Packaging
@@ -29,6 +29,13 @@ Local validation is NOT done here — it runs on the host via pnpm (see `validat
 
 - Electron packaging uses `electron-builder.config.cjs` and the desktop compose/Playwright configs.
 - Capacitor (`capacitor.config.ts`, `android/`, `ios/`) wraps the web build; keep platform configs in sync.
+
+## Post-push ownership (do not stop at "deploy initiated")
+
+- Required local gate before every `main` push: `pnpm run ship:gate` (`scripts/ship/pre-push-gate.mjs`). Seconds only. Catches conflict markers, leftover rebase splices, and brace imbalance. Not a full `pnpm build` / `dotnet test`.
+- After push, watch **only** `Build & Deploy (web + API)` for this SHA: `pnpm run ship:watch`. Dump `--log-failed` on red, fix, gate, push again without waiting for the owner. Ignore QA Smoke.
+- `deploy.yml` `syntax-gate` job must stay first (`needs` of every image build). Do not remove it to "save a minute".
+- Flip the repo private only after this SHA's Build & Deploy succeeds. Then confirm public health + VPS image tags contain the SHA. VPS remains pull-only.
 
 ## VPS production operational notes
 

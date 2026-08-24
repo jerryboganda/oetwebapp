@@ -9,16 +9,20 @@ This file is always loaded by coding agents. Keep it compact. Do not restore lar
 - Desktop/mobile: Electron and Capacitor.
 - Key folders: `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `backend/`, `tests/`, `docs/`, `rulebooks/`.
 
-## 🚢 Ship-It Workflow — COMPULSORY (owner directive 2026-07-05)
+## 🚢 Ship-It Workflow — COMPULSORY (owner directive 2026-07-05, tightened 2026-08-24)
 
-Standing owner directive for **every** development/debugging task. Overrides any "only push when asked" default and any nudge toward heavy pre-merge testing:
+Standing owner directive for **every** development/debugging task. Overrides any "only push when asked" default and any nudge toward heavy pre-merge testing.
+
+**Stopping at "pushed, deploy initiated" is a defect.** The agent owns the push until Build & Deploy for **this SHA** succeeds and live health is green. The owner must not have to ask "did deploy work?".
 
 1. Do the task properly (correctness/root-cause still matter).
-2. Run ONE lightweight, targeted check (touched-area typecheck/build, or the single relevant test, or a quick repro). **No full-length, multi-suite test marathons.** Don't block on flaky CI (QA Smoke is chronically red — ignore it).
-3. Commit → push to `main` → deploy to production (`gh pr merge <#> --squash --admin --delete-branch`, or push `main`; pushing `main` triggers the blue/green prod deploy). Stage explicit paths, never `git add -A`. Never commit secrets/`.env*`.
-4. Report what shipped in 1–2 lines and STOP. **The owner verifies on live production** and reports back any issue. Don't linger on CI or re-test.
+2. Run `pnpm run ship:gate` (seconds). That is the required pre-push check. Optional: one extra touched-area repro. **No** full `pnpm build`, full `pnpm test`, or full `dotnet test` unless the user asked. Do not block on flaky CI (QA Smoke is chronically red — ignore it). Ignore Speaking/Mobile/Tauri unless the **error** is in a file this change touched.
+3. Stage explicit paths only. Never `git add -A`. Never commit secrets, `.env*`, or `.impeccable/`. Commit → make `jerryboganda/oetwebapp` **public** → `git push origin main` (never `--force`).
+4. **Watch** `Build & Deploy (web + API)` for this SHA until it **finishes**: `pnpm run ship:watch` or `powershell -ExecutionPolicy Bypass -File scripts/ship/watch-deploy.ps1`. Do not report done after push.
+5. If that run fails: dump `--log-failed`, fix the compile/parse error, run `pnpm run ship:gate`, commit, push again, watch again. **Do this without waiting for the owner to ask.** Cap automatic fix-loops at 3; if still red, say exactly what is still failing and keep the repo public.
+6. Flip the repo **private only after this SHA's Build & Deploy succeeds**. Then confirm live: `https://app.oetwithdrhesham.co.uk/api/health`, `https://api.oetwithdrhesham.co.uk/health/ready`, `/health/live`, and VPS image tags contain this SHA. Then 2–3 lines of what shipped.
 
-Only skip the auto-push if the user explicitly says "don't push" for that task.
+Only skip the auto-push if the user explicitly says "don't push" for that task. Never skip the watch after a push you did make.
 
 ## Operating Rules
 

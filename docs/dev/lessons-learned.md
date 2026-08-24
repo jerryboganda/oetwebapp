@@ -3,6 +3,13 @@
 Practical, session-proven gotchas for this repo. Read before similar work.
 Add new entries at the top; keep each entry to: **Mistake → Lesson → Action**.
 
+## 2026-08-24 — Silent "pushed, deploy initiated" left prod on the old SHA
+
+- **Rebase leftovers shipped because the agent stopped at push.** `payment-return/page.tsx` had `return () => {, user?.userId` (Turbopack "Expression expected"). `AiPackageCreditServiceTests.cs` had an extra `}` so the next `[Fact]` nested (CS0106). Build & Deploy failed; live stayed on `b23893ec` until the owner asked.
+  → Never report done after push. Run `pnpm run ship:gate` before push and `pnpm run ship:watch` until Build & Deploy for **this SHA** succeeds. On fail: dump logs, fix, push again without waiting. Flip private only after that success.
+  → `deploy.yml` `syntax-gate` now fails in seconds on conflict markers / leftover splices / brace imbalance so Docker does not start.
+- **QA Smoke / Speaking 450 warnings are not deploy blockers.** The one Speaking lint *error* was the same payment-return parse. Ignore chronic red suites unless the error is in a touched file.
+
 ## 2026-08-24 — Antigravity gateway hardening + phases 3c–7
 
 - **"Unused import" cleanup removed `get_settings` from server.py while `create_app()` still called it** → gateway crash-looped on the VPS and the blue/green health gate correctly blocked promotion. All 38 tests stayed green because every test passes `settings` explicitly — the production-only `create_app()` no-args path was never exercised.
@@ -37,4 +44,4 @@ Add new entries at the top; keep each entry to: **Mistake → Lesson → Action*
 - Host validation: `pnpm exec tsc --noEmit`, `pnpm run lint`, `pnpm test`, `pnpm run backend:build`, `pnpm run backend:test`.
 - Gateway tests: `agent-gateway\.venv\Scripts\python.exe -m pytest agent-gateway/tests -q` (no network/harness needed).
 - Rust: `cargo check` with space-free `CARGO_TARGET_DIR` (see above).
-- Ship-It: one targeted check → commit → push `main` → owner verifies on prod.
+- Ship-It: `pnpm run ship:gate` → public → push `main` → `pnpm run ship:watch` → fix/push on red without asking → private only after Build & Deploy for this SHA succeeds → live health.

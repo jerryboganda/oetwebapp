@@ -33,6 +33,7 @@ How agents operate in this repo. Repo rules win over generic skill/agent/plugin 
 - Prefer focused tests for behavior changes and bug fixes.
 - Review the diff for OET contracts, security, tests, and regressions.
 - Validate with the lightest credible host command (`validation.instructions.md`) before reporting done.
+- After a `main` push, `pnpm run ship:watch` until Build & Deploy for this SHA succeeds. Failure logs are the agent's job to fix and re-push. Do not stop at "deploy initiated" and do not wait for the owner to notice.
 - Ask only when a missing decision blocks correctness or safety; offer a recommended option.
 
 ## Lean context policy

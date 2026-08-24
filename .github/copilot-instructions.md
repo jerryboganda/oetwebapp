@@ -42,9 +42,11 @@ Ask only when a missing decision blocks correctness or safety.
 - Admin UI: load admin Hallmark instructions and keep operational UI dense, restrained, accessible, and scan-friendly.
 - Review/audit requests: lead with findings ordered by severity.
 
-## GitHub Actions visibility
+## GitHub Actions visibility + deploy ownership
 
-For every Actions run (deploy/CI/smoke/rerun): make `jerryboganda/oetwebapp` **public** first, start the run, then set it **private** again when the run finishes. Never leave it public. Never start Actions while it is private.
+For every Actions run (deploy/CI/smoke/rerun): make `jerryboganda/oetwebapp` **public** first, start the run, then set it **private** again when the **needed** run finishes. Never leave it public. Never start Actions while it is private.
+
+After every `main` push: run `pnpm run ship:gate` before push, then `pnpm run ship:watch` (or `scripts/ship/watch-deploy.ps1`) until **Build & Deploy (web + API)** for this SHA succeeds and live health is green. On failure, dump logs, fix, push again — do not wait for the owner. Do not stop at "deploy initiated". Ignore QA Smoke. Private flip only after that deploy succeeds.
 
 ## Execution Locality
 
