@@ -335,7 +335,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             account.ExpiresAt = Later(account.ExpiresAt, giftExpiry);
         }
 
-        AddTransaction(account, new AiPackageCreditTransaction)
+        AddTransaction(account, new AiPackageCreditTransaction
         {
             Id = NewId("aipkg-tx"),
             PackageId = planCode,
@@ -2079,9 +2079,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             .Where(lot => Remaining(lot) > 0 || lot.UnlimitedGrading || lot.UnlimitedListening || lot.UnlimitedReading)
             .Select(lot => lot.PackageId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
-            .Distinct(StringCo,
-        string BalanceSource,
-        int CreditsUsedmparer.OrdinalIgnoreCase)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
             .Cast<string>()
             .ToList();
         int? daysLeft = expires is { } expiry ? Math.Max(0, (int)Math.Ceiling((expiry - now).TotalDays)) : null;
@@ -2094,7 +2092,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         int WritingDelta,
         int SpeakingDelta,
         string AllocationJson,
-        string FeedbackMessage);
+        string FeedbackMessage,
+        string BalanceSource,
+        int CreditsUsed);
 
     private sealed record LotAllocation(
         string? LotId,
