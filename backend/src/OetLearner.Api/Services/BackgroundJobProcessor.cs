@@ -62,6 +62,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private DateTimeOffset _lastPrivateSpeakingReminderAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastPrivateSpeakingReservationExpiryAt = DateTimeOffset.MinValue;
     private DateTimeOffset _lastStuckJobRecoveryAt = DateTimeOffset.MinValue;
+    /// <summary>Jobs claimed by the most recent pass; 0 = idle tick.</summary>
+    private int _lastClaimedJobCount;
     private static readonly TimeSpan ReconciliationInterval = TimeSpan.FromHours(1);
     /// <summary>How often to scan for jobs orphaned in Processing (e.g. by a
     /// container restart mid-job). Runs on the first tick after startup too,
@@ -111,7 +113,11 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
             try
             {
-                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                // Idle backoff: when the previous pass claimed no jobs, poll
+                // less frequently. Cuts steady-state DB chatter ~3x while a
+                // queued job still starts within 2 seconds of appearing.
+                var idle = _lastClaimedJobCount == 0;
+                await Task.Delay(idle ? TimeSpan.FromSeconds(6) : TimeSpan.FromSeconds(2), stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -132,6 +138,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var now = DateTimeOffset.UtcNow;
         var jobs = await ClaimQueuedJobsAsync(db, now, cancellationToken);
+        _lastClaimedJobCount = jobs.Count;
 
         foreach (var job in jobs)
         {

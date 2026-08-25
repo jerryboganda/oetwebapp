@@ -9,6 +9,9 @@ x-learner-api-slot: &learner-api-slot
   image: ${API_IMAGE:-oetwebsite-learner-api:local}
   pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
   restart: unless-stopped
+  # Cap each slot so a memory leak or request spike can never starve postgres
+  # on the shared VPS. .NET GC respects cgroup limits; 2G is ample headroom.
+  mem_limit: 2g
   depends_on:
     postgres:
       condition: service_healthy
@@ -148,6 +151,9 @@ x-web-slot: &web-slot
   image: ${WEB_IMAGE:-oetwebsite-web:local}
   pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
   restart: unless-stopped
+  # Cap each slot so a runaway Next.js worker can never starve postgres or
+  # the API on the shared VPS. 1G covers normal SSR peaks with headroom.
+  mem_limit: 1g
   environment: &web-env
     NODE_ENV: production
     PORT: 3000
@@ -183,6 +189,10 @@ services:
     image: pgvector/pgvector:pg17
     container_name: oet-postgres
     restart: unless-stopped
+    # 3G cap (shared_buffers=2G lives inside it) + larger SYSV shm for
+    # parallel maintenance (vacuum/analyze on the notification tables).
+    mem_limit: 3g
+    shm_size: 512m
     command:
       - postgres
       - -c
@@ -281,6 +291,7 @@ services:
     pull_policy: ${PRODUCTION_IMAGE_PULL_POLICY:-always}
     container_name: oet-agent-gateway
     restart: unless-stopped
+    mem_limit: 1g
     # Graceful drain: the gateway finishes in-flight agent turns (bounded by
     # AGENTGATEWAY_DRAIN_TIMEOUT_SECONDS) before SIGKILL during blue/green swaps.
     stop_grace_period: 45s
