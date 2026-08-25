@@ -834,22 +834,28 @@ public static class LearnerEndpoints
 
         var recentResults = attempts
             .Where(a => a.Status == ReadingAttemptStatus.Submitted)
-            .Where(IsCanonicalReadingScoreAttempt)
+            .Where(a => IsCanonicalReadingScoreAttempt(a) || IsReadingPartPracticeAttempt(a))
             .OrderByDescending(a => a.SubmittedAt)
             .Take(5)
-            .Select(a => new
+            .Select(a =>
             {
-                attemptId = a.Id,
-                paperId = a.PaperId,
-                paperTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper"),
-                rawScore = a.RawScore ?? 0,
-                maxRawScore = a.MaxRawScore,
-                scaledScore = HasApprovedReadingScore(a) ? a.ScaledScore : null,
-                gradeLetter = HasApprovedReadingScore(a) ? a.ScoreConversionGrade ?? "—" : "—",
-                requiresAdminReview = a.RequiresAdminReview,
-                adminReviewReason = a.RequiresAdminReview ? a.AdminReviewReason : null,
-                a.SubmittedAt,
-                route = $"/reading/paper/{a.PaperId}/results?attemptId={a.Id}",
+                var partCode = TryGetReadingPartPracticeCode(a);
+                var baseTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper");
+                var displayTitle = partCode is not null ? $"{baseTitle} — Part {partCode} practice" : baseTitle;
+                return new
+                {
+                    attemptId = a.Id,
+                    paperId = a.PaperId,
+                    paperTitle = displayTitle,
+                    rawScore = a.RawScore ?? 0,
+                    maxRawScore = a.MaxRawScore,
+                    scaledScore = HasApprovedReadingScore(a) ? a.ScaledScore : null,
+                    gradeLetter = HasApprovedReadingScore(a) ? a.ScoreConversionGrade ?? "—" : "—",
+                    requiresAdminReview = a.RequiresAdminReview,
+                    adminReviewReason = a.RequiresAdminReview ? a.AdminReviewReason : null,
+                    a.SubmittedAt,
+                    route = $"/reading/paper/{a.PaperId}/results?attemptId={a.Id}",
+                };
             })
             .ToList();
 
@@ -1077,6 +1083,49 @@ public static class LearnerEndpoints
             && attempt.ScaledScore.HasValue
             && !string.IsNullOrWhiteSpace(attempt.ScoreConversionTableVersionKey)
             && attempt.ScoreConversionPassed.HasValue;
+
+    private static bool IsReadingPartPracticeAttempt(ReadingAttempt attempt)
+    {
+        if (attempt.Mode != ReadingAttemptMode.Drill) return false;
+        if (string.IsNullOrWhiteSpace(attempt.ScopeJson)) return false;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(attempt.ScopeJson);
+            if (!doc.RootElement.TryGetProperty("kind", out var kind)
+                || !string.Equals(kind.GetString(), "part-practice", StringComparison.OrdinalIgnoreCase))
+                return false;
+            if (!doc.RootElement.TryGetProperty("partCode", out var pc)
+                || pc.ValueKind != System.Text.Json.JsonValueKind.String)
+                return false;
+            var part = pc.GetString();
+            return part is "A" or "B" or "C";
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string? TryGetReadingPartPracticeCode(ReadingAttempt attempt)
+    {
+        if (string.IsNullOrWhiteSpace(attempt.ScopeJson)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(attempt.ScopeJson);
+            if (!doc.RootElement.TryGetProperty("kind", out var kind)
+                || !string.Equals(kind.GetString(), "part-practice", StringComparison.OrdinalIgnoreCase))
+                return null;
+            if (!doc.RootElement.TryGetProperty("partCode", out var pc)
+                || pc.ValueKind != System.Text.Json.JsonValueKind.String)
+                return null;
+            var part = pc.GetString();
+            return part is "A" or "B" or "C" ? part : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 
     private static (DateTimeOffset PartADeadlineAt, DateTimeOffset PartBCDeadlineAt) ResolveReadingAttemptDeadlines(
         ReadingAttempt attempt,

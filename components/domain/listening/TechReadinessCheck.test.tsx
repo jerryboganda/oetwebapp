@@ -53,12 +53,13 @@ describe('TechReadinessCheck', () => {
     vi.unstubAllGlobals();
   });
 
-  it('fails closed when a scored audio asset fails integrity verification', async () => {
+  it('treats scored audio verification as advisory — probe success still marks audio ready with warning', async () => {
+    const onReady = vi.fn();
     render(
       <TechReadinessCheck
         audioProbeUrl="/probe.mp3"
         audioUrls={['https://cdn.example.test/scored.mp3']}
-        onReady={vi.fn()}
+        onReady={onReady}
       />,
     );
 
@@ -72,8 +73,12 @@ describe('TechReadinessCheck', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('A scored audio asset failed its readiness check.');
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Continue anyway' })).not.toBeInTheDocument();
+    // Probe tone succeeded, so exam gate is satisfied even though the scored
+    // asset failed. Full exams bulk-verify 4-5 assets and must not block on a
+    // single slow fetch while part practice (1 asset) succeeds.
+    expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ audioOk: true }));
+    expect(screen.getByRole('status')).toHaveTextContent('Audio confirmed');
+    expect(screen.getByRole('note')).toHaveTextContent('A scored audio asset failed its readiness check');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

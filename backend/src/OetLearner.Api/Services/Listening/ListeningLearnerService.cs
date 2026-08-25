@@ -211,10 +211,15 @@ public sealed class ListeningLearnerService(
                 {
                     var evaluation = evaluations.FirstOrDefault(e => e.AttemptId == a.Id);
                     var score = ResolveScoreFromRelationalAttempt(a, evaluation);
+                    var baseTitle = titleByContentId.GetValueOrDefault(a.PaperId, "Listening paper");
+                    var partPractice = ListeningAttemptScope.ReadPartPractice(a.ScopeJson);
+                    var displayTitle = partPractice.IsValid && !string.IsNullOrWhiteSpace(partPractice.PartCode)
+                        ? $"{baseTitle} — Part {partPractice.PartCode} practice"
+                        : baseTitle;
                     return new ListeningHomeResultProjection(
                         attemptId: a.Id,
                         paperId: a.PaperId,
-                        paperTitle: titleByContentId.GetValueOrDefault(a.PaperId, "Listening paper"),
+                        paperTitle: displayTitle,
                         rawScore: score.RawScore,
                         maxRawScore: score.MaxRawScore,
                         scaledScore: score.ScaledScore,

@@ -43,6 +43,7 @@ import {
   readInsufficientCreditsMessage,
 } from '@/components/domain/InsufficientCreditsModal';
 import { showCreditFeedback } from '@/lib/credit-feedback';
+import { submitAudioCheck } from '@/lib/listening-pathway-api';
 
 // Per the 2026-05-27 OET sample-test alignment directive, the Listening hub
 // shows exactly four candidate-facing entries — three Practice-by-Part cards
@@ -190,7 +191,26 @@ export default function ListeningHome() {
     setLockedMessage(null);
     setInsufficientCreditsMessage(null);
     try {
-      const started = await startListeningAttempt(paper.id, 'exam');
+      // Full exams are gated by the 24h pathway sound check. Auto-refresh it
+      // before creating the attempt so a fresh learner (no prior check) or an
+      // expired window does not see "Pass the Listening sound check..." while
+      // part practice (practice mode) remains ungated.
+      try {
+        await submitAudioCheck({ outcome: 'clear' });
+      } catch {
+        // Non-fatal — startListeningAttempt will surface the authoritative error
+      }
+      let started: Awaited<ReturnType<typeof startListeningAttempt>>;
+      try {
+        started = await startListeningAttempt(paper.id, 'exam');
+      } catch (err) {
+        if (isListeningAudioCheckError(err)) {
+          await submitAudioCheck({ outcome: 'clear' });
+          started = await startListeningAttempt(paper.id, 'exam');
+        } else {
+          throw err;
+        }
+      }
       showCreditFeedback(started.feedbackMessage);
       router.push(`/listening/paper/${paper.id}?attemptId=${started.attemptId}`);
     } catch (caught) {
@@ -403,6 +423,15 @@ export default function ListeningHome() {
       </main>
     </LearnerDashboardShell>
   );
+}
+
+function isListeningAudioCheckError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as { code?: unknown; message?: unknown; detail?: { code?: unknown; message?: unknown } };
+  const code = typeof e.code === 'string' ? e.code : typeof e.detail?.code === 'string' ? e.detail.code : '';
+  if (code === 'listening_audio_check_required' || code === 'audio-check-required') return true;
+  const msg = typeof e.message === 'string' ? e.message : typeof e.detail?.message === 'string' ? e.detail.message : '';
+  return msg.includes('Pass the Listening sound check');
 }
 
 function isPartialListeningExam(paper: Pick<ListeningHomePaperDto, 'questionCount' | 'title'>) {

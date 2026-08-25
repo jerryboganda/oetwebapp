@@ -215,15 +215,19 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const allSectionsAudioReady = subSections.length > 0
     && subSections.every((subSection) => Boolean(subSection.audioUrl));
   const scoredAudioUrls = useMemo(() => {
+    // Keep the verify set minimal — per-section URLs are the playback source.
+    // Extract URLs duplicate the section map and would double the verification
+    // work for the full exam (5 sections vs 1 for a single part), which made
+    // full-exam sound checks timeout while part practice succeeded.
     const urls = [
       session?.paper.audioUrl ?? null,
       ...Object.values(session?.paper.audioUrlByPart ?? {}),
-      ...(session?.paper.extracts ?? []).map((extract) => extract.audioUrl ?? null),
+      ...subSections.map((section) => section.audioUrl),
     ];
     return [...new Set(urls
       .filter((url): url is string => Boolean(url?.trim()))
       .map((url) => url.trim()))];
-  }, [session?.paper.audioUrl, session?.paper.audioUrlByPart, session?.paper.extracts]);
+  }, [session?.paper.audioUrl, session?.paper.audioUrlByPart, subSections]);
 
   useEffect(() => () => {
     Object.values(saveTimers.current).forEach(clearTimeout);

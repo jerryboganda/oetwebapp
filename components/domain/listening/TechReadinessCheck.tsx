@@ -36,20 +36,36 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady }: T
     };
   }, []);
 
+  const [verificationWarning, setVerificationWarning] = useState<string | null>(null);
+
   const runProbe = async () => {
     setStatus('running');
     setError(null);
+    setVerificationWarning(null);
     cleanupRef.current?.();
     const startedAt = Date.now();
     try {
       await playProbe(audioProbeUrl, volume, (cleanup) => {
         cleanupRef.current = cleanup;
       });
-      await verifyScoredAudioAssets(audioUrls);
+      // Verify scored assets as advisory only — a slow or missing asset must not
+      // block the full listening exam start when parts (single-asset) verify
+      // succeeds. The server already enforces HasAllRequiredAudioAssets before
+      // creating the attempt; this check is best-effort UX and stays
+      // non-blocking so the 24h sound-check gate + probe tone are the only
+      // hard gates.
+      let advisoryWarning: string | null = null;
+      try {
+        await verifyScoredAudioAssets(audioUrls);
+      } catch (verifyErr) {
+        advisoryWarning = verifyErr instanceof Error ? verifyErr.message : 'Scored audio verification failed';
+        console.warn('[Listening] scored audio verification advisory warning:', advisoryWarning);
+      }
       if (!mountedRef.current) return;
       cleanupRef.current?.();
       cleanupRef.current = null;
       setStatus('ok');
+      if (advisoryWarning) setVerificationWarning(advisoryWarning);
       onReady({
         audioOk: true,
         durationMs: Date.now() - startedAt,
@@ -99,9 +115,16 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady }: T
           </span>
         )}
         {status === 'ok' && (
-          <span role="status" className="inline-flex items-center gap-2 text-sm text-success">
-            <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> Audio confirmed.
-          </span>
+          <div className="space-y-2">
+            <span role="status" className="inline-flex items-center gap-2 text-sm text-success">
+              <CheckCircle2 aria-hidden="true" className="h-4 w-4" /> Audio confirmed.
+            </span>
+            {verificationWarning ? (
+              <p role="note" className="flex items-start gap-2 text-xs text-amber-800">
+                <AlertTriangle aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0" /> {verificationWarning} — you can still start; the exam will verify audio during playback.
+              </p>
+            ) : null}
+          </div>
         )}
         {status === 'failed' && (
           <div className="space-y-2">
