@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, FileLock2, GraduationCap, Headphones, MinusCircle, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, GraduationCap, Headphones, MinusCircle, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -18,8 +18,10 @@ import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { ListeningPartBreakdown } from '@/components/domain/results/listening-part-breakdown';
 import { TimeUsedSummary } from '@/components/domain/results/time-used-summary';
-import { SelectionToVocab } from '@/components/domain/vocabulary';
+import { ListeningQuestionPaperViewer } from '@/components/domain/listening/ListeningQuestionPaperViewer';
+import { ListeningFullTranscriptViewer } from '@/components/domain/listening/ListeningFullTranscriptViewer';
 import { analytics } from '@/lib/analytics';
+import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { getListeningReview, listListeningAnswerKeyReports, type ListeningReviewDto } from '@/lib/listening-api';
 import { hasApprovedListeningConversion } from '@/lib/listening-result-display';
 import { getListeningExpertFeedback } from '@/lib/expert-listening-api';
@@ -29,10 +31,30 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function transcriptStateCopy(state: ListeningReviewDto['transcriptAccess']['state']) {
-  if (state === 'available') return 'Transcript excerpts are available for all reviewed questions.';
-  if (state === 'partial') return 'Transcript excerpts are available only for authored items that allow evidence reveal.';
-  return 'Transcript excerpts are restricted for this result. The answer review remains available after submit.';
+function transcriptStateCopy(review: ListeningReviewDto | null) {
+  if (!review) return 'Full transcript for the submitted part is available after submission.';
+  const hasSegments = (review.transcriptSegments?.length ?? 0) > 0;
+  const parentParts = new Set<string>();
+  for (const seg of review.transcriptSegments ?? []) {
+    const p = (seg.partCode ?? '').trim().toUpperCase();
+    if (p.startsWith('A')) parentParts.add('A');
+    else if (p.startsWith('C')) parentParts.add('C');
+    else parentParts.add('B');
+  }
+  // Fallback to itemReview when segments not authored yet
+  if (parentParts.size === 0) {
+    for (const item of review.itemReview ?? []) {
+      const p = (item.partCode ?? '').trim().toUpperCase();
+      if (p.startsWith('A')) parentParts.add('A');
+      else if (p.startsWith('C')) parentParts.add('C');
+      else parentParts.add('B');
+    }
+  }
+  const partsLabel = ['A', 'B', 'C'].filter((p) => parentParts.has(p)).join(', ') || 'submitted part';
+  if (hasSegments) return `Full transcript available for the submitted part${parentParts.size > 1 ? 's' : ''}: Part ${partsLabel}. Other parts remain hidden until submitted. Audio replay is unlimited.`;
+  if (review.transcriptAccess.state === 'available') return 'Full transcript for the submitted part is available. Audio replay is unlimited.';
+  if (review.transcriptAccess.state === 'partial') return `Transcript available for submitted part${parentParts.size > 1 ? 's' : ''}: Part ${partsLabel}. Other parts remain hidden until submitted.`;
+  return 'Full transcript will be available after the part is submitted. Transcript-backed evidence is shown for reviewed questions.';
 }
 
 function formatMilliseconds(value: number | null | undefined) {
@@ -120,6 +142,21 @@ export default function ListeningReviewPage() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
   const pendingSeekRef = useRef<{ startMs: number; endMs: number | null } | null>(null);
+  // Authenticated blob resolution: /v1/media/{id}/content is bearer-protected,
+  // so <audio src="…"> 401s without a token. Mirror the exam player's
+  // fetchAuthorizedObjectUrl → blob URL pattern so the evidence player is
+  // replayable post-submit on every section, indefinitely.
+  const [resolvedAudioSrc, setResolvedAudioSrc] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioResolveError, setAudioResolveError] = useState<string | null>(null);
+  const [audioRetryKey, setAudioRetryKey] = useState(0);
+  const [highlightedEvidence, setHighlightedEvidence] = useState<{
+    questionNumber: number;
+    partCode: string;
+    startMs: number | null;
+    endMs: number | null;
+    excerpt: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!attemptId) return;
@@ -177,6 +214,51 @@ export default function ListeningReviewPage() {
       setActiveAudioUrl(review.paper.audioUrl ?? null);
     }
   }, [review]);
+
+  // Resolve the active section's raw URL ( /v1/media/{id}/content is bearer-
+  // protected) to an authenticated blob URL the <audio> element can play
+  // without auth headers. Mirrors app/listening/player/[id]/page.tsx.
+  // TTS fallback (/v1/listening/audio/{sha}.wav) is AllowAnonymous, but
+  // fetching it via the authorized helper still succeeds and keeps logic uniform.
+  useEffect(() => {
+    const rawUrl = activeAudioUrl;
+    if (!rawUrl) {
+      setResolvedAudioSrc(null);
+      setAudioLoading(false);
+      setAudioResolveError(null);
+      return;
+    }
+    if (/^https?:\/\//i.test(rawUrl)) {
+      setResolvedAudioSrc(rawUrl);
+      setAudioLoading(false);
+      setAudioResolveError(null);
+      return;
+    }
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    setResolvedAudioSrc(null);
+    setAudioLoading(true);
+    setAudioResolveError(null);
+    fetchAuthorizedObjectUrl(rawUrl)
+      .then((blobUrl) => {
+        if (cancelled) {
+          URL.revokeObjectURL(blobUrl);
+          return;
+        }
+        objectUrl = blobUrl;
+        setResolvedAudioSrc(blobUrl);
+        setAudioLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setAudioResolveError(err instanceof Error ? err.message : 'Audio could not be loaded.');
+        setAudioLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [activeAudioUrl, audioRetryKey]);
 
   const seekAndPlay = (audio: HTMLAudioElement, startMs: number, endMs: number | null) => {
     if (evidenceTimerRef.current) clearTimeout(evidenceTimerRef.current);
@@ -310,10 +392,10 @@ export default function ListeningReviewPage() {
               eyebrow="Transcript-backed Review"
               icon={Quote}
               accent="indigo"
-              title="Use transcript clues to see why the answer changed"
-              description={transcriptStateCopy(review.transcriptAccess.state)}
+              title="Answers, full transcript, and unlimited replay"
+              description={transcriptStateCopy(review)}
               highlights={[
-                { icon: Quote, label: 'Policy', value: review.transcriptAccess.policy.replace(/_/g, ' ') },
+                { icon: Quote, label: 'Transcript', value: `${review.transcriptSegments.length} segments` },
                 { icon: Target, label: 'Questions', value: `${review.itemReview.length} reviewed` },
                 { icon: Target, label: 'Next drill', value: review.recommendedNextDrill ? 'Recommended' : 'Not assigned' },
               ]}
@@ -322,18 +404,36 @@ export default function ListeningReviewPage() {
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Review Policy"
-                title="Transcript support is controlled item by item"
-                description="Listening transcripts should stay evidence-based and only reveal the snippets that the learner is allowed to revisit after the attempt."
+                title="Full transcript for the submitted part only"
+                description="Each part's full transcript (Part A with A1/A2, Part B, Part C with C1/C2) is revealed only after that part is submitted. Non-submitted parts remain hidden so you cannot see their transcript or answers before attempting them. After submission you can reopen the transcript and replay the audio as many times as you want — this access is permanent."
                 className="mb-4"
               />
               <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
-                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
-                  <span className="font-bold text-navy">Policy:</span> {review.transcriptAccess.policy.replace(/_/g, ' ')}
-                  <br />
-                  {review.transcriptAccess.reason}
+                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm leading-6 text-muted">
+                  <span className="font-bold text-navy">What you can review now: </span>
+                  {(() => {
+                    const parts = new Set<string>();
+                    for (const seg of review.transcriptSegments ?? []) {
+                      const p = (seg.partCode ?? '').trim().toUpperCase();
+                      if (p.startsWith('A')) parts.add('Part A');
+                      else if (p.startsWith('C')) parts.add('Part C');
+                      else if (p) parts.add('Part B');
+                    }
+                    if (parts.size === 0) {
+                      for (const it of review.itemReview ?? []) {
+                        const p = (it.partCode ?? '').trim().toUpperCase();
+                        if (p.startsWith('A')) parts.add('Part A');
+                        else if (p.startsWith('C')) parts.add('Part C');
+                        else parts.add('Part B');
+                      }
+                    }
+                    const label = parts.size === 0 ? 'submitted part' : Array.from(parts).sort().join(', ');
+                    return `Full transcript and audio for ${label}. Other parts remain hidden until submitted. Your review access never expires.`;
+                  })()}
+                  <span className="mt-1 block text-xs text-muted">Answers and score are always shown after submission. Vocabulary lookup works on every word of the visible transcript.</span>
                 </div>
-                <div className="rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-bold capitalize text-primary">
-                  {review.transcriptAccess.state}
+                <div className="rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm font-bold capitalize text-success">
+                  Available
                 </div>
               </div>
             </section>
@@ -367,11 +467,30 @@ export default function ListeningReviewPage() {
                     ))}
                   </div>
                 ) : null}
+                {audioResolveError ? (
+                  <InlineAlert variant="error" className="mb-4">
+                    {audioResolveError}{' '}
+                    <button
+                      type="button"
+                      onClick={() => setAudioRetryKey((k) => k + 1)}
+                      className="ml-2 font-semibold underline"
+                    >
+                      Retry
+                    </button>
+                  </InlineAlert>
+                ) : null}
+                {audioLoading ? (
+                  <div className="flex items-center gap-3 rounded-xl border border-border bg-background-light px-4 py-4 text-sm text-muted">
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden />
+                    Loading audio…
+                  </div>
+                ) : null}
                 <audio
                   ref={audioRef}
-                  key={activeAudioUrl ?? 'no-audio'}
-                  src={activeAudioUrl ?? undefined}
+                  key={resolvedAudioSrc ?? activeAudioUrl ?? 'no-audio'}
+                  src={resolvedAudioSrc ?? undefined}
                   controls
+                  preload="metadata"
                   className="w-full"
                   onLoadedMetadata={() => {
                     const audio = audioRef.current;
@@ -382,9 +501,19 @@ export default function ListeningReviewPage() {
                       seekAndPlay(audio, pending.startMs, pending.endMs);
                     }
                   }}
+                  onError={() => {
+                    setAudioResolveError('Audio failed to load. Please retry.');
+                  }}
                 />
+                <p className="mt-3 text-xs leading-5 text-muted">
+                  Audios remain replayable after submit — switch sections and use evidence buttons to jump to any span at any time.
+                </p>
               </section>
-            ) : null}
+            ) : (
+              <InlineAlert variant="info">
+                No audio is attached to this paper yet. The evidence player will appear once section audio is published.
+              </InlineAlert>
+            )}
 
             {(review.paper.extracts?.length ?? 0) > 0 ? (
               <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
@@ -427,31 +556,26 @@ export default function ListeningReviewPage() {
               </section>
             ) : null}
 
-            {review.transcriptSegments.length > 0 ? (
+            {review.paper.audioScriptUrl ? (
               <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
-                  eyebrow="Transcript Segments"
-                  title="Scan the time-coded script"
-                  description="Segments are grouped with part and speaker metadata where the author supplied it."
+                  eyebrow="Audio Script"
+                  title="Full audio script (authored PDF)"
+                  description="The complete transcript PDF authored for this paper. This is shown post-submit alongside the time-coded transcript tabs below."
                   className="mb-4"
                 />
-                <div className="max-h-96 space-y-2 overflow-auto pr-2">
-                  {review.transcriptSegments.map((segment, index) => (
-                    <button
-                      key={`${segment.startMs}-${segment.endMs}-${index}`}
-                      type="button"
-                      onClick={() => playEvidence(segment.startMs, segment.endMs, segment.partCode)}
-                      className="block w-full rounded-xl border border-border bg-background-light p-3 text-left text-sm transition hover:border-border-hover hover:bg-surface"
-                    >
-                      <span className="text-xs font-black uppercase tracking-widest text-muted">
-                        {formatMilliseconds(segment.startMs)}-{formatMilliseconds(segment.endMs)} {segment.partCode ?? ''} {segment.speakerId ?? ''}
-                      </span>
-                      <span className="mt-1 block text-navy">{segment.text}</span>
-                    </button>
-                  ))}
-                </div>
+                <ListeningQuestionPaperViewer url={review.paper.audioScriptUrl} partLabel="Audio Script" />
+                <p className="mt-3 text-xs text-muted">The script is fetched with your learner entitlement and remains available permanently after submission. If the viewer fails, ensure the paper has an AudioScript PDF attached and you are entitled to this paper.</p>
               </section>
             ) : null}
+
+            <ListeningFullTranscriptViewer
+              transcriptSegments={review.transcriptSegments}
+              extracts={review.paper.extracts}
+              highlightedEvidence={highlightedEvidence}
+              onPlayEvidence={playEvidence}
+              attemptId={attemptId ?? ''}
+            />
 
             <section className="space-y-4">
               <LearnerSurfaceSectionHeader
@@ -500,7 +624,16 @@ export default function ListeningReviewPage() {
                       {question.transcriptEvidenceStartMs != null ? (
                         <button
                           type="button"
-                          onClick={() => playEvidence(question.transcriptEvidenceStartMs, question.transcriptEvidenceEndMs, question.partCode)}
+                          onClick={() => {
+                            setHighlightedEvidence({
+                              questionNumber: question.number,
+                              partCode: question.partCode,
+                              startMs: question.transcriptEvidenceStartMs ?? null,
+                              endMs: question.transcriptEvidenceEndMs ?? null,
+                              excerpt: question.transcript?.excerpt ?? null,
+                            });
+                            playEvidence(question.transcriptEvidenceStartMs, question.transcriptEvidenceEndMs, question.partCode);
+                          }}
                           className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-3 py-2 font-semibold text-info transition hover:bg-info/20"
                         >
                           <Volume2 className="h-4 w-4" /> Evidence {formatMilliseconds(question.transcriptEvidenceStartMs)}
@@ -512,19 +645,31 @@ export default function ListeningReviewPage() {
                           <Clock className="h-4 w-4" /> No time-coded evidence
                         </span>
                       ) : null}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setHighlightedEvidence({
+                            questionNumber: question.number,
+                            partCode: question.partCode,
+                            startMs: question.transcriptEvidenceStartMs ?? null,
+                            endMs: question.transcriptEvidenceEndMs ?? null,
+                            excerpt: question.transcript?.excerpt ?? null,
+                          })
+                        }
+                        className="inline-flex items-center gap-1 rounded-lg border border-info/20 bg-surface px-3 py-2 font-semibold text-info transition hover:bg-info/10"
+                      >
+                        <Quote className="h-4 w-4" /> Show in transcript
+                      </button>
                     </div>
-                    {question.transcript?.allowed && question.transcript.excerpt ? (
-                      <SelectionToVocab source="listening" sourceRefPrefix={`listening:${attemptId}:${question.questionId}`}>
-                        <div className="rounded-2xl border border-info/30 bg-info/10 p-4 text-sm text-info">
-                          Transcript clue: {question.transcript.excerpt}
-                        </div>
-                      </SelectionToVocab>
-                    ) : (
-                      <div className="flex items-start gap-3 rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
-                        <FileLock2 className="mt-0.5 h-4 w-4 shrink-0" />
-                        Transcript excerpt restricted for this item.
-                      </div>
-                    )}
+                    <div className="rounded-2xl border border-info/20 bg-info/10 p-4 text-sm leading-6 text-info">
+                      <p className="font-black">Relevant transcript section highlighted below.</p>
+                      {question.transcript?.excerpt ? (
+                        <p className="mt-1 italic">“{question.transcript.excerpt}”</p>
+                      ) : (
+                        <p className="mt-1 text-info/80">Open the Part {(() => { const p = (question.partCode ?? '').trim().toUpperCase(); if (p.startsWith('A')) return 'A'; if (p.startsWith('C')) return 'C'; return 'B'; })()} transcript tab to see the highlighted supporting lines. Select any word in the full transcript to look it up.</p>
+                      )}
+                      <p className="mt-2 text-xs text-info/70">The full transcript for the submitted part is visible above. The supporting lines for Q{question.number} are highlighted when you click “Show in transcript”.</p>
+                    </div>
                     {question.distractorExplanation ? (
                       <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
                         Distractor explanation: {question.distractorExplanation}

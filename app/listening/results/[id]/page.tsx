@@ -410,27 +410,29 @@ function ListeningResultsContent() {
                             </>
                           ) : null}
 
-                          {item.transcript?.allowed && item.transcript.excerpt ? (
+                          {item.transcript?.excerpt || item.transcript?.allowed ? (
                             <div className="pt-2">
                               {revealedTranscripts[item.questionId] ? (
-                                <div className="relative rounded-xl border border-border bg-surface p-4">
-                                  <Quote className="absolute left-2 top-2 h-8 w-8 text-primary/30" />
-                                  <p className="relative z-10 pl-6 text-sm italic text-muted">
-                                    {item.transcript.excerpt}
-                                  </p>
+                                <div className="relative rounded-xl border border-info/20 bg-info/10 p-4">
+                                  <Quote className="absolute left-2 top-2 h-8 w-8 text-info/20" />
+                                  <p className="relative z-10 pl-6 text-sm font-semibold text-info">Relevant transcript section highlighted in review</p>
+                                  {item.transcript?.excerpt ? (
+                                    <p className="relative z-10 mt-1 pl-6 text-sm italic text-info/80">“{item.transcript.excerpt}”</p>
+                                  ) : null}
+                                  <p className="relative z-10 mt-2 pl-6 text-xs leading-5 text-info/70">Open the full Part transcript in the review to see the highlighted supporting lines and look up any word. Audio replay remains available permanently.</p>
                                   <button
                                     onClick={(event) => toggleTranscript(item.questionId, event)}
-                                    className="mt-3 text-xs font-bold uppercase tracking-widest text-muted hover:text-navy"
+                                    className="relative z-10 mt-3 text-xs font-bold uppercase tracking-widest text-info hover:text-info/80"
                                   >
-                                    Hide Transcript
+                                    Hide
                                   </button>
                                 </div>
                               ) : (
                                 <button
                                   onClick={(event) => toggleTranscript(item.questionId, event)}
-                                  className="inline-flex items-center gap-2 rounded-lg bg-primary/5 px-4 py-2 text-sm font-bold text-primary transition-colors hover:bg-primary/10"
+                                  className="inline-flex items-center gap-2 rounded-lg bg-info/10 px-4 py-2 text-sm font-bold text-info transition-colors hover:bg-info/20"
                                 >
-                                  <Quote className="h-4 w-4" /> Reveal Transcript Excerpt
+                                  <Quote className="h-4 w-4" /> Relevant transcript section
                                 </button>
                               )}
                             </div>
@@ -446,15 +448,16 @@ function ListeningResultsContent() {
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Transcript Access</p>
-              <p className="mt-2 text-sm text-muted">{result.transcriptAccess.reason}</p>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Full transcript & audio — permanent access</p>
+              <p className="mt-2 text-sm leading-6 text-muted">The full transcript for the submitted part (Part A with A1/A2, Part B, Part C with C1/C2) and its audio are available permanently after submission. You can reopen them any time, replay the audio as many times as you want, and look up any word in the transcript. Non-submitted parts remain hidden until submitted.</p>
+              <p className="mt-1 text-xs text-muted">Tip: use the Part A / B / C tabs in the review to jump to the relevant section. The supporting lines for each question are highlighted.</p>
             </div>
-            <Button variant="outline" className="gap-2" asChild>
-<Link href={`/listening/review/${result.attemptId}`}>
+            <Button variant="outline" className="gap-2 shrink-0" asChild>
+              <Link href={`/listening/review/${result.attemptId}`}>
                 <FileText className="h-4 w-4" />
                 Open Transcript Review
               </Link>
-</Button>
+            </Button>
           </div>
         </section>
       </div>

@@ -3475,7 +3475,7 @@ public sealed class ListeningLearnerService(
         return new ListeningReviewDto(
             EvaluationId: Evaluation?.Id,
             AttemptId: AttemptId,
-            Paper: SourceDto(Source),
+            Paper: SourceDto(Source, includeAudioScriptUrl: true),
             RawScore: score.RawScore,
             MaxRawScore: score.MaxRawScore,
             ScaledScore: score.ScaledScore,
@@ -3650,12 +3650,18 @@ public sealed class ListeningLearnerService(
 
     private static bool ResolveTranscriptEvidencePolicy(string? policySnapshotJson)
     {
-        if (string.IsNullOrWhiteSpace(policySnapshotJson)) return false;
+        // Post-submit review should always surface authored transcript evidence.
+        // The learningEvidenceLoopEnabled flag gates the *learning-mode* replay
+        // loop, not the post-submit review. Default to true when the snapshot is
+        // missing/malformed so legacy attempts and papers still render their full
+        // script and per-question clues. An explicit false is still honoured when
+        // present.
+        if (string.IsNullOrWhiteSpace(policySnapshotJson)) return true;
         try
         {
             using var document = JsonDocument.Parse(policySnapshotJson);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return false;
+            if (root.ValueKind != JsonValueKind.Object) return true;
 
             if (root.TryGetProperty("learningEvidenceLoopEnabled", out var direct)
                 && direct.ValueKind is JsonValueKind.True or JsonValueKind.False)
@@ -3673,10 +3679,10 @@ public sealed class ListeningLearnerService(
         }
         catch (JsonException)
         {
-            return false;
+            return true;
         }
 
-        return false;
+        return true;
     }
 
     private static string MissReasonErrorType(ListeningMissReason missReason) => missReason switch
@@ -3896,7 +3902,7 @@ public sealed class ListeningLearnerService(
         };
     }
 
-    private static object SourceDto(ListeningSource source) => new
+    private static object SourceDto(ListeningSource source, bool includeAudioScriptUrl = false) => new
     {
         id = source.Id,
         sourceKind = source.SourceKind,
@@ -3913,6 +3919,13 @@ public sealed class ListeningLearnerService(
         // contract keeps keys hidden until grading and exposes only the
         // policy-controlled item review after submission.
         audioUrlByPart = source.AudioUrlByPart ?? new Dictionary<string, string>(),
+        // Full audio script PDF (marker reference). Exposed post-submit ONLY on
+        // the review/results surfaces so learners can read the complete transcript
+        // alongside time-coded evidence. Null during the timed session so the
+        // script cannot be used to cheat. Null when no AudioScript asset is
+        // attached. The media endpoint still gates it to entitled learners via
+        // MediaAssetAccessService (AudioScript added to learner-visible roles).
+        audioScriptUrl = includeAudioScriptUrl ? source.AudioScriptUrl : null,
         audioAvailable = !string.IsNullOrWhiteSpace(source.AudioUrl)
             || (source.AudioUrlByPart?.Count ?? 0) > 0,
         audioUnavailableReason = !string.IsNullOrWhiteSpace(source.AudioUrl)
@@ -4664,13 +4677,64 @@ public sealed class ListeningLearnerService(
             .Select(q => NormalizePartCode(q.PartCode) ?? q.PartCode)
             .Where(code => !string.IsNullOrWhiteSpace(code))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var allowedParentParts = questions
+            .Select(q => ListeningParentPartFromCode(q.PartCode))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var extracts = source.Extracts
             .Where(extract => allowedParts.Contains(extract.PartCode)
                 || allowedParts.Contains(NormalizePartCode(extract.PartCode) ?? string.Empty)
                 || (ListeningParentPartFromCode(extract.PartCode) == "B"
                     && questions.Any(q => ListeningParentPartFromCode(q.PartCode) == "B")))
             .ToList();
-        return source with { Questions = questions, Extracts = extracts };
+        var isFullPaper = allowedParentParts.Count == 3;
+        // Filter transcript segments to only the submitted parent parts (A/B/C).
+        // This enforces requirement 1: Part A practice shows only Part A script,
+        // Full exam shows A+B+C, and hidden parts never leak via transcriptSegments.
+        var transcriptSegments = source.TranscriptSegments
+            .Where(seg =>
+            {
+                if (string.IsNullOrWhiteSpace(seg.PartCode))
+                    // Unauthored segments: show for full-paper review only; hide for
+                    // scoped practice to avoid leaking other parts.
+                    return isFullPaper;
+                var parent = ListeningParentPartFromCode(seg.PartCode);
+                return allowedParentParts.Contains(parent);
+            })
+            .ToList();
+        // Filter per-section audio + question-paper maps to submitted parts only.
+        IReadOnlyDictionary<string, string>? audioByPart = null;
+        if (source.AudioUrlByPart is not null)
+        {
+            var filtered = source.AudioUrlByPart
+                .Where(kv => allowedParentParts.Contains(ListeningParentPartFromCode(kv.Key))
+                    || allowedParts.Contains(kv.Key.Trim().ToUpperInvariant()))
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            audioByPart = filtered.Count > 0 ? filtered : null;
+        }
+        IReadOnlyDictionary<string, string>? questionPaperByPart = null;
+        if (source.QuestionPaperUrlByPart is not null)
+        {
+            var filteredQp = source.QuestionPaperUrlByPart
+                .Where(kv => allowedParentParts.Contains(ListeningParentPartFromCode(kv.Key))
+                    || allowedParts.Contains(kv.Key.Trim().ToUpperInvariant()))
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
+            questionPaperByPart = filteredQp.Count > 0 ? filteredQp : null;
+        }
+        // For scoped practice, hide the whole-paper AudioScript PDF and the legacy
+        // combined AudioUrl which would otherwise expose the full transcript / full
+        // audio of non-submitted parts.
+        var audioScriptUrl = isFullPaper ? source.AudioScriptUrl : null;
+        var audioUrl = isFullPaper ? source.AudioUrl : null;
+        return source with
+        {
+            Questions = questions,
+            Extracts = extracts,
+            TranscriptSegments = transcriptSegments,
+            AudioUrl = audioUrl,
+            AudioUrlByPart = audioByPart is not null ? audioByPart : (isFullPaper ? source.AudioUrlByPart : new Dictionary<string, string>(StringComparer.Ordinal)),
+            QuestionPaperUrlByPart = questionPaperByPart is not null ? questionPaperByPart : (isFullPaper ? source.QuestionPaperUrlByPart : new Dictionary<string, string>(StringComparer.Ordinal)),
+            AudioScriptUrl = audioScriptUrl
+        };
     }
 
     private static string ListeningParentPart(ListeningPartCode partCode)

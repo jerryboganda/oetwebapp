@@ -167,6 +167,12 @@ public sealed class MediaAssetAccessService(
     [
         PaperAssetRole.Audio,
         PaperAssetRole.QuestionPaper,
+        // Full audio script PDF is learner-visible post-submit via the
+        // review/results surfaces (paper.audioScriptUrl). Not exposed in the
+        // exam-session DTO pre-submit, and the media endpoint still gates it
+        // to entitled + profession-visible learners, so adding it here cannot
+        // leak the script during the timed attempt.
+        PaperAssetRole.AudioScript,
         PaperAssetRole.CaseNotes,
         PaperAssetRole.RoleCard,
         PaperAssetRole.WarmUpQuestions,
