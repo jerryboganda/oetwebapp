@@ -11,8 +11,6 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 import { MarkdownContent } from '@/components/ui/markdown-content';
 import { AnswerComparisonCard } from '@/components/domain/results/answer-comparison-card';
 import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
-import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
-import { GroundedListeningQuestionQna } from '@/components/domain/results/grounded-listening-question-qna';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
@@ -600,76 +598,12 @@ export default function ListeningReviewPage() {
                     missReason={chip ? { title: `Missed because: ${chip.label}`, detail: chip.hint } : null}
                     explanation={question.explanation ? <p>{question.explanation}</p> : null}
                   >
-                    <GroundedListeningAiExplanation
-                      attemptId={attemptId ?? ''}
-                      questionId={question.questionId}
-                      unanswered={unanswered}
-                    />
-                    <GroundedListeningQuestionQna
-                      attemptId={attemptId ?? ''}
-                      questionId={question.questionId}
-                    />
                     <ReportAnswerControl
                       assessment="listening"
                       attemptId={attemptId ?? ''}
                       questionId={question.questionId}
                       alreadyReported={reportedQuestionIds.has(question.questionId)}
                     />
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                      {question.speakerAttitude ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2 font-semibold capitalize text-navy">
-                          <Quote className="h-4 w-4" /> {question.speakerAttitude.replace(/_/g, ' ')}
-                        </span>
-                      ) : null}
-                      {question.transcriptEvidenceStartMs != null ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setHighlightedEvidence({
-                              questionNumber: question.number,
-                              partCode: question.partCode,
-                              startMs: question.transcriptEvidenceStartMs ?? null,
-                              endMs: question.transcriptEvidenceEndMs ?? null,
-                              excerpt: question.transcript?.excerpt ?? null,
-                            });
-                            playEvidence(question.transcriptEvidenceStartMs, question.transcriptEvidenceEndMs, question.partCode);
-                          }}
-                          className="inline-flex items-center gap-1 rounded-lg bg-info/10 px-3 py-2 font-semibold text-info transition hover:bg-info/20"
-                        >
-                          <Volume2 className="h-4 w-4" /> Evidence {formatMilliseconds(question.transcriptEvidenceStartMs)}
-                          {question.transcriptEvidenceEndMs != null ? `-${formatMilliseconds(question.transcriptEvidenceEndMs)}` : ''}
-                        </button>
-                      ) : null}
-                      {question.transcriptEvidenceStartMs == null && question.transcriptEvidenceEndMs == null ? (
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-background-light px-3 py-2">
-                          <Clock className="h-4 w-4" /> No time-coded evidence
-                        </span>
-                      ) : null}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setHighlightedEvidence({
-                            questionNumber: question.number,
-                            partCode: question.partCode,
-                            startMs: question.transcriptEvidenceStartMs ?? null,
-                            endMs: question.transcriptEvidenceEndMs ?? null,
-                            excerpt: question.transcript?.excerpt ?? null,
-                          })
-                        }
-                        className="inline-flex items-center gap-1 rounded-lg border border-info/20 bg-surface px-3 py-2 font-semibold text-info transition hover:bg-info/10"
-                      >
-                        <Quote className="h-4 w-4" /> Show in transcript
-                      </button>
-                    </div>
-                    <div className="rounded-2xl border border-info/20 bg-info/10 p-4 text-sm leading-6 text-info">
-                      <p className="font-black">Relevant transcript section highlighted below.</p>
-                      {question.transcript?.excerpt ? (
-                        <p className="mt-1 italic">“{question.transcript.excerpt}”</p>
-                      ) : (
-                        <p className="mt-1 text-info/80">Open the Part {(() => { const p = (question.partCode ?? '').trim().toUpperCase(); if (p.startsWith('A')) return 'A'; if (p.startsWith('C')) return 'C'; return 'B'; })()} transcript tab to see the highlighted supporting lines. Select any word in the full transcript to look it up.</p>
-                      )}
-                      <p className="mt-2 text-xs text-info/70">The full transcript for the submitted part is visible above. The supporting lines for Q{question.number} are highlighted when you click “Show in transcript”.</p>
-                    </div>
                     {question.distractorExplanation ? (
                       <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
                         Distractor explanation: {question.distractorExplanation}

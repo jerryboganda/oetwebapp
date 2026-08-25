@@ -10,8 +10,6 @@ import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
 import { ResultsScorePanel } from '@/components/domain/results/results-score-panel';
 import { ScoreBandGraph } from '@/components/domain/results/score-band-graph';
-import { GroundedListeningAiExplanation } from '@/components/domain/results/grounded-listening-ai-explanation';
-import { GroundedListeningQuestionQna } from '@/components/domain/results/grounded-listening-question-qna';
 import { ReportAnswerControl } from '@/components/domain/results/report-answer-control';
 import { ScoreConversionEvidence } from '@/components/domain/results/score-conversion-evidence';
 import { ListeningPartBreakdown } from '@/components/domain/results/listening-part-breakdown';
@@ -391,51 +389,12 @@ function ListeningResultsContent() {
                           </div>
 
                           {!item.isInvalid ? (
-                            <>
-                              <GroundedListeningAiExplanation
-                                attemptId={id ?? ''}
-                                questionId={item.questionId}
-                                unanswered={!item.learnerAnswer}
-                              />
-                              <GroundedListeningQuestionQna
-                                attemptId={id ?? ''}
-                                questionId={item.questionId}
-                              />
-                              <ReportAnswerControl
-                                assessment="listening"
-                                attemptId={id ?? ''}
-                                questionId={item.questionId}
-                                alreadyReported={reportedQuestionIds.has(item.questionId)}
-                              />
-                            </>
-                          ) : null}
-
-                          {item.transcript?.excerpt || item.transcript?.allowed ? (
-                            <div className="pt-2">
-                              {revealedTranscripts[item.questionId] ? (
-                                <div className="relative rounded-xl border border-info/20 bg-info/10 p-4">
-                                  <Quote className="absolute left-2 top-2 h-8 w-8 text-info/20" />
-                                  <p className="relative z-10 pl-6 text-sm font-semibold text-info">Relevant transcript section highlighted in review</p>
-                                  {item.transcript?.excerpt ? (
-                                    <p className="relative z-10 mt-1 pl-6 text-sm italic text-info/80">“{item.transcript.excerpt}”</p>
-                                  ) : null}
-                                  <p className="relative z-10 mt-2 pl-6 text-xs leading-5 text-info/70">Open the full Part transcript in the review to see the highlighted supporting lines and look up any word. Audio replay remains available permanently.</p>
-                                  <button
-                                    onClick={(event) => toggleTranscript(item.questionId, event)}
-                                    className="relative z-10 mt-3 text-xs font-bold uppercase tracking-widest text-info hover:text-info/80"
-                                  >
-                                    Hide
-                                  </button>
-                                </div>
-                              ) : (
-                                <button
-                                  onClick={(event) => toggleTranscript(item.questionId, event)}
-                                  className="inline-flex items-center gap-2 rounded-lg bg-info/10 px-4 py-2 text-sm font-bold text-info transition-colors hover:bg-info/20"
-                                >
-                                  <Quote className="h-4 w-4" /> Relevant transcript section
-                                </button>
-                              )}
-                            </div>
+                            <ReportAnswerControl
+                              assessment="listening"
+                              attemptId={id ?? ''}
+                              questionId={item.questionId}
+                              alreadyReported={reportedQuestionIds.has(item.questionId)}
+                            />
                           ) : null}
                         </div>
                   </MotionCollapse>
