@@ -63,6 +63,17 @@ public interface IAiPackageCreditService
     /// add-on item was cancelled, drop the null sentinel back to a finite pool.
     /// </summary>
     Task RecalculateObjectiveAllowancesAsync(string userId, CancellationToken ct);
+
+    /// <summary>
+    /// Read-only check whether the learner holds an active objective-practice
+    /// allowance for <paramref name="subtest"/> (listening/reading). True when
+    /// an unexpired lot grants unlimited OR remaining dedicated tests &gt; 0 OR
+    /// shared credits &gt;= 1. Mirrors <see cref="DeductObjectivePracticeAsync"/>
+    /// without consuming. Used by <c>ContentEntitlementService</c> so a
+    /// standalone Reading/Listening Pro purchase can open papers even without
+    /// an eligible course subscription.
+    /// </summary>
+    Task<bool> HasObjectivePracticeAllowanceAsync(string userId, string subtest, CancellationToken ct);
 }
 
 public sealed record AiPackageCreditBucketSnapshot(
@@ -668,6 +679,37 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             CreditsUsed: Math.Abs(listeningDelta + readingDelta + sharedDelta),
             RemainingAfter: (account.ListeningTestsRemaining ?? 0) + (account.ReadingTestsRemaining ?? 0) + account.SharedCredits,
             FeedbackMessage: feedback);
+    }
+
+    public async Task<bool> HasObjectivePracticeAllowanceAsync(string userId, string subtest, CancellationToken ct)
+    {
+        var normalized = NormalizeSubtest(subtest);
+        if (normalized is not ("listening" or "reading")) return false;
+
+        var account = await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
+        if (account is null) return false;
+
+        await EnsureLotsLoadedAsync(account, ct);
+        EnsureSyntheticLotIfNeeded(account);
+        await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
+
+        // Expired accounts cannot fund objective practice, same gate as DeductObjectivePracticeAsync.
+        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= DateTimeOffset.UtcNow))
+            return false;
+
+        // Legacy bypass is NOT treated as an allowance — it is a debit-only shortcut
+        // for pre-package accounts. Content visibility still requires a real purchase.
+        // Also treat the account null sentinel (ReadingTestsRemaining == null) as unlimited.
+        if (normalized == "listening")
+            return HasUnlimitedObjective(account, "listening")
+                || account.ListeningTestsRemaining is null
+                || (account.ListeningTestsRemaining ?? 0) > 0
+                || account.SharedCredits >= AiGradingCreditCost.ListeningExam;
+
+        return HasUnlimitedObjective(account, "reading")
+            || account.ReadingTestsRemaining is null
+            || (account.ReadingTestsRemaining ?? 0) > 0
+            || account.SharedCredits >= AiGradingCreditCost.ReadingExam;
     }
 
     public async Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct)

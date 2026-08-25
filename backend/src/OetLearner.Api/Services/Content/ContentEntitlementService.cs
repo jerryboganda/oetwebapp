@@ -95,7 +95,6 @@ public sealed class ContentEntitlementService(
         string? userId, ContentPaper paper, CancellationToken ct)
     {
         if (paper is null) throw new ArgumentNullException(nameof(paper));
-        _ = aiPackageCreditService;
 
         // 1. Paper-level free preview.
         if (HasTag(paper.TagsCsv, AccessFreeTag))
@@ -153,6 +152,33 @@ public sealed class ContentEntitlementService(
                     Allowed: false, Reason: "subscription_expired",
                     CurrentTier: "expired",
                     RequiredScope: $"subtest:{paper.SubtestCode}");
+            }
+
+            // Standalone AI packages (e.g. Reading Pro pkg_reading_pro) have
+            // HasEligibleSubscription == false because they use the
+            // "standalone-addon" planId. They still own live AiPackageCreditLots
+            // with ReadingTestsRemaining / UnlimitedReading / SharedCredits.
+            // Grant paper access when such a lot can fund the subtest — the
+            // per-paper debit (DeductObjectivePracticeAsync) remains the
+            // authoritative idempotent spend.
+            if (aiPackageCreditService is not null
+                && (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(paper.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase)))
+            {
+                try
+                {
+                    if (await aiPackageCreditService.HasObjectivePracticeAllowanceAsync(userId, paper.SubtestCode, ct))
+                    {
+                        return new ContentEntitlementResult(
+                            Allowed: true, Reason: "ai_package_grants_subtest",
+                            CurrentTier: "ai_package", RequiredScope: null);
+                    }
+                }
+                catch
+                {
+                    // Fall through to no_active_subscription — never crash the
+                    // entitlement gate because the credit service threw.
+                }
             }
 
             return new ContentEntitlementResult(
