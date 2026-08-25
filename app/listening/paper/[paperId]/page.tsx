@@ -1273,11 +1273,14 @@ function SubSectionAudio({
   const [audioError, setAudioError] = useState<string | null>(null);
   const [isBuffering, setIsBuffering] = useState(true);
   const [hasPlayedToEnd, setHasPlayedToEnd] = useState(resumeState === 'ended');
+  const [needsUserPlay, setNeedsUserPlay] = useState(false);
+  const [audioRetryKey, setAudioRetryKey] = useState(0);
   const lastKnownTimeRef = useRef(0);
   const lastProgressLoggedAtRef = useRef(0);
   const allowedProgrammaticPauseRef = useRef(false);
   const programmaticSeekTargetRef = useRef<number | null>(null);
   const hasStartedRef = useRef(false);
+  const autoPlayTriedRef = useRef(false);
 
   const setBuffering = useCallback((buffering: boolean) => {
     setIsBuffering(buffering);
@@ -1285,12 +1288,23 @@ function SubSectionAudio({
   }, [onBufferingChange]);
 
   // Resolve an authenticated media URL into a local blob URL once per section.
+  // Includes a retry key so the user can recover from transient network failures.
   useEffect(() => {
-    if (!subSection.audioUrl || !subSection.audioRequiresAuth) return;
+    if (!subSection.audioUrl) {
+      setResolvedSrc(null);
+      setBuffering(false);
+      return;
+    }
+    if (!subSection.audioRequiresAuth) {
+      setResolvedSrc(subSection.audioUrl);
+      return;
+    }
     let cancelled = false;
     let objectUrl: string | null = null;
     setResolvedSrc(null);
     setAudioError(null);
+    setNeedsUserPlay(false);
+    autoPlayTriedRef.current = false;
     setBuffering(true);
     (async () => {
       try {
@@ -1303,7 +1317,8 @@ function SubSectionAudio({
         setResolvedSrc(url);
       } catch (err) {
         if (!cancelled) {
-          setBuffering(true);
+          // Network/auth failure — show retry, don't leave in infinite buffering.
+          setBuffering(false);
           onIntegrityEvent('audio_error', {
             section: subSection.partCode,
             questionIndex,
@@ -1311,7 +1326,7 @@ function SubSectionAudio({
             loadFailure: true,
           });
           onAudioFailure();
-          setAudioError(err instanceof Error ? err.message : 'Audio could not be loaded.');
+          setAudioError(err instanceof Error ? err.message : 'Audio could not be loaded. Check your connection and retry.');
         }
       }
     })();
@@ -1319,34 +1334,69 @@ function SubSectionAudio({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [onAudioFailure, onIntegrityEvent, questionIndex, setBuffering, subSection.audioRequiresAuth, subSection.audioUrl, subSection.partCode]);
+  }, [audioRetryKey, onAudioFailure, onIntegrityEvent, questionIndex, setBuffering, subSection.audioRequiresAuth, subSection.audioUrl, subSection.partCode]);
 
-  // Autoplay as soon as the source is ready. Gesture-chained via the prior
-  // Start/Next click, so most browsers allow it; the AbortError that fires when
-  // the element is torn down mid-play (advance) is intentionally ignored.
-  useEffect(() => {
-    if (!resolvedSrc) return;
+  const tryPlay = useCallback(() => {
     const el = audioRef.current;
     if (!el) return;
+    setNeedsUserPlay(false);
+    const result = el.play();
+    if (result && typeof result.catch === 'function') {
+      result.catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isAbort = err instanceof DOMException && err.name === 'AbortError';
+        const isNotAllowed = err instanceof DOMException && err.name === 'NotAllowedError';
+        if (isAbort || msg.includes('play() request was interrupted')) {
+          // Seek-then-play race or teardown mid-play — keep buffering paused and retry on next canPlay.
+          setBuffering(true);
+          return;
+        }
+        if (isNotAllowed || msg.includes('gesture') || msg.includes('user') || msg.includes('NotAllowed')) {
+          // Autoplay blocked — keep timer paused and show explicit Play button instead of infinite spinner.
+          setBuffering(true);
+          setNeedsUserPlay(true);
+          setAudioError(null);
+          return;
+        }
+        setBuffering(true);
+        handleAudioPlaybackError(err, setAudioError);
+      });
+    }
+  }, []);
+
+  // Defer autoplay until the element can actually play. Setting currentTime before
+  // metadata is loaded causes an AbortError that leaves the section stuck on
+  // "Loading audio…". We set the initial cue only after loadedmetadata.
+  const handleLoadedMetadata = useCallback(() => {
+    const el = audioRef.current;
+    if (!el || !onePlayOnly) return;
+    el.defaultPlaybackRate = 1;
+    el.playbackRate = 1;
     const cueStart = cueStartMs != null && cueStartMs >= 0 ? cueStartMs / 1000 : null;
     const resumeAt = resumeState === 'active' && resumeAtMs != null && resumeAtMs >= 0
       ? resumeAtMs / 1000
       : null;
     const initialTime = resumeAt ?? cueStart;
-    if (initialTime != null) {
-      programmaticSeekTargetRef.current = initialTime;
-      el.currentTime = initialTime;
-      lastKnownTimeRef.current = initialTime;
+    if (initialTime != null && Number.isFinite(initialTime)) {
+      try {
+        programmaticSeekTargetRef.current = initialTime;
+        el.currentTime = initialTime;
+        lastKnownTimeRef.current = initialTime;
+      } catch {
+        programmaticSeekTargetRef.current = null;
+      }
     }
-    if (resumeState === 'ended') return;
-    const result = el.play();
-    if (result && typeof result.catch === 'function') {
-      result.catch((err: unknown) => {
-        setBuffering(true);
-        handleAudioPlaybackError(err, setAudioError);
-      });
-    }
-  }, [cueStartMs, resolvedSrc, resumeAtMs, resumeState]);
+  }, [cueStartMs, onePlayOnly, resumeAtMs, resumeState]);
+
+  const handleCanPlay = useCallback(() => {
+    setBuffering(false);
+    onIntegrityEvent('audio_buffering_end', { section: subSection.partCode, questionIndex });
+    if (resumeState === 'ended' || autoPlayTriedRef.current) return;
+    autoPlayTriedRef.current = true;
+    // Gesture-chained via Start/Next click — most browsers allow it. If blocked,
+    // tryPlay will flip needsUserPlay and show the explicit button.
+    tryPlay();
+  }, [onIntegrityEvent, questionIndex, resumeState, subSection.partCode, tryPlay]);
 
   if (!subSection.audioUrl) {
     return (
@@ -1372,7 +1422,9 @@ function SubSectionAudio({
         <audio
           ref={audioRef}
           src={resolvedSrc}
-          autoPlay={resumeState !== 'ended'}
+          // Autoplay is handled via handleCanPlay -> tryPlay (gesture-chained).
+          // Keep native autoPlay off to avoid the double-play AbortError.
+          autoPlay={false}
           // This route is the strict computer-based exam surface. Browser
           // media controls remain disabled even if a malformed/legacy session
           // response reports a permissive transport flag.
@@ -1380,12 +1432,7 @@ function SubSectionAudio({
           controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
           preload="auto"
           className="w-full"
-          onLoadedMetadata={() => {
-            const el = audioRef.current;
-            if (!el || !onePlayOnly) return;
-            el.defaultPlaybackRate = 1;
-            el.playbackRate = 1;
-          }}
+          onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={() => {
             const el = audioRef.current;
             if (!el || el.seeking || !onePlayOnly) return;
@@ -1448,10 +1495,7 @@ function SubSectionAudio({
             setBuffering(true);
             onIntegrityEvent('audio_stalled', { section: subSection.partCode, questionIndex });
           }}
-          onCanPlay={() => {
-            setBuffering(false);
-            onIntegrityEvent('audio_buffering_end', { section: subSection.partCode, questionIndex });
-          }}
+          onCanPlay={handleCanPlay}
           onRateChange={() => {
             const el = audioRef.current;
             if (!onePlayOnly || !el || el.playbackRate === 1) return;
@@ -1529,8 +1573,32 @@ function SubSectionAudio({
           Loading audio…
         </div>
       )}
-      {audioError ? <p className="mt-2 text-xs font-semibold text-danger">{audioError}</p> : null}
-      {isBuffering && !audioError ? (
+      {needsUserPlay && !audioError ? (
+        <div className="mt-3 flex items-center gap-2">
+          <Button variant="primary" onClick={() => tryPlay()} className="gap-2">
+            <Play className="h-4 w-4" aria-hidden="true" /> Tap to Play — {subSection.title}
+          </Button>
+          <span className="text-xs font-semibold text-muted">Audio is ready. Tap Play (plays once).</span>
+        </div>
+      ) : null}
+      {audioError ? (
+        <div className="mt-2 flex items-center gap-2">
+          <p className="text-xs font-semibold text-danger">{audioError}</p>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setAudioError(null);
+              setNeedsUserPlay(false);
+              autoPlayTriedRef.current = false;
+              setAudioRetryKey((k) => k + 1);
+            }}
+            className="h-7 px-2 text-xs"
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+      {isBuffering && !audioError && !needsUserPlay ? (
         <p className="mt-2 text-xs font-semibold text-warning" role="status">
           Audio is buffering; the section timer is paused until playback is ready.
         </p>
