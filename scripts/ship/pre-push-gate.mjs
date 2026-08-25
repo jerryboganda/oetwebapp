@@ -221,7 +221,7 @@ function findBalanceFault(source, ext) {
   return null;
 }
 
-export function inspectSource(relPath, source, { skipBalance = false } = {}) {
+export function inspectSource(relPath, source) {
   const findings = [];
   const ext = extname(relPath).toLowerCase();
   const lines = source.split(/\r?\n/);
@@ -240,9 +240,12 @@ export function inspectSource(relPath, source, { skipBalance = false } = {}) {
       }
     }
     // The character-level balance check cannot parse JSX/TSX (quoted text in
-    // markup trips it). When the real TypeScript parser is available it is
-    // authoritative for .ts/.tsx, so the crude check is skipped for them.
-    if (!skipBalance) {
+    // markup trips it), and CI runs this gate on a bare checkout where the
+    // real TypeScript parser is unavailable — so for .ts/.tsx the gate relies
+    // on the leftover-splice patterns above plus the authoritative TS parse
+    // (local) and the Next.js/Docker build (CI). Other code (e.g. .cs) keeps
+    // the balance check.
+    if (ext !== '.ts' && ext !== '.tsx') {
       const fault = findBalanceFault(source, ext);
       if (fault) findings.push(`${relPath}: ${fault}`);
     }
@@ -284,9 +287,7 @@ export async function runGate({ ci = false, files = null, readFile = null } = {}
   for (const relPath of targets) {
     const source = reader(relPath);
     if (source == null) continue;
-    const ext = extname(relPath).toLowerCase();
-    const tsAuthoritative = Boolean(tsMod) && (ext === '.ts' || ext === '.tsx');
-    findings.push(...inspectSource(relPath, source, { skipBalance: tsAuthoritative }));
+    findings.push(...inspectSource(relPath, source));
     findings.push(...await inspectTypescript(relPath, source, tsMod));
   }
 
@@ -336,6 +337,18 @@ export function selfTest() {
       path: 'app/ok.tsx',
       source: 'export function Ok() {\n  return <div />;\n}\n',
       wantFail: false,
+    },
+    {
+      name: 'tsx with JSX text apostrophes stays legal (balance check is JSX-blind)',
+      path: 'app/ok.tsx',
+      source: "export function Ok() {\n  return <p>The learner's credits don't expire</p>;\n}\n",
+      wantFail: false,
+    },
+    {
+      name: 'tsx leftover splice still fails via pattern',
+      path: 'app/ok.tsx',
+      source: 'useEffect(() => {\n    void poll();\n    return () => {\n, deps\n  }, [x]);\n',
+      wantFail: true,
     },
     {
       name: 'conflict marker',
