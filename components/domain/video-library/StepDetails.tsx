@@ -30,6 +30,7 @@ import {
   VIDEO_DIFFICULTY_OPTIONS,
   VIDEO_SUBTEST_OPTIONS,
 } from './video-wizard-config';
+import { VideoBatchTagPicker } from './VideoBatchTagPicker';
 
 export function StepDetails() {
   const wizard = useAdminWizard<AdminVideoDetail>();
@@ -150,14 +151,12 @@ export function StepDetails() {
           maxLength={200}
           required
         />
-        <Input
-          label="Tags (comma-separated)"
-          value={tagsCsv}
-          onChange={(e) => setTagsCsv(e.target.value)}
-          placeholder="e.g. skimming, part-b, time management"
-          maxLength={500}
-        />
       </div>
+
+      <VideoBatchTagPicker
+        tagsCsv={tagsCsv}
+        onChange={(next) => setTagsCsv(next)}
+      />
 
       <Textarea
         label="Description"
