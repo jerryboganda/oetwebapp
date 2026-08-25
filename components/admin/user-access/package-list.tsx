@@ -274,7 +274,7 @@ export function PackageList({
         </div>
         {(selectedPlan?.bundledAiCredits ?? 0) > 0 ? (
           <p className="text-sm text-admin-fg-strong">
-            Includes {selectedPlan?.bundledAiCredits} gifted AI credits, granted automatically when you add this package.
+            Includes {selectedPlan?.bundledAiCredits} gifted Shared AI credits, granted automatically when you add this package.
           </p>
         ) : null}
         <div className="flex justify-end">

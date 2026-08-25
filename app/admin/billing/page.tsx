@@ -1179,7 +1179,7 @@ export default function BillingPage() {
       render: (plan) => (
         <div className="space-y-1 text-muted">
           <p>{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
-          <p className="text-xs">{plan.bundledAiCredits ?? 0} gifted AI credits</p>
+          <p className="text-xs">{plan.bundledAiCredits ?? 0} gifted Shared AI credits</p>
         </div>
       ),
     },
@@ -1787,7 +1787,7 @@ export default function BillingPage() {
           <p className="mt-1 font-medium text-admin-fg-strong">{plan.activeSubscribers.toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gifted AI credits</p>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gifted Shared AI Credits</p>
           <p className="mt-1 font-medium text-admin-fg-strong">{(plan.bundledAiCredits ?? 0).toLocaleString()}</p>
         </div>
         <div className="rounded-2xl bg-admin-bg-subtle px-3 py-2">
@@ -3403,12 +3403,12 @@ export default function BillingPage() {
                 <Input label="Writing assessments" type="number" min={0} value={planForm.bundledWritingAssessments} onChange={(event) => setPlanForm((current) => ({ ...current, bundledWritingAssessments: event.target.value }))} />
                 <Input label="Human Tutor Speaking sessions" type="number" min={0} value={planForm.bundledSpeakingSessions} onChange={(event) => setPlanForm((current) => ({ ...current, bundledSpeakingSessions: event.target.value }))} hint="Bookable live-tutor sessions, distinct from AI Speaking Credits" />
                 <Input
-                  label="Gifted AI credits"
+                  label="Gifted Shared AI Credits"
                   type="number"
                   min={0}
                   value={planForm.bundledAiCredits}
                   onChange={(event) => setPlanForm((current) => ({ ...current, bundledAiCredits: event.target.value }))}
-                  hint="Granted automatically into the exam wallet when this Full Course is purchased or assigned. Full Courses use 5."
+                  hint="Gifted Shared AI Credits land in the candidate's universal Shared pool when this Full Course is purchased or assigned. Full Courses use 5."
                 />
               </div>
               <div className="mt-2 flex flex-wrap gap-4">
@@ -3694,7 +3694,7 @@ export default function BillingPage() {
                   options={plans.map((plan) => ({ value: plan.code ?? plan.id, label: `${plan.name} (${plan.code ?? plan.id})` }))}
                 />
                 <p className="text-sm text-admin-text-muted">
-                  Gifted AI credits on the plan are granted automatically. No extra checkbox.
+                  Gifted Shared AI Credits on the plan are granted automatically. No extra checkbox.
                 </p>
               </>
             ) : null}

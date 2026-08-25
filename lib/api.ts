@@ -4613,12 +4613,19 @@ export async function fetchAdminUserAiCredits(userId: string): Promise<AiPackage
 
 export interface AiPackageCreditAdjustmentPayload {
   sharedCreditsDelta?: number;
+  sharedCreditsSet?: number;
   flexibleCreditsDelta?: number;
+  flexibleCreditsSet?: number;
   writingOnlyCreditsDelta?: number;
+  writingOnlyCreditsSet?: number;
   speakingOnlyCreditsDelta?: number;
+  speakingOnlyCreditsSet?: number;
   listeningTestsDelta?: number;
+  listeningTestsSet?: number;
   readingTestsDelta?: number;
+  readingTestsSet?: number;
   mockExamsDelta?: number;
+  mockExamsSet?: number;
   expiresAt?: string | null;
   reason?: string | null;
 }

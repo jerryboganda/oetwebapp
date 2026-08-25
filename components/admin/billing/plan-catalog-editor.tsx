@@ -547,7 +547,7 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Price</th>
                 <th className="px-3 py-3">Interval</th>
-                <th className="px-3 py-3">Gifted AI credits</th>
+                <th className="px-3 py-3">Gifted Shared AI Credits</th>
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3 sr-only">Actions</th>
               </tr>
@@ -617,11 +617,11 @@ export function PlanCatalogEditor({ canWrite = true }: PlanCatalogEditorProps) {
 
           <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
             <Input
-              label="Gifted AI credits"
+              label="Gifted Shared AI Credits"
               inputMode="numeric"
               value={form.bundledAiCredits}
               onChange={(e) => setField('bundledAiCredits', e.target.value)}
-              hint="Granted automatically into the exam wallet when this Full Course is purchased or assigned. Full Courses use 5. No extra checkbox."
+              hint="Gifted Shared AI Credits land in the candidate's universal Shared pool when this Full Course is purchased or assigned. Full Courses use 5. No extra checkbox."
             />
           </div>
 

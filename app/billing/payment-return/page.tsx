@@ -99,8 +99,16 @@ function BillingPaymentReturnContent() {
         setStatus(result);
         if (result.status === 'completed') {
           setPhase('completed');
+          // Re-fetch every authoritative balance/entitlement surface so the
+          // learner never sees stale state after a confirmed payment.
           getQueryClient().invalidateQueries({
             queryKey: queryKeys.dashboard.aiPackageCredits(user?.userId ?? 'current'),
+          });
+          getQueryClient().invalidateQueries({
+            queryKey: queryKeys.dashboard.entitlement(user?.userId ?? 'current'),
+          });
+          getQueryClient().invalidateQueries({
+            queryKey: queryKeys.dashboard.subscription(user?.userId ?? 'current'),
           });
           return;
         }

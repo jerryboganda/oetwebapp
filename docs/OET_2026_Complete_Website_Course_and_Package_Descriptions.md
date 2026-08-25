@@ -663,8 +663,8 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 ## Key package logic used in this update
 
-- Quick Check includes 5 Shared AI credits plus 3 Listening exams and 3 Reading exams.
-- Exam Prep Pro includes 15 Shared AI credits plus 6 Listening exams and 6 Reading exams.
+- Quick Check includes 5 flexible AI grading credits for Writing or Speaking plus 3 Listening exams and 3 Reading exams.
+- Exam Prep Pro includes 15 flexible AI grading credits for Writing or Speaking plus 6 Listening exams and 6 Reading exams.
 - OET Mastery is positioned as the unlimited AI assessment package, with unlimited Listening and Reading practice.
 - Listening Starter and Reading Starter include 3 exams each.
 - Listening Standard and Reading Standard include 6 exams each.
@@ -678,13 +678,13 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** AI grading and practice starter package
 
-**Website description:** A targeted one-off readiness package for candidates who want instant AI feedback on Writing or Speaking together with a small Listening and Reading practice allowance. This package includes 5 Shared AI credits, plus 3 Listening exams and 3 Reading exams for focused practice.
+**Website description:** A targeted one-off readiness package for candidates who want instant AI feedback on Writing or Speaking together with a small Listening and Reading practice allowance. This package includes 5 flexible AI grading credits for Writing letters or Speaking cards, plus 3 Listening exams and 3 Reading exams for focused practice.
 
 **Access:** 30 days from purchase | **Format:** AI feedback reports plus Listening and Reading practice exams
 
 #### Included components
 
-- 5 Shared AI credits for Writing, Speaking, Listening or Reading
+- 5 flexible AI grading credits for Writing or Speaking
 - 3 Listening practice exams
 - 3 Reading practice exams
 - AI feedback reports for graded Writing or Speaking submissions
@@ -698,13 +698,13 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** AI grading and exam preparation package
 
-**Website description:** A larger one-off exam preparation package for candidates who need repeated AI grading and more Listening and Reading practice before the exam. It includes 15 Shared AI credits, plus 6 Listening exams and 6 Reading exams.
+**Website description:** A larger one-off exam preparation package for candidates who need repeated AI grading and more Listening and Reading practice before the exam. It includes 15 flexible AI grading credits for Writing letters or Speaking cards, plus 6 Listening exams and 6 Reading exams.
 
 **Access:** 90 days from purchase | **Format:** AI feedback reports plus Listening and Reading practice exams
 
 #### Included components
 
-- 15 Shared AI credits for Writing, Speaking, Listening or Reading
+- 15 flexible AI grading credits for Writing or Speaking
 - 6 Listening practice exams
 - 6 Reading practice exams
 - AI feedback reports for graded Writing or Speaking submissions

@@ -1,5 +1,13 @@
 # Agent State (local)
 
+## Current task — AI Packages spec 100% conformance sweep (DEPLOYING)
+- Audited full OET_AI_Packages spec (A01-A17, 3A/3B) against code: dashboard credits-only UI, Other papers hidden (CandidateVisible), instant webhook fulfilment + idempotency, reopen-free attempts, admin parity all verified implemented.
+- FIXED major gap: Quick Check / Exam Prep Pro were seeded/stored as shared_credits (violates spec A03/A04 + master catalogue). Restored flexible_credits 5/15 via seed manifest + website copy + migration 20261001120000_RestoreFlexibleWsMixedPacks (converts live balances + ledger deltas back to Flexible W/S for those packages).
+- FIXED minor gaps: admin CreditBucketAdjuster Add/Set-exact toggle; "Gifted Shared AI Credits" labels; payment-return invalidates entitlement+subscription+aiPackageCredits.
+- FIXED ship gate: repaired 40 broken pnpm junctions (pnpm install --frozen-lockfile), gate now uses real TS parser for .ts/.tsx, [Fact] regex tightened to column-0 orphans, self-test extended.
+- Validation: backend build 0 errors; 56/56 billing tests; ship-gate OK (typescript=yes); payment-return 17/17; ai-credit-summary 4/4; package-list + catalog-website-packages green. Pre-existing failures NOT touched: pdf-policy-release* snapshot tests, 126 repo-wide tsc errors.
+- Next: commit -> push -> watch Build & Deploy -> verify /api/health + spot-check pkg_quick_check entitlements JSON on prod DB shows flexible_credits.
+
 ## Current task — Shared wallet screenshot close-out + Master Catalogue merge
 - Debit-on-start + screenshot remaining copy now wired: reading exam/paper/practice/parts, listening paper/player, speaking warmup + self-practice, writing V2 eligibility, writing paper direct launch.
 - Unlimited L/R comes from live lot flags, not null remaining. Writing V2 eligibility deducts once on `writing-v2:{userId}:{scenarioId}`.

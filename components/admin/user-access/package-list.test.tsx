@@ -86,7 +86,7 @@ describe('PackageList primary package behavior', () => {
     expect(latest.find((row) => row.planCode === 'med')?.isPrimary).toBe(false);
   });
 
-  it('hides Grant included credits and advertises gifted AI credits', async () => {
+  it('hides Grant included credits and advertises gifted Shared AI credits', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const giftedPlans = [
@@ -104,7 +104,7 @@ describe('PackageList primary package behavior', () => {
 
     expect(screen.queryByLabelText('Grant included credits')).not.toBeInTheDocument();
     await user.selectOptions(screen.getByLabelText('Plan'), 'med');
-    expect(screen.getByText(/includes 5 gifted AI credits/i)).toBeInTheDocument();
+    expect(screen.getByText(/includes 5 gifted Shared AI credits/i)).toBeInTheDocument();
     const latest = onChange.mock.calls.at(-1)?.[0] as UserAccessSubscriptionRow[];
     expect(latest.find((row) => row.planCode === 'med')?.grantIncludedCredits).toBe(false);
   });

@@ -22,7 +22,10 @@ const conflictRe = /^(<{7}|={7}|>{7})(?:\s|$)/;
 const leftoverPatterns = [
   { name: 'cleanup-hook-splice', re: new RegExp(String.raw`return\s*\(\)\s*=>\s*\{\s*,`) },
   { name: 'block-open-trailing-comma', re: new RegExp(String.raw`\{\s*,`) },
-  { name: 'orphan-public-after-extra-brace', re: new RegExp(String.raw`^\s*\}\s*\n\s*\[Fact\]`, 'm') },
+  // Only a column-0 orphan `}` before [Fact] is a splice artifact. Normal
+  // xUnit methods end with an indented `}` followed by a blank line and the
+  // next [Fact], which must stay legal.
+  { name: 'orphan-public-after-extra-brace', re: new RegExp(String.raw`^\}\s*\n\s*\[Fact\]`, 'm') },
 ];
 const codeExt = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.cs']);
 const skipDir = new Set([
@@ -218,7 +221,7 @@ function findBalanceFault(source, ext) {
   return null;
 }
 
-export function inspectSource(relPath, source) {
+export function inspectSource(relPath, source, { skipBalance = false } = {}) {
   const findings = [];
   const ext = extname(relPath).toLowerCase();
   const lines = source.split(/\r?\n/);
@@ -236,8 +239,13 @@ export function inspectSource(relPath, source) {
         }
       }
     }
-    const fault = findBalanceFault(source, ext);
-    if (fault) findings.push(`${relPath}: ${fault}`);
+    // The character-level balance check cannot parse JSX/TSX (quoted text in
+    // markup trips it). When the real TypeScript parser is available it is
+    // authoritative for .ts/.tsx, so the crude check is skipped for them.
+    if (!skipBalance) {
+      const fault = findBalanceFault(source, ext);
+      if (fault) findings.push(`${relPath}: ${fault}`);
+    }
   }
   return findings;
 }
@@ -276,7 +284,9 @@ export async function runGate({ ci = false, files = null, readFile = null } = {}
   for (const relPath of targets) {
     const source = reader(relPath);
     if (source == null) continue;
-    findings.push(...inspectSource(relPath, source));
+    const ext = extname(relPath).toLowerCase();
+    const tsAuthoritative = Boolean(tsMod) && (ext === '.ts' || ext === '.tsx');
+    findings.push(...inspectSource(relPath, source, { skipBalance: tsAuthoritative }));
     findings.push(...await inspectTypescript(relPath, source, tsMod));
   }
 
@@ -307,6 +317,18 @@ export function selfTest() {
       name: 'extra class brace',
       path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
       source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n    }\n}\n',
+      wantFail: true,
+    },
+    {
+      name: 'normal xUnit method boundary is legal',
+      path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
+      source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n\n    [Fact]\n    public async Task B() {\n        Assert.True(true);\n    }\n}\n',
+      wantFail: false,
+    },
+    {
+      name: 'column-0 orphan brace before Fact fails',
+      path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
+      source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n}\n\n[Fact]\npublic async Task B() {\n    Assert.True(true);\n}\n',
       wantFail: true,
     },
     {

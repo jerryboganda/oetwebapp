@@ -9,6 +9,10 @@ vi.mock('@/lib/api', () => ({
   fetchBillingPaymentStatus: mockFetchBillingPaymentStatus,
 }));
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: { userId: 'user-1' }, isLoading: false }),
+}));
+
 import BillingPaymentReturnPage from './page';
 import { renderWithRouter } from '@/tests/test-utils';
 

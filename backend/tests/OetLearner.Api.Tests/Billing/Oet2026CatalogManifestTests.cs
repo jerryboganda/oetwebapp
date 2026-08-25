@@ -228,10 +228,45 @@ public sealed class Oet2026CatalogManifestTests
         void AssertWritingPackage(string code, int displayedItems, int debitUnits)
         {
             var addOn = addOns.Single(row => row.GetProperty("code").GetString() == code);
-            Assert.Equal(displayedItems, addOn.GetProperty("grantCredits").GetInt32());
+            // Writing packs advertise writingItems and debit writing_only_credits;
+            // grantCredits stays 0 so no legacy shared-credit fallback can fire.
+            Assert.Equal(0, addOn.GetProperty("grantCredits").GetInt32());
             Assert.Equal(displayedItems, addOn.GetProperty("writingItems").GetInt32());
             Assert.Equal(debitUnits, addOn.GetProperty("writingOnlyCredits").GetInt32());
         }
+    }
+
+    [Fact]
+    public async Task MixedPacks_GrantRestrictedFlexibleWs_NeverUniversalShared()
+    {
+        // Master Catalogue products 30/31: the W/S pool is restricted to
+        // Writing/Speaking and must not be convertible into universal Shared.
+        var manifest = await LoadManifestAsync();
+        var addOns = manifest.RootElement.GetProperty("addOns").EnumerateArray().ToArray();
+
+        var quickCheck = addOns.Single(addOn => addOn.GetProperty("code").GetString() == "pkg_quick_check");
+        Assert.Equal(5, quickCheck.GetProperty("flexibleCredits").GetInt32());
+        Assert.False(quickCheck.TryGetProperty("sharedCredits", out _) && quickCheck.GetProperty("sharedCredits").GetInt32() > 0);
+        Assert.Equal(0, quickCheck.GetProperty("grantCredits").GetInt32());
+        Assert.Equal(3, quickCheck.GetProperty("listeningTests").GetInt32());
+        Assert.Equal(3, quickCheck.GetProperty("readingTests").GetInt32());
+        Assert.Equal(30, quickCheck.GetProperty("durationDays").GetInt32());
+        Assert.Contains(
+            "flexible AI grading credits",
+            quickCheck.GetProperty("description").GetString(),
+            StringComparison.OrdinalIgnoreCase);
+
+        var examPrepPro = addOns.Single(addOn => addOn.GetProperty("code").GetString() == "pkg_exam_prep_pro");
+        Assert.Equal(15, examPrepPro.GetProperty("flexibleCredits").GetInt32());
+        Assert.False(examPrepPro.TryGetProperty("sharedCredits", out _) && examPrepPro.GetProperty("sharedCredits").GetInt32() > 0);
+        Assert.Equal(0, examPrepPro.GetProperty("grantCredits").GetInt32());
+        Assert.Equal(6, examPrepPro.GetProperty("listeningTests").GetInt32());
+        Assert.Equal(6, examPrepPro.GetProperty("readingTests").GetInt32());
+        Assert.Equal(90, examPrepPro.GetProperty("durationDays").GetInt32());
+        Assert.Contains(
+            "flexible AI grading credits",
+            examPrepPro.GetProperty("description").GetString(),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

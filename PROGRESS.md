@@ -1,6 +1,13 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-24
+Last updated: 2026-08-25
+
+## Current Checkpoint - AI Packages spec 100% conformance sweep (spec of record 2026-08-23)
+
+- Full audit of OET_AI_Packages spec (A01-A17, 3A/3B): all dashboard/admin/payment/attempt/Other-papers requirements verified live in code. Gap found + fixed: Quick Check / Exam Prep Pro seeded + stored as `shared_credits`, violating the spec's "must NOT be converted into universal Shared Credits" rule (A03/A04). Restored canonical `flexible_credits` 5/15: seed manifest, website copy (lib/catalog-website-packages.ts + canonical markdown), and migration 20261001120000_RestoreFlexibleWsMixedPacks (rewrites live add-on JSON, converts remaining lot/account balances and purchase-ledger deltas back to Flexible W/S for those two packages only).
+- Admin gaps closed: CreditBucketAdjuster gained Add/±-delta vs Set-exact mode toggle (API *Set fields already existed); "Gifted AI credits" labels renamed to "Gifted Shared AI Credits" (plan-catalog-editor, billing ops, package-list + tests); payment-return completion now invalidates entitlement + subscription queries alongside aiPackageCredits.
+- Ship gate fixes: pnpm junctions repaired (folder rename had orphaned all 40 to `NEW OET WEB APP` path); pre-push-gate now runs the real TypeScript parser for .ts/.tsx (skips the JSX-blind balance heuristic when TS is available) and the `[Fact]` orphan-brace regex only fires on column-0 orphans. Self-test extended.
+- Tests: Oet2026CatalogManifestTests.MixedPacks_GrantRestrictedFlexibleWs_NeverUniversalShared locks A03/A04 into the manifest; stale payment-return (useAuth mock) + ai-credit-summary (bucket-table) tests repaired; pre-existing failures in pdf-policy-release* snapshot folders and 126 repo-wide tsc errors left as-is (untouched legacy).
 
 ## Current Checkpoint - Push no longer stops at "deploy initiated"
 
