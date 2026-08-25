@@ -111,6 +111,42 @@ public class AdminAlertService(LearnerDbContext db)
         if (massPlaybackAccounts > 0)
             alerts.Add(new AdminAlertItemResponse("mass_playback", "warning", "Mass Playback Volume", $"{massPlaybackAccounts} account(s) started {massPlaybackThreshold}+ playback sessions in the last 24h", "/admin/security", now));
 
+        // Payment fulfilment queue — paid orders waiting for admin hand-over.
+        // Generated ONLY from successful payment records (Status=Pending + pending_manual/pending_verification),
+        // never from cart / draft scaffolds. Cart-only learners have Draft subscriptions which
+        // are excluded here by the Status filter. Count drives the dashboard alert and
+        // Billing Ops badge until the admin fulfills/verifies.
+        var pendingFulfilmentCount = await db.Subscriptions.AsNoTracking()
+            .Where(s => s.Status == SubscriptionStatus.Pending
+                && (s.FulfilmentStatus == FulfilmentStatuses.PendingManual
+                    || s.FulfilmentStatus == FulfilmentStatuses.PendingVerification))
+            .CountAsync(ct);
+        if (pendingFulfilmentCount > 0)
+        {
+            alerts.Add(new AdminAlertItemResponse(
+                "pending_fulfilment",
+                "warning",
+                "Pending Fulfilment",
+                $"{pendingFulfilmentCount} paid order(s) waiting for fulfilment",
+                "/admin/billing/manual-payments?tab=fulfilment",
+                now));
+        }
+
+        // Payment proofs pending review (manual gateway receipts + learner uploads awaiting verification)
+        var pendingProofsCount = await db.ManualPaymentRequests.AsNoTracking()
+            .Where(r => r.Status == "pending" || r.Status == "needs_review")
+            .CountAsync(ct);
+        if (pendingProofsCount > 0)
+        {
+            alerts.Add(new AdminAlertItemResponse(
+                "pending_payment_proofs",
+                "info",
+                "Payment Proofs",
+                $"{pendingProofsCount} payment proof(s) pending review",
+                "/admin/billing/manual-payments?tab=proofs",
+                now));
+        }
+
         var criticalCount = alerts.Count(a => a.Severity == "critical");
         var warningCount = alerts.Count(a => a.Severity == "warning");
         var infoCount = alerts.Count(a => a.Severity == "info");

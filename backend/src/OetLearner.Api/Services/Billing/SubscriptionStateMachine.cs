@@ -18,6 +18,15 @@ public static class SubscriptionStateMachine
     private static readonly IReadOnlyDictionary<SubscriptionStatus, IReadOnlySet<SubscriptionStatus>> Allowed
         = new Dictionary<SubscriptionStatus, IReadOnlySet<SubscriptionStatus>>
         {
+            [SubscriptionStatus.Draft] = new HashSet<SubscriptionStatus>
+            {
+                SubscriptionStatus.Draft,
+                SubscriptionStatus.Pending,
+                SubscriptionStatus.Active,
+                SubscriptionStatus.Trial,
+                SubscriptionStatus.Cancelled,
+                SubscriptionStatus.Expired,
+            },
             [SubscriptionStatus.Trial] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Trial,

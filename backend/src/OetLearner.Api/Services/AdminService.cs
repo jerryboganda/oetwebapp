@@ -4690,7 +4690,9 @@ public partial class AdminService(
 
         subscription ??= activeSubs.FirstOrDefault()
             ?? await db.Subscriptions.AsNoTracking()
-                .Where(s => s.UserId == userId)
+                .Where(s => s.UserId == userId
+                    && s.Status != SubscriptionStatus.Draft
+                    && !(s.Status == SubscriptionStatus.Pending && s.FulfilmentStatus == FulfilmentStatuses.Auto))
                 .OrderByDescending(s => s.ChangedAt)
                 .FirstOrDefaultAsync(ct);
         if (subscription is null) return null;
@@ -5520,6 +5522,16 @@ public partial class AdminService(
             {
                 query = query.Where(subscription => subscription.Status == parsedStatus);
             }
+        }
+        else
+        {
+            // Normal admin view hides Draft scaffolds (pre-payment only, never Pending,
+            // no entitlements) and phantom Pending+auto rows that never saw a successful
+            // payment (cart-only). Explicit status=draft or status=pending still shows
+            // them when filtered.
+            query = query.Where(subscription =>
+                subscription.Status != SubscriptionStatus.Draft
+                && !(subscription.Status == SubscriptionStatus.Pending && subscription.FulfilmentStatus == FulfilmentStatuses.Auto));
         }
 
         if (!string.IsNullOrWhiteSpace(search))

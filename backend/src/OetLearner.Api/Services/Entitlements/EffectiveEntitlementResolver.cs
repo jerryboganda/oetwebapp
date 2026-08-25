@@ -32,18 +32,30 @@ public sealed record ContentOverrideSets(
     IReadOnlySet<string> VideoIncludes,
     IReadOnlySet<string> VideoExcludes,
     IReadOnlySet<string> MaterialFolderIncludes,
-    IReadOnlySet<string> MaterialFolderExcludes)
+    IReadOnlySet<string> MaterialFolderExcludes,
+    /// <summary>
+    /// Per-plan tag-based video exclusion. Any video whose <c>TagsCsv</c> contains
+    /// one of these tags is denied, even if a different scope would allow it. An
+    /// explicit per-plan video include id still wins (the same override-explicit
+    /// include beats exclude rule already used for ids). Admin-tagged videos
+    /// (Full Course only / Crash Course only) make this fully admin-manageable:
+    /// a new upload with a single tag immediately picks up the rule for every
+    /// plan that lists it in <c>videos.excludeTags</c>.
+    /// </summary>
+    IReadOnlySet<string>? VideoExcludeTags = null)
 {
     public static readonly ContentOverrideSets Empty = new(
         new HashSet<string>(StringComparer.OrdinalIgnoreCase),
         new HashSet<string>(StringComparer.OrdinalIgnoreCase),
         new HashSet<string>(StringComparer.OrdinalIgnoreCase),
-        new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+        null);
 
     public bool IsEmpty => VideoIncludes.Count == 0
         && VideoExcludes.Count == 0
         && MaterialFolderIncludes.Count == 0
-        && MaterialFolderExcludes.Count == 0;
+        && MaterialFolderExcludes.Count == 0
+        && (VideoExcludeTags is null || VideoExcludeTags.Count == 0);
 }
 
 public sealed record EffectiveEntitlementSnapshot(
@@ -752,6 +764,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         var videoExcludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var folderIncludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var folderExcludes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var videoExcludeTags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var plan in plans)
         {
@@ -761,6 +774,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 using var doc = JsonDocument.Parse(plan.ContentOverridesJson);
                 if (doc.RootElement.ValueKind != JsonValueKind.Object) continue;
                 ReadOverrideNode(doc.RootElement, "videos", videoIncludes, videoExcludes);
+                ReadOverrideTagNode(doc.RootElement, "videos", videoExcludeTags);
                 ReadOverrideNode(doc.RootElement, "materialFolders", folderIncludes, folderExcludes);
                 ReadOverrideNode(doc.RootElement, "material_folders", folderIncludes, folderExcludes);
             }
@@ -770,7 +784,12 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             }
         }
 
-        var merged = new ContentOverrideSets(videoIncludes, videoExcludes, folderIncludes, folderExcludes);
+        var merged = new ContentOverrideSets(
+            videoIncludes,
+            videoExcludes,
+            folderIncludes,
+            folderExcludes,
+            videoExcludeTags.Count == 0 ? null : videoExcludeTags);
         return merged.IsEmpty ? ContentOverrideSets.Empty : merged;
     }
 
@@ -788,6 +807,26 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         if (node.TryGetProperty("exclude", out var exc))
         {
             foreach (var id in ReadStringArray(exc)) excludes.Add(id);
+        }
+    }
+
+    /// <summary>
+    /// Read a per-plan tag-based video exclusion set. Lives on the same "videos" node
+    /// as the id-based include/exclude, so admins and existing migrations keep using
+    /// the familiar shape: <c>{"videos":{"excludeTags":["batch:crash-course-arabic-writing"]}}</c>.
+    /// Tags are stored as opaque strings; matching is done against <c>LibraryVideo.TagsCsv</c>
+    /// entries in <c>VideoEntitlementService.Evaluate</c>.
+    /// </summary>
+    private static void ReadOverrideTagNode(
+        JsonElement root,
+        string nodeName,
+        HashSet<string> excludeTags)
+    {
+        if (!root.TryGetProperty(nodeName, out var node) || node.ValueKind != JsonValueKind.Object) return;
+        if (node.TryGetProperty("excludeTags", out var arr)
+            || node.TryGetProperty("exclude_tags", out arr))
+        {
+            foreach (var tag in ReadStringArray(arr)) excludeTags.Add(tag);
         }
     }
 

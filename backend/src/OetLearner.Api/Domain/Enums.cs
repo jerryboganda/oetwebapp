@@ -65,19 +65,21 @@ public enum ContentStatus
 
 public enum SubscriptionStatus
 {
-    Trial,
-    Pending,
-    Active,
-    PastDue,
-    Suspended,
-    Cancelled,
-    Expired,
+    Trial = 0,
+    Pending = 1,
+    Active = 2,
+    PastDue = 3,
+    Suspended = 4,
+    Cancelled = 5,
+    Expired = 6,
     /// <summary>Phase 6 international expansion: voluntary pause (renewal suspended, access frozen or limited per plan rule).</summary>
-    Paused,
+    Paused = 7,
     /// <summary>Candidate has requested a subscription freeze; access remains active until admin approval.</summary>
-    FreezeRequested,
+    FreezeRequested = 8,
     /// <summary>Course access is frozen and blocked while remaining days are preserved.</summary>
-    Frozen,
+    Frozen = 9,
+    /// <summary>Pre-payment scaffold only. Never confers entitlements; hidden from learner/admin views. Never becomes Pending without a successful payment.</summary>
+    Draft = 10,
 }
 
 public enum FreezeApprovalMode

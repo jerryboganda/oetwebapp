@@ -252,7 +252,10 @@ public static class BillingExpansionEndpoints
     private static async Task<Ok<List<PendingFulfilmentDto>>> ListPendingFulfilment(LearnerDbContext db, CancellationToken ct)
     {
         var subscriptions = await db.Subscriptions
-            .Where(s => s.FulfilmentStatus == FulfilmentStatuses.PendingManual)
+            .Where(s => s.Status == SubscriptionStatus.Pending
+                && (s.FulfilmentStatus == FulfilmentStatuses.PendingManual
+                    || s.FulfilmentStatus == FulfilmentStatuses.PendingVerification)
+                && s.Status != SubscriptionStatus.Draft)
             .OrderBy(s => s.ChangedAt)
             .Take(200)
             .ToListAsync(ct);
@@ -291,15 +294,43 @@ public static class BillingExpansionEndpoints
                 .Where(v => versionIds.Contains(v.Id))
                 .ToDictionaryAsync(v => v.Id, StringComparer.Ordinal, ct);
 
+        // Enrichment: also pull gateway transactions for subscriptions without proof
+        var quoteMap = await db.BillingQuotes.AsNoTracking()
+            .Where(q => q.SubscriptionId != null && subscriptionIds.Contains(q.SubscriptionId!))
+            .ToDictionaryAsync(q => q.SubscriptionId!, StringComparer.Ordinal, ct);
+        var quoteIds = quoteMap.Values.Select(q => q.Id).ToList();
+        var transactions = quoteIds.Count == 0 ? new List<PaymentTransaction>() : await db.PaymentTransactions.AsNoTracking()
+            .Where(t => t.QuoteId != null && quoteIds.Contains(t.QuoteId!) && t.Status == "completed")
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync(ct);
+        var txBySubscription = new Dictionary<string, PaymentTransaction>(StringComparer.Ordinal);
+        foreach (var tx in transactions)
+        {
+            if (tx.QuoteId is null) continue;
+            var q = quoteMap.Values.FirstOrDefault(v => v.Id == tx.QuoteId);
+            if (q?.SubscriptionId is not null && !txBySubscription.ContainsKey(q.SubscriptionId!))
+            {
+                txBySubscription[q.SubscriptionId!] = tx;
+            }
+        }
+
         var items = subscriptions.Select(s =>
         {
             plans.TryGetValue(s.PlanId, out var plan);
             proofBySubscription.TryGetValue(s.Id, out var proof);
             userById.TryGetValue(s.UserId, out var user);
             versions.TryGetValue(s.PlanVersionId ?? string.Empty, out var version);
+            txBySubscription.TryGetValue(s.Id, out var tx);
+            quoteMap.TryGetValue(s.Id, out var quote);
             var externalOnly = version is not null
                 ? ManualDeliveryPolicy.IsExternalOnly(version)
                 : string.IsNullOrWhiteSpace(s.PlanVersionId) && ManualDeliveryPolicy.IsExternalOnly(plan);
+            var amount = proof?.AmountAmount ?? tx?.Amount ?? quote?.TotalAmount ?? s.PriceAmount;
+            var currency = proof?.Currency ?? tx?.Currency ?? quote?.Currency ?? s.Currency;
+            var gateway = proof?.Gateway ?? tx?.Gateway ?? "manual";
+            var transactionId = proof?.Reference ?? tx?.GatewayTransactionId ?? tx?.CaptureId ?? quote?.CheckoutSessionId ?? string.Empty;
+            var paymentMethod = proof?.Method ?? tx?.Gateway ?? "manual";
+            DateTimeOffset? paidAt = proof?.SubmittedAt ?? tx?.CreatedAt ?? quote?.CreatedAt;
             return new PendingFulfilmentDto(
                 s.Id,
                 s.UserId,
@@ -316,7 +347,13 @@ public static class BillingExpansionEndpoints
                 s.ChangedAt,
                 proof is null ? null : ManualPaymentDto.FromEntity(proof, s.FulfilmentStatus),
                 false,
-                externalOnly);
+                externalOnly,
+                amount,
+                currency,
+                gateway,
+                transactionId,
+                paymentMethod,
+                paidAt);
         }).ToList();
 
         return TypedResults.Ok(items);
@@ -338,9 +375,10 @@ public static class BillingExpansionEndpoints
         {
             return TypedResults.BadRequest("This order has already been marked fulfilled.");
         }
-        if (subscription.FulfilmentStatus != FulfilmentStatuses.PendingManual)
+        if (subscription.FulfilmentStatus != FulfilmentStatuses.PendingManual
+            && subscription.FulfilmentStatus != FulfilmentStatuses.PendingVerification)
         {
-            return TypedResults.BadRequest("Only an order awaiting manual fulfilment can be marked fulfilled.");
+            return TypedResults.BadRequest("Only an order awaiting fulfilment can be marked fulfilled.");
         }
 
         var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == subscription.PlanId, ct);
@@ -675,7 +713,13 @@ public sealed record PendingFulfilmentDto(
     DateTimeOffset ChangedAt,
     ManualPaymentDto? Proof,
     bool WebAccessReleased = false,
-    bool ExternalOnly = false);
+    bool ExternalOnly = false,
+    decimal Amount = 0,
+    string Currency = "AUD",
+    string? Gateway = null,
+    string? TransactionId = null,
+    string? PaymentMethod = null,
+    DateTimeOffset? PaidAt = null);
 
 public sealed record ApproveRejectRequest(string? Notes);
 

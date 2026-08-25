@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
   AlertTriangle,
@@ -118,7 +119,17 @@ type Decision =
   | { kind: 'fulfil'; row: PendingFulfilmentDto };
 
 export default function AdminPaymentProofsPage() {
+  const searchParams = useSearchParams();
   const [tab, setTab] = useState<Tab>('proofs');
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  // Deep link: /admin/billing/manual-payments?tab=fulfilment&subscriptionId=... or ?tab=proofs&paymentId=...
+  useEffect(() => {
+    const qpTab = searchParams.get('tab');
+    if (qpTab === 'fulfilment' || qpTab === 'proofs') setTab(qpTab);
+    const subId = searchParams.get('subscriptionId') ?? searchParams.get('paymentId') ?? searchParams.get('id');
+    if (subId) setHighlightId(subId);
+  }, [searchParams]);
 
   const [statusFilter, setStatusFilter] = useState('pending');
   const [kindFilter, setKindFilter] = useState('__all');
@@ -517,12 +528,15 @@ export default function AdminPaymentProofsPage() {
     {
       id: 'learner',
       header: 'Learner',
-      cell: ({ row }) => (
-        <div>
-          <p className="font-medium text-admin-fg-strong">{row.original.displayName || '-'}</p>
-          <p className="text-xs text-admin-fg-muted">{row.original.email || row.original.userId}</p>
-        </div>
-      ),
+      cell: ({ row }) => {
+        const hl = highlightId && (row.original.subscriptionId === highlightId || row.original.userId === highlightId);
+        return (
+          <div className={hl ? 'rounded bg-amber-50 px-2 py-1 ring-1 ring-amber-300' : undefined}>
+            <p className="font-medium text-admin-fg-strong">{row.original.displayName || '-'}</p>
+            <p className="text-xs text-admin-fg-muted">{row.original.email || row.original.userId}</p>
+          </div>
+        );
+      },
     },
     {
       id: 'plan',
@@ -531,6 +545,26 @@ export default function AdminPaymentProofsPage() {
         <div>
           <p className="font-medium text-admin-fg-strong">{row.original.planName}</p>
           <p className="text-xs text-admin-fg-muted">{row.original.planCode}</p>
+        </div>
+      ),
+    },
+    {
+      id: 'payment',
+      header: 'Payment',
+      cell: ({ row }) => (
+        <div className="space-y-0.5 text-xs">
+          <p className="font-medium text-admin-fg-strong">
+            {row.original.amount?.toLocaleString?.() ?? row.original.amount} {row.original.currency}
+          </p>
+          <p className="text-admin-fg-muted">{row.original.paymentMethod ?? row.original.gateway ?? '—'}</p>
+          {row.original.transactionId ? (
+            <p className="truncate font-mono text-[11px] text-admin-fg-muted" title={row.original.transactionId}>
+              {row.original.transactionId}
+            </p>
+          ) : null}
+          {row.original.paidAt ? (
+            <p className="text-[11px] text-admin-fg-muted">{new Date(row.original.paidAt).toLocaleString()}</p>
+          ) : null}
         </div>
       ),
     },

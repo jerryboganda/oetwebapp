@@ -220,22 +220,28 @@ public static class BillingSubscriptionEndpoints
 
     private static IQueryable<Subscription> QueryUserSubscriptions(LearnerDbContext db, string userId)
         => db.Subscriptions
-            .Where(s => s.UserId == userId)
+            .Where(s => s.UserId == userId
+                && s.Status != SubscriptionStatus.Draft
+                && !(s.Status == SubscriptionStatus.Pending && s.FulfilmentStatus == FulfilmentStatuses.Auto))
             .OrderByDescending(s => s.ChangedAt)
             .ThenByDescending(s => s.StartedAt);
 
     /// <summary>The subscription that currently represents this user's plan: the most
     /// recently changed row that still owns its plan slot (see
     /// SubscriptionStateMachine.CurrentOwnershipStatuses), falling back to the most
-    /// recently changed row overall when none are currently owned. A bare "latest
-    /// changed" pick would let a just-cancelled OLD package (e.g. an admin swapping
-    /// packages: grant new, then cancel old) outrank the learner's real current one,
-    /// since cancelling also touches ChangedAt.</summary>
+    /// recently changed row overall when none are currently owned. Draft rows are
+    /// hidden: before successful payment = Draft only, never shown as a valid
+    /// subscription. A bare "latest changed" pick would let a just-cancelled OLD
+    /// package (e.g. an admin swapping packages: grant new, then cancel old)
+    /// outrank the learner's real current one, since cancelling also touches
+    /// ChangedAt.</summary>
     private static async Task<Subscription?> GetCurrentSubscriptionAsync(LearnerDbContext db, string userId, CancellationToken ct)
         => await QueryUserSubscriptions(db, userId)
                 .Where(s => SubscriptionStateMachine.CurrentOwnershipStatuses.Contains(s.Status))
                 .FirstOrDefaultAsync(ct)
-            ?? await QueryUserSubscriptions(db, userId).FirstOrDefaultAsync(ct);
+            ?? await QueryUserSubscriptions(db, userId)
+                .Where(s => s.Status != SubscriptionStatus.Draft)
+                .FirstOrDefaultAsync(ct);
 
     private static async Task<SubscriptionMeDto> ProjectAsync(LearnerDbContext db, Subscription sub, CancellationToken ct)
     {

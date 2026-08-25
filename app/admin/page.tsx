@@ -21,6 +21,7 @@ import Link from 'next/link';
 import {
   AlertTriangle,
   ArrowRight,
+  CreditCard,
   Flag,
   Inbox,
   RefreshCw,
@@ -34,6 +35,7 @@ import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminDashboardData } from '@/lib/admin';
 import type { AdminDashboardData } from '@/lib/types/admin';
+import { fetchAdminAlerts } from '@/lib/api';
 
 // ── New admin design system primitives ────────────────────────────────
 import {
@@ -364,12 +366,63 @@ function DashboardSkeleton() {
   );
 }
 
+function FulfilmentAlertBanner() {
+  const [alerts, setAlerts] = useState<{ type: string; message: string; href: string }[]>([]);
+  const load = useCallback(async () => {
+    try {
+      const res = (await fetchAdminAlerts()) as {
+        alerts?: { alertType: string; description: string; actionRoute: string; severity: string }[];
+      };
+      const list = Array.isArray(res.alerts) ? res.alerts : [];
+      const relevant = list
+        .filter((a) => a.alertType === 'pending_fulfilment' || a.alertType === 'pending_payment_proofs')
+        .map((a) => ({ type: a.alertType, message: a.description, href: a.actionRoute }));
+      setAlerts(relevant);
+    } catch {
+      // silent — dashboard not blocked by alerts
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+    const id = window.setInterval(() => void load(), 30_000);
+    return () => window.clearInterval(id);
+  }, [load]);
+  if (alerts.length === 0) return null;
+  const primary = alerts.find((a) => a.type === 'pending_fulfilment') ?? alerts[0];
+  const isFulfilment = primary.type === 'pending_fulfilment';
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={
+        isFulfilment
+          ? 'mb-4 flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100'
+          : 'mb-4 flex items-center justify-between gap-3 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sky-900 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-100'
+      }
+    >
+      <div className="flex items-center gap-2">
+        <CreditCard className="h-5 w-5" aria-hidden="true" />
+        <span className="text-sm font-semibold">{primary.message}</span>
+        {alerts.length > 1 && (
+          <Badge variant="default" className="ml-2">
+            +{alerts.length - 1} more
+          </Badge>
+        )}
+      </div>
+      <Button asChild size="sm" variant="primary">
+        <Link href={primary.href}>Open queue</Link>
+      </Button>
+    </div>
+  );
+}
+
 function DashboardContent({ data: d }: { data: AdminDashboardData }) {
   const agreementTone =
     d.quality.agreementRate >= 80 ? 'success' : d.quality.agreementRate >= 65 ? 'warning' : 'danger';
 
   return (
     <>
+      <FulfilmentAlertBanner />
       {/* KPI strip — six pulse-style tiles. */}
       <KpiStrip aria-label="Operations key metrics">
         <KpiTile

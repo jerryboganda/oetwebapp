@@ -94,6 +94,10 @@ public sealed record VideoAccessContext(
     // bypasses the module / subscription gate.
     IReadOnlySet<string>? VideoIncludes = null,
     IReadOnlySet<string>? VideoExcludes = null,
+    // Per-plan tag-based video exclusion. Any video whose TagsCsv contains a
+    // tag in this set is denied. An explicit per-plan video include id still
+    // wins. See ContentOverrideSets.VideoExcludeTags for the full contract.
+    IReadOnlySet<string>? VideoExcludeTags = null,
     // Per-USER video allocation scope. Explicit ids remain allow-listed, while videos first
     // published after the initial scope timestamp are automatically included. Null = no
     // per-user restriction (fail-open). Admins bypass it.
@@ -244,6 +248,7 @@ public sealed class VideoEntitlementService(
             ProfessionId: entitlement.ProfessionId,
             VideoIncludes: entitlement.ContentOverrides.VideoIncludes,
             VideoExcludes: entitlement.ContentOverrides.VideoExcludes,
+            VideoExcludeTags: entitlement.ContentOverrides.VideoExcludeTags,
             UserVideoAccess: userVideoAccess,
             BasicEnglishEntitled: basicEnglish.Entitled,
             ExclusivelyBasicEnglish: basicEnglish.ExclusivelyBasicEnglish);
@@ -285,6 +290,10 @@ public sealed class VideoEntitlementService(
             if (context.VideoExcludes is { Count: > 0 } && context.VideoExcludes.Contains(video.Id))
             {
                 return new VideoEntitlementResult(false, "plan_excludes_video", context.CurrentTier);
+            }
+            if (context.VideoExcludeTags is { Count: > 0 } && VideoMatchesAnyTag(video, context.VideoExcludeTags))
+            {
+                return new VideoEntitlementResult(false, "plan_excludes_video_tag", context.CurrentTier);
             }
             if (!VideoLibraryLearnerService.IsProfessionVisible(video.ProfessionIdsJson, context.ProfessionId))
             {
@@ -551,4 +560,20 @@ public sealed class VideoEntitlementService(
         JsonValueKind.Number => el.TryGetInt32(out var i) && i > 0,
         _ => false,
     };
+
+    /// <summary>
+    /// True when the video's <c>TagsCsv</c> contains any of the supplied tags (case-insensitive,
+    /// trimmed). Both the canonical "<c>batch:...</c>" form and the value-without-prefix form
+    /// (admin sets whichever the picker hands them) match — admins only need a single source of
+    /// truth, and the entitlement service is forgiving about minor variations.
+    /// </summary>
+    public static bool VideoMatchesAnyTag(LibraryVideo video, IReadOnlySet<string> tags)
+    {
+        if (string.IsNullOrWhiteSpace(video.TagsCsv) || tags.Count == 0) return false;
+        foreach (var raw in video.TagsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (tags.Contains(raw)) return true;
+        }
+        return false;
+    }
 }

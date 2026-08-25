@@ -312,6 +312,14 @@ public sealed class VideoLibraryLearnerService(
             return null;
         }
 
+        // Mutual Full/Crash filtering: non-entitled videos are invisible (404), not
+        // Premium/locked. Evaluate honors plan excludes, subtest scope, module gate,
+        // profession gating and free-tier rules.
+        if (!entitlements.Evaluate(context, video).Allowed)
+        {
+            return null;
+        }
+
         return video;
     }
 
@@ -328,11 +336,14 @@ public sealed class VideoLibraryLearnerService(
         var userVideoAccess = await UserVideoAccessScope.LoadAsync(db, userId, ct);
         var context = await entitlements.ResolveContextAsync(userId, isAdmin: false, ct);
         // ProfessionIdsJson is a JSON column — filter client-side (never LINQ into JSON).
+        // Entitlement gate: non-entitled premium content must be invisible, not
+        // Premium/locked. Free-tier preview handling stays inside Evaluate.
         return published
             .Where(v => IsCourseProfessionVisible(v, profession))
             .Where(userVideoAccess.Allows)
             .Where(v => CourseContentMatrix.IsVisibleInBasicEnglishScope(
                 v, context.BasicEnglishEntitled, context.ExclusivelyBasicEnglish))
+            .Where(v => entitlements.Evaluate(context, v).Allowed)
             .ToList();
     }
 

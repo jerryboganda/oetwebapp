@@ -8924,7 +8924,7 @@ public partial class LearnerService(
                 .OrderByDescending(s => s.ChangedAt)
                 .FirstOrDefaultAsync(cancellationToken);
             subscription ??= await StandaloneAddonSubscriptions.EnsureAsync(
-                db, userId, now, cancellationToken, SubscriptionStatus.Pending);
+                db, userId, now, cancellationToken, SubscriptionStatus.Draft);
         }
         else
         {
@@ -8955,17 +8955,18 @@ public partial class LearnerService(
 
             // A brand-new learner with no prior subscription needs a parent row so
             // this quote (and any add-on items) have something to hang off. It is a
-            // pre-payment SCAFFOLD only — it MUST NOT confer entitlements until the
-            // payment actually completes, otherwise merely opening checkout would
-            // light up "Active on your account" and unlock gated modules for free.
-            // So it starts Pending (fails-low to FREE in EffectiveEntitlementResolver)
-            // and is flipped to Active in ApplyCheckoutCompletionAsync once paid.
+            // pre-payment DRAFT only — it MUST NOT become Pending, must not confer
+            // entitlements, and must remain hidden from learner/admin views until a
+            // successful payment completes. Before success = Draft only; after success
+            // ApplyCheckoutCompletionAsync moves Draft → Pending (admin approval
+            // required) or Draft → Active (automatic access). Pending is never created
+            // before a successful payment.
             subscription = new Subscription
             {
                 Id = TruncateIdentifier($"sub-{Guid.NewGuid():N}"),
                 UserId = userId,
                 PlanId = defaultPlan.Code,
-                Status = SubscriptionStatus.Pending,
+                Status = SubscriptionStatus.Draft,
                 NextRenewalAt = now.AddMonths(Math.Max(defaultPlan.DurationMonths, 1)),
                 StartedAt = now,
                 ChangedAt = now,
@@ -11728,22 +11729,32 @@ public partial class LearnerService(
                 // Freeze rule is "once per subscription purchase" — buying a new plan
                 // renews the learner's one-time self-service freeze entitlement.
                 await ResetFreezeEntitlementForNewPurchaseAsync(transaction.LearnerUserId, ct);
+
+                // Final rule: Before payment = Draft only. Successful payment +
+                // admin approval required = Pending; automatic = Active.
+                // If the scaffold is still Draft, move it to Pending so the admin
+                // queue shows "payment succeeded, awaiting approval". This is the
+                // gateway from the pre-payment scaffold to the paid Pending state.
+                if (subscription.Status == SubscriptionStatus.Draft)
+                {
+                    SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Pending, "checkout_pending_approval");
+                }
             }
         }
 
-        // Activate the pre-payment scaffold subscription now that we are on the paid
-        // completion path. An automatic_web plan purchase has already transitioned it to
-        // Active above; this covers add-on / credit / review-pack purchases by a
-        // first-time learner whose scaffold subscription was created Pending in
-        // BuildBillingQuoteAsync and never runs the plan block. Guarded on Pending so it
-        // is a strict no-op for a returning learner's existing Active/Cancelled/Frozen
-        // subscription. Pending now has THREE producers — the checkout scaffold, a
-        // manual-delivery plan purchase parked at pending_manual, and a regular
-        // Products 1-29 order parked at pending_verification — so both conjuncts are
-        // load-bearing: without them this would activate an order an admin has not yet
-        // verified/fulfilled. Add-on-only AI package purchases (Products 30-47) keep
-        // instant activation per Flow B.
-        if (subscription.Status == SubscriptionStatus.Pending
+        // Final subscription/payment logic:
+        // - Before successful payment = Draft only (hidden, no entitlements).
+        // - Successful payment + admin approval required = Draft → Pending (payment
+        //   succeeded, waiting for admin). Pending → Active only via admin action.
+        // - Successful payment + automatic access = Draft → Active immediately.
+        // Pending is never created before a successful payment.
+        // This covers add-on / credit / review-pack purchases by a first-time
+        // learner whose scaffold was Draft and never ran the plan block. Guarded
+        // so it is a no-op for Active/Cancelled/Frozen subscriptions. Both pending
+        // conjuncts are load-bearing: without them we would activate an order an
+        // admin has not yet verified/fulfilled. Add-on-only AI packages (Products
+        // 30-47) keep instant activation per Flow B.
+        if ((subscription.Status == SubscriptionStatus.Pending || subscription.Status == SubscriptionStatus.Draft)
             && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingManual, StringComparison.OrdinalIgnoreCase)
             && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingVerification, StringComparison.OrdinalIgnoreCase))
         {
