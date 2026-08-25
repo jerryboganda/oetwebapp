@@ -1,6 +1,10 @@
 # Agent State (local)
 
-## Current task — AI Packages spec 100% conformance sweep (DEPLOYING)
+## Current task — Finish Listening 100% and ship
+- Player auto-advance restored: cue-end marks all section extracts, Part B waits for every workplace cue, 0s review hops V2 review then next/submit. Player suite 34/34. Backend listening 36/36. Page/category tests 16/16.
+- Rebased onto origin/main. Kept remote ship-gate (TSX balance already skipped). Next: continue rebase, public, push main, watch Build & Deploy for this SHA, private only after success, hit live health.
+
+## Previous — AI Packages spec 100% conformance sweep
 - Audited full OET_AI_Packages spec (A01-A17, 3A/3B) against code: dashboard credits-only UI, Other papers hidden (CandidateVisible), instant webhook fulfilment + idempotency, reopen-free attempts, admin parity all verified implemented.
 - FIXED major gap: Quick Check / Exam Prep Pro were seeded/stored as shared_credits (violates spec A03/A04 + master catalogue). Restored flexible_credits 5/15 via seed manifest + website copy + migration 20261001120000_RestoreFlexibleWsMixedPacks (converts live balances + ledger deltas back to Flexible W/S for those packages).
 - FIXED minor gaps: admin CreditBucketAdjuster Add/Set-exact toggle; "Gifted Shared AI Credits" labels; payment-return invalidates entitlement+subscription+aiPackageCredits.
@@ -9,7 +13,7 @@
 - DEPLOYED: 7be86b744 Build & Deploy success; web/api health green; migrations applied; VPS images on this SHA; repo private again.
 - PROD VERIFIED: /v1/billing/ai-packages now returns pkg_quick_check/pkg_exam_prep_pro with sharedCredits=0 and "flexible AI grading credits" copy (was sharedCredits 5/15). Balance conversion ran in the same migration batch.
 
-## Current task — Shared wallet screenshot close-out + Master Catalogue merge
+## Previous — Shared wallet screenshot close-out + Master Catalogue merge
 - Debit-on-start + screenshot remaining copy now wired: reading exam/paper/practice/parts, listening paper/player, speaking warmup + self-practice, writing V2 eligibility, writing paper direct launch.
 - Unlimited L/R comes from live lot flags, not null remaining. Writing V2 eligibility deducts once on `writing-v2:{userId}:{scenarioId}`.
 - Catalogue split kept: Shared vs restricted Flexible W/S; dedicated → Flex W/S → Shared; R/L never Flex W/S.

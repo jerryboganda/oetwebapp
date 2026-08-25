@@ -269,6 +269,20 @@ public static class ListeningLearnerEndpoints
             .WithName("StartListeningPaperAttempt")
             .WithSummary("Start or resume a Listening paper attempt");
 
+        group.MapPost("/papers/{paperId}/practice/parts/{partCode}", async (
+            string paperId,
+            string partCode,
+            HttpContext http,
+            ListeningLearnerService service,
+            CancellationToken ct) =>
+        {
+            var started = await service.StartPartPracticeAttemptAsync(http.UserId(), paperId, partCode, ct);
+            return Results.Ok(started);
+        })
+            .RequireRateLimiting("PerUserWrite")
+            .WithName("StartListeningPartPracticeAttempt")
+            .WithSummary("Start or resume a Part A/B/C Listening practice attempt");
+
         group.MapGet("/attempts/{attemptId}", async (
             string attemptId,
             HttpContext http,

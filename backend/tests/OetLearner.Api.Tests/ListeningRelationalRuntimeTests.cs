@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 
@@ -135,7 +136,26 @@ public class ListeningRelationalRuntimeTests
         db.ListeningParts.Add(part);
         db.ListeningExtracts.Add(extract);
         db.ListeningQuestions.Add(question);
-        db.ListeningPolicies.Add(new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 10 });
+        db.ListeningPolicies.Add(new ListeningPolicy
+        {
+            Id = "global",
+            FullPaperTimerMinutes = 45,
+            GracePeriodSeconds = 10,
+            ShortAnswerAcceptSynonyms = true,
+        });
+        db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
+        {
+            Id = "listening-policy-relational",
+            Assessment = "listening",
+            ScopeKey = "default",
+            VersionKey = "relational-v1",
+            PolicyJson = new AssessmentMarkingPolicyDocument().Serialize(),
+            Status = AssessmentGovernanceStatus.Effective,
+            EffectiveFrom = now.AddMinutes(-1),
+            CreatedByUserId = "owner",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
         // WS2: exam/home mode requires a passed audio check within 24 h.
         db.LearnerListeningProfiles.Add(new LearnerListeningProfile
         {
@@ -165,6 +185,18 @@ public class ListeningRelationalRuntimeTests
             LastActiveAt = now,
             AccountStatus = "active",
         };
+        var media = new MediaAsset
+        {
+            Id = "media-json-audio-1",
+            OriginalFilename = "json-paper-1.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            StoragePath = "content/json-paper-1.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+            UploadedAt = now,
+        };
         var paper = new ContentPaper
         {
             Id = "json-paper-1",
@@ -193,10 +225,53 @@ public class ListeningRelationalRuntimeTests
                     },
                 },
             }),
+            Assets =
+            [
+                new ContentPaperAsset
+                {
+                    Id = "asset-json-audio-1",
+                    PaperId = "json-paper-1",
+                    Role = PaperAssetRole.Audio,
+                    Part = "A1",
+                    MediaAssetId = media.Id,
+                    MediaAsset = media,
+                    IsPrimary = true,
+                },
+            ],
         };
         db.Users.Add(user);
+        db.MediaAssets.Add(media);
         db.ContentPapers.Add(paper);
-        db.ListeningPolicies.Add(new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 10 });
+        db.ListeningPolicies.Add(new ListeningPolicy
+        {
+            Id = "global",
+            FullPaperTimerMinutes = 45,
+            GracePeriodSeconds = 10,
+            ShortAnswerAcceptSynonyms = true,
+        });
+        db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
+        {
+            Id = "listening-policy-json",
+            Assessment = "listening",
+            ScopeKey = "default",
+            VersionKey = "json-v1",
+            PolicyJson = new AssessmentMarkingPolicyDocument().Serialize(),
+            Status = AssessmentGovernanceStatus.Effective,
+            EffectiveFrom = now.AddMinutes(-1),
+            CreatedByUserId = "owner",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.LearnerListeningProfiles.Add(new LearnerListeningProfile
+        {
+            UserId = user.Id,
+            TargetBand = "B",
+            Profession = "medicine",
+            CurrentStage = "practice",
+            OnboardingCompletedAt = now,
+            AudioCheckPassedAt = now,
+            UpdatedAt = now,
+        });
         await db.SaveChangesAsync();
         return (user.Id, paper.Id);
     }
@@ -521,18 +596,16 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
-    public async Task GetSession_DoesNotAutoResumeAttemptFromDifferentMode()
+    public async Task GetSession_PaperModeIsRejected()
     {
         var (db, svc) = Build();
         var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
 
         await svc.StartAttemptAsync(userId, paperId, "home", default);
 
-        var paperSession = await svc.GetSessionAsync(userId, paperId, "paper", attemptId: null, default);
-        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(paperSession));
-
-        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("attempt").ValueKind);
-        Assert.Equal("paper", doc.RootElement.GetProperty("modePolicy").GetProperty("mode").GetString());
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.GetSessionAsync(userId, paperId, "paper", attemptId: null, default));
+        Assert.Equal("listening_paper_mode_disabled", ex.ErrorCode);
     }
 
     [Fact]
@@ -553,6 +626,92 @@ public class ListeningRelationalRuntimeTests
         Assert.Equal(2, attempts.Count);
         Assert.DoesNotContain("pathwayStage", attempts[0].ScopeJson);
         Assert.Contains("foundation_partA", attempts[1].ScopeJson);
+    }
+
+    [Fact]
+    public async Task StartPartPracticeAttemptAsync_ScopesToPartAQuestionsAndReturnsPlayerRoute()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+
+        var started = await svc.StartPartPracticeAttemptAsync(userId, paperId, "A", default);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(started));
+
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        Assert.Equal(attempt.Id, doc.RootElement.GetProperty("attemptId").GetString());
+        Assert.Equal(
+            $"/listening/player/{paperId}?attemptId={attempt.Id}&mode=practice&part=A&focus=part-a",
+            doc.RootElement.GetProperty("playerRoute").GetString());
+        Assert.Equal(1, doc.RootElement.GetProperty("questionCount").GetInt32());
+        Assert.Equal(15, doc.RootElement.GetProperty("minutes").GetInt32());
+        Assert.Equal("A", doc.RootElement.GetProperty("partPractice").GetProperty("partCode").GetString());
+        Assert.Contains("part-practice", attempt.ScopeJson);
+        Assert.Contains(questionId, attempt.ScopeJson);
+        Assert.Equal(1, attempt.MaxRawScore);
+        Assert.NotNull(attempt.DeadlineAt);
+    }
+
+    [Fact]
+    public async Task StartPartPracticeAttemptAsync_RejectsPartsWithoutQuestionsAndInvalidCodes()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+
+        var missingB = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.StartPartPracticeAttemptAsync(userId, paperId, "B", default));
+        Assert.Equal("part_practice_no_questions", missingB.Code);
+
+        var missingC = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.StartPartPracticeAttemptAsync(userId, paperId, "C", default));
+        Assert.Equal("part_practice_no_questions", missingC.Code);
+
+        var invalid = await Assert.ThrowsAsync<ApiException>(() =>
+            svc.StartPartPracticeAttemptAsync(userId, paperId, "D", default));
+        Assert.Equal("part_code_invalid", invalid.Code);
+    }
+
+    [Fact]
+    public async Task SubmitRelationalAttemptAsync_GradesEarlySubmitFromA1AudioWithoutFsmComplete()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, questionId) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+        var attempt = await db.ListeningAttempts.SingleAsync(a => a.UserId == userId && a.PaperId == paperId);
+        attempt.NavigationStateJson = JsonSerializer.Serialize(new NavigationState(ListeningFsmTransitions.A1Audio, []));
+        await db.SaveChangesAsync();
+
+        await svc.SaveAnswerAsync(userId, attempt.Id, questionId, new ListeningAnswerSaveRequest("five"), default);
+        var review = await svc.SubmitAsync(userId, attempt.Id, default);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(review));
+
+        var submitted = await db.ListeningAttempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
+        Assert.Equal(ListeningAttemptStatus.Submitted, submitted.Status);
+        Assert.Equal(1, submitted.RawScore);
+        Assert.True(doc.RootElement.TryGetProperty("RawScore", out var rawScore)
+            ? rawScore.GetInt32() == 1
+            : doc.RootElement.GetProperty("rawScore").GetInt32() == 1);
+    }
+
+    [Fact]
+    public async Task StartAttemptAsync_DoesNotReusePartPracticeAsUnscopedPractice()
+    {
+        var (db, svc) = Build();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+
+        await svc.StartPartPracticeAttemptAsync(userId, paperId, "A", default);
+        await svc.StartAttemptAsync(userId, paperId, "practice", default);
+
+        var attempts = await db.ListeningAttempts
+            .Where(a => a.UserId == userId && a.PaperId == paperId)
+            .OrderBy(a => a.StartedAt)
+            .ToListAsync();
+
+        Assert.Equal(2, attempts.Count);
+        Assert.True(ListeningAttemptScope.ReadPartPractice(attempts[0].ScopeJson).IsValid);
+        Assert.False(ListeningAttemptScope.ReadPartPractice(attempts[1].ScopeJson).IsPartPractice);
+        Assert.True(ListeningAttemptScope.MatchesRequestedScope(attempts[1].ScopeJson, null));
+        Assert.False(ListeningAttemptScope.MatchesRequestedScope(attempts[0].ScopeJson, null));
     }
 
     [Fact]
@@ -685,6 +844,8 @@ public class ListeningRelationalRuntimeTests
         Assert.False(await db.ListeningAttempts.AnyAsync(a => a.Id == attempt.Id));
 
         var first = await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(0), default);
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(1), default);
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(2), default);
         var second = await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(3), default);
 
         Assert.Contains("\"sectionCursor\":0", JsonSerializer.Serialize(first));
@@ -704,15 +865,16 @@ public class ListeningRelationalRuntimeTests
         await svc.StartAttemptAsync(userId, paperId, "home", default);
         var attempt = await db.Attempts.SingleAsync(a => a.UserId == userId && a.ContentId == paperId);
 
-        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(5), default);
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(0), default);
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(1), default);
 
         var ex = await Assert.ThrowsAsync<ApiException>(() =>
-            svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(4), default));
+            svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(0), default));
         Assert.Equal("listening_section_one_way", ex.ErrorCode);
 
         var reloaded = await db.Attempts.AsNoTracking().SingleAsync(a => a.Id == attempt.Id);
         using var answers = JsonDocument.Parse(reloaded.AnswersJson);
-        Assert.Equal("5", answers.RootElement.GetProperty("__listeningSectionCursor").GetString());
+        Assert.Equal("1", answers.RootElement.GetProperty("__listeningSectionCursor").GetString());
     }
 
     [Fact]
@@ -724,6 +886,8 @@ public class ListeningRelationalRuntimeTests
         await svc.StartAttemptAsync(userId, paperId, "home", default);
         var attempt = await db.Attempts.SingleAsync(a => a.UserId == userId && a.ContentId == paperId);
         await svc.SaveAnswerAsync(userId, attempt.Id, "json-q1", new ListeningAnswerSaveRequest("five"), default);
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(0), default);
+        await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(1), default);
         await svc.AdvanceSectionAsync(userId, attempt.Id, new ListeningAdvanceSectionRequest(2), default);
 
         // GetAttempt (the player's resume payload) must not echo the reserved

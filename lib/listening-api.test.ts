@@ -15,7 +15,7 @@ vi.mock('./network/fetch-with-timeout', () => ({
   fetchWithTimeout: mockFetchWithTimeout,
 }));
 
-import { getListeningSession, startListeningAttempt } from './listening-api';
+import { getListeningSession, startListeningAttempt, startListeningPartPracticeAttempt } from './listening-api';
 
 function jsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -66,6 +66,15 @@ describe('listening-api', () => {
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       '/v1/listening-papers/papers/paper%201/session?mode=practice&pathwayStage=foundation_partA',
       expect.any(Object),
+    );
+  });
+
+  it('posts a part-practice start against the published paper part endpoint', async () => {
+    await startListeningPartPracticeAttempt('paper 1', 'B');
+
+    expect(mockFetchWithTimeout).toHaveBeenCalledWith(
+      '/v1/listening-papers/papers/paper%201/practice/parts/B',
+      expect.objectContaining({ method: 'POST' }),
     );
   });
 });

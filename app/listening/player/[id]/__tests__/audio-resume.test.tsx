@@ -16,6 +16,7 @@ const {
   mockV2Advance,
   mockRecordTechReadiness,
   mockAudioResume,
+  mockSubmitAudioCheck,
 } = vi.hoisted(() => ({
   mockGetListeningSession: vi.fn(),
   mockStartListeningAttempt: vi.fn(),
@@ -31,6 +32,7 @@ const {
   mockV2Advance: vi.fn(),
   mockRecordTechReadiness: vi.fn(),
   mockAudioResume: vi.fn(),
+  mockSubmitAudioCheck: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -55,6 +57,10 @@ vi.mock('@/lib/listening/v2-api', () => ({
     saveAnswer: mockSaveAnswer,
     submit: mockSubmit,
   },
+}));
+
+vi.mock('@/lib/listening-pathway-api', () => ({
+  submitAudioCheck: mockSubmitAudioCheck,
 }));
 
 vi.mock('@/components/domain/listening/TechReadinessCheck', () => ({
@@ -239,6 +245,11 @@ describe('Listening player — strict-mode audio-resume server validation (C8g)'
       durationMs: 1500,
       checkedAt: '2026-04-01T00:00:00Z',
       ttlMs: 900_000,
+    });
+    mockSubmitAudioCheck.mockResolvedValue({
+      success: true,
+      currentStage: 'diagnostic',
+      audioCheckPassedAt: '2026-04-01T00:00:00Z',
     });
     mockUseSearchParams.mockReturnValue({
       get: (key: string) => {

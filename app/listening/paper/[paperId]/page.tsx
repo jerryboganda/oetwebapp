@@ -146,6 +146,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const [saveState, setSaveState] = useState<SaveState>('idle');
   // One-way cursor. Only ever increments (Next or timer auto-advance).
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [showExamSubmitConfirm, setShowExamSubmitConfirm] = useState(false);
   // Per-paper question-paper annotations (Part B/C highlight/strikethrough).
   const [annotations, setAnnotations] = useState<ReadingPaperAnnotationDto[]>([]);
 
@@ -560,6 +561,11 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
 
   const answeredCount = Object.values(answers).filter((value) => value.trim().length > 0).length;
   const totalQuestions = session.questions.length;
+  const unansweredQuestions = session.questions.filter((question) => (answers[question.id] ?? '').trim().length === 0);
+  const unansweredQuestionNumbers = unansweredQuestions
+    .map((question) => question.number)
+    .sort((a, b) => a - b);
+  const unansweredQuestionList = unansweredQuestionNumbers.map((number) => `Q${number}`).join(', ');
 
   return (
     <LearnerDashboardShell pageTitle={session.paper.title} backHref="/listening">
@@ -604,6 +610,8 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
               currentIndex={currentIndex}
               sectionCount={subSections.length}
               activeLabel={activeSubSection?.label ?? ''}
+              submitting={submitting}
+              onSubmit={() => setShowExamSubmitConfirm(true)}
             />
 
             <SectionProgress subSections={subSections} currentIndex={currentIndex} />
@@ -633,6 +641,36 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
                 onAdvance={() => void advance()}
               />
             ) : null}
+
+            <Modal
+              open={showExamSubmitConfirm}
+              onClose={() => setShowExamSubmitConfirm(false)}
+              title="Submit listening task?"
+            >
+              <div className="space-y-4">
+                <p className="text-sm leading-6 text-muted">
+                  Are you sure you want to submit this exam? You will not be able to continue this attempt after submission.
+                </p>
+                {unansweredQuestionNumbers.length > 0 ? (
+                  <InlineAlert variant="warning">
+                    {unansweredQuestionNumbers.length} unanswered question{unansweredQuestionNumbers.length === 1 ? '' : 's'} will score zero if you submit now: {unansweredQuestionList}.
+                  </InlineAlert>
+                ) : null}
+              </div>
+              <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <Button variant="ghost" onClick={() => setShowExamSubmitConfirm(false)}>Keep working</Button>
+                <Button
+                  variant="primary"
+                  loading={submitting}
+                  onClick={() => {
+                    setShowExamSubmitConfirm(false);
+                    void submit();
+                  }}
+                >
+                  Submit now
+                </Button>
+              </div>
+            </Modal>
           </>
         )}
       </main>
@@ -745,6 +783,8 @@ function ExamToolbar({
   currentIndex,
   sectionCount,
   activeLabel,
+  submitting,
+  onSubmit,
 }: {
   answeredCount: number;
   totalQuestions: number;
@@ -752,6 +792,8 @@ function ExamToolbar({
   currentIndex: number;
   sectionCount: number;
   activeLabel: string;
+  submitting: boolean;
+  onSubmit: () => void;
 }) {
   return (
     <section className="rounded-[20px] border border-border bg-surface p-4 shadow-sm" aria-label="Attempt status">
@@ -764,7 +806,18 @@ function ExamToolbar({
             {answeredCount}/{totalQuestions} answered
           </span>
         </div>
-        <SaveStatus state={saveState} />
+        <div className="flex flex-wrap items-center gap-3">
+          <SaveStatus state={saveState} />
+          <Button
+            variant="primary"
+            onClick={onSubmit}
+            loading={submitting}
+            data-testid="listening-submit-exam"
+          >
+            <Send className="h-4 w-4" aria-hidden="true" />
+            Submit
+          </Button>
+        </div>
       </div>
     </section>
   );
@@ -969,10 +1022,10 @@ function ActiveSubSectionPanel({
   const pdfAssets: ReadingPdfAsset[] = questionPaperUrl
     ? [{ id: assetId, part: subSection.partCode, title: subSection.title, downloadPath: questionPaperUrl }]
     : [];
-  // Part B is a one-question-at-a-time flow; showing the full PDF would
-  // expose the other five questions before their extracts are played.
-  const showPdf = !isPartA && !isPartB && pdfAssets.length > 0;
-  const canAnnotate = showPdf && mediaAssetId !== null;
+  // Learner Listening never shows the scanned question paper. Interactive
+  // questions plus audio/part indicators are the only candidate surface.
+  const showPdf = false;
+  const canAnnotate = false;
 
   return (
     <div

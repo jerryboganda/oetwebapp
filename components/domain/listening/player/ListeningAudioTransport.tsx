@@ -9,7 +9,7 @@
 // In-flow (NOT sticky) so it never floats over the question/notes content as
 // an overlay on scroll (owner directive 2026-07-05).
 
-import { Clock, Loader2, Pause, Play, Save, WifiOff } from 'lucide-react';
+import { Clock, Loader2, Pause, Play, Save, Send, WifiOff } from 'lucide-react';
 import { formatReviewSeconds } from '@/lib/listening-sections';
 
 export interface ListeningAudioTransportProps {
@@ -35,6 +35,8 @@ export interface ListeningAudioTransportProps {
   warningThresholdsSeconds?: number[];
   onTogglePlayPause: () => void;
   onScrub: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSubmit?: () => void;
+  submitDisabled?: boolean;
 }
 
 function formatTime(seconds: number) {
@@ -61,6 +63,8 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
     warningThresholdsSeconds,
     onTogglePlayPause,
     onScrub,
+    onSubmit,
+    submitDisabled,
   } = props;
 
   const widthPercent =
@@ -158,6 +162,22 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
           <Clock className="h-4 w-4" />
           {attemptSecondsRemaining === 0 ? 'Time up' : formatReviewSeconds(attemptSecondsRemaining)}
         </div>
+      ) : null}
+      {onSubmit ? (
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={submitDisabled}
+          data-testid="listening-submit-exam"
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-black transition-colors ${
+            submitDisabled
+              ? 'cursor-not-allowed bg-white/10 text-white/30'
+              : 'bg-white text-navy hover:bg-background-light'
+          }`}
+        >
+          <Send className="h-4 w-4" />
+          Submit
+        </button>
       ) : null}
     </div>
   );

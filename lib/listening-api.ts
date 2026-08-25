@@ -26,6 +26,11 @@ export interface ListeningHomePaperDto {
    * influences the lock badge visual.
    */
   accessTier?: 'free' | 'preview' | 'premium';
+  /** Catalog tags used to place the paper in Atlas / Nova Listening folders. */
+  tagsCsv?: string | null;
+  partACount?: number;
+  partBCount?: number;
+  partCCount?: number;
   assetReadiness: {
     audio: boolean;
     questionPaper: boolean;
@@ -538,6 +543,29 @@ export const startListeningAttempt = (paperId: string, mode: ListeningSessionMod
       void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('listening'));
     }
     return attempt;
+  });
+
+export type ListeningPartPracticeCode = 'A' | 'B' | 'C';
+
+export interface ListeningPartPracticeStartedDto {
+  attemptId: string;
+  playerRoute: string;
+  questionCount: number;
+  minutes: number;
+  partPractice: { partCode: ListeningPartPracticeCode; title: string };
+  feedbackMessage?: string | null;
+}
+
+export const startListeningPartPracticeAttempt = (
+  paperId: string,
+  partCode: ListeningPartPracticeCode,
+) =>
+  api<ListeningPartPracticeStartedDto>(
+    `/v1/listening-papers/papers/${encodeURIComponent(paperId)}/practice/parts/${encodeURIComponent(partCode)}`,
+    { method: 'POST' },
+  ).then((started) => {
+    void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('listening'));
+    return started;
   });
 
 export const saveListeningAnswer = (attemptId: string, questionId: string, userAnswer: string) =>

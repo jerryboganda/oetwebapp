@@ -111,14 +111,26 @@ public sealed class ListeningLearnerService(
         }
 
         var relationalQuestionRows = paperIds.Count == 0
-            ? new List<string>()
-            : await db.ListeningQuestions.AsNoTracking()
+            ? new List<(string PaperId, ListeningPartCode PartCode)>()
+            : (await db.ListeningQuestions.AsNoTracking()
                 .Where(q => paperIds.Contains(q.PaperId))
-                .Select(q => q.PaperId)
-                .ToListAsync(ct);
+                .Select(q => new { q.PaperId, PartCode = q.Part!.PartCode })
+                .ToListAsync(ct))
+                .Select(row => (PaperId: row.PaperId, PartCode: row.PartCode))
+                .ToList();
         var relationalQuestionCounts = relationalQuestionRows
-            .GroupBy(paperId => paperId, StringComparer.Ordinal)
+            .GroupBy(row => row.PaperId, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        var relationalPartCounts = relationalQuestionRows
+            .GroupBy(row => row.PaperId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => (
+                    A: group.Count(row => ListeningParentPart(row.PartCode) == "A"),
+                    B: group.Count(row => ListeningParentPart(row.PartCode) == "B"),
+                    C: group.Count(row => ListeningParentPart(row.PartCode) == "C")
+                ),
+                StringComparer.Ordinal);
 
         var evaluationAttemptIds = attempts.Select(a => a.Id)
             .Concat(relationalAttempts.Select(a => a.Id))
@@ -296,18 +308,27 @@ public sealed class ListeningLearnerService(
         {
             try
             {
-                var lastGeneric = attempts.FirstOrDefault(a => a.ContentId == paper.Id);
-                var lastRelational = relationalAttempts.FirstOrDefault(a => a.PaperId == paper.Id);
+                var lastGeneric = attempts.FirstOrDefault(a =>
+                    a.ContentId == paper.Id
+                    && (a.Mode == "exam" || a.Mode == "home"));
+                var lastRelational = relationalAttempts.FirstOrDefault(a =>
+                    a.PaperId == paper.Id
+                    && (a.Mode == ListeningAttemptMode.Exam || a.Mode == ListeningAttemptMode.Home)
+                    && !ListeningAttemptScope.ReadPartPractice(a.ScopeJson).IsPartPractice);
                 if (!showPastAttempts)
                 {
                     if (lastGeneric?.State != AttemptState.InProgress) lastGeneric = null;
                     if (lastRelational?.Status != ListeningAttemptStatus.InProgress) lastRelational = null;
                 }
+                var partCounts = relationalPartCounts.GetValueOrDefault(paper.Id);
                 paperDtos.Add(PaperHomeDto(
                     paper,
                     BuildPaperLastAttemptDto(paper.Id, lastGeneric, lastRelational),
                     relationalQuestionCounts.GetValueOrDefault(paper.Id),
-                    requiresSubscriptionByPaperId.GetValueOrDefault(paper.Id, false)));
+                    requiresSubscriptionByPaperId.GetValueOrDefault(paper.Id, false),
+                    partCounts.A,
+                    partCounts.B,
+                    partCounts.C));
             }
             catch (Exception)
             {
@@ -417,7 +438,7 @@ public sealed class ListeningLearnerService(
                     .OrderByDescending(a => a.LastActivityAt)
                     .ToListAsync(ct);
                 relationalAttempt = relationalCandidates.FirstOrDefault(a =>
-                    ListeningAttemptScope.MatchesRequestedPathwayStage(a.ScopeJson, normalizedPathwayStage));
+                    ListeningAttemptScope.MatchesRequestedScope(a.ScopeJson, normalizedPathwayStage));
             }
 
             if (relationalAttempt is null)
@@ -432,6 +453,8 @@ public sealed class ListeningLearnerService(
                     .FirstOrDefaultAsync(ct);
             }
         }
+
+        source = ApplyAttemptScope(source, relationalAttempt);
 
         var questions = source.Questions.Select(LearnerQuestionDto).ToList();
         var candidate = await db.Users
@@ -533,7 +556,9 @@ public sealed class ListeningLearnerService(
             },
             scoring = new
             {
-                maxRawScore = CanonicalRawMax,
+                maxRawScore = source.Questions.Sum(q => q.Points) > 0
+                    ? source.Questions.Sum(q => q.Points)
+                    : CanonicalRawMax,
                 // Pass thresholds are intentionally absent until an approved
                 // owner conversion table is published for this subtest.
                 passRawScore = (int?)null,
@@ -738,6 +763,48 @@ public sealed class ListeningLearnerService(
         if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
             await conversionResolver.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
         return AttemptDto(attempt, new Dictionary<string, string?>(), feedbackMessage);
+    }
+
+    public async Task<object> StartPartPracticeAttemptAsync(
+        string userId,
+        string paperId,
+        string partCode,
+        CancellationToken ct)
+    {
+        await EnsureLearnerMutationAllowedAsync(userId, ct);
+        await RequirePaperAccessIfAuthoredAsync(userId, paperId, ct);
+
+        var normalizedPart = NormalizeListeningParentPart(partCode)
+            ?? throw ApiException.Validation("part_code_invalid", "partCode must be A, B, or C.");
+
+        var source = await ResolveSourceAsync(paperId, ct);
+        var scopedQuestions = source.Questions
+            .Where(question => string.Equals(
+                ListeningParentPartFromCode(question.PartCode),
+                normalizedPart,
+                StringComparison.OrdinalIgnoreCase))
+            .OrderBy(question => question.Number)
+            .ToList();
+        if (scopedQuestions.Count == 0)
+        {
+            throw ApiException.Validation(
+                "part_practice_no_questions",
+                $"No published Listening questions exist for Part {normalizedPart} on this paper.");
+        }
+
+        var scopedSource = ApplyQuestionScope(source, scopedQuestions.Select(q => q.Id).ToList());
+        var minutes = PartPracticeMinutes(normalizedPart);
+        return await StartRelationalAttemptAsync(
+            userId,
+            scopedSource,
+            "practice",
+            normalizedPathwayStage: null,
+            forceNewAttempt: false,
+            ct,
+            billObjectivePractice: true,
+            partPracticePartCode: normalizedPart,
+            partPracticeQuestionIds: scopedQuestions.Select(q => q.Id).ToList(),
+            partPracticeMinutes: minutes);
     }
 
     public async Task<object> GetAttemptAsync(string userId, string attemptId, CancellationToken ct)
@@ -1248,7 +1315,9 @@ public sealed class ListeningLearnerService(
                     "Transcript-backed review is available after the Listening attempt is submitted.");
             }
 
-            var relationalSource = await ResolveSourceAsync(relationalAttempt.PaperId, ct);
+            var relationalSource = ApplyAttemptScope(
+                await ResolveSourceAsync(relationalAttempt.PaperId, ct),
+                relationalAttempt);
             var relationalEvaluation = await db.Evaluations.AsNoTracking()
                 .Where(e => e.AttemptId == relationalAttempt.Id)
                 .OrderByDescending(e => e.GeneratedAt)
@@ -1653,9 +1722,21 @@ public sealed class ListeningLearnerService(
         return new AudioPlaybackSnapshot(state, state == "active" ? resumeAtMs : null, section, questionIndex);
     }
 
-    private async Task<object> StartRelationalAttemptAsync(string userId, ListeningSource source, string normalizedMode, string? normalizedPathwayStage, bool forceNewAttempt, CancellationToken ct, bool billObjectivePractice = true)
+    private async Task<object> StartRelationalAttemptAsync(
+        string userId,
+        ListeningSource source,
+        string normalizedMode,
+        string? normalizedPathwayStage,
+        bool forceNewAttempt,
+        CancellationToken ct,
+        bool billObjectivePractice = true,
+        string? partPracticePartCode = null,
+        IReadOnlyList<string>? partPracticeQuestionIds = null,
+        int? partPracticeMinutes = null)
     {
         var relationalMode = ToRelationalMode(normalizedMode);
+        var isPartPractice = !string.IsNullOrWhiteSpace(partPracticePartCode)
+            && partPracticeQuestionIds is { Count: > 0 };
         if (!forceNewAttempt)
         {
             var existingCandidates = await db.ListeningAttempts
@@ -1665,10 +1746,17 @@ public sealed class ListeningLearnerService(
                     && a.Status == ListeningAttemptStatus.InProgress)
                 .OrderByDescending(a => a.LastActivityAt)
                 .ToListAsync(ct);
-            var existing = existingCandidates.FirstOrDefault(a => ListeningAttemptScope.MatchesRequestedPathwayStage(a.ScopeJson, normalizedPathwayStage));
+            var existing = isPartPractice
+                ? existingCandidates.FirstOrDefault(a =>
+                    ListeningAttemptScope.MatchesRequestedPartPractice(a.ScopeJson, partPracticePartCode!))
+                : existingCandidates.FirstOrDefault(a =>
+                    ListeningAttemptScope.MatchesRequestedScope(a.ScopeJson, normalizedPathwayStage));
             if (existing is not null)
             {
-                return RelationalAttemptDto(existing, await LoadRelationalAnswersAsync(existing.Id, ct));
+                var existingAnswers = await LoadRelationalAnswersAsync(existing.Id, ct);
+                return isPartPractice
+                    ? PartPracticeStartedDto(existing, source, partPracticePartCode!, existingAnswers)
+                    : RelationalAttemptDto(existing, existingAnswers);
             }
         }
 
@@ -1740,9 +1828,18 @@ public sealed class ListeningLearnerService(
             feedbackMessage = creditResult.FeedbackMessage;
         }
 
+        var scopedQuestionIds = isPartPractice
+            ? partPracticeQuestionIds!.ToHashSet(StringComparer.Ordinal)
+            : null;
         var questionVersionMap = await db.ListeningQuestions.AsNoTracking()
-            .Where(q => q.PaperId == source.Id)
+            .Where(q => q.PaperId == source.Id && (scopedQuestionIds == null || scopedQuestionIds.Contains(q.Id)))
             .ToDictionaryAsync(q => q.Id, q => q.Version, StringComparer.Ordinal, ct);
+        var scopedMaxRaw = source.Questions.Sum(q => q.Points);
+        var deadlineAt = isPartPractice
+            ? now.AddMinutes(Math.Max(1, partPracticeMinutes ?? PartPracticeMinutes(partPracticePartCode!)))
+            : isExamLike
+                ? now.AddMinutes(fullPaperTimerMinutes).AddSeconds(policy.GracePeriodSeconds)
+                : (DateTimeOffset?)null;
         var attempt = new ListeningAttempt
         {
             Id = relationalAttemptId,
@@ -1756,10 +1853,10 @@ public sealed class ListeningLearnerService(
             PaperId = source.Id,
             StartedAt = now,
             LastActivityAt = now,
-            DeadlineAt = isExamLike ? now.AddMinutes(fullPaperTimerMinutes).AddSeconds(policy.GracePeriodSeconds) : null,
+            DeadlineAt = deadlineAt,
             Status = ListeningAttemptStatus.InProgress,
             Mode = relationalMode,
-            MaxRawScore = source.Questions.Sum(q => q.Points),
+            MaxRawScore = scopedMaxRaw,
             PaperRevisionId = source.PaperRevisionId,
             // The published question revision is immutable for the lifetime of
             // an attempt. Keep the exact version map so a concurrent authoring
@@ -1797,7 +1894,12 @@ public sealed class ListeningLearnerService(
                     ? "kiosk_fullscreen"
                     : normalizedMode,
             }),
-            ScopeJson = ListeningAttemptScope.Build(normalizedMode, source.SourceKind, normalizedPathwayStage),
+            ScopeJson = isPartPractice
+                ? ListeningAttemptScope.BuildPartPractice(
+                    partPracticePartCode!,
+                    partPracticeQuestionIds!,
+                    partPracticeMinutes ?? PartPracticeMinutes(partPracticePartCode!))
+                : ListeningAttemptScope.Build(normalizedMode, source.SourceKind, normalizedPathwayStage),
         };
 
         db.ListeningAttempts.Add(attempt);
@@ -1817,7 +1919,9 @@ public sealed class ListeningLearnerService(
         await markingPolicyResolver.MarkUsedAsync(markingPolicy.PolicyId!, ct);
         if (scoreConversionAtStart.TableId is not null && scoreConversionAtStart.IsAvailable)
             await conversionResolver.MarkUsedAsync(scoreConversionAtStart.TableId, ct);
-        return RelationalAttemptDto(attempt, new Dictionary<string, string?>(), feedbackMessage);
+        return isPartPractice
+            ? PartPracticeStartedDto(attempt, source, partPracticePartCode!, new Dictionary<string, string?>(), feedbackMessage)
+            : RelationalAttemptDto(attempt, new Dictionary<string, string?>(), feedbackMessage);
     }
 
     private async Task SaveRelationalAnswerAsync(
@@ -1833,6 +1937,15 @@ public sealed class ListeningLearnerService(
             .Select(q => new { q.Id, q.Version, q.Part!.PartCode })
             .FirstOrDefaultAsync(ct)
             ?? throw ApiException.Validation("listening_question_not_found", "This question does not belong to the Listening attempt.");
+
+        var partPracticeScope = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson);
+        if (partPracticeScope.IsValid
+            && !partPracticeScope.QuestionIds.Contains(question.Id, StringComparer.Ordinal))
+        {
+            throw ApiException.Validation(
+                "listening_question_out_of_scope",
+                "This question is outside the current Part practice attempt.");
+        }
 
         // H10 fix: In strict/exam mode, reject answer saves for locked sections.
         if (attempt.Mode is ListeningAttemptMode.Exam or ListeningAttemptMode.Home)
@@ -1901,7 +2014,7 @@ public sealed class ListeningLearnerService(
         string idempotencyKey,
         CancellationToken ct)
     {
-        var source = await ResolveSourceAsync(attempt.PaperId, ct);
+        var source = ApplyAttemptScope(await ResolveSourceAsync(attempt.PaperId, ct), attempt);
         if (source.Questions.Count == 0)
         {
             throw ApiException.Validation("listening_questions_missing", "This Listening attempt has no structured questions to grade.");
@@ -1919,31 +2032,17 @@ public sealed class ListeningLearnerService(
         var acceptsFinalAnswers = attempt.Status == ListeningAttemptStatus.InProgress;
         EnsureRelationalAttemptCanSubmit(attempt);
 
-        // B5 fix: In strict exam modes, refuse submit unless FSM has reached
-        // the final-review state (learner must have progressed through all sections).
-        if (attempt.Mode is ListeningAttemptMode.Exam or ListeningAttemptMode.Home)
-        {
-            var navState = ParseNavigation(attempt.NavigationStateJson);
-            if (navState is not null && !string.IsNullOrEmpty(navState.State))
-            {
-                var allowedSubmitStates = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    ListeningFsmTransitions.C2Review,
-                    ListeningFsmTransitions.C2FinalReview,
-                    ListeningFsmTransitions.Submitted,
-                };
-                if (!allowedSubmitStates.Contains(navState.State))
-                {
-                    throw ApiException.Validation(
-                        "listening_submit_fsm_not_ready",
-                        $"Cannot submit in strict mode from state '{navState.State}'. Complete all sections first.");
-                }
-            }
-        }
+        // Explicit learner submit is allowed from any FSM state. One-way
+        // AdvanceSection remains the only lock for section progression; the
+        // candidate may still end the attempt early via Submit.
 
         if (acceptsFinalAnswers && finalAnswers is { Count: > 0 })
         {
             await ApplyFinalRelationalAnswersAsync(attempt, source, finalAnswers, ct);
+            // Persist final learner answers before invoking the deterministic
+            // grader so it never inserts duplicate answer rows for the same
+            // question when it reads from the database context.
+            await db.SaveChangesAsync(ct);
         }
 
         // The relational submit endpoint is the user-visible grading path.
@@ -2129,12 +2228,17 @@ public sealed class ListeningLearnerService(
     {
         var rows = await db.ListeningAnswers.AsNoTracking()
             .Where(answer => answer.ListeningAttemptId == attemptId)
-            .Select(answer => new { answer.ListeningQuestionId, answer.UserAnswerJson })
+            .Select(answer => new { answer.ListeningQuestionId, answer.UserAnswerJson, answer.AnsweredAt })
             .ToListAsync(ct);
-        return rows.ToDictionary(
-            row => row.ListeningQuestionId,
-            row => DecodeRelationalAnswer(row.UserAnswerJson),
-            StringComparer.Ordinal);
+        return rows
+            .GroupBy(row => row.ListeningQuestionId, StringComparer.Ordinal)
+            .ToDictionary(
+                group => group.Key,
+                group => DecodeRelationalAnswer(group
+                    .OrderByDescending(row => row.AnsweredAt)
+                    .First()
+                    .UserAnswerJson),
+                StringComparer.Ordinal);
     }
 
     private static string? DecodeRelationalAnswer(string? json)
@@ -3944,7 +4048,7 @@ public sealed class ListeningLearnerService(
                 mode,
                 route = relationalAttempt.Status == ListeningAttemptStatus.Submitted
                     ? $"/listening/results/{Uri.EscapeDataString(relationalAttempt.Id)}"
-                    : $"/listening/player/{Uri.EscapeDataString(paperId)}?attemptId={Uri.EscapeDataString(relationalAttempt.Id)}&mode={Uri.EscapeDataString(mode)}"
+                    : RelationalAttemptRoute(relationalAttempt)
             };
         }
 
@@ -3961,11 +4065,27 @@ public sealed class ListeningLearnerService(
         };
     }
 
-    private static object PaperHomeDto(ContentPaper paper, object? lastAttempt, int relationalQuestionCount, bool requiresSubscription)
+    private static object PaperHomeDto(
+        ContentPaper paper,
+        object? lastAttempt,
+        int relationalQuestionCount,
+        bool requiresSubscription,
+        int relationalPartACount = 0,
+        int relationalPartBCount = 0,
+        int relationalPartCCount = 0)
     {
         var roles = paper.Assets.Where(a => a.IsPrimary).Select(a => a.Role).ToHashSet();
         var questions = ExtractQuestions(JsonSupport.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson, new Dictionary<string, object?>()).GetValueOrDefault("listeningQuestions")).ToList();
         var questionCount = relationalQuestionCount > 0 ? relationalQuestionCount : questions.Count;
+        var partACount = relationalPartACount > 0
+            ? relationalPartACount
+            : questions.Count(q => ListeningParentPartFromCode(q.PartCode) == "A");
+        var partBCount = relationalPartBCount > 0
+            ? relationalPartBCount
+            : questions.Count(q => ListeningParentPartFromCode(q.PartCode) == "B");
+        var partCCount = relationalPartCCount > 0
+            ? relationalPartCCount
+            : questions.Count(q => ListeningParentPartFromCode(q.PartCode) == "C");
         return new
         {
             id = paper.Id,
@@ -3974,7 +4094,11 @@ public sealed class ListeningLearnerService(
             paper.Difficulty,
             paper.EstimatedDurationMinutes,
             paper.PublishedAt,
-            route = $"/listening/player/{Uri.EscapeDataString(paper.Id)}",
+            tagsCsv = paper.TagsCsv,
+            partACount,
+            partBCount,
+            partCCount,
+            route = $"/listening/paper/{Uri.EscapeDataString(paper.Id)}",
             sourceKind = "content_paper",
             objectiveReady = questionCount > 0,
             questionCount,
@@ -4502,9 +4626,105 @@ public sealed class ListeningLearnerService(
             "listening_paper_mode_disabled",
             "Listening is computer-based only; paper simulation is not supported.");
 
+    private static object PartPracticeStartedDto(
+        ListeningAttempt attempt,
+        ListeningSource source,
+        string partCode,
+        IReadOnlyDictionary<string, string?> answers,
+        string? feedbackMessage = null)
+    {
+        _ = answers;
+        var minutes = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson).Minutes;
+        if (minutes <= 0) minutes = PartPracticeMinutes(partCode);
+        return new
+        {
+            attemptId = attempt.Id,
+            playerRoute = RelationalAttemptRoute(attempt),
+            questionCount = source.Questions.Count,
+            minutes,
+            partPractice = new { partCode, title = $"Part {partCode}" },
+            feedbackMessage,
+        };
+    }
+
+    private static ListeningSource ApplyAttemptScope(ListeningSource source, ListeningAttempt? attempt)
+    {
+        if (attempt is null) return source;
+        var partPractice = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson);
+        return partPractice.IsValid
+            ? ApplyQuestionScope(source, partPractice.QuestionIds)
+            : source;
+    }
+
+    private static ListeningSource ApplyQuestionScope(ListeningSource source, IReadOnlyCollection<string> questionIds)
+    {
+        var allowed = questionIds.ToHashSet(StringComparer.Ordinal);
+        var questions = source.Questions.Where(q => allowed.Contains(q.Id)).ToList();
+        var allowedParts = questions
+            .Select(q => NormalizePartCode(q.PartCode) ?? q.PartCode)
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var extracts = source.Extracts
+            .Where(extract => allowedParts.Contains(extract.PartCode)
+                || allowedParts.Contains(NormalizePartCode(extract.PartCode) ?? string.Empty)
+                || (ListeningParentPartFromCode(extract.PartCode) == "B"
+                    && questions.Any(q => ListeningParentPartFromCode(q.PartCode) == "B")))
+            .ToList();
+        return source with { Questions = questions, Extracts = extracts };
+    }
+
+    private static string ListeningParentPart(ListeningPartCode partCode)
+        => partCode switch
+        {
+            ListeningPartCode.A1 or ListeningPartCode.A2 => "A",
+            ListeningPartCode.C1 or ListeningPartCode.C2 => "C",
+            _ => "B",
+        };
+
+    private static string ListeningParentPartFromCode(string? partCode)
+    {
+        var normalized = (partCode ?? string.Empty).Trim().ToUpperInvariant();
+        if (normalized.StartsWith('A')) return "A";
+        if (normalized.StartsWith('C')) return "C";
+        return "B";
+    }
+
+    private static string? NormalizeListeningParentPart(string? partCode)
+    {
+        var normalized = partCode?.Trim().ToUpperInvariant();
+        return normalized is "A" or "B" or "C" ? normalized : null;
+    }
+
+    private static int PartPracticeMinutes(string partCode) => partCode.ToUpperInvariant() switch
+    {
+        "A" => 15,
+        "B" => 12,
+        "C" => 15,
+        _ => 15,
+    };
+
     private static string RelationalAttemptRoute(ListeningAttempt attempt)
     {
         var mode = ToApiMode(attempt.Mode);
+        var partPractice = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson);
+        if (partPractice.IsValid)
+        {
+            var part = partPractice.PartCode!;
+            var focus = part.ToLowerInvariant() switch
+            {
+                "a" => "part-a",
+                "b" => "part-b",
+                "c" => "part-c",
+                _ => "part-a",
+            };
+            return $"/listening/player/{Uri.EscapeDataString(attempt.PaperId)}?attemptId={Uri.EscapeDataString(attempt.Id)}&mode=practice&part={Uri.EscapeDataString(part)}&focus={focus}";
+        }
+
+        if (mode is "exam" or "home")
+        {
+            return $"/listening/paper/{Uri.EscapeDataString(attempt.PaperId)}?attemptId={Uri.EscapeDataString(attempt.Id)}";
+        }
+
         var route = $"/listening/player/{Uri.EscapeDataString(attempt.PaperId)}?attemptId={Uri.EscapeDataString(attempt.Id)}&mode={Uri.EscapeDataString(mode)}";
         var scopedStage = ListeningAttemptScope.ReadPathwayStage(attempt.ScopeJson);
         return scopedStage.HasScope && !string.IsNullOrWhiteSpace(scopedStage.Stage)

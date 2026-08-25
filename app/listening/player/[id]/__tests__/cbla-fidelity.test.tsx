@@ -16,6 +16,7 @@ const {
   mockV2GetState,
   mockV2Advance,
   mockRecordTechReadiness,
+  mockSubmitAudioCheck,
 } = vi.hoisted(() => ({
   mockGetListeningSession: vi.fn(),
   mockStartListeningAttempt: vi.fn(),
@@ -30,6 +31,7 @@ const {
   mockV2GetState: vi.fn(),
   mockV2Advance: vi.fn(),
   mockRecordTechReadiness: vi.fn(),
+  mockSubmitAudioCheck: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -53,6 +55,10 @@ vi.mock('@/lib/listening/v2-api', () => ({
     saveAnswer: mockSaveAnswer,
     submit: mockSubmit,
   },
+}));
+
+vi.mock('@/lib/listening-pathway-api', () => ({
+  submitAudioCheck: mockSubmitAudioCheck,
 }));
 
 vi.mock('@/components/domain/listening/TechReadinessCheck', () => ({
@@ -289,6 +295,16 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       durationMs: 1500,
       checkedAt: '2026-04-01T00:00:00Z',
       ttlMs: 900_000,
+    });
+    mockSubmitAudioCheck.mockResolvedValue({
+      success: true,
+      currentStage: 'diagnostic',
+      audioCheckPassedAt: '2026-04-01T00:00:00Z',
+    });
+    mockStartListeningAttempt.mockResolvedValue({
+      attemptId: 'attempt-1', paperId: 'lp-001', state: 'in_progress', mode: 'exam',
+      startedAt: '2026-04-01T00:00:00Z', submittedAt: null, completedAt: null,
+      elapsedSeconds: 0, lastClientSyncAt: null, answers: {},
     });
     mockUseSearchParams.mockReturnValue({
       get: (key: string) => {
@@ -822,6 +838,18 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     const warning = await screen.findByText(/2 unanswered questions will score zero if you submit now: Q38, Q40\./i);
     expect(warning).toBeInTheDocument();
     expect(warning).not.toHaveTextContent('Q39');
+  });
+
+  it('keeps Submit visible before the last section and never shows a learner question paper', async () => {
+    mockGetListeningSession.mockResolvedValue(makeTwoSectionSession());
+
+    render(<ListeningPlayer />);
+
+    expect(await screen.findByTestId('listening-submit-exam')).toBeVisible();
+    expect(screen.queryByTestId('listening-question-paper')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /show question paper/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /hide question paper/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/question paper – part/i)).not.toBeInTheDocument();
   });
 
   it('includes the final in-memory answer when the timer expires before debounce save completes', async () => {

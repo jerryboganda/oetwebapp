@@ -262,6 +262,12 @@ public sealed class ListeningGradingService
             .Where(q => q.PaperId == attempt.PaperId)
             .Include(q => q.Options)
             .ToListAsync(ct);
+        var partPractice = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson);
+        if (partPractice.IsValid)
+        {
+            var scopedIds = partPractice.QuestionIds.ToHashSet(StringComparer.Ordinal);
+            questions = questions.Where(q => scopedIds.Contains(q.Id)).ToList();
+        }
 
         // Resolve the captured policy once per grade pass. The owner-approved
         // profile controls whether internal whitespace may be collapsed; the

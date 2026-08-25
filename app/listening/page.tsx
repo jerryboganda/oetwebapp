@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowRight,
   CalendarDays,
   Clock,
   Headphones,
@@ -24,12 +23,26 @@ import { analytics } from '@/lib/analytics';
 import { useListeningProfile } from '@/hooks/useListeningProfile';
 import {
   getListeningHome,
+  startListeningAttempt,
   type ListeningHomeAttemptDto,
   type ListeningHomeDto,
   type ListeningHomePaperDto,
   type ListeningHomeResultDto,
 } from '@/lib/listening-api';
+import { ListeningExamFolderBrowser } from '@/components/domain/listening/listening-exam-folder-browser';
+import { groupListeningExamPapers } from '@/lib/listening-exam-categories';
 import { readErrorMessage } from '@/lib/read-error-message';
+import {
+  ContentLockedNotice,
+  isContentLockedError,
+  readContentLockedMessage,
+} from '@/components/domain/ContentLockedNotice';
+import {
+  InsufficientCreditsModal,
+  isInsufficientCreditsError,
+  readInsufficientCreditsMessage,
+} from '@/components/domain/InsufficientCreditsModal';
+import { showCreditFeedback } from '@/lib/credit-feedback';
 
 // Per the 2026-05-27 OET sample-test alignment directive, the Listening hub
 // shows exactly four candidate-facing entries — three Practice-by-Part cards
@@ -108,6 +121,9 @@ export default function ListeningHome() {
   const [homeLoading, setHomeLoading] = useState(true);
   const [homeError, setHomeError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [startingPaperId, setStartingPaperId] = useState<string | null>(null);
+  const [lockedMessage, setLockedMessage] = useState<string | null>(null);
+  const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated) {
@@ -147,10 +163,48 @@ export default function ListeningHome() {
   }, [authLoading, isAuthenticated, retryCount]);
 
   const papers = useMemo(() => home?.papers ?? [], [home]);
+  const catalogPapers = useMemo(
+    () => groupListeningExamPapers(papers).flatMap((section) => section.papers),
+    [papers],
+  );
   const activeAttempts = useMemo(() => home?.activeAttempts ?? [], [home]);
   const recentResults = useMemo(() => home?.recentResults ?? [], [home]);
   const latestResult = recentResults[0] ?? null;
   const progressScoreDisplay = home?.progressScoreDisplay ?? latestResult?.scoreDisplay ?? null;
+
+  async function handleStartFullExam(paper: ListeningHomePaperDto) {
+    const resumeRoute = paper.lastAttempt && !paper.lastAttempt.submittedAt
+      ? `/listening/paper/${paper.id}?attemptId=${paper.lastAttempt.attemptId}`
+      : null;
+    if (resumeRoute) {
+      router.push(resumeRoute);
+      return;
+    }
+    if (paper.requiresSubscription === true) {
+      setLockedMessage('This paper requires an active Listening subscription.');
+      return;
+    }
+
+    setStartingPaperId(paper.id);
+    setHomeError(null);
+    setLockedMessage(null);
+    setInsufficientCreditsMessage(null);
+    try {
+      const started = await startListeningAttempt(paper.id, 'exam');
+      showCreditFeedback(started.feedbackMessage);
+      router.push(`/listening/paper/${paper.id}?attemptId=${started.attemptId}`);
+    } catch (caught) {
+      if (isInsufficientCreditsError(caught)) {
+        setInsufficientCreditsMessage(readInsufficientCreditsMessage(caught));
+      } else if (isContentLockedError(caught)) {
+        setLockedMessage(readContentLockedMessage(caught));
+      } else {
+        setHomeError(readErrorMessage(caught, 'Could not start the full Listening exam.'));
+      }
+    } finally {
+      setStartingPaperId(null);
+    }
+  }
 
   // Cheap derivation — not memoized because wall-clock time is inherently impure.
   const daysToExam: number | null = (() => {
@@ -165,7 +219,7 @@ export default function ListeningHome() {
       {
         icon: Target,
         label: 'Available papers',
-        value: homeLoading ? 'Loading…' : `${papers.length} ready`,
+        value: homeLoading ? 'Loading…' : `${catalogPapers.length} ready`,
       },
       {
         icon: TrendingUp,
@@ -185,7 +239,7 @@ export default function ListeningHome() {
               : `${daysToExam} days`,
       },
     ],
-    [homeLoading, papers.length, home?.progressScoreDisplayMode, progressScoreDisplay, daysToExam],
+    [homeLoading, catalogPapers.length, home?.progressScoreDisplayMode, progressScoreDisplay, daysToExam],
   );
 
   if (authLoading) {
@@ -206,6 +260,11 @@ export default function ListeningHome() {
 
   return (
     <LearnerDashboardShell pageTitle="Listening">
+      <InsufficientCreditsModal
+        open={insufficientCreditsMessage !== null}
+        message={insufficientCreditsMessage ?? ''}
+        onClose={() => setInsufficientCreditsMessage(null)}
+      />
       <main className="space-y-6 sm:space-y-10">
         <LearnerPageHero
           eyebrow="Module focus"
@@ -232,6 +291,7 @@ export default function ListeningHome() {
             </button>
           </div>
         ) : null}
+        {lockedMessage ? <ContentLockedNotice message={lockedMessage} /> : null}
 
         {activeAttempts.length > 0 ? <ResumeBanner attempts={activeAttempts} /> : null}
 
@@ -299,22 +359,24 @@ export default function ListeningHome() {
               </h2>
             </div>
           </div>
-
           {homeLoading ? (
             <LearnerSkeleton variant="card-grid" />
-          ) : papers.length > 0 ? (
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {papers.map((paper) => (
-                <li key={paper.id}>
-                  <PaperCard paper={paper} />
-                </li>
-              ))}
-            </ul>
-          ) : (
+          ) : catalogPapers.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border bg-surface px-4 py-6 text-sm text-muted">
-              No full listening exams are published yet. Your tutor will add papers here as they become
-              available — meanwhile you can practise Part&nbsp;A, B, or C above.
+              no published Atlas/Nova Listening papers yet.
             </div>
+          ) : (
+            <ListeningExamFolderBrowser
+              papers={papers}
+              emptyMessage="no published Atlas/Nova Listening papers yet."
+              renderPaper={(paper) => (
+                <PaperCard
+                  paper={paper}
+                  starting={startingPaperId === paper.id}
+                  onStart={() => void handleStartFullExam(paper)}
+                />
+              )}
+            />
           )}
         </section>
 
@@ -351,54 +413,68 @@ function isPartialListeningExam(paper: Pick<ListeningHomePaperDto, 'questionCoun
   );
 }
 
-function PaperCard({ paper }: { paper: ListeningHomePaperDto }) {
+function PaperCard({
+  paper,
+  starting,
+  onStart,
+}: {
+  paper: ListeningHomePaperDto;
+  starting: boolean;
+  onStart: () => void;
+}) {
   const locked = paper.requiresSubscription === true;
   const partial = isPartialListeningExam(paper);
+  const resume = Boolean(paper.lastAttempt && !paper.lastAttempt.submittedAt);
   return (
-    <Link
-      href={paper.route}
-      className="group flex h-full items-start gap-4 rounded-2xl border border-border bg-surface p-5 transition-shadow hover:border-violet-300 hover:shadow-md"
-    >
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
-        <Headphones className="h-5 w-5" aria-hidden />
-      </div>
-      <div className="flex-1">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <h3 className="text-sm font-bold text-navy">{paper.title}</h3>
-          {locked ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
-              <Lock className="h-3 w-3" aria-hidden />
-              Premium
-            </span>
-          ) : partial ? (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
-              Partial · Q37–42 unavailable
-            </span>
-          ) : (
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
-              Full exam
-            </span>
-          )}
+    <article className="flex h-full flex-col rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <div className="flex items-start gap-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-800">
+          <Headphones className="h-5 w-5" aria-hidden />
         </div>
-        <p className="mt-1 flex items-center gap-2 text-xs text-muted">
-          <span>{paper.questionCount} questions</span>
-          <span aria-hidden>·</span>
-          <span className="inline-flex items-center gap-1">
-            <Clock className="h-3.5 w-3.5" aria-hidden />
-            {paper.estimatedDurationMinutes} min
-          </span>
-        </p>
-        {partial ? (
-          <p className="mt-2 text-xs text-muted">
-            Questions 37–42 are unavailable in the supplied source. This paper is 36 items (Parts A, B, and C extract 1 only).
+        <div className="flex-1">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h3 className="text-sm font-bold text-navy">{paper.title}</h3>
+            {locked ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                <Lock className="h-3 w-3" aria-hidden />
+                Premium
+              </span>
+            ) : partial ? (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+                Partial · Q37–42 unavailable
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
+                Full exam
+              </span>
+            )}
+          </div>
+          <p className="mt-1 flex items-center gap-2 text-xs text-muted">
+            <span>{paper.questionCount} questions</span>
+            <span aria-hidden>·</span>
+            <span className="inline-flex items-center gap-1">
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              {paper.estimatedDurationMinutes} min
+            </span>
           </p>
-        ) : null}
+          {partial ? (
+            <p className="mt-2 text-xs text-muted">
+              Questions 37–42 are unavailable in the supplied source. This paper is 36 items (Parts A, B, and C extract 1 only).
+            </p>
+          ) : null}
+        </div>
       </div>
-      <ArrowRight
-        className="h-4 w-4 self-center text-violet-400 opacity-0 transition-opacity group-hover:opacity-100"
-        aria-hidden
-      />
-    </Link>
+      <div className="mt-auto pt-4">
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={starting}
+          className="rounded-md bg-info px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-info/90 disabled:opacity-70"
+        >
+          {starting ? 'Starting...' : resume ? 'Resume exam' : locked ? 'View access' : 'Start full exam'}
+        </button>
+      </div>
+    </article>
   );
 }
 

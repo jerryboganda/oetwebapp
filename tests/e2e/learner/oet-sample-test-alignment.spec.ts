@@ -27,8 +27,8 @@ async function expectNoSeriousAxeViolations(page: Page) {
  *  3. Reading hub shows exactly 4 candidate-facing cards.
  *  4. Mocks page surfaces the 4 canonical mock categories.
  *  5. Reading exam renders the OET-style split-screen at desktop viewports.
- *  6. The "no mocks inside Listening / Reading" rule is enforced via
- *     redirects from /listening/mocks, /listening/exam, /reading/exam.
+ *  6. Full-mock entry stays in /mocks for Reading exam and Listening mocks,
+ *     while /listening/exam stays on the Listening series/exam library.
  */
 
 test.describe('OET sample-test alignment — learner workspace', () => {
@@ -131,11 +131,15 @@ test.describe('OET sample-test alignment — learner workspace', () => {
   });
 
   test('full-mock entry points outside /mocks redirect into the canonical Mocks tab', async ({ page }) => {
-    // Owner directive §6 — full mocks must live only in /mocks.
+    // Listening Full Exam stays in the Listening library (Atlas/Nova folders).
     await page.goto('/listening/exam');
-    await expect(page).toHaveURL(/\/mocks(?:\?|$)/);
-    expect(page.url()).toContain('subtest=listening');
+    await expect(page).toHaveURL(/\/listening\/exam(?:\?|$)/);
+    await expect(page.getByRole('heading', { name: /choose a series/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /atlas practice series/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /nova practice series/i })).toBeVisible();
 
+    // Owner directive §6 — Reading full mocks and the legacy Listening mocks
+    // URL still live only in /mocks.
     await page.goto('/reading/exam');
     await expect(page).toHaveURL(/\/mocks(?:\?|$)/);
     expect(page.url()).toContain('subtest=reading');

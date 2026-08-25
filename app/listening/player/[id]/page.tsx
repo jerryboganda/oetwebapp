@@ -40,9 +40,6 @@ import { showCreditFeedback } from '@/lib/credit-feedback';
 import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
 import { PartARenderer } from '@/components/domain/listening/PartARenderer';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
-import { PartAPdfOverlayDocument } from '@/components/domain/listening/PartAPdfOverlayDocument';
-import type { PartAOverlayBlank } from '@/components/domain/listening/admin/PartAPdfOverlayEditor';
-import { ListeningQuestionPaperViewer } from '@/components/domain/listening/ListeningQuestionPaperViewer';
 import { ZoomControls } from '@/components/domain/listening/ZoomControls';
 import { ListeningIntroCard } from '@/components/domain/listening/player/ListeningIntroCard';
 import { ListeningAudioTransport } from '@/components/domain/listening/player/ListeningAudioTransport';
@@ -109,21 +106,6 @@ function isPartialSourceGapListeningSession(session: { questions: Array<{ number
   const maxNumber = Math.max(...session.questions.map((question) => question.number));
   const hasC2 = session.questions.some((question) => question.partCode.toUpperCase() === 'C2');
   return maxNumber === 36 && !hasC2;
-}
-
-// A Part B/C question card is "authored inline" when its stem is real prose (not
-// the "See PDF" sentinel) AND every option is real prose (not the generic
-// "Option A/B/C" placeholder). Once every MCQ question in a section is inline, the
-// question-paper PDF is redundant and is hidden for that section (Part A unaffected).
-function listeningQuestionIsInlineAuthored(question: { text: string; options: string[] }): boolean {
-  const stem = question.text.trim().toLowerCase();
-  const stemOk = stem.length > 0 && stem !== 'see pdf';
-  const optionsOk = question.options.length > 0
-    && question.options.every((option, index) => {
-      const normalized = option.trim().toLowerCase();
-      return normalized.length > 0 && normalized !== `option ${String.fromCharCode(97 + index)}`;
-    });
-  return stemOk && optionsOk;
 }
 
 function derivePlayerMode({
@@ -1054,30 +1036,6 @@ function PlayerContent() {
   const visibleExtracts = currentSection === 'B'
     ? (currentExtracts[currentPartBQuestionIndex] ? [currentExtracts[currentPartBQuestionIndex]] : [])
     : currentExtracts;
-  // Learner-facing question-paper PDF for the current section. Per-part map is
-  // keyed by uppercased part/section code; resolve exact section code first,
-  // then fall back to the parent part letter (mirrors the Reading PDF viewer).
-  const currentQuestionPaperUrl = (() => {
-    const map = session?.paper.questionPaperUrlByPart;
-    if (!map || !currentSection) return null;
-    const code = String(currentSection).toUpperCase();
-    return map[code] ?? map[code.charAt(0)] ?? null;
-  })();
-  // A Part A consultation authored as a note-completion document is its own
-  // answer surface, so a missing question-paper PDF there is expected — we don't
-  // show an empty-state for those. Every other section shows a friendly
-  // "no question paper yet" message when its PDF slot is empty (content is
-  // never compulsory, so a published paper may legitimately omit it).
-  const currentSectionHasNotes =
-    (currentSection === 'A1' || currentSection === 'A2')
-    && extracts.some((e) => e.partCode === currentSection && (e.notesBody?.trim().length ?? 0) > 0);
-  // Drop the question-paper PDF for a Part B/C section once every MCQ question in
-  // it is authored inline (stem + options). A section with any placeholder question
-  // keeps the PDF as a fallback. Part A (notes / PDF-overlay) is never gated here.
-  const currentSectionMcqs = (currentSection ? sectionGroups?.[currentSection] ?? [] : [])
-    .filter((question) => question.options.length > 0);
-  const currentSectionInlineBcReady =
-    currentSectionMcqs.length > 0 && currentSectionMcqs.every(listeningQuestionIsInlineAuthored);
   // Per-section audio: each section plays its OWN uploaded file (Part B plays one
   // shared file across B1..B6). Resolved by section code (A1, A2, B, C1, C2).
   // Falls back to the legacy combined paper audio (+ cue windows) for papers that
@@ -1321,11 +1279,12 @@ function PlayerContent() {
     advanceToNextSection();
   };
 
-  // Audio completion opens a review/confirmation state. It must never silently
-  // cross an irreversible section boundary, including when the configured
-  // review window is zero; §5.4 requires an explicit candidate confirmation.
-  // Legacy single-file (cue-point) papers do not fire `<audio> ended` at a
-  // section boundary, so the active cue completion calls this same handler.
+  // Audio plays once. When every authored cue in the section has been
+  // crossed, continue automatically: hop the server review state in
+  // strict exams (confirm-token), then leave a 0-second review window
+  // immediately. Last section submits. Legacy combined-file papers do
+  // not fire `<audio> ended` at a cue boundary, so cue completion
+  // drives the same handler.
   useEffect(() => {
     if (phase !== 'audio' || !hasStarted) return;
     if (usingPerSectionAudio) return;
@@ -1334,6 +1293,19 @@ function PlayerContent() {
     void autoAdvanceAfterAudio();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, hasStarted, usingPerSectionAudio, currentSectionAudioEndMs, allCurrentExtractsCompleted]);
+
+  // Zero-length review windows must not trap the candidate. Restore the
+  // continuation that advanceToNextSection already guards against: reset
+  // phase off 'review' before the section index changes, otherwise this
+  // effect would see the next section and submit/skip it.
+  useEffect(() => {
+    if (!hasStarted || phase !== 'review') return;
+    if (reviewSecondsRemaining > 0) return;
+    if (audioValidityHeld || autoAdvanceInFlightRef.current) return;
+    if (isSubmittingRef.current || autoSubmittedRef.current) return;
+    void advanceFromReview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, reviewSecondsRemaining, hasStarted, audioValidityHeld]);
 
   // C8f — when the preview countdown hits zero, transition to audio and
   // trigger playback. The cue-point seek effect below handles auto-seeking
@@ -1517,20 +1489,28 @@ function PlayerContent() {
     audio.play().catch(handlePlaybackFailure);
   }, [activeAudioStartMs, currentPartBQuestionIndex, currentSection, phase, seekAudioTo]);
 
-  // Audio is non-pausable in every mode. Part B advances between its six
-  // cue-bounded extracts only through the explicit irreversible Next action;
-  // other sections open an explicit finish confirmation when their audio
-  // reaches its end. This is fired from the <audio> `onEnded` handler. Idempotent via
-  // `autoAdvanceInFlightRef` (reset when the section changes).
+  // Audio is non-pausable in every mode. Cue-end / `ended` continues the
+  // section automatically. Part B only fail-closes when an extract is
+  // missing a valid cue; otherwise it waits until every workplace extract
+  // has been crossed, then follows the same review/next/submit path.
+  // Idempotent via `autoAdvanceInFlightRef` (reset when the section changes).
   const autoAdvanceAfterAudio = async () => {
     if (audioValidityHeld) return;
     if (!currentSection) return;
     if (autoAdvanceInFlightRef.current) return;
     if (currentSection === 'B') {
-      setAudioValidityHeld(true);
-      setIntegrityWarning('Part B audio is missing a valid cue boundary for each short extract. This attempt has been halted and flagged for administrator review.');
-      logIntegrityEvent('part_b_extract_boundary_missing');
-      return;
+      const missingCueBoundary = currentExtracts.length === 0 || currentExtracts.some((extract) => (
+        extract.audioStartMs == null
+        || extract.audioEndMs == null
+        || extract.audioEndMs <= extract.audioStartMs
+      ));
+      if (missingCueBoundary) {
+        setAudioValidityHeld(true);
+        setIntegrityWarning('Part B audio is missing a valid cue boundary for each short extract. This attempt has been halted and flagged for administrator review.');
+        logIntegrityEvent('part_b_extract_boundary_missing');
+        return;
+      }
+      if (!allCurrentExtractsCompleted) return;
     }
     autoAdvanceInFlightRef.current = true;
     try {
@@ -1539,11 +1519,19 @@ function PlayerContent() {
         if (reviewState) {
           const advancedReview = await advanceStrictPhaseIfNeeded(reviewState);
           if (!advancedReview) return;
+          // Product review windows are 0: hop the FSM review state so the
+          // confirm-token stays in sync, then continue immediately.
+          if (currentSectionReviewSeconds > 0) return;
+          await advanceFromReview();
           return;
         }
       }
-      setPhase('review');
-      setReviewSecondsRemaining(currentSectionReviewSeconds);
+      if (currentSectionReviewSeconds > 0) {
+        setPhase('review');
+        setReviewSecondsRemaining(currentSectionReviewSeconds);
+        return;
+      }
+      await advanceFromReview();
     } finally {
       autoAdvanceInFlightRef.current = false;
     }
@@ -1663,8 +1651,15 @@ function PlayerContent() {
             // audioEndMs in exam mode. Practice mode keeps full scrub
             // freedom. We pause and latch hasReachedEnd; subsequent
             // play() invocations are immediately re-paused.
+            // Part B shares one file across workplace extracts: do not
+            // halt at the current question's cue if a later extract has
+            // not been reached yet, or later end-cues never fire.
             const startMs = activeAudioStartMs;
             const endMs = activeAudioEndMs;
+            const laterPartBExtractRemains = currentSection === 'B'
+              && currentExtracts.some((extract) => (
+                extract.audioEndMs != null && now * 1000 < extract.audioEndMs
+              ));
             if (
               session?.modePolicy.canScrub === false
               && startMs != null
@@ -1672,15 +1667,17 @@ function PlayerContent() {
               && endMs > startMs
               && now * 1000 >= endMs
               && !audio.paused
+              && !laterPartBExtractRemains
             ) {
               hasReachedEndRef.current = true;
               allowedPauseRef.current = true;
               audio.pause();
             }
-            // C8c — mark this extract as completed once its audioEndMs is
-            // crossed (regardless of mode), so the section panel renders a
-            // checkmark next to the row.
-            const completedNow = visibleExtracts.filter((extract) => (
+            // C8c — mark every authored extract whose audioEndMs has been
+            // crossed, not only the currently visible row. Part B keeps one
+            // question on screen while later workplace extracts still need
+            // their end cues recorded so the section can auto-complete.
+            const completedNow = currentExtracts.filter((extract) => (
               extract.audioEndMs != null
               && now * 1000 >= extract.audioEndMs
             ));
@@ -1904,6 +1901,8 @@ function PlayerContent() {
               warningThresholdsSeconds={session.modePolicy.countdownWarningsSeconds}
               onTogglePlayPause={togglePlayPause}
               onScrub={handleScrub}
+              onSubmit={() => setShowSubmitConfirm(true)}
+              submitDisabled={audioValidityHeld}
             />
 
             {session.modePolicy.screenReaderOptimised ? (
@@ -2066,54 +2065,13 @@ function PlayerContent() {
                   <>
                       <ZoomControls value={questionZoomPercent} onChange={setQuestionZoomPercent} />
 
-                      {currentQuestionPaperUrl && !currentSectionInlineBcReady ? (
-                        <ListeningQuestionPaperViewer
-                          url={currentQuestionPaperUrl}
-                          partLabel={currentSection}
-                        />
-                      ) : (currentSectionHasNotes || currentSectionInlineBcReady) ? null : (
-                        <div
-                          data-testid="listening-question-paper-empty"
-                          className="rounded-2xl border border-dashed border-border bg-surface px-4 py-5 text-center text-sm text-muted"
-                        >
-                          No question paper has been added for this part yet.
-                        </div>
-                      )}
-
                       <div data-testid="listening-question-surface" className="space-y-6" style={{ fontSize: `${questionZoomPercent}%` }}>
                         {visibleQuestionSections.map(({ section, questions }) => (
                           <section key={section} className="space-y-4" aria-label={LISTENING_SECTION_LABEL[section]}>
                             {(() => {
-                              // Part A1 / A2 with an authored notes body → ONE continuous note-completion document.
                               if (section === 'A1' || section === 'A2') {
                                 const extract = extracts.find((e) => e.partCode === section);
-                                // PDF-overlay method (Method C): render the question-paper PDF
-                                // with fill-in inputs positioned at the authored blanks.
-                                if (extract?.authoringMethod === 'pdf_overlay' && extract.partAOverlayBlanksJson) {
-                                  let blanks: PartAOverlayBlank[] = [];
-                                  try {
-                                    blanks = (JSON.parse(extract.partAOverlayBlanksJson) as PartAOverlayBlank[]) ?? [];
-                                  } catch {
-                                    blanks = [];
-                                  }
-                                  const pdfPath =
-                                    session?.paper.questionPaperUrlByPart?.[section]
-                                    ?? session?.paper.questionPaperUrlByPart?.['A']
-                                    ?? session?.paper.questionPaperUrl
-                                    ?? null;
-                                  return (
-                                    <PartAPdfOverlayDocument
-                                      pdfDownloadPath={pdfPath}
-                                      blanks={blanks}
-                                      questions={questions.map((q) => ({ id: q.id, number: q.number }))}
-                                      answers={answers}
-                                      onAnswerChange={handleAnswerChange}
-                                      locked={false}
-                                    />
-                                  );
-                                }
                                 if (extract?.notesBody?.trim()) {
-                                  const canEdit = true;
                                   return (
                                     <PartANotesDocument
                                       partLabel={LISTENING_SECTION_LABEL[section]}
@@ -2121,7 +2079,7 @@ function PlayerContent() {
                                       questions={questions.map((q) => ({ id: q.id, number: q.number }))}
                                       answers={answers}
                                       onAnswerChange={handleAnswerChange}
-                                      locked={!canEdit}
+                                      locked={false}
                                     />
                                   );
                                 }
@@ -2256,7 +2214,7 @@ function PlayerContent() {
             <Modal open={showSubmitConfirm} onClose={() => setShowSubmitConfirm(false)} title="Submit listening task?" size="sm">
               <div className="space-y-4">
                 <p className="text-sm text-muted">
-                  Submit your answers now? This locks the attempt and opens server-graded OET score plus transcript-backed review.
+                  Are you sure you want to submit this exam? You will not be able to continue this attempt after submission.
                 </p>
                 {unansweredQuestionNumbers.length > 0 ? (
                   <InlineAlert variant="warning">

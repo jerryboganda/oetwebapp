@@ -2,14 +2,16 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const {
-  mockMyPathway,
+  mockGetListeningHome,
   mockRouterPush,
   mockNotFound,
+  mockStartListeningPartPracticeAttempt,
   mockTrack,
 } = vi.hoisted(() => ({
-  mockMyPathway: vi.fn(),
+  mockGetListeningHome: vi.fn(),
   mockRouterPush: vi.fn(),
   mockNotFound: vi.fn(),
+  mockStartListeningPartPracticeAttempt: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -47,75 +49,132 @@ vi.mock('@/lib/analytics', () => ({
   analytics: { track: mockTrack },
 }));
 
-vi.mock('@/lib/listening/v2-api', () => ({
-  listeningV2Api: { myPathway: mockMyPathway },
-}));
+vi.mock('@/lib/listening-api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/listening-api')>(
+    '@/lib/listening-api',
+  );
+  return {
+    ...actual,
+    getListeningHome: mockGetListeningHome,
+    startListeningPartPracticeAttempt: mockStartListeningPartPracticeAttempt,
+  };
+});
 
 import ListeningPartPracticePage from './page';
 
-interface StageOverrides {
-  stage: string;
-  status?: 'Locked' | 'Unlocked' | 'InProgress' | 'Completed';
-  actionHref?: string | null;
+function buildPaper(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'atlas-st9',
+    title: 'Atlas Practice Series — Listening Sample Test 9',
+    slug: 'atlas-practice-series-listening-sample-test-09',
+    difficulty: 'standard',
+    estimatedDurationMinutes: 45,
+    publishedAt: '2026-08-18T00:00:00.000Z',
+    route: '/listening/paper/atlas-st9',
+    sourceKind: 'content_paper',
+    objectiveReady: true,
+    questionCount: 36,
+    tagsCsv: 'listening,atlas-practice-series',
+    partACount: 24,
+    partBCount: 6,
+    partCCount: 6,
+    assetReadiness: { audio: true, questionPaper: true, answerKey: true, audioScript: true },
+    lastAttempt: null,
+    ...overrides,
+  };
 }
 
-function stage({ stage, status = 'Unlocked', actionHref = null }: StageOverrides) {
-  return { stage, status, scaledScore: null, completedAt: null, actionHref };
-}
-
-// A pathway where the diagnostic has NOT been completed (it is merely Unlocked),
-// yet the part foundations are unlocked entry points with runnable papers — the
-// post-change behaviour where the diagnostic is optional, not a gate.
-function pathwayWithoutDiagnostic() {
-  return [
-    stage({ stage: 'diagnostic', status: 'Unlocked', actionHref: '/listening/player/lp-1?mode=diagnostic&pathwayStage=diagnostic' }),
-    stage({ stage: 'foundation_partA', actionHref: '/listening/player/lp-1?mode=practice&pathwayStage=foundation_partA' }),
-    stage({ stage: 'foundation_partB', actionHref: '/listening/player/lp-1?mode=practice&pathwayStage=foundation_partB' }),
-    stage({ stage: 'foundation_partC', actionHref: '/listening/player/lp-1?mode=practice&pathwayStage=foundation_partC' }),
-    stage({ stage: 'drill_partA', status: 'Locked' }),
-  ];
+function buildHome(papers = [buildPaper()]) {
+  return {
+    intro: 'Listening practice',
+    papers,
+    featuredTasks: [],
+    activeAttempts: [],
+    recentResults: [],
+    partCollections: [],
+    transcriptBackedReview: {
+      title: '',
+      route: null,
+      availableAfterAttempt: false,
+      latestAttemptId: null,
+      latestScoreDisplay: null,
+    },
+    distractorDrills: [],
+    drillGroups: [],
+    accessPolicyHints: { policy: '', state: 'available', rationale: '', availableAfterAttempt: false },
+    mockSets: [],
+    emptyStates: { papers: null, activeAttempts: null, recentResults: null },
+  };
 }
 
 describe('Listening part practice dispatcher', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockMyPathway.mockResolvedValue(pathwayWithoutDiagnostic());
+    mockGetListeningHome.mockResolvedValue(buildHome());
+    mockStartListeningPartPracticeAttempt.mockResolvedValue({
+      attemptId: 'att-part-b',
+      playerRoute: '/listening/player/atlas-st9?attemptId=att-part-b&mode=practice&part=B&focus=part-b',
+      questionCount: 6,
+      minutes: 12,
+      partPractice: { partCode: 'B', title: 'Part B' },
+    });
   });
 
-  it('lets a learner start Part B practice without completing the diagnostic', async () => {
+  it('lists published papers under Atlas and Nova folders for Part B', async () => {
+    mockGetListeningHome.mockResolvedValue(
+      buildHome([
+        buildPaper(),
+        buildPaper({
+          id: 'nova-20',
+          title: 'Nova Practice Series — Listening Test 20',
+          slug: 'nova-practice-series-listening-20',
+          tagsCsv: 'listening,nova-practice-series',
+          questionCount: 42,
+          partCCount: 12,
+        }),
+        buildPaper({
+          id: 'legacy',
+          title: 'Older sample paper',
+          slug: 'listening-sample-1',
+          tagsCsv: null,
+        }),
+      ]),
+    );
+
     render(<ListeningPartPracticePage />);
 
-    expect(await screen.findByRole('button', { name: /start part b practice/i })).toBeInTheDocument();
-    // The old diagnostic-gate message must be gone.
-    expect(screen.queryByText(/complete the listening diagnostic/i)).not.toBeInTheDocument();
-    expect(mockNotFound).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: /atlas practice series/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /nova practice series/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /anna hartford/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Older sample paper/)).not.toBeInTheDocument();
   });
 
-  it('launches the part-scoped player with the Part B focus params', async () => {
+  it('starts a scoped Part B attempt from a published paper', async () => {
     const user = userEvent.setup();
     render(<ListeningPartPracticePage />);
 
+    await user.click(await screen.findByRole('button', { name: /atlas practice series/i }));
     await user.click(await screen.findByRole('button', { name: /start part b practice/i }));
 
-    expect(mockRouterPush).toHaveBeenCalledTimes(1);
-    const pushedUrl = mockRouterPush.mock.calls[0][0] as string;
-    expect(pushedUrl).toContain('/listening/player/lp-1');
-    expect(pushedUrl).toContain('mode=practice');
-    expect(pushedUrl).toContain('pathwayStage=foundation_partB');
-    expect(pushedUrl).toContain('focus=part-b');
-    expect(pushedUrl).toContain('part=B');
+    await waitFor(() => {
+      expect(mockStartListeningPartPracticeAttempt).toHaveBeenCalledWith('atlas-st9', 'B');
+      expect(mockRouterPush).toHaveBeenCalledWith(
+        '/listening/player/atlas-st9?attemptId=att-part-b&mode=practice&part=B&focus=part-b',
+      );
+    });
+    expect(mockNotFound).not.toHaveBeenCalled();
   });
 
-  it('shows a non-diagnostic fallback when no runnable paper is available', async () => {
-    mockMyPathway.mockResolvedValue([
-      stage({ stage: 'foundation_partB', status: 'Unlocked', actionHref: null }),
-    ]);
+  it('shows an empty state when no published paper contains the requested part', async () => {
+    mockGetListeningHome.mockResolvedValue(
+      buildHome([
+        buildPaper({ partBCount: 0 }),
+      ]),
+    );
 
     render(<ListeningPartPracticePage />);
 
-    await waitFor(() => expect(mockMyPathway).toHaveBeenCalled());
-    expect(await screen.findByText(/no part b listening paper is available yet/i)).toBeInTheDocument();
-    expect(screen.queryByText(/complete the listening diagnostic/i)).not.toBeInTheDocument();
+    expect(await screen.findByText(/No published Listening papers contain Part B yet/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /start part b practice/i })).not.toBeInTheDocument();
   });
 });

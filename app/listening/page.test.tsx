@@ -1,7 +1,8 @@
 import { render, screen } from '@testing-library/react';
 
-const { mockGetListeningHome, mockUseAuth, mockUseListeningProfile, mockRouterReplace } = vi.hoisted(() => ({
+const { mockGetListeningHome, mockStartListeningAttempt, mockUseAuth, mockUseListeningProfile, mockRouterReplace } = vi.hoisted(() => ({
   mockGetListeningHome: vi.fn(),
+  mockStartListeningAttempt: vi.fn(),
   mockUseAuth: vi.fn(),
   mockUseListeningProfile: vi.fn(),
   mockRouterReplace: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock('@/hooks/useListeningProfile', () => ({
 
 vi.mock('@/lib/listening-api', () => ({
   getListeningHome: mockGetListeningHome,
+  startListeningAttempt: mockStartListeningAttempt,
 }));
 
 vi.mock('@/lib/read-error-message', () => ({
@@ -65,11 +67,12 @@ vi.mock('@/components/ui/alert', () => ({
 
 import ListeningHome from './page';
 
-function buildPaper(overrides?: Partial<{ id: string; title: string; route: string; questionCount: number; estimatedDurationMinutes: number; requiresSubscription: boolean }>) {
+function buildPaper(overrides?: Partial<{ id: string; title: string; slug: string; tagsCsv: string | null; route: string; questionCount: number; estimatedDurationMinutes: number; requiresSubscription: boolean }>) {
   return {
     id: overrides?.id ?? 'paper-1',
-    title: overrides?.title ?? 'Listening Sample 1',
-    slug: 'listening-sample-1',
+    title: overrides?.title ?? 'Atlas Practice Series — Listening Sample 1',
+    slug: overrides?.slug ?? 'atlas-practice-series-listening-sample-1',
+    tagsCsv: overrides?.tagsCsv ?? 'listening,atlas-practice-series',
     difficulty: 'standard',
     estimatedDurationMinutes: overrides?.estimatedDurationMinutes ?? 45,
     publishedAt: '2026-05-12T10:00:00Z',
@@ -109,27 +112,32 @@ describe('Listening hub — available papers library (Reading parity)', () => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue({ isAuthenticated: true, loading: false });
     mockUseListeningProfile.mockReturnValue({ profile: null, isLoading: false, error: null });
-    mockGetListeningHome.mockResolvedValue(buildHome([buildPaper(), buildPaper({ id: 'paper-2', title: 'Listening Sample 2', route: '/listening/paper/paper-2' })]));
+    mockGetListeningHome.mockResolvedValue(buildHome([
+      buildPaper(),
+      buildPaper({
+        id: 'paper-2',
+        title: 'Nova Practice Series — Listening Sample 2',
+        slug: 'nova-practice-series-listening-sample-2',
+        tagsCsv: 'listening,nova-practice-series',
+        route: '/listening/paper/paper-2',
+      }),
+    ]));
   });
 
-  it('lists every available listening exam with a launch route and a hero count', async () => {
+  it('lists Atlas and Nova Listening folders instead of a flat paper grid', async () => {
     render(<ListeningHome />);
 
-    expect(await screen.findByText('Listening Sample 1')).toBeInTheDocument();
-    expect(screen.getByText('Listening Sample 2')).toBeInTheDocument();
-
-    const link = screen.getByText('Listening Sample 1').closest('a');
-    expect(link).toHaveAttribute('href', '/listening/paper/paper-1');
-
-    // Hero "Available papers" stat reflects the count.
+    expect(await screen.findByRole('button', { name: /atlas practice series/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /nova practice series/i })).toBeInTheDocument();
+    expect(screen.queryByText('Atlas Practice Series — Listening Sample 1')).not.toBeInTheDocument();
     expect(screen.getByText('Available papers: 2 ready')).toBeInTheDocument();
   });
 
-  it('shows a friendly empty state when no listening exams are published', async () => {
+  it('shows a friendly empty state when no Atlas/Nova listening exams are published', async () => {
     mockGetListeningHome.mockResolvedValue(buildHome([]));
     render(<ListeningHome />);
 
-    expect(await screen.findByText(/No full listening exams are published yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no published Atlas\/Nova Listening papers yet/i)).toBeInTheDocument();
     expect(screen.getByText('Available papers: 0 ready')).toBeInTheDocument();
   });
 
@@ -137,7 +145,9 @@ describe('Listening hub — available papers library (Reading parity)', () => {
     mockGetListeningHome.mockResolvedValue(buildHome([buildPaper({ requiresSubscription: true })]));
     render(<ListeningHome />);
 
-    expect(await screen.findByText('Listening Sample 1')).toBeInTheDocument();
+    const user = (await import('@testing-library/user-event')).default.setup();
+    await user.click(await screen.findByRole('button', { name: /atlas practice series/i }));
+    expect(await screen.findByText('Atlas Practice Series — Listening Sample 1')).toBeInTheDocument();
     expect(screen.getByText(/Premium/i)).toBeInTheDocument();
   });
 
@@ -156,6 +166,7 @@ describe('Listening hub — available papers library (Reading parity)', () => {
         buildPaper({
           id: 'atlas-st9',
           title: 'Atlas Practice Series — Listening Sample Test 9 (Q37–42 unavailable)',
+          slug: 'atlas-practice-series-listening-sample-test-09',
           route: '/listening/paper/atlas-st9',
           questionCount: 36,
         }),
@@ -163,8 +174,10 @@ describe('Listening hub — available papers library (Reading parity)', () => {
     );
     render(<ListeningHome />);
 
+    const user = (await import('@testing-library/user-event')).default.setup();
+    await user.click(await screen.findByRole('button', { name: /atlas practice series/i }));
     const title = await screen.findByText('Atlas Practice Series — Listening Sample Test 9 (Q37–42 unavailable)');
-    const card = title.closest('a');
+    const card = title.closest('article');
     expect(card).not.toBeNull();
     expect(card).toHaveTextContent('Partial · Q37–42 unavailable');
     expect(card).not.toHaveTextContent('Full exam');

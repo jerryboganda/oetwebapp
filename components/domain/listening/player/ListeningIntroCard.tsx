@@ -6,9 +6,8 @@
 // `app/listening/player/[id]/page.tsx` so the surface can be Storybook'd
 // and tested in isolation without booting the full Suspense + FSM tree.
 
-import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, FileText, Loader2, Lock, Play, Timer, Volume2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Loader2, Lock, Play, Timer, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
@@ -264,13 +263,6 @@ export function ListeningIntroCard(props: ListeningIntroCardProps) {
           {isStarting ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
           {isStarting ? 'Starting...' : 'Start Audio & Task'}
         </Button>
-        {session.paper.questionPaperUrl ? (
-          <Button size="lg" variant="outline" className="gap-2" asChild>
-<Link href={session.paper.questionPaperUrl} target="_blank">
-              <FileText className="h-5 w-5" /> Question Paper
-            </Link>
-</Button>
-        ) : null}
       </div>
     </motion.div>
   );
