@@ -6,7 +6,8 @@
 - FIXED minor gaps: admin CreditBucketAdjuster Add/Set-exact toggle; "Gifted Shared AI Credits" labels; payment-return invalidates entitlement+subscription+aiPackageCredits.
 - FIXED ship gate: repaired 40 broken pnpm junctions (pnpm install --frozen-lockfile), gate now uses real TS parser for .ts/.tsx, [Fact] regex tightened to column-0 orphans, self-test extended.
 - Validation: backend build 0 errors; 56/56 billing tests; ship-gate OK (typescript=yes); payment-return 17/17; ai-credit-summary 4/4; package-list + catalog-website-packages green. Pre-existing failures NOT touched: pdf-policy-release* snapshot tests, 126 repo-wide tsc errors.
-- Next: commit -> push -> watch Build & Deploy -> verify /api/health + spot-check pkg_quick_check entitlements JSON on prod DB shows flexible_credits.
+- DEPLOYED: 7be86b744 Build & Deploy success; web/api health green; migrations applied; VPS images on this SHA; repo private again.
+- PROD VERIFIED: /v1/billing/ai-packages now returns pkg_quick_check/pkg_exam_prep_pro with sharedCredits=0 and "flexible AI grading credits" copy (was sharedCredits 5/15). Balance conversion ran in the same migration batch.
 
 ## Current task — Shared wallet screenshot close-out + Master Catalogue merge
 - Debit-on-start + screenshot remaining copy now wired: reading exam/paper/practice/parts, listening paper/player, speaking warmup + self-practice, writing V2 eligibility, writing paper direct launch.
