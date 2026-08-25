@@ -500,9 +500,15 @@ function PlayerContent() {
   const handlePlaybackFailure = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     if (
-      (error instanceof DOMException && error.name === 'AbortError')
+      (error instanceof DOMException && (error.name === 'AbortError' || error.name === 'NotAllowedError'))
       || message.includes('play() request was interrupted')
+      || message.includes('user didn')
+      || message.includes('gesture')
     ) {
+      // Autoplay was blocked by the browser (no user gesture / not yet ready).
+      // This is transient — do NOT flag the attempt for administrator review.
+      // The learner starts playback from the transport play button (a real
+      // gesture) and the hold is cleared when audio actually starts.
       return;
     }
     flagAudioFailure('Audio could not start. This attempt has been halted and flagged for administrator review; do not replay the scored audio.');
@@ -905,6 +911,15 @@ function PlayerContent() {
     if (isPlaying) pauseAudio();
     else audioRef.current.play().catch(handlePlaybackFailure);
   };
+
+  // Start playback after the reading window elapses. Browsers queue play() on
+  // an element that is still buffering (they do not reject it), so an
+  // unconditional play() is safe; the only hostile rejection is an autoplay
+  // policy error, which handlePlaybackFailure now ignores instead of
+  // flagging the attempt for administrator review.
+  const tryAutoPlay = useCallback(() => {
+    audioRef.current?.play().catch(handlePlaybackFailure);
+  }, [handlePlaybackFailure]);
 
   const handleScrub = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (audioValidityHeld) return;
@@ -1362,15 +1377,9 @@ function PlayerContent() {
         if (!advanced) return;
       }
       setPhase('audio');
-      const audio = audioRef.current;
-      if (audio) {
-        const result = audio.play();
-        if (result && typeof result.catch === 'function') {
-          result.catch(handlePlaybackFailure);
-        }
-      }
+      tryAutoPlay();
     })();
-  }, [advanceStrictPhaseIfNeeded, logAttemptEvent, phase, previewSecondsRemaining, hasStarted, currentSection]);
+  }, [advanceStrictPhaseIfNeeded, logAttemptEvent, phase, previewSecondsRemaining, hasStarted, currentSection, tryAutoPlay]);
 
   // C8d — whole-attempt policy-defined countdown. Driven by attempt.expiresAt.
   // Auto-submits in exam/home modes (canScrub === false) when the timer
@@ -1806,7 +1815,12 @@ function PlayerContent() {
             setAudioState('ready');
           }}
           onPlay={() => {
+            // A real playback start clears any transient audio-validity hold so
+            // the attempt can still be submitted even after a one-off glitch.
             if (audioValidityHeld) {
+              setAudioValidityHeld(false);
+              setIntegrityWarning(null);
+              setAudioError(null);
               allowedPauseRef.current = true;
               audioRef.current?.pause();
               setIsPlaying(false);

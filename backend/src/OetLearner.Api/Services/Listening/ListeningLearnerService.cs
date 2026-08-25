@@ -1452,6 +1452,15 @@ public sealed class ListeningLearnerService(
                     section: section,
                     questionIndex: questionIndex);
             }
+            // A genuine playback start proves the earlier audio_error was
+            // transient (e.g. an autoplay-policy rejection), so release the
+            // review hold and let the learner submit normally.
+            if (eventType == "audio_started" && relationalAttempt.AdminReviewReason == adminReviewReason)
+            {
+                relationalAttempt.RequiresAdminReview = false;
+                relationalAttempt.AdminReviewReason = null;
+                relationalAttempt.AdminReviewFlaggedAt = null;
+            }
         }
         else if (attempt is not null)
         {
@@ -1467,6 +1476,14 @@ public sealed class ListeningLearnerService(
                 attempt.RequiresAdminReview = true;
                 attempt.AdminReviewReason ??= adminReviewReason;
                 attempt.AdminReviewFlaggedAt ??= now;
+            }
+            // Mirror the relational path: a real playback start clears a prior
+            // audio_playback_error hold so a one-off glitch cannot block submit.
+            if (eventType == "audio_started" && attempt.AdminReviewReason == adminReviewReason)
+            {
+                attempt.RequiresAdminReview = false;
+                attempt.AdminReviewReason = null;
+                attempt.AdminReviewFlaggedAt = null;
             }
         }
 
