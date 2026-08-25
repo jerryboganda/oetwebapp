@@ -377,18 +377,6 @@ export interface CommentDto {
   createdAt: string;
 }
 
-export interface ChatMessage {
-  role: string;
-  content: string;
-}
-
-export interface PassageQnaResponse {
-  reply: string;
-  history: ChatMessage[];
-  grounded: boolean;
-  advisoryOnly: boolean;
-  marksUnaffected: boolean;
-}
 
 interface RawDailyPlanItemDto {
   id: string;
@@ -768,19 +756,6 @@ export const postComment = (questionId: string, body: string) =>
   api<CommentDto>(`/v1/reading-pathway/questions/${encodeURIComponent(questionId)}/comments`, {
     method: 'POST',
     body: JSON.stringify({ body }),
-  });
-
-// ── AI ────────────────────────────────────────────────────────────────────────
-
-export const askAiAboutPassage = (
-  attemptId: string,
-  passageId: string,
-  message: string,
-  history: ChatMessage[],
-) =>
-  api<PassageQnaResponse>('/v1/reading-pathway/ai/passage-qna', {
-    method: 'POST',
-    body: JSON.stringify({ attemptId, passageId, message, history }),
   });
 
 function mapDailyPlan(items: RawDailyPlanItemDto[]): DailyPlanDto {

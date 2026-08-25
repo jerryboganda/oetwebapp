@@ -241,6 +241,10 @@ export interface ListeningSessionDto {
      * falling back to the combined `audioUrl`. Empty when a paper relies on the
      * legacy combined audio. */
     audioUrlByPart?: Record<string, string>;
+    /** Full audio script PDF (AudioScript role) — marker reference + post-submit
+     * learner review. Null/absent when no AudioScript asset is attached. The
+     * media endpoint gates it to entitled + profession-visible learners. */
+    audioScriptUrl?: string | null;
     audioAvailable: boolean;
     audioUnavailableReason: string | null;
     assetReadiness: {
@@ -726,32 +730,6 @@ export const getListeningAttemptAiExplanation = (
   language = 'en',
 ) => api<ListeningGroundedAiExplanationDto>(
   `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/ai-explanation?language=${encodeURIComponent(language)}`,
-);
-
-export interface ListeningQuestionQnaMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export interface ListeningQuestionQnaResponse {
-  reply: string;
-  history: ListeningQuestionQnaMessage[];
-  grounded: true;
-  advisoryOnly: true;
-  marksUnaffected: true;
-}
-
-export const askListeningQuestionGroundedAi = (
-  attemptId: string,
-  questionId: string,
-  message: string,
-  history: ListeningQuestionQnaMessage[] = [],
-) => api<ListeningQuestionQnaResponse>(
-  `/v1/listening-papers/attempts/${encodeURIComponent(attemptId)}/questions/${encodeURIComponent(questionId)}/ai-qna`,
-  {
-    method: 'POST',
-    body: JSON.stringify({ message, history }),
-  },
 );
 
 export function getListeningDrill(drillId: string, options: { paperId?: string; attemptId?: string } = {}) {

@@ -10,7 +10,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RecordingPlayer } from '@/components/class/RecordingPlayer';
-import { AskAiPanel } from '@/components/class/AskAiPanel';
+import { AiHelpTooltip } from '@/components/ui/ai-help-tooltip';
 import { ClassMaterialList, type ClassMaterial } from '@/components/class/ClassMaterialList';
 import { fetchLiveClassRecording, type LiveClassRecording } from '@/lib/api';
 
@@ -151,13 +151,16 @@ export default function RecordingPage() {
               </div>
 
               <div className="space-y-4">
-                {sessionId ? (
-                  <AskAiPanel sessionId={sessionId} />
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border bg-surface p-4 text-center text-xs text-muted">
-                    <Sparkles className="mx-auto mb-2 h-5 w-5 text-muted/50" /> AI assistant unavailable.
+                <div className="flex items-center justify-between rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <div>
+                      <h3 className="text-sm font-semibold text-navy dark:text-white">AI study assistant</h3>
+                      <p className="text-xs text-muted">Summarise the class, explain tricky parts, or build recall questions.</p>
+                    </div>
                   </div>
-                )}
+                  <AiHelpTooltip variant="class" />
+                </div>
               </div>
             </div>
           </>

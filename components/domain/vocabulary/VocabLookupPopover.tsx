@@ -2,17 +2,17 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, Loader2, Plus, CheckCircle2, Sparkles, X, Volume2 } from 'lucide-react';
+import { BookOpen, Loader2, Plus, CheckCircle2, X, Volume2 } from 'lucide-react';
 import {
   lookupVocabularyTerm,
   addToMyVocabulary,
-  requestVocabularyGloss,
   fetchRecallsAudio,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
-import type { VocabularyLookupResult, VocabularyGlossResponse } from '@/lib/types/vocabulary';
+import { AiHelpTooltip } from '@/components/ui/ai-help-tooltip';
+import type { VocabularyLookupResult } from '@/lib/types/vocabulary';
 
 export type VocabLookupSource =
   | 'reading'
@@ -57,8 +57,6 @@ export function VocabLookupPopover({
 }: VocabLookupPopoverProps) {
   const [lookup, setLookup] = useState<VocabularyLookupResult | null>(null);
   const [loading, setLoading] = useState(true);
-  const [gloss, setGloss] = useState<VocabularyGlossResponse | null>(null);
-  const [glossing, setGlossing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,21 +116,6 @@ export function VocabLookupPopover({
       setError(msg);
     } finally {
       setAdding(false);
-    }
-  }
-
-  async function handleGloss() {
-    setGlossing(true);
-    setError(null);
-    try {
-      const res = await requestVocabularyGloss({ word, context });
-      setGloss(res as VocabularyGlossResponse);
-      analytics.track('vocab_gloss_requested', { word });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Gloss failed.';
-      setError(msg);
-    } finally {
-      setGlossing(false);
     }
   }
 
@@ -219,7 +202,7 @@ export function VocabLookupPopover({
           />
         )}
 
-        {!loading && lookup && !lookup.found && !gloss && (
+        {!loading && lookup && !lookup.found && (
           <div className="space-y-2">
             <div className="rounded-xl bg-background-light px-3 py-2 text-xs text-muted">
               Not found in the catalog.
@@ -243,34 +226,11 @@ export function VocabLookupPopover({
                 </>
               )}
             </div>
-            <button
-              onClick={handleGloss}
-              disabled={glossing}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary/5 px-3 py-2 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-50"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              {glossing ? 'Asking AI…' : 'Ask AI for a gloss'}
-            </button>
+            <div className="flex items-center justify-between gap-2 rounded-xl bg-primary/5 px-3 py-2">
+              <span className="text-xs text-primary">Need a definition? The AI can suggest one.</span>
+              <AiHelpTooltip variant="vocabulary" />
+            </div>
           </div>
-        )}
-
-        {gloss && (
-          <TermPanel
-            heading="AI gloss (advisory)"
-            word={gloss.term}
-            ipa={gloss.ipaPronunciation}
-            definition={gloss.shortDefinition}
-            example={gloss.exampleSentence}
-            footer={gloss.existingTermId && !added ? (
-              <button
-                onClick={() => handleAdd(gloss.existingTermId!)}
-                disabled={adding}
-                className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-xs font-medium text-white hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 disabled:opacity-50"
-              >
-                <Plus className="h-3 w-3" /> Add existing match
-              </button>
-            ) : undefined}
-          />
         )}
         {audioUpgradeModal}
       </motion.div>

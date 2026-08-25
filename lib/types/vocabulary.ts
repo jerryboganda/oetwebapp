@@ -175,17 +175,3 @@ export interface VocabularyLookupResult {
   term: VocabularyTerm | null;
   suggestions: VocabularyTermSummary[];
 }
-
-export interface VocabularyGlossResponse {
-  term: string;
-  ipaPronunciation: string | null;
-  shortDefinition: string;
-  exampleSentence: string;
-  contextNotes: string | null;
-  synonyms: string[];
-  register: string;
-  appliedRuleIds: string[];
-  rulebookVersion: string;
-  matchedExistingTerm: boolean;
-  existingTermId: string | null;
-}

@@ -7050,13 +7050,6 @@ export async function fetchVocabularyQuizHistory(params?: { page?: number; pageS
   return apiRequest(`/v1/vocabulary/quiz/history?${p}`);
 }
 
-export async function requestVocabularyGloss(payload: { word: string; context?: string; letterType?: string; profession?: string }) {
-  return apiRequest('/v1/vocabulary/gloss', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
 export interface MyVocabularyPageRequest {
   page: number;
   pageSize: number;

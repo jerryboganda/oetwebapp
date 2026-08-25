@@ -4,13 +4,11 @@ import userEvent from '@testing-library/user-event';
 const {
   mockLookupVocabularyTerm,
   mockAddToMyVocabulary,
-  mockRequestVocabularyGloss,
   mockFetchRecallsAudio,
   mockTrack,
 } = vi.hoisted(() => ({
   mockLookupVocabularyTerm: vi.fn(),
   mockAddToMyVocabulary: vi.fn(),
-  mockRequestVocabularyGloss: vi.fn(),
   mockFetchRecallsAudio: vi.fn(),
   mockTrack: vi.fn(),
 }));
@@ -24,7 +22,6 @@ vi.mock('motion/react', () => ({
 vi.mock('@/lib/api', () => ({
   lookupVocabularyTerm: mockLookupVocabularyTerm,
   addToMyVocabulary: mockAddToMyVocabulary,
-  requestVocabularyGloss: mockRequestVocabularyGloss,
   fetchRecallsAudio: mockFetchRecallsAudio,
 }));
 
@@ -124,7 +121,7 @@ describe('VocabLookupPopover', () => {
     expect(mockTrack).toHaveBeenCalledWith('vocab_saved_from_reading', expect.objectContaining({ termId: 'vt-001', source: 'reading' }));
   });
 
-  it('offers "Ask AI for a gloss" when lookup misses', async () => {
+  it('offers AI glossary help when lookup misses', async () => {
     mockLookupVocabularyTerm.mockResolvedValue({
       found: false,
       term: null,
@@ -132,29 +129,6 @@ describe('VocabLookupPopover', () => {
     });
     render(<VocabLookupPopover word="zzxunknown" source="reading" onClose={vi.fn()} />);
     expect(await screen.findByText(/Not found in the catalog/i)).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: /Ask AI for a gloss/i })).toBeInTheDocument();
-  });
-
-  it('fetches and renders the AI gloss when the gloss button is clicked', async () => {
-    mockLookupVocabularyTerm.mockResolvedValue({ found: false, term: null, suggestions: [] });
-    mockRequestVocabularyGloss.mockResolvedValue({
-      term: 'zzxunknown',
-      shortDefinition: 'A contextual gloss.',
-      exampleSentence: 'Example sentence.',
-      contextNotes: null,
-      synonyms: [],
-      register: 'clinical',
-      ipaPronunciation: null,
-      appliedRuleIds: [],
-      rulebookVersion: '1.0.0',
-      matchedExistingTerm: false,
-      existingTermId: null,
-    });
-    const user = userEvent.setup();
-    render(<VocabLookupPopover word="zzxunknown" source="reading" onClose={vi.fn()} />);
-    const askBtn = await screen.findByRole('button', { name: /Ask AI for a gloss/i });
-    await user.click(askBtn);
-    expect(await screen.findByText('A contextual gloss.')).toBeInTheDocument();
-    expect(mockTrack).toHaveBeenCalledWith('vocab_gloss_requested', { word: 'zzxunknown' });
+    expect(await screen.findByRole('button', { name: /About the AI glossary/i })).toBeInTheDocument();
   });
 });
