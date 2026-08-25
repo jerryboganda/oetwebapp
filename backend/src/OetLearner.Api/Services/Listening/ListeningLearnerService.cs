@@ -20,7 +20,8 @@ public sealed class ListeningLearnerService(
     ListeningGradingService? gradingService = null,
     IAssessmentScoreConversionService? scoreConversionService = null,
     IAssessmentMarkingPolicyService? markingPolicyService = null,
-    IListeningPolicyService? listeningPolicyService = null)
+    IListeningPolicyService? listeningPolicyService = null,
+    IListeningBackfillService? backfillService = null)
 {
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
@@ -783,6 +784,14 @@ public sealed class ListeningLearnerService(
             ?? throw ApiException.Validation("part_code_invalid", "partCode must be A, B, or C.");
 
         var source = await ResolveSourceAsync(paperId, ct);
+        // Auto-backfill (user-transparent): if the paper has authored JSON questions
+        // but no relational rows yet, project them now so part-practice grading
+        // (which requires ListeningQuestions) succeeds without admin action.
+        if (!source.UsesRelationalStructure && source.Questions.Count > 0)
+        {
+            source = await EnsureRelationalBackfillAsync(paperId, source, ct);
+        }
+
         var scopedQuestions = source.Questions
             .Where(question => string.Equals(
                 ListeningParentPartFromCode(question.PartCode),
@@ -792,6 +801,10 @@ public sealed class ListeningLearnerService(
             .ToList();
         if (scopedQuestions.Count == 0)
         {
+            // If we still have no questions for this part but the paper does have
+            // relational rows, the part truly has no authored items.
+            // If the paper still has no relational structure, the auto-backfill
+            // above either failed or the JSON has no questions for this part.
             throw ApiException.Validation(
                 "part_practice_no_questions",
                 $"No published Listening questions exist for Part {normalizedPart} on this paper.");
@@ -810,6 +823,26 @@ public sealed class ListeningLearnerService(
             partPracticePartCode: normalizedPart,
             partPracticeQuestionIds: scopedQuestions.Select(q => q.Id).ToList(),
             partPracticeMinutes: minutes);
+    }
+
+    private async Task<ListeningSource> EnsureRelationalBackfillAsync(string paperId, ListeningSource currentSource, CancellationToken ct)
+    {
+        var svc = backfillService ?? new ListeningBackfillService(db);
+        try
+        {
+            var report = await svc.BackfillPaperAsync(paperId, "system:auto-backfill", bypassAttemptsGuard: true, ct);
+            if (!report.Success)
+            {
+                return currentSource;
+            }
+
+            var refreshed = await ResolveSourceAsync(paperId, ct);
+            return refreshed.UsesRelationalStructure ? refreshed : currentSource;
+        }
+        catch
+        {
+            return currentSource;
+        }
     }
 
     public async Task<object> GetAttemptAsync(string userId, string attemptId, CancellationToken ct)
@@ -2191,7 +2224,36 @@ public sealed class ListeningLearnerService(
         var unknown = finalAnswers.Keys.FirstOrDefault(id => !validQuestionIds.Contains(id));
         if (unknown is not null)
         {
-            throw ApiException.Validation("listening_question_not_found", "One submitted answer does not belong to this Listening attempt.");
+            var partPractice = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson);
+            if (partPractice.IsValid)
+            {
+                // Fallback: client is posting stale GUIDs (attempt was created
+                // before the paper was backfilled and GUIDs were regenerated).
+                // Remap by position: old scope order (by Question.Number) →
+                // new source order (by Question.Number) for the same parent part.
+                var oldIdsInOrder = partPractice.QuestionIds;
+                var newQuestionsSorted = source.Questions.OrderBy(q => q.Number).ToList();
+                if (oldIdsInOrder.Count == newQuestionsSorted.Count && oldIdsInOrder.Count == finalAnswers.Count)
+                {
+                    var remapped = new Dictionary<string, string?>(StringComparer.Ordinal);
+                    for (var i = 0; i < oldIdsInOrder.Count; i++)
+                    {
+                        var oldId = oldIdsInOrder[i];
+                        if (finalAnswers.TryGetValue(oldId, out var ans))
+                        {
+                            remapped[newQuestionsSorted[i].Id] = ans;
+                        }
+                    }
+                    finalAnswers = remapped;
+                    validQuestionIds = source.Questions.Select(q => q.Id).ToHashSet(StringComparer.Ordinal);
+                    unknown = finalAnswers.Keys.FirstOrDefault(id => !validQuestionIds.Contains(id));
+                }
+            }
+
+            if (unknown is not null)
+            {
+                throw ApiException.Validation("listening_question_not_found", "One submitted answer does not belong to this Listening attempt.");
+            }
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -4669,9 +4731,26 @@ public sealed class ListeningLearnerService(
     {
         if (attempt is null) return source;
         var partPractice = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson);
-        return partPractice.IsValid
-            ? ApplyQuestionScope(source, partPractice.QuestionIds)
-            : source;
+        if (!partPractice.IsValid) return source;
+
+        var scoped = ApplyQuestionScope(source, partPractice.QuestionIds);
+        if (scoped.Questions.Count == 0 && source.Questions.Count > 0)
+        {
+            // Fallback: stored questionIds are stale (random GUIDs regenerated on
+            // backfill after the attempt was created). Recover by parent part
+            // so part-only review still shows the correct transcript/audio/answers
+            // instead of collapsing to an empty paper.
+            var parent = partPractice.PartCode!.Trim().ToUpperInvariant();
+            var fallbackIds = source.Questions
+                .Where(q => string.Equals(ListeningParentPartFromCode(q.PartCode), parent, StringComparison.OrdinalIgnoreCase))
+                .Select(q => q.Id)
+                .ToList();
+            if (fallbackIds.Count > 0)
+            {
+                return ApplyQuestionScope(source, fallbackIds);
+            }
+        }
+        return scoped;
     }
 
     private static ListeningSource ApplyQuestionScope(ListeningSource source, IReadOnlyCollection<string> questionIds)

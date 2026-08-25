@@ -263,10 +263,36 @@ public sealed class ListeningGradingService
             .Include(q => q.Options)
             .ToListAsync(ct);
         var partPractice = ListeningAttemptScope.ReadPartPractice(attempt.ScopeJson);
+        var partPracticeFallbackApplied = false;
         if (partPractice.IsValid)
         {
             var scopedIds = partPractice.QuestionIds.ToHashSet(StringComparer.Ordinal);
-            questions = questions.Where(q => scopedIds.Contains(q.Id)).ToList();
+            var filtered = questions.Where(q => scopedIds.Contains(q.Id)).ToList();
+            if (filtered.Count == 0 && questions.Count > 0)
+            {
+                // IDs are stale (paper was backfilled after the attempt started and
+                // GUIDs were regenerated). Fall back to parent-part scoping so the
+                // attempt remains gradable and part-only review still shows the
+                // correct script/answers instead of the generic
+                // "no structured questions" error.
+                var partRows = await _db.ListeningParts.AsNoTracking()
+                    .Where(p => p.PaperId == attempt.PaperId)
+                    .ToListAsync(ct);
+                var allowedPartIds = partRows
+                    .Where(p => string.Equals(ToParentPartString(p.PartCode), partPractice.PartCode, StringComparison.OrdinalIgnoreCase))
+                    .Select(p => p.Id)
+                    .ToHashSet(StringComparer.Ordinal);
+                if (allowedPartIds.Count > 0)
+                {
+                    var fallback = questions.Where(q => allowedPartIds.Contains(q.ListeningPartId)).ToList();
+                    if (fallback.Count > 0)
+                    {
+                        filtered = fallback;
+                        partPracticeFallbackApplied = true;
+                    }
+                }
+            }
+            questions = filtered;
         }
 
         // Resolve the captured policy once per grade pass. The owner-approved
@@ -297,7 +323,11 @@ public sealed class ListeningGradingService
         // candidate must never receive a result produced from a key different
         // from the one captured at attempt start.
         var versionMap = ParseVersionMap(attempt.LastQuestionVersionMapJson);
-        if (versionMap.Count > 0)
+        // When we recovered via parent-part fallback (stale GUIDs regenerated on
+        // backfill), the stored version map is keyed by the old GUIDs and must
+        // not fail the attempt — the candidate still answered the same numbered
+        // items for the same part.
+        if (versionMap.Count > 0 && !partPracticeFallbackApplied)
         {
             var currentQuestionIds = questions.Select(q => q.Id).ToHashSet(StringComparer.Ordinal);
             var missing = versionMap.Keys.Where(id => !currentQuestionIds.Contains(id)).ToArray();
@@ -323,25 +353,66 @@ public sealed class ListeningGradingService
         var rawCorrect = 0;
         var driftedQuestionIds = new List<string>();
         var multipleSelectionIssues = new List<MultipleSelectionIntegrityIssue>();
+        // When fallback was applied (stale GUIDs), rebuild a position-based
+        // answer map so old answers keyed by the pre-backfill GUIDs still grade
+        // against the new GUIDs for the same numbered items.
+        IReadOnlyDictionary<string, ListeningAnswer>? fallbackAnswerByNewId = null;
+        if (partPracticeFallbackApplied)
+        {
+            var orderedNew = questions.OrderBy(q => q.QuestionNumber).ThenBy(q => q.DisplayOrder).ToList();
+            var oldIds = partPractice.QuestionIds;
+            if (oldIds.Count == orderedNew.Count)
+            {
+                var map = new Dictionary<string, ListeningAnswer>(StringComparer.Ordinal);
+                for (var i = 0; i < oldIds.Count; i++)
+                {
+                    if (answerByQuestionId.TryGetValue(oldIds[i], out var oldAns))
+                    {
+                        map[orderedNew[i].Id] = oldAns;
+                    }
+                }
+                if (map.Count > 0) fallbackAnswerByNewId = map;
+            }
+        }
+
         foreach (var q in questions.OrderBy(q => q.QuestionNumber).ThenBy(q => q.DisplayOrder))
         {
             if (!answerByQuestionId.TryGetValue(q.Id, out var ans))
             {
-                ans = new ListeningAnswer
+                if (partPracticeFallbackApplied
+                    && fallbackAnswerByNewId is not null
+                    && fallbackAnswerByNewId.TryGetValue(q.Id, out var fbAns))
                 {
-                    Id = Guid.NewGuid().ToString("N"),
-                    ListeningAttemptId = attempt.Id,
-                    ListeningQuestionId = q.Id,
-                    UserAnswerJson = JsonSerializer.Serialize(string.Empty),
-                    QuestionVersionSnapshot = versionMap.TryGetValue(q.Id, out var snapshot) ? snapshot : q.Version,
-                    AnsweredAt = now,
-                };
-                _db.ListeningAnswers.Add(ans);
+                    ans = new ListeningAnswer
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        ListeningAttemptId = attempt.Id,
+                        ListeningQuestionId = q.Id,
+                        UserAnswerJson = fbAns.UserAnswerJson,
+                        QuestionVersionSnapshot = q.Version,
+                        AnsweredAt = fbAns.AnsweredAt,
+                    };
+                    _db.ListeningAnswers.Add(ans);
+                }
+                else
+                {
+                    ans = new ListeningAnswer
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        ListeningAttemptId = attempt.Id,
+                        ListeningQuestionId = q.Id,
+                        UserAnswerJson = JsonSerializer.Serialize(string.Empty),
+                        QuestionVersionSnapshot = versionMap.TryGetValue(q.Id, out var snapshot) ? snapshot : q.Version,
+                        AnsweredAt = now,
+                    };
+                    _db.ListeningAnswers.Add(ans);
+                }
             }
 
             var pinnedVersion = ans.QuestionVersionSnapshot
                 ?? (versionMap.TryGetValue(q.Id, out var v) ? v : q.Version);
-            if (pinnedVersion != q.Version
+            if (!partPracticeFallbackApplied
+                && pinnedVersion != q.Version
                 && !string.Equals(q.Id, keyCorrection?.QuestionRevisionId, StringComparison.Ordinal))
             {
                 throw ApiException.Conflict(
@@ -1188,6 +1259,13 @@ public sealed class ListeningGradingService
         string QuestionId,
         int QuestionNumber,
         IReadOnlyList<string> Selections);
+
+    private static string ToParentPartString(ListeningPartCode code) => code switch
+    {
+        ListeningPartCode.A1 or ListeningPartCode.A2 => "A",
+        ListeningPartCode.C1 or ListeningPartCode.C2 => "C",
+        _ => "B",
+    };
 }
 
 public sealed record ListeningGradingResult(
