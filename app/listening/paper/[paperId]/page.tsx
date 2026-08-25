@@ -114,6 +114,15 @@ function mediaAssetIdFromUrl(url: string | null): string | null {
   return match ? match[1] : null;
 }
 
+function isListeningAudioCheckError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as { code?: unknown; message?: unknown; detail?: { code?: unknown; message?: unknown } };
+  const code = typeof e.code === 'string' ? e.code : typeof e.detail?.code === 'string' ? e.detail.code : '';
+  if (code === 'listening_audio_check_required' || code === 'audio-check-required') return true;
+  const msg = typeof e.message === 'string' ? e.message : typeof e.detail?.message === 'string' ? e.detail.message : '';
+  return msg.includes('Pass the Listening sound check');
+}
+
 export default function ListeningPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
   return (
     <Suspense fallback={<LearnerDashboardShell pageTitle="Listening"><Skeleton className="h-64" /></LearnerDashboardShell>}>
@@ -301,8 +310,27 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     setError(null);
     setContentLockedMessage(null);
     try {
-      await submitAudioCheck({ outcome: 'clear' });
-      const started = await startListeningAttempt(paperId, mode, { mockAttemptId, mockSectionId });
+      // Ensure the 24h pathway sound-check gate is satisfied before creating
+      // the attempt. The backend fix refreshes the timestamp on every successful
+      // check, so a single retry is sufficient to recover from an expired gate.
+      try {
+        await submitAudioCheck({ outcome: 'clear' });
+      } catch {
+        // Non-fatal — startListeningAttempt will surface the authoritative error
+        // if the check truly failed. Swallow so we don't mask the start error.
+      }
+      let started: Awaited<ReturnType<typeof startListeningAttempt>>;
+      try {
+        started = await startListeningAttempt(paperId, mode, { mockAttemptId, mockSectionId });
+      } catch (err) {
+        if (isListeningAudioCheckError(err)) {
+          // Gate was expired — one more sound-check refresh then retry start.
+          await submitAudioCheck({ outcome: 'clear' });
+          started = await startListeningAttempt(paperId, mode, { mockAttemptId, mockSectionId });
+        } else {
+          throw err;
+        }
+      }
       showCreditFeedback(started.feedbackMessage);
       syncServerClock(started.serverNow);
       const probe = await buildTechReadinessProbe({

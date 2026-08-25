@@ -79,8 +79,10 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
     /// <summary>
     /// Record an audio-check outcome (§5.4). Pass values ("clear" / "quiet")
     /// advance the stage to "diagnostic"; "failed" keeps the learner on
-    /// audio_check so they're prompted to retry hardware. Idempotent — the
-    /// timestamp is only set on first success.
+    /// audio_check so they're prompted to retry hardware. Each successful
+    /// check refreshes <see cref="LearnerListeningProfile.AudioCheckPassedAt"/>
+    /// so the 24h exam gate (<see cref="ListeningSessionService.AudioCheckTtlMs"/>)
+    /// is extended on every re-check.
     /// </summary>
     public async Task<AudioCheckResponse> SubmitAudioCheckAsync(
         string userId, AudioCheckRequest request, CancellationToken ct)
@@ -130,13 +132,11 @@ public sealed class ListeningLearnerPathwayService : IListeningLearnerPathwaySer
 
         if (passed)
         {
-            // First pass — capture the timestamp and advance the stage. We
-            // only advance when still on audio_check; re-takers don't get
-            // demoted from later stages.
-            if (profile.AudioCheckPassedAt is null)
-            {
-                profile.AudioCheckPassedAt = now;
-            }
+            // Every successful sound-check refreshes the 24h validity window.
+            // Previously this was only set on first pass, so learners whose
+            // check expired after 24h were permanently blocked even after
+            // re-running the check. Now each pass extends the gate.
+            profile.AudioCheckPassedAt = now;
             if (profile.CurrentStage == "audio_check")
             {
                 profile.CurrentStage = "foundation";

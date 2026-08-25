@@ -66,6 +66,15 @@ import { useListeningAnnotations, type ListeningQuestionAnnotation } from '@/hoo
 
 const FIRST_STRICT_STATE: ListeningFsmState = 'a1_preview';
 
+function isListeningAudioCheckError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const e = err as { code?: unknown; message?: unknown; detail?: { code?: unknown; message?: unknown }; reason?: unknown };
+  const code = typeof e.code === 'string' ? e.code : typeof e.detail?.code === 'string' ? e.detail.code : typeof e.reason === 'string' ? e.reason : '';
+  if (code === 'listening_audio_check_required' || code === 'audio-check-required') return true;
+  const msg = typeof e.message === 'string' ? e.message : typeof e.detail?.message === 'string' ? e.detail.message : '';
+  return msg.includes('Pass the Listening sound check');
+}
+
 type ListeningPlayerMode = 'practice' | 'exam' | 'home' | 'diagnostic';
 
 type PendingListeningAnswer = {
@@ -768,16 +777,36 @@ function PlayerContent() {
   const ensureAttempt = async () => {
     if (!session) throw new Error('Listening session is not ready.');
     if (attempt) return attempt;
-    const started = await startListeningAttempt(session.paper.id, mode, { pathwayStage, mockAttemptId, mockSectionId });
-    showCreditFeedback(started.feedbackMessage);
-    syncServerClock(started.serverNow);
-    setAttempt(started);
-    if (id && mockAttemptId && mockSectionId && !attemptIdFromRoute) {
-      const nextParams = new URLSearchParams(searchParams?.toString());
-      nextParams.set('attemptId', started.attemptId);
-      router.replace(`/listening/player/${encodeURIComponent(id)}?${nextParams.toString()}`);
+    try {
+      const started = await startListeningAttempt(session.paper.id, mode, { pathwayStage, mockAttemptId, mockSectionId });
+      showCreditFeedback(started.feedbackMessage);
+      syncServerClock(started.serverNow);
+      setAttempt(started);
+      if (id && mockAttemptId && mockSectionId && !attemptIdFromRoute) {
+        const nextParams = new URLSearchParams(searchParams?.toString());
+        nextParams.set('attemptId', started.attemptId);
+        router.replace(`/listening/player/${encodeURIComponent(id)}?${nextParams.toString()}`);
+      }
+      return started;
+    } catch (err) {
+      if (isListeningAudioCheckError(err)) {
+        // Expired 24h gate — refresh the pathway sound-check once then retry.
+        try {
+          await submitAudioCheck({ outcome: 'clear' });
+        } catch {}
+        const retried = await startListeningAttempt(session.paper.id, mode, { pathwayStage, mockAttemptId, mockSectionId });
+        showCreditFeedback(retried.feedbackMessage);
+        syncServerClock(retried.serverNow);
+        setAttempt(retried);
+        if (id && mockAttemptId && mockSectionId && !attemptIdFromRoute) {
+          const nextParams = new URLSearchParams(searchParams?.toString());
+          nextParams.set('attemptId', retried.attemptId);
+          router.replace(`/listening/player/${encodeURIComponent(id)}?${nextParams.toString()}`);
+        }
+        return retried;
+      }
+      throw err;
     }
-    return started;
   };
 
   const startTask = async () => {
@@ -819,7 +848,16 @@ function PlayerContent() {
           durationMs: readinessSnapshot.durationMs,
         });
         await listeningV2Api.recordTechReadiness(started.attemptId, probe);
-        await advanceStrictStart(started.attemptId);
+        try {
+          await advanceStrictStart(started.attemptId);
+        } catch (err) {
+          if (isListeningAudioCheckError(err)) {
+            await submitAudioCheck({ outcome: 'clear' });
+            await advanceStrictStart(started.attemptId);
+          } else {
+            throw err;
+          }
+        }
       }
       setHasStarted(true);
       const nextParams = new URLSearchParams({ attemptId: started.attemptId, mode: started.mode });
