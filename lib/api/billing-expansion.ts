@@ -145,10 +145,10 @@ export function getManualPaymentProofBlob(id: string): Promise<Blob> {
 
 export type DeliveryMethod = 'automatic_web' | 'manual_web' | 'whatsapp' | 'manual_material';
 
-export type FulfilmentStatus = 'auto' | 'pending_manual' | 'pending_verification' | 'fulfilled';
+export type FulfilmentStatus = 'auto' | 'pending_manual' | 'pending_verification' | 'processing' | 'fulfilled';
 
-/** A paid order awaiting an admin hand-over. Its subscription stays Pending, so the
- * entitlement resolver grants nothing until it is marked fulfilled.
+/** A paid order awaiting an admin hand-over. New purchases stay Pending; legacy
+ * active-subscription orders are also represented by their fulfilment state.
  * Amount / gateway / transaction fields are populated from the proof or the
  * completed gateway transaction so the admin can verify the order quickly. */
 export interface PendingFulfilmentDto {
@@ -174,6 +174,8 @@ export interface PendingFulfilmentDto {
   transactionId: string | null;
   paymentMethod: string | null;
   paidAt: string | null;
+  orderId: string | null;
+  paymentStatus: string;
 }
 
 export function listPendingFulfilment(): Promise<PendingFulfilmentDto[]> {

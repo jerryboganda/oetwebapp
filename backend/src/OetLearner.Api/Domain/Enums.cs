@@ -391,12 +391,15 @@ public static class FulfilmentStatuses
     /// </summary>
     public const string PendingVerification = "pending_verification";
 
+    /// <summary>An admin has atomically claimed the order and is applying its grants.</summary>
+    public const string Processing = "processing";
+
     /// <summary>Admin has handed the package over; access released.</summary>
     public const string Fulfilled = "fulfilled";
 
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        Auto, PendingManual, Fulfilled, PendingVerification,
+        Auto, PendingManual, Processing, Fulfilled, PendingVerification,
     };
 
     public static bool IsValid(string? value) => value is not null && All.Contains(value);

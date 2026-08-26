@@ -1,6 +1,8 @@
+using System.Data;
 using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
@@ -94,7 +96,7 @@ public sealed class ManualPaymentService : IManualPaymentService
         _storage = storage;
         _notifier = notifier;
         _logger = logger;
-        _aiPackageCredits = aiPackageCredits;
+        _aiPackageCredits = aiPackageCredits ?? new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
     }
 
     public async Task<ManualPaymentRequest> SubmitAsync(string userId, ManualPaymentSubmitRequest request, byte[] proofBytes, CancellationToken ct)
@@ -231,19 +233,83 @@ public sealed class ManualPaymentService : IManualPaymentService
 
     public async Task<ManualPaymentRequest> ApproveAsync(string requestId, string adminId, string? notes, CancellationToken ct)
     {
-        var row = await _db.ManualPaymentRequests.FirstOrDefaultAsync(r => r.Id == requestId, ct)
-            ?? throw new InvalidOperationException("Manual payment request not found.");
+        await using var transaction = _db.Database.IsRelational() && _db.Database.CurrentTransaction is null
+            ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct)
+            : null;
+        var now = DateTimeOffset.UtcNow;
+        ManualPaymentRequest row;
+        if (_db.Database.IsRelational())
+        {
+            var claimed = await _db.ManualPaymentRequests
+                .Where(request => request.Id == requestId
+                    && (request.Status == "pending"
+                        || request.Status == "needs_review"
+                        || (request.Status == "paid"
+                            && request.Kind == PaymentProofKinds.GatewayReceipt
+                            && request.PaymentTransactionId != null
+                            && request.ReviewedAt == null)))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(request => request.Status, "processing")
+                    .SetProperty(request => request.UpdatedAt, now), ct);
+            if (claimed == 0)
+            {
+                var existing = await _db.ManualPaymentRequests.AsNoTracking()
+                    .FirstOrDefaultAsync(request => request.Id == requestId, ct)
+                    ?? throw new InvalidOperationException("Manual payment request not found.");
+                if (existing.Status == "paid" && existing.ReviewedAt.HasValue)
+                {
+                    return existing;
+                }
+                throw new InvalidOperationException($"Manual payment already {existing.Status}.");
+            }
+            row = await _db.ManualPaymentRequests.FirstAsync(request => request.Id == requestId, ct);
+        }
+        else
+        {
+            row = await _db.ManualPaymentRequests.FirstOrDefaultAsync(request => request.Id == requestId, ct)
+                ?? throw new InvalidOperationException("Manual payment request not found.");
+            if (row.Status == "paid" && row.ReviewedAt.HasValue)
+            {
+                return row;
+            }
+        }
 
-        if (row.Status is "approved" or "paid" or "rejected")
+        var isVerifiedGatewayFulfilment = row.Kind == PaymentProofKinds.GatewayReceipt
+            && row.PaymentTransactionId.HasValue;
+        if (!_db.Database.IsRelational()
+            && (row.Status is not ("pending" or "needs_review" or "paid")
+                || (row.Status == "paid" && !isVerifiedGatewayFulfilment)))
         {
             throw new InvalidOperationException($"Manual payment already {row.Status}.");
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var gatewayTransactionId = $"manual_{row.Id}";
         var quote = string.IsNullOrWhiteSpace(row.QuoteId)
             ? null
             : await _db.BillingQuotes.FirstOrDefaultAsync(q => q.Id == row.QuoteId && q.UserId == row.UserId, ct);
+        var existingTxn = isVerifiedGatewayFulfilment
+            ? await _db.PaymentTransactions.FirstOrDefaultAsync(t => t.Id == row.PaymentTransactionId, ct)
+            : null;
+        if (isVerifiedGatewayFulfilment)
+        {
+            if (existingTxn is null
+                || !string.Equals(existingTxn.Status, "completed", StringComparison.OrdinalIgnoreCase)
+                || !string.Equals(existingTxn.LearnerUserId, row.UserId, StringComparison.Ordinal)
+                || !string.Equals(existingTxn.QuoteId, row.QuoteId, StringComparison.Ordinal)
+                || existingTxn.Amount != row.AmountAmount
+                || !string.Equals(existingTxn.Currency, row.Currency, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The verified gateway payment no longer matches this fulfilment request.");
+            }
+
+            if (quote is null
+                || quote.TotalAmount != existingTxn.Amount
+                || !string.Equals(quote.Currency, existingTxn.Currency, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("The verified payment amount or currency does not match the authoritative order.");
+            }
+        }
+
+        var gatewayTransactionId = existingTxn?.GatewayTransactionId ?? $"manual_{row.Id}";
 
         var planCode = quote?.PlanCode ?? row.CourseId ?? row.CourseName;
         var plan = await _db.BillingPlans.FirstOrDefaultAsync(p => p.Code == planCode || p.Id == planCode, ct);
@@ -261,7 +327,7 @@ public sealed class ManualPaymentService : IManualPaymentService
             throw new InvalidOperationException("Manual payment cannot be approved because the selected course/plan was not found.");
         }
 
-        var existingTxn = await _db.PaymentTransactions.FirstOrDefaultAsync(t => t.GatewayTransactionId == gatewayTransactionId, ct);
+        existingTxn ??= await _db.PaymentTransactions.FirstOrDefaultAsync(t => t.GatewayTransactionId == gatewayTransactionId, ct);
         Guid txnId;
         if (existingTxn is null)
         {
@@ -275,7 +341,7 @@ public sealed class ManualPaymentService : IManualPaymentService
                 Status = "completed",
                 Amount = row.AmountAmount,
                 Currency = row.Currency,
-                ProductType = "subscription",
+                ProductType = "plan",
                 ProductId = plan?.Code ?? planVersion!.Code,
                 QuoteId = row.QuoteId,
                 PlanVersionId = quote?.PlanVersionId ?? planVersion?.Id,
@@ -326,6 +392,14 @@ public sealed class ManualPaymentService : IManualPaymentService
         }
         subscription.ChangedAt = now;
 
+        var isPlanOrder = (plan is not null || planVersion is not null)
+            && (!isVerifiedGatewayFulfilment
+                || string.Equals(existingTxn?.ProductType, "plan", StringComparison.OrdinalIgnoreCase));
+        if (isPlanOrder && subscription.Status == SubscriptionStatus.Active)
+        {
+            await CancelReplacedSubscriptionsAsync(subscription, now, ct);
+        }
+
         // Deferred Flow-A grants the webhook skipped while the order was Pending
         // Verification: wallet review credits included with legacy plans, plus the
         // current-plan pointer. Idempotent via the (type,type-ref,id) uniqueness check.
@@ -333,11 +407,10 @@ public sealed class ManualPaymentService : IManualPaymentService
         if (includedCredits > 0)
         {
             var wallet = await _db.Wallets.FirstAsync(w => w.UserId == row.UserId, ct);
+            var walletIdempotencyKey = $"manual-approve:{row.Id}";
             var existingWalletGrant = await _db.WalletTransactions.FirstOrDefaultAsync(
                 x => x.WalletId == wallet.Id
-                     && x.TransactionType == "plan_grant"
-                     && x.ReferenceType == "subscription"
-                     && x.ReferenceId == row.Id, ct);
+                     && x.IdempotencyKey == walletIdempotencyKey, ct);
             if (existingWalletGrant is null)
             {
                 wallet.CreditBalance += includedCredits;
@@ -351,7 +424,8 @@ public sealed class ManualPaymentService : IManualPaymentService
                     BalanceAfter = wallet.CreditBalance,
                     ReferenceType = "subscription",
                     ReferenceId = row.Id,
-                    Description = $"Included credits for {plan?.Name ?? row.CourseName}",
+                    IdempotencyKey = walletIdempotencyKey,
+                    Description = $"Included credits for {planVersion?.Name ?? plan?.Name ?? row.CourseName}",
                     CreatedBy = "admin",
                     CreatedAt = now,
                 });
@@ -359,9 +433,10 @@ public sealed class ManualPaymentService : IManualPaymentService
         }
 
         var approverUser = await _db.Users.FirstOrDefaultAsync(u => u.Id == row.UserId, ct);
-        if (approverUser is not null && !string.IsNullOrWhiteSpace(plan?.Code))
+        if (approverUser is not null
+            && (!string.IsNullOrWhiteSpace(planVersion?.Code) || !string.IsNullOrWhiteSpace(plan?.Code)))
         {
-            approverUser.CurrentPlanId = plan!.Code;
+            approverUser.CurrentPlanId = planVersion?.Code ?? plan!.Code;
         }
 
         // AI-credit parity with the Stripe webhook fulfillment path: the
@@ -376,16 +451,16 @@ public sealed class ManualPaymentService : IManualPaymentService
         var aiCredits = planVersion?.BundledAiCredits ?? plan?.BundledAiCredits ?? 0;
         if (aiCredits > 0)
         {
-            var planCodeForCredit = plan?.Code ?? planVersion!.Code;
+            var planCodeForCredit = planVersion?.Code ?? plan!.Code;
             var creditReferenceId = $"manual:{row.Id}:{planCodeForCredit}";
             if (_aiPackageCredits is not null)
             {
-                var durationMonths = plan?.DurationMonths ?? planVersion?.DurationMonths ?? 0;
+                var durationMonths = planVersion?.DurationMonths ?? plan?.DurationMonths ?? 0;
                 var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
                 await _aiPackageCredits.GrantCourseGiftCreditsAsync(
                     row.UserId,
                     planCodeForCredit,
-                    plan?.Name ?? row.CourseName,
+                    planVersion?.Name ?? plan?.Name ?? row.CourseName,
                     aiCredits,
                     creditReferenceId,
                     giftExpiry,
@@ -407,6 +482,10 @@ public sealed class ManualPaymentService : IManualPaymentService
         row.AccessGrantedSubscriptionId = subscription.Id;
 
         await _db.SaveChangesAsync(ct);
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(ct);
+        }
 
         await DispatchSafeAsync("manual_payment_approved", row, reason: null, ct);
         return row;
@@ -628,6 +707,26 @@ public sealed class ManualPaymentService : IManualPaymentService
         }
     }
 
+    private async Task CancelReplacedSubscriptionsAsync(
+        Subscription activatedSubscription,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var replaced = await _db.Subscriptions
+            .Where(subscription => subscription.UserId == activatedSubscription.UserId
+                && subscription.Id != activatedSubscription.Id
+                && SubscriptionStateMachine.CurrentOwnershipStatuses.Contains(subscription.Status))
+            .ToListAsync(ct);
+        foreach (var subscription in replaced)
+        {
+            SubscriptionStateMachine.Transition(
+                subscription,
+                SubscriptionStatus.Cancelled,
+                "replaced_by_verified_plan_purchase");
+            subscription.ChangedAt = now;
+        }
+    }
+
     private async Task<Subscription> ResolveSubscriptionForApprovalAsync(
         ManualPaymentRequest row,
         BillingPlan? plan,
@@ -635,7 +734,34 @@ public sealed class ManualPaymentService : IManualPaymentService
         DateTimeOffset now,
         CancellationToken ct)
     {
-        var planCode = plan?.Code ?? planVersion?.Code ?? row.CourseId ?? row.CourseName;
+        var planCode = planVersion?.Code ?? plan?.Code ?? row.CourseId ?? row.CourseName;
+
+        if (!string.IsNullOrWhiteSpace(row.QuoteId))
+        {
+            var quotedSubscriptionId = await _db.BillingQuotes
+                .Where(q => q.Id == row.QuoteId && q.UserId == row.UserId)
+                .Select(q => q.SubscriptionId)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrWhiteSpace(quotedSubscriptionId))
+            {
+                var quotedSubscription = await _db.Subscriptions
+                    .FirstOrDefaultAsync(s => s.Id == quotedSubscriptionId && s.UserId == row.UserId, ct);
+                if (quotedSubscription is not null)
+                {
+                    quotedSubscription.PlanId = planCode;
+                    quotedSubscription.PlanVersionId = planVersion?.Id;
+                    quotedSubscription.PriceAmount = planVersion?.Price ?? plan?.Price ?? row.AmountAmount;
+                    quotedSubscription.Currency = planVersion?.Currency ?? plan?.Currency ?? row.Currency;
+                    quotedSubscription.Interval = planVersion?.Interval ?? plan?.Interval ?? "one_time";
+                    if (quotedSubscription.StartedAt == default) quotedSubscription.StartedAt = now;
+                    if (quotedSubscription.NextRenewalAt <= now)
+                    {
+                        quotedSubscription.NextRenewalAt = now.AddMonths(Math.Max(1, planVersion?.DurationMonths ?? plan?.DurationMonths ?? 6));
+                    }
+                    return quotedSubscription;
+                }
+            }
+        }
 
         // Match on the plan being approved ONLY. Subscriptions are many-per-user and
         // additive: falling back to "any subscription this user happens to have" would
@@ -648,13 +774,13 @@ public sealed class ManualPaymentService : IManualPaymentService
         {
             subscription.PlanId = planCode;
             subscription.PlanVersionId = planVersion?.Id;
-            subscription.PriceAmount = plan?.Price ?? planVersion?.Price ?? row.AmountAmount;
-            subscription.Currency = plan?.Currency ?? planVersion?.Currency ?? row.Currency;
-            subscription.Interval = plan?.Interval ?? planVersion?.Interval ?? "one_time";
+            subscription.PriceAmount = planVersion?.Price ?? plan?.Price ?? row.AmountAmount;
+            subscription.Currency = planVersion?.Currency ?? plan?.Currency ?? row.Currency;
+            subscription.Interval = planVersion?.Interval ?? plan?.Interval ?? "one_time";
             if (subscription.StartedAt == default) subscription.StartedAt = now;
             if (subscription.NextRenewalAt <= now)
             {
-                subscription.NextRenewalAt = now.AddMonths(Math.Max(1, plan?.DurationMonths ?? planVersion?.DurationMonths ?? 6));
+                subscription.NextRenewalAt = now.AddMonths(Math.Max(1, planVersion?.DurationMonths ?? plan?.DurationMonths ?? 6));
             }
             return subscription;
         }
@@ -670,11 +796,11 @@ public sealed class ManualPaymentService : IManualPaymentService
             Status = SubscriptionStatus.Pending,
             StartedAt = now,
             ChangedAt = now,
-            NextRenewalAt = now.AddMonths(Math.Max(1, plan?.DurationMonths ?? planVersion?.DurationMonths ?? 6)),
-            PriceAmount = plan?.Price ?? planVersion?.Price ?? row.AmountAmount,
-            Currency = plan?.Currency ?? planVersion?.Currency ?? row.Currency,
-            Interval = plan?.Interval ?? planVersion?.Interval ?? "one_time",
-            AccessDurationDays = Math.Max(1, plan?.AccessDurationDays ?? planVersion?.AccessDurationDays ?? 180),
+            NextRenewalAt = now.AddMonths(Math.Max(1, planVersion?.DurationMonths ?? plan?.DurationMonths ?? 6)),
+            PriceAmount = planVersion?.Price ?? plan?.Price ?? row.AmountAmount,
+            Currency = planVersion?.Currency ?? plan?.Currency ?? row.Currency,
+            Interval = planVersion?.Interval ?? plan?.Interval ?? "one_time",
+            AccessDurationDays = Math.Max(1, planVersion?.AccessDurationDays ?? plan?.AccessDurationDays ?? 180),
         };
         _db.Subscriptions.Add(subscription);
         return subscription;

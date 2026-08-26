@@ -196,10 +196,15 @@ public class BillingExpansionServiceTests
         var submitted = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("approve"), CancellationToken.None);
 
         var approved = await svc.ApproveAsync(submitted.Id, "admin_1", "Verified", CancellationToken.None);
+        var retried = await svc.ApproveAsync(submitted.Id, "admin_1", "Duplicate retry", CancellationToken.None);
 
         Assert.Equal("paid", approved.Status);
+        Assert.Equal(approved.Id, retried.Id);
         Assert.Equal("admin_1", approved.ReviewedByAdminId);
         Assert.NotNull(approved.AccessGrantedSubscriptionId);
+        Assert.Single(await db.PaymentTransactions
+            .Where(transaction => transaction.GatewayTransactionId == $"manual_{submitted.Id}")
+            .ToListAsync());
     }
 
     [Fact]

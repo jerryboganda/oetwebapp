@@ -147,6 +147,7 @@ export default function AdminPaymentProofsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
   const [proofView, setProofView] = useState<ProofView | null>(null);
+  const [fulfilmentDetails, setFulfilmentDetails] = useState<PendingFulfilmentDto | null>(null);
 
   const loadProofs = useCallback(async () => {
     setLoading(true);
@@ -627,17 +628,27 @@ export default function AdminPaymentProofsPage() {
       enableSorting: false,
       enableHiding: false,
       cell: ({ row }) => (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => {
-            setDecision({ kind: 'fulfil', row: row.original });
-            setNotes('');
-          }}
-          startIcon={<PackageCheck className="h-4 w-4" />}
-        >
-          Mark fulfilled
-        </Button>
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setFulfilmentDetails(row.original)}
+            startIcon={<Eye className="h-4 w-4" />}
+          >
+            Details
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setDecision({ kind: 'fulfil', row: row.original });
+              setNotes('');
+            }}
+            startIcon={<PackageCheck className="h-4 w-4" />}
+          >
+            {row.original.externalOnly ? 'Mark delivered' : 'Fulfil & activate'}
+          </Button>
+        </div>
       ),
     },
   ];
@@ -913,6 +924,58 @@ export default function AdminPaymentProofsPage() {
             ) : <div />}
             <Button variant="ghost" size="sm" onClick={closeProof}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={fulfilmentDetails !== null} onOpenChange={(open) => !open && setFulfilmentDetails(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Verified payment details</DialogTitle>
+            <DialogDescription>
+              Inspect the authoritative paid order before releasing its entitlement.
+            </DialogDescription>
+          </DialogHeader>
+          {fulfilmentDetails ? (
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+              {[
+                ['Candidate', fulfilmentDetails.displayName || fulfilmentDetails.userId],
+                ['Email', fulfilmentDetails.email || '-'],
+                ['Product', fulfilmentDetails.planName],
+                ['Order ID', fulfilmentDetails.orderId || '-'],
+                ['Payment status', titleise(fulfilmentDetails.paymentStatus)],
+                ['Fulfilment status', titleise(fulfilmentDetails.fulfilmentStatus)],
+                [
+                  'Amount',
+                  fulfilmentDetails.amount != null
+                    ? `${fulfilmentDetails.currency || ''} ${fulfilmentDetails.amount.toFixed(2)}`.trim()
+                    : '-',
+                ],
+                ['Provider', fulfilmentDetails.gateway || fulfilmentDetails.paymentMethod || '-'],
+                ['Transaction reference', fulfilmentDetails.transactionId || '-'],
+                ['Paid at', fulfilmentDetails.paidAt ? new Date(fulfilmentDetails.paidAt).toLocaleString() : '-'],
+                ['Delivery', DELIVERY_LABELS[fulfilmentDetails.deliveryMethod] ?? titleise(fulfilmentDetails.deliveryMethod)],
+                ['Subscription', fulfilmentDetails.subscriptionId],
+              ].map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-xs font-medium uppercase tracking-wide text-admin-fg-muted">{label}</dt>
+                  <dd className="mt-1 break-words font-medium text-admin-fg-strong">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setFulfilmentDetails(null)}>Close</Button>
+            <Button
+              onClick={() => {
+                if (!fulfilmentDetails) return;
+                setDecision({ kind: 'fulfil', row: fulfilmentDetails });
+                setFulfilmentDetails(null);
+              }}
+              startIcon={<PackageCheck className="h-4 w-4" />}
+            >
+              {fulfilmentDetails?.externalOnly ? 'Mark delivered' : 'Fulfil & activate'}
             </Button>
           </DialogFooter>
         </DialogContent>

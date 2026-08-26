@@ -105,9 +105,9 @@ public sealed class PaymentGatewayCatalog : IPaymentGatewayCatalog
         var wanted = string.IsNullOrWhiteSpace(region) ? PaymentGatewayRegions.Global : region.Trim().ToLowerInvariant();
 
         return rows
-            .Where(row => row.IsEnabled)
             .Where(row => IsVisibleInRegion(row.Region, wanted))
-            .Where(row => IsConfigured(row.Name, effective, sandbox))
+            .Where(row => sandbox || row.IsEnabled)
+            .Where(row => sandbox || IsConfigured(row.Name, effective, sandbox))
             .OrderBy(row => row.DisplayOrder)
             .ThenBy(row => row.Name)
             .Select(row => new LearnerPaymentMethodDto(
@@ -124,8 +124,14 @@ public sealed class PaymentGatewayCatalog : IPaymentGatewayCatalog
     public async Task<bool> IsEnabledAsync(string gatewayName, CancellationToken ct)
     {
         var rows = await EnsureSeededAsync(ct);
-        var name = gatewayName.Trim().ToLowerInvariant();
-        return rows.Any(row => row.IsEnabled && string.Equals(row.Name, name, StringComparison.OrdinalIgnoreCase));
+        var name = gatewayName.Trim();
+        var row = rows.FirstOrDefault(candidate => string.Equals(candidate.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (row is null)
+        {
+            return false;
+        }
+
+        return row.IsEnabled || _billing.Value.AllowSandboxFallbacks;
     }
 
     public async Task<IReadOnlyList<AdminPaymentGatewayDto>> ListAdminAsync(CancellationToken ct)

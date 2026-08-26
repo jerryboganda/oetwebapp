@@ -981,7 +981,7 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
             productType = "plan_upgrade",
             quantity = 1,
             priceId = planCode,
-            gateway = "paypal"
+            gateway = "whop"
         });
         var checkoutBody = await checkoutResponse.Content.ReadAsStringAsync();
         Assert.True(checkoutResponse.IsSuccessStatusCode, checkoutBody);
@@ -993,7 +993,13 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var plan = await db.BillingPlans.FirstAsync(x => x.Code == planCode);
-            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            var quote = await db.BillingQuotes.FirstAsync(x => x.CheckoutSessionId == checkoutSessionId);
+            var subscription = await db.Subscriptions.FirstAsync(x => x.Id == quote.SubscriptionId);
+            Assert.Equal(SubscriptionStatus.Draft, subscription.Status);
+            Assert.True(await db.Subscriptions.AnyAsync(x =>
+                x.UserId == userId
+                && x.Id != subscription.Id
+                && x.Status == SubscriptionStatus.Active));
             subscription.NextRenewalAt = DateTimeOffset.UtcNow.AddMinutes(-5);
             plan.Name = "Snapshot Plan Mutated";
             plan.Price = 999m;
@@ -1006,14 +1012,43 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
         }
 
         var completionStartedAt = DateTimeOffset.UtcNow;
-        await CompletePayPalCheckoutAsync(client, checkoutSessionId!);
+        await CompleteWhopCheckoutAsync(client, checkoutSessionId!);
+
+        string purchasedSubscriptionId;
+        await using (var pendingScope = _factory.Services.CreateAsyncScope())
+        {
+            var db = pendingScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var quote = await db.BillingQuotes.FirstAsync(x => x.CheckoutSessionId == checkoutSessionId);
+            var purchasedSubscription = await db.Subscriptions.FirstAsync(x => x.Id == quote.SubscriptionId);
+            purchasedSubscriptionId = purchasedSubscription.Id;
+            Assert.Equal(SubscriptionStatus.Pending, purchasedSubscription.Status);
+            Assert.Equal(FulfilmentStatuses.PendingVerification, purchasedSubscription.FulfilmentStatus);
+            Assert.False(await db.WalletTransactions.AnyAsync(x =>
+                x.ReferenceType == "subscription" && x.ReferenceId == quote.Id));
+            Assert.True(await db.Subscriptions.AnyAsync(x =>
+                x.UserId == userId
+                && x.Id != purchasedSubscription.Id
+                && x.Status == SubscriptionStatus.Active));
+        }
+
+        using (var admin = _factory.CreateClient())
+        {
+            admin.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+            admin.DefaultRequestHeaders.Add("X-Debug-UserId", $"snapshot-admin-{Guid.NewGuid():N}");
+            admin.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+            using var fulfilResponse = await admin.PostAsJsonAsync(
+                $"/v1/admin/billing/fulfilment/subscriptions/{purchasedSubscriptionId}/mark-fulfilled",
+                new { notes = "Snapshot payment verified." });
+            var fulfilBody = await fulfilResponse.Content.ReadAsStringAsync();
+            Assert.True(fulfilResponse.IsSuccessStatusCode, fulfilBody);
+        }
         var completionFinishedAt = DateTimeOffset.UtcNow;
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
             var quote = await db.BillingQuotes.FirstAsync(x => x.CheckoutSessionId == checkoutSessionId);
+            var subscription = await db.Subscriptions.FirstAsync(x => x.Id == quote.SubscriptionId);
             var paymentTransaction = await db.PaymentTransactions.FirstAsync(x => x.GatewayTransactionId == checkoutSessionId);
             var invoice = await db.Invoices.FirstAsync(x => x.QuoteId == quote.Id);
             var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
@@ -1023,6 +1058,10 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
                 .FirstAsync();
 
             Assert.Equal(planCode, subscription.PlanId);
+            Assert.Equal(SubscriptionStatus.Active, subscription.Status);
+            Assert.All(
+                await db.Subscriptions.Where(x => x.UserId == userId && x.Id != subscription.Id).ToListAsync(),
+                replaced => Assert.Equal(SubscriptionStatus.Cancelled, replaced.Status));
             Assert.Equal(planVersionId, subscription.PlanVersionId);
             Assert.Equal(180m, subscription.PriceAmount);
             Assert.Equal("AUD", subscription.Currency);
@@ -1352,6 +1391,28 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
 
         using var response = await client.PostAsync(
             "/v1/payment/webhooks/paypal",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("completed", json.RootElement.GetProperty("state").GetString());
+    }
+
+    private static async Task CompleteWhopCheckoutAsync(HttpClient client, string checkoutSessionId)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            type = "payment.succeeded",
+            data = new
+            {
+                id = checkoutSessionId,
+                status = "paid",
+            },
+        });
+
+        using var response = await client.PostAsync(
+            "/v1/payment/webhooks/whop",
             new StringContent(payload, Encoding.UTF8, "application/json"));
         var body = await response.Content.ReadAsStringAsync();
         Assert.True(response.IsSuccessStatusCode, body);

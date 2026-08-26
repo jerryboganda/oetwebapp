@@ -9017,6 +9017,30 @@ public partial class LearnerService(
                 await EnsureUserAsync(userId, cancellationToken),
                 targetPlan,
                 cancellationToken);
+
+            var draftIsUncommitted = subscription.Status == SubscriptionStatus.Draft
+                && !await db.BillingQuotes.AsNoTracking()
+                    .AnyAsync(quote => quote.SubscriptionId == subscription.Id, cancellationToken);
+            if (!draftIsUncommitted)
+            {
+                subscription = new Subscription
+                {
+                    Id = TruncateIdentifier($"sub-{Guid.NewGuid():N}"),
+                    UserId = userId,
+                    Status = SubscriptionStatus.Draft,
+                    StartedAt = now,
+                    ChangedAt = now,
+                };
+                db.Subscriptions.Add(subscription);
+            }
+
+            subscription.PlanId = targetPlan.Code;
+            subscription.PriceAmount = targetPlan.Price;
+            subscription.Currency = targetPlan.Currency;
+            subscription.Interval = targetPlan.Interval;
+            subscription.NextRenewalAt = now.AddMonths(Math.Max(targetPlan.DurationMonths, 1));
+            subscription.AccessDurationDays = Math.Max(1, targetPlan.AccessDurationDays);
+
             if (targetPlan.BundledTutorBook && await UserOwnsTutorBookAsync(userId, cancellationToken))
             {
                 throw ApiException.Validation(
@@ -11532,8 +11556,9 @@ public partial class LearnerService(
     /// Mint the system receipt that stands in for a learner-uploaded proof file on a card
     /// gateway order, so every order carries exactly one proof row for the admin dashboard.
     /// Idempotent on PaymentTransactionId (completion fires from both the webhook and the
-    /// synchronous capture path). Best-effort by design: the learner has already paid, so a
-    /// bookkeeping failure must never block activation.
+    /// synchronous capture path). This is part of the authoritative payment unit of work:
+    /// a successful payment must not disappear from the admin queue because receipt
+    /// persistence failed.
     /// </summary>
     private async Task TryWriteGatewayReceiptAsync(
         PaymentTransaction transaction,
@@ -11544,18 +11569,23 @@ public partial class LearnerService(
     {
         if (manualPaymentService is null)
         {
-            return;
+            throw new InvalidOperationException("Gateway payment receipt service is not available.");
         }
 
         try
         {
-            await manualPaymentService.CreateGatewayReceiptAsync(
+            var receipt = await manualPaymentService.CreateGatewayReceiptAsync(
                 transaction.LearnerUserId,
                 transaction,
                 courseName,
                 quote.PlanCode,
                 subscriptionId,
                 ct);
+            if (string.IsNullOrWhiteSpace(receipt.AccessGrantedSubscriptionId)
+                && !string.IsNullOrWhiteSpace(quote.SubscriptionId))
+            {
+                receipt.AccessGrantedSubscriptionId = quote.SubscriptionId;
+            }
         }
         catch (Exception ex)
         {
@@ -11773,6 +11803,23 @@ public partial class LearnerService(
             && !string.Equals(subscription.FulfilmentStatus, FulfilmentStatuses.PendingVerification, StringComparison.OrdinalIgnoreCase))
         {
             SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
+        }
+        if (subscription.Status == SubscriptionStatus.Active
+            && string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
+        {
+            var replacedSubscriptions = await db.Subscriptions
+                .Where(row => row.UserId == subscription.UserId
+                    && row.Id != subscription.Id
+                    && SubscriptionStateMachine.CurrentOwnershipStatuses.Contains(row.Status))
+                .ToListAsync(ct);
+            foreach (var replaced in replacedSubscriptions)
+            {
+                SubscriptionStateMachine.Transition(
+                    replaced,
+                    SubscriptionStatus.Cancelled,
+                    "replaced_by_verified_plan_purchase");
+                replaced.ChangedAt = now;
+            }
         }
 
         foreach (var item in quoteResponse.Items.Where(x => string.Equals(x.Kind, "addon", StringComparison.OrdinalIgnoreCase)))
