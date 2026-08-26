@@ -235,18 +235,42 @@ export default function AdminSecurityPage() {
             <Badge variant="success">Enforced</Badge>
           </div>
           <ul className="mt-4 grid gap-2 text-sm text-admin-fg-muted md:grid-cols-2">
-            <li>One approved client identity per learner by default; a fresh identity must complete email OTP approval.</li>
-            <li>When a new identity is approved at capacity, the replaced identity is revoked and its live sessions are signed out.</li>
+            <li>Two approved client identities per learner by default; a fresh identity must complete email OTP approval. Fewer than two → free-slot approval without replacement choice.</li>
+            <li>When the two slots are full, the third identity returns <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">replacement_required</code> with masked device choices, active/max counts, and a protected candidate challenge token.</li>
+            <li>Learner must explicitly select one of the two registered identities to replace; only the selected device and its sessions are revoked.</li>
             <li>The signed-out client receives a clear reason explaining that a newer device was approved.</li>
-            <li>Admins can set a positive per-learner override from 1 to 5 approved identities.</li>
+            <li>Admins can set a positive per-learner override from 1 to 5 approved identities (<code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">null</code> = default <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">2</code>).</li>
             <li>Approvals, rejections, revocations, automatic sign-outs, and overrides are recorded in Security Events and Audit Logs.</li>
-            <li>The same stable identity contract is used by browser, Android, iOS, Windows, and macOS clients.</li>
+            <li>The same stable identity contract (<code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-xs">X-OET-Device-Id</code>) is used by browser, Android, iOS, Windows, and macOS clients. IP, country, tabs, and user-agent never create identity.</li>
           </ul>
           <div className="mt-4 rounded-admin border border-[var(--admin-primary)]/30 bg-[var(--admin-primary)]/5 p-3 text-sm">
             <p className="font-semibold text-admin-fg-strong">Exact rule used by the platform</p>
             <p className="mt-1 text-admin-fg-muted">
-              A browser profile counts as one client identity and its tabs/windows count once. Each official app installation counts as one identity using its secure OS storage. A browser profile and an official app on the same physical computer or phone count separately because the server cannot prove hardware equivalence. Reinstalling an app or clearing browser storage creates a new identity and may require approval. Increasing the approved-identity limit does not disable the global single-active-session rule, so it does not permit simultaneous account use.
+              A browser profile counts as one client identity and its tabs/windows count once. Each official app installation counts as one identity using its secure OS storage. A browser profile and an official app on the same physical computer or phone count separately because the server cannot prove hardware equivalence. Reinstalling an app or clearing browser storage creates a new identity and may require approval. The global single-active-session invariant is preserved, so only the new session remains after approval. Increasing the approved-identity limit does not disable it, so it does not permit simultaneous account use.
             </p>
+          </div>
+          <div className="mt-4 rounded-admin border border-admin-border bg-admin-bg-surface p-3">
+            <p className="text-sm font-semibold text-admin-fg-strong">Admin/Support trigger chart</p>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs text-admin-fg-muted" aria-label="Device policy trigger chart">
+                <thead>
+                  <tr className="border-b border-admin-border text-[11px] uppercase tracking-wide">
+                    <th className="py-2 pr-3">Trigger</th>
+                    <th className="py-2">Value</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-admin-border">
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Identity key</td><td className="py-2">Persisted <code className="rounded bg-admin-bg-muted px-1 py-0.5 font-mono text-[11px]">X-OET-Device-Id</code> (web: <code className="font-mono text-[11px]">localStorage</code> + <code className="font-mono text-[11px]">oet_device_binding</code> cookie; native/desktop: secure storage).</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Threshold</td><td className="py-2">Default <code className="font-mono text-[11px]">2</code>; Admin override <code className="font-mono text-[11px]">1-5</code> (<code className="font-mono text-[11px]">null</code> = <code className="font-mono text-[11px]">2</code>).</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Window</td><td className="py-2">Runtime <code className="font-mono text-[11px]">DeviceChangeWindowDays</code>, default <code className="font-mono text-[11px]">7</code>.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Limit</td><td className="py-2">Runtime <code className="font-mono text-[11px]">DeviceChangeMaxPerWindow</code>, default <code className="font-mono text-[11px]">3</code>.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Counted</td><td className="py-2">OTP-approved replacements only; bootstrap is not counted.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Not counted</td><td className="py-2">Same browser/app identity after IP/location change or web storage recovery through the continuity cookie.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Reset</td><td className="py-2">Admin device reset clears identities and live sessions; learner recovery is password plus email OTP.</td></tr>
+                  <tr><td className="py-2 pr-3 font-medium text-admin-fg-strong">Cooldown evidence</td><td className="py-2"><code className="font-mono text-[11px]">cooldownUntil</code>, exact <code className="font-mono text-[11px]">secondsRemaining</code>, configured <code className="font-mono text-[11px]">window</code>/<code className="font-mono text-[11px]">limit</code>, live <code className="font-mono text-[11px]">countdown</code>. Learners keep OTP recovery; privileged get <code className="font-mono text-[11px]">device_change_cooldown</code>.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
           <p className="mt-3 text-xs text-admin-fg-muted">
             Review the corresponding system and admin actions in <Link className="font-medium text-[var(--admin-primary)] underline" href="/admin/audit-logs?search=Device">Audit Logs</Link>.

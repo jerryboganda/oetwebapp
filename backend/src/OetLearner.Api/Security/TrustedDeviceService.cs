@@ -23,26 +23,51 @@ public enum DeviceResolution
     Bootstrap,
 
     /// <summary>A different client identity needs email-OTP approval before it
-    /// can occupy a device slot.</summary>
+    /// can occupy a free device slot.</summary>
     OtpRequired,
+
+    /// <summary>The approved slots are full. The learner must explicitly
+    /// select which registered identity to replace.</summary>
+    ReplacementRequired,
 
     /// <summary>Too many OTP-approved device replacements in the configured
     /// rolling window.</summary>
     CooldownBlocked,
 }
 
-public sealed record DeviceResolutionResult(DeviceResolution Resolution);
+public sealed record TrustedDeviceSummary(
+    Guid Id,
+    string MaskedDeviceId,
+    string? DeviceName,
+    string? Platform,
+    DateTimeOffset TrustedAt,
+    DateTimeOffset? LastSeenAt);
+
+public sealed record DeviceResolutionResult(
+    DeviceResolution Resolution,
+    int ActiveDeviceCount = 0,
+    int MaxDevices = TrustedDeviceService.DefaultMaxDevices,
+    IReadOnlyList<TrustedDeviceSummary>? RegisteredDevices = null,
+    DateTimeOffset? CooldownUntil = null,
+    int? SecondsRemaining = null,
+    int? ChangeWindowDays = null,
+    int? ChangeMaxPerWindow = null);
 
 public interface ITrustedDeviceService
 {
     Task<DeviceResolutionResult> ResolveForSignInAsync(
         string authAccountId, string? deviceId, int changeWindowDays, int changeMaxPerWindow, CancellationToken ct);
 
-    /// <summary>Approves a client identity. The default policy keeps one active
-    /// identity and therefore revokes the previous device's sessions; an
-    /// explicit positive per-learner override may retain more identities.</summary>
+    /// <summary>Approves a client identity. The default policy keeps two active
+    /// identities and therefore revokes the selected device's sessions when
+    /// at capacity; an explicit positive per-learner override may retain more identities.</summary>
     Task TrustDeviceAsync(
         string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct);
+
+    /// <summary>Approves a client identity by explicitly replacing the selected
+    /// registered identity. Only the selected device and its sessions are revoked.</summary>
+    Task TrustDeviceWithReplacementAsync(
+        string authAccountId, string deviceId, Guid selectedTrustedDeviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct);
 
     /// <summary>Admin-initiated: clears every approved device and revokes every
     /// live session because a cleared device is a security-boundary reset.</summary>
@@ -71,7 +96,7 @@ public sealed class TrustedDeviceService(
     ISecurityEventLogger securityEventLogger,
     TimeProvider timeProvider) : ITrustedDeviceService
 {
-    public const int DefaultMaxDevices = 1;
+    public const int DefaultMaxDevices = 2;
     public const int MaxAllowedDevicesOverride = 5;
 
     public async Task<DeviceResolutionResult> ResolveForSignInAsync(
@@ -98,12 +123,12 @@ public sealed class TrustedDeviceService(
         {
             matchingDevice.LastSeenAt = timeProvider.GetUtcNow();
             await db.SaveChangesAsync(ct);
-            return new DeviceResolutionResult(DeviceResolution.Trusted);
+            return new DeviceResolutionResult(DeviceResolution.Trusted, ActiveDeviceCount: activeDevices.Count, MaxDevices: await GetEffectiveMaxDevicesAsync(authAccountId, ct));
         }
 
         if (activeDevices.Count == 0)
         {
-            return new DeviceResolutionResult(DeviceResolution.Bootstrap);
+            return new DeviceResolutionResult(DeviceResolution.Bootstrap, ActiveDeviceCount: 0, MaxDevices: await GetEffectiveMaxDevicesAsync(authAccountId, ct));
         }
 
         // This is deliberately separate from the per-learner number of active
@@ -112,14 +137,24 @@ public sealed class TrustedDeviceService(
         // legitimate learner's replacement budget. An admin override changes
         // how many identities may remain approved, not how many times a learner
         // may rotate devices in a short period.
-        var windowStart = timeProvider.GetUtcNow().AddDays(-Math.Max(1, changeWindowDays));
-        var recentChanges = await db.TrustedDevices
-            .CountAsync(d => d.ApplicationUserAccountId == authAccountId
-                && d.TrustedAt > windowStart
-                && d.TrustGrantedVia == "otp_verified", ct);
+        var effectiveWindowDays = Math.Max(1, changeWindowDays);
         var effectiveChangeLimit = Math.Max(1, changeMaxPerWindow);
+        var windowStart = timeProvider.GetUtcNow().AddDays(-effectiveWindowDays);
+        var recentOtpDevices = await db.TrustedDevices
+            .Where(d => d.ApplicationUserAccountId == authAccountId
+                && d.TrustedAt > windowStart
+                && d.TrustGrantedVia == "otp_verified")
+            .OrderBy(d => d.TrustedAt)
+            .ToListAsync(ct);
+        var recentChanges = recentOtpDevices.Count;
+        var maxDevices = await GetEffectiveMaxDevicesAsync(authAccountId, ct);
+        var summaries = BuildSummaries(activeDevices);
+
         if (recentChanges >= effectiveChangeLimit)
         {
+            var oldest = recentOtpDevices.FirstOrDefault();
+            var cooldownUntil = oldest is not null ? oldest.TrustedAt.AddDays(effectiveWindowDays) : timeProvider.GetUtcNow().AddDays(effectiveWindowDays);
+            var secondsRemaining = Math.Max(0, (int)(cooldownUntil - timeProvider.GetUtcNow()).TotalSeconds);
             await securityEventLogger.TryLogAsync(
                 authAccountId,
                 SecurityEventKinds.DeviceChangeBlockedCooldown,
@@ -128,34 +163,86 @@ public sealed class TrustedDeviceService(
                 {
                     reason = "cooldown",
                     recentChanges,
-                    changeWindowDays,
+                    changeWindowDays = effectiveWindowDays,
                     changeMaxPerWindow = effectiveChangeLimit,
                     activeDeviceCount = activeDevices.Count,
+                    maxDevices,
+                    cooldownUntil,
+                    secondsRemaining,
                 },
                 cancellationToken: CancellationToken.None);
             await LogRejectedAsync(authAccountId, normalizedDeviceId, "cooldown", CancellationToken.None);
-            return new DeviceResolutionResult(DeviceResolution.CooldownBlocked);
+            return new DeviceResolutionResult(
+                DeviceResolution.CooldownBlocked,
+                ActiveDeviceCount: activeDevices.Count,
+                MaxDevices: maxDevices,
+                RegisteredDevices: summaries,
+                CooldownUntil: cooldownUntil,
+                SecondsRemaining: secondsRemaining,
+                ChangeWindowDays: effectiveWindowDays,
+                ChangeMaxPerWindow: effectiveChangeLimit);
         }
 
-        var maxDevices = await GetEffectiveMaxDevicesAsync(authAccountId, ct);
+        if (activeDevices.Count < maxDevices)
+        {
+            await securityEventLogger.TryLogAsync(
+                authAccountId,
+                SecurityEventKinds.DeviceTrustRequested,
+                deviceId: normalizedDeviceId,
+                details: new { activeDeviceCount = activeDevices.Count, maxDevices, mode = "free_slot" },
+                cancellationToken: ct);
+            return new DeviceResolutionResult(
+                DeviceResolution.OtpRequired,
+                ActiveDeviceCount: activeDevices.Count,
+                MaxDevices: maxDevices,
+                RegisteredDevices: summaries,
+                ChangeWindowDays: effectiveWindowDays,
+                ChangeMaxPerWindow: effectiveChangeLimit);
+        }
+
         await securityEventLogger.TryLogAsync(
             authAccountId,
             SecurityEventKinds.DeviceTrustRequested,
             deviceId: normalizedDeviceId,
-            details: new { activeDeviceCount = activeDevices.Count, maxDevices },
+            details: new { activeDeviceCount = activeDevices.Count, maxDevices, mode = "replacement_required" },
             cancellationToken: ct);
-        return new DeviceResolutionResult(DeviceResolution.OtpRequired);
+        return new DeviceResolutionResult(
+            DeviceResolution.ReplacementRequired,
+            ActiveDeviceCount: activeDevices.Count,
+            MaxDevices: maxDevices,
+            RegisteredDevices: summaries,
+            ChangeWindowDays: effectiveWindowDays,
+            ChangeMaxPerWindow: effectiveChangeLimit);
     }
+
+    private IReadOnlyList<TrustedDeviceSummary> BuildSummaries(IReadOnlyList<TrustedDevice> activeDevices)
+        => activeDevices
+            .OrderByDescending(d => d.LastSeenAt ?? d.TrustedAt)
+            .Select(d => new TrustedDeviceSummary(
+                d.Id,
+                MaskDeviceId(d.DeviceId),
+                d.DeviceName,
+                d.Platform,
+                d.TrustedAt,
+                d.LastSeenAt))
+            .ToList();
 
     public Task TrustDeviceAsync(
         string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
         => WithDeviceMutationLockAsync(
             authAccountId,
             ct,
-            () => TrustDeviceCoreAsync(authAccountId, deviceId, deviceName, platform, grantedVia, ct));
+            () => TrustDeviceCoreAsync(authAccountId, deviceId, deviceName, platform, grantedVia, ct, selectedTrustedDeviceId: null));
+
+    public Task TrustDeviceWithReplacementAsync(
+        string authAccountId, string deviceId, Guid selectedTrustedDeviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
+        => WithDeviceMutationLockAsync(
+            authAccountId,
+            ct,
+            () => TrustDeviceCoreAsync(authAccountId, deviceId, deviceName, platform, grantedVia, ct, selectedTrustedDeviceId: selectedTrustedDeviceId));
 
     private async Task TrustDeviceCoreAsync(
-        string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
+        string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct, Guid? selectedTrustedDeviceId)
     {
         var normalizedDeviceId = NormalizeDeviceId(deviceId)
             ?? throw new InvalidOperationException("A valid device id is required to approve a device.");
@@ -172,11 +259,24 @@ public sealed class TrustedDeviceService(
             return;
         }
 
-        var devicesToRevoke = activeDevices
-            .OrderBy(d => d.LastSeenAt ?? d.TrustedAt)
-            .ThenBy(d => d.TrustedAt)
-            .Take(Math.Max(0, activeDevices.Count - maxDevices + 1))
-            .ToList();
+        List<TrustedDevice> devicesToRevoke;
+        if (selectedTrustedDeviceId.HasValue)
+        {
+            var selected = activeDevices.FirstOrDefault(d => d.Id == selectedTrustedDeviceId.Value);
+            if (selected is null)
+            {
+                throw ApiException.Validation("invalid_replacement_device", "The selected device to replace is not valid or is no longer active.");
+            }
+            devicesToRevoke = [selected];
+        }
+        else
+        {
+            devicesToRevoke = activeDevices
+                .OrderBy(d => d.LastSeenAt ?? d.TrustedAt)
+                .ThenBy(d => d.TrustedAt)
+                .Take(Math.Max(0, activeDevices.Count - maxDevices + 1))
+                .ToList();
+        }
 
         foreach (var prior in devicesToRevoke)
         {
@@ -199,9 +299,11 @@ public sealed class TrustedDeviceService(
         // decision has already been made.
         await db.SaveChangesAsync(CancellationToken.None);
 
-        var replacementReason = maxDevices == DefaultMaxDevices
+        var replacementReason = selectedTrustedDeviceId.HasValue
             ? "device_replaced"
-            : "device_limit_replaced";
+            : maxDevices == DefaultMaxDevices
+                ? "device_replaced"
+                : "device_limit_replaced";
 
         await securityEventLogger.TryLogAsync(
             authAccountId,
@@ -213,6 +315,7 @@ public sealed class TrustedDeviceService(
                 activeDeviceCount = activeDevices.Count - devicesToRevoke.Count + 1,
                 maxDevices,
                 replacedDeviceCount = devicesToRevoke.Count,
+                selectedDeviceId = selectedTrustedDeviceId,
             },
             cancellationToken: CancellationToken.None);
         await LogSystemAuditAsync(
@@ -232,7 +335,7 @@ public sealed class TrustedDeviceService(
                 authAccountId,
                 SecurityEventKinds.DeviceRevoked,
                 deviceId: prior.DeviceId,
-                details: new { reason = replacementReason, replacedByDeviceId = normalizedDeviceId },
+                details: new { reason = replacementReason, replacedByDeviceId = normalizedDeviceId, selectedDeviceId = selectedTrustedDeviceId },
                 cancellationToken: CancellationToken.None);
             await LogSystemAuditAsync(
                 authAccountId,
@@ -241,11 +344,23 @@ public sealed class TrustedDeviceService(
                 CancellationToken.None);
         }
 
-        if (maxDevices == DefaultMaxDevices)
+        // Single-active-session invariant is preserved by the AuthService caller
+        // after device trust. For the strict single-device policy (max==1) we
+        // eagerly revoke all families here to heal anomalous multi-active states;
+        // for the two-device default and larger overrides, revoke only the replaced device's families.
+        if (selectedTrustedDeviceId.HasValue)
         {
-            // The strict one-device rule revokes every previous family. There
-            // should be only one active identity, but this also heals an
-            // anomalous concurrent-write state without leaving a live session.
+            foreach (var prior in devicesToRevoke)
+            {
+                await sessionRevocationService.RevokeDeviceFamiliesAsync(
+                    authAccountId, prior.DeviceId, replacementReason, CancellationToken.None);
+            }
+            return;
+        }
+
+        if (maxDevices == 1 && devicesToRevoke.Count > 0)
+        {
+            // Legacy strict single-device path: heal anomalous multi-active states.
             await sessionRevocationService.RevokeAllFamiliesAsync(
                 authAccountId, exceptFamilyId: null, reason: replacementReason, CancellationToken.None);
             return;

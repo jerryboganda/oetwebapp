@@ -2109,14 +2109,32 @@ public class AuthFlowsTests
 
         public Task<DeviceResolutionResult> ResolveForSignInAsync(
             string authAccountId, string? deviceId, int changeWindowDays, int changeMaxPerWindow, CancellationToken ct)
-            => Task.FromResult(
-                new DeviceResolutionResult(
-                    !bootstrapFirst || bootstrappedAccounts.Contains(authAccountId)
-                        ? DeviceResolution.CooldownBlocked
-                        : DeviceResolution.Bootstrap));
+        {
+            if (!bootstrapFirst || bootstrappedAccounts.Contains(authAccountId))
+            {
+                var now = DateTimeOffset.UtcNow;
+                return Task.FromResult(new DeviceResolutionResult(
+                    DeviceResolution.CooldownBlocked,
+                    ActiveDeviceCount: 1,
+                    MaxDevices: 2,
+                    RegisteredDevices: [],
+                    CooldownUntil: now.AddHours(2),
+                    SecondsRemaining: 7200,
+                    ChangeWindowDays: changeWindowDays,
+                    ChangeMaxPerWindow: changeMaxPerWindow));
+            }
+            return Task.FromResult(new DeviceResolutionResult(DeviceResolution.Bootstrap, ActiveDeviceCount: 0, MaxDevices: 2));
+        }
 
         public Task TrustDeviceAsync(
             string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
+        {
+            bootstrappedAccounts.Add(authAccountId);
+            return Task.CompletedTask;
+        }
+
+        public Task TrustDeviceWithReplacementAsync(
+            string authAccountId, string deviceId, Guid selectedTrustedDeviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
         {
             bootstrappedAccounts.Add(authAccountId);
             return Task.CompletedTask;
@@ -2135,7 +2153,7 @@ public class AuthFlowsTests
             => Task.FromResult<IReadOnlyList<TrustedDevice>>([]);
 
         public Task<int> GetEffectiveMaxDevicesAsync(string authAccountId, CancellationToken ct)
-            => Task.FromResult(1);
+            => Task.FromResult(2);
 
         public Task<int> EnforceDeviceLimitAsync(string authAccountId, int maxDevices, CancellationToken ct)
             => Task.FromResult(0);
@@ -2154,6 +2172,10 @@ public class AuthFlowsTests
             string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
             => Task.CompletedTask;
 
+        public Task TrustDeviceWithReplacementAsync(
+            string authAccountId, string deviceId, Guid selectedTrustedDeviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
+            => Task.CompletedTask;
+
         public Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct)
             => Task.CompletedTask;
 
@@ -2164,7 +2186,7 @@ public class AuthFlowsTests
             => Task.FromResult<IReadOnlyList<TrustedDevice>>(Array.Empty<TrustedDevice>());
 
         public Task<int> GetEffectiveMaxDevicesAsync(string authAccountId, CancellationToken ct)
-            => Task.FromResult(1);
+            => Task.FromResult(2);
 
         public Task<int> EnforceDeviceLimitAsync(string authAccountId, int maxDevices, CancellationToken ct)
             => Task.FromResult(0);

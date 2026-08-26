@@ -128,6 +128,7 @@ public class TrustedDeviceServiceTests
     {
         var (db, service, clock, sessions, events) = Build();
         var seeded = await SeedDeviceAsync(db, AccountId, "device-1", clock.GetUtcNow());
+        var originalLastSeen = seeded.LastSeenAt;
         clock.Advance(TimeSpan.FromHours(2));
 
         var result = await service.ResolveForSignInAsync(AccountId, "device-1", changeWindowDays: 30, changeMaxPerWindow: 3, default);
@@ -138,7 +139,7 @@ public class TrustedDeviceServiceTests
 
         var reloaded = await db.TrustedDevices.AsNoTracking().SingleAsync(d => d.Id == seeded.Id);
         Assert.Equal(clock.GetUtcNow(), reloaded.LastSeenAt);
-        Assert.NotEqual(seeded.LastSeenAt, reloaded.LastSeenAt);
+        Assert.NotEqual(originalLastSeen, reloaded.LastSeenAt);
     }
 
     [Fact]
@@ -222,7 +223,12 @@ public class TrustedDeviceServiceTests
             changeMaxPerWindow: 3,
             default);
 
-        Assert.Equal(DeviceResolution.OtpRequired, result.Resolution);
+        // With default 2 slots, two active devices (bootstrap + otp-2) means the next new device needs explicit replacement selection
+        Assert.Equal(DeviceResolution.ReplacementRequired, result.Resolution);
+        Assert.Equal(2, result.ActiveDeviceCount);
+        Assert.Equal(2, result.MaxDevices);
+        Assert.NotNull(result.RegisteredDevices);
+        Assert.Equal(2, result.RegisteredDevices!.Count);
         Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceTrustRequested);
         Assert.DoesNotContain(events.Calls, call => call.Kind == SecurityEventKinds.DeviceChangeBlockedCooldown);
         Assert.Empty(sessions.RevokeAllCalls);
@@ -315,6 +321,7 @@ public class TrustedDeviceServiceTests
     public async Task TrustDeviceAsync_TrustingNewDevice_RevokesPreviousDeviceRecordAndAllAccountSessions()
     {
         var (db, service, clock, sessions, events) = Build();
+        await SeedAccountAsync(db, AccountId, maxDevicesOverride: 1);
         var oldDevice = await SeedDeviceAsync(db, AccountId, "device-old", clock.GetUtcNow());
         clock.Advance(TimeSpan.FromMinutes(30));
 
@@ -333,7 +340,7 @@ public class TrustedDeviceServiceTests
         var revokeCall = Assert.Single(sessions.RevokeAllCalls);
         Assert.Equal(AccountId, revokeCall.AuthAccountId);
         Assert.Null(revokeCall.ExceptFamilyId);
-        Assert.Equal("device_replaced", revokeCall.Reason);
+        Assert.Equal("device_limit_replaced", revokeCall.Reason);
 
         Assert.Equal(2, events.Calls.Count);
         Assert.Contains(events.Calls, c => c.Kind == SecurityEventKinds.DeviceTrusted && c.DeviceId == "device-new");
@@ -356,6 +363,7 @@ public class TrustedDeviceServiceTests
     public async Task TrustDeviceAsync_MultiplePriorActiveDeviceRows_RevokesAllRowsAndLogsOneRevokedEventPerRow()
     {
         var (db, service, clock, sessions, events) = Build();
+        await SeedAccountAsync(db, AccountId, maxDevicesOverride: 1);
         await SeedDeviceAsync(db, AccountId, "device-a", clock.GetUtcNow().AddMinutes(-10));
         await SeedDeviceAsync(db, AccountId, "device-b", clock.GetUtcNow().AddMinutes(-5));
 
@@ -416,7 +424,7 @@ public class TrustedDeviceServiceTests
         Assert.Contains("device-new", active);
         var revokeCall = Assert.Single(sessions.RevokeDeviceCalls);
         Assert.Equal("device-oldest", revokeCall.DeviceId);
-        Assert.Equal("device_limit_replaced", revokeCall.Reason);
+        Assert.Equal("device_replaced", revokeCall.Reason);
         Assert.Contains(events.Calls, call => call.Kind == SecurityEventKinds.DeviceRevoked && call.DeviceId == "device-oldest");
     }
 

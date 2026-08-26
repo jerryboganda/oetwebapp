@@ -49,12 +49,32 @@ export interface PendingMfaChallenge {
   rememberMe: boolean;
 }
 
+export interface DeviceSummary {
+  id: string;
+  maskedDeviceId: string;
+  deviceName: string | null;
+  platform: string | null;
+  trustedAt: string;
+  lastSeenAt: string | null;
+}
+
 /** Security spec §3.2: mirrors `PendingMfaChallenge` for the device-binding
- * email-OTP challenge (`device_verification_required`). */
+ * email-OTP challenge (`device_verification_required`). Extended for the
+ * two-device default with explicit replacement selection and cooldown evidence. */
 export interface PendingDeviceChallenge {
   email: string;
   challengeToken: string;
   rememberMe: boolean;
+  mode?: string;
+  registeredDevices?: DeviceSummary[];
+  activeDeviceCount?: number;
+  maxDevices?: number;
+  cooldownUntil?: string | null;
+  secondsRemaining?: number | null;
+  changeWindowDays?: number | null;
+  changeMaxPerWindow?: number | null;
+  countdown?: string | null;
+  selectedDeviceId?: string | null;
 }
 
 export interface SignupExamType {

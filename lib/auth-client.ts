@@ -38,6 +38,22 @@ interface AuthErrorPayload {
   retryable?: boolean;
   email?: string;
   challengeToken?: string;
+  mode?: string;
+  registeredDevices?: Array<{
+    id: string;
+    maskedDeviceId: string;
+    deviceName: string | null;
+    platform: string | null;
+    trustedAt: string;
+    lastSeenAt: string | null;
+  }>;
+  activeDeviceCount?: number;
+  maxDevices?: number;
+  cooldownUntil?: string | null;
+  secondsRemaining?: number | null;
+  changeWindowDays?: number | null;
+  changeMaxPerWindow?: number | null;
+  countdown?: string | null;
 }
 
 interface DevicePairingRedeemResponse {
@@ -408,7 +424,9 @@ export async function restoreSession(): Promise<AuthSession | null> {
 
 /** Security spec §3.2: `DeviceVerificationRequiredException` (backend) uses the
  * identical 403 JSON shape as the MFA challenge (`email` + `challengeToken`),
- * so every call site that can hit it builds the pending challenge the same way. */
+ * so every call site that can hit it builds the pending challenge the same way.
+ * Extended for the two-device default with replacement mode, registered-device
+ * summaries, active/max counts, and cooldown evidence (cooldownUntil, secondsRemaining, window/limit, countdown). */
 function buildPendingDeviceChallenge(
   error: AuthClientError,
   fallbackEmail: string,
@@ -418,7 +436,27 @@ function buildPendingDeviceChallenge(
     email: error.details?.email ?? fallbackEmail,
     challengeToken: error.details?.challengeToken ?? '',
     rememberMe,
+    mode: error.details?.mode,
+    registeredDevices: error.details?.registeredDevices,
+    activeDeviceCount: error.details?.activeDeviceCount,
+    maxDevices: error.details?.maxDevices,
+    cooldownUntil: error.details?.cooldownUntil ?? null,
+    secondsRemaining: error.details?.secondsRemaining ?? null,
+    changeWindowDays: error.details?.changeWindowDays ?? null,
+    changeMaxPerWindow: error.details?.changeMaxPerWindow ?? null,
+    countdown: error.details?.countdown ?? null,
   };
+}
+
+export function formatDeviceCountdown(secondsRemaining: number | null | undefined): string | null {
+  if (secondsRemaining == null || secondsRemaining <= 0) return null;
+  const s = Math.max(0, Math.floor(secondsRemaining));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m ${sec}s`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
 }
 
 export async function signIn(input: { email: string; password: string; rememberMe: boolean }): Promise<SignInResult> {
@@ -705,10 +743,36 @@ export async function completeRecoveryChallenge(recoveryCode: string): Promise<M
   }
 }
 
+/** Security spec §3.2: binds an explicit replacement target for the
+ *  `replacement_required` flow. The protected candidate-device challenge token
+ *  is exchanged for a selection-bound token that must be used for the subsequent
+ *  OTP send/verify calls. Preserves free-slot behavior when no selection is required. */
+export async function selectReplacementDevice(selectedDeviceId: string): Promise<PendingDeviceChallenge> {
+  const challenge = loadPendingDeviceChallenge();
+  if (!challenge) {
+    throw new AuthClientError(400, 'missing_device_challenge', 'No device verification challenge is available.');
+  }
+  if (!selectedDeviceId) {
+    throw new AuthClientError(400, 'replacement_selection_required', 'Select which device to replace.');
+  }
+  const response = await postJson<{ challengeToken: string }>('/v1/auth/device/select-replacement', {
+    challengeToken: challenge.challengeToken,
+    selectedTrustedDeviceId: selectedDeviceId,
+  });
+  const updated: PendingDeviceChallenge = {
+    ...challenge,
+    challengeToken: response.challengeToken,
+    selectedDeviceId,
+  };
+  savePendingDeviceChallenge(updated);
+  return updated;
+}
+
 /** Security spec §3.2: re-send the device-approval email code for the
  * pending challenge (mirrors `sendEmailVerificationOtp`). No auth state
  * changes here, so this is a plain client call rather than a context method —
- * same reasoning as the email-verification send during registration. */
+ * same reasoning as the email-verification send during registration.
+ * For `replacement_required` mode the challenge must be selection-bound. */
 export async function sendDeviceVerificationOtp(
   options?: { recaptchaToken?: string | null },
 ): Promise<OtpChallenge> {
@@ -727,6 +791,11 @@ export async function completeDeviceVerification(code: string): Promise<AuthSess
   const challenge = loadPendingDeviceChallenge();
   if (!challenge) {
     throw new AuthClientError(400, 'missing_device_challenge', 'No device verification challenge is available.');
+  }
+
+  // Guard the replacement flow on the client: require an explicit selection when the server says slots are full.
+  if (challenge.mode === 'replacement_required' && !challenge.selectedDeviceId) {
+    throw new AuthClientError(400, 'replacement_selection_required', 'Select which device to replace before verifying the code.');
   }
 
   const session = await postJson<AuthSession>('/v1/auth/device/verify', {

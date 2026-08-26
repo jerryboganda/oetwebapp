@@ -718,9 +718,71 @@ public sealed class AuthService(
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
         await EnsureDeviceVerificationIsRequiredAsync(account, cancellationToken);
+
+        // Replacement mode requires an explicit selection-bound token. The free-slot flow preserves existing behavior.
+        if (string.Equals(challenge.Mode, "replacement_required", StringComparison.Ordinal) && challenge.SelectedTrustedDeviceId is null)
+        {
+            throw ApiException.Validation("replacement_selection_required", "Select which device to replace before sending a verification code.");
+        }
+
+        if (string.Equals(challenge.Mode, "replacement_required", StringComparison.Ordinal) && challenge.SelectedTrustedDeviceId.HasValue)
+        {
+            var ownsSelected = await db.TrustedDevices.AsNoTracking().AnyAsync(
+                d => d.Id == challenge.SelectedTrustedDeviceId.Value
+                    && d.ApplicationUserAccountId == account.Id
+                    && d.RevokedAt == null,
+                cancellationToken);
+            if (!ownsSelected)
+            {
+                throw ApiException.Validation("invalid_replacement_device", "The selected device to replace is not valid or is no longer active.");
+            }
+        }
+
         var response = await emailOtpService.RequestDeviceTrustOtpAsync(account, cancellationToken, recaptchaToken);
         await ApplyOtpRateLimitItemsAsync(account.Email, response.DeliveryChannel, cancellationToken, account.Id);
         return response;
+    }
+
+    /// <summary>Binds an explicit replacement target to a pending device challenge. The caller has already
+    /// authenticated with a correct password and received a <c>replacement_required</c> challenge; this step
+    /// records which of the two approved slots the learner chose to free. The returned token is
+    /// selection-bound and must be used for the subsequent OTP send/verify calls.</summary>
+    public async Task<string> SelectReplacementDeviceAsync(string? challengeToken, Guid selectedTrustedDeviceId, CancellationToken cancellationToken = default)
+    {
+        var challenge = ReadDeviceChallengeTokenOrThrow(challengeToken);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(x => x.Id == challenge.AccountId, cancellationToken)
+            ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
+
+        if (!string.Equals(challenge.Mode, "replacement_required", StringComparison.Ordinal))
+        {
+            throw ApiException.Validation("replacement_selection_not_required", "This device challenge does not require a replacement selection.");
+        }
+
+        var selected = await db.TrustedDevices.AsNoTracking().FirstOrDefaultAsync(
+            d => d.Id == selectedTrustedDeviceId && d.ApplicationUserAccountId == account.Id && d.RevokedAt == null,
+            cancellationToken);
+        if (selected is null)
+        {
+            throw ApiException.Validation("invalid_replacement_device", "The selected device to replace is not valid or is no longer active.");
+        }
+
+        // Issue a new protected ticket that binds the selection, preserving the original candidate device and expiry window.
+        var boundToken = CreateDeviceChallengeToken(challenge.AccountId, challenge.DeviceId, "replacement_required", selected.Id);
+        await securityEventLogger.TryLogAsync(
+            account.Id,
+            SecurityEventKinds.DeviceTrustRequested,
+            deviceId: challenge.DeviceId,
+            details: new { action = "replacement_selected", selectedDeviceId = selected.Id, selectedMaskedId = MaskDeviceId(selected.DeviceId) },
+            cancellationToken: cancellationToken);
+        return boundToken;
+    }
+
+    private static string MaskDeviceId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "unknown device";
+        var normalized = new string(value.Trim().Select(character => char.IsControl(character) ? '?' : character).ToArray());
+        return normalized.Length <= 8 ? normalized : $"{normalized[..4]}…{normalized[^4..]}";
     }
 
     private async Task ApplyOtpRateLimitItemsAsync(
@@ -774,7 +836,7 @@ public sealed class AuthService(
     }
 
     /// <summary>Verifies the device-approval code, trusts the device
-    /// (auto-revoking whatever was previously trusted), and completes the
+    /// (auto-revoking only the selected device when in replacement mode), and completes the
     /// sign-in that was paused for this challenge.</summary>
     public async Task<AuthSessionResponse> CompleteDeviceVerificationAsync(
         string? challengeToken, string? code, CancellationToken cancellationToken = default)
@@ -785,6 +847,25 @@ public sealed class AuthService(
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
         await EnsureDeviceVerificationIsRequiredAsync(account, cancellationToken);
+
+        if (string.Equals(challenge.Mode, "replacement_required", StringComparison.Ordinal) && challenge.SelectedTrustedDeviceId is null)
+        {
+            throw ApiException.Validation("replacement_selection_required", "Select which device to replace before verifying the code.");
+        }
+
+        if (string.Equals(challenge.Mode, "replacement_required", StringComparison.Ordinal) && challenge.SelectedTrustedDeviceId.HasValue)
+        {
+            var ownsSelected = await db.TrustedDevices.AsNoTracking().AnyAsync(
+                d => d.Id == challenge.SelectedTrustedDeviceId.Value
+                    && d.ApplicationUserAccountId == account.Id
+                    && d.RevokedAt == null,
+                cancellationToken);
+            if (!ownsSelected)
+            {
+                throw ApiException.Validation("invalid_replacement_device", "The selected device to replace is not valid or is no longer active.");
+            }
+        }
+
         await emailOtpService.VerifyDeviceTrustOtpAsync(account, code ?? string.Empty, cancellationToken);
 
         var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
@@ -800,12 +881,19 @@ public sealed class AuthService(
             if (string.IsNullOrWhiteSpace(platform)) platform = null;
         }
 
-        // Trust (and revoke the prior device's sessions) BEFORE creating the
-        // new session, so CreateSessionCoreAsync's own device check below
-        // sees this device as already Trusted rather than looping back into
-        // OtpRequired.
-        await trustedDeviceService.TrustDeviceAsync(
-            account.Id, challenge.DeviceId, deviceInfo, platform, "otp_verified", cancellationToken);
+        // Trust BEFORE creating the new session, so CreateSessionCoreAsync's own device check below
+        // sees this device as already Trusted rather than looping back into OtpRequired.
+        // Replacement mode revokes only the selected identity; free-slot mode relies on the existing capacity logic.
+        if (challenge.SelectedTrustedDeviceId.HasValue)
+        {
+            await trustedDeviceService.TrustDeviceWithReplacementAsync(
+                account.Id, challenge.DeviceId, challenge.SelectedTrustedDeviceId.Value, deviceInfo, platform, "otp_verified", cancellationToken);
+        }
+        else
+        {
+            await trustedDeviceService.TrustDeviceAsync(
+                account.Id, challenge.DeviceId, deviceInfo, platform, "otp_verified", cancellationToken);
+        }
 
         var now = timeProvider.GetUtcNow();
         account.LastLoginAt = now;
@@ -1514,18 +1602,55 @@ public sealed class AuthService(
                         // support-only dead end: make the cooldown a step-up
                         // signal and let the existing verified-device flow
                         // approve the replacement. Privileged accounts retain
-                        // the hard block and the admin audit signal.
+                        // the hard block and the admin audit signal, but now with
+                        // exact cooldown evidence (cooldownUntil, secondsRemaining, window/limit, countdown).
                         if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
                         {
+                            var learnerCooldownToken = CreateDeviceChallengeTokenForResolution(account.Id, deviceId!, resolution);
                             throw new DeviceVerificationRequiredException(
-                                account.Email, CreateDeviceChallengeToken(account.Id, deviceId!));
+                                account.Email,
+                                learnerCooldownToken,
+                                mode: "cooldown",
+                                registeredDevices: resolution.RegisteredDevices,
+                                activeDeviceCount: resolution.ActiveDeviceCount,
+                                maxDevices: resolution.MaxDevices,
+                                cooldownUntil: resolution.CooldownUntil,
+                                secondsRemaining: resolution.SecondsRemaining,
+                                changeWindowDays: resolution.ChangeWindowDays,
+                                changeMaxPerWindow: resolution.ChangeMaxPerWindow);
                         }
-                        throw ApiException.Forbidden(
-                            "device_change_cooldown",
-                            "Too many device changes recently. Try again later or contact support.");
+                        throw new DeviceChangeCooldownException(
+                            $"Too many device changes recently. Try again in {FormatCooldownCountdown(resolution.SecondsRemaining ?? 0)} or contact support.",
+                            resolution.CooldownUntil ?? timeProvider.GetUtcNow().AddDays(resolution.ChangeWindowDays ?? 7),
+                            resolution.SecondsRemaining ?? 0,
+                            resolution.ChangeWindowDays ?? 7,
+                            resolution.ChangeMaxPerWindow ?? 3,
+                            resolution.ActiveDeviceCount,
+                            resolution.MaxDevices);
                     case DeviceResolution.OtpRequired:
                         throw new DeviceVerificationRequiredException(
-                            account.Email, CreateDeviceChallengeToken(account.Id, deviceId!));
+                            account.Email,
+                            CreateDeviceChallengeTokenForResolution(account.Id, deviceId!, resolution),
+                            mode: "otp_required",
+                            registeredDevices: resolution.RegisteredDevices,
+                            activeDeviceCount: resolution.ActiveDeviceCount,
+                            maxDevices: resolution.MaxDevices,
+                            cooldownUntil: resolution.CooldownUntil,
+                            secondsRemaining: resolution.SecondsRemaining,
+                            changeWindowDays: resolution.ChangeWindowDays,
+                            changeMaxPerWindow: resolution.ChangeMaxPerWindow);
+                    case DeviceResolution.ReplacementRequired:
+                        throw new DeviceVerificationRequiredException(
+                            account.Email,
+                            CreateDeviceChallengeTokenForResolution(account.Id, deviceId!, resolution),
+                            mode: "replacement_required",
+                            registeredDevices: resolution.RegisteredDevices,
+                            activeDeviceCount: resolution.ActiveDeviceCount,
+                            maxDevices: resolution.MaxDevices,
+                            cooldownUntil: resolution.CooldownUntil,
+                            secondsRemaining: resolution.SecondsRemaining,
+                            changeWindowDays: resolution.ChangeWindowDays,
+                            changeMaxPerWindow: resolution.ChangeMaxPerWindow);
                     case DeviceResolution.Bootstrap:
                         await trustedDeviceService.TrustDeviceAsync(
                             account.Id, deviceId!, deviceInfo, platform, "bootstrap", cancellationToken);
@@ -2033,13 +2158,30 @@ public sealed class AuthService(
     // challenge above, carrying the account id AND the specific device id
     // being challenged (so verification knows exactly which device to trust
     // without re-deriving it from a header that could differ by the time the
-    // OTP is submitted).
-    private string CreateDeviceChallengeToken(string accountId, string deviceId)
+    // OTP is submitted). Extended for the two-device approved limit: the
+    // protected ticket also carries the selection mode (free_slot vs
+    // replacement_required vs cooldown) and, after the explicit selection step,
+    // the chosen TrustedDevice id to replace.
+    private string CreateDeviceChallengeToken(string accountId, string deviceId, string mode = "otp_required", Guid? selectedTrustedDeviceId = null)
     {
-        var challenge = new DeviceChallengeTicket(accountId, deviceId, timeProvider.GetUtcNow().Add(_mfaChallengeLifetime));
+        var challenge = new DeviceChallengeTicket(accountId, deviceId, timeProvider.GetUtcNow().Add(_mfaChallengeLifetime), mode, selectedTrustedDeviceId);
         var serialized = JsonSerializer.Serialize(challenge);
         var protectedPayload = _deviceChallengeProtector.Protect(serialized);
         return WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(protectedPayload));
+    }
+
+    private string CreateDeviceChallengeTokenForResolution(string accountId, string deviceId, DeviceResolutionResult resolution)
+    {
+        var mode = resolution.Resolution switch
+        {
+            DeviceResolution.ReplacementRequired => "replacement_required",
+            DeviceResolution.CooldownBlocked => "cooldown",
+            DeviceResolution.OtpRequired => "otp_required",
+            _ => "otp_required",
+        };
+        // Cooldown for learners still flows through device OTP recovery, so keep mode as otp_required-like but preserve cooldown flag
+        // For free-slot vs replacement we already distinguished.
+        return CreateDeviceChallengeToken(accountId, deviceId, mode);
     }
 
     private DeviceChallengeTicket ReadDeviceChallengeTokenOrThrow(string? challengeToken)
@@ -2060,6 +2202,7 @@ public sealed class AuthService(
                 throw ApiException.Validation("invalid_device_challenge", "The device challenge is invalid or expired.");
             }
 
+            // Back-compat: older tokens missing Mode/SelectedTrustedDeviceId deserialize with defaults via optional params.
             return challenge;
         }
         catch (ApiException)
@@ -2070,6 +2213,21 @@ public sealed class AuthService(
         {
             throw ApiException.Validation("invalid_device_challenge", "The device challenge is invalid or expired.");
         }
+    }
+
+    private static string FormatCooldownCountdown(int secondsRemaining)
+    {
+        if (secondsRemaining <= 0) return "0s";
+        var ts = TimeSpan.FromSeconds(secondsRemaining);
+        if (ts.TotalHours >= 1)
+        {
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+        }
+        if (ts.TotalMinutes >= 1)
+        {
+            return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
+        }
+        return $"{ts.Seconds}s";
     }
 
     private string BuildOtpAuthUri(string email, string secretKey)
@@ -2409,5 +2567,5 @@ public sealed class AuthService(
 
     private sealed record MfaChallengeTicket(string AccountId, DateTimeOffset ExpiresAt);
 
-    private sealed record DeviceChallengeTicket(string AccountId, string DeviceId, DateTimeOffset ExpiresAt);
+    private sealed record DeviceChallengeTicket(string AccountId, string DeviceId, DateTimeOffset ExpiresAt, string Mode = "otp_required", Guid? SelectedTrustedDeviceId = null);
 }

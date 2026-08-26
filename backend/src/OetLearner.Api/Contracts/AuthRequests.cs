@@ -65,6 +65,8 @@ public record DeviceOtpSendRequest(
 
 public record DeviceOtpVerifyRequest(string? ChallengeToken, string? Code);
 
+public record DeviceReplacementSelectRequest(string? ChallengeToken, Guid SelectedTrustedDeviceId);
+
 public record ForgotPasswordRequest(
     string Email,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

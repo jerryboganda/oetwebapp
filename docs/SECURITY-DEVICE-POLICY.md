@@ -6,20 +6,36 @@ and the web, Android, iOS, Windows, and macOS clients.
 
 ## Default rule
 
-- A learner has one approved client identity by default.
+- A learner has two approved client identities by default.
 - A client identity is the stable value sent in `X-OET-Device-Id` and stored
   in `TrustedDevice.DeviceId`. Web clients persist it in both first-party
   `localStorage` and an opaque first-party cookie so privacy-oriented
   in-app-browser localStorage resets do not silently mint a new identity on
-  every launch; native clients use OS secure storage.
-- The first enforced sign-in bootstraps one identity. A different identity must
-  complete the existing email-OTP device challenge before it is approved.
-- When a new identity is approved while the default one-identity limit is
-  full, the previous identity is revoked and all of its live session families
-  are revoked. The previous client receives a `session_revoked` message that
-  explains that a newer device was approved.
-- Revocation is also enforced by refresh-token family liveness and playback
-  session revocation, so a missed realtime push is not an access bypass.
+  every launch; native clients use OS secure storage. Browser profiles, apps,
+  and installations remain separate identities; IP, country, tabs, and user-agent never create identity.
+- The first enforced sign-in bootstraps one identity. A second distinct identity
+  fills the second slot via the existing email-OTP device challenge without asking for a replacement target.
+- When the two slots are full, a third distinct identity triggers a `replacement_required` outcome: the
+  authenticated credential response returns masked registered-device choices, active/maximum counts, and a
+  protected candidate-device challenge token. The learner must explicitly select which of the two
+  approved identities to replace; the backend binds that choice to the challenge, sends the email OTP,
+  and only then approves the new identity, revoking only the selected device and its session families.
+- Revocation is also enforced by refresh-token family liveness, playback
+  session revocation, and the global single-active-session invariant so that only the new session remains
+  after approval; a missed realtime push is not an access bypass.
+
+## Admin/Support trigger chart
+
+| Trigger | Value |
+|---|---|
+| Identity key | Persisted `X-OET-Device-Id` (web: `localStorage` + shared first-party cookie; native/desktop: secure storage). Browser profiles, apps, and installations are separate identities; IP, country, tabs, and user-agent never create identity. |
+| Threshold | Default `2`; Admin override `1-5` (`null` = default `2`). |
+| Window | Runtime `DeviceChangeWindowDays`, default `7`. |
+| Limit | Runtime `DeviceChangeMaxPerWindow`, default `3`. |
+| Counted | OTP-approved replacements only; bootstrap is not counted. |
+| Not counted | Same browser/app identity after an IP/location change or web storage recovery through the continuity cookie (`oet_device_binding`). |
+| Reset | Admin device reset clears all approved identities and live sessions (`admin.device_reset`); learner recovery is password plus email OTP. |
+| Cooldown evidence | `cooldownUntil`, exact `secondsRemaining`, configured `window`/`limit`, and live human-readable `countdown` (e.g. `2h 13m 5s`). Learners retain the secure email-OTP recovery route; privileged accounts receive the exact cooldown error and Admin reset remains the recovery path. |
 
 ## What counts as one identity
 
@@ -38,7 +54,7 @@ header is normalized to `web`, `capacitor-android`, `capacitor-ios`, or
 ## Admin override
 
 An admin may set a positive per-learner override from 1 through 5 approved
-identities. `null` means the strict default of one. There is no unlimited
+identities. `null` means the strict default of two. There is no unlimited
 setting. Lowering the limit immediately revokes the oldest identities that no
 longer fit and revokes their associated session families.
 
@@ -53,9 +69,9 @@ separate from the approved-identity limit and counts OTP-approved replacement
 identities only; the initial bootstrap does not consume the change budget. An
 override does not make unlimited rapid device churn possible. For learner
 accounts, reaching that counter routes the already-authenticated password
-attempt through the existing email-OTP device challenge instead of leaving the
+attempt through the existing email-OTP device challenge (with exact `cooldownUntil`, `secondsRemaining`, window/limit, and countdown evidence) instead of leaving the
 learner at a support-only dead end. Privileged accounts retain the hard
-cooldown block.
+cooldown block with the same exact evidence and Admin reset remains the recovery path.
 
 ## Audit and user-visible evidence
 

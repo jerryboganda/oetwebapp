@@ -17,8 +17,8 @@ required.
 |---|---|---|---|
 | `security.singleActiveSessionEnabled` | `true` | Signing in anywhere revokes every other session immediately. | Flip to `false` only if this produces unexpected lockouts you need to investigate — it is the P0 control from spec §3.1 and should stay on. |
 | `security.riskMode` | `"enforce"` | `"off"` \| `"log_only"` \| `"enforce"`. Medium-risk sign-ins require email-OTP step-up; High-risk sign-ins get `403 sign_in_blocked_risk`, an admin notification, and an account-owner alert. | Keep enforced. Temporarily use `log_only` only while investigating a demonstrated false positive. |
-| `security.trustedDeviceRequired` | `true` | Spec §3.2 device binding: a sign-in from a device other than the account's trusted one requires email OTP; approval revokes the old device's sessions. | Keep enforced. Use Admin → Security device reset for recovery. |
-| `security.deviceChangeWindowDays` / `security.deviceChangeMaxPerWindow` | `7` / `3` | Device-change cooldown: more than N OTP-approved replacement identities inside the window triggers the existing email-OTP recovery for learners; privileged accounts retain `device_change_cooldown`. The initial bootstrap is not counted. | Adjust only after reviewing device-change telemetry; use Admin → Security device reset when the approved identity itself is compromised or lost. |
+| `security.trustedDeviceRequired` | `true` | Spec §3.2 device binding: valid credentials on a new `X-OET-Device-Id` need email OTP; free slot (fewer than 2) approves without replacement choice; full (2) needs explicit `replacement_required` selection before OTP; OTP success revokes only the selected device. | Keep enforced. Use Admin → Security device reset for recovery. |
+| `security.deviceChangeWindowDays` / `security.deviceChangeMaxPerWindow` | `7` / `3` | Device-change cooldown: more than N OTP-approved replacements inside the window. Cooldown response includes `cooldownUntil`, exact `secondsRemaining`, configured `window`/`limit`, and live human-readable `countdown`. Learners keep email-OTP recovery; privileged get the exact cooldown error (`device_change_cooldown`) and Admin reset remains the recovery path. Bootstrap not counted; same browser/app identity after IP/location change or storage recovery via `oet_device_binding` not counted. | Adjust only after reviewing device-change telemetry; use Admin → Security device reset when the approved identity itself is compromised or lost. |
 | `security.inactiveSessionTimeoutDays` | `30` | Sessions with no refresh activity for this long are revoked by the retention sweep (spec §4.2). | Rarely. |
 | `security.requireVerifiedEmailForLearners` | `true` | Spec §4.2 hard gate: unverified learners get `403 email_verification_required` and the app routes them to the verify screen. | Keep enforced; use the verification resend flow for recovery. |
 | `security.countryAllowList` + `security.countryAllowListMode` | empty / `"off"` | Spec §3.3 country fence: comma-separated ISO codes; mode `step_up` challenges sign-ins from outside the list with an email OTP, `block` rejects them. Unknown-country sign-ins always pass. | Only if the owner decides to geographically restrict accounts. Set the list BEFORE setting the mode. |
@@ -26,23 +26,38 @@ required.
 | `videoProtection.blockRootedDevices` / `videoProtection.blockEmulators` | `true` / `true` | Reject new playback sessions from clients reporting root/jailbreak or emulator integrity signals (`403 DEVICE_BLOCKED`). Clients that send no signal (old shells, desktop, web) fail open and are logged. | Flip off temporarily if the heuristics produce false positives on some handset population. |
 | `dataRetention.securityEventsDays` | `180` | How long `SecurityEvents` rows are kept. | Shorten if storage becomes a concern; this table is far higher volume than `AuditEvents` (every sign-in, refresh, playback start). |
 
-## 2. Exact anti-sharing device rule
+## 2. Exact anti-sharing device rule (default 2)
 
-The default is one approved client identity per learner. Browser tabs and
+The default is two approved client identities per learner. Browser tabs and
 windows in the same browser profile count once. Each official Android, iOS,
 Windows, or macOS installation counts as one identity using its persisted
-secure storage. A browser profile and an official app on the same physical
+secure storage (`X-OET-Device-Id` via `localStorage` + shared first-party cookie on web, secure storage on native/desktop). A browser profile and an official app on the same physical
 computer or phone count separately because the server cannot prove hardware
-equivalence. Clearing browser storage or reinstalling an app creates a new
-identity and may require email OTP approval.
+equivalence; IP, country, tabs, and user-agent never create identity. Clearing browser storage (without cookie recovery) or reinstalling an app creates a new identity.
 
-An admin can set a per-learner override from 1 through 5 approved identities;
+- **Free slot:** fewer than two identities → email OTP approves without asking for a replacement target.
+- **Full:** two identities → `replacement_required` returns masked registered-device choices, active/max counts, and a protected candidate challenge token. Learner must explicitly pick one identity to replace; the backend binds the choice, sends OTP, then on success revokes only the selected identity and its sessions under the single-active-session invariant.
+
+An admin can set a per-learner override from 1 through 5 approved identities (`null` = default `2`);
 there is no unlimited value. Lowering the limit revokes the oldest identities
 and their sessions immediately. The override does not disable the global
 single-active-session rule, so it never permits simultaneous account sharing.
-The rolling device-change cooldown is separate from this limit. See
-`docs/SECURITY-DEVICE-POLICY.md` for the complete client matrix and recovery
-behavior.
+The rolling device-change cooldown (`DeviceChangeWindowDays`/`DeviceChangeMaxPerWindow`, default `7`/`3`) is separate from this limit and counts OTP-approved replacements only; bootstrap not counted; same identity after IP/location change or web storage recovery via `oet_device_binding` not counted. See
+`docs/SECURITY-DEVICE-POLICY.md` for the complete client matrix, recovery,
+and the Admin/Support trigger chart.
+
+### Admin/Support trigger chart
+
+| Trigger | Value |
+|---|---|
+| Identity key | Persisted `X-OET-Device-Id` (web: `localStorage` + shared `oet_device_binding` cookie; native/desktop: secure storage). |
+| Threshold | Default `2`; Admin override `1-5` (`null` = `2`). |
+| Window | `DeviceChangeWindowDays`, default `7` days. |
+| Limit | `DeviceChangeMaxPerWindow`, default `3`. |
+| Counted | OTP-approved replacements only; bootstrap is not counted. |
+| Not counted | Same browser/app identity after IP/location change or web storage recovery through the continuity cookie. |
+| Reset | Admin device reset (`POST /v1/admin/users/{userId}/security/devices/reset`) clears identities and live sessions; learner recovery is password plus email OTP. |
+| Cooldown evidence | `cooldownUntil`, exact `secondsRemaining`, configured `window`/`limit`, live human-readable `countdown`. Learners keep OTP recovery; privileged get `device_change_cooldown`. |
 
 To change a toggle:
 

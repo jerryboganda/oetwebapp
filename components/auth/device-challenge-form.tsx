@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowRight, Laptop, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Clock, Laptop, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { sendDeviceVerificationOtp } from '@/lib/auth-client';
+import { formatDeviceCountdown, selectReplacementDevice, sendDeviceVerificationOtp } from '@/lib/auth-client';
 import { obtainFirebaseOtpRecaptchaToken } from '@/lib/auth/firebase-otp-recaptcha';
 import { describeOtpDelivery } from '@/lib/auth/otp-delivery';
 import { appendAuthNextParam, AUTH_ROUTES } from '@/lib/auth/routes';
@@ -19,6 +19,15 @@ interface DeviceChallengeFormProps {
   nextHref?: string | null;
 }
 
+function formatTrustTime(value: string | null | undefined): string {
+  if (!value) return 'unknown';
+  try {
+    return new Date(value).toLocaleString();
+  } catch {
+    return value;
+  }
+}
+
 export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
   const router = useRouter();
   const { pendingDeviceChallenge, completeDeviceVerification, cancelDeviceVerification } = useAuth();
@@ -27,8 +36,40 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSelecting, setIsSelecting] = useState(false);
   const [deliveryChannel, setDeliveryChannel] = useState('email');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(pendingDeviceChallenge?.selectedDeviceId ?? null);
+  const [countdown, setCountdown] = useState<string | null>(pendingDeviceChallenge?.countdown ?? null);
+  const [secondsRemaining, setSecondsRemaining] = useState<number | null>(pendingDeviceChallenge?.secondsRemaining ?? null);
   const sentForToken = useRef<string | null>(null);
+
+  const isReplacementRequired = pendingDeviceChallenge?.mode === 'replacement_required';
+  const isCooldown = pendingDeviceChallenge?.mode === 'cooldown' || (pendingDeviceChallenge?.secondsRemaining != null && pendingDeviceChallenge?.cooldownUntil);
+  const registeredDevices = pendingDeviceChallenge?.registeredDevices ?? [];
+  const activeCount = pendingDeviceChallenge?.activeDeviceCount ?? registeredDevices.length;
+  const maxCount = pendingDeviceChallenge?.maxDevices ?? 2;
+
+  // Live countdown for cooldown
+  useEffect(() => {
+    if (!pendingDeviceChallenge?.cooldownUntil) {
+      setCountdown(pendingDeviceChallenge?.countdown ?? null);
+      setSecondsRemaining(pendingDeviceChallenge?.secondsRemaining ?? null);
+      return;
+    }
+    const compute = () => {
+      const until = new Date(pendingDeviceChallenge.cooldownUntil as string).getTime();
+      const sec = Math.max(0, Math.floor((until - Date.now()) / 1000));
+      setSecondsRemaining(sec);
+      setCountdown(formatDeviceCountdown(sec) ?? pendingDeviceChallenge.countdown ?? null);
+    };
+    compute();
+    const id = window.setInterval(compute, 1000);
+    return () => window.clearInterval(id);
+  }, [pendingDeviceChallenge?.cooldownUntil, pendingDeviceChallenge?.countdown, pendingDeviceChallenge?.secondsRemaining]);
+
+  useEffect(() => {
+    setSelectedDeviceId(pendingDeviceChallenge?.selectedDeviceId ?? null);
+  }, [pendingDeviceChallenge?.selectedDeviceId]);
 
   const applyChallengeNotice = (destinationHint?: string, channel?: string) => {
     const nextChannel = channel || 'email';
@@ -41,12 +82,36 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     return sendDeviceVerificationOtp({ recaptchaToken });
   };
 
+  const handleSelectDevice = async (deviceId: string) => {
+    if (selectedDeviceId === deviceId) return;
+    setSelectedDeviceId(deviceId);
+    setError(null);
+    setIsSelecting(true);
+    try {
+      await selectReplacementDevice(deviceId);
+      setNotice(null);
+      // After binding, send the OTP for the new selection
+      setIsSending(true);
+      const challenge = await sendOtp();
+      applyChallengeNotice(challenge.destinationHint, challenge.deliveryChannel);
+    } catch (selectError) {
+      setError(readErrorMessage(selectError, 'Unable to select that device.'));
+    } finally {
+      setIsSelecting(false);
+      setIsSending(false);
+    }
+  };
+
   useEffect(() => {
     const challengeToken = pendingDeviceChallenge?.challengeToken;
     if (!challengeToken || sentForToken.current === challengeToken) {
       return;
     }
-
+    // For replacement_required without a selection, do not auto-send OTP — user must pick a slot first
+    if (isReplacementRequired && !selectedDeviceId) {
+      return;
+    }
+    // Already selection-bound? allow auto-send
     sentForToken.current = challengeToken;
     let cancelled = false;
     setIsSending(true);
@@ -59,7 +124,13 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
         }
       } catch (sendError) {
         if (!cancelled) {
-          setError(readErrorMessage(sendError, 'Unable to send the device verification code.'));
+          const msg = readErrorMessage(sendError, 'Unable to send the device verification code.');
+          // Show replacement selection required as a distinct message
+          if (msg.toLowerCase().includes('select which device')) {
+            setError('Select which device to replace before we send a code.');
+          } else {
+            setError(msg);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -71,9 +142,16 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     return () => {
       cancelled = true;
     };
-  }, [pendingDeviceChallenge?.challengeToken, pendingDeviceChallenge?.email]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingDeviceChallenge?.challengeToken, pendingDeviceChallenge?.email, isReplacementRequired, selectedDeviceId]);
+
+  // When selection is made after initial mount, the challengeToken changes (bound token); the effect above handles the send.
 
   const handleResend = async () => {
+    if (isReplacementRequired && !selectedDeviceId) {
+      setError('Select which device to replace before sending a code.');
+      return;
+    }
     setCode('');
     setError(null);
     setIsSending(true);
@@ -90,6 +168,10 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isReplacementRequired && !selectedDeviceId) {
+      setError('Select which device to replace before verifying the code.');
+      return;
+    }
     const normalizedCode = code.replace(/\D/g, '');
 
     if (normalizedCode.length !== 6) {
@@ -106,7 +188,12 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
       const session = await completeDeviceVerification(normalizedCode);
       router.replace(resolvePostAuthDestination(session.currentUser, nextHref));
     } catch (submitError) {
-      setError(readErrorMessage(submitError, 'Unable to verify this device.'));
+      const msg = readErrorMessage(submitError, 'Unable to verify this device.');
+      if (msg.toLowerCase().includes('select which device')) {
+        setError('Select which device to replace before verifying the code.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -114,12 +201,17 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
 
   const signInHref = appendAuthNextParam(AUTH_ROUTES.signIn, nextHref);
 
+  const showReplacementChoice = isReplacementRequired && registeredDevices.length > 0;
+  const showCooldown = isCooldown && pendingDeviceChallenge?.cooldownUntil;
+
   return (
     <AuthScreenShell
       eyebrow="Device Verification"
-      title="Verify this device"
+      title={isReplacementRequired ? 'Choose a device to replace' : 'Verify this device'}
       subtitle={pendingDeviceChallenge
-        ? `We don't recognize this device for ${pendingDeviceChallenge.email}. Confirm it's you before continuing.`
+        ? isReplacementRequired
+          ? `You've reached the limit of ${maxCount} approved devices (${activeCount}/${maxCount}). Select one to replace for ${pendingDeviceChallenge.email}.`
+          : `We don't recognize this device for ${pendingDeviceChallenge.email}. Confirm it's you before continuing.`
         : 'A pending device verification is required before you can continue.'}
       footer={
         <p className={styles.resend}>
@@ -128,7 +220,7 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
             type="button"
             className={styles.link}
             onClick={() => void handleResend()}
-            disabled={!pendingDeviceChallenge || isSending}
+            disabled={!pendingDeviceChallenge || isSending || isSelecting || (isReplacementRequired && !selectedDeviceId)}
           >
             Resend it
           </button>
@@ -137,13 +229,13 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     >
       <form className={styles.passwordFlowForm} onSubmit={handleSubmit}>
         <div className={styles.summaryCard}>
-          <h4>New device detected</h4>
+          <h4>{isReplacementRequired ? `Approved devices ${activeCount}/${maxCount}` : 'New device detected'}</h4>
           <div className={styles.summaryList}>
             <div className={styles.summaryItem}>
               <span className={styles.summaryIcon}>
                 <Laptop size={16} />
               </span>
-              <p>Approving this device signs your previous device out once verification succeeds.</p>
+              <p>{isReplacementRequired ? 'Pick the device you want to sign out. The new device will take its place.' : 'Approving this device signs your previous device out once verification succeeds.'}</p>
             </div>
             <div className={styles.summaryItem}>
               <span className={styles.summaryIcon}>
@@ -156,14 +248,68 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
               </p>
             </div>
           </div>
+          {!isReplacementRequired && <p className={styles.fieldHint} style={{ marginTop: '0.5rem' }}>Identity key: <code className="font-mono text-xs">X-OET-Device-Id</code> (browser profile / app installation).</p>}
         </div>
 
+        {showCooldown ? (
+          <div className={`${styles.notice} ${styles.noticeWarning}`.trim()} role="status" aria-live="polite">
+            <div className="flex items-start gap-2">
+              <Clock size={16} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium">Too many device changes recently.</p>
+                <p className="text-sm">You can still recover with email OTP. Cooldown until <span className="font-mono text-xs">{pendingDeviceChallenge.cooldownUntil ? new Date(pendingDeviceChallenge.cooldownUntil).toLocaleString() : 'unknown'}</span>{countdown ? ` — ${countdown} remaining` : secondsRemaining != null ? ` — ${secondsRemaining}s remaining` : ''}.</p>
+                <p className="mt-1 text-xs">Window: {pendingDeviceChallenge.changeWindowDays ?? 7} days · Limit: {pendingDeviceChallenge.changeMaxPerWindow ?? 3} · Not counted: same browser/app after IP/location change or storage recovery via continuity cookie.</p>
+                {countdown ? <p className="mt-1 font-mono text-xs">Live countdown: {countdown}</p> : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {showReplacementChoice ? (
+          <fieldset className={styles.field} aria-required="true">
+            <legend className="mb-2 text-sm font-semibold">Select a device to replace</legend>
+            <div className="space-y-2">
+              {registeredDevices.map((device) => {
+                const isSelected = selectedDeviceId === device.id;
+                return (
+                  <label
+                    key={device.id}
+                    className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 text-sm ${isSelected ? 'border-navy bg-blue-50' : 'border-border bg-background-light'} ${isSelecting ? 'opacity-60' : ''}`}
+                  >
+                    <input
+                      type="radio"
+                      name="replacementDevice"
+                      value={device.id}
+                      checked={isSelected}
+                      onChange={() => void handleSelectDevice(device.id)}
+                      disabled={isSubmitting || isSelecting}
+                      className="mt-1"
+                      aria-label={`Replace ${device.maskedDeviceId}`}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="font-mono text-xs font-medium">{device.maskedDeviceId}</span>
+                      {device.deviceName ? <span className="ml-2 text-xs text-muted">{device.deviceName}</span> : null}
+                      {device.platform ? <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[11px]">{device.platform}</span> : null}
+                      <span className="block text-xs text-muted">Trusted: {formatTrustTime(device.trustedAt)}{device.lastSeenAt ? ` · Last seen: ${formatTrustTime(device.lastSeenAt)}` : ''}</span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <p className={styles.fieldHint}>You have {activeCount} approved {activeCount === 1 ? 'device' : 'devices'} (limit {maxCount}). This choice is required and binds to your verification code.</p>
+          </fieldset>
+        ) : !isReplacementRequired && typeof activeCount === 'number' ? (
+          <div className={styles.field}>
+            <p className={styles.fieldHint}>Approved devices: {activeCount}/{maxCount}. No replacement choice needed for this free slot — we’ll send a code.</p>
+          </div>
+        ) : null}
+
         <div className={styles.field}>
-          <label>Verification code</label>
+          <label htmlFor="device-otp-code">Verification code</label>
           <OtpCodeInput value={code} onChange={(next) => {
             setCode(next.replace(/\D/g, '').slice(0, 6));
             setError(null);
-          }} disabled={!pendingDeviceChallenge || isSubmitting} />
+          }} disabled={!pendingDeviceChallenge || isSubmitting || (isReplacementRequired && !selectedDeviceId)} />
           <p className={styles.fieldHint}>
             {deliveryChannel === 'sms'
               ? 'Use the 6-digit code from the SMS we sent you.'
@@ -172,15 +318,16 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
         </div>
 
         {notice ? <p className={styles.fieldHint}>{notice}</p> : null}
-        {error ? <div className={`${styles.notice} ${styles.noticeDanger}`.trim()}>{error}</div> : null}
+        {error ? <div className={`${styles.notice} ${styles.noticeDanger}`.trim()} role="alert">{error}</div> : null}
+        {isReplacementRequired && !selectedDeviceId ? <p className="text-sm text-amber-700">Select a device above to enable verification. The code is bound to your selection.</p> : null}
 
         <button
           type="submit"
           className={`${styles.submit} ${styles.passwordFlowSubmit}`.trim()}
-          disabled={!pendingDeviceChallenge || isSubmitting}
+          disabled={!pendingDeviceChallenge || isSubmitting || isSelecting || (isReplacementRequired && !selectedDeviceId)}
         >
-          <span>{isSubmitting ? 'Verifying device...' : 'Verify Device'}</span>
-          {!isSubmitting ? <ArrowRight size={18} /> : null}
+          <span>{isSubmitting ? 'Verifying device...' : isSelecting ? 'Binding selection...' : 'Verify Device'}</span>
+          {!isSubmitting && !isSelecting ? <ArrowRight size={18} /> : null}
         </button>
 
         <p className={styles.fieldHint} style={{ textAlign: 'center', marginTop: '0.75rem' }}>

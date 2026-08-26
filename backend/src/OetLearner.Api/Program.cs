@@ -2132,16 +2132,56 @@ app.UseExceptionHandler(handler =>
         if (exception is DeviceVerificationRequiredException deviceVerificationRequiredException)
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            var countdown = deviceVerificationRequiredException.SecondsRemaining is int s ? FormatDeviceCountdown(s) : null;
             var devicePayload = new
             {
                 code = "device_verification_required",
                 message = deviceVerificationRequiredException.Message,
                 email = deviceVerificationRequiredException.Email,
                 challengeToken = deviceVerificationRequiredException.ChallengeToken,
+                mode = deviceVerificationRequiredException.Mode,
+                registeredDevices = deviceVerificationRequiredException.RegisteredDevices?.Select(d => new
+                {
+                    id = d.Id,
+                    maskedDeviceId = d.MaskedDeviceId,
+                    deviceName = d.DeviceName,
+                    platform = d.Platform,
+                    trustedAt = d.TrustedAt,
+                    lastSeenAt = d.LastSeenAt,
+                }),
+                activeDeviceCount = deviceVerificationRequiredException.ActiveDeviceCount,
+                maxDevices = deviceVerificationRequiredException.MaxDevices,
+                cooldownUntil = deviceVerificationRequiredException.CooldownUntil,
+                secondsRemaining = deviceVerificationRequiredException.SecondsRemaining,
+                changeWindowDays = deviceVerificationRequiredException.ChangeWindowDays,
+                changeMaxPerWindow = deviceVerificationRequiredException.ChangeMaxPerWindow,
+                countdown,
                 retryable = false,
                 correlationId
             };
             await context.Response.WriteAsync(JsonSupport.Serialize(devicePayload));
+            return;
+        }
+
+        if (exception is OetLearner.Api.Services.DeviceChangeCooldownException deviceCooldownException)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            var countdown = FormatDeviceCountdown(deviceCooldownException.SecondsRemaining);
+            var cooldownPayload = new
+            {
+                code = "device_change_cooldown",
+                message = deviceCooldownException.Message,
+                cooldownUntil = deviceCooldownException.CooldownUntil,
+                secondsRemaining = deviceCooldownException.SecondsRemaining,
+                changeWindowDays = deviceCooldownException.ChangeWindowDays,
+                changeMaxPerWindow = deviceCooldownException.ChangeMaxPerWindow,
+                activeDeviceCount = deviceCooldownException.ActiveDeviceCount,
+                maxDevices = deviceCooldownException.MaxDevices,
+                countdown,
+                retryable = false,
+                correlationId
+            };
+            await context.Response.WriteAsync(JsonSupport.Serialize(cooldownPayload));
             return;
         }
 
@@ -2228,6 +2268,15 @@ app.UseExceptionHandler(handler =>
         await context.Response.WriteAsync(JsonSupport.Serialize(payload));
     });
 });
+
+static string FormatDeviceCountdown(int secondsRemaining)
+{
+    if (secondsRemaining <= 0) return "0s";
+    var ts = TimeSpan.FromSeconds(secondsRemaining);
+    if (ts.TotalHours >= 1) return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+    if (ts.TotalMinutes >= 1) return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
+    return $"{ts.Seconds}s";
+}
 
 if (!app.Environment.IsDevelopment())
 {
