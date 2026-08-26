@@ -300,9 +300,9 @@ public sealed class VideoEntitlementService(
             return new VideoEntitlementResult(false, "not_in_user_allocation", context.CurrentTier);
         }
 
-        // Content scope (spec §3): an explicit per-plan include wins over the exclude list, tag
-        // excludes, course-family isolation, and subtest/profession scope — but never over the
-        // module/subscription gates below, which every path still has to clear.
+        // Content scope (spec §3): an explicit per-plan include wins over the exclude list and
+        // subtest/profession scope — but never over the module/subscription or course-family
+        // gates below, which every path still has to clear.
         var explicitlyIncluded = context.VideoIncludes is { Count: > 0 }
             && context.VideoIncludes.Contains(video.Id);
         if (!explicitlyIncluded)
@@ -347,15 +347,16 @@ public sealed class VideoEntitlementService(
             return new VideoEntitlementResult(false, "no_active_subscription", "free");
         }
 
-        // Course-family isolation (mutual Full ↔ Crash). Shared and unclassified content
-        // remain visible unless the title/labels or explicit batch tags show a different
-        // family. An explicit per-plan include still wins, but unselected out-of-family
-        // content remains hidden rather than shown as locked/premium.
+        // Course-family isolation (mutual Full ↔ Crash, deny-by-default). Free videos
+        // already returned above are unaffected. A premium video with no explicit family
+        // tag is invisible to EVERY learner until the admin classifies it, and an
+        // out-of-family video is invisible (not locked) — never beat by an explicit
+        // per-plan include. Always resolved from the video's family batch tags.
         var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
-        if (!explicitlyIncluded
-            && context.CourseFamilies is { } families
-            && families.IsRestricted
-            && !families.Allows(family))
+        if (family == CourseFamily.None
+            || (context.CourseFamilies is { } families
+                && families.IsRestricted
+                && !families.Allows(family)))
         {
             return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
         }
