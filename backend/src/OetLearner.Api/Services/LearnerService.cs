@@ -7099,7 +7099,16 @@ public partial class LearnerService(
 
         if (aiPackageCreditService is not null)
         {
-            var debit = await aiPackageCreditService.DeductObjectivePracticeAsync(userId, subtest, attempt.Id, cancellationToken);
+            // The paper (sample / content item) is the billing unit, matching the
+            // part-practice and full-paper start gates: the reference is per
+            // (user, paper), so the first submission for this paper content
+            // debits exactly one test and every later submission of the same
+            // paper content is free. Using attempt.Id here would debit a credit
+            // for every re-submission.
+            var debit = await aiPackageCreditService.DeductObjectivePracticeAsync(
+                userId, subtest,
+                CreditGateExtensions.ObjectivePaperReference(subtest, userId, attempt.ContentId),
+                cancellationToken);
             if (!debit.Debited)
             {
                 throw ApiException.PaymentRequired(

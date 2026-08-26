@@ -88,6 +88,10 @@ export interface ListeningHomeResultDto {
   submittedAt: string | null;
   scoreDisplay: string;
   route: string;
+  practiceRoute: string;
+  mode: 'exam' | 'home' | 'diagnostic' | 'practice' | (string & {});
+  attemptKind: 'full' | 'part';
+  partCode: 'A' | 'B' | 'C' | null;
 }
 
 export interface ListeningDrillDto {
@@ -568,7 +572,11 @@ export const startListeningPartPracticeAttempt = (
     `/v1/listening-papers/papers/${encodeURIComponent(paperId)}/practice/parts/${encodeURIComponent(partCode)}`,
     { method: 'POST' },
   ).then((started) => {
-    void import('@/lib/credit-feedback').then((m) => m.announceCreditUsage('listening'));
+    // Rule E: the backend returns the authoritative consumption copy in
+    // feedbackMessage (null when this part of the paper was already covered
+    // by an earlier debit) and the page toasts it; refresh the dashboard
+    // credit card caches regardless.
+    void import('@/lib/credit-feedback').then((m) => m.refreshCreditCards());
     return started;
   });
 

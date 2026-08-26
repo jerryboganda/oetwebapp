@@ -132,7 +132,7 @@ export const BILLING_COPY_FIELDS: BillingCopyField[] = [
   // ── AI packages ──────────────────────────────────────────────
   { key: 'billing.ai.eyebrow', section: 'AI packages', label: 'AI eyebrow', default: 'AI Credits' },
   { key: 'billing.ai.title', section: 'AI packages', label: 'AI title', default: 'AI grading packages' },
-  { key: 'billing.ai.description', section: 'AI packages', label: 'AI description', default: 'Credits grade your Writing letters and Speaking cards instantly with AI. 1 credit = 1 letter or card. Listening & Reading practice is always free. Credits are deducted when grading starts and automatically refunded if grading fails.', multiline: true },
+  { key: 'billing.ai.description', section: 'AI packages', label: 'AI description', default: 'Credits grade your Writing letters and Speaking cards instantly with AI. 1 credit = 1 letter or card. Listening & Reading practice: the first part of a paper you open consumes 1 test credit; the remaining parts of that same paper are free. Credits are deducted when grading starts and automatically refunded if grading fails.', multiline: true },
   { key: 'billing.ai.unavailable', section: 'AI packages', label: 'AI unavailable text', default: 'AI packages are not available right now. Please check back shortly.', multiline: true },
   { key: 'billing.ai.toggle.full', section: 'AI packages', label: 'Full Packages toggle', default: 'Full Packages' },
   { key: 'billing.ai.toggle.separate', section: 'AI packages', label: 'Separate Packages toggle', default: 'Separate Packages' },

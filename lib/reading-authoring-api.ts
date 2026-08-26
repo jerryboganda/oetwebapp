@@ -392,6 +392,9 @@ export interface ReadingHomeResultDto {
   attemptId: string;
   paperId: string;
   paperTitle: string;
+  mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank' | (string & {});
+  attemptKind: 'full' | 'part';
+  partCode: 'A' | 'B' | 'C' | null;
   rawScore: number;
   maxRawScore: number;
   scaledScore: number | null;
@@ -400,6 +403,7 @@ export interface ReadingHomeResultDto {
   adminReviewReason?: string | null;
   submittedAt: string | null;
   route: string;
+  practiceRoute: string;
 }
 
 export interface ReadingHomeSafeDrillDto {
@@ -1347,7 +1351,14 @@ export const startReadingPartPracticeAttempt = (paperId: string, partCode: Readi
   api<ReadingPracticeStartedDto>(
     `/v1/reading-papers/papers/${paperId}/practice/parts/${partCode}`,
     { method: 'POST' },
-  );
+  ).then((started) => {
+    // Rule E: the backend returns the authoritative consumption copy in
+    // feedbackMessage (null when this part of the paper was already covered
+    // by an earlier debit) and the page toasts it; refresh the dashboard
+    // credit card caches regardless.
+    void import('@/lib/credit-feedback').then((m) => m.refreshCreditCards());
+    return started;
+  });
 
 export const getReadingErrorBank = (opts?: { partCode?: ReadingPartCode; limit?: number }) => {
   const params = new URLSearchParams();

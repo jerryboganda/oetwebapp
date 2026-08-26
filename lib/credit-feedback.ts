@@ -96,6 +96,25 @@ async function latestMatchingDebit(
 }
 
 /**
+ * Refreshes the dashboard credit card caches so the candidate sees the same
+ * authoritative balances the admin reads. Safe to call after any metered
+ * activity — including ones that consumed nothing (idempotent per paper),
+ * which is why it can't rely on a debit row existing.
+ */
+export async function refreshCreditCards(): Promise<void> {
+  try {
+    const [snapshot, queryClient] = await Promise.all([
+      import('@/lib/api').then((m) => m.fetchMyAiPackageCredits()),
+      import('@/components/providers/query-provider').then((m) => m.getQueryClient()),
+    ]);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits('current') });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits(snapshot.userId) });
+  } catch {
+    // Balance refresh must never block the activity itself.
+  }
+}
+
+/**
  * Rule E (live balance updates): immediately after a metered activity starts
  * or a graded submission completes, show what was used and what remains.
  * Reads the same authoritative ledger the admin sees, then toasts the
@@ -103,11 +122,10 @@ async function latestMatchingDebit(
  */
 export async function announceCreditUsage(subtest: MeteredSubtest): Promise<void> {
   try {
-    const [{ fetchMyAiPackageCredits }, { queryClient }] = await Promise.all([
-      import('@/lib/api'),
-      import('@/lib/query/hooks'),
+    const [snapshot, queryClient] = await Promise.all([
+      import('@/lib/api').then((m) => m.fetchMyAiPackageCredits()),
+      import('@/components/providers/query-provider').then((m) => m.getQueryClient()),
     ]);
-    const snapshot = await fetchMyAiPackageCredits();
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits('current') });
     void queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.aiPackageCredits(snapshot.userId) });
 
