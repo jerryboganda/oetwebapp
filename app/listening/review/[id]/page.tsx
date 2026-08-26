@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, GraduationCap, Headphones, MinusCircle, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, Clock, GraduationCap, Headphones, MinusCircle, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -32,6 +32,8 @@ function firstParam(value: string | string[] | undefined) {
 function transcriptStateCopy(review: ListeningReviewDto | null) {
   if (!review) return 'Full transcript for the submitted part is available after submission.';
   const hasSegments = (review.transcriptSegments?.length ?? 0) > 0;
+  const scriptParts = availableScriptParts(review);
+  const hiddenPartNote = scriptParts.length === 3 ? '' : ' Other parts remain hidden until submitted.';
   const parentParts = new Set<string>();
   for (const seg of review.transcriptSegments ?? []) {
     const p = (seg.partCode ?? '').trim().toUpperCase();
@@ -49,9 +51,9 @@ function transcriptStateCopy(review: ListeningReviewDto | null) {
     }
   }
   const partsLabel = ['A', 'B', 'C'].filter((p) => parentParts.has(p)).join(', ') || 'submitted part';
-  if (hasSegments) return `Full transcript available for the submitted part${parentParts.size > 1 ? 's' : ''}: Part ${partsLabel}. Other parts remain hidden until submitted. Audio replay is unlimited.`;
+  if (hasSegments) return `Full transcript available for the submitted part${parentParts.size > 1 ? 's' : ''}: Part ${partsLabel}.${hiddenPartNote} Audio replay is unlimited.`;
   if (review.transcriptAccess.state === 'available') return 'Full transcript for the submitted part is available. Audio replay is unlimited.';
-  if (review.transcriptAccess.state === 'partial') return `Transcript available for submitted part${parentParts.size > 1 ? 's' : ''}: Part ${partsLabel}. Other parts remain hidden until submitted.`;
+  if (review.transcriptAccess.state === 'partial') return `Transcript available for submitted part${parentParts.size > 1 ? 's' : ''}: Part ${partsLabel}.${hiddenPartNote}`;
   return 'Full transcript will be available after the part is submitted. Transcript-backed evidence is shown for reviewed questions.';
 }
 
@@ -61,6 +63,28 @@ function formatMilliseconds(value: number | null | undefined) {
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;
   return `${minutes}:${remainder.toString().padStart(2, '0')}`;
+}
+
+function availableScriptParts(review: ListeningReviewDto) {
+  const parts = new Set<'A' | 'B' | 'C'>();
+
+  for (const segment of review.transcriptSegments) {
+    const code = (segment.partCode ?? '').trim().toUpperCase();
+    if (code.startsWith('A')) parts.add('A');
+    else if (code.startsWith('C')) parts.add('C');
+    else if (code.startsWith('B')) parts.add('B');
+  }
+
+  if (parts.size === 0) {
+    for (const item of review.itemReview) {
+      const code = (item.partCode ?? '').trim().toUpperCase();
+      if (code.startsWith('A')) parts.add('A');
+      else if (code.startsWith('C')) parts.add('C');
+      else parts.add('B');
+    }
+  }
+
+  return ['A', 'B', 'C'].filter((part): part is 'A' | 'B' | 'C' => parts.has(part as 'A' | 'B' | 'C'));
 }
 
 const LISTENING_REVIEW_AUDIO_SECTIONS = ['A1', 'A2', 'B', 'C1', 'C2'] as const;
@@ -155,6 +179,7 @@ export default function ListeningReviewPage() {
     endMs: number | null;
     excerpt: string | null;
   } | null>(null);
+  const [scriptVisible, setScriptVisible] = useState(false);
 
   useEffect(() => {
     if (!attemptId) return;
@@ -371,6 +396,48 @@ export default function ListeningReviewPage() {
               errorCode={review.scoreConversionErrorCode}
             />
             <ListeningPartBreakdown items={review.itemReview} />
+            <section
+              id="show-script"
+              aria-labelledby="listening-show-script-heading"
+              className="scroll-mt-24 rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm"
+            >
+              <LearnerSurfaceSectionHeader
+                eyebrow="Post-submit access"
+                title={scriptVisible ? 'Complete Listening Script' : 'Show Script'}
+                description={
+                  review.paper.audioScriptUrl || review.transcriptSegments.length > 0
+                    ? `Open the complete script${availableScriptParts(review).length === 3 ? 's for Parts A, B, and C' : availableScriptParts(review).length > 0 ? ` for Part ${availableScriptParts(review).join(', Part ')}` : ''}. Every authored line is shown; evidence excerpts are only used to highlight the relevant lines.`
+                    : 'No complete time-coded script or authored Audio Script PDF was published for this submitted scope yet.'
+                }
+                className="mb-4"
+              />
+              {scriptVisible ? (
+                <div className="space-y-5">
+                  {review.paper.audioScriptUrl ? (
+                    <ListeningQuestionPaperViewer url={review.paper.audioScriptUrl} partLabel="Audio Script" />
+                  ) : null}
+
+                  <ListeningFullTranscriptViewer
+                    transcriptSegments={review.transcriptSegments}
+                    extracts={review.paper.extracts}
+                    highlightedEvidence={highlightedEvidence}
+                    onPlayEvidence={playEvidence}
+                    attemptId={attemptId ?? ''}
+                  />
+
+                  {!review.paper.audioScriptUrl && review.transcriptSegments.length === 0 ? (
+                    <InlineAlert variant="warning">
+                      This paper has no complete script published yet. Per-question evidence remains visible in the item review below.
+                    </InlineAlert>
+                  ) : null}
+                </div>
+              ) : (
+                <Button type="button" onClick={() => setScriptVisible(true)} className="gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  Show Script
+                </Button>
+              )}
+            </section>
             <TimeUsedSummary
               totalMilliseconds={review.timeUsed?.totalMilliseconds ?? null}
               sections={(review.timeUsed?.sections ?? []).map((section) => ({
@@ -387,7 +454,7 @@ export default function ListeningReviewPage() {
             })()}
 
             <LearnerPageHero
-              eyebrow="Transcript-backed Review"
+                eyebrow="Transcript-backed Review"
               icon={Quote}
               accent="indigo"
               title="Answers, full transcript, and unlimited replay"
@@ -402,8 +469,12 @@ export default function ListeningReviewPage() {
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Review Policy"
-                title="Full transcript for the submitted part only"
-                description="Each part's full transcript (Part A with A1/A2, Part B, Part C with C1/C2) is revealed only after that part is submitted. Non-submitted parts remain hidden so you cannot see their transcript or answers before attempting them. After submission you can reopen the transcript and replay the audio as many times as you want — this access is permanent."
+                title={availableScriptParts(review).length === 3 ? 'Complete transcript for the full attempt' : 'Full transcript for the submitted part'}
+                description={
+                  availableScriptParts(review).length === 3
+                    ? 'The complete Part A, B, and C transcripts are revealed after submission. You can reopen them and replay the audio as many times as you want — this access is permanent.'
+                    : "Each part's full transcript (Part A with A1/A2, Part B, Part C with C1/C2) is revealed only after that part is submitted. Non-submitted parts remain hidden so you cannot see their transcript or answers before attempting them."
+                }
                 className="mb-4"
               />
               <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
@@ -426,7 +497,7 @@ export default function ListeningReviewPage() {
                       }
                     }
                     const label = parts.size === 0 ? 'submitted part' : Array.from(parts).sort().join(', ');
-                    return `Full transcript and audio for ${label}. Other parts remain hidden until submitted. Your review access never expires.`;
+                    return `${availableScriptParts(review).length === 3 ? 'Complete transcript and audio for Parts A, B, and C' : `Full transcript and audio for ${label}`}. Your review access never expires.${availableScriptParts(review).length === 3 ? '' : ' Other parts remain hidden until submitted.'}`;
                   })()}
                   <span className="mt-1 block text-xs text-muted">Answers and score are always shown after submission. Vocabulary lookup works on every word of the visible transcript.</span>
                 </div>
@@ -553,27 +624,6 @@ export default function ListeningReviewPage() {
                 </div>
               </section>
             ) : null}
-
-            {review.paper.audioScriptUrl ? (
-              <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Audio Script"
-                  title="Full audio script (authored PDF)"
-                  description="The complete transcript PDF authored for this paper. This is shown post-submit alongside the time-coded transcript tabs below."
-                  className="mb-4"
-                />
-                <ListeningQuestionPaperViewer url={review.paper.audioScriptUrl} partLabel="Audio Script" />
-                <p className="mt-3 text-xs text-muted">The script is fetched with your learner entitlement and remains available permanently after submission. If the viewer fails, ensure the paper has an AudioScript PDF attached and you are entitled to this paper.</p>
-              </section>
-            ) : null}
-
-            <ListeningFullTranscriptViewer
-              transcriptSegments={review.transcriptSegments}
-              extracts={review.paper.extracts}
-              highlightedEvidence={highlightedEvidence}
-              onPlayEvidence={playEvidence}
-              attemptId={attemptId ?? ''}
-            />
 
             <section className="space-y-4">
               <LearnerSurfaceSectionHeader

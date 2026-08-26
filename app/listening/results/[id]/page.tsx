@@ -174,6 +174,15 @@ function ListeningResultsContent() {
   const percentCorrect = result.maxRawScore > 0
     ? Math.round((result.rawScore / result.maxRawScore) * 100)
     : 0;
+  const submittedParts = ['A', 'B', 'C'].filter((part) => (
+    result.itemReview.some((item) => (item.partCode ?? '').trim().toUpperCase().startsWith(part))
+    || result.transcriptSegments.some((segment) => (segment.partCode ?? '').trim().toUpperCase().startsWith(part))
+  ));
+  const scriptScopeLabel = submittedParts.length === 3
+    ? 'Parts A, B, and C'
+    : submittedParts.length > 0
+      ? `Part ${submittedParts.join(', Part ')}`
+      : 'the submitted part';
 
   return (
     <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.paper.title} backHref="/listening">
@@ -254,6 +263,31 @@ function ListeningResultsContent() {
           tableVersion={hasApprovedConversion ? result.scoreConversionTableVersionKey : null}
           errorCode={result.scoreConversionErrorCode}
         />
+
+        <section
+          aria-labelledby="listening-show-script-heading"
+          className="rounded-2xl border border-primary/30 bg-primary/5 p-5 shadow-sm"
+        >
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 id="listening-show-script-heading" className="text-lg font-black text-navy">
+                Show Script
+                <span className="ml-2 rounded-full bg-primary px-2 py-0.5 align-middle text-[10px] font-black uppercase tracking-widest text-white">
+                  Post-submit
+                </span>
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted">
+                Open the complete {scriptScopeLabel} scripts for this submitted attempt. The review page shows every authored segment, not just answer snippets.
+              </p>
+            </div>
+            <Button className="shrink-0 gap-2" asChild>
+              <Link href={`/listening/review/${result.attemptId}#show-script`}>
+                <FileText className="h-4 w-4" />
+                Show Script
+              </Link>
+            </Button>
+          </div>
+        </section>
 
         <ListeningPartBreakdown items={result.itemReview} />
         <TimeUsedSummary

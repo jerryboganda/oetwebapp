@@ -190,9 +190,9 @@ export function ListeningFullTranscriptViewer({ transcriptSegments, highlightedE
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-black uppercase tracking-widest text-muted">Full transcript</p>
-          <h3 className="mt-1 text-lg font-black text-navy">Complete script for the submitted part</h3>
+          <h3 className="mt-1 text-lg font-black text-navy">Complete Listening script</h3>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
-            Select any word or phrase to look it up. Click <span className="font-semibold">Play</span> on a segment to replay that span. The relevant section for the question you are reviewing is highlighted.
+            Select any word or phrase to look it up. Parts A, B, and C are enabled according to this submitted attempt. Click <span className="font-semibold">Play</span> on a segment to replay that span. The relevant section for the question you are reviewing is highlighted.
           </p>
         </div>
         <Volume2 className="hidden h-5 w-5 shrink-0 text-muted sm:block" aria-hidden />
