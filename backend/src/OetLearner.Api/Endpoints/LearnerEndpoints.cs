@@ -834,19 +834,20 @@ public static class LearnerEndpoints
 
         var recentResults = attempts
             .Where(a => a.Status == ReadingAttemptStatus.Submitted)
-            .Where(a => IsCanonicalReadingScoreAttempt(a) || IsReadingPartPracticeAttempt(a))
             .OrderByDescending(a => a.SubmittedAt)
-            .Take(5)
             .Select(a =>
             {
-                var partCode = TryGetReadingPartPracticeCode(a);
+                var scope = ReadingAttemptScope.FromJson(a.ScopeJson);
                 var baseTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper");
-                var displayTitle = partCode is not null ? $"{baseTitle} — Part {partCode} practice" : baseTitle;
+                var displayTitle = scope.PartCode is not null ? $"{baseTitle} — Part {scope.PartCode} practice" : baseTitle;
                 return new
                 {
                     attemptId = a.Id,
                     paperId = a.PaperId,
                     paperTitle = displayTitle,
+                    mode = a.Mode.ToString(),
+                    attemptKind = scope.IsPartPractice ? "part" : "full",
+                    partCode = scope.PartCode,
                     rawScore = a.RawScore ?? 0,
                     maxRawScore = a.MaxRawScore,
                     scaledScore = HasApprovedReadingScore(a) ? a.ScaledScore : null,
@@ -855,6 +856,7 @@ public static class LearnerEndpoints
                     adminReviewReason = a.RequiresAdminReview ? a.AdminReviewReason : null,
                     a.SubmittedAt,
                     route = $"/reading/paper/{a.PaperId}/results?attemptId={a.Id}",
+                    practiceRoute = BuildReadingHistoryPracticeRoute(a),
                 };
             })
             .ToList();
@@ -1125,6 +1127,17 @@ public static class LearnerEndpoints
         {
             return null;
         }
+    }
+
+    private static string BuildReadingHistoryPracticeRoute(ReadingAttempt attempt)
+    {
+        var partCode = ReadingAttemptScope.FromJson(attempt.ScopeJson).PartCode;
+        if (partCode is not null)
+        {
+            return $"/reading/parts/{partCode.ToLowerInvariant()}";
+        }
+
+        return attempt.Mode == ReadingAttemptMode.Learning ? "/reading/practice" : "/reading/exam";
     }
 
     private static (DateTimeOffset PartADeadlineAt, DateTimeOffset PartBCDeadlineAt) ResolveReadingAttemptDeadlines(

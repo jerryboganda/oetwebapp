@@ -191,6 +191,8 @@ public sealed class ListeningLearnerService(
             {
                 var evaluation = evaluations.FirstOrDefault(e => e.AttemptId == a.Id);
                 var score = ResolveScoreFromEvaluation(evaluation, a.RequiresAdminReview);
+                var isPartPractice = false;
+                string? partCode = null;
                 return new ListeningHomeResultProjection(
                     attemptId: a.Id,
                     paperId: a.ContentId,
@@ -203,6 +205,10 @@ public sealed class ListeningLearnerService(
                     submittedAt: a.SubmittedAt,
                     scoreDisplay: FormatScoreDisplay(score),
                     route: $"/listening/results/{Uri.EscapeDataString(a.Id)}",
+                    practiceRoute: BuildListeningHistoryPracticeRoute(a.Mode.ToString(), isPartPractice, partCode),
+                    mode: a.Mode,
+                    attemptKind: isPartPractice ? "part" : "full",
+                    partCode: partCode,
                     requiresAdminReview: a.RequiresAdminReview,
                     adminReviewReason: a.AdminReviewReason);
             })
@@ -214,6 +220,9 @@ public sealed class ListeningLearnerService(
                     var score = ResolveScoreFromRelationalAttempt(a, evaluation);
                     var baseTitle = titleByContentId.GetValueOrDefault(a.PaperId, "Listening paper");
                     var partPractice = ListeningAttemptScope.ReadPartPractice(a.ScopeJson);
+                    var partCode = partPractice.IsValid && !string.IsNullOrWhiteSpace(partPractice.PartCode)
+                        ? partPractice.PartCode
+                        : null;
                     var displayTitle = partPractice.IsValid && !string.IsNullOrWhiteSpace(partPractice.PartCode)
                         ? $"{baseTitle} — Part {partPractice.PartCode} practice"
                         : baseTitle;
@@ -227,14 +236,18 @@ public sealed class ListeningLearnerService(
                         grade: score.Grade,
                         passed: score.Passed,
                         submittedAt: a.SubmittedAt,
-                        scoreDisplay: FormatScoreDisplay(score),
-                        route: $"/listening/results/{Uri.EscapeDataString(a.Id)}",
-                        requiresAdminReview: a.RequiresAdminReview,
-                        adminReviewReason: a.AdminReviewReason);
+                    scoreDisplay: FormatScoreDisplay(score),
+                    route: $"/listening/results/{Uri.EscapeDataString(a.Id)}",
+                    practiceRoute: BuildListeningHistoryPracticeRoute(ToApiMode(a.Mode), partPractice.IsValid, partCode),
+                    mode: ToApiMode(a.Mode),
+                    attemptKind: partPractice.IsValid ? "part" : "full",
+                    partCode: partCode,
+                    requiresAdminReview: a.RequiresAdminReview,
+                    adminReviewReason: a.AdminReviewReason);
                 }))
             .OrderByDescending(result => result.submittedAt)
             .ToList();
-        var recentResults = allResults.Take(5).ToList();
+        var recentResults = allResults.ToList();
         var progressScoreDisplay = SelectProgressScoreDisplay(allResults, listeningPolicy.BestScoreDisplay);
 
         var latestCompletedAttempt = showPastAttempts
@@ -4897,6 +4910,16 @@ public sealed class ListeningLearnerService(
             : route;
     }
 
+    private static string BuildListeningHistoryPracticeRoute(string mode, bool isPartPractice, string? partCode)
+    {
+        if (isPartPractice && partCode is not null)
+        {
+            return $"/listening/practice/{Uri.EscapeDataString(partCode.ToLowerInvariant())}";
+        }
+
+        return mode is "exam" or "home" ? "/listening/exam" : "/listening/practice";
+    }
+
     private static string? AssetDownloadPath(ContentPaperAsset? asset)
         => asset?.MediaAsset is null ? null : $"/v1/media/{asset.MediaAsset.Id}/content";
 
@@ -5348,6 +5371,10 @@ public sealed class ListeningLearnerService(
         DateTimeOffset? submittedAt,
         string scoreDisplay,
         string route,
+        string practiceRoute,
+        string mode,
+        string attemptKind,
+        string? partCode,
         bool requiresAdminReview = false,
         string? adminReviewReason = null);
 

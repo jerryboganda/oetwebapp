@@ -160,6 +160,47 @@ describe('Listening hub — available papers library (Reading parity)', () => {
     expect(await screen.findByText('best score: 18 / 42 • 365 / 500 • Grade B')).toBeInTheDocument();
   });
 
+  it('renders every submitted attempt with review and practice reopen actions', async () => {
+    mockGetListeningHome.mockResolvedValue(buildHome(
+      [],
+      Array.from({ length: 7 }, (_, index) => ({
+        attemptId: `attempt-${index + 1}`,
+        paperId: 'paper-1',
+        paperTitle: `Listening attempt ${index + 1}`,
+        rawScore: 20,
+        maxRawScore: 42,
+        scaledScore: null,
+        grade: '—',
+        passed: null,
+        submittedAt: '2026-05-12T11:00:00Z',
+        scoreDisplay: '20 / 42 practice',
+        route: `/listening/results/attempt-${index + 1}`,
+        practiceRoute: index === 0 ? '/listening/practice/b' : '/listening/exam',
+        mode: index === 0 ? 'practice' : 'exam',
+        attemptKind: index === 0 ? 'part' : 'full',
+        partCode: index === 0 ? 'B' : null,
+      })),
+    ));
+
+    render(<ListeningHome />);
+
+    expect(await screen.findByText('Listening attempt 7')).toBeInTheDocument();
+    for (let index = 1; index <= 7; index += 1) {
+      expect(screen.getByText(`Listening attempt ${index}`)).toBeInTheDocument();
+    }
+    const reviewLinks = screen.getAllByRole('link', { name: /^review$/i });
+    const practiceLinks = screen.getAllByRole('link', { name: /^practice$/i });
+    expect(reviewLinks[0]).toHaveAttribute(
+      'href',
+      '/listening/results/attempt-1',
+    );
+    expect(practiceLinks[0]).toHaveAttribute(
+      'href',
+      '/listening/practice/b',
+    );
+    expect(practiceLinks[1]).toHaveAttribute('href', '/listening/exam');
+  });
+
   it('shows a partial badge for a 36-question paper titled Q37–42 unavailable', async () => {
     mockGetListeningHome.mockResolvedValue(
       buildHome([

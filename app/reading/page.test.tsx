@@ -139,12 +139,33 @@ describe('Reading hub', () => {
           attemptId: 'attempt-1',
           paperId: 'paper-1',
           paperTitle: 'Reading Sample Paper 1',
+          mode: 'Exam',
+          attemptKind: 'full',
+          partCode: null,
           rawScore: 30,
           maxRawScore: 42,
           scaledScore: 350,
           gradeLetter: 'B',
           submittedAt: '2026-05-12T11:00:00Z',
           route: '/reading/paper/paper-1/results?attemptId=attempt-1',
+          practiceRoute: '/reading/exam',
+        },
+        {
+          attemptId: 'attempt-part-b',
+          paperId: 'paper-2',
+          paperTitle: 'Reading Sample Paper 2 — Part B practice',
+          mode: 'Drill',
+          attemptKind: 'part',
+          partCode: 'B',
+          rawScore: 5,
+          maxRawScore: 6,
+          scaledScore: null,
+          gradeLetter: '—',
+          requiresAdminReview: false,
+          adminReviewReason: null,
+          submittedAt: '2026-05-13T11:00:00Z',
+          route: '/reading/paper/paper-2/results?attemptId=attempt-part-b',
+          practiceRoute: '/reading/parts/b',
         },
       ],
     });
@@ -173,6 +194,25 @@ describe('Reading hub', () => {
     expect(screen.getAllByText('Reading Sample Paper 1').length).toBeGreaterThan(0);
     expect(screen.getByText('Retake after feedback')).toBeInTheDocument();
     expect(screen.getByText(/30\/42/)).toBeInTheDocument();
+    expect(screen.getByText('Reading Sample Paper 2 — Part B practice')).toBeInTheDocument();
+    const reviewLinks = screen.getAllByRole('link', { name: /^review$/i });
+    const practiceLinks = screen.getAllByRole('link', { name: /^practice$/i });
+    expect(reviewLinks[0]).toHaveAttribute(
+      'href',
+      '/reading/paper/paper-1/results?attemptId=attempt-1',
+    );
+    expect(practiceLinks[0]).toHaveAttribute(
+      'href',
+      '/reading/exam',
+    );
+    expect(reviewLinks[1]).toHaveAttribute(
+      'href',
+      '/reading/paper/paper-2/results?attemptId=attempt-part-b',
+    );
+    expect(practiceLinks[1]).toHaveAttribute(
+      'href',
+      '/reading/parts/b',
+    );
   });
 
   it('shows a Resume banner when the learner has an active resumable Reading attempt', async () => {

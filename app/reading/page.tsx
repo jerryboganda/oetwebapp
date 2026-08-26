@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Clock,
+  Eye,
   ListChecks,
   PlayCircle,
   Target,
@@ -350,19 +351,38 @@ function ReadingSecondaryDashboard({
         />
         {recentResults.length > 0 ? (
           <ul className="mt-4 space-y-3">
-            {recentResults.slice(0, 3).map((result) => (
+            {recentResults.map((result) => (
               <li key={result.attemptId}>
-                <Link href={result.route} className="block rounded-xl border border-border/70 bg-white p-3 text-sm transition-colors hover:border-primary/40 dark:bg-surface">
-                  <span className="font-semibold text-navy">{result.paperTitle}</span>
-                  <span className="mt-1 block text-xs text-muted">
+                <article className="rounded-xl border border-border/70 bg-white p-3 text-sm dark:bg-surface">
+                  <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                    {result.partCode ? `Part ${result.partCode}` : 'Full exam'}
+                  </span>
+                  <p className="mt-2 font-semibold text-navy">{result.paperTitle}</p>
+                  <p className="mt-1 text-xs text-muted">
                     {result.rawScore}/{result.maxRawScore}
                     {result.requiresAdminReview
                       ? ' · admin review pending'
                       : result.scaledScore == null
                         ? ' practice'
                         : ` · ${result.scaledScore}/500 · ${result.gradeLetter}`}
-                  </span>
-                </Link>
+                  </p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Link
+                      href={result.route}
+                      className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-md border border-primary/20 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/5"
+                    >
+                      <Eye className="h-3.5 w-3.5" aria-hidden />
+                      Review
+                    </Link>
+                    <Link
+                      href={result.practiceRoute}
+                      className="inline-flex min-h-8 flex-1 items-center justify-center gap-1.5 rounded-md bg-info px-2.5 py-1 text-xs font-semibold text-white hover:bg-info/90"
+                    >
+                      <PlayCircle className="h-3.5 w-3.5" aria-hidden />
+                      Practice
+                    </Link>
+                  </div>
+                </article>
               </li>
             ))}
           </ul>
