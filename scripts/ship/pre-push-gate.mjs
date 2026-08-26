@@ -131,6 +131,20 @@ function stripForBalance(source, ext) {
       }
       continue;
     }
+    if (isCs && ch === '"' && next === '"' && source[i + 2] === '"') {
+      out += '   ';
+      i += 3;
+      while (i < n) {
+        if (source[i] === '"' && source[i + 1] === '"' && source[i + 2] === '"') {
+          out += '   ';
+          i += 3;
+          break;
+        }
+        out += source[i] === '\n' ? '\n' : ' ';
+        i += 1;
+      }
+      continue;
+    }
     if (isCs && ch === '@' && next === '"') {
       out += '  ';
       i += 2;
@@ -320,6 +334,22 @@ export function selfTest() {
       path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
       source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n    }\n}\n',
       wantFail: true,
+    },
+    {
+      name: 'c# raw interpolated string braces stay legal',
+      path: 'backend/src/OetLearner.Api/Services/AuthService.cs',
+      source: [
+        'private static string BuildQrCodeDataUrl(string secretKey, string otpAuthUri)',
+        '{',
+        '    var svg = $$"""',
+        '        <svg xmlns="http://www.w3.org/2000/svg" width="420" height="180">',
+        '          <text x="16" y="28">Secret: {{WebUtility.HtmlEncode(secretKey)}}</text>',
+        '        </svg>',
+        '        """;',
+        '    return $"data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}";',
+        '}',
+      ].join('\n'),
+      wantFail: false,
     },
     {
       name: 'normal xUnit method boundary is legal',
