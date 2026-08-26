@@ -406,11 +406,25 @@ public sealed class ManualPaymentService : IManualPaymentService
         var includedCredits = planVersion?.IncludedCredits ?? plan?.IncludedCredits ?? 0;
         if (includedCredits > 0)
         {
-            var wallet = await _db.Wallets.FirstAsync(w => w.UserId == row.UserId, ct);
-            var walletIdempotencyKey = $"manual-approve:{row.Id}";
+            var wallet = await _db.Wallets.FirstOrDefaultAsync(w => w.UserId == row.UserId, ct);
+            if (wallet is null)
+            {
+                wallet = new Wallet
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    UserId = row.UserId,
+                    CreditBalance = 0,
+                    LedgerSummaryJson = "[]",
+                    LastUpdatedAt = now,
+                };
+                _db.Wallets.Add(wallet);
+            }
+
             var existingWalletGrant = await _db.WalletTransactions.FirstOrDefaultAsync(
                 x => x.WalletId == wallet.Id
-                     && x.IdempotencyKey == walletIdempotencyKey, ct);
+                     && x.TransactionType == "plan_grant"
+                     && x.ReferenceType == "subscription"
+                     && x.ReferenceId == subscription.Id, ct);
             if (existingWalletGrant is null)
             {
                 wallet.CreditBalance += includedCredits;
@@ -423,10 +437,9 @@ public sealed class ManualPaymentService : IManualPaymentService
                     Amount = includedCredits,
                     BalanceAfter = wallet.CreditBalance,
                     ReferenceType = "subscription",
-                    ReferenceId = row.Id,
-                    IdempotencyKey = walletIdempotencyKey,
+                    ReferenceId = subscription.Id,
                     Description = $"Included credits for {planVersion?.Name ?? plan?.Name ?? row.CourseName}",
-                    CreatedBy = "admin",
+                    CreatedBy = adminId,
                     CreatedAt = now,
                 });
             }
@@ -445,18 +458,18 @@ public sealed class ManualPaymentService : IManualPaymentService
         // bundled AI credits must be granted here, with the same idempotency
         // guard the webhook uses. Keyed on the manual request id so re-approval
         // never double-grants.
-        // NOTE: the legacy raw-token AiCreditLedger write was removed —
-        // candidate entitlements are Credits/Attempts/Unlimited only
-        // (Master Catalogue §2); the old TokensDelta rows are no longer written.
         var aiCredits = planVersion?.BundledAiCredits ?? plan?.BundledAiCredits ?? 0;
         if (aiCredits > 0)
         {
             var planCodeForCredit = planVersion?.Code ?? plan!.Code;
             var creditReferenceId = $"manual:{row.Id}:{planCodeForCredit}";
+            var durationMonths = planVersion?.DurationMonths ?? plan?.DurationMonths ?? 0;
+            var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
+
+            subscription.AiCreditsRemaining += aiCredits;
+
             if (_aiPackageCredits is not null)
             {
-                var durationMonths = planVersion?.DurationMonths ?? plan?.DurationMonths ?? 0;
-                var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
                 await _aiPackageCredits.GrantCourseGiftCreditsAsync(
                     row.UserId,
                     planCodeForCredit,
@@ -465,6 +478,28 @@ public sealed class ManualPaymentService : IManualPaymentService
                     creditReferenceId,
                     giftExpiry,
                     ct);
+            }
+
+            var hasLegacyLedgerEntry = await _db.AiCreditLedger.AnyAsync(
+                entry => entry.UserId == row.UserId
+                    && entry.ReferenceId == creditReferenceId
+                    && entry.Source == AiCreditSource.Purchase,
+                ct);
+            if (!hasLegacyLedgerEntry)
+            {
+                _db.AiCreditLedger.Add(new AiCreditLedgerEntry
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    UserId = row.UserId,
+                    TokensDelta = aiCredits,
+                    CostDeltaUsd = 0m,
+                    Source = AiCreditSource.Purchase,
+                    Description = $"{planVersion?.Name ?? plan?.Name ?? row.CourseName} gifted AI credits",
+                    ReferenceId = creditReferenceId,
+                    ExpiresAt = giftExpiry,
+                    CreatedAt = now,
+                    CreatedByAdminId = adminId,
+                });
             }
         }
 

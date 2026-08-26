@@ -461,9 +461,11 @@ public static class BillingExpansionEndpoints
                 && row.Status == "paid")
             .OrderByDescending(row => row.SubmittedAt)
             .FirstOrDefaultAsync(ct);
+        var gatewayReceiptWasApprovedInThisPass = false;
         if (gatewayReceipt is not null)
         {
             await manualPayments.ApproveAsync(gatewayReceipt.Id, http.AdminId(), request.Notes, ct);
+            gatewayReceiptWasApprovedInThisPass = true;
         }
 
         if (!externalOnly)
@@ -511,64 +513,67 @@ public static class BillingExpansionEndpoints
             user.CurrentPlanId = targetPlanCode;
         }
 
-        // Grant included review credits (wallet credits)
-        var includedCredits = purchasedVersion?.IncludedCredits ?? plan?.IncludedCredits ?? 0;
-        if (includedCredits > 0)
+        if (!gatewayReceiptWasApprovedInThisPass)
         {
-            var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == subscription.UserId, ct);
-            if (wallet is null)
+            // Grant included review credits (wallet credits)
+            var includedCredits = purchasedVersion?.IncludedCredits ?? plan?.IncludedCredits ?? 0;
+            if (includedCredits > 0)
             {
-                wallet = new Wallet
+                var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == subscription.UserId, ct);
+                if (wallet is null)
                 {
-                    Id = Guid.NewGuid().ToString("N"),
-                    UserId = subscription.UserId,
-                    CreditBalance = 0,
-                    LedgerSummaryJson = "[]",
-                    LastUpdatedAt = now,
-                };
-                db.Wallets.Add(wallet);
-                await db.SaveChangesAsync(ct);
+                    wallet = new Wallet
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        UserId = subscription.UserId,
+                        CreditBalance = 0,
+                        LedgerSummaryJson = "[]",
+                        LastUpdatedAt = now,
+                    };
+                    db.Wallets.Add(wallet);
+                    await db.SaveChangesAsync(ct);
+                }
+
+                var existingWalletGrant = await db.WalletTransactions.FirstOrDefaultAsync(
+                    x => x.WalletId == wallet.Id
+                         && x.TransactionType == "plan_grant"
+                         && x.ReferenceType == "subscription"
+                         && x.ReferenceId == subscription.Id, ct);
+                if (existingWalletGrant is null)
+                {
+                    wallet.CreditBalance += includedCredits;
+                    wallet.LastUpdatedAt = now;
+                    db.WalletTransactions.Add(new WalletTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        WalletId = wallet.Id,
+                        TransactionType = "plan_grant",
+                        Amount = includedCredits,
+                        BalanceAfter = wallet.CreditBalance,
+                        ReferenceType = "subscription",
+                        ReferenceId = subscription.Id,
+                        Description = $"Included credits for {plan?.Name ?? subscription.PlanId}",
+                        CreatedBy = http.AdminId(),
+                        CreatedAt = now,
+                    });
+                }
             }
 
-            var existingWalletGrant = await db.WalletTransactions.FirstOrDefaultAsync(
-                x => x.WalletId == wallet.Id
-                     && x.TransactionType == "plan_grant"
-                     && x.ReferenceType == "subscription"
-                     && x.ReferenceId == subscription.Id, ct);
-            if (existingWalletGrant is null)
+            // Grant bundled AI credits (gift credits)
+            var aiCredits = purchasedVersion?.BundledAiCredits ?? plan?.BundledAiCredits ?? 0;
+            if (aiCredits > 0 && aiPackageCredits is not null)
             {
-                wallet.CreditBalance += includedCredits;
-                wallet.LastUpdatedAt = now;
-                db.WalletTransactions.Add(new WalletTransaction
-                {
-                    Id = Guid.NewGuid(),
-                    WalletId = wallet.Id,
-                    TransactionType = "plan_grant",
-                    Amount = includedCredits,
-                    BalanceAfter = wallet.CreditBalance,
-                    ReferenceType = "subscription",
-                    ReferenceId = subscription.Id,
-                    Description = $"Included credits for {plan?.Name ?? subscription.PlanId}",
-                    CreatedBy = http.AdminId(),
-                    CreatedAt = now,
-                });
+                var durationMonths = plan?.DurationMonths ?? purchasedVersion?.DurationMonths ?? 0;
+                var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
+                await aiPackageCredits.GrantCourseGiftCreditsAsync(
+                    subscription.UserId,
+                    targetPlanCode,
+                    plan?.Name ?? subscription.PlanId,
+                    aiCredits,
+                    $"plan:{subscription.Id}:{targetPlanCode}",
+                    giftExpiry,
+                    ct);
             }
-        }
-
-        // Grant bundled AI credits (gift credits)
-        var aiCredits = purchasedVersion?.BundledAiCredits ?? plan?.BundledAiCredits ?? 0;
-        if (aiCredits > 0 && aiPackageCredits is not null)
-        {
-            var durationMonths = plan?.DurationMonths ?? purchasedVersion?.DurationMonths ?? 0;
-            var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
-            await aiPackageCredits.GrantCourseGiftCreditsAsync(
-                subscription.UserId,
-                targetPlanCode,
-                plan?.Name ?? subscription.PlanId,
-                aiCredits,
-                $"plan:{subscription.Id}:{targetPlanCode}",
-                giftExpiry,
-                ct);
         }
 
         // Mark linked ManualPaymentRequest rows as paid
