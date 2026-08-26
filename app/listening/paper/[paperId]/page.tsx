@@ -983,18 +983,25 @@ function ActiveSubSectionPanel({
   const partBExtracts = isPartB
     ? (subSection.extracts?.length ? subSection.extracts : subSection.extract ? [subSection.extract] : [])
     : [];
+  // Exam Part B slicing is only valid when each of the 6 questions has its own
+  // cue-bounded extract. Legacy/monolithic papers with a single 08:33 extract
+  // for 6 questions must show all 6 at once — otherwise Q2..Q6 are unreachable.
+  const shouldSliceExamPartB = isPartB
+    && partBExtracts.length > 1
+    && subSection.questions.length > 1
+    && partBExtracts.length === subSection.questions.length;
   const [partBQuestionIndex, setPartBQuestionIndex] = useState(
-    subSection.partCode === 'B'
+    shouldSliceExamPartB
       ? Math.max(0, Math.min(subSection.questions.length - 1, resumeAudioQuestionIndex ?? 0))
       : 0,
   );
-  const activePartBQuestion = isPartB ? (subSection.questions[partBQuestionIndex] ?? null) : null;
-  const activePartBExtract = isPartB ? (partBExtracts[partBQuestionIndex] ?? null) : null;
-  const visibleQuestions = isPartB
+  const activePartBQuestion = shouldSliceExamPartB ? (subSection.questions[partBQuestionIndex] ?? null) : null;
+  const activePartBExtract = shouldSliceExamPartB ? (partBExtracts[partBQuestionIndex] ?? null) : null;
+  const visibleQuestions = shouldSliceExamPartB
     ? (activePartBQuestion ? [activePartBQuestion] : [])
     : subSection.questions;
   const [partBExtractEnded, setPartBExtractEnded] = useState(false);
-  const canMoveToNextPartBQuestion = isPartB
+  const canMoveToNextPartBQuestion = shouldSliceExamPartB
     && !timerExpired
     && partBQuestionIndex < subSection.questions.length - 1;
   // Timer expiry opens the same explicit boundary confirmation as the Next
@@ -1042,7 +1049,7 @@ function ActiveSubSectionPanel({
 
   const requestAdvance = () => {
     if (advancing || audioFailure) return;
-    if (isPartB && !partBExtractEnded && !timerExpired) return;
+    if (shouldSliceExamPartB && !partBExtractEnded && !timerExpired) return;
     setShowConfirm(true);
   };
 
@@ -1079,15 +1086,15 @@ function ActiveSubSectionPanel({
       <section className="space-y-4 xl:sticky xl:top-4 xl:self-start">
         <SubSectionTimer label={subSection.label} remaining={remaining} />
         <SubSectionAudio
-          key={`${attemptId}:${subSection.index}:${partBQuestionIndex}`}
+          key={`${attemptId}:${subSection.index}:${shouldSliceExamPartB ? partBQuestionIndex : 'all'}`}
           attemptId={attemptId}
           subSection={subSection}
-          cueStartMs={activePartBExtract?.audioStartMs ?? null}
-          cueEndMs={activePartBExtract?.audioEndMs ?? null}
-           onExtractComplete={isPartB ? handlePartBExtractComplete : undefined}
+          cueStartMs={shouldSliceExamPartB ? (activePartBExtract?.audioStartMs ?? null) : null}
+          cueEndMs={shouldSliceExamPartB ? (activePartBExtract?.audioEndMs ?? null) : null}
+           onExtractComplete={shouldSliceExamPartB ? handlePartBExtractComplete : undefined}
            resumeState={resumeAudioState}
            resumeAtMs={resumeAudioAtMs}
-           questionIndex={isPartB ? partBQuestionIndex : null}
+           questionIndex={shouldSliceExamPartB ? partBQuestionIndex : null}
            onIntegrityEvent={onIntegrityEvent}
            onBufferingChange={setAudioBuffering}
            onAudioFailure={handleAudioFailure}
@@ -1111,7 +1118,7 @@ function ActiveSubSectionPanel({
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Questions</h2>
           <Badge variant="info">
-            {isPartB
+            {shouldSliceExamPartB
               ? `Question ${partBQuestionIndex + 1} of ${subSection.questions.length}`
               : `${subSection.questions.length} item${subSection.questions.length === 1 ? '' : 's'}`}
           </Badge>
@@ -1154,7 +1161,7 @@ function ActiveSubSectionPanel({
             variant="primary"
             onClick={requestAdvance}
             loading={advancing}
-            disabled={audioFailure || (isPartB && !partBExtractEnded && !timerExpired)}
+            disabled={audioFailure || (shouldSliceExamPartB && !partBExtractEnded && !timerExpired)}
             aria-label={isLastSection ? 'Submit attempt' : 'Advance to next sub-section'}
           >
             {isLastSection ? <Send className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}

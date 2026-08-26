@@ -1083,10 +1083,21 @@ function PlayerContent() {
       })
       .sort((a, b) => a.displayOrder - b.displayOrder)
     : [];
-  const activePartBQuestion = currentSection === 'B'
+  // Part B slicing is exam-only. Practice (individual Part B) shows all 6 at once.
+  // Monolithic papers (1 extract, 6 questions) also show all at once — slicing
+  // would require 6 cue windows that legacy data lacks and would trap on Q1.
+  const isMonolithicPartB = currentSection === 'B'
+    && currentExtracts.length === 1
+    && (sectionGroups?.B?.length ?? 0) > 1;
+  const shouldSlicePartB = currentSection === 'B'
+    && (sectionGroups?.B?.length ?? 0) > 1
+    && currentExtracts.length > 1
+    && !isMonolithicPartB
+    && (mode === 'exam' || mode === 'home' || strictReadinessRequired);
+  const activePartBQuestion = shouldSlicePartB
     ? (sectionGroups?.B?.[currentPartBQuestionIndex] ?? null)
     : null;
-  const visibleExtracts = currentSection === 'B'
+  const visibleExtracts = shouldSlicePartB
     ? (currentExtracts[currentPartBQuestionIndex] ? [currentExtracts[currentPartBQuestionIndex]] : [])
     : currentExtracts;
   // Per-section audio: each section plays its OWN uploaded file (Part B plays one
@@ -1100,32 +1111,39 @@ function PlayerContent() {
   const currentSectionAudioUrl = perSectionAudioUrl ?? session?.paper.audioUrl ?? null;
   const currentSectionAudioEnded = currentSection ? endedSections.has(currentSection) : false;
   const activeExtract = visibleExtracts[0] ?? null;
-  // Part B is six independent short extracts in one forward-only sequence.
-  // Its per-section audio file therefore still uses the authored cue window for
-  // the active question; dropping those cues would expose all six questions at
-  // once and allow one long playback to bypass the Part B contract.
-  const currentExtractWindows = currentExtracts.filter((extract) => (
-    (currentSection === 'B'
-      ? extract.partCode === activeExtract?.partCode && extract.displayOrder === activeExtract?.displayOrder
-      : !usingPerSectionAudio)
-    && extract.audioStartMs != null
-    && extract.audioEndMs != null
-    && extract.audioEndMs > extract.audioStartMs
-  ));
+  // Part B slicing (exam-only) keeps per-question cue windows; practice /
+  // monolithic B shows the whole shared file at once so cues are dropped.
+  const currentExtractWindows = shouldSlicePartB
+    ? currentExtracts.filter((extract) => (
+      extract.partCode === activeExtract?.partCode
+      && extract.displayOrder === activeExtract?.displayOrder
+      && extract.audioStartMs != null
+      && extract.audioEndMs != null
+      && extract.audioEndMs > extract.audioStartMs
+    ))
+    : usingPerSectionAudio
+      ? []
+      : currentExtracts.filter((extract) => (
+        extract.audioStartMs != null
+        && extract.audioEndMs != null
+        && extract.audioEndMs > extract.audioStartMs
+      ));
   const currentSectionAudioStartMs = currentExtractWindows.length > 0
     ? Math.min(...currentExtractWindows.map((extract) => extract.audioStartMs!))
     : null;
   const currentSectionAudioEndMs = currentExtractWindows.length > 0
     ? Math.max(...currentExtractWindows.map((extract) => extract.audioEndMs!))
     : null;
-  const activeAudioStartMs = usingPerSectionAudio
-    && currentSection !== 'B'
+  const activeAudioStartMs = shouldSlicePartB
+    ? currentSectionAudioStartMs
+    : usingPerSectionAudio
       ? null
-    : currentSectionAudioStartMs;
-  const activeAudioEndMs = usingPerSectionAudio
-    && currentSection !== 'B'
+      : currentSectionAudioStartMs;
+  const activeAudioEndMs = shouldSlicePartB
+    ? currentSectionAudioEndMs
+    : usingPerSectionAudio
       ? null
-    : currentSectionAudioEndMs;
+      : currentSectionAudioEndMs;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
   const canSkipPreview = session?.modePolicy.mode === 'practice';
@@ -1136,10 +1154,10 @@ function PlayerContent() {
   // Exam-mode gate on opening the review window: per-section audio waits for the
   // section's own file to end; the legacy combined-file model waits for all cue
   // windows to be crossed (or has no window to gate on).
-  const partBQuestionAudioEnded = currentSection === 'B'
+  const partBQuestionAudioEnded = shouldSlicePartB
     && activeExtract != null
     && completedExtractIds.has(`${activeExtract.partCode}-${activeExtract.displayOrder}`);
-  const audioGateSatisfied = currentSection === 'B'
+  const audioGateSatisfied = shouldSlicePartB
     ? partBQuestionAudioEnded
     : usingPerSectionAudio
       ? currentSectionAudioEnded
@@ -1509,7 +1527,7 @@ function PlayerContent() {
   };
 
   const advancePartBQuestion = async () => {
-    if (audioValidityHeld || currentSection !== 'B' || !partBQuestionAudioEnded) return;
+    if (audioValidityHeld || !shouldSlicePartB || !partBQuestionAudioEnded) return;
     const nextIndex = currentPartBQuestionIndex + 1;
     const hasNextQuestion = nextIndex < (sectionGroups?.B?.length ?? 0);
     if (!hasNextQuestion) {
@@ -1528,13 +1546,13 @@ function PlayerContent() {
   // candidate confirms the irreversible Next action, begin the next extract
   // from its cue without exposing a pause/replay control.
   useEffect(() => {
-    if (!autoPlayNextPartBQuestionRef.current || currentSection !== 'B' || phase !== 'audio') return;
+    if (!autoPlayNextPartBQuestionRef.current || !shouldSlicePartB || phase !== 'audio') return;
     autoPlayNextPartBQuestionRef.current = false;
     const audio = audioRef.current;
     if (!audio) return;
     if (activeAudioStartMs != null) seekAudioTo(activeAudioStartMs / 1000);
     audio.play().catch(handlePlaybackFailure);
-  }, [activeAudioStartMs, currentPartBQuestionIndex, currentSection, phase, seekAudioTo]);
+  }, [activeAudioStartMs, currentPartBQuestionIndex, shouldSlicePartB, phase, seekAudioTo]);
 
   // Audio is non-pausable in every mode. Cue-end / `ended` continues the
   // section automatically. Part B only fail-closes when an extract is
@@ -1545,7 +1563,7 @@ function PlayerContent() {
     if (audioValidityHeld) return;
     if (!currentSection) return;
     if (autoAdvanceInFlightRef.current) return;
-    if (currentSection === 'B') {
+    if (shouldSlicePartB) {
       const missingCueBoundary = currentExtracts.length === 0 || currentExtracts.some((extract) => (
         extract.audioStartMs == null
         || extract.audioEndMs == null
@@ -1558,6 +1576,10 @@ function PlayerContent() {
         return;
       }
       if (!allCurrentExtractsCompleted) return;
+    }
+    if (currentSection === 'B' && !shouldSlicePartB) {
+      // Non-sliced Part B (practice / monolithic) advances like a normal
+      // section — do not require per-extract cue completion.
     }
     autoAdvanceInFlightRef.current = true;
     try {
@@ -1652,13 +1674,13 @@ function PlayerContent() {
       .sort((a, b) => a - b)
     : [];
   const currentSectionUnansweredList = formatQuestionNumberList(currentSectionUnansweredNumbers);
-  const navigationQuestions = currentSection === 'B'
+  const navigationQuestions = shouldSlicePartB
     ? (activePartBQuestion ? [activePartBQuestion] : [])
     : currentSection ? sectionGroups?.[currentSection] ?? [] : [];
   const visibleQuestionSections = currentSection
     ? [{
       section: currentSection,
-      questions: currentSection === 'B'
+      questions: shouldSlicePartB
         ? (activePartBQuestion ? [activePartBQuestion] : [])
         : sectionGroups?.[currentSection] ?? [],
     }]
@@ -2201,11 +2223,13 @@ function PlayerContent() {
 
             <div className="flex items-center justify-between gap-3 pt-4">
               <p className="text-xs text-muted">
-              {currentSection === 'B'
+              {shouldSlicePartB
                 ? 'Part B shows one question at a time. Each short extract plays once; after it ends, Next is irreversible.'
-                : 'Audio plays once per section and cannot be paused, scrubbed, or replayed. When it ends, confirm the irreversible boundary before the next section opens.'}
+                : currentSection === 'B'
+                  ? 'Part B — 6 short workplace extracts. Audio shares one file; all questions are visible and remain editable until you submit or advance.'
+                  : 'Audio plays once per section and cannot be paused, scrubbed, or replayed. When it ends, confirm the irreversible boundary before the next section opens.'}
               </p>
-              {currentSection === 'B' && phase === 'audio' && partBQuestionAudioEnded && !audioValidityHeld ? (
+              {shouldSlicePartB && phase === 'audio' && partBQuestionAudioEnded && !audioValidityHeld ? (
                 <Button
                   variant="primary"
                   onClick={() => setShowNextConfirm(true)}
@@ -2220,14 +2244,14 @@ function PlayerContent() {
             <Modal
               open={showNextConfirm}
               onClose={() => setShowNextConfirm(false)}
-              title={currentSection === 'B'
+              title={shouldSlicePartB
                 ? currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'Continue to the next Part B question?' : 'Lock Part B and continue?'
                 : phase === 'review' ? 'Lock this section and continue?' : currentSectionReviewSeconds > 0 ? 'Open review window?' : 'Lock Part B and continue?'}
               size="sm"
             >
               <div className="space-y-4">
                 <p className="text-sm text-muted">
-                  {currentSection === 'B'
+                  {shouldSlicePartB
                     ? `This will permanently lock question ${activePartBQuestion?.number ?? ''}. You will not be able to return to it. ${currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'The next short extract will start automatically.' : 'Part C will open next.'}`
                     : phase === 'review'
                     ? `This will permanently lock ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'}. You will not be able to return to it at any point.`
@@ -2246,7 +2270,7 @@ function PlayerContent() {
                     disabled={isAdvancingPhase}
                     onClick={async () => {
                       setShowNextConfirm(false);
-                      if (currentSection === 'B') {
+                      if (shouldSlicePartB) {
                         await advancePartBQuestion();
                       } else if (phase === 'review') {
                         await advanceFromReview();
@@ -2255,7 +2279,7 @@ function PlayerContent() {
                       }
                     }}
                   >
-                    {currentSection === 'B'
+                    {shouldSlicePartB
                       ? currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'Lock & start next' : 'Lock & continue'
                       : phase === 'review' ? 'Lock & continue' : currentSectionReviewSeconds > 0 ? 'Open review window' : 'Lock & continue'}
                   </Button>
