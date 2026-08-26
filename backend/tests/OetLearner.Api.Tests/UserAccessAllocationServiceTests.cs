@@ -335,6 +335,60 @@ public class UserAccessAllocationServiceTests
     }
 
     [Fact]
+    public async Task PutScope_EmptyNestedScopes_RemoveRestrictionsAndRestorePackageDefaults()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-package-defaults";
+        await SeedLearnerAsync(db, userId);
+        var now = DateTimeOffset.UtcNow;
+        db.UserMaterialFolderAccesses.Add(new UserMaterialFolderAccess
+        {
+            Id = "ufa-restricted",
+            UserId = userId,
+            FolderId = "writing-only",
+            CreatedAt = now,
+        });
+        db.UserRecallSetAccesses.Add(new UserRecallSetAccess
+        {
+            Id = "ursa-restricted",
+            UserId = userId,
+            RecallSetCode = "2026",
+            CreatedAt = now,
+        });
+        db.UserVideoAccesses.Add(new UserVideoAccess
+        {
+            Id = "uva-restricted",
+            UserId = userId,
+            VideoId = "writing-video",
+            CreatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var access = await CreateService(db).PutScopeAsync(
+            "admin", "Admin", userId,
+            new AdminUserAccessScopeRequest(
+                Modules: new List<AdminModuleOverrideDto>
+                {
+                    new("Recalls", true),
+                    new("MaterialsLibrary", true),
+                    new("VideoLibrary", true),
+                },
+                MaterialFolderIds: [],
+                RecallSetCodes: [],
+                AccessExpiresAt: null,
+                ClearAccessExpiry: false,
+                VideoIds: []),
+            default);
+
+        Assert.Empty(access.MaterialFolderIds);
+        Assert.Empty(access.RecallSetCodes);
+        Assert.Empty(access.VideoIds);
+        Assert.Empty(await db.UserMaterialFolderAccesses.Where(row => row.UserId == userId).ToListAsync());
+        Assert.Empty(await db.UserRecallSetAccesses.Where(row => row.UserId == userId).ToListAsync());
+        Assert.Empty(await db.UserVideoAccesses.Where(row => row.UserId == userId).ToListAsync());
+    }
+
+    [Fact]
     public async Task PutScope_PreservesInitialVideoScopeDate_WhenUpdatingVideoSelection()
     {
         await using var db = CreateDb();

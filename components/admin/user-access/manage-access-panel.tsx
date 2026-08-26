@@ -242,45 +242,76 @@ export function ManageAccessPanel({
 
       {materialsEnabled ? (
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-navy">Materials Library scope</h3>
+          <h3 className="text-sm font-semibold text-navy">Materials Library content</h3>
           <p className="text-xs text-muted">
-            Tick a section to grant it all, or drill down to specific folders. Nothing ticked = the learner
-            gets every folder their plan grants.
+            Automatic by default: leave the optional restriction below empty and the learner receives every
+            Materials Library folder their package grants.
           </p>
-          <FolderScopePicker
-            folderTree={folderTree}
-            selectedIds={value.materialFolderIds}
-            onChange={(materialFolderIds) => onChange({ ...value, materialFolderIds })}
-            disabled={disabled || isLoadingOptions}
-          />
+          <details className="rounded-xl border border-border bg-background-light px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium text-navy">Optional manual restriction</summary>
+            <p className="mt-2 text-xs text-muted">
+              Select folders only when you deliberately need to limit this learner below their package allowance.
+            </p>
+            <div className="mt-3">
+              <FolderScopePicker
+                folderTree={folderTree}
+                selectedIds={value.materialFolderIds}
+                onChange={(materialFolderIds) => onChange({ ...value, materialFolderIds })}
+                disabled={disabled || isLoadingOptions}
+              />
+            </div>
+          </details>
         </section>
       ) : null}
 
       {videosEnabled ? (
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-navy">Videos scope</h3>
+          <h3 className="text-sm font-semibold text-navy">Video Library content</h3>
           <p className="text-xs text-muted">
-            Tick a Section → Language group to grant it all, or drill down to individual videos. Nothing
-            ticked = the learner gets every video their plan grants (for their profession).
+            Automatic by default: leave the optional restriction below empty and the learner receives every
+            video their package grants for their profession.
           </p>
-          <VideoScopePicker
-            videos={videos}
-            selectedIds={value.videoIds}
-            onChange={(videoIds) => onChange({ ...value, videoIds })}
-            disabled={disabled || isLoadingOptions}
-          />
+          <details className="rounded-xl border border-border bg-background-light px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium text-navy">
+              Optional manual restriction
+            </summary>
+            <p className="mt-2 text-xs text-muted">
+              Select sections or individual videos only when you deliberately need to limit this learner below
+              their package allowance.
+            </p>
+            <div className="mt-3">
+              <VideoScopePicker
+                videos={videos}
+                selectedIds={value.videoIds}
+                onChange={(videoIds) => onChange({ ...value, videoIds })}
+                disabled={disabled || isLoadingOptions}
+              />
+            </div>
+          </details>
         </section>
       ) : null}
 
       {recallsEnabled ? (
         <section className="space-y-2">
-          <h3 className="text-sm font-semibold text-navy">Recall sets scope</h3>
-          <RecallSetPicker
-            recallSets={recallSets}
-            selectedCodes={value.recallSetCodes}
-            onChange={(recallSetCodes) => onChange({ ...value, recallSetCodes })}
-            disabled={disabled || isLoadingOptions}
-          />
+          <h3 className="text-sm font-semibold text-navy">Recall content</h3>
+          <p className="text-xs text-muted">
+            Automatic by default: leave the optional restriction below empty and the learner receives every
+            recall set their package grants.
+          </p>
+          <details className="rounded-xl border border-border bg-background-light px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium text-navy">Optional manual restriction</summary>
+            <p className="mt-2 text-xs text-muted">
+              Select recall sets only when you deliberately need to limit this learner below their package allowance.
+            </p>
+            <div className="mt-3">
+              <RecallSetPicker
+                recallSets={recallSets}
+                selectedCodes={value.recallSetCodes}
+                onChange={(recallSetCodes) => onChange({ ...value, recallSetCodes })}
+                disabled={disabled || isLoadingOptions}
+              />
+            </div>
+          </details>
         </section>
       ) : null}
 

@@ -276,7 +276,7 @@ export function QuickGrantModal({
                 onClick={() => void handleExpandScope()}
                 className="flex items-center gap-1 text-sm font-medium text-primary"
               >
-                Customize scope
+                Add an optional manual restriction
                 {scopeExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
               </button>
               {scopeExpanded ? (
@@ -290,7 +290,9 @@ export function QuickGrantModal({
                   ) : (
                     <VideoScopePicker videos={videos} selectedIds={scopeSelection} onChange={setScopeSelection} />
                   )}
-                  <p className="mt-1 text-xs text-muted">Nothing ticked = every item their plan grants.</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Leave this empty to keep automatic package-based content access.
+                  </p>
                 </div>
               ) : null}
             </div>

@@ -22,16 +22,22 @@ export function ModuleToggles({ overrides, onChange, disabled }: ModuleTogglesPr
   }
 
   return (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {MODULE_KEYS.map((moduleKey) => (
-        <Checkbox
-          key={moduleKey}
-          label={MODULE_LABELS[moduleKey]}
-          checked={isEnabled(overrides, moduleKey)}
-          onChange={() => toggle(moduleKey)}
-          disabled={disabled}
-        />
-      ))}
+    <div className="space-y-2">
+      <p className="text-xs text-muted">
+        These switches turn modules on or off. The learner’s package automatically decides which content appears
+        inside each enabled module.
+      </p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {MODULE_KEYS.map((moduleKey) => (
+          <Checkbox
+            key={moduleKey}
+            label={MODULE_LABELS[moduleKey]}
+            checked={isEnabled(overrides, moduleKey)}
+            onChange={() => toggle(moduleKey)}
+            disabled={disabled}
+          />
+        ))}
+      </div>
     </div>
   );
 }

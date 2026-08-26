@@ -312,11 +312,12 @@ public record AdminUserAccessAddonRequest(
 /// <summary>A single per-user module override (see ModuleKeys).</summary>
 public record AdminModuleOverrideDto(string ModuleKey, bool Enabled);
 
-/// <summary>Declarative overwrite of a user's per-user scope: module overrides, the
-/// Materials folder allow-list, the Recall-set allow-list, and the master access-expiry
-/// login gate. Each list REPLACES the existing rows. Set <paramref name="ClearAccessExpiry"/>
-/// to remove the master expiry; otherwise <paramref name="AccessExpiresAt"/> (when provided)
-/// sets it.</summary>
+/// <summary>Declarative overwrite of a user's per-user overrides: module switches and optional
+/// Materials, Recall-set, and Video restrictions plus the master access-expiry login gate.
+/// Empty nested-content lists remove the restriction and restore automatic package-based content
+/// access; non-empty lists deliberately limit the learner below their package allowance. Each list
+/// REPLACES the existing rows. Set <paramref name="ClearAccessExpiry"/> to remove the master
+/// expiry; otherwise <paramref name="AccessExpiresAt"/> (when provided) sets it.</summary>
 public record AdminUserAccessScopeRequest(
     List<AdminModuleOverrideDto>? Modules,
     List<string>? MaterialFolderIds,
