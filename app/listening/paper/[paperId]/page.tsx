@@ -1007,6 +1007,14 @@ function ActiveSubSectionPanel({
     setShowConfirm(true);
   }, []);
 
+  // Stable identities so SubSectionAudio's blob-fetch effect does not re-run
+  // on every parent render (the timer ticks each second, and answer edits also
+  // re-render this panel). An inline arrow here would reset the audio source
+  // and revoke the in-use object URL every second, interrupting play() and
+  // leaving the section stuck on the buffering banner.
+  const handleAudioFailure = useCallback(() => setAudioFailure(true), []);
+  const handlePartBExtractComplete = useCallback(() => setPartBExtractEnded(true), []);
+
   useEffect(() => {
     setPartBExtractEnded(false);
   }, [partBQuestionIndex]);
@@ -1076,13 +1084,13 @@ function ActiveSubSectionPanel({
           subSection={subSection}
           cueStartMs={activePartBExtract?.audioStartMs ?? null}
           cueEndMs={activePartBExtract?.audioEndMs ?? null}
-           onExtractComplete={isPartB ? () => setPartBExtractEnded(true) : undefined}
+           onExtractComplete={isPartB ? handlePartBExtractComplete : undefined}
            resumeState={resumeAudioState}
            resumeAtMs={resumeAudioAtMs}
            questionIndex={isPartB ? partBQuestionIndex : null}
            onIntegrityEvent={onIntegrityEvent}
            onBufferingChange={setAudioBuffering}
-           onAudioFailure={() => setAudioFailure(true)}
+           onAudioFailure={handleAudioFailure}
            onePlayOnly={onePlayOnly}
         />
         {showPdf ? (
@@ -1281,6 +1289,15 @@ function SubSectionAudio({
   const programmaticSeekTargetRef = useRef<number | null>(null);
   const hasStartedRef = useRef(false);
   const autoPlayTriedRef = useRef(false);
+  // One-shot attempt marker: when a play() attempt is interrupted (AbortError
+  // from a seek/revoke race), the next canplay/seeked retries it instead of
+  // leaving the section permanently stuck on the buffering banner.
+  const playAbortPendingRef = useRef(false);
+  const playAbortCountRef = useRef(0);
+  const onAudioFailureRef = useRef(onAudioFailure);
+  useEffect(() => {
+    onAudioFailureRef.current = onAudioFailure;
+  }, [onAudioFailure]);
 
   const setBuffering = useCallback((buffering: boolean) => {
     setIsBuffering(buffering);
@@ -1305,6 +1322,8 @@ function SubSectionAudio({
     setAudioError(null);
     setNeedsUserPlay(false);
     autoPlayTriedRef.current = false;
+    playAbortPendingRef.current = false;
+    playAbortCountRef.current = 0;
     setBuffering(true);
     (async () => {
       try {
@@ -1325,7 +1344,7 @@ function SubSectionAudio({
             playbackValidity: 'admin_review_required',
             loadFailure: true,
           });
-          onAudioFailure();
+          onAudioFailureRef.current();
           setAudioError(err instanceof Error ? err.message : 'Audio could not be loaded. Check your connection and retry.');
         }
       }
@@ -1334,7 +1353,7 @@ function SubSectionAudio({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [audioRetryKey, onAudioFailure, onIntegrityEvent, questionIndex, setBuffering, subSection.audioRequiresAuth, subSection.audioUrl, subSection.partCode]);
+  }, [audioRetryKey, onIntegrityEvent, questionIndex, setBuffering, subSection.audioRequiresAuth, subSection.audioUrl, subSection.partCode]);
 
   const tryPlay = useCallback(() => {
     const el = audioRef.current;
@@ -1347,8 +1366,18 @@ function SubSectionAudio({
         const isAbort = err instanceof DOMException && err.name === 'AbortError';
         const isNotAllowed = err instanceof DOMException && err.name === 'NotAllowedError';
         if (isAbort || msg.includes('play() request was interrupted')) {
-          // Seek-then-play race or teardown mid-play — keep buffering paused and retry on next canPlay.
+          // Seek-then-play race or teardown mid-play — keep buffering paused and
+          // retry on the next canplay/seeked. Bounded: after two interrupted
+          // attempts we stop auto-retrying and surface the explicit Play button,
+          // because a real user gesture always satisfies the media policies.
           setBuffering(true);
+          if (playAbortCountRef.current >= 2) {
+            setNeedsUserPlay(true);
+            setAudioError(null);
+            return;
+          }
+          playAbortCountRef.current += 1;
+          playAbortPendingRef.current = true;
           return;
         }
         if (isNotAllowed || msg.includes('gesture') || msg.includes('user') || msg.includes('NotAllowed')) {
@@ -1379,8 +1408,15 @@ function SubSectionAudio({
     const initialTime = resumeAt ?? cueStart;
     if (initialTime != null && Number.isFinite(initialTime)) {
       try {
-        programmaticSeekTargetRef.current = initialTime;
-        el.currentTime = initialTime;
+        // Skip a no-op seek when already at the target: assigning currentTime
+        // at (or within) its current value still starts a seeking cycle, which
+        // can interrupt the very first play() and surface AbortError.
+        if (Math.abs(el.currentTime - initialTime) > 0.05) {
+          programmaticSeekTargetRef.current = initialTime;
+          el.currentTime = initialTime;
+        } else {
+          programmaticSeekTargetRef.current = null;
+        }
         lastKnownTimeRef.current = initialTime;
       } catch {
         programmaticSeekTargetRef.current = null;
@@ -1391,7 +1427,17 @@ function SubSectionAudio({
   const handleCanPlay = useCallback(() => {
     setBuffering(false);
     onIntegrityEvent('audio_buffering_end', { section: subSection.partCode, questionIndex });
-    if (resumeState === 'ended' || autoPlayTriedRef.current) return;
+    if (resumeState === 'ended') return;
+    const el = audioRef.current;
+    // Already playing (recovery canplay after an interrupted attempt) — nothing
+    // left to do for this section.
+    if (el && !el.paused && !el.ended) {
+      autoPlayTriedRef.current = true;
+      playAbortPendingRef.current = false;
+      return;
+    }
+    if (autoPlayTriedRef.current && !playAbortPendingRef.current) return;
+    playAbortPendingRef.current = false;
     autoPlayTriedRef.current = true;
     // Gesture-chained via Start/Next click — most browsers allow it. If blocked,
     // tryPlay will flip needsUserPlay and show the explicit button.
@@ -1510,6 +1556,8 @@ function SubSectionAudio({
           }}
           onPlay={() => {
             setBuffering(false);
+            playAbortCountRef.current = 0;
+            playAbortPendingRef.current = false;
             const el = audioRef.current;
             if (!el || !onePlayOnly) return;
             if (hasPlayedToEnd) {
@@ -1565,6 +1613,20 @@ function SubSectionAudio({
           }}
           onSeeked={() => {
             programmaticSeekTargetRef.current = null;
+            // A seek that interrupted a pending play() (the cue-start seek at
+            // metadata time races the first play) is only safe to retry once the
+            // seek has settled — that is now. Bounded like tryPlay: two misses
+            // and the learner gets the explicit Play button instead.
+            if (playAbortPendingRef.current) {
+              playAbortPendingRef.current = false;
+              if (playAbortCountRef.current >= 2) {
+                setNeedsUserPlay(true);
+                setAudioError(null);
+                return;
+              }
+              playAbortCountRef.current += 1;
+              tryPlay();
+            }
           }}
         />
       ) : (
