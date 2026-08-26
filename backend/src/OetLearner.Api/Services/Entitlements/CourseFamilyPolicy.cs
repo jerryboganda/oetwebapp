@@ -84,6 +84,7 @@ public static class CourseFamilyPolicy
         var category = productCategory?.Trim() ?? string.Empty;
         if (FullCourseCategories.Contains(category)) return CourseFamilyAccess.FullOnly;
         if (CrashCourseCategories.Contains(category)) return CourseFamilyAccess.CrashOnly;
+        if (category.Length > 0) return CourseFamilyAccess.Unrestricted;
 
         var code = (planCode ?? string.Empty).Trim().ToLowerInvariant();
         if (code.Length == 0) return CourseFamilyAccess.Unrestricted;
@@ -124,10 +125,10 @@ public static class CourseFamilyPolicy
 
     public static CourseFamily ClassifyVideo(Domain.LibraryVideo video, IEnumerable<string>? extraLabels = null)
     {
-        // Tag-only, deny-by-default: only explicit batch:* tags classify; titles and
-        // collection labels are deliberately ignored (extraLabels is accepted for API
-        // compatibility but not consulted). Untagged premium videos are None and the
-        // entitlement gate (Evaluate) denies None for every learner.
+        // Classification order: explicit batch:* tags first, then title/collection
+        // labels, then Shared. This keeps admin tagging authoritative while allowing
+        // unmarked content to stay visible unless the title/labels clearly indicate
+        // a specific family.
         var tags = SplitTags(video.TagsCsv);
         var hasFullTag = tags.Contains(FullCourseOnlyTag);
         var hasCrashTag = false;
@@ -145,7 +146,17 @@ public static class CourseFamilyPolicy
         if (hasCrashTag) return CourseFamily.CrashCourse;
         if (tags.Contains(SharedTag)) return CourseFamily.Shared;
 
-        return CourseFamily.None;
+        var labels = new List<string>();
+        if (!string.IsNullOrWhiteSpace(video.Title)) labels.Add(video.Title);
+        if (extraLabels is not null)
+        {
+            foreach (var label in extraLabels)
+            {
+                if (!string.IsNullOrWhiteSpace(label)) labels.Add(label);
+            }
+        }
+
+        return ClassifyLabels(labels);
     }
 
     public static CourseFamily ClassifyLabels(IEnumerable<string?> labels)

@@ -9,11 +9,10 @@ namespace OetLearner.Api.Tests;
 
 /// <summary>
 /// Mutual Full Course ↔ Crash Course visibility. Package ProductCategory
-/// (catalog) decides the course family automatically. Course family is
-/// tag-only (batch:*); unclassified premium videos are invisible to every
-/// learner (deny-by-default, plan_excludes_course_family) and an explicit
-/// per-plan video include never beats the family gate. Shared content stays
-/// visible on both families.
+/// (catalog) decides the course family automatically. Classification uses
+/// explicit batch:* tags first, then title/collection labels, and finally
+/// defaults to Shared so neutral content stays visible. An explicit per-plan
+/// video include preserves an intentional cross-family catalog carve-out.
 /// </summary>
 public class CourseFamilyEntitlementTests
 {
@@ -106,6 +105,14 @@ public class CourseFamilyEntitlementTests
         Assert.Equal(full, access.FullCourse);
         Assert.Equal(crash, access.CrashCourse);
         Assert.True(access.IsRestricted);
+    }
+
+    [Fact]
+    public void Resolve_ExplicitUnknownCategory_DoesNotUsePlanCodeFallback()
+    {
+        var access = CourseFamilyPolicy.Resolve("custom", "full-custom-plan");
+
+        Assert.False(access.IsRestricted);
     }
 
     [Fact]
@@ -295,7 +302,7 @@ public class CourseFamilyEntitlementTests
     }
 
     [Fact]
-    public async Task ExplicitInclude_DoesNotBeatCourseFamily()
+    public async Task ExplicitInclude_BeatsCourseFamily()
     {
         await using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
@@ -331,13 +338,13 @@ public class CourseFamilyEntitlementTests
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
-        // Even an explicit per-plan include cannot resurrect an out-of-family video.
+        // An explicit per-plan include is an intentional cross-family catalog carve-out.
         var result = await service.AllowAccessAsync(
             "learner-1",
             Video("vid-crash-carved", tagsCsv: CourseFamilyPolicy.CrashCourseOnlyTag, title: "Crash Course / Day 1"),
             default);
-        Assert.False(result.Allowed);
-        Assert.Equal("plan_excludes_course_family", result.Reason);
+        Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_video_library", result.Reason);
     }
 
     [Fact]
@@ -452,7 +459,7 @@ public class CourseFamilyEntitlementTests
     }
 
     [Fact]
-    public void Evaluate_TagsOnly_IgnoresCollectionTitle()
+    public void Evaluate_UsesTitleAndCollectionLabelsBeforeSharedFallback()
     {
         using var db = CreateDb();
         var service = CreateService(db);
@@ -475,14 +482,28 @@ public class CourseFamilyEntitlementTests
         Assert.False(service.Evaluate(context, tagged, ["Arabic / New Medicine Crash Course / Sessions"]).Allowed);
         Assert.False(service.Evaluate(context, tagged, extraLabels: null).Allowed);
 
-        // Untagged premium is deny-by-default — crash labels/titles are ignored.
-        var untagged = Video("vid-untagged", title: "Day 1 Session");
-        var deniedWithLabels = service.Evaluate(context, untagged, ["Arabic / New Medicine Crash Course / Sessions"]);
-        Assert.False(deniedWithLabels.Allowed);
-        Assert.Equal("plan_excludes_course_family", deniedWithLabels.Reason);
-        var deniedWithoutLabels = service.Evaluate(context, untagged, extraLabels: null);
-        Assert.False(deniedWithoutLabels.Allowed);
-        Assert.Equal("plan_excludes_course_family", deniedWithoutLabels.Reason);
+        var freeTagged = Video(
+            "vid-free-tagged",
+            tagsCsv: CourseFamilyPolicy.CrashCourseOnlyTag,
+            accessTier: "free");
+        var freeDenied = service.Evaluate(context, freeTagged, extraLabels: null);
+        Assert.False(freeDenied.Allowed);
+        Assert.Equal("plan_excludes_course_family", freeDenied.Reason);
+
+        // Titles/labels classify before the Shared fallback.
+        var crashTitle = Video("vid-crash-title", title: "Crash Course / Day 1");
+        var crashByLabel = service.Evaluate(context, crashTitle, ["Arabic / New Medicine Crash Course / Sessions"]);
+        Assert.False(crashByLabel.Allowed);
+        Assert.Equal("plan_excludes_course_family", crashByLabel.Reason);
+
+        var neutral = Video("vid-neutral", title: "Day 1 Session");
+        var neutralWithLabels = service.Evaluate(context, neutral, ["Arabic / New Medicine Crash Course / Sessions"]);
+        Assert.False(neutralWithLabels.Allowed);
+        Assert.Equal("plan_excludes_course_family", neutralWithLabels.Reason);
+
+        var neutralWithoutLabels = service.Evaluate(context, neutral, extraLabels: null);
+        Assert.True(neutralWithoutLabels.Allowed);
+        Assert.Equal("plan_grants_video_library", neutralWithoutLabels.Reason);
 
         // Shared-tagged video stays visible even when collection title looks like crash.
         var shared = Video("vid-shared", tagsCsv: CourseFamilyPolicy.SharedTag);
@@ -491,7 +512,7 @@ public class CourseFamilyEntitlementTests
     }
 
     [Fact]
-    public async Task UnclassifiedPremium_IsDeniedEvenForUnrestricted()
+    public async Task UnclassifiedPremium_IsSharedForUnrestrictedPlans()
     {
         await using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
@@ -505,7 +526,7 @@ public class CourseFamilyEntitlementTests
             CreatedAt = now,
             LastActiveAt = now,
         });
-        // Custom/legacy category → Unrestricted course-family access — still deny-by-default.
+        // Custom/legacy category → Unrestricted course-family access, and neutral videos remain visible.
         db.BillingPlans.Add(new BillingPlan
         {
             Id = "custom-plan",
@@ -533,8 +554,8 @@ public class CourseFamilyEntitlementTests
             "learner-1",
             Video("vid-untagged", tagsCsv: null),
             default);
-        Assert.False(untagged.Allowed);
-        Assert.Equal("plan_excludes_course_family", untagged.Reason);
+        Assert.True(untagged.Allowed);
+        Assert.Equal("plan_grants_video_library", untagged.Reason);
 
         var shared = await service.AllowAccessAsync(
             "learner-1",
@@ -544,7 +565,7 @@ public class CourseFamilyEntitlementTests
     }
 
     [Fact]
-    public void ClassifyVideo_IsTagOnlyDenyByDefault()
+    public void ClassifyVideo_UsesExplicitTagsThenTitlesThenSharedFallback()
     {
         Assert.Equal(
             CourseFamily.CrashCourse,
@@ -559,17 +580,21 @@ public class CourseFamilyEntitlementTests
             CourseFamily.Shared,
             CourseFamilyPolicy.ClassifyVideo(
                 Video("v", tagsCsv: $"{CourseFamilyPolicy.FullCourseOnlyTag}, {CourseFamilyPolicy.CrashCourseOnlyTag}")));
-        // Titles/labels are ignored — only batch:* tags classify.
         Assert.Equal(
-            CourseFamily.None,
+            CourseFamily.CrashCourse,
             CourseFamilyPolicy.ClassifyVideo(Video("v", title: "Crash Course / Day 1"), ["Arabic / New Medicine Crash Course"]));
-        Assert.Equal(CourseFamily.None, CourseFamilyPolicy.ClassifyVideo(Video("v")));
         Assert.Equal(
-            CourseFamily.None,
+            CourseFamily.Shared,
+            CourseFamilyPolicy.ClassifyVideo(Video("v")));
+        Assert.Equal(
+            CourseFamily.CrashCourse,
             CourseFamilyPolicy.ClassifyVideo(Video("v", title: "Day 1"), ["Full Crash Course - General OET"]));
         Assert.Equal(
-            CourseFamily.None,
+            CourseFamily.CrashCourse,
             CourseFamilyPolicy.ClassifyVideo(Video("v", title: "Day 1 Session"), ["Arabic / New Medicine Crash Course / Sessions"]));
+        Assert.Equal(
+            CourseFamily.FullCourse,
+            CourseFamilyPolicy.ClassifyVideo(Video("v", title: "Day 1"), ["Writing / Full Course / December"]));
     }
 
     [Fact]

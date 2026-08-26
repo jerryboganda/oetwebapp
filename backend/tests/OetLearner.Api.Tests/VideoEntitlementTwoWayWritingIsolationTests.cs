@@ -10,20 +10,20 @@ namespace OetLearner.Api.Tests;
 /// Owner directive 2026-08-26: two-way Writing video isolation between
 /// Full Course and Crash Course / Fast Track. The tag-driven family model
 /// (CourseFamilyPolicy) supersedes the per-plan excludeTags / include /
-/// subtest-restriction machinery: a premium video's family comes ONLY from
-/// its admin-assigned "batch:*" tags, unclassified premium videos are
-/// denied by default, and explicit per-id includes never beat family.
+/// subtest-restriction machinery: a premium video's family comes from the
+/// admin-assigned "batch:*" tags first, then title/collection labels, and
+/// neutral content falls back to Shared. Explicit per-id includes preserve
+/// intentional cross-family catalog carve-outs.
 ///
 /// These tests lock the four core guarantees:
 ///   1. Full-course plans deny every video tagged with any Crash Course
 ///      batch tag — including the legacy excludeTags-covered batches.
 ///   2. Full-course plans still allow ordinary December/February Writing
-///      videos tagged batch:full-course-only (no regression for shared
-///      content).
+///      videos tagged batch:full-course-only and neutral untagged content.
 ///   3. Crash Course plans allow the crash batch tags with no include
 ///      carve-out and no video_library.subtests restriction — the family
 ///      tag is the sole gate.
-///   4. Explicit per-id include does NOT beat the family tag.
+///   4. Explicit per-id include beats the family tag for that exact video.
 /// </summary>
 public class VideoEntitlementTwoWayWritingIsolationTests
 {
@@ -137,7 +137,7 @@ public class VideoEntitlementTwoWayWritingIsolationTests
     }
 
     [Fact]
-    public async Task FullCourse_DeniesUntaggedPremiumWritingVideo_DenyByDefault()
+    public async Task FullCourse_AllowsUntaggedPremiumWritingVideo_WhenNeutral()
     {
         await using var db = CreateDb();
         SeedPlan(db, "learner-1", "full-condensed-medicine", "{}");
@@ -147,8 +147,8 @@ public class VideoEntitlementTwoWayWritingIsolationTests
         var video = Video("vid_untagged_1", tagsCsv: null);
         var result = await service.AllowAccessAsync("learner-1", video, default);
 
-        Assert.False(result.Allowed);
-        Assert.Equal("plan_excludes_course_family", result.Reason);
+        Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_video_library", result.Reason);
     }
 
     [Fact]
@@ -171,11 +171,11 @@ public class VideoEntitlementTwoWayWritingIsolationTests
     }
 
     [Fact]
-    public async Task FullCourse_ExplicitIncludeDoesNotBeatCrashTag()
+    public async Task FullCourse_ExplicitIncludeBeatsCrashTag()
     {
         await using var db = CreateDb();
-        // Even an explicit per-id include cannot resurrect a crash-tagged video on a
-        // full-course plan — family isolation is the outer, non-overridable gate.
+        // An explicit per-id include intentionally carves this crash-tagged video into
+        // the full-course plan without exposing the rest of the Crash Course catalog.
         var fullCourseOverrides = """
             {
               "videos": {
@@ -194,8 +194,8 @@ public class VideoEntitlementTwoWayWritingIsolationTests
             tagsCsv: "batch:crash-course-arabic-writing");
         var result = await service.AllowAccessAsync("learner-1", video, default);
 
-        Assert.False(result.Allowed);
-        Assert.Equal("plan_excludes_course_family", result.Reason);
+        Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_video_library", result.Reason);
     }
 
     [Fact]

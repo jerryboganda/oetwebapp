@@ -300,9 +300,9 @@ public sealed class VideoEntitlementService(
             return new VideoEntitlementResult(false, "not_in_user_allocation", context.CurrentTier);
         }
 
-        // Content scope (spec §3): an explicit per-plan include wins over the exclude list and
-        // subtest/profession scope — but never over the module/subscription or course-family
-        // gates below, which every path still has to clear.
+        // Content scope (spec §3): an explicit per-plan include wins over the exclude list,
+        // tag excludes, course-family isolation, and subtest/profession scope — but never
+        // over the module/subscription gates below, which every path still has to clear.
         var explicitlyIncluded = context.VideoIncludes is { Count: > 0 }
             && context.VideoIncludes.Contains(video.Id);
         if (!explicitlyIncluded)
@@ -319,6 +319,21 @@ public sealed class VideoEntitlementService(
             {
                 return new VideoEntitlementResult(false, "profession_mismatch", context.CurrentTier);
             }
+        }
+
+        // Course-family isolation (mutual Full ↔ Crash). Family is resolved from
+        // explicit batch tags, then title/collection labels, and finally Shared.
+        // Neutral content stays visible, while out-of-family videos are hidden
+        // regardless of access tier unless the plan intentionally includes that
+        // exact video.
+        var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
+        if (!explicitlyIncluded
+            && (family == CourseFamily.None
+                || (context.CourseFamilies is { } families
+                    && families.IsRestricted
+                    && !families.Allows(family))))
+        {
+            return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
         }
 
         if (string.Equals(video.AccessTier, "free", StringComparison.OrdinalIgnoreCase))
@@ -345,20 +360,6 @@ public sealed class VideoEntitlementService(
             if (context.Frozen) return new VideoEntitlementResult(false, "subscription_frozen", "frozen");
             if (context.Expired) return new VideoEntitlementResult(false, "subscription_expired", "expired");
             return new VideoEntitlementResult(false, "no_active_subscription", "free");
-        }
-
-        // Course-family isolation (mutual Full ↔ Crash, deny-by-default). Free videos
-        // already returned above are unaffected. A premium video with no explicit family
-        // tag is invisible to EVERY learner until the admin classifies it, and an
-        // out-of-family video is invisible (not locked) — never beat by an explicit
-        // per-plan include. Always resolved from the video's family batch tags.
-        var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
-        if (family == CourseFamily.None
-            || (context.CourseFamilies is { } families
-                && families.IsRestricted
-                && !families.Allows(family)))
-        {
-            return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
         }
 
         if (context.PlanGrantsPremium || context.AddOnGrantsPremium)

@@ -26,8 +26,8 @@ public class VideoEntitlementServiceTests
         AccessTier = accessTier,
         SubtestCode = subtestCode,
         // Mirrors post-migration production state: every non-crash premium video carries
-        // batch:shared, which the course-family gate allows on all plans (deny-by-default
-        // only bites unclassified videos, covered in CourseFamilyEntitlementTests).
+        // batch:shared, which the course-family gate allows on all plans; neutral videos
+        // remain visible via the Shared fallback when the family is not explicit.
         TagsCsv = CourseFamilyPolicy.SharedTag,
         Status = ContentStatus.Published,
         DurationSeconds = 600,
