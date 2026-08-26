@@ -271,9 +271,21 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 }
                 else
                 {
-                    var anyCorrect = q.Options.Any(opt =>
-                        string.Equals(q.CorrectAnswer?.Trim(), opt?.Trim(), StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(q.CorrectAnswer?.Trim(), OptionKeyForIndex(q.Options.IndexOf(opt)), StringComparison.OrdinalIgnoreCase));
+                    var correctTrim = q.CorrectAnswer?.Trim();
+                    var anyCorrect = false;
+                    if (!string.IsNullOrEmpty(correctTrim))
+                    {
+                        for (var oi = 0; oi < q.Options.Count; oi++)
+                        {
+                            var optText = q.Options[oi]?.Trim();
+                            if (string.Equals(correctTrim, optText, StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(correctTrim, OptionKeyForIndex(oi), StringComparison.OrdinalIgnoreCase))
+                            {
+                                anyCorrect = true;
+                                break;
+                            }
+                        }
+                    }
                     if (!anyCorrect)
                     {
                         warnings.Add($"Question {q.Number} (Part {partCode}): multiple-choice item has no option matching its CorrectAnswer '{q.CorrectAnswer ?? string.Empty}'.");

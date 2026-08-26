@@ -604,6 +604,10 @@ export default function ListeningReviewPage() {
                   controls
                   preload="metadata"
                   className="w-full"
+                  onDurationChange={() => {
+                    const audio = audioRef.current;
+                    if (audio) setAudioDurationSeconds(audio.duration);
+                  }}
                   onLoadedMetadata={() => {
                     const audio = audioRef.current;
                     if (!audio) return;

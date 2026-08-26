@@ -1,7 +1,7 @@
 export interface ListeningResultConversionFields {
   maxRawScore: number;
   scaledScore: number | null;
-  scoreConversionTableVersionKey: string | null | undefined;
+  scoreConversionTableVersionKey?: string | null | undefined;
   passed: boolean | null;
 }
 
