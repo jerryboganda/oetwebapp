@@ -51,7 +51,11 @@ simultaneously in two live sessions.
 The rolling `DeviceChangeWindowDays` / `DeviceChangeMaxPerWindow` cooldown is
 separate from the approved-identity limit and counts OTP-approved replacement
 identities only; the initial bootstrap does not consume the change budget. An
-override does not make unlimited rapid device churn possible.
+override does not make unlimited rapid device churn possible. For learner
+accounts, reaching that counter routes the already-authenticated password
+attempt through the existing email-OTP device challenge instead of leaving the
+learner at a support-only dead end. Privileged accounts retain the hard
+cooldown block.
 
 ## Audit and user-visible evidence
 
@@ -76,6 +80,7 @@ The sign-in page explains these policy-driven sign-outs:
 
 An admin can reset all approved identities from the learner's Sessions &
 Devices panel. Resetting is a security-boundary operation: it revokes active
-sessions and requires the next sign-in to bootstrap a new identity. The
-cooldown remains a separate control and can be cleared only through the
-admin recovery action.
+sessions and requires the next sign-in to bootstrap a new identity. A learner
+who reaches the rolling cooldown can recover through the password plus email
+OTP challenge; the admin reset remains available when the approved identity
+itself must be cleared or the account has lost access to its normal device.

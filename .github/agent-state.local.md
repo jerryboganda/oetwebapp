@@ -1,8 +1,15 @@
 # Agent State (local)
 
-## Current task — Finish Listening 100% and ship
+## Current task — Candidate login device cooldown recovery — READY FOR PRODUCTION DEPLOY
+- Shared backend auth now preserves an approved device identity through browser storage resets with an HttpOnly continuity cookie, prefers an explicitly approved multi-device header, and carries the verified challenge device through OTP completion.
+- Learner accounts that hit the rolling device-change cooldown now enter the existing email-OTP verification flow; privileged accounts retain the hard cooldown block.
+- Web device persistence shares only the production apex/www/app hosts; staging remains isolated. Security policy and admin runbook document the recovery behavior.
+- Focused validation: device-id Vitest 6/6; learner cooldown regression 1/1; `pnpm run ship:gate` passed; `git diff --check` passed. A broader pre-existing TrustedDeviceService timestamp assertion remains flaky (19/20 passed).
+- NEXT: commit all current tracked changes, push `main`, watch Build & Deploy for that exact SHA, verify public health and image tags, then restore repository privacy.
+
+## Previous — Finish Listening 100% and ship
 - Player auto-advance restored: cue-end marks all section extracts, Part B waits for every workplace cue, 0s review hops V2 review then next/submit. Player suite 34/34. Backend listening 36/36. Page/category tests 16/16.
-- Rebased onto origin/main. Kept remote ship-gate (TSX balance already skipped). Next: continue rebase, public, push main, watch Build & Deploy for this SHA, private only after success, hit live health.
+- Local commit `9694c70bb` pushed to origin/main earlier; uncommitted tree still holds listening/auth work (app/listening+reading pages/tests, AuthService device-id, ListeningLearnerService, LearnerEndpoints, device-id.ts, docs, untracked ReadingAttemptScope.cs) — do NOT include in unrelated commits.
 
 ## Previous — AI Packages spec 100% conformance sweep
 - Audited full OET_AI_Packages spec (A01-A17, 3A/3B) against code: dashboard credits-only UI, Other papers hidden (CandidateVisible), instant webhook fulfilment + idempotency, reopen-free attempts, admin parity all verified implemented.

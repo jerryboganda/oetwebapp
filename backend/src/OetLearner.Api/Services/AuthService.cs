@@ -453,7 +453,10 @@ public sealed class AuthService(
         // detection above. Only checked when BOTH sides have a device id
         // (old clients sending no X-OET-Device-Id header, or sessions
         // created before this column existed, skip silently).
-        var presentedDeviceId = httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString();
+        var presentedDeviceId = await ResolveDeviceIdForRequestAsync(
+            refreshToken.ApplicationUserAccountId,
+            httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString(),
+            cancellationToken);
         if (!string.IsNullOrWhiteSpace(presentedDeviceId)
             && !string.IsNullOrWhiteSpace(refreshToken.DeviceId)
             && !string.Equals(presentedDeviceId, refreshToken.DeviceId, StringComparison.Ordinal))
@@ -811,7 +814,12 @@ public sealed class AuthService(
         var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
         // The device email-OTP just verified IS the §3.3 step-up — evaluating
         // step-up again here would loop the challenge forever.
-        var session = await CreateSessionCoreAsync(account, subject, cancellationToken, riskStepUpSatisfied: true);
+        var session = await CreateSessionCoreAsync(
+            account,
+            subject,
+            cancellationToken,
+            riskStepUpSatisfied: true,
+            deviceIdOverride: challenge.DeviceId);
         await db.SaveChangesAsync(cancellationToken);
         await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInSucceeded, cancellationToken: cancellationToken);
         return session;
@@ -959,13 +967,17 @@ public sealed class AuthService(
 
     /// <summary>The account's currently-trusted device (spec §3.2), for the
     /// learner's own sessions screen. Null when none has been bootstrapped
-    /// yet. IsCurrentDevice compares against this request's X-OET-Device-Id.</summary>
+    /// yet. IsCurrentDevice uses the request identity, including the server
+    /// continuity cookie when browser storage has been reset.</summary>
     public async Task<TrustedDeviceSelfResponse?> GetTrustedDeviceAsync(
         ClaimsPrincipal principal, CancellationToken cancellationToken = default)
     {
         var (account, _) = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
         var devices = await trustedDeviceService.GetActiveDevicesAsync(account.Id, cancellationToken);
-        var presentedDeviceId = httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString()?.Trim();
+        var presentedDeviceId = await ResolveDeviceIdForRequestAsync(
+            account.Id,
+            httpContextAccessor.HttpContext?.Request.Headers["X-OET-Device-Id"].ToString(),
+            cancellationToken);
         var device = devices.FirstOrDefault(candidate =>
             !string.IsNullOrWhiteSpace(presentedDeviceId)
             && string.Equals(candidate.DeviceId, presentedDeviceId, StringComparison.Ordinal))
@@ -1094,8 +1106,14 @@ public sealed class AuthService(
     // ═══════════════════════════════════════════════════════════════════════
     private const string RefreshCookieName = "oet_rt";
     private const string CsrfCookieName = "oet_csrf";
+    // HttpOnly continuity for the browser/device identity. The client-generated
+    // header remains the primary identity signal, but this cookie survives the
+    // privacy-oriented storage resets that otherwise mint a new id on every
+    // launch and eventually trigger the device-change cooldown.
+    private const string DeviceBindingCookieName = "oet_device_binding";
     private const string ClientPlatformHeader = "X-OET-Client-Platform";
     private const string RefreshCookiePath = "/";
+    private static readonly TimeSpan DeviceBindingCookieLifetime = TimeSpan.FromDays(365);
 
     private bool IsLocalhostDevelopmentRequest(HttpContext httpContext)
         => environment.IsDevelopment()
@@ -1164,6 +1182,76 @@ public sealed class AuthService(
             SameSite = isLocalDev ? SameSiteMode.Lax : SameSiteMode.None,
             Path = RefreshCookiePath,
         });
+    }
+
+    private async Task<string?> ResolveDeviceIdForRequestAsync(
+        string authAccountId,
+        string? presentedDeviceId,
+        CancellationToken cancellationToken)
+    {
+        var normalizedPresented = NormalizeDeviceId(presentedDeviceId);
+        var httpContext = httpContextAccessor.HttpContext;
+        var continuityDeviceId = httpContext?.Request.Cookies[DeviceBindingCookieName];
+        continuityDeviceId = NormalizeDeviceId(continuityDeviceId);
+
+        if (normalizedPresented is not null
+            && await db.TrustedDevices.AsNoTracking().AnyAsync(
+                device => device.ApplicationUserAccountId == authAccountId
+                    && device.RevokedAt == null
+                    && device.DeviceId == normalizedPresented,
+                cancellationToken))
+        {
+            // Prefer an explicitly presented identity when it is already
+            // approved. This matters for bounded multi-device overrides: a
+            // stale continuity cookie must not make a valid newer device look
+            // like a refresh-token mismatch.
+            return normalizedPresented;
+        }
+
+        if (continuityDeviceId is not null
+            && await db.TrustedDevices.AsNoTracking().AnyAsync(
+                device => device.ApplicationUserAccountId == authAccountId
+                    && device.RevokedAt == null
+                    && device.DeviceId == continuityDeviceId,
+                cancellationToken))
+        {
+            // The continuity cookie is account-scoped by this database lookup.
+            // If a browser storage reset generated a new header, keep the
+            // already-approved identity instead of counting a false replacement.
+            return continuityDeviceId;
+        }
+
+        return normalizedPresented;
+    }
+
+    private void SetDeviceBindingCookie(string deviceId)
+    {
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is null
+            || string.IsNullOrWhiteSpace(deviceId)
+            || deviceId.Any(static character => character is ';' or ',' or '\r' or '\n'))
+        {
+            return;
+        }
+
+        var isLocalDev = IsLocalhostDevelopmentRequest(httpContext);
+        httpContext.Response.Cookies.Append(DeviceBindingCookieName, deviceId, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !isLocalDev,
+            SameSite = isLocalDev ? SameSiteMode.Lax : SameSiteMode.None,
+            Path = RefreshCookiePath,
+            Expires = timeProvider.GetUtcNow().Add(DeviceBindingCookieLifetime),
+            IsEssential = true,
+        });
+    }
+
+    private static string? NormalizeDeviceId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var normalized = value.Trim();
+        if (normalized.Length is 0 or > 128 || normalized.Any(char.IsControl)) return null;
+        return normalized;
     }
 
     private async Task<bool> TryRevokeCurrentBearerSessionAsync(CancellationToken cancellationToken)
@@ -1244,7 +1332,8 @@ public sealed class AuthService(
         AuthenticatedSessionSubject subject,
         CancellationToken cancellationToken,
         Guid? familyId = null,
-        bool riskStepUpSatisfied = false)
+        bool riskStepUpSatisfied = false,
+        string? deviceIdOverride = null)
     {
         var sessionId = Guid.NewGuid();
         // Fresh sign-in (familyId is null on entry) starts its own family;
@@ -1268,9 +1357,10 @@ public sealed class AuthService(
             countryCode = httpContext.Request.Headers["CF-IPCountry"].ToString();
             if (string.IsNullOrWhiteSpace(countryCode) || countryCode.Length > 8) countryCode = null;
             deviceId = httpContext.Request.Headers["X-OET-Device-Id"].ToString();
-            if (string.IsNullOrWhiteSpace(deviceId) || deviceId.Length > 128) deviceId = null;
-            else deviceId = deviceId.Trim();
         }
+        deviceId = deviceIdOverride is not null
+            ? NormalizeDeviceId(deviceIdOverride)
+            : await ResolveDeviceIdForRequestAsync(account.Id, deviceId, cancellationToken);
         var platform = httpContext?.Request.Headers["X-OET-Client-Platform"].ToString();
         if (string.IsNullOrWhiteSpace(platform) || platform.Length > 32) platform = null;
         var appVersion = httpContext?.Request.Headers["X-App-Version"].ToString();
@@ -1417,6 +1507,19 @@ public sealed class AuthService(
                 switch (resolution.Resolution)
                 {
                     case DeviceResolution.CooldownBlocked:
+                        // A correct password plus the existing device email OTP
+                        // is a stronger proof of account ownership than the
+                        // client-generated identity churn that triggered this
+                        // rolling counter. Learners must never be left at a
+                        // support-only dead end: make the cooldown a step-up
+                        // signal and let the existing verified-device flow
+                        // approve the replacement. Privileged accounts retain
+                        // the hard block and the admin audit signal.
+                        if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+                        {
+                            throw new DeviceVerificationRequiredException(
+                                account.Email, CreateDeviceChallengeToken(account.Id, deviceId!));
+                        }
                         throw ApiException.Forbidden(
                             "device_change_cooldown",
                             "Too many device changes recently. Try again later or contact support.");
@@ -1441,6 +1544,11 @@ public sealed class AuthService(
                         break;
                 }
             }
+        }
+
+        if (deviceId is not null)
+        {
+            SetDeviceBindingCookie(deviceId);
         }
 
         var issuedSession = tokenService.IssueSession(subject, sessionId, resolvedFamilyId);

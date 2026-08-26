@@ -205,6 +205,37 @@ public class AuthFlowsTests
     }
 
     [Fact]
+    public async Task AuthService_LearnerDeviceCooldown_UsesOtpRecoveryInsteadOfSupportDeadEnd()
+    {
+        var httpContextAccessor = new HttpContextAccessor
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+        httpContextAccessor.HttpContext.Request.Headers["X-OET-Device-Id"] = "candidate-device-after-storage-reset";
+
+        var settings = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Security = new SecuritySettings(
+                SingleActiveSessionEnabled: true,
+                RiskMode: SecurityRiskModes.LogOnly,
+                TrustedDeviceRequired: true,
+                DeviceChangeWindowDays: 7,
+                DeviceChangeMaxPerWindow: 3)
+        });
+        var harness = CreateAuthServiceHarness(
+            trustedDeviceService: new LearnerCooldownTrustedDeviceService(bootstrapFirst: false),
+            runtimeSettingsProvider: settings,
+            httpContextAccessor: httpContextAccessor);
+        await harness.SeedLearnerAsync();
+
+        var error = await Assert.ThrowsAsync<DeviceVerificationRequiredException>(() => harness.Service.SignInAsync(
+            new PasswordSignInRequest("learner@example.com", "Password123!", true)));
+
+        Assert.Equal("learner@example.com", error.Email);
+        Assert.False(string.IsNullOrWhiteSpace(error.ChallengeToken));
+    }
+
+    [Fact]
     public async Task AuthEndpoints_ForgotPasswordAndResetPassword_RotatesCredentialsAndRevokesSessions()
     {
         await using var harness = CreateAuthApiHarness();
@@ -1616,7 +1647,10 @@ public class AuthFlowsTests
         return new AuthApiHarness(factory, client, sender, timeProvider);
     }
 
-    private static AuthServiceHarness CreateAuthServiceHarness()
+    private static AuthServiceHarness CreateAuthServiceHarness(
+        ITrustedDeviceService? trustedDeviceService = null,
+        IRuntimeSettingsProvider? runtimeSettingsProvider = null,
+        IHttpContextAccessor? httpContextAccessor = null)
     {
         var dbOptions = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -1647,6 +1681,10 @@ public class AuthFlowsTests
             SeedData.EnsureReferenceDataAsync(setupDb).GetAwaiter().GetResult();
         }
 
+        var resolvedHttpContextAccessor = httpContextAccessor ?? new HttpContextAccessor();
+        var resolvedTrustedDeviceService = trustedDeviceService ?? new NoopTrustedDeviceService();
+        var resolvedRuntimeSettingsProvider = runtimeSettingsProvider ?? new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base());
+
         var service = new AuthService(
             new LearnerDbContext(dbOptions),
             passwordHasher,
@@ -1662,13 +1700,13 @@ public class AuthFlowsTests
             authBehaviorOptions,
             environment,
             dataProtectionProvider,
-            new HttpContextAccessor(),
+            resolvedHttpContextAccessor,
             new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             new NoopSecurityEventLogger(),
             new NoopSessionRevocationService(),
             new NoopSignInRiskService(),
-            new NoopTrustedDeviceService(),
-            new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base()),
+            resolvedTrustedDeviceService,
+            resolvedRuntimeSettingsProvider,
             now);
 
         return new AuthServiceHarness(
@@ -2059,6 +2097,48 @@ public class AuthFlowsTests
     {
         public Task<SignInRiskAssessment> EvaluateAsync(string authAccountId, string? currentCountryCode, string? ipAddress, CancellationToken ct)
             => Task.FromResult(new SignInRiskAssessment(SignInRiskLevel.None, []));
+    }
+
+    /// <summary>Deterministic integration-test double for the learner recovery
+    /// path. Registration gets a one-time bootstrap; the next identity is
+    /// reported as cooldown-blocked so the API must return the existing OTP
+    /// challenge rather than the old support-only error.</summary>
+    private sealed class LearnerCooldownTrustedDeviceService(bool bootstrapFirst = true) : ITrustedDeviceService
+    {
+        private readonly HashSet<string> bootstrappedAccounts = new(StringComparer.Ordinal);
+
+        public Task<DeviceResolutionResult> ResolveForSignInAsync(
+            string authAccountId, string? deviceId, int changeWindowDays, int changeMaxPerWindow, CancellationToken ct)
+            => Task.FromResult(
+                new DeviceResolutionResult(
+                    !bootstrapFirst || bootstrappedAccounts.Contains(authAccountId)
+                        ? DeviceResolution.CooldownBlocked
+                        : DeviceResolution.Bootstrap));
+
+        public Task TrustDeviceAsync(
+            string authAccountId, string deviceId, string? deviceName, string? platform, string grantedVia, CancellationToken ct)
+        {
+            bootstrappedAccounts.Add(authAccountId);
+            return Task.CompletedTask;
+        }
+
+        public Task ResetDeviceAsync(string authAccountId, string reason, CancellationToken ct)
+        {
+            bootstrappedAccounts.Remove(authAccountId);
+            return Task.CompletedTask;
+        }
+
+        public Task<TrustedDevice?> GetActiveDeviceAsync(string authAccountId, CancellationToken ct)
+            => Task.FromResult<TrustedDevice?>(null);
+
+        public Task<IReadOnlyList<TrustedDevice>> GetActiveDevicesAsync(string authAccountId, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<TrustedDevice>>([]);
+
+        public Task<int> GetEffectiveMaxDevicesAsync(string authAccountId, CancellationToken ct)
+            => Task.FromResult(1);
+
+        public Task<int> EnforceDeviceLimitAsync(string authAccountId, int maxDevices, CancellationToken ct)
+            => Task.FromResult(0);
     }
 
     /// <summary>No-op test double — TrustedDeviceRequired defaults to false in
