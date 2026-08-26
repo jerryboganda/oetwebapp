@@ -1,15 +1,22 @@
 # Agent State (local)
 
-## Current task — Candidate login device cooldown recovery — READY FOR PRODUCTION DEPLOY
-- Shared backend auth now preserves an approved device identity through browser storage resets with an HttpOnly continuity cookie, prefers an explicitly approved multi-device header, and carries the verified challenge device through OTP completion.
-- Learner accounts that hit the rolling device-change cooldown now enter the existing email-OTP verification flow; privileged accounts retain the hard cooldown block.
-- Web device persistence shares only the production apex/www/app hosts; staging remains isolated. Security policy and admin runbook document the recovery behavior.
-- Focused validation: device-id Vitest 6/6; learner cooldown regression 1/1; `pnpm run ship:gate` passed; `git diff --check` passed. A broader pre-existing TrustedDeviceService timestamp assertion remains flaky (19/20 passed).
-- NEXT: commit all current tracked changes, push `main`, watch Build & Deploy for that exact SHA, verify public health and image tags, then restore repository privacy.
+## Current task — Admin Verify Email recovery — SHIPPED + LIVE
+- Feature `9d5edaa2e` (feat(admin): add manual candidate email verification): POST /v1/admin/users/{id}/verify-email (AdminUsersWrite) sets EmailVerifiedAt, consumes pending verify_email OTPs, revokes all sessions via ISessionRevocationService (refresh-token fallback if unavailable), writes audit; one-click `Verify Email` button (MailCheck) after Set Password on /admin/users/[id]; instant badge + verified toast; failure keeps current state. Build & Deploy run 32975533469 SUCCESS 2026-08-26; health 200 app/api-ready/api-live; web-blue/api-blue/agent-gateway images tagged 9d5edaa2e...; repo PRIVATE.
+- Post-hoc owner-decision compliance fix (uncommitted at last state write): canVerifyEmail now requires status == active (suspended accounts no longer show the action); added AdminUsers_VerifyEmail_ActionHiddenForSuspendedAccount. Owned commit + deploy watching from this session — see next section.
+- Validation this session: backend verify-email 3/3; admin users page Vitest 12/12 (28/28 with related suites); `dotnet build backend/OetLearner.sln` 0 errors; `pnpm run ship:gate` OK.
+- Unrelated dirty files PRESERVED uncommitted: AdminRequests.cs, UserAccessAllocationServiceTests.cs, components/admin/user-access/{manage-access-panel,module-toggles,quick-grant-modal}.tsx, root `oet-unrelated-dirty.patch` (listening). Never stage them with task commits.
+- QA Smoke + Speaking Module CI chronically red (ignore per AGENTS.md). OWNER NEXT: live acceptance with a disposable unverified test account — admin Verify Email → badge flips immediately → candidate signed out → sign-in lands email-verified without the OTP trap.
+
+## Previous — Per-paper objective practice credits — SHIPPED + DEPLOYED
+- Credit rule (first part/full paper per paper = 1 credit; sibling parts/re-attempts free) committed `e4a75cd6f`; gate raw-string fix `7835c5922`; both in production now.
+- Prod run: `2b40d46db` Build & Deploy run 32969766881 SUCCESS (syntax-gate/builds/migrate/deploy all green, 2026-08-26). Health 200 on api /health/live, /health/ready, app. Repo PRIVATE again.
+- Compile blocker fixed en route: CS1929 `IReadOnlyList<string>.IndexOf` in ListeningBackfillService.cs:276 (a45a29519) — fixed by sibling agent commit `2b40d46db` "fix(listening): complete replay validation and grading build". Working tree clean.
+- GitHub billing note: actions job start was blocked twice by account billing ("recent account payments have failed...") — owner fixed; if runners stop starting again, owner must re-check https://github.com/settings/billing before rerunning.
+- Still live 2026-08-26: Listening-100% stream (9694c70bb, ad98fa4b2 history+scripts, 8b6ffc657 device cooldown, a45a29519 scripts/grading warnings, 2b40d46db replay validation).
 
 ## Previous — Finish Listening 100% and ship
 - Player auto-advance restored: cue-end marks all section extracts, Part B waits for every workplace cue, 0s review hops V2 review then next/submit. Player suite 34/34. Backend listening 36/36. Page/category tests 16/16.
-- Local commit `9694c70bb` pushed to origin/main earlier; uncommitted tree still holds listening/auth work (app/listening+reading pages/tests, AuthService device-id, ListeningLearnerService, LearnerEndpoints, device-id.ts, docs, untracked ReadingAttemptScope.cs) — do NOT include in unrelated commits.
+- Local commit `9694c70bb` pushed to origin/main; the listening/auth work listed below was since committed+pushed by sibling agent (ad98fa4b2, 8b6ffc657, a45a29519, 2b40d46db) and is in production — superseded.
 
 ## Previous — AI Packages spec 100% conformance sweep
 - Audited full OET_AI_Packages spec (A01-A17, 3A/3B) against code: dashboard credits-only UI, Other papers hidden (CandidateVisible), instant webhook fulfilment + idempotency, reopen-free attempts, admin parity all verified implemented.

@@ -3004,7 +3004,7 @@ public partial class AdminService(
                     canAdjustCredits = status is not DeletedUserStatus,
                     canTriggerPasswordReset = learner.AuthAccountId is not null && status is not DeletedUserStatus,
                     canVerifyEmail = authAccount is not null
-                        && status is not DeletedUserStatus
+                        && status is ActiveUserStatus
                         && authAccount.EmailVerifiedAt is null,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,
@@ -3049,7 +3049,7 @@ public partial class AdminService(
                     canAdjustCredits = false,
                     canTriggerPasswordReset = expert.AuthAccountId is not null && status is not DeletedUserStatus,
                     canVerifyEmail = authAccount is not null
-                        && status is not DeletedUserStatus
+                        && status is ActiveUserStatus
                         && authAccount.EmailVerifiedAt is null,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,

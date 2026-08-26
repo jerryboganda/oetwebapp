@@ -995,6 +995,48 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminUsers_VerifyEmail_ActionHiddenForSuspendedAccount()
+    {
+        var userId = $"verify-suspended-{Guid.NewGuid():N}";
+        var authAccountId = $"verify-suspended-auth-{Guid.NewGuid():N}";
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+            {
+                Id = authAccountId,
+                Email = $"suspended-{Guid.NewGuid():N}@example.test",
+                NormalizedEmail = $"SUSPENDED-{Guid.NewGuid():N}@EXAMPLE.TEST",
+                Role = ApplicationUserRoles.Learner,
+                PasswordHash = "test-password-hash",
+                CreatedAt = now,
+            });
+            db.Users.Add(new LearnerUser
+            {
+                Id = userId,
+                AuthAccountId = authAccountId,
+                Role = ApplicationUserRoles.Learner,
+                DisplayName = "Suspended Verify Candidate",
+                Email = $"suspended-{Guid.NewGuid():N}@example.test",
+                Timezone = "UTC",
+                Locale = "en-AU",
+                ActiveProfessionId = "nursing",
+                CreatedAt = now,
+                LastActiveAt = now,
+                AccountStatus = "suspended",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var detailResponse = await _client.GetAsync($"/v1/admin/users/{userId}");
+        detailResponse.EnsureSuccessStatusCode();
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        Assert.False(detailJson.RootElement.GetProperty("availableActions").GetProperty("canVerifyEmail").GetBoolean());
+    }
+
+    [Fact]
     public async Task AdminUsers_DeletePermanentlyRemovesLearnerAccount()
     {
         var email = $"admin-lifecycle-purge-{Guid.NewGuid():N}@example.test";
