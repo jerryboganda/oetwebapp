@@ -47,7 +47,8 @@ public sealed record ListeningBackfillReport(
     int ExtractsCreated,
     int QuestionsCreated,
     int OptionsCreated,
-    string? Reason);
+    string? Reason,
+    IReadOnlyList<string>? Warnings = null);
 
 public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBackfillService
 {
@@ -67,7 +68,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             }
             catch (Exception ex)
             {
-                reports.Add(new ListeningBackfillReport(id, false, 0, 0, 0, 0, ex.Message));
+                reports.Add(new ListeningBackfillReport(id, false, 0, 0, 0, 0, ex.Message, Warnings: null));
             }
         }
         return reports;
@@ -84,14 +85,14 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
 
         if (!string.Equals(paper.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase))
         {
-            return new ListeningBackfillReport(paperId, false, 0, 0, 0, 0, "Paper is not a Listening paper.");
+            return new ListeningBackfillReport(paperId, false, 0, 0, 0, 0, "Paper is not a Listening paper.", Warnings: null);
         }
 
         var (questions, extracts, transcript) = ParseAuthoredJson(paper.ExtractedTextJson);
         if (questions.Count == 0)
         {
             return new ListeningBackfillReport(paperId, false, 0, 0, 0, 0,
-                "ExtractedTextJson.listeningQuestions is empty — nothing to backfill.");
+                "ExtractedTextJson.listeningQuestions is empty — nothing to backfill.", Warnings: null);
         }
 
         var hasLearnerAttempts = await db.ListeningAttempts.AsNoTracking()
@@ -111,7 +112,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             {
                 return new ListeningBackfillReport(paperId, false, 0, 0, 0, 0,
                     "Cannot modify answer keys while in-flight attempts exist. " +
-                    "Create a new paper revision or wait for all attempts to complete.");
+                    "Create a new paper revision or wait for all attempts to complete.", Warnings: null);
             }
         }
 
@@ -250,12 +251,39 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         }
 
         var optionsCreated = 0;
+        var warnings = new List<string>();
         var questionRows = new List<ListeningQuestion>(questions.Count);
         foreach (var q in questions)
         {
             var partCode = NormalizePartCodeEnum(q.PartCode);
             var partId = partIdByCode[partCode];
             var extractId = extractRowByPart[partCode];
+
+            // Validation: flag authored questions that cannot be reliably graded
+            // so the repair sweep surfaces (rather than silently mis-grades) them.
+            // These are authoring defects the relational rebuild cannot invent an
+            // answer for; the structured-question data must be corrected at source.
+            if (string.Equals(q.Type, "multiple_choice_3", StringComparison.OrdinalIgnoreCase))
+            {
+                if (q.Options is not { Count: > 0 })
+                {
+                    warnings.Add($"Question {q.Number} (Part {partCode}): multiple-choice item has no options and cannot be graded.");
+                }
+                else
+                {
+                    var anyCorrect = q.Options.Any(opt =>
+                        string.Equals(q.CorrectAnswer?.Trim(), opt?.Trim(), StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(q.CorrectAnswer?.Trim(), OptionKeyForIndex(q.Options.IndexOf(opt)), StringComparison.OrdinalIgnoreCase));
+                    if (!anyCorrect)
+                    {
+                        warnings.Add($"Question {q.Number} (Part {partCode}): multiple-choice item has no option matching its CorrectAnswer '{q.CorrectAnswer ?? string.Empty}'.");
+                    }
+                }
+            }
+            else if (string.IsNullOrWhiteSpace(q.CorrectAnswer))
+            {
+                warnings.Add($"Question {q.Number} (Part {partCode}): short-answer item has no CorrectAnswer and cannot be graded.");
+            }
 
             var canonicalAnswerJson = JsonSerializer.Serialize(q.CorrectAnswer ?? string.Empty);
             string? acceptedJson = q.AcceptedAnswers is { Count: > 0 }
@@ -380,7 +408,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
             ExtractsCreated: extractCount,
             QuestionsCreated: questionRows.Count,
             OptionsCreated: optionsCreated,
-            Reason: null);
+            Reason: null,
+            Warnings: warnings.Count > 0 ? warnings : null);
     }
 
     // ── JSON parsing ────────────────────────────────────────────────────

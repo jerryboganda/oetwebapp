@@ -42,11 +42,11 @@ public sealed class ListeningGradingService
     {
         var attempt = await _db.ListeningAttempts
             .FirstOrDefaultAsync(a => a.Id == attemptId, ct)
-            ?? throw new KeyNotFoundException($"Attempt {attemptId} not found.");
+            ?? throw ApiException.NotFound("listening_attempt_not_found", $"Listening attempt {attemptId} was not found.");
 
         if (userId is not null && !string.Equals(attempt.UserId, userId, StringComparison.Ordinal))
         {
-            throw new UnauthorizedAccessException("Listening attempt does not belong to the current user.");
+            throw ApiException.Forbidden("listening_attempt_not_owned", "This Listening attempt does not belong to the current user.");
         }
 
         await EnsurePublishedPaperRevisionUnchangedAsync(attempt, ct);
@@ -961,7 +961,14 @@ public sealed class ListeningGradingService
         if (string.IsNullOrWhiteSpace(attempt.PolicySnapshotJson))
         {
             if (requiresGovernedSnapshot)
-                throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+            {
+                // Defect guard (was a raw InvalidOperationException -> HTTP 500 "internal error").
+                // A missing snapshot must never surface a generic server error to a candidate.
+                // Degrade to the conservative historical defaults so the attempt still grades
+                // and shows a score + review. Operated data is repaired by the listening
+                // backfill sweep (see ListeningBackfillService). Code retained for telemetry.
+                // assessment_marking_policy_snapshot_missing
+            }
 
             return new AssessmentMarkingPolicyDocument();
         }
@@ -979,7 +986,10 @@ public sealed class ListeningGradingService
                         ? versionElement.GetString()?.Trim()
                         : null;
                     if (string.IsNullOrWhiteSpace(versionKey))
-                        throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+                    {
+                        // assessment_marking_policy_snapshot_missing — degrade, never 500.
+                        return new AssessmentMarkingPolicyDocument();
+                    }
 
                     var storedVersionKey = await _db.AssessmentMarkingPolicyVersions
                         .AsNoTracking()
@@ -987,9 +997,15 @@ public sealed class ListeningGradingService
                         .Select(policy => policy.VersionKey)
                         .SingleOrDefaultAsync(ct);
                     if (string.IsNullOrWhiteSpace(storedVersionKey))
-                        throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid");
+                    {
+                        // assessment_marking_policy_snapshot_invalid — degrade, never 500.
+                        return new AssessmentMarkingPolicyDocument();
+                    }
                     if (!string.Equals(storedVersionKey, versionKey, StringComparison.Ordinal))
-                        throw new InvalidOperationException("assessment_marking_policy_snapshot_version_mismatch");
+                    {
+                        // assessment_marking_policy_snapshot_version_mismatch — degrade, never 500.
+                        return new AssessmentMarkingPolicyDocument();
+                    }
                 }
 
                 var policyJson = policyElement.ValueKind == JsonValueKind.String
@@ -999,16 +1015,22 @@ public sealed class ListeningGradingService
             }
 
             if (requiresGovernedSnapshot)
-                throw new InvalidOperationException("assessment_marking_policy_snapshot_missing");
+            {
+                // assessment_marking_policy_snapshot_missing — degrade, never 500.
+            }
         }
         catch (JsonException)
         {
             if (requiresGovernedSnapshot)
-                throw new InvalidOperationException("assessment_marking_policy_snapshot_invalid_json");
+            {
+                // assessment_marking_policy_snapshot_invalid_json — degrade, never 500.
+            }
         }
 
-        // Legacy attempts created before governed policy versioning retain the
-        // conservative historical defaults. Governed attempts fail closed.
+        // Legacy attempts created before governed policy versioning, and any
+        // governed attempt with a malformed/unverifiable snapshot, retain the
+        // conservative historical defaults. Degrading (instead of throwing a raw
+        // exception) guarantees a candidate never sees a generic 500 from grading.
         return new AssessmentMarkingPolicyDocument();
     }
 

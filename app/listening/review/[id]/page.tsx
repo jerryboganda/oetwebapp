@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, BookOpen, CheckCircle2, Clock, GraduationCap, Headphones, MinusCircle, Quote, Tag, Target, Volume2, XCircle } from 'lucide-react';
+import { ArrowLeft, BookOpen, CheckCircle2, Clock, GraduationCap, Headphones, MinusCircle, Quote, RotateCcw, Tag, Target, Volume2, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -85,6 +85,13 @@ function availableScriptParts(review: ListeningReviewDto) {
   }
 
   return ['A', 'B', 'C'].filter((part): part is 'A' | 'B' | 'C' => parts.has(part as 'A' | 'B' | 'C'));
+}
+
+function formatAudioDuration(seconds: number) {
+  const totalSeconds = Math.max(0, Math.round(seconds));
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainder = totalSeconds % 60;
+  return `${minutes}:${remainder.toString().padStart(2, '0')}`;
 }
 
 const LISTENING_REVIEW_AUDIO_SECTIONS = ['A1', 'A2', 'B', 'C1', 'C2'] as const;
@@ -172,6 +179,7 @@ export default function ListeningReviewPage() {
   const [audioLoading, setAudioLoading] = useState(false);
   const [audioResolveError, setAudioResolveError] = useState<string | null>(null);
   const [audioRetryKey, setAudioRetryKey] = useState(0);
+  const [audioDurationSeconds, setAudioDurationSeconds] = useState<number | null>(null);
   const [highlightedEvidence, setHighlightedEvidence] = useState<{
     questionNumber: number;
     partCode: string;
@@ -249,6 +257,7 @@ export default function ListeningReviewPage() {
       setResolvedAudioSrc(null);
       setAudioLoading(false);
       setAudioResolveError(null);
+      setAudioDurationSeconds(null);
       return;
     }
     if (/^https?:\/\//i.test(rawUrl)) {
@@ -262,6 +271,7 @@ export default function ListeningReviewPage() {
     setResolvedAudioSrc(null);
     setAudioLoading(true);
     setAudioResolveError(null);
+    setAudioDurationSeconds(null);
     fetchAuthorizedObjectUrl(rawUrl)
       .then((blobUrl) => {
         if (cancelled) {
@@ -285,6 +295,7 @@ export default function ListeningReviewPage() {
 
   const seekAndPlay = (audio: HTMLAudioElement, startMs: number, endMs: number | null) => {
     if (evidenceTimerRef.current) clearTimeout(evidenceTimerRef.current);
+    evidenceTimerRef.current = null;
     audio.currentTime = Math.max(0, startMs / 1000);
     void audio.play();
     if (endMs != null && endMs > startMs) {
@@ -295,8 +306,17 @@ export default function ListeningReviewPage() {
   // Switch the evidence player to a section's file (manual section tab).
   const loadSection = (section: string) => {
     pendingSeekRef.current = null;
+    if (evidenceTimerRef.current) clearTimeout(evidenceTimerRef.current);
+    evidenceTimerRef.current = null;
     setActiveSection(section);
     setActiveAudioUrl(audioByPart[section] ?? null);
+  };
+
+  const replayFullAudio = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    pendingSeekRef.current = null;
+    seekAndPlay(audio, 0, null);
   };
 
   const playEvidence = (
@@ -383,19 +403,8 @@ export default function ListeningReviewPage() {
                    tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
                  />
                )}
-             />
+              />
 
-            <ScoreConversionEvidence
-              assessment="Listening"
-              rawScore={review.rawScore}
-              maxRawScore={review.maxRawScore}
-              scaledScore={hasApprovedConversion ? review.scaledScore : null}
-              passed={hasApprovedConversion ? review.passed : null}
-              grade={hasApprovedConversion ? review.grade : null}
-              tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
-              errorCode={review.scoreConversionErrorCode}
-            />
-            <ListeningPartBreakdown items={review.itemReview} />
             <section
               id="show-script"
               aria-labelledby="listening-show-script-heading"
@@ -438,6 +447,17 @@ export default function ListeningReviewPage() {
                 </Button>
               )}
             </section>
+            <ScoreConversionEvidence
+              assessment="Listening"
+              rawScore={review.rawScore}
+              maxRawScore={review.maxRawScore}
+              scaledScore={hasApprovedConversion ? review.scaledScore : null}
+              passed={hasApprovedConversion ? review.passed : null}
+              grade={hasApprovedConversion ? review.grade : null}
+              tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
+              errorCode={review.scoreConversionErrorCode}
+            />
+            <ListeningPartBreakdown items={review.itemReview} />
             <TimeUsedSummary
               totalMilliseconds={review.timeUsed?.totalMilliseconds ?? null}
               sections={(review.timeUsed?.sections ?? []).map((section) => ({
@@ -510,11 +530,11 @@ export default function ListeningReviewPage() {
             {usingPerSectionAudio || review.paper.audioUrl ? (
               <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
-                  eyebrow="Evidence Player"
-                  title="Replay the proof window, not the whole paper"
+                  eyebrow="Audio Replay"
+                  title="Replay the complete submitted audio"
                   description={usingPerSectionAudio
-                    ? 'Each section has its own audio (Part B is one shared clip). Pick a section, or use the evidence buttons below to jump straight to the supporting span.'
-                    : 'Use authored evidence times to jump directly to the audio span that supports each answer.'}
+                    ? 'Each section plays its own complete audio (Part B is one shared clip). Replay it as many times as you need; evidence buttons remain optional shortcuts.'
+                    : 'Replay the complete audio as many times as you need. Authored evidence times remain optional shortcuts.'}
                   className="mb-4"
                 />
                 {usingPerSectionAudio ? (
@@ -548,12 +568,35 @@ export default function ListeningReviewPage() {
                     </button>
                   </InlineAlert>
                 ) : null}
+                {resolvedAudioSrc && audioDurationSeconds != null && (!Number.isFinite(audioDurationSeconds) || audioDurationSeconds <= 0) ? (
+                  <InlineAlert variant="error" className="mb-4">
+                    The audio duration could not be read.{' '}
+                    <button
+                      type="button"
+                      onClick={() => setAudioRetryKey((key) => key + 1)}
+                      className="ml-2 font-semibold underline"
+                    >
+                      Retry
+                    </button>
+                  </InlineAlert>
+                ) : null}
                 {audioLoading ? (
                   <div className="flex items-center gap-3 rounded-xl border border-border bg-background-light px-4 py-4 text-sm text-muted">
                     <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" aria-hidden />
                     Loading audio…
                   </div>
                 ) : null}
+                <div className="mb-4 flex flex-wrap items-center gap-3">
+                  <Button type="button" onClick={replayFullAudio} disabled={!resolvedAudioSrc} className="gap-2">
+                    <RotateCcw className="h-4 w-4" />
+                    Replay full audio from start
+                  </Button>
+                  {audioDurationSeconds != null && Number.isFinite(audioDurationSeconds) && audioDurationSeconds > 0 ? (
+                    <span className="text-sm font-semibold text-success">
+                      Duration loaded: {formatAudioDuration(audioDurationSeconds)}
+                    </span>
+                  ) : null}
+                </div>
                 <audio
                   ref={audioRef}
                   key={resolvedAudioSrc ?? activeAudioUrl ?? 'no-audio'}
@@ -564,6 +607,7 @@ export default function ListeningReviewPage() {
                   onLoadedMetadata={() => {
                     const audio = audioRef.current;
                     if (!audio) return;
+                    setAudioDurationSeconds(audio.duration);
                     const pending = pendingSeekRef.current;
                     if (pending) {
                       pendingSeekRef.current = null;
@@ -575,7 +619,7 @@ export default function ListeningReviewPage() {
                   }}
                 />
                 <p className="mt-3 text-xs leading-5 text-muted">
-                  Audios remain replayable after submit — switch sections and use evidence buttons to jump to any span at any time.
+                  Audio remains replayable after submit — switch sections to hear every submitted part, or use evidence buttons to jump to any span at any time.
                 </p>
               </section>
             ) : (

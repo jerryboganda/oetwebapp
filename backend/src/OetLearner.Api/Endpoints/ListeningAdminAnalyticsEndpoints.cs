@@ -93,15 +93,22 @@ public static class ListeningAdminAnalyticsEndpoints
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             var reports = await svc.BackfillAllAsync(adminId, ct);
+            var flagged = reports
+                .Where(r => r.Warnings is { Count: > 0 })
+                .Select(r => new { r.PaperId, r.Success, r.Reason, Warnings = r.Warnings })
+                .ToList();
             return Results.Ok(new
             {
                 count = reports.Count,
                 successCount = reports.Count(r => r.Success),
+                warningCount = reports.Sum(r => r.Warnings?.Count ?? 0),
+                papersWithWarnings = flagged.Count,
+                warningsByPaper = flagged,
                 reports,
             });
         })
             .WithName("BackfillListeningRelationalAll")
-            .WithSummary("Project the JSON blob into ListeningPart/Extract/Question/Option for every Listening paper");
+            .WithSummary("Project the JSON blob into ListeningPart/Extract/Question/Option for every Listening paper, and report any authored questions that cannot be graded");
 
         return app;
     }
