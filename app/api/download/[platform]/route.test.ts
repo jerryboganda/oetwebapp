@@ -40,8 +40,18 @@ function requestFor(platform: string) {
 }
 
 afterEach(() => {
-  process.env.RELEASES_ROOT = originalEnv.RELEASES_ROOT;
-  process.env.RELEASES_PUBLIC_BASE_URL = originalEnv.RELEASES_PUBLIC_BASE_URL;
+  // Assigning `undefined` via env coercion leaves the string "undefined" behind,
+  // which makes the fallback URL malformed ("undefined/get-app").
+  if (originalEnv.RELEASES_ROOT === undefined) {
+    delete process.env.RELEASES_ROOT;
+  } else {
+    process.env.RELEASES_ROOT = originalEnv.RELEASES_ROOT;
+  }
+  if (originalEnv.RELEASES_PUBLIC_BASE_URL === undefined) {
+    delete process.env.RELEASES_PUBLIC_BASE_URL;
+  } else {
+    process.env.RELEASES_PUBLIC_BASE_URL = originalEnv.RELEASES_PUBLIC_BASE_URL;
+  }
 });
 
 describe('direct native download resolver', () => {

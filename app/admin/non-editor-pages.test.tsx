@@ -95,6 +95,7 @@ const api = vi.hoisted(() => ({
   restoreAdminUser: vi.fn(),
   adjustAdminUserCredits: vi.fn(),
   adjustAdminAiPackageCredits: vi.fn(),
+  fetchAdminUserAiCredits: vi.fn().mockResolvedValue(null),
   restoreAdminContentRevision: vi.fn(),
   retryWebhook: vi.fn(),
 }));
@@ -247,6 +248,7 @@ vi.mock('@/lib/api', () => ({
   deleteAdminUser: api.deleteAdminUser,
   restoreAdminUser: api.restoreAdminUser,
   adjustAdminUserCredits: api.adjustAdminUserCredits,
+  fetchAdminUserAiCredits: api.fetchAdminUserAiCredits,
   restoreAdminContentRevision: api.restoreAdminContentRevision,
   retryWebhook: api.retryWebhook,
   isApiError: () => false,

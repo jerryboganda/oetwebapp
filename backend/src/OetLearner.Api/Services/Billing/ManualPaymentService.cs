@@ -39,7 +39,8 @@ public interface IManualPaymentService
         PaymentTransaction transaction,
         string courseName,
         string? courseId,
-        CancellationToken ct);
+        string? subscriptionId = null,
+        CancellationToken ct = default);
 
     /// <summary>Release a pending offline order whose payment was confirmed out-of-band,
     /// without an uploaded file. Records who waived it, when, and why, plus an AuditEvent.
@@ -481,7 +482,8 @@ public sealed class ManualPaymentService : IManualPaymentService
         PaymentTransaction transaction,
         string courseName,
         string? courseId,
-        CancellationToken ct)
+        string? subscriptionId = null,
+        CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(transaction);
 
@@ -494,13 +496,28 @@ public sealed class ManualPaymentService : IManualPaymentService
             .FirstOrDefault(e => e.PaymentTransactionId == transaction.Id);
         if (pending is not null)
         {
+            if (string.IsNullOrWhiteSpace(pending.AccessGrantedSubscriptionId) && !string.IsNullOrWhiteSpace(subscriptionId))
+            {
+                pending.AccessGrantedSubscriptionId = subscriptionId;
+            }
             return pending;
         }
         var existing = await _db.ManualPaymentRequests
             .FirstOrDefaultAsync(r => r.PaymentTransactionId == transaction.Id, ct);
         if (existing is not null)
         {
+            if (string.IsNullOrWhiteSpace(existing.AccessGrantedSubscriptionId) && !string.IsNullOrWhiteSpace(subscriptionId))
+            {
+                existing.AccessGrantedSubscriptionId = subscriptionId;
+            }
             return existing;
+        }
+
+        var resolvedSubId = subscriptionId;
+        if (string.IsNullOrWhiteSpace(resolvedSubId) && !string.IsNullOrWhiteSpace(transaction.QuoteId))
+        {
+            var quote = await _db.BillingQuotes.AsNoTracking().FirstOrDefaultAsync(q => q.Id == transaction.QuoteId, ct);
+            resolvedSubId = quote?.SubscriptionId;
         }
 
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
@@ -528,8 +545,9 @@ public sealed class ManualPaymentService : IManualPaymentService
             CourseName = Truncate(courseName ?? string.Empty, 128),
             CourseId = string.IsNullOrWhiteSpace(courseId) ? null : Truncate(courseId.Trim(), 64),
             PaymentCategory = "international",
-            // Card money has already cleared — there is nothing for an admin to verify.
+            // Card money has already cleared at the gateway level.
             Status = "paid",
+            AccessGrantedSubscriptionId = resolvedSubId,
             SubmittedAt = transaction.CreatedAt == default ? now : transaction.CreatedAt,
             CreatedAt = now,
             UpdatedAt = now,

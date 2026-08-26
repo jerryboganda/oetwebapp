@@ -114,6 +114,7 @@ public class UserVideoAccessTests
     public async Task Allocation_AutomaticallyIncludesVideosPublishedAfterTheScopeWasCreated()
     {
         await using var db = CreateDb();
+        SeedVideoModuleSubscription(db, "learner-1");
         var scopeCreatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var existing = Video("vid-a", scopeCreatedAt.AddHours(-1), scopeCreatedAt.AddHours(-1));
         var newlyPublished = Video("vid-new", scopeCreatedAt.AddHours(1), scopeCreatedAt.AddHours(1));
@@ -197,6 +198,7 @@ public class UserVideoAccessTests
     public async Task FindVisibleVideo_WithAllocation_HidesNonAllocated()
     {
         await using var db = CreateDb();
+        SeedVideoModuleSubscription(db, "learner-1");
         var scopeCreatedAt = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var allocated = Video("vid-a", scopeCreatedAt.AddHours(-2));
         var excluded = Video("vid-b", scopeCreatedAt.AddHours(-1));
@@ -204,8 +206,6 @@ public class UserVideoAccessTests
         Allow(db, "learner-1", "vid-a", scopeCreatedAt);
         await db.SaveChangesAsync();
 
-        // FindVisibleVideoAsync only touches the db (profession + video scope); the
-        // entitlement/settings deps are never dereferenced on this path.
         var service = new VideoLibraryLearnerService(db, CreateGate(db), settingsProvider: null!);
         var now = DateTimeOffset.UtcNow;
 
@@ -217,8 +217,9 @@ public class UserVideoAccessTests
     public async Task FindVisibleVideo_WithoutAllocation_ShowsAll()
     {
         await using var db = CreateDb();
+        SeedVideoModuleSubscription(db, "learner-1");
         db.LibraryVideos.AddRange(Video("vid-a"), Video("vid-b"));
-        // No UserVideoAccess rows.
+        // No UserVideoAccess rows — fail-open.
         await db.SaveChangesAsync();
 
         var service = new VideoLibraryLearnerService(db, CreateGate(db), settingsProvider: null!);

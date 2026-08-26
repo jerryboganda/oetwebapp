@@ -11539,6 +11539,7 @@ public partial class LearnerService(
         PaymentTransaction transaction,
         BillingQuote quote,
         string courseName,
+        string? subscriptionId,
         CancellationToken ct)
     {
         if (manualPaymentService is null)
@@ -11553,6 +11554,7 @@ public partial class LearnerService(
                 transaction,
                 courseName,
                 quote.PlanCode,
+                subscriptionId,
                 ct);
         }
         catch (Exception ex)
@@ -11741,12 +11743,15 @@ public partial class LearnerService(
 
                 // Final rule: Before payment = Draft only. Successful payment +
                 // admin approval required = Pending; automatic = Active.
-                // If the scaffold is still Draft, move it to Pending so the admin
-                // queue shows "payment succeeded, awaiting approval". This is the
-                // gateway from the pre-payment scaffold to the paid Pending state.
-                if (subscription.Status == SubscriptionStatus.Draft)
+                // Move it to Pending so the admin queue shows "payment succeeded, awaiting approval".
+                // This is the gateway from the pre-payment state to the paid Pending state.
+                if (planPendingVerification || DeliveryMethods.RequiresManualFulfilment(deliveryMethod))
                 {
                     SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Pending, "checkout_pending_approval");
+                }
+                else
+                {
+                    SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Active, "checkout_completed");
                 }
             }
         }
@@ -12017,7 +12022,7 @@ public partial class LearnerService(
         quote.Status = BillingQuoteStatus.Completed;
         quote.CheckoutSessionId = transaction.GatewayTransactionId;
 
-        await TryWriteGatewayReceiptAsync(transaction, quote, quoteResponse.Summary, ct);
+        await TryWriteGatewayReceiptAsync(transaction, quote, quoteResponse.Summary, subscription.Id, ct);
 
         // Mark pricing-experiment conversion if this quote was assigned to a variant.
         if (!string.IsNullOrEmpty(quote.ExperimentAssignmentId))

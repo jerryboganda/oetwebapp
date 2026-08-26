@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react';
-const { mockFetchSubmissions, mockTrack } = vi.hoisted(() => ({
+const { mockFetchSubmissions, mockFetchMyAttemptHistory, mockTrack } = vi.hoisted(() => ({
   mockFetchSubmissions: vi.fn(),
+  mockFetchMyAttemptHistory: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
 }));
@@ -20,6 +21,7 @@ vi.mock('@/lib/analytics', () => ({
 
 vi.mock('@/lib/api', () => ({
   fetchSubmissions: mockFetchSubmissions,
+  fetchMyAttemptHistory: mockFetchMyAttemptHistory,
 }));
 
 import SubmissionHistoryPage from './page';
@@ -28,6 +30,7 @@ import { renderWithRouter } from '@/tests/test-utils';
 describe('Submission history page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchMyAttemptHistory.mockResolvedValue([]);
     mockFetchSubmissions.mockResolvedValue([
       {
         id: 'sub-1',

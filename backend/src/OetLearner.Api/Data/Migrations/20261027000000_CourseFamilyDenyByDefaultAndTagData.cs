@@ -42,7 +42,7 @@ namespace OetLearner.Api.Data.Migrations
             "'vid_cd7c2202084f4d27bb9eb689d97f6bc8','vid_7f855ac92cc34d55ae60dca949c60cb1'";
 
         private const string FullPlanPrefix = "full-";
-        private const string CrashPlanPrefixes = "'crash-%','writing-crash%','speaking-crash%'";
+        private const string CrashPlanPrefixes = "'crash-%' OR \"Code\" LIKE 'writing-crash%' OR \"Code\" LIKE 'speaking-crash%'";
 
         protected override void Up(MigrationBuilder migrationBuilder)
         {

@@ -346,7 +346,7 @@ describe('Dashboard page', () => {
 
     renderDashboard();
 
-    expect(await screen.findByText('Subscription details unavailable')).toBeInTheDocument();
+    expect(await screen.findByText('Payment & subscription status unavailable')).toBeInTheDocument();
     expect(screen.getByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
   });
 });

@@ -297,6 +297,15 @@ public static class BillingSubscriptionEndpoints
         {
             return "expired";
         }
+        if (sub.Status == SubscriptionStatus.Pending)
+        {
+            return sub.FulfilmentStatus switch
+            {
+                FulfilmentStatuses.PendingManual => "pending_manual",
+                FulfilmentStatuses.PendingVerification => "pending_verification",
+                _ => "pending",
+            };
+        }
         return sub.Status switch
         {
             SubscriptionStatus.PastDue => "past_due",

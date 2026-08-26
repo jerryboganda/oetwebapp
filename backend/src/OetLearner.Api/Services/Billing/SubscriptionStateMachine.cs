@@ -30,6 +30,7 @@ public static class SubscriptionStateMachine
             [SubscriptionStatus.Trial] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Trial,
+                SubscriptionStatus.Pending,
                 SubscriptionStatus.Active,
                 SubscriptionStatus.Suspended, // admin suspend (reversible via Suspended -> Active)
                 SubscriptionStatus.Cancelled,
@@ -47,6 +48,7 @@ public static class SubscriptionStateMachine
             [SubscriptionStatus.Active] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Active,
+                SubscriptionStatus.Pending,
                 SubscriptionStatus.PastDue,
                 SubscriptionStatus.Suspended, // dispute-pending equivalent
                 SubscriptionStatus.Paused,    // Phase 6 voluntary pause
@@ -90,6 +92,7 @@ public static class SubscriptionStateMachine
             [SubscriptionStatus.Suspended] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Suspended,
+                SubscriptionStatus.Pending,
                 SubscriptionStatus.Active,    // dispute resolved in our favour
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
@@ -97,17 +100,21 @@ public static class SubscriptionStateMachine
             [SubscriptionStatus.Cancelled] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Cancelled,
+                SubscriptionStatus.Pending,
                 SubscriptionStatus.Active,    // admin restore / ReactivateCancelled
                 SubscriptionStatus.Expired,
             },
             [SubscriptionStatus.Expired] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Expired,
+                SubscriptionStatus.Pending,
+                SubscriptionStatus.Active,
             },
         };
 
     /// <summary>Statuses where a subscription still owns its plan slot — actively
-    /// granting access (Active/Trial/FreezeRequested) or paused-but-owned (Frozen).
+    /// granting access (Active/Trial/FreezeRequested), paused-but-owned (Frozen),
+    /// or paid-awaiting-admin-fulfillment (Pending).
     /// Use this (never a bare <c>OrderByDescending(ChangedAt).First()</c>) whenever
     /// picking "the" subscription that represents a user's current package: a stale
     /// mutation on an OLD package (e.g. an admin cancelling it right after granting a
@@ -119,6 +126,7 @@ public static class SubscriptionStateMachine
         SubscriptionStatus.Trial,
         SubscriptionStatus.FreezeRequested,
         SubscriptionStatus.Frozen,
+        SubscriptionStatus.Pending,
     };
 
     public static bool IsLegal(SubscriptionStatus from, SubscriptionStatus to)

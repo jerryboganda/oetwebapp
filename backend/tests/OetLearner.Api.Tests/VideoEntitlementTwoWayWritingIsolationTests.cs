@@ -137,7 +137,7 @@ public class VideoEntitlementTwoWayWritingIsolationTests
     }
 
     [Fact]
-    public async Task FullCourse_AllowsUntaggedWritingVideo()
+    public async Task FullCourse_DeniesUntaggedPremiumWritingVideo_DenyByDefault()
     {
         await using var db = CreateDb();
         SeedPlan(db, "learner-1", "full-condensed-medicine", "{}");
@@ -147,7 +147,8 @@ public class VideoEntitlementTwoWayWritingIsolationTests
         var video = Video("vid_untagged_1", tagsCsv: null);
         var result = await service.AllowAccessAsync("learner-1", video, default);
 
-        Assert.True(result.Allowed);
+        Assert.False(result.Allowed);
+        Assert.Equal("plan_excludes_course_family", result.Reason);
     }
 
     [Fact]
@@ -170,15 +171,14 @@ public class VideoEntitlementTwoWayWritingIsolationTests
     }
 
     [Fact]
-    public async Task FullCourse_ExplicitIncludeBeatsExcludeTag()
+    public async Task FullCourse_ExplicitIncludeDoesNotBeatCrashTag()
     {
         await using var db = CreateDb();
+        // Even an explicit per-id include cannot resurrect a crash-tagged video on a
+        // full-course plan — family isolation is the outer, non-overridable gate.
         var fullCourseOverrides = """
             {
               "videos": {
-                "excludeTags": [
-                  "batch:crash-course-arabic-writing"
-                ],
                 "include": [
                   "vid_crash_arabic_legacy_included"
                 ]
@@ -194,7 +194,8 @@ public class VideoEntitlementTwoWayWritingIsolationTests
             tagsCsv: "batch:crash-course-arabic-writing");
         var result = await service.AllowAccessAsync("learner-1", video, default);
 
-        Assert.True(result.Allowed);
+        Assert.False(result.Allowed);
+        Assert.Equal("plan_excludes_course_family", result.Reason);
     }
 
     [Fact]

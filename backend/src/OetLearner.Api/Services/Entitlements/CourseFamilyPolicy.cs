@@ -124,6 +124,9 @@ public static class CourseFamilyPolicy
 
     public static CourseFamily ClassifyVideo(Domain.LibraryVideo video, IEnumerable<string>? extraLabels = null)
     {
+        // Family classification is tag-first, then label/title fallback, then Shared.
+        // This keeps explicit batch:* family tags authoritative while allowing ordinary,
+        // untagged content to stay visible unless the title/labels clearly declare a family.
         var tags = SplitTags(video.TagsCsv);
         var hasFullTag = tags.Contains(FullCourseOnlyTag);
         var hasCrashTag = false;
@@ -141,10 +144,15 @@ public static class CourseFamilyPolicy
         if (hasCrashTag) return CourseFamily.CrashCourse;
         if (tags.Contains(SharedTag)) return CourseFamily.Shared;
 
-        var labels = extraLabels is null
-            ? new List<string>()
-            : extraLabels.Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
-        if (!string.IsNullOrWhiteSpace(video.Title)) labels.Add(video.Title);
+        var labels = new List<string?>
+        {
+            video.Title,
+        };
+        if (extraLabels is not null)
+        {
+            labels.AddRange(extraLabels);
+        }
+
         return ClassifyLabels(labels);
     }
 

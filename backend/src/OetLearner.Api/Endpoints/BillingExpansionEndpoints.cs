@@ -252,10 +252,9 @@ public static class BillingExpansionEndpoints
     private static async Task<Ok<List<PendingFulfilmentDto>>> ListPendingFulfilment(LearnerDbContext db, CancellationToken ct)
     {
         var subscriptions = await db.Subscriptions
-            .Where(s => s.Status == SubscriptionStatus.Pending
+            .Where(s => s.Status != SubscriptionStatus.Draft
                 && (s.FulfilmentStatus == FulfilmentStatuses.PendingManual
-                    || s.FulfilmentStatus == FulfilmentStatuses.PendingVerification)
-                && s.Status != SubscriptionStatus.Draft)
+                    || s.FulfilmentStatus == FulfilmentStatuses.PendingVerification))
             .OrderBy(s => s.ChangedAt)
             .Take(200)
             .ToListAsync(ct);
@@ -270,14 +269,23 @@ public static class BillingExpansionEndpoints
             .ToDictionaryAsync(p => p.Code, StringComparer.Ordinal, ct);
 
         var subscriptionIds = subscriptions.Select(s => s.Id).ToList();
-        var proofs = await db.ManualPaymentRequests
-            .Where(r => r.AccessGrantedSubscriptionId != null && subscriptionIds.Contains(r.AccessGrantedSubscriptionId!))
-            .ToListAsync(ct);
-        var proofBySubscription = proofs
-            .GroupBy(r => r.AccessGrantedSubscriptionId!, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.SubmittedAt).First(), StringComparer.Ordinal);
-
         var userIds = subscriptions.Select(s => s.UserId).Distinct().ToList();
+
+        var proofs = await db.ManualPaymentRequests
+            .Where(r => (r.AccessGrantedSubscriptionId != null && subscriptionIds.Contains(r.AccessGrantedSubscriptionId!))
+                || userIds.Contains(r.UserId))
+            .ToListAsync(ct);
+        var proofBySubscription = new Dictionary<string, ManualPaymentRequest>(StringComparer.Ordinal);
+        foreach (var s in subscriptions)
+        {
+            var match = proofs.FirstOrDefault(r => string.Equals(r.AccessGrantedSubscriptionId, s.Id, StringComparison.Ordinal))
+                ?? proofs.OrderByDescending(r => r.SubmittedAt).FirstOrDefault(r => r.UserId == s.UserId && (r.CourseId == s.PlanId || r.CourseName == s.PlanId));
+            if (match is not null)
+            {
+                proofBySubscription[s.Id] = match;
+            }
+        }
+
         var users = await db.Users
             .Where(u => userIds.Contains(u.Id))
             .Select(u => new { u.Id, u.DisplayName, u.Email })
@@ -294,23 +302,39 @@ public static class BillingExpansionEndpoints
                 .Where(v => versionIds.Contains(v.Id))
                 .ToDictionaryAsync(v => v.Id, StringComparer.Ordinal, ct);
 
-        // Enrichment: also pull gateway transactions for subscriptions without proof
+        // Enrichment: also pull gateway transactions for subscriptions
         var quoteMap = await db.BillingQuotes.AsNoTracking()
-            .Where(q => q.SubscriptionId != null && subscriptionIds.Contains(q.SubscriptionId!))
-            .ToDictionaryAsync(q => q.SubscriptionId!, StringComparer.Ordinal, ct);
-        var quoteIds = quoteMap.Values.Select(q => q.Id).ToList();
-        var transactions = quoteIds.Count == 0 ? new List<PaymentTransaction>() : await db.PaymentTransactions.AsNoTracking()
-            .Where(t => t.QuoteId != null && quoteIds.Contains(t.QuoteId!) && t.Status == "completed")
+            .Where(q => (q.SubscriptionId != null && subscriptionIds.Contains(q.SubscriptionId!))
+                || (userIds.Contains(q.UserId) && planCodes.Contains(q.PlanCode ?? string.Empty)))
+            .ToListAsync(ct);
+        var quoteIds = quoteMap.Select(q => q.Id).ToList();
+        var transactions = await db.PaymentTransactions.AsNoTracking()
+            .Where(t => (t.QuoteId != null && quoteIds.Contains(t.QuoteId!))
+                || (userIds.Contains(t.LearnerUserId) && planCodes.Contains(t.ProductId ?? string.Empty)))
             .OrderByDescending(t => t.CreatedAt)
             .ToListAsync(ct);
         var txBySubscription = new Dictionary<string, PaymentTransaction>(StringComparer.Ordinal);
-        foreach (var tx in transactions)
+        var quoteBySubscription = new Dictionary<string, BillingQuote>(StringComparer.Ordinal);
+        foreach (var s in subscriptions)
         {
-            if (tx.QuoteId is null) continue;
-            var q = quoteMap.Values.FirstOrDefault(v => v.Id == tx.QuoteId);
-            if (q?.SubscriptionId is not null && !txBySubscription.ContainsKey(q.SubscriptionId!))
+            var matchedQuote = quoteMap.FirstOrDefault(q => string.Equals(q.SubscriptionId, s.Id, StringComparison.Ordinal))
+                ?? quoteMap.OrderByDescending(q => q.CreatedAt).FirstOrDefault(q => q.UserId == s.UserId && q.PlanCode == s.PlanId);
+            if (matchedQuote is not null)
             {
-                txBySubscription[q.SubscriptionId!] = tx;
+                quoteBySubscription[s.Id] = matchedQuote;
+                var matchedTx = transactions.FirstOrDefault(t => t.QuoteId == matchedQuote.Id && t.Status == "completed");
+                if (matchedTx is not null)
+                {
+                    txBySubscription[s.Id] = matchedTx;
+                }
+            }
+            if (!txBySubscription.ContainsKey(s.Id))
+            {
+                var directTx = transactions.FirstOrDefault(t => t.LearnerUserId == s.UserId && (t.ProductId == s.PlanId || t.ProductId == s.PlanVersionId) && t.Status == "completed");
+                if (directTx is not null)
+                {
+                    txBySubscription[s.Id] = directTx;
+                }
             }
         }
 
@@ -321,16 +345,16 @@ public static class BillingExpansionEndpoints
             userById.TryGetValue(s.UserId, out var user);
             versions.TryGetValue(s.PlanVersionId ?? string.Empty, out var version);
             txBySubscription.TryGetValue(s.Id, out var tx);
-            quoteMap.TryGetValue(s.Id, out var quote);
+            quoteBySubscription.TryGetValue(s.Id, out var quote);
             var externalOnly = version is not null
                 ? ManualDeliveryPolicy.IsExternalOnly(version)
                 : string.IsNullOrWhiteSpace(s.PlanVersionId) && ManualDeliveryPolicy.IsExternalOnly(plan);
             var amount = proof?.AmountAmount ?? tx?.Amount ?? quote?.TotalAmount ?? s.PriceAmount;
             var currency = proof?.Currency ?? tx?.Currency ?? quote?.Currency ?? s.Currency;
-            var gateway = proof?.Gateway ?? tx?.Gateway ?? "manual";
+            var gateway = proof?.Gateway ?? tx?.Gateway ?? "online";
             var transactionId = proof?.Reference ?? tx?.GatewayTransactionId ?? tx?.CaptureId ?? quote?.CheckoutSessionId ?? string.Empty;
-            var paymentMethod = proof?.Method ?? tx?.Gateway ?? "manual";
-            DateTimeOffset? paidAt = proof?.SubmittedAt ?? tx?.CreatedAt ?? quote?.CreatedAt;
+            var paymentMethod = proof?.Method ?? tx?.Gateway ?? "online";
+            DateTimeOffset? paidAt = proof?.SubmittedAt ?? tx?.CreatedAt ?? quote?.CreatedAt ?? s.StartedAt;
             return new PendingFulfilmentDto(
                 s.Id,
                 s.UserId,
@@ -364,6 +388,7 @@ public static class BillingExpansionEndpoints
         HttpContext http,
         ApproveRejectRequest request,
         LearnerDbContext db,
+        IAiPackageCreditService? aiPackageCredits,
         CancellationToken ct)
     {
         var subscription = await db.Subscriptions.FirstOrDefaultAsync(s => s.Id == id, ct);
@@ -410,6 +435,91 @@ public static class BillingExpansionEndpoints
         subscription.FulfilmentStatus = FulfilmentStatuses.Fulfilled;
         subscription.ChangedAt = now;
 
+        var targetPlanCode = plan?.Code ?? purchasedVersion?.Code ?? subscription.PlanId;
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == subscription.UserId, ct);
+        if (user is not null && !string.IsNullOrWhiteSpace(targetPlanCode))
+        {
+            user.CurrentPlanId = targetPlanCode;
+        }
+
+        // Grant included review credits (wallet credits)
+        var includedCredits = purchasedVersion?.IncludedCredits ?? plan?.IncludedCredits ?? 0;
+        if (includedCredits > 0)
+        {
+            var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == subscription.UserId, ct);
+            if (wallet is null)
+            {
+                wallet = new Wallet
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    UserId = subscription.UserId,
+                    CreditBalance = 0,
+                    LedgerSummaryJson = "[]",
+                    LastUpdatedAt = now,
+                };
+                db.Wallets.Add(wallet);
+                await db.SaveChangesAsync(ct);
+            }
+
+            var existingWalletGrant = await db.WalletTransactions.FirstOrDefaultAsync(
+                x => x.WalletId == wallet.Id
+                     && x.TransactionType == "plan_grant"
+                     && x.ReferenceType == "subscription"
+                     && x.ReferenceId == subscription.Id, ct);
+            if (existingWalletGrant is null)
+            {
+                wallet.CreditBalance += includedCredits;
+                wallet.LastUpdatedAt = now;
+                db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    WalletId = wallet.Id,
+                    TransactionType = "plan_grant",
+                    Amount = includedCredits,
+                    BalanceAfter = wallet.CreditBalance,
+                    ReferenceType = "subscription",
+                    ReferenceId = subscription.Id,
+                    Description = $"Included credits for {plan?.Name ?? subscription.PlanId}",
+                    CreatedBy = http.AdminId(),
+                    CreatedAt = now,
+                });
+            }
+        }
+
+        // Grant bundled AI credits (gift credits)
+        var aiCredits = purchasedVersion?.BundledAiCredits ?? plan?.BundledAiCredits ?? 0;
+        if (aiCredits > 0 && aiPackageCredits is not null)
+        {
+            var durationMonths = plan?.DurationMonths ?? purchasedVersion?.DurationMonths ?? 0;
+            var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
+            await aiPackageCredits.GrantCourseGiftCreditsAsync(
+                subscription.UserId,
+                targetPlanCode,
+                plan?.Name ?? subscription.PlanId,
+                aiCredits,
+                $"plan:{subscription.Id}:{targetPlanCode}",
+                giftExpiry,
+                ct);
+        }
+
+        // Mark linked ManualPaymentRequest rows as paid
+        var linkedProofs = await db.ManualPaymentRequests
+            .Where(r => r.AccessGrantedSubscriptionId == subscription.Id
+                || (r.UserId == subscription.UserId && (r.CourseId == targetPlanCode || r.CourseName == targetPlanCode) && r.Status == "pending"))
+            .ToListAsync(ct);
+        foreach (var pr in linkedProofs)
+        {
+            pr.Status = "paid";
+            pr.AccessGrantedSubscriptionId = subscription.Id;
+            pr.ReviewedAt = now;
+            pr.ReviewedByAdminId = http.AdminId();
+            if (!string.IsNullOrWhiteSpace(request.Notes))
+            {
+                pr.AdminNotes = request.Notes;
+            }
+            pr.UpdatedAt = now;
+        }
+
         db.AuditEvents.Add(new AuditEvent
         {
             Id = Guid.NewGuid().ToString("N"),
@@ -426,10 +536,6 @@ public static class BillingExpansionEndpoints
         });
         await db.SaveChangesAsync(ct);
 
-        var user = await db.Users
-            .Where(u => u.Id == subscription.UserId)
-            .Select(u => new { u.DisplayName, u.Email })
-            .FirstOrDefaultAsync(ct);
         return TypedResults.Ok(new PendingFulfilmentDto(
             subscription.Id,
             subscription.UserId,

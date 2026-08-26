@@ -83,7 +83,15 @@ export function formatSubscriptionStatus(status: string | null | undefined): str
     case 'trial':
       return 'Trial';
     case 'pending':
-      return 'Pending';
+    case 'pending_fulfillment':
+    case 'pendingfulfillment':
+      return 'Pending Fulfillment';
+    case 'pending_verification':
+    case 'pendingverification':
+      return 'Pending Verification';
+    case 'pending_manual':
+    case 'pendingmanual':
+      return 'Pending Manual Hand-over';
     case 'past_due':
     case 'pastdue':
       return 'Past due';

@@ -315,14 +315,6 @@ public sealed class VideoEntitlementService(
             {
                 return new VideoEntitlementResult(false, "plan_excludes_video_tag", context.CurrentTier);
             }
-            var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
-            if (family == CourseFamily.None
-                || (context.CourseFamilies is { } families
-                    && families.IsRestricted
-                    && !families.Allows(family)))
-            {
-                return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
-            }
             if (!VideoLibraryLearnerService.IsProfessionVisible(video.ProfessionIdsJson, context.ProfessionId))
             {
                 return new VideoEntitlementResult(false, "profession_mismatch", context.CurrentTier);
@@ -353,6 +345,19 @@ public sealed class VideoEntitlementService(
             if (context.Frozen) return new VideoEntitlementResult(false, "subscription_frozen", "frozen");
             if (context.Expired) return new VideoEntitlementResult(false, "subscription_expired", "expired");
             return new VideoEntitlementResult(false, "no_active_subscription", "free");
+        }
+
+        // Course-family isolation (mutual Full ↔ Crash). Shared and unclassified content
+        // remain visible unless the title/labels or explicit batch tags show a different
+        // family. An explicit per-plan include still wins, but unselected out-of-family
+        // content remains hidden rather than shown as locked/premium.
+        var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
+        if (!explicitlyIncluded
+            && context.CourseFamilies is { } families
+            && families.IsRestricted
+            && !families.Allows(family))
+        {
+            return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
         }
 
         if (context.PlanGrantsPremium || context.AddOnGrantsPremium)
