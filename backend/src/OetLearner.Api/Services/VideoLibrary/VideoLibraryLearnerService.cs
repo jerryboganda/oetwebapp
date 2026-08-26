@@ -4,6 +4,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.VideoLibrary;
 
@@ -132,6 +133,13 @@ public sealed class VideoLibraryLearnerService(
         var shelves = new List<VideoCategoryShelfDto>();
         foreach (var category in categories)
         {
+            if (!CourseFamilyPolicy.Allows(
+                    context.CourseFamilies,
+                    CourseFamilyPolicy.ClassifyLabel(category.Title)))
+            {
+                continue;
+            }
+
             var shelfVideos = memberships
                 .Where(m => m.CategoryId == category.Id && summariesById.ContainsKey(m.VideoId))
                 .OrderBy(m => m.SortOrder)
@@ -312,10 +320,13 @@ public sealed class VideoLibraryLearnerService(
             return null;
         }
 
+        var collectionTitles = await LoadCollectionTitlesAsync([videoId], ct);
+        collectionTitles.TryGetValue(videoId, out var extraLabels);
+
         // Mutual Full/Crash filtering: non-entitled videos are invisible (404), not
         // Premium/locked. Evaluate honors plan excludes, subtest scope, module gate,
-        // profession gating and free-tier rules.
-        if (!entitlements.Evaluate(context, video).Allowed)
+        // profession gating, course-family isolation and free-tier rules.
+        if (!entitlements.Evaluate(context, video, extraLabels).Allowed)
         {
             return null;
         }
@@ -335,6 +346,7 @@ public sealed class VideoLibraryLearnerService(
             .ToListAsync(ct);
         var userVideoAccess = await UserVideoAccessScope.LoadAsync(db, userId, ct);
         var context = await entitlements.ResolveContextAsync(userId, isAdmin: false, ct);
+        var collectionTitles = await LoadCollectionTitlesAsync(published.Select(v => v.Id).ToList(), ct);
         // ProfessionIdsJson is a JSON column — filter client-side (never LINQ into JSON).
         // Entitlement gate: non-entitled premium content must be invisible, not
         // Premium/locked. Free-tier preview handling stays inside Evaluate.
@@ -343,8 +355,38 @@ public sealed class VideoLibraryLearnerService(
             .Where(userVideoAccess.Allows)
             .Where(v => CourseContentMatrix.IsVisibleInBasicEnglishScope(
                 v, context.BasicEnglishEntitled, context.ExclusivelyBasicEnglish))
-            .Where(v => entitlements.Evaluate(context, v).Allowed)
+            .Where(v =>
+            {
+                collectionTitles.TryGetValue(v.Id, out var labels);
+                return entitlements.Evaluate(context, v, labels).Allowed;
+            })
             .ToList();
+    }
+
+    private async Task<Dictionary<string, List<string>>> LoadCollectionTitlesAsync(
+        IReadOnlyCollection<string> videoIds,
+        CancellationToken ct)
+    {
+        var result = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        if (videoIds.Count == 0) return result;
+
+        var rows = await (
+            from item in db.VideoCategoryItems.AsNoTracking()
+            join category in db.VideoCategories.AsNoTracking() on item.CategoryId equals category.Id
+            where videoIds.Contains(item.VideoId)
+            select new { item.VideoId, category.Title }).ToListAsync(ct);
+
+        foreach (var row in rows)
+        {
+            if (!result.TryGetValue(row.VideoId, out var titles))
+            {
+                titles = [];
+                result[row.VideoId] = titles;
+            }
+            titles.Add(row.Title);
+        }
+
+        return result;
     }
 
     /// <summary>

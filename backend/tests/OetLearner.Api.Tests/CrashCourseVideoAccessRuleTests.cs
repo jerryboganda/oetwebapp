@@ -16,7 +16,7 @@ public sealed class CrashCourseVideoAccessRuleTests
 
         var result = service.Evaluate(
             FullCourseContext(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "crash-writing" }),
-            Video("crash-writing"));
+            FullCourseVideo("crash-writing"));
 
         Assert.False(result.Allowed);
         Assert.Equal("plan_excludes_video", result.Reason);
@@ -28,7 +28,7 @@ public sealed class CrashCourseVideoAccessRuleTests
         using var db = CreateDb();
         var service = new VideoEntitlementService(db, new EffectiveEntitlementResolver(db));
 
-        var result = service.Evaluate(FullCourseContext(), Video("december-writing"));
+        var result = service.Evaluate(FullCourseContext(), FullCourseVideo("december-writing"));
 
         Assert.True(result.Allowed);
         Assert.Equal("plan_grants_video_library", result.Reason);
@@ -40,7 +40,7 @@ public sealed class CrashCourseVideoAccessRuleTests
         using var db = CreateDb();
         var service = new VideoEntitlementService(db, new EffectiveEntitlementResolver(db));
 
-        var result = service.Evaluate(CrashCourseContext("crash-writing"), Video("crash-writing"));
+        var result = service.Evaluate(CrashCourseContext("crash-writing"), CrashVideo("crash-writing"));
 
         Assert.True(result.Allowed);
         Assert.Equal("plan_grants_video_library", result.Reason);
@@ -52,7 +52,7 @@ public sealed class CrashCourseVideoAccessRuleTests
         using var db = CreateDb();
         var service = new VideoEntitlementService(db, new EffectiveEntitlementResolver(db));
 
-        var result = service.Evaluate(CrashCourseContext("crash-writing"), Video("february-writing"));
+        var result = service.Evaluate(CrashCourseContext("crash-writing"), CrashVideo("february-writing"));
 
         Assert.False(result.Allowed);
         Assert.Equal("plan_does_not_grant_subtest", result.Reason);
@@ -66,13 +66,25 @@ public sealed class CrashCourseVideoAccessRuleTests
         return new LearnerDbContext(options);
     }
 
-    private static LibraryVideo Video(string id) => new()
+    private static LibraryVideo FullCourseVideo(string id) => new()
     {
         Id = id,
         Title = id,
         AccessTier = "premium",
         SubtestCode = "writing",
         ProfessionIdsJson = "[\"medicine\"]",
+        TagsCsv = "batch:full-course-only",
+        Status = ContentStatus.Published,
+    };
+
+    private static LibraryVideo CrashVideo(string id) => new()
+    {
+        Id = id,
+        Title = id,
+        AccessTier = "premium",
+        SubtestCode = "writing",
+        ProfessionIdsJson = "[\"medicine\"]",
+        TagsCsv = "batch:crash-course-only",
         Status = ContentStatus.Published,
     };
 

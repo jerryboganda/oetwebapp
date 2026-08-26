@@ -38,6 +38,10 @@ public class UserVideoAccessTests
             Id = id,
             Title = $"Video {id}",
             AccessTier = "premium",
+            // Post-migration state: all non-crash premium videos carry batch:shared, which the
+            // course-family gate allows on every plan (unclassified videos are covered in
+            // CourseFamilyEntitlementTests, not here).
+            TagsCsv = CourseFamilyPolicy.SharedTag,
             Status = ContentStatus.Published,
             DurationSeconds = 600,
             ProfessionIdsJson = "[]",
@@ -117,7 +121,7 @@ public class UserVideoAccessTests
         Allow(db, "learner-1", existing.Id, scopeCreatedAt);
         await db.SaveChangesAsync();
 
-        var service = new VideoLibraryLearnerService(db, entitlements: null!, settingsProvider: null!);
+        var service = new VideoLibraryLearnerService(db, CreateGate(db), settingsProvider: null!);
 
         Assert.NotNull(await service.FindVisibleVideoAsync("learner-1", newlyPublished.Id, scopeCreatedAt.AddDays(1), default));
     }
@@ -202,7 +206,7 @@ public class UserVideoAccessTests
 
         // FindVisibleVideoAsync only touches the db (profession + video scope); the
         // entitlement/settings deps are never dereferenced on this path.
-        var service = new VideoLibraryLearnerService(db, entitlements: null!, settingsProvider: null!);
+        var service = new VideoLibraryLearnerService(db, CreateGate(db), settingsProvider: null!);
         var now = DateTimeOffset.UtcNow;
 
         Assert.NotNull(await service.FindVisibleVideoAsync("learner-1", allocated.Id, now, default));
@@ -217,7 +221,7 @@ public class UserVideoAccessTests
         // No UserVideoAccess rows.
         await db.SaveChangesAsync();
 
-        var service = new VideoLibraryLearnerService(db, entitlements: null!, settingsProvider: null!);
+        var service = new VideoLibraryLearnerService(db, CreateGate(db), settingsProvider: null!);
         var now = DateTimeOffset.UtcNow;
 
         Assert.NotNull(await service.FindVisibleVideoAsync("learner-1", "vid-a", now, default));

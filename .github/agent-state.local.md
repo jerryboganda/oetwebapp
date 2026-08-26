@@ -1,9 +1,15 @@
 # Agent State (local)
 
+## Current task — Course-family mutual visibility — SHIP READY
+- Implemented centralized `CourseFamilyPolicy` for Full/Crash/Shared classification and backend family gating across video access, collection visibility, materials trees, and direct-access 404s.
+- Validation: `pnpm run ship:gate` OK; targeted backend entitlement validation passed for two-way family access, crash rules, package transitions, and materials restrictions.
+- Next release step: commit the exact backend change set to `main`, push publicly, watch the GitHub Actions `Build & Deploy (web + API)` run for this SHA, and set the repo private again only after the deploy succeeds and health checks are green.
+
 ## Current task — Admin Verify Email recovery — SHIPPED + LIVE
 - Feature `9d5edaa2e` (feat(admin): add manual candidate email verification): POST /v1/admin/users/{id}/verify-email (AdminUsersWrite) sets EmailVerifiedAt, consumes pending verify_email OTPs, revokes all sessions via ISessionRevocationService (refresh-token fallback if unavailable), writes audit; one-click `Verify Email` button (MailCheck) after Set Password on /admin/users/[id]; instant badge + verified toast; failure keeps current state. Build & Deploy run 32975533469 SUCCESS 2026-08-26; health 200 app/api-ready/api-live; web-blue/api-blue/agent-gateway images tagged 9d5edaa2e...; repo PRIVATE.
-- Post-hoc owner-decision compliance fix (uncommitted at last state write): canVerifyEmail now requires status == active (suspended accounts no longer show the action); added AdminUsers_VerifyEmail_ActionHiddenForSuspendedAccount. Owned commit + deploy watching from this session — see next section.
-- Validation this session: backend verify-email 3/3; admin users page Vitest 12/12 (28/28 with related suites); `dotnet build backend/OetLearner.sln` 0 errors; `pnpm run ship:gate` OK.
+- Post-hoc owner-decision compliance fix: canVerifyEmail now requires status == active (suspended accounts no longer show the action); added AdminUsers_VerifyEmail_ActionHiddenForSuspendedAccount.
+- COMMITTED+PUSHED `9dd71ec4d` (2026-08-26 ~15:14 UTC) together with this state update; sibling commit `6c4426306` landed on top of it on main. Validation this session: backend verify-email 3/3; admin users page Vitest 12/12 (28/28 with related suites); `dotnet build backend/OetLearner.sln` 0 errors; `pnpm run ship:gate` OK.
+- DEPLOYED 2026-08-26 (fix included): owner fixed the billing runner gate; a 16:10 push run died as a private-repo run (~5s, empty logs — see Actions visibility rule), so retried publicly: manual dispatch run `32987591042` on main (HEAD `6c4426306` = fix + sibling access fix) SUCCESS 16:26 UTC. Health 200 web/api-ready/api-live; web-green/api-green/agent-gateway images on `6c4426306` (blue on 9d5edaa2e); repo PRIVATE again. Owner live acceptance of Verify Email still pending (disposable unverified account test).
 - Unrelated dirty files PRESERVED uncommitted: AdminRequests.cs, UserAccessAllocationServiceTests.cs, components/admin/user-access/{manage-access-panel,module-toggles,quick-grant-modal}.tsx, root `oet-unrelated-dirty.patch` (listening). Never stage them with task commits.
 - QA Smoke + Speaking Module CI chronically red (ignore per AGENTS.md). OWNER NEXT: live acceptance with a disposable unverified test account — admin Verify Email → badge flips immediately → candidate signed out → sign-in lands email-verified without the OTP trap.
 

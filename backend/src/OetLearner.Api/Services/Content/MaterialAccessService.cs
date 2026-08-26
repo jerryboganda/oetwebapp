@@ -618,10 +618,35 @@ public sealed class MaterialAccessService(
             return decided;
         }
 
+        if (entitlement is not null
+            && !CourseFamilyPolicy.Allows(
+                entitlement.CourseFamilies,
+                ClassifyFolderFamily(folder, allFolders)))
+        {
+            return false;
+        }
+
         var isBasicEnglish = IsBasicEnglishFolder(folder, allFolders);
         return basicEnglishScope.IsFolderVisible(isBasicEnglish)
             && IsDisciplineVisible(folder, allFolders, disciplineUniverse, learnerDisciplines)
             && (isBasicEnglish || IsSubtestInScope(ResolveEffectiveSubtest(folder, allFolders), entitlement));
+    }
+
+    internal static CourseFamily ClassifyFolderFamily(
+        MaterialFolder folder,
+        Dictionary<string, MaterialFolder> allFolders)
+    {
+        var names = new List<string>();
+        var current = folder;
+        var guard = 0;
+        while (current is not null && guard++ < 64)
+        {
+            names.Add(current.Name);
+            if (current.ParentFolderId is null) break;
+            allFolders.TryGetValue(current.ParentFolderId, out current);
+        }
+
+        return CourseFamilyPolicy.ClassifyLabels(names);
     }
 
     /// <summary>

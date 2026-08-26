@@ -95,6 +95,13 @@ public sealed record EffectiveEntitlementSnapshot(
     public DateTimeOffset? ExpiresAt { get; init; }
     public string? ProductCategory { get; init; }
 
+    /// <summary>
+    /// Package-level Full Course vs Crash Course entitlement. Derived from
+    /// <see cref="ProductCategory"/> / plan code across every effective package.
+    /// Unrestricted for unknown/legacy categories so custom plans keep working.
+    /// </summary>
+    public CourseFamilyAccess CourseFamilies { get; init; } = CourseFamilyAccess.Unrestricted;
+
     // ── Subtest × profession content model (access & payment spec §3) ────────
 
     /// <summary>The learner's registered profession (<see cref="Domain.ApplicationUser.ActiveProfessionId"/>),
@@ -417,6 +424,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 BasicEnglishUnlocked = subscription.BasicEnglishUnlocked,
                 ExpiresAt = subscription.ExpiresAt,
                 ProductCategory = string.IsNullOrEmpty(plan.ProductCategory) ? null : plan.ProductCategory,
+                CourseFamilies = CourseFamilyPolicy.Resolve(plan.ProductCategory, plan.Code),
             };
         }
 
@@ -571,6 +579,8 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 ProductCategory = string.IsNullOrEmpty(primaryPkg.Plan.ProductCategory)
                     ? snapshot.ProductCategory
                     : primaryPkg.Plan.ProductCategory,
+                CourseFamilies = CourseFamilyPolicy.Union(
+                    aggPlans.Select(p => CourseFamilyPolicy.Resolve(p.ProductCategory, p.Code))),
             };
         }
 

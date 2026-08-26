@@ -753,6 +753,12 @@ internal sealed class MediaPerformanceVideoEntitlementService : IVideoEntitlemen
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
         => new(context.PlanGrantsPremium, "test", context.CurrentTier);
+
+    public VideoEntitlementResult Evaluate(
+        VideoAccessContext context,
+        LibraryVideo video,
+        IReadOnlyList<string>? extraLabels)
+        => Evaluate(context, video);
 }
 
 internal sealed class MediaPerformanceEffectiveEntitlementResolver : IEffectiveEntitlementResolver

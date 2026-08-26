@@ -52,6 +52,11 @@ public interface IVideoEntitlementService
     Task<VideoAccessContext> ResolveContextAsync(string? userId, bool isAdmin, CancellationToken ct);
 
     VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video);
+
+    VideoEntitlementResult Evaluate(
+        VideoAccessContext context,
+        LibraryVideo video,
+        IReadOnlyList<string>? extraLabels);
 }
 
 public sealed record VideoEntitlementResult(
@@ -59,7 +64,7 @@ public sealed record VideoEntitlementResult(
     string Reason,        // "admin" | "free_tier" | "plan_grants_video_library" | "addon_grants_video_library"
                           // | "no_active_subscription" | "subscription_frozen" | "subscription_expired" | "plan_does_not_grant"
                           // | "plan_does_not_grant_subtest" | "profession_mismatch" | "plan_excludes_video"
-                          // | "not_in_user_allocation"
+                          // | "plan_excludes_course_family" | "not_in_user_allocation"
     string? CurrentTier); // null | "free" | "premium" | "trial" | "frozen" | "expired" | "admin"
 
 /// <summary>Resolved-once grant context for evaluating many videos.</summary>
@@ -105,7 +110,9 @@ public sealed record VideoAccessContext(
     // Basic English Course videos are a separate product. Entitled learners see that box;
     // exclusive Basic English subscribers do not inherit the OET Listening/Reading/Writing/Speaking pool.
     bool BasicEnglishEntitled = false,
-    bool ExclusivelyBasicEnglish = false);
+    bool ExclusivelyBasicEnglish = false,
+    // Package-level Full/Crash isolation. Null = do not apply (unit tests / unrestricted).
+    CourseFamilyAccess? CourseFamilies = null);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
 public sealed record VideoLibraryBundle(bool HasNode, string Tier, IReadOnlyList<string> Subtests)
@@ -129,7 +136,8 @@ public sealed class VideoEntitlementService(
     public async Task<VideoEntitlementResult> AllowAccessAsync(string? userId, LibraryVideo video, CancellationToken ct)
     {
         var context = await ResolveContextAsync(userId, isAdmin: false, ct);
-        return Evaluate(context, video);
+        var extraLabels = await LoadCollectionTitlesAsync(video.Id, ct);
+        return Evaluate(context, video, extraLabels);
     }
 
     public async Task RequireAccessAsync(string? userId, LibraryVideo video, CancellationToken ct)
@@ -151,6 +159,10 @@ public sealed class VideoEntitlementService(
             case "plan_does_not_grant_basic_english":
                 throw ApiException.PaymentRequired("content_locked",
                     "This video is part of the Basic English Course. Register for that subscription to watch it.");
+            case "plan_excludes_course_family":
+            case "plan_excludes_video":
+            case "plan_excludes_video_tag":
+                throw ApiException.NotFound("video_not_found", "Video not found.");
             default:
                 throw ApiException.PaymentRequired("content_locked",
                     "Your current plan does not include the Video Library. Upgrade to a plan or add-on that includes it.");
@@ -193,7 +205,8 @@ public sealed class VideoEntitlementService(
                 PlanGrantsPremium: false, AddOnGrantsPremium: false,
                 CurrentTier: frozen ? "frozen" : expired ? "expired" : "free",
                 ProfessionId: entitlement.ProfessionId,
-                UserVideoAccess: userVideoAccess);
+                UserVideoAccess: userVideoAccess,
+                CourseFamilies: entitlement.CourseFamilies);
         }
 
         var planJson = await ResolvePlanEntitlementsJsonAsync(entitlement, ct);
@@ -251,10 +264,17 @@ public sealed class VideoEntitlementService(
             VideoExcludeTags: entitlement.ContentOverrides.VideoExcludeTags,
             UserVideoAccess: userVideoAccess,
             BasicEnglishEntitled: basicEnglish.Entitled,
-            ExclusivelyBasicEnglish: basicEnglish.ExclusivelyBasicEnglish);
+            ExclusivelyBasicEnglish: basicEnglish.ExclusivelyBasicEnglish,
+            CourseFamilies: entitlement.CourseFamilies);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
+        => Evaluate(context, video, extraLabels: null);
+
+    public VideoEntitlementResult Evaluate(
+        VideoAccessContext context,
+        LibraryVideo video,
+        IReadOnlyList<string>? extraLabels)
     {
         if (context.IsAdmin)
         {
@@ -280,9 +300,9 @@ public sealed class VideoEntitlementService(
             return new VideoEntitlementResult(false, "not_in_user_allocation", context.CurrentTier);
         }
 
-        // Content scope (spec §3): an explicit per-plan include wins over the exclude list and over
-        // the subtest/profession scope — but never over the module/subscription gates below, which
-        // every path still has to clear.
+        // Content scope (spec §3): an explicit per-plan include wins over the exclude list, tag
+        // excludes, course-family isolation, and subtest/profession scope — but never over the
+        // module/subscription gates below, which every path still has to clear.
         var explicitlyIncluded = context.VideoIncludes is { Count: > 0 }
             && context.VideoIncludes.Contains(video.Id);
         if (!explicitlyIncluded)
@@ -294,6 +314,14 @@ public sealed class VideoEntitlementService(
             if (context.VideoExcludeTags is { Count: > 0 } && VideoMatchesAnyTag(video, context.VideoExcludeTags))
             {
                 return new VideoEntitlementResult(false, "plan_excludes_video_tag", context.CurrentTier);
+            }
+            var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
+            if (family == CourseFamily.None
+                || (context.CourseFamilies is { } families
+                    && families.IsRestricted
+                    && !families.Allows(family)))
+            {
+                return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
             }
             if (!VideoLibraryLearnerService.IsProfessionVisible(video.ProfessionIdsJson, context.ProfessionId))
             {
@@ -348,6 +376,17 @@ public sealed class VideoEntitlementService(
         }
 
         return new VideoEntitlementResult(false, "plan_does_not_grant", context.CurrentTier);
+    }
+
+    private async Task<List<string>> LoadCollectionTitlesAsync(string videoId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) return [];
+
+        return await (
+            from item in db.VideoCategoryItems.AsNoTracking()
+            join category in db.VideoCategories.AsNoTracking() on item.CategoryId equals category.Id
+            where item.VideoId == videoId
+            select category.Title).ToListAsync(ct);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────

@@ -134,13 +134,15 @@ public class PackageBasedContentAccessAcceptanceTests
             new MaterialFile { Id = "file-shared", FolderId = "f-shared", MediaAssetId = "asset-shared", SubtestCode = "reading", Kind = "pdf", Title = "Reading Guide", Status = ContentStatus.Published, SortOrder = 0, CreatedAt = now, UpdatedAt = now },
             new MaterialFile { Id = "file-nursing", FolderId = "f-nursing", MediaAssetId = "asset-nursing", SubtestCode = "speaking", Kind = "pdf", Title = "Nursing Guide", Status = ContentStatus.Published, SortOrder = 0, CreatedAt = now, UpdatedAt = now });
 
-        // Videos (Medicine-tagged, Shared untagged, Nursing-tagged)
+        // Videos (Medicine-tagged, Shared untagged, Nursing-tagged; all carry batch:shared
+        // per migration — the course-family gate allows shared on every plan)
         db.LibraryVideos.AddRange(
             new LibraryVideo
             {
                 Id = "vid-med",
                 Title = "Medicine Case Study",
                 AccessTier = "premium",
+                TagsCsv = CourseFamilyPolicy.SharedTag,
                 Status = ContentStatus.Published,
                 ProfessionIdsJson = """["medicine"]""",
                 DurationSeconds = 600,
@@ -153,6 +155,7 @@ public class PackageBasedContentAccessAcceptanceTests
                 Id = "vid-shared",
                 Title = "Reading Strategy",
                 AccessTier = "premium",
+                TagsCsv = CourseFamilyPolicy.SharedTag,
                 Status = ContentStatus.Published,
                 ProfessionIdsJson = "[]",
                 DurationSeconds = 600,
@@ -165,6 +168,7 @@ public class PackageBasedContentAccessAcceptanceTests
                 Id = "vid-nursing",
                 Title = "Nursing Handover",
                 AccessTier = "premium",
+                TagsCsv = CourseFamilyPolicy.SharedTag,
                 Status = ContentStatus.Published,
                 ProfessionIdsJson = """["nursing"]""",
                 DurationSeconds = 600,

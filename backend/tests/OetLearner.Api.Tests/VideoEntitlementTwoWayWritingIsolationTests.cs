@@ -8,21 +8,22 @@ namespace OetLearner.Api.Tests;
 
 /// <summary>
 /// Owner directive 2026-08-26: two-way Writing video isolation between
-/// Full Course and Crash Course / Fast Track. The previous narrower rule
-/// (20260822090000, 18 Arabic Writing videos) is superseded by this
-/// tag-driven approach. A new admin-managed "batch:*" tag picker makes
-/// the rule live the moment an admin publishes a video, with no
-/// migration required.
+/// Full Course and Crash Course / Fast Track. The tag-driven family model
+/// (CourseFamilyPolicy) supersedes the per-plan excludeTags / include /
+/// subtest-restriction machinery: a premium video's family comes ONLY from
+/// its admin-assigned "batch:*" tags, unclassified premium videos are
+/// denied by default, and explicit per-id includes never beat family.
 ///
 /// These tests lock the four core guarantees:
-///   1. Full-course plans deny every video tagged with one of the four
-///      Crash Course Writing batch tags.
+///   1. Full-course plans deny every video tagged with any Crash Course
+///      batch tag — including the legacy excludeTags-covered batches.
 ///   2. Full-course plans still allow ordinary December/February Writing
-///      videos (no regression for shared content).
-///   3. Crash Course plans allow the four batch tags (no regression on
-///      the 18-id include carved in by 20260822090000).
-///   4. The new tag-based exclusion composes correctly with the existing
-///      explicit-per-id include rule (include beats exclude-tag).
+///      videos tagged batch:full-course-only (no regression for shared
+///      content).
+///   3. Crash Course plans allow the crash batch tags with no include
+///      carve-out and no video_library.subtests restriction — the family
+///      tag is the sole gate.
+///   4. Explicit per-id include does NOT beat the family tag.
 /// </summary>
 public class VideoEntitlementTwoWayWritingIsolationTests
 {
@@ -92,19 +93,7 @@ public class VideoEntitlementTwoWayWritingIsolationTests
     public async Task FullCourse_DeniesVideoTaggedWithCrashCourseArabicWritingBatch()
     {
         await using var db = CreateDb();
-        var fullCourseOverrides = """
-            {
-              "videos": {
-                "excludeTags": [
-                  "batch:crash-course-arabic-writing",
-                  "batch:writing-sessions-crash-course-old",
-                  "batch:fast-track-crash-course",
-                  "batch:crash-course-workshops"
-                ]
-              }
-            }
-            """;
-        SeedPlan(db, "learner-1", "full-condensed-medicine", fullCourseOverrides);
+        SeedPlan(db, "learner-1", "full-condensed-medicine", "{}");
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
@@ -112,26 +101,14 @@ public class VideoEntitlementTwoWayWritingIsolationTests
         var result = await service.AllowAccessAsync("learner-1", video, default);
 
         Assert.False(result.Allowed);
-        Assert.Equal("plan_excludes_video_tag", result.Reason);
+        Assert.Equal("plan_excludes_course_family", result.Reason);
     }
 
     [Fact]
     public async Task FullCourse_DeniesVideoTaggedWithFastTrackCrashCourseBatch()
     {
         await using var db = CreateDb();
-        var fullCourseOverrides = """
-            {
-              "videos": {
-                "excludeTags": [
-                  "batch:crash-course-arabic-writing",
-                  "batch:writing-sessions-crash-course-old",
-                  "batch:fast-track-crash-course",
-                  "batch:crash-course-workshops"
-                ]
-              }
-            }
-            """;
-        SeedPlan(db, "learner-1", "full-condensed-medicine", fullCourseOverrides);
+        SeedPlan(db, "learner-1", "full-condensed-medicine", "{}");
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
@@ -139,26 +116,14 @@ public class VideoEntitlementTwoWayWritingIsolationTests
         var result = await service.AllowAccessAsync("learner-1", video, default);
 
         Assert.False(result.Allowed);
-        Assert.Equal("plan_excludes_video_tag", result.Reason);
+        Assert.Equal("plan_excludes_course_family", result.Reason);
     }
 
     [Fact]
     public async Task FullCourse_AllowsOrdinaryDecemberFullCourseWritingVideo()
     {
         await using var db = CreateDb();
-        var fullCourseOverrides = """
-            {
-              "videos": {
-                "excludeTags": [
-                  "batch:crash-course-arabic-writing",
-                  "batch:writing-sessions-crash-course-old",
-                  "batch:fast-track-crash-course",
-                  "batch:crash-course-workshops"
-                ]
-              }
-            }
-            """;
-        SeedPlan(db, "learner-1", "full-condensed-medicine", fullCourseOverrides);
+        SeedPlan(db, "learner-1", "full-condensed-medicine", "{}");
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
@@ -175,19 +140,7 @@ public class VideoEntitlementTwoWayWritingIsolationTests
     public async Task FullCourse_AllowsUntaggedWritingVideo()
     {
         await using var db = CreateDb();
-        var fullCourseOverrides = """
-            {
-              "videos": {
-                "excludeTags": [
-                  "batch:crash-course-arabic-writing",
-                  "batch:writing-sessions-crash-course-old",
-                  "batch:fast-track-crash-course",
-                  "batch:crash-course-workshops"
-                ]
-              }
-            }
-            """;
-        SeedPlan(db, "learner-1", "full-condensed-medicine", fullCourseOverrides);
+        SeedPlan(db, "learner-1", "full-condensed-medicine", "{}");
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
@@ -201,47 +154,25 @@ public class VideoEntitlementTwoWayWritingIsolationTests
     public async Task CrashCourse_AllowsVideoTaggedWithCrashCourseArabicWritingBatch()
     {
         await using var db = CreateDb();
-        // Crash Course plan: video_library restricted to L/R/S only (existing rule from
-        // 20260822090000), with the 18 crash-course videos carved back in via per-id include.
-        // The new batch tags MUST NOT additionally exclude the video — the include still wins,
-        // and no excludeTags entry points at these batches on the crash plan.
-        var crashCourseOverrides = """
-            {
-              "videos": {
-                "include": [
-                  "vid_crash_arabic_1"
-                ]
-              }
-            }
-            """;
-        SeedPlan(
-            db,
-            "learner-1",
-            "crash-course",
-            crashCourseOverrides,
-            dashboardModulesJson: """["VideoLibrary"]""");
+        // Crash Course plan, plain: no video_library.subtests restriction and no
+        // per-id include. The family tag alone grants the crash writing video —
+        // the migration strips the old subtests node so writing is granted like
+        // every other subtest.
+        SeedPlan(db, "learner-1", "crash-course", "{}");
         await db.SaveChangesAsync();
         var service = CreateService(db);
-
-        // Manually restrict the plan to L/R/S only (matches the existing migration's
-        // entitlements_json structure). Writing is excluded at the entitlement layer but
-        // the explicit per-id include wins.
-        var plan = await db.BillingPlans.FirstAsync(p => p.Code == "crash-course");
-        plan.EntitlementsJson = """{"video_library":{"tier":"premium","subtests":["listening","reading","speaking"]}}""";
-        await db.SaveChangesAsync();
 
         var video = Video("vid_crash_arabic_1", tagsCsv: "batch:crash-course-arabic-writing");
         var result = await service.AllowAccessAsync("learner-1", video, default);
 
         Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_video_library", result.Reason);
     }
 
     [Fact]
     public async Task FullCourse_ExplicitIncludeBeatsExcludeTag()
     {
         await using var db = CreateDb();
-        // The previous 18-id include from migration 20260822090000 still wins even when
-        // a tag-based exclude covers the same video. This keeps the legacy carve-out intact.
         var fullCourseOverrides = """
             {
               "videos": {
