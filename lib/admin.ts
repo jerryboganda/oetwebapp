@@ -571,6 +571,7 @@ export async function getAdminUserDetailData(userId: string): Promise<AdminUserD
       canRestore: toBooleanValue(actionsRaw.canRestore),
       canAdjustCredits: toBooleanValue(actionsRaw.canAdjustCredits),
       canTriggerPasswordReset: toBooleanValue(actionsRaw.canTriggerPasswordReset),
+      canVerifyEmail: toBooleanValue(actionsRaw.canVerifyEmail),
       canForceSignOut: toBooleanValue(actionsRaw.canForceSignOut),
       canUnlock: toBooleanValue(actionsRaw.canUnlock),
       canResendInvite: toBooleanValue(actionsRaw.canResendInvite),

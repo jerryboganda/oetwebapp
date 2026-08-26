@@ -800,6 +800,201 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
     }
 
     [Fact]
+    public async Task AdminUsers_VerifyEmail_ConsumesPendingOtpAndRevokesSessions()
+    {
+        var userId = $"verify-email-{Guid.NewGuid():N}";
+        var authAccountId = $"verify-email-auth-{Guid.NewGuid():N}";
+        var email = $"verify-email-{Guid.NewGuid():N}@example.test";
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+            {
+                Id = authAccountId,
+                Email = email,
+                NormalizedEmail = email.ToUpperInvariant(),
+                Role = ApplicationUserRoles.Learner,
+                PasswordHash = "test-password-hash",
+                CreatedAt = now,
+            });
+            db.Users.Add(new LearnerUser
+            {
+                Id = userId,
+                AuthAccountId = authAccountId,
+                Role = ApplicationUserRoles.Learner,
+                DisplayName = "Verify Email Candidate",
+                Email = email,
+                Timezone = "UTC",
+                Locale = "en-AU",
+                ActiveProfessionId = "nursing",
+                CreatedAt = now,
+                LastActiveAt = now,
+                AccountStatus = "active",
+            });
+            db.RefreshTokenRecords.Add(new RefreshTokenRecord
+            {
+                Id = Guid.NewGuid(),
+                ApplicationUserAccountId = authAccountId,
+                TokenHash = $"hash-{Guid.NewGuid():N}",
+                FamilyId = Guid.NewGuid(),
+                ExpiresAt = now.AddDays(30),
+                CreatedAt = now,
+            });
+            db.RefreshTokenRecords.Add(new RefreshTokenRecord
+            {
+                Id = Guid.NewGuid(),
+                ApplicationUserAccountId = authAccountId,
+                TokenHash = $"hash-{Guid.NewGuid():N}",
+                FamilyId = Guid.NewGuid(),
+                ExpiresAt = now.AddDays(30),
+                CreatedAt = now,
+            });
+            db.EmailOtpChallenges.Add(new EmailOtpChallenge
+            {
+                Id = Guid.NewGuid(),
+                ApplicationUserAccountId = authAccountId,
+                Purpose = EmailOtpService.EmailVerificationPurpose,
+                CodeHash = $"otp-{Guid.NewGuid():N}",
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(10),
+                Provider = EmailOtpProviders.BrevoEmail,
+                DeliveryChannel = "email",
+            });
+            db.EmailOtpChallenges.Add(new EmailOtpChallenge
+            {
+                Id = Guid.NewGuid(),
+                ApplicationUserAccountId = authAccountId,
+                Purpose = EmailOtpService.PasswordResetPurpose,
+                CodeHash = $"otp-{Guid.NewGuid():N}",
+                CreatedAt = now,
+                ExpiresAt = now.AddMinutes(10),
+                Provider = EmailOtpProviders.BrevoEmail,
+                DeliveryChannel = "email",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var detailResponse = await _client.GetAsync($"/v1/admin/users/{userId}");
+        detailResponse.EnsureSuccessStatusCode();
+        using (var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync()))
+        {
+            Assert.True(detailJson.RootElement.GetProperty("availableActions").GetProperty("canVerifyEmail").GetBoolean());
+        }
+
+        var verifyResponse = await _client.PostAsync($"/v1/admin/users/{userId}/verify-email", null);
+        verifyResponse.EnsureSuccessStatusCode();
+        DateTimeOffset verifiedAt;
+        using (var verifyJson = JsonDocument.Parse(await verifyResponse.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal(userId, verifyJson.RootElement.GetProperty("userId").GetString());
+            Assert.Equal(email, verifyJson.RootElement.GetProperty("email").GetString());
+            Assert.False(verifyJson.RootElement.GetProperty("alreadyVerified").GetBoolean());
+            Assert.Equal(2, verifyJson.RootElement.GetProperty("revokedSessions").GetInt32());
+            verifiedAt = verifyJson.RootElement.GetProperty("emailVerifiedAt").GetDateTimeOffset();
+        }
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var account = await db.ApplicationUserAccounts.SingleAsync(x => x.Id == authAccountId);
+            Assert.NotNull(account.EmailVerifiedAt);
+
+            var challenges = await db.EmailOtpChallenges
+                .Where(x => x.ApplicationUserAccountId == authAccountId)
+                .ToDictionaryAsync(x => x.Purpose);
+            Assert.NotNull(challenges[EmailOtpService.EmailVerificationPurpose].VerifiedAt);
+            Assert.Null(challenges[EmailOtpService.PasswordResetPurpose].VerifiedAt);
+
+            var tokens = await db.RefreshTokenRecords
+                .Where(x => x.ApplicationUserAccountId == authAccountId)
+                .ToListAsync();
+            Assert.All(tokens, token => Assert.NotNull(token.RevokedAt));
+
+            Assert.True(await db.AuditEvents.AnyAsync(x =>
+                x.ResourceType == "User"
+                && x.ResourceId == userId
+                && x.Action == "Verified Email"
+                && x.Details!.Contains("Revoked 2 active session(s)")));
+        }
+
+        var verifiedDetailResponse = await _client.GetAsync($"/v1/admin/users/{userId}");
+        verifiedDetailResponse.EnsureSuccessStatusCode();
+        using (var verifiedDetailJson = JsonDocument.Parse(await verifiedDetailResponse.Content.ReadAsStringAsync()))
+        {
+            Assert.False(verifiedDetailJson.RootElement.GetProperty("availableActions").GetProperty("canVerifyEmail").GetBoolean());
+        }
+
+        var repeatResponse = await _client.PostAsync($"/v1/admin/users/{userId}/verify-email", null);
+        repeatResponse.EnsureSuccessStatusCode();
+        using var repeatJson = JsonDocument.Parse(await repeatResponse.Content.ReadAsStringAsync());
+        Assert.True(repeatJson.RootElement.GetProperty("alreadyVerified").GetBoolean());
+        Assert.Equal(0, repeatJson.RootElement.GetProperty("revokedSessions").GetInt32());
+        Assert.Equal(verifiedAt, repeatJson.RootElement.GetProperty("emailVerifiedAt").GetDateTimeOffset());
+    }
+
+    [Fact]
+    public async Task AdminUsers_VerifyEmail_RejectsDeletedAndAuthlessAccounts()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var deletedUserId = $"verify-deleted-{Guid.NewGuid():N}";
+        var deletedAuthId = $"verify-deleted-auth-{Guid.NewGuid():N}";
+        var authlessUserId = $"verify-authless-{Guid.NewGuid():N}";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+            {
+                Id = deletedAuthId,
+                Email = $"deleted-{Guid.NewGuid():N}@example.test",
+                NormalizedEmail = $"DELETED-{Guid.NewGuid():N}@EXAMPLE.TEST",
+                Role = ApplicationUserRoles.Learner,
+                PasswordHash = "test-password-hash",
+                CreatedAt = now,
+                DeletedAt = now,
+            });
+            db.Users.Add(new LearnerUser
+            {
+                Id = deletedUserId,
+                AuthAccountId = deletedAuthId,
+                Role = ApplicationUserRoles.Learner,
+                DisplayName = "Deleted Verify Candidate",
+                Email = $"deleted-{Guid.NewGuid():N}@example.test",
+                Timezone = "UTC",
+                Locale = "en-AU",
+                ActiveProfessionId = "nursing",
+                CreatedAt = now,
+                LastActiveAt = now,
+                AccountStatus = "deleted",
+            });
+            db.Users.Add(new LearnerUser
+            {
+                Id = authlessUserId,
+                Role = ApplicationUserRoles.Learner,
+                DisplayName = "Authless Verify Candidate",
+                Email = $"authless-{Guid.NewGuid():N}@example.test",
+                Timezone = "UTC",
+                Locale = "en-AU",
+                ActiveProfessionId = "nursing",
+                CreatedAt = now,
+                LastActiveAt = now,
+                AccountStatus = "active",
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var deletedResponse = await _client.PostAsync($"/v1/admin/users/{deletedUserId}/verify-email", null);
+        Assert.Equal(HttpStatusCode.BadRequest, deletedResponse.StatusCode);
+        Assert.Equal("account_deleted", await ReadErrorCodeAsync(deletedResponse));
+
+        var authlessResponse = await _client.PostAsync($"/v1/admin/users/{authlessUserId}/verify-email", null);
+        Assert.Equal(HttpStatusCode.BadRequest, authlessResponse.StatusCode);
+        Assert.Equal("auth_account_missing", await ReadErrorCodeAsync(authlessResponse));
+    }
+
+    [Fact]
     public async Task AdminUsers_DeletePermanentlyRemovesLearnerAccount()
     {
         var email = $"admin-lifecycle-purge-{Guid.NewGuid():N}@example.test";

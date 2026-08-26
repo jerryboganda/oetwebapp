@@ -344,6 +344,7 @@ export interface AdminUserDetail {
     canRestore: boolean;
     canAdjustCredits: boolean;
     canTriggerPasswordReset: boolean;
+    canVerifyEmail?: boolean;
     canForceSignOut?: boolean;
     canUnlock?: boolean;
     canResendInvite?: boolean;

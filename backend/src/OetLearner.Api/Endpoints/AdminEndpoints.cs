@@ -384,6 +384,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.TriggerUserPasswordResetAsync(http.AdminId(), http.AdminName(), userId, ct)))
             .WithAdminWrite("AdminUsersWrite");
 
+        admin.MapPost("/users/{userId}/verify-email", async (string userId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.VerifyUserEmailAsync(http.AdminId(), http.AdminName(), userId, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
         admin.MapPost("/users/{userId}/sessions/revoke", async (string userId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.RevokeUserSessionsAsync(http.AdminId(), http.AdminName(), userId, ct)))
             .WithAdminWrite("AdminUsersWrite");

@@ -31,7 +31,8 @@ public partial class AdminService(
     OetLearner.Api.Services.Professions.IProfessionCatalogService? professionCatalog = null,
     ISecurityEventLogger? securityEventLogger = null,
     OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettingsProvider = null,
-    OetLearner.Api.Services.Admin.UserHardDeleteService? userHardDeleteService = null)
+    OetLearner.Api.Services.Admin.UserHardDeleteService? userHardDeleteService = null,
+    ISessionRevocationService? sessionRevocationService = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -3002,6 +3003,9 @@ public partial class AdminService(
                     canRestore = status is DeletedUserStatus && !string.Equals(learner.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canAdjustCredits = status is not DeletedUserStatus,
                     canTriggerPasswordReset = learner.AuthAccountId is not null && status is not DeletedUserStatus,
+                    canVerifyEmail = authAccount is not null
+                        && status is not DeletedUserStatus
+                        && authAccount.EmailVerifiedAt is null,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,
                     canResendInvite = CanResendInvite(authAccount, status)
@@ -3044,6 +3048,9 @@ public partial class AdminService(
                     canRestore = status is DeletedUserStatus && !string.Equals(expert.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canAdjustCredits = false,
                     canTriggerPasswordReset = expert.AuthAccountId is not null && status is not DeletedUserStatus,
+                    canVerifyEmail = authAccount is not null
+                        && status is not DeletedUserStatus
+                        && authAccount.EmailVerifiedAt is null,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,
                     canResendInvite = CanResendInvite(authAccount, status)
@@ -3079,6 +3086,7 @@ public partial class AdminService(
                     canRestore = false,
                     canAdjustCredits = false,
                     canTriggerPasswordReset = status is not DeletedUserStatus,
+                    canVerifyEmail = status is not DeletedUserStatus && adminAccount.EmailVerifiedAt is null,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,
                     canResendInvite = CanResendInvite(adminAccount, status)
@@ -4519,6 +4527,100 @@ public partial class AdminService(
         await LogAuditAsync(adminId, adminName, "Revoked Sessions", "User", userId,
             $"Force sign-out: revoked {revoked} active session(s).", ct);
         return new { id = target.Id, revoked };
+    }
+
+    public async Task<object> VerifyUserEmailAsync(
+        string adminId,
+        string adminName,
+        string userId,
+        CancellationToken ct)
+    {
+        var target = await ResolveUserTargetAsync(userId, ct);
+        if (target.Status == DeletedUserStatus)
+        {
+            throw ApiException.Validation("account_deleted", "Deleted accounts cannot be email-verified.");
+        }
+
+        if (string.IsNullOrWhiteSpace(target.AuthAccountId))
+        {
+            throw ApiException.Validation("auth_account_missing", "This user does not have an authentication account to verify.");
+        }
+
+        var authAccount = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == target.AuthAccountId, ct);
+        if (authAccount is null)
+        {
+            throw ApiException.NotFound("auth_account_not_found", "Authentication account not found.");
+        }
+
+        if (authAccount.EmailVerifiedAt is not null)
+        {
+            return new
+            {
+                userId = target.Id,
+                target.Email,
+                alreadyVerified = true,
+                emailVerifiedAt = authAccount.EmailVerifiedAt,
+                revokedSessions = 0
+            };
+        }
+
+        var now = timeProvider.GetUtcNow();
+        authAccount.EmailVerifiedAt = now;
+        authAccount.UpdatedAt = now;
+
+        var pendingVerificationChallenges = await db.EmailOtpChallenges
+            .Where(x => x.ApplicationUserAccountId == authAccount.Id
+                && x.Purpose == EmailOtpService.EmailVerificationPurpose
+                && x.VerifiedAt == null)
+            .ToListAsync(ct);
+        foreach (var challenge in pendingVerificationChallenges)
+        {
+            challenge.VerifiedAt = now;
+        }
+
+        var activeSessionCount = await db.RefreshTokenRecords
+            .CountAsync(x => x.ApplicationUserAccountId == authAccount.Id && x.RevokedAt == null, ct);
+
+        var transaction = await BeginTransactionIfNeededAsync(ct);
+        try
+        {
+            if (sessionRevocationService is null)
+            {
+                await RevokeActiveRefreshTokensAsync(authAccount.Id, ct);
+            }
+            else
+            {
+                await sessionRevocationService.RevokeAllFamiliesAsync(
+                    authAccount.Id,
+                    exceptFamilyId: null,
+                    reason: "admin_email_verified",
+                    ct);
+            }
+
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(
+                adminId,
+                adminName,
+                "Verified Email",
+                "User",
+                userId,
+                $"Marked email verified administratively. Revoked {activeSessionCount} active session(s).",
+                ct);
+            await CommitIfOwnedAsync(transaction, ct);
+            return new
+            {
+                userId = target.Id,
+                target.Email,
+                alreadyVerified = false,
+                emailVerifiedAt = authAccount.EmailVerifiedAt,
+                revokedSessions = activeSessionCount
+            };
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.RollbackAsync(ct);
+            throw;
+        }
     }
 
     public async Task<object> UnlockUserAsync(string adminId, string adminName,

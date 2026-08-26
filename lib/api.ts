@@ -5704,6 +5704,18 @@ export async function triggerAdminUserPasswordReset(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' });
 }
 
+export async function verifyAdminUserEmail(
+  userId: string,
+): Promise<{ userId: string; email: string; alreadyVerified: boolean; emailVerifiedAt: string | null; revokedSessions: number }> {
+  return apiRequest<{
+    userId: string;
+    email: string;
+    alreadyVerified: boolean;
+    emailVerifiedAt: string | null;
+    revokedSessions: number;
+  }>(`/v1/admin/users/${encodeURIComponent(userId)}/verify-email`, { method: 'POST' });
+}
+
 export async function revokeAdminUserSessions(userId: string): Promise<{ id: string; revoked: number }> {
   return apiRequest<{ id: string; revoked: number }>(`/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke`, { method: 'POST' });
 }

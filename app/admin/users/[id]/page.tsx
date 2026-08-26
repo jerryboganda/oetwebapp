@@ -11,6 +11,7 @@ import {
   LockKeyhole,
   LogOut,
   Mail,
+  MailCheck,
   Mic,
   Pencil,
   Phone,
@@ -53,6 +54,7 @@ import {
   unlockAdminUser,
   updateAdminUserProfile,
   updateAdminUserStatus,
+  verifyAdminUserEmail,
   type AdminUserProfileUpdatePayload,
 } from '@/lib/api';
 import {
@@ -439,6 +441,30 @@ export default function UserDetailPage() {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: 'Unable to resend the invitation.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleVerifyEmail() {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      const result = await verifyAdminUserEmail(user.id);
+      const revokedCount = result.revokedSessions;
+      setToast({
+        variant: 'success',
+        message: revokedCount > 0
+          ? `Email verified for ${user.email}; ${revokedCount} active session(s) were signed out.`
+          : `Email verified for ${user.email}.`,
+      });
+      await reloadUser();
+    } catch (error) {
+      console.error(error);
+      setToast({
+        variant: 'error',
+        message: readErrorMessage(error, 'Unable to verify this email address.'),
+      });
     } finally {
       setIsMutating(false);
     }
@@ -996,6 +1022,12 @@ export default function UserDetailPage() {
                   <Button ref={setPasswordButtonRef} variant="outline" onClick={openPasswordModal} className="gap-2">
                     <LockKeyhole className="h-4 w-4" />
                     Set Password
+                  </Button>
+                ) : null}
+                {user.availableActions.canVerifyEmail ? (
+                  <Button variant="outline" onClick={handleVerifyEmail} loading={isMutating} className="gap-2">
+                    <MailCheck className="h-4 w-4" />
+                    Verify Email
                   </Button>
                 ) : null}
                 {user.availableActions.canResendInvite ? (

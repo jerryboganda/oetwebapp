@@ -9,6 +9,7 @@ const {
   mockFetchAdminSignupCatalog,
   mockUpdateAdminUserProfile,
   mockSetAdminUserPassword,
+  mockVerifyAdminUserEmail,
   mockDeleteAdminUser,
   mockRouterReplace,
 } = vi.hoisted(() => ({
@@ -17,6 +18,7 @@ const {
   mockFetchAdminSignupCatalog: vi.fn(),
   mockUpdateAdminUserProfile: vi.fn(),
   mockSetAdminUserPassword: vi.fn(),
+  mockVerifyAdminUserEmail: vi.fn(),
   mockDeleteAdminUser: vi.fn(),
   mockRouterReplace: vi.fn(),
 }));
@@ -31,6 +33,7 @@ vi.mock('@/lib/admin', () => ({ getAdminUserDetailData: (...args: unknown[]) => 
 vi.mock('@/lib/api', () => ({
   apiClient: {
     get: vi.fn().mockResolvedValue({}),
+    post: vi.fn().mockResolvedValue({}),
   },
   adjustAdminUserCredits: vi.fn(),
   adjustAdminAiPackageCredits: vi.fn(),
@@ -58,12 +61,41 @@ vi.mock('@/lib/api', () => ({
   revokeAdminUserSessions: vi.fn(),
   setAdminUserPassword: (...args: unknown[]) => mockSetAdminUserPassword(...args),
   triggerAdminUserPasswordReset: vi.fn(),
+  verifyAdminUserEmail: (...args: unknown[]) => mockVerifyAdminUserEmail(...args),
   unlockAdminUser: vi.fn(),
   updateAdminUserProfile: (...args: unknown[]) => mockUpdateAdminUserProfile(...args),
   updateAdminUserStatus: vi.fn(),
 }));
 
+vi.mock('@/lib/api/admin-security', () => ({
+  blockAdminUserPlayback: vi.fn(),
+  clearAdminUserDeviceCooldown: vi.fn(),
+  fetchAdminUserDevices: vi.fn().mockResolvedValue([]),
+  fetchAdminUserSessions: vi.fn().mockResolvedValue([]),
+  resetAdminUserDevice: vi.fn(),
+  revokeAdminUserDevice: vi.fn(),
+  revokeAdminUserSession: vi.fn(),
+  setCandidateDeviceLimit: vi.fn(),
+  toggleAdminUserDeviceExemption: vi.fn(),
+}));
+
 import UserDetailPage from './page';
+
+const verifiedSecurity = {
+  mfaEnabled: false,
+  failedSignInCount: 0,
+  lockoutUntil: null,
+  lockedOut: false,
+  emailVerifiedAt: '2026-01-02T00:00:00Z',
+  activeSessionCount: 0,
+  lastSessionAt: null,
+  lastSessionIp: null,
+  lastSessionDevice: null,
+  deviceVerificationExempt: false,
+  maxDevicesOverride: null,
+  effectiveMaxDevices: 1,
+  activeDeviceCount: 0,
+};
 
 function buildUser(overrides: Partial<AdminUserDetail> = {}): AdminUserDetail {
   return {
@@ -297,6 +329,63 @@ describe('UserDetailPage profile catalog fields', () => {
 
     await waitFor(() => expect(mockDeleteAdminUser).toHaveBeenCalledWith('learner-1', undefined));
     expect(mockRouterReplace).toHaveBeenCalledWith('/admin/users');
+  });
+
+  it('verifies an unverified email and refreshes the profile immediately', async () => {
+    const user = userEvent.setup();
+    mockGetAdminUserDetailData
+      .mockResolvedValueOnce(buildUser({
+        security: { ...verifiedSecurity, emailVerifiedAt: null },
+        availableActions: { ...buildUser().availableActions, canVerifyEmail: true },
+      }))
+      .mockResolvedValue(buildUser({
+        security: verifiedSecurity,
+        availableActions: { ...buildUser().availableActions, canVerifyEmail: false },
+      }));
+    mockVerifyAdminUserEmail.mockResolvedValueOnce({
+      userId: 'learner-1',
+      email: 'learner@example.test',
+      alreadyVerified: false,
+      emailVerifiedAt: verifiedSecurity.emailVerifiedAt,
+      revokedSessions: 2,
+    });
+
+    renderWithRouter(<UserDetailPage />);
+
+    await user.click(await screen.findByRole('button', { name: /verify email/i }));
+    await waitFor(() => expect(mockVerifyAdminUserEmail).toHaveBeenCalledWith('learner-1'));
+    expect(await screen.findByText('Email verified')).toBeInTheDocument();
+    expect(await screen.findByText(/email verified for learner@example\.test; 2 active session/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /verify email/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the unverified state when email verification fails', async () => {
+    const user = userEvent.setup();
+    mockGetAdminUserDetailData.mockResolvedValue(buildUser({
+      security: { ...verifiedSecurity, emailVerifiedAt: null },
+      availableActions: { ...buildUser().availableActions, canVerifyEmail: true },
+    }));
+    mockVerifyAdminUserEmail.mockRejectedValueOnce(new Error('Verification service unavailable.'));
+
+    renderWithRouter(<UserDetailPage />);
+
+    await user.click(await screen.findByRole('button', { name: /verify email/i }));
+    expect(await screen.findByText('Verification service unavailable.')).toBeInTheDocument();
+    expect(await screen.findByText('Email unverified')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /verify email/i })).toBeInTheDocument();
+  });
+
+  it('does not offer email verification for an already verified account', async () => {
+    mockGetAdminUserDetailData.mockResolvedValue(buildUser({
+      security: verifiedSecurity,
+      availableActions: { ...buildUser().availableActions, canVerifyEmail: false },
+    }));
+
+    renderWithRouter(<UserDetailPage />);
+
+    await screen.findByRole('button', { name: /edit profile/i });
+    expect(screen.queryByRole('button', { name: /verify email/i })).not.toBeInTheDocument();
+    expect(screen.getByText('Email verified')).toBeInTheDocument();
   });
 
   it('does not show review credit balance or Adjust Credits', async () => {
