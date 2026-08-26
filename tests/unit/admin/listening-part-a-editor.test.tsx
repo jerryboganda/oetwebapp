@@ -19,12 +19,14 @@ import type { ListeningAuthoredExtractList, ListeningAuthoredQuestionList } from
 const {
   mockGetListeningExtracts,
   mockGetListeningStructure,
+  mockGetListeningAcceptedVariantHistory,
   mockPatchListeningExtract,
   mockPatchListeningQuestion,
   mockUseAdminAuth,
 } = vi.hoisted(() => ({
   mockGetListeningExtracts: vi.fn(),
   mockGetListeningStructure: vi.fn(),
+  mockGetListeningAcceptedVariantHistory: vi.fn(),
   mockPatchListeningExtract: vi.fn(),
   mockPatchListeningQuestion: vi.fn(),
   mockUseAdminAuth: vi.fn(),
@@ -37,6 +39,8 @@ vi.mock('@/lib/hooks/use-admin-auth', () => ({
 vi.mock('@/lib/listening-authoring-api', () => ({
   getListeningExtracts: (paperId: string) => mockGetListeningExtracts(paperId),
   getListeningStructure: (paperId: string) => mockGetListeningStructure(paperId),
+  getListeningAcceptedVariantHistory: (paperId: string) =>
+    mockGetListeningAcceptedVariantHistory(paperId),
   patchListeningExtract: (paperId: string, code: string, patch: unknown) =>
     mockPatchListeningExtract(paperId, code, patch),
   patchListeningQuestion: (paperId: string, qid: string, patch: unknown) =>
@@ -157,6 +161,7 @@ function setup(
   mockUseAdminAuth.mockReturnValue({ isAuthenticated: true, role: 'admin', isLoading: false });
   mockGetListeningExtracts.mockResolvedValue(makeExtracts(a1Body, a2Body));
   mockGetListeningStructure.mockResolvedValue(makeQuestions());
+  mockGetListeningAcceptedVariantHistory.mockResolvedValue([]);
   mockPatchListeningExtract.mockResolvedValue(makeExtracts(a1Body, a2Body));
   mockPatchListeningQuestion.mockResolvedValue(makeQuestions());
 }

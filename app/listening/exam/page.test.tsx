@@ -1,10 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ListeningHomeDto, ListeningHomePaperDto } from '@/lib/listening-api';
 
-const { mockGetListeningHome, mockPush, mockStartListeningAttempt } = vi.hoisted(() => ({
+const { mockGetListeningHome, mockPush, mockStartListeningAttempt, mockSubmitAudioCheck } = vi.hoisted(() => ({
   mockGetListeningHome: vi.fn(),
   mockPush: vi.fn(),
   mockStartListeningAttempt: vi.fn(),
+  mockSubmitAudioCheck: vi.fn(),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -15,6 +16,10 @@ vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="learner-dashboard-shell">{children}</div>
   ),
+}));
+
+vi.mock('@/lib/listening-pathway-api', () => ({
+  submitAudioCheck: mockSubmitAudioCheck,
 }));
 
 vi.mock('@/lib/listening-api', async () => {
@@ -80,6 +85,12 @@ describe('Listening full exam page', () => {
     mockGetListeningHome.mockReset();
     mockPush.mockReset();
     mockStartListeningAttempt.mockReset();
+    mockSubmitAudioCheck.mockReset();
+    mockSubmitAudioCheck.mockResolvedValue({
+      success: true,
+      currentStage: 'diagnostic',
+      audioCheckPassedAt: null,
+    });
   });
 
   it('lists published papers under Atlas and Nova folders instead of mocks', async () => {
