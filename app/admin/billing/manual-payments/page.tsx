@@ -231,17 +231,17 @@ export default function AdminPaymentProofsPage() {
         case 'approve':
           await approveManualPayment(decision.row.id, notes || undefined);
           toast.success('Approved.');
-          await loadProofs();
+          await Promise.all([loadProofs(), loadFulfilment()]);
           break;
         case 'reject':
           await rejectManualPayment(decision.row.id, notes || 'Rejected.');
           toast.success('Rejected.');
-          await loadProofs();
+          await Promise.all([loadProofs(), loadFulfilment()]);
           break;
         case 'waive':
           await waiveManualPaymentProof(decision.row.id, notes.trim());
           toast.success('Proof requirement waived.');
-          await loadProofs();
+          await Promise.all([loadProofs(), loadFulfilment()]);
           break;
         case 'fulfil':
           {
@@ -252,7 +252,7 @@ export default function AdminPaymentProofsPage() {
                 : 'Marked delivered — no platform access released.',
             );
           }
-          await loadFulfilment();
+          await Promise.all([loadProofs(), loadFulfilment()]);
           break;
       }
       setDecision(null);
@@ -718,7 +718,7 @@ export default function AdminPaymentProofsPage() {
       actions={
         <Button
           variant="ghost"
-          onClick={() => void (tab === 'proofs' ? loadProofs() : loadFulfilment())}
+          onClick={() => void Promise.all([loadProofs(), loadFulfilment()])}
           startIcon={<RefreshCw className="h-4 w-4" />}
         >
           Refresh

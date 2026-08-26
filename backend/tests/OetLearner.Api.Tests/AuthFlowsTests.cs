@@ -1997,6 +1997,11 @@ public class AuthFlowsTests
                 ["Conversation:AsrProvider"] = "deepgram",
                 ["Conversation:DeepgramApiKey"] = "deepgram-conversation-key",
                 ["Conversation:TtsProvider"] = "off",
+                // Production-env test factory: ListeningTtsProviderPolicy refuses the
+                // 'stub' provider in Production. The ElevenLabs provider resolves its
+                // API key lazily at synthesis time, so naming the provider is enough
+                // here — no key is needed because these tests never synthesise.
+                ["Listening:TtsProvider"] = "elevenlabs",
                 // Disable HIBP breach check in tests (C7 password policy). Fixture passwords
                 // like "Password123!" are in the breach corpus; tests assert success paths
                 // that would otherwise fail with 400. Length + complexity remain enforced.
