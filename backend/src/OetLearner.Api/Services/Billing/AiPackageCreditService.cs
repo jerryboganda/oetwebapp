@@ -7,7 +7,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services.Billing;
 
-file sealed record CreditUsage(int Shared, int Flexible, int Writing, int Speaking, int ListeningTests, int ReadingTests, int MockExams);
+sealed record CreditUsage(int Shared, int Flexible, int Writing, int Speaking, int ListeningTests, int ReadingTests, int MockExams);
 
 public interface IAiPackageCreditService
 {
