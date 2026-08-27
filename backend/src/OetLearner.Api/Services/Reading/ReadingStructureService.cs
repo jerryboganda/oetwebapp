@@ -701,7 +701,8 @@ public sealed class ReadingStructureService : IReadingStructureService
                                 ? order
                                 : null,
                             q.OptionDistractorsJson,
-                            q.ReviewState))
+                            q.ReviewState,
+                            q.EvidenceSentence))
                         .ToList(),
                     questionPaperAsset);
             })

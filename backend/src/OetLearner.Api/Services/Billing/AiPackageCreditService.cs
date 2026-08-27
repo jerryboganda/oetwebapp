@@ -7,6 +7,8 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services.Billing;
 
+file sealed record CreditUsage(int Shared, int Flexible, int Writing, int Speaking, int ListeningTests, int ReadingTests, int MockExams);
+
 public interface IAiPackageCreditService
 {
     Task<AiPackageCreditSnapshot> GetSnapshotAsync(string userId, int transactionLimit, CancellationToken ct);
@@ -63,6 +65,15 @@ public interface IAiPackageCreditService
     /// add-on item was cancelled, drop the null sentinel back to a finite pool.
     /// </summary>
     Task RecalculateObjectiveAllowancesAsync(string userId, CancellationToken ct);
+
+    /// <summary>
+    /// Re-sync the valid-until of course-gifted AI credit lots that were granted
+    /// from <paramref name="subscriptionId"/> (SourceReferenceId
+    /// <c>admin-package:{subscriptionId}:{planCode}</c>) to the edited package
+    /// expiry (admin date override). Only the linked lot's validity changes; Used
+    /// history is untouched and unrelated credits are never modified.
+    /// </summary>
+    Task UpdateGrantExpiryAsync(string userId, string subscriptionId, DateTimeOffset? expiresAt, CancellationToken ct);
 
     /// <summary>
     /// Read-only check whether the learner holds an active objective-practice
@@ -453,6 +464,49 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
     }
 
+    /// <summary>
+    /// Admin date override sync: move the valid-until of course-gifted AI credit
+    /// lots granted from this exact subscription to the edited package expiry.
+    /// Used history is untouched; unrelated lots/packages are never modified.
+    /// </summary>
+    public async Task UpdateGrantExpiryAsync(string userId, string subscriptionId, DateTimeOffset? expiresAt, CancellationToken ct)
+    {
+        var prefix = AddonGrantProcessor.FitDatabaseKey($"admin-package:{subscriptionId}:");
+        var account = await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
+        if (account is null)
+        {
+            return;
+        }
+
+        await EnsureLotsLoadedAsync(account, ct);
+        var linkedLots = db.AiPackageCreditLots.Local
+            .Where(lot => lot.AccountId == account.Id
+                && lot.SourceReferenceId is { } source
+                && source.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (linkedLots.Count == 0)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        foreach (var lot in linkedLots)
+        {
+            lot.ExpiresAt = expiresAt;
+            // A past end expires the linked (unused) credits immediately, exactly as
+            // the package itself expired — spending any remaining balance is blocked.
+            if (expiresAt is { } exp && exp <= now && !lot.Expired)
+            {
+                lot.Expired = true;
+                lot.ExpiredAt = now;
+            }
+        }
+
+        RebuildAccountFromLots(account);
+        account.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+    }
+
     public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
         => DeductGradingCreditAsync(userId, subtest, referenceId, 1, ct);
 
@@ -823,13 +877,35 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var account = await GetOrCreateAccountAsync(userId, ct);
         await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
 
-        var sharedDelta = ResolveAdjustmentDelta(account.SharedCredits, request.SharedCreditsDelta, request.SharedCreditsSet);
-        var flexibleDelta = ResolveAdjustmentDelta(account.FlexibleCredits, request.FlexibleCreditsDelta, request.FlexibleCreditsSet);
-        var writingDelta = ResolveAdjustmentDelta(account.WritingOnlyCredits, request.WritingOnlyCreditsDelta, request.WritingOnlyCreditsSet);
-        var speakingDelta = ResolveAdjustmentDelta(account.SpeakingOnlyCredits, request.SpeakingOnlyCreditsDelta, request.SpeakingOnlyCreditsSet);
-        var mockDelta = ResolveAdjustmentDelta(account.MockExamsRemaining, request.MockExamsDelta, request.MockExamsSet);
-        var listeningDelta = ResolveNullableAdjustmentDelta(account.ListeningTestsRemaining, request.ListeningTestsDelta, request.ListeningTestsSet);
-        var readingDelta = ResolveNullableAdjustmentDelta(account.ReadingTestsRemaining, request.ReadingTestsDelta, request.ReadingTestsSet);
+        // Genuine used-per-bucket so admin adjustments never mutate "Used" and the
+        // Total >= Used invariant can be validated. SetExact targets TOTAL:
+        // delta = (setTotal - used) - currentRemaining, i.e. Remaining = setTotal - Used.
+        var ledgerRows = await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == userId)
+            .Select(row => new LedgerRow(
+                row.PackageId,
+                row.Description,
+                row.Reason,
+                row.SharedCreditsDelta,
+                row.FlexibleCreditsDelta,
+                row.WritingOnlyCreditsDelta,
+                row.SpeakingOnlyCreditsDelta,
+                row.ListeningTestsDelta,
+                row.ReadingTestsDelta,
+                row.MockExamsDelta,
+                row.ExpiresAt,
+                row.CreatedAt,
+                row.ReferenceId))
+            .ToListAsync(ct);
+        var usage = ComputeUsage(ledgerRows);
+
+        var sharedDelta = ResolveAdminDelta(account.SharedCredits, usage.Shared, request.SharedCreditsDelta, request.SharedCreditsSet, "Shared Credits");
+        var flexibleDelta = ResolveAdminDelta(account.FlexibleCredits, usage.Flexible, request.FlexibleCreditsDelta, request.FlexibleCreditsSet, "Flexible W/S Credits");
+        var writingDelta = ResolveAdminDelta(account.WritingOnlyCredits, usage.Writing, request.WritingOnlyCreditsDelta, request.WritingOnlyCreditsSet, "Writing Credits");
+        var speakingDelta = ResolveAdminDelta(account.SpeakingOnlyCredits, usage.Speaking, request.SpeakingOnlyCreditsDelta, request.SpeakingOnlyCreditsSet, "Speaking Credits");
+        var mockDelta = ResolveAdminDelta(account.MockExamsRemaining, usage.Mocks, request.MockExamsDelta, request.MockExamsSet, "Mock Attempts");
+        var listeningDelta = ResolveAdminDelta(account.ListeningTestsRemaining ?? 0, usage.Listening, request.ListeningTestsDelta, request.ListeningTestsSet, "Listening Credits");
+        var readingDelta = ResolveAdminDelta(account.ReadingTestsRemaining ?? 0, usage.Reading, request.ReadingTestsDelta, request.ReadingTestsSet, "Reading Credits");
 
         ApplyAdminAdjustmentToLots(
             account,
@@ -842,6 +918,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             mockDelta,
             request.ExpiresAt);
 
+        // "Set exact" also replaces the expiry when explicitly provided; otherwise the
+        // pool expiry is retained. This is the only admin mutation that can rewrite
+        // ExpiresAt, and it is the "Edit dates" source of truth for linked credits.
         account.ExpiresAt = request.ExpiresAt ?? account.ExpiresAt;
         account.UpdatedAt = DateTimeOffset.UtcNow;
         RebuildAccountFromLots(account);
@@ -1333,25 +1412,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                 row.ReferenceId))
             .ToListAsync(ct);
 
-        static bool IsGrantReason(AiPackageCreditReason reason)
-            => reason is AiPackageCreditReason.Purchase
-                or AiPackageCreditReason.AdminAdjustment
-                or AiPackageCreditReason.GrantReversed;
-
-        static bool IsDebitReason(AiPackageCreditReason reason)
-            => reason is AiPackageCreditReason.GradingDeduct
-                or AiPackageCreditReason.ObjectivePracticeDeduct
-                or AiPackageCreditReason.MockDeduct;
-
         var grantRows = ledgerRows.Where(row => IsGrantReason(row.Reason)).ToList();
         var debitRows = ledgerRows.Where(row => IsDebitReason(row.Reason)).ToList();
+        var usage = ComputeUsage(ledgerRows);
         var creditsGranted = Math.Max(0, grantRows.Sum(row =>
             row.SharedCreditsDelta + row.FlexibleCreditsDelta + row.WritingOnlyCreditsDelta + row.SpeakingOnlyCreditsDelta));
-        var creditsUsed = debitRows.Sum(row =>
-            Math.Max(0, -row.SharedCreditsDelta) + Math.Max(0, -row.FlexibleCreditsDelta)
-            + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta));
-        var sharedGranted = grantRows.Sum(row => Math.Max(0, row.SharedCreditsDelta));
-        var sharedUsed = debitRows.Sum(row => Math.Max(0, -row.SharedCreditsDelta));
+        var creditsUsed = usage.Shared + usage.Flexible + usage.Writing + usage.Speaking;
+        var sharedGranted = Math.Max(0, grantRows.Sum(row => row.SharedCreditsDelta));
+        var sharedUsed = usage.Shared;
         var creditsRemaining = account.SharedCredits + account.FlexibleCredits + account.WritingOnlyCredits + account.SpeakingOnlyCredits;
         var unlimitedGrading = await HasActiveUnlimitedGradingAsync(userId, DateTimeOffset.UtcNow, ct);
         var now = DateTimeOffset.UtcNow;
@@ -1374,7 +1442,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                 Math.Max(0, -row.SharedCreditsDelta) + Math.Max(0, -row.FlexibleCreditsDelta) + Math.Max(0, -row.WritingOnlyCreditsDelta) + Math.Max(0, -row.SpeakingOnlyCreditsDelta),
                 creditsRemaining))
             .ToList();
-        var buckets = BuildBucketDtos(account, grantRows, unlimitedGrading, listeningUnlimited, readingUnlimited);
+        var buckets = BuildBucketDtos(account, grantRows, usage, unlimitedGrading, listeningUnlimited, readingUnlimited);
 
         return new AiPackageCreditSnapshot(
             account.UserId,
@@ -1424,9 +1492,52 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         DateTimeOffset CreatedAt,
         string? ReferenceId);
 
+    /// <summary>Genuine learner consumption (never admin adjustments / reversals /
+    /// expiry). Per-bucket usage used to project Total = Used + Remaining.</summary>
+    private sealed record CreditUsage(
+        int Shared,
+        int Flexible,
+        int Writing,
+        int Speaking,
+        int Listening,
+        int Reading,
+        int Mocks);
+
+    private static bool IsGrantReason(AiPackageCreditReason reason)
+        => reason is AiPackageCreditReason.Purchase
+            or AiPackageCreditReason.AdminAdjustment
+            or AiPackageCreditReason.GrantReversed;
+
+    private static bool IsDebitReason(AiPackageCreditReason reason)
+        => reason is AiPackageCreditReason.GradingDeduct
+            or AiPackageCreditReason.ObjectivePracticeDeduct
+            or AiPackageCreditReason.MockDeduct;
+
+    private static bool IsConsumption(AiPackageCreditReason reason)
+        => IsDebitReason(reason)
+            || reason is AiPackageCreditReason.RefundOnFailure
+                or AiPackageCreditReason.MockRefundOnFailure;
+
+    /// <summary>
+    /// Genuine learner usage per bucket. Refund rows restore a debit, so they are
+    /// included in the netting: a consumed-then-refunded credit nets to 0 used.
+    /// Admin adjustments, grant reversals and expiry rows are allocation changes
+    /// and never count toward Used.
+    /// </summary>
+    private static CreditUsage ComputeUsage(IReadOnlyList<LedgerRow> ledgerRows)
+        => new(
+            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.SharedCreditsDelta))),
+            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.FlexibleCreditsDelta))),
+            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.WritingOnlyCreditsDelta))),
+            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.SpeakingOnlyCreditsDelta))),
+            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.ListeningTestsDelta))),
+            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.ReadingTestsDelta))),
+            Math.Max(0, -ledgerRows.Where(row => IsConsumption(row.Reason)).Sum(row => Math.Min(0, row.MockExamsDelta))));
+
     private static IReadOnlyList<AiPackageCreditBucketDto> BuildBucketDtos(
         AiPackageCreditAccount account,
         List<LedgerRow> grantRows,
+        CreditUsage usage,
         bool writingSpeakingUnlimited,
         bool listeningUnlimited,
         bool readingUnlimited)
@@ -1450,21 +1561,26 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                 .OrderBy(source => source.GrantedAt)
                 .ToList();
 
-        AiPackageCreditBucketDto Bucket(string key, string label, int remaining, bool unlimited, List<AiPackageCreditGrantSourceDto> grants)
+        AiPackageCreditBucketDto Bucket(string key, string label, int remaining, bool unlimited, int used, List<AiPackageCreditGrantSourceDto> grants)
         {
-            var totalGranted = grants.Sum(source => source.TotalGranted);
+            // Admin AI credits fix: Total = Used + Remaining is the invariant that the
+            // UI reports. Admin ± / Set adjustments change `remaining` (the pool), so
+            // Total moves but Used stays pinned to genuine learner consumption. Building
+            // Total from the grant-reversal-free used figure keeps "Used" a read-only
+            // learner-usage number (see ProjectSnapshotAsync.ComputeUsage).
+            var effectiveUsed = unlimited ? 0 : Math.Clamp(used, 0, int.MaxValue);
+            var totalGranted = remaining + effectiveUsed;
             var activeGrants = grants.Where(source => source.ExpiresAt is null || source.ExpiresAt > now).ToList();
             DateTimeOffset? validFrom = activeGrants.Count > 0 ? activeGrants.Min(source => source.GrantedAt) : null;
             DateTimeOffset? expiresAt = activeGrants.Any(source => source.ExpiresAt is null)
                 ? null
                 : activeGrants.Select(source => source.ExpiresAt).Max();
-            var used = unlimited ? 0 : Math.Clamp(totalGranted - remaining, 0, int.MaxValue);
             return new(
                 key,
                 label,
                 unlimited,
                 totalGranted,
-                used,
+                effectiveUsed,
                 remaining,
                 grants.Count == 0 ? null : string.Join(", ", grants
                     .Select(source => HumanizePackageName(source.PackageId, source.Description))
@@ -1477,29 +1593,31 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         var buckets = new List<AiPackageCreditBucketDto>
         {
-            Bucket("reading", "Reading Credits", account.ReadingTestsRemaining ?? 0, readingUnlimited || account.ReadingTestsRemaining is null, GrantsFor(row => row.ReadingTestsDelta)),
-            Bucket("listening", "Listening Credits", account.ListeningTestsRemaining ?? 0, listeningUnlimited || account.ListeningTestsRemaining is null, GrantsFor(row => row.ListeningTestsDelta)),
+            Bucket("reading", "Reading Credits", account.ReadingTestsRemaining ?? 0, readingUnlimited || account.ReadingTestsRemaining is null, usage.Reading, GrantsFor(row => row.ReadingTestsDelta)),
+            Bucket("listening", "Listening Credits", account.ListeningTestsRemaining ?? 0, listeningUnlimited || account.ListeningTestsRemaining is null, usage.Listening, GrantsFor(row => row.ListeningTestsDelta)),
             Bucket("writing", "Writing Credits",
                 writingSpeakingUnlimited ? 0 : account.WritingOnlyCredits,
                 writingSpeakingUnlimited,
+                usage.Writing,
                 GrantsFor(row => row.WritingOnlyCreditsDelta)),
             Bucket("speaking", "Speaking Credits",
                 writingSpeakingUnlimited ? 0 : account.SpeakingOnlyCredits,
                 writingSpeakingUnlimited,
+                usage.Speaking,
                 GrantsFor(row => row.SpeakingOnlyCreditsDelta)),
-            Bucket("shared", "Shared Credits", account.SharedCredits, false, GrantsFor(row => row.SharedCreditsDelta)),
+            Bucket("shared", "Shared Credits", account.SharedCredits, false, usage.Shared, GrantsFor(row => row.SharedCreditsDelta)),
         };
 
         var flexibleWsGrants = GrantsFor(row => row.FlexibleCreditsDelta);
         if (account.FlexibleCredits > 0 || flexibleWsGrants.Count > 0)
         {
-            buckets.Add(Bucket("flexible_ws", "Flexible W/S Credits", account.FlexibleCredits, false, flexibleWsGrants));
+            buckets.Add(Bucket("flexible_ws", "Flexible W/S Credits", account.FlexibleCredits, false, usage.Flexible, flexibleWsGrants));
         }
 
         var mockGrants = GrantsFor(row => row.MockExamsDelta);
         if (account.MockExamsRemaining > 0 || mockGrants.Count > 0)
         {
-            buckets.Add(Bucket("mock", "Full Mock Attempts", account.MockExamsRemaining, false, mockGrants));
+            buckets.Add(Bucket("mock", "Full Mock Attempts", account.MockExamsRemaining, false, usage.Mocks, mockGrants));
         }
 
         return buckets;
@@ -2000,11 +2118,35 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         RebuildAccountFromLots(account);
     }
 
-    private static int ResolveAdjustmentDelta(int current, int delta, int? set)
-        => set is int target ? target - current : delta;
+    private static int ResolveAdminDelta(int currentRemaining, int used, int delta, int? set, string label)
+    {
+        if (set is int targetTotal)
+        {
+            // SetExact targets TOTAL. Validate Total must never be lower than Used.
+            if (targetTotal < used)
+            {
+                throw ApiException.Validation(
+                    "credits_total_below_used",
+                    $"Cannot set {label} to {targetTotal}: the learner has already used {used}, " +
+                    $"and Total can never be lower than Used");
+            }
+            // Remaining = Total - Used. Delta moves currentRemaining to (targetTotal - used).
+            var targetRemaining = targetTotal - used;
+            return targetRemaining - currentRemaining;
+        }
 
-    private static int ResolveNullableAdjustmentDelta(int? current, int delta, int? set)
-        => set is int target ? target - (current ?? 0) : delta;
+        // Delta mode: validation applies to negative admin adjustments too — the
+        // resulting Remaining (and therefore Total) must never dip below Used.
+        if (delta < 0 && currentRemaining + delta < 0)
+        {
+            throw ApiException.Validation(
+                "credits_total_below_used",
+                $"Cannot remove {Math.Abs(delta)} {label}: only {currentRemaining} remaining ({used} used), " +
+                "and Total can never fall below Used");
+        }
+
+        return delta;
+    }
 
     private static string FormatUsedRemaining(string unit, int used, int remaining)
         => $"{used} {unit}{(used == 1 ? "" : "s")} used. {remaining} {unit}{(remaining == 1 ? "" : "s")} remaining.";

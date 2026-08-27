@@ -2238,23 +2238,6 @@ public class ReadingAuthoringTests
             "Part A typed item", "[]", correctJson, null, false, null, null), "admin", default);
 
         var snapshot = await policy.ResolveForUserAsync("u1", default);
-        var existingPolicy = await db.ReadingPolicies.FirstOrDefaultAsync(p => p.Id == "global");
-        if (existingPolicy is not null)
-        {
-            existingPolicy.NormalizeSmartQuotes = true;
-            existingPolicy.UpdatedAt = DateTimeOffset.UtcNow;
-        }
-        else
-        {
-            db.ReadingPolicies.Add(new ReadingPolicy
-            {
-                Id = "global",
-                NormalizeSmartQuotes = true,
-                UpdatedAt = DateTimeOffset.UtcNow,
-            });
-        }
-        await db.SaveChangesAsync();
-        snapshot = await policy.ResolveForUserAsync("u1", default);
         db.ReadingAttempts.Add(new ReadingAttempt
         {
             Id = "wave1-a1", UserId = "u1", PaperId = "p1",
@@ -3573,7 +3556,7 @@ public class ReadingAuthoringTests
         }
     }
 
-    private static void SeedReadingMockSection(LearnerDbContext db, string userId, int scaledScore)
+    private static void SeedReadingMockSection(LearnerDbContext db, string userId, int scaledScore, string? contentAttemptId = null)
     {
         var now = DateTimeOffset.UtcNow;
         var mockAttempt = new MockAttempt
@@ -3611,6 +3594,7 @@ public class ReadingAuthoringTests
             MockBundleSection = bundleSection,
             SubtestCode = "reading",
             ContentPaperId = "p1",
+            ContentAttemptId = contentAttemptId,
             LaunchRoute = "/mocks",
             State = AttemptState.Completed,
             RawScore = 30,
@@ -4684,7 +4668,7 @@ public class ReadingAuthoringTests
         var run = await attemptSvc.StartAsync("u1", "p1", default);
         await AnswerAllReadingQuestionsAsync(db, attemptSvc, "u1", run.AttemptId, correct: true);
         await attemptSvc.SubmitAsync("u1", run.AttemptId, default);
-        SeedReadingMockSection(db, "u1", scaledScore: OetScoring.ScaledPassGradeB);
+        SeedReadingMockSection(db, "u1", scaledScore: OetScoring.ScaledPassGradeB, contentAttemptId: run.AttemptId);
         await db.SaveChangesAsync();
 
         var pathway = new OetLearner.Api.Services.Reading.ReadingPathwayService(db);
