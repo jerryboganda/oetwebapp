@@ -488,6 +488,13 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             var seeder = scope.ServiceProvider
                 .GetRequiredService<OetLearner.Api.Services.Billing.Oet2026CatalogSeeder>();
             await seeder.SeedAsync(cancellationToken);
+            // Reading/Listening attempt start fails closed without effective
+            // marking policies; test hosts never run the governance seed
+            // migration, so seed the production defaults here as well.
+            var govDb = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(govDb);
+            AssessmentGovernanceSeeder.SeedDefaultScoreTables(govDb);
+            await govDb.SaveChangesAsync(cancellationToken);
             _catalogSeeded = true;
         }
         finally
@@ -593,13 +600,14 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         }
     }
 
-    public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName)
+    public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName, string? activeProfessionId = null)
     {
         await EnsureCatalogSeededAsync();
         await using var scope = Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync();
 
+        var profession = activeProfessionId ?? "medicine";
         var now = DateTimeOffset.UtcNow;
         var learner = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
         if (learner is null)
@@ -611,7 +619,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
                 Email = email,
                 Timezone = "UTC",
                 Locale = "en-AU",
-                ActiveProfessionId = "medicine",
+                ActiveProfessionId = profession,
                 CreatedAt = now,
                 LastActiveAt = now,
                 AccountStatus = "active"
@@ -623,7 +631,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             learner.Email = email;
             learner.Timezone = "UTC";
             learner.Locale = "en-AU";
-            learner.ActiveProfessionId ??= "medicine";
+            learner.ActiveProfessionId ??= profession;
             learner.LastActiveAt = now;
             learner.AccountStatus = "active";
         }

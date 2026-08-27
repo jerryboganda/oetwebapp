@@ -308,7 +308,9 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
 
     private async Task<HttpClient> CreateClientForUserAsync(string userId, int walletCredits)
     {
-        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        // Seed content used here (wt-001 writing) is nursing-scoped; the
+        // Master Catalogue profession-isolation gate 404s otherwise.
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId, "nursing");
         await _factory.EnsureAiCreditsAsync(userId);
         await using (var scope = _factory.Services.CreateAsyncScope())
         {

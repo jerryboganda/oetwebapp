@@ -775,7 +775,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
 
     private async Task<HttpClient> CreateClientForUserAsync(string userId)
     {
-        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        // Seed content used here (wt-001/wt-002 writing, st-001 speaking) is
+        // nursing-scoped; the Master Catalogue profession-isolation gate 404s
+        // otherwise.
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId, "nursing");
         await _factory.EnsureAiCreditsAsync(userId);
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);

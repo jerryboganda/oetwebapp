@@ -37,6 +37,10 @@ public class ListeningAttemptEventLoggingTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
+        // Attempt start fails closed without an effective marking policy (test
+        // hosts never run the governance seed migration).
+        OetLearner.Api.Tests.Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        db.SaveChanges();
         return (db, new ListeningLearnerService(db, new AllowAllContentEntitlementService()));
     }
 

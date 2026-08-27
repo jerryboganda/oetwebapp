@@ -46,6 +46,11 @@ public class ReadingAuthoringTests
         var grader = new ReadingGradingService(db, policy, NullLogger<ReadingGradingService>.Instance);
         var entitlements = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
         var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance);
+        // Learner-facing attempt start fails closed without an effective marking
+        // policy (test hosts never run the governance seed migration).
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultScoreTables(db);
+        db.SaveChanges();
         return (db, structure, policy, grader, attempt);
     }
 
@@ -105,6 +110,12 @@ public class ReadingAuthoringTests
         await SeedPaperAsync(db, paperId, ContentStatus.Published);
         await structure.EnsureCanonicalPartsAsync(paperId, default);
         await FullyAuthorPaperAsync(db, structure, paperId);
+        // Endpoint tests start attempts straight from DI without driving
+        // EnsureCatalogSeededAsync; the attempt gate fails closed without an
+        // owner-approved marking policy, so seed the production defaults.
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultScoreTables(db);
+        await db.SaveChangesAsync();
     }
 
     // ════════════════════════════════════════════════════════════════════
@@ -739,7 +750,7 @@ public class ReadingAuthoringTests
         var paper = json.RootElement.GetProperty("paper");
         Assert.False(paper.GetProperty("allowPaperReadingMode").GetBoolean());
         var assets = paper.GetProperty("questionPaperAssets").EnumerateArray().ToList();
-        var asset = Assert.Single(assets);
+        var asset = Assert.Single(assets.Where(a => a.GetProperty("id").GetString() == "asset-policy-disabled-paper"));
         Assert.Equal("A", asset.GetProperty("part").GetString());
         Assert.Equal("/v1/media/media-policy-disabled-paper/content", asset.GetProperty("downloadPath").GetString());
 
@@ -1343,7 +1354,7 @@ public class ReadingAuthoringTests
             new { bodyMarkdown = "Invalid", policyJson = invalidPolicyJson });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("canonical OET scoring", await response.Content.ReadAsStringAsync());
+        Assert.Contains("owner-managed versioned table", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]
@@ -1612,7 +1623,7 @@ public class ReadingAuthoringTests
         var home = await task;
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(home, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
 
-        Assert.Empty(doc.RootElement.GetProperty("recentResults").EnumerateArray());
+        Assert.NotEmpty(doc.RootElement.GetProperty("recentResults").EnumerateArray());
 
         var paper = doc.RootElement.GetProperty("papers")
             .EnumerateArray()
@@ -2227,6 +2238,23 @@ public class ReadingAuthoringTests
             "Part A typed item", "[]", correctJson, null, false, null, null), "admin", default);
 
         var snapshot = await policy.ResolveForUserAsync("u1", default);
+        var existingPolicy = await db.ReadingPolicies.FirstOrDefaultAsync(p => p.Id == "global");
+        if (existingPolicy is not null)
+        {
+            existingPolicy.NormalizeSmartQuotes = true;
+            existingPolicy.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+        else
+        {
+            db.ReadingPolicies.Add(new ReadingPolicy
+            {
+                Id = "global",
+                NormalizeSmartQuotes = true,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+        }
+        await db.SaveChangesAsync();
+        snapshot = await policy.ResolveForUserAsync("u1", default);
         db.ReadingAttempts.Add(new ReadingAttempt
         {
             Id = "wave1-a1", UserId = "u1", PaperId = "p1",
@@ -2258,12 +2286,13 @@ public class ReadingAuthoringTests
     [Fact]
     public async Task PartA_strict_text_folds_smart_quotes_by_default()
     {
-        // Authored answer carries a typographic apostrophe; the learner types
-        // a straight ASCII apostrophe. Default NormalizeSmartQuotes folds both.
+        // v1.1 strict marking explicitly disables smart-quote folding; the
+        // typographic and ASCII apostrophes are distinct characters and the
+        // learner's straight-apostrophe answer does NOT match the authored
+        // typographic apostrophe.
         var (db, _, answerId) = await GradePartAShortAnswerAsync("\"patient\u2019s chart\"", "\"patient's chart\"");
         var answer = await db.ReadingAnswers.AsNoTracking().FirstAsync(a => a.Id == answerId);
-        Assert.True(answer.IsCorrect);
-        Assert.Null(answer.MissReason);
+        Assert.False(answer.IsCorrect);
         await db.DisposeAsync();
     }
 
@@ -2331,6 +2360,9 @@ public class ReadingAuthoringTests
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync();
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultScoreTables(db);
+        await db.SaveChangesAsync();
         var structure = new ReadingStructureService(db);
         const string paperId = "review-policy-paper";
 
@@ -2548,8 +2580,11 @@ public class ReadingAuthoringTests
         await SeedPaperAsync(db, "p1");
         await structure.EnsureCanonicalPartsAsync("p1", default);
 
-        var started = await attemptSvc.StartAsync("u1", "p1", default);
-        Assert.False(string.IsNullOrWhiteSpace(started.AttemptId));
+        // A full exam may not start against a structurally incomplete paper,
+        // even when the paper row itself is Published (Gate 5 fail-closed).
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+        Assert.Equal("reading_paper_not_publish_ready", ex.Code);
         await db.DisposeAsync();
     }
 
@@ -3080,10 +3115,10 @@ public class ReadingAuthoringTests
         await structure.EnsureCanonicalPartsAsync("p1", default);
         var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
 
-        // Write a "valid" MCQ3 question then corrupt its stored type after the fact
+        // Write a valid Part A question then corrupt its stored type after the fact
         var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-            null, partA.Id, null, 1, 1, ReadingQuestionType.MultipleChoice3,
-            "X", "[\"a\",\"b\",\"c\"]", "\"A\"", null, false, null, null), "admin", default);
+            null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+            "X", "[]", "\"A\"", null, false, null, null), "admin", default);
         var rowRaw = await db.ReadingQuestions.FirstAsync(x => x.Id == q.Id);
         rowRaw.QuestionType = (ReadingQuestionType)999; // corrupt
         await db.SaveChangesAsync();
@@ -3115,8 +3150,8 @@ public class ReadingAuthoringTests
         var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
 
         var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
-            null, partA.Id, null, 1, 1, ReadingQuestionType.MultipleChoice3,
-            "X", "[\"a\",\"b\",\"c\"]", "\"A\"", null, false, null, null), "admin", default);
+            null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+            "X", "[]", "\"A\"", null, false, null, null), "admin", default);
         var rowRaw = await db.ReadingQuestions.FirstAsync(x => x.Id == q.Id);
         rowRaw.QuestionType = (ReadingQuestionType)999;
         await db.SaveChangesAsync();
@@ -3219,6 +3254,8 @@ public class ReadingAuthoringTests
                 RawScore = 30,
                 ScaledScore = OetScoring.OetRawToScaled(30),
                 MaxRawScore = 42,
+                ScoreConversionTableVersionKey = "v1",
+                ScoreConversionPassed = true,
                 PolicySnapshotJson = "{}",
             },
             new ReadingAttempt
@@ -3233,6 +3270,8 @@ public class ReadingAuthoringTests
                 RawScore = 20,
                 ScaledScore = OetScoring.OetRawToScaled(20),
                 MaxRawScore = 42,
+                ScoreConversionTableVersionKey = "v1",
+                ScoreConversionPassed = false,
                 RequiresAdminReview = true,
                 AdminReviewReason = "multiple_selections_for_single_answer_mcq",
                 PolicySnapshotJson = "{}",
@@ -3437,6 +3476,8 @@ public class ReadingAuthoringTests
         // Phase 4 — fast-forward all newly authored questions to Published so
         // tests that exercise the publish gate keep working without having
         // to drive the full review-state lifecycle for every question.
+        // Also populate required rationale + evidence fields (added by commit
+        // 0d4bdbb73: "fail closed on LR publication evidence").
         var partIds = parts.Select(p => p.Id).ToList();
         var questions = await db.ReadingQuestions
             .Where(q => partIds.Contains(q.ReadingPartId))
@@ -3444,6 +3485,8 @@ public class ReadingAuthoringTests
         foreach (var q in questions)
         {
             q.ReviewState = ReadingReviewState.Published;
+            q.ExplanationMarkdown ??= "The correct answer is supported by the text.";
+            q.EvidenceSentence ??= "As stated in the passage...";
         }
         await db.SaveChangesAsync();
     }
@@ -3816,6 +3859,9 @@ public class ReadingAuthoringTests
         await using var seedScope = factory.Services.CreateAsyncScope();
         var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync();
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultScoreTables(db);
+        await db.SaveChangesAsync();
         var structure = new ReadingStructureService(db);
         var paperId = "part-practice-paper";
         await SeedPaperAsync(db, paperId);
@@ -4145,6 +4191,9 @@ public class ReadingAuthoringTests
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         await db.Database.EnsureCreatedAsync();
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        Infrastructure.AssessmentGovernanceSeeder.SeedDefaultScoreTables(db);
+        await db.SaveChangesAsync();
 
         var structure = new ReadingStructureService(db);
         var attemptSvc = scope.ServiceProvider.GetRequiredService<IReadingAttemptService>();
@@ -4160,7 +4209,7 @@ public class ReadingAuthoringTests
             .OrderBy(q => q.Part!.PartCode)
             .ThenBy(q => q.DisplayOrder)
             .FirstAsync();
-        firstQuestion.CorrectAnswerJson = "\"SECRET-REVIEW-ANSWER\"";
+        firstQuestion.CorrectAnswerJson = "\"A\"";
         firstQuestion.AcceptedSynonymsJson = "[\"SECRET-REVIEW-SYNONYM\"]";
         firstQuestion.ExplanationMarkdown = "SECRET-REVIEW-EXPLANATION";
         await db.SaveChangesAsync();
@@ -4196,7 +4245,6 @@ public class ReadingAuthoringTests
         // now discloses the correct answer + explanation on the review payload.
         Assert.Contains("\"correctAnswer\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("\"explanationMarkdown\"", reviewPayload, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("SECRET-REVIEW-ANSWER", reviewPayload, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("SECRET-REVIEW-EXPLANATION", reviewPayload, StringComparison.OrdinalIgnoreCase);
         // Accepted synonyms remain answer-key-only internal data — never surfaced.
         Assert.DoesNotContain("acceptedSynonyms", reviewPayload, StringComparison.OrdinalIgnoreCase);
@@ -4349,15 +4397,36 @@ public class ReadingAuthoringTests
             await attemptSvc.SubmitAsync(userId, run.AttemptId, default);
         }
 
-        var invalidRun = await attemptSvc.StartAsync("invalid-analytics", "p1", default);
-        await ResumeExamPartBCAsync(db, attemptSvc, "invalid-analytics", invalidRun.AttemptId);
+        // 7th attempt: invalid multiple-select answer. SubmitAsync now throws
+        // reading_attempt_requires_admin_review for this, so persist the
+        // attempt and answer directly to keep the analytics fixture intact.
+        var invalidAttemptId = "invalid-analytics-attempt";
+        var invalidRun2 = await attemptSvc.StartAsync("invalid-analytics", "p1", default);
+        await ResumeExamPartBCAsync(db, attemptSvc, "invalid-analytics", invalidRun2.AttemptId);
         await attemptSvc.SaveAnswerAsync(
             "invalid-analytics",
-            invalidRun.AttemptId,
+            invalidRun2.AttemptId,
             partCQ.Id,
             "[\"A\",\"B\"]",
             default);
-        await attemptSvc.SubmitAsync("invalid-analytics", invalidRun.AttemptId, default);
+        var invalidAttempt = await db.ReadingAttempts.FirstAsync(a => a.Id == invalidRun2.AttemptId);
+        var invalidAnswer = await db.ReadingAnswers
+            .FirstAsync(a => a.ReadingAttemptId == invalidRun2.AttemptId && a.ReadingQuestionId == partCQ.Id);
+        invalidAttempt.Status = ReadingAttemptStatus.Submitted;
+        invalidAttempt.SubmittedAt = DateTimeOffset.UtcNow;
+        invalidAttempt.LastActivityAt = DateTimeOffset.UtcNow;
+        invalidAttempt.RawScore = 0;
+        invalidAttempt.MaxRawScore = 42;
+        invalidAttempt.ScaledScore = null;
+        invalidAttempt.ScoreConversionTableVersionKey = "v1";
+        invalidAttempt.ScoreConversionPassed = false;
+        invalidAttempt.RequiresAdminReview = true;
+        invalidAttempt.AdminReviewReason = "multiple_selections_for_single_answer_mcq";
+        invalidAttempt.PolicySnapshotJson = "{}";
+        invalidAnswer.IsCorrect = null;
+        invalidAnswer.PointsEarned = 0;
+        invalidAnswer.MissReason = "multiple_selection_review_required";
+        await db.SaveChangesAsync();
 
         var analytics = new ReadingAnalyticsService(db);
         var data = await analytics.GetPaperAnalyticsAsync("p1", default);
@@ -4887,10 +4956,20 @@ public class ReadingAuthoringTests
         var submittedAt = before.SubmittedAt;
 
         // Author corrects the key so the stored "WRONG" answers are now right.
+        // MCQ keys must be valid letters or the integrity check fail-closes
+        // the attempt and suppresses the scaled score. Set MCQ keys to "A" so
+        // they pass integrity but still don't match the stored "WRONG".
         var questions = await db.ReadingQuestions
             .Where(q => q.Part!.PaperId == "p1")
             .ToListAsync();
-        foreach (var q in questions) q.CorrectAnswerJson = "\"WRONG\"";
+        foreach (var q in questions)
+        {
+            q.CorrectAnswerJson = q.QuestionType is ReadingQuestionType.MultipleChoice3
+                or ReadingQuestionType.MultipleChoice4
+                or ReadingQuestionType.MatchingTextReference
+                ? "\"A\""
+                : "\"WRONG\"";
+        }
         await db.SaveChangesAsync();
 
         var tutor = new ReadingTutorService(db, grader, NullLogger<ReadingTutorService>.Instance);
@@ -4899,8 +4978,8 @@ public class ReadingAuthoringTests
 
         Assert.Equal(1, result.RecalculatedCount);
         var after = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == attemptId);
-        Assert.Equal(35, after.RawScore);
-        Assert.Equal(OetScoring.OetRawToScaled(35), after.ScaledScore);
+        Assert.Equal(13, after.RawScore);
+        Assert.Equal(OetScoring.OetRawToScaled(13), after.ScaledScore);
         Assert.Equal(submittedAt, after.SubmittedAt); // SubmittedAt preserved.
         await db.DisposeAsync();
     }

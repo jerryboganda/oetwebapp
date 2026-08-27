@@ -33,6 +33,10 @@ public sealed class ReadingListeningCreditPerPaperTests
         var entitlements = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
         var credit = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
         var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance, credit);
+        // Attempt start fails closed without an effective marking policy (test
+        // hosts never run the governance seed migration).
+        OetLearner.Api.Tests.Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        db.SaveChanges();
         return (db, attempt, credit);
     }
 

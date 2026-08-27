@@ -497,6 +497,11 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             if (!partTimeLimits.TryGetValue(code, out var timeLimitSeconds)) continue;
 
+            // A part row without an authored TimeLimitSeconds has no expected
+            // timing to validate against — skip it (mirrors the JSON side,
+            // which skips extracts without timeLimitSeconds).
+            if (timeLimitSeconds is null) continue;
+
             if (timeLimitSeconds is <= 0)
             {
                 invalidSectionTimingParts.Add($"{code} has a non-positive time limit");

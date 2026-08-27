@@ -86,6 +86,7 @@ public class ListeningStructureServiceTests
                 transcriptEvidenceEndMs = num * 1000 + 500,
                 difficultyLevel = 3,
                 validationStatus = "published",
+                rationale = "Why this answer is correct.",
             });
             num++;
         }
@@ -96,6 +97,7 @@ public class ListeningStructureServiceTests
                 transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500,
                 difficultyLevel = 3,
                 validationStatus = "published",
+                rationale = "Why this answer is correct.",
                 optionDistractorCategory = Enumerable.Range(0, partBOptionCount).Select(index => index == 0 ? null : "reused_keyword").ToArray() });
         for (var i = 0; i < partC; i++)
             list.Add(new { id = $"c-{i}", number = num++, partCode = i < partC / 2 ? "C1" : "C2", type = "multiple_choice_3", text = "q",
@@ -103,6 +105,7 @@ public class ListeningStructureServiceTests
                 transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000,
                 transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3,
                 validationStatus = "published",
+                rationale = "Why this answer is correct.",
                 optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         // One extract per sub-section, each with a non-overlapping audio window.
         // A1/A2 carry a note-completion body whose gap count matches that
@@ -271,12 +274,14 @@ public class ListeningStructureServiceTests
 
         var report = await svc.ValidatePaperAsync(paper.Id, default);
 
-        // Owner decision: pedagogical authoring gates are advisory (warning),
-        // not publish blockers, for the uploaded-audio Listening flow.
+        // Owner decision: non-essential pedagogical authoring gates are
+        // advisory (warning), not publish blockers, for the uploaded-audio
+        // Listening flow. Transcript evidence and distractor-category authoring
+        // remain hard publish blockers (LR publication evidence).
         Assert.Contains(report.Issues, issue => issue.Code == "listening_skill_tags" && issue.Severity == "warning");
-        Assert.Contains(report.Issues, issue => issue.Code == "listening_transcript_evidence" && issue.Severity == "warning");
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_transcript_evidence" && issue.Severity == "error");
         Assert.Contains(report.Issues, issue => issue.Code == "listening_question_difficulty" && issue.Severity == "warning");
-        Assert.Contains(report.Issues, issue => issue.Code == "listening_distractor_categories" && issue.Severity == "warning");
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_distractor_categories" && issue.Severity == "error");
         Assert.Contains(report.Issues, issue => issue.Code == "listening_extract_difficulty" && issue.Severity == "warning");
         // Audio cue timing remains a hard publish blocker (extract[0] window invalid).
         Assert.Contains(report.Issues, issue => issue.Code == "listening_extract_timing" && issue.Severity == "error");
@@ -339,12 +344,12 @@ public class ListeningStructureServiceTests
         var list = new List<object>();
         var num = 1;
         for (var i = 0; i < 24; i++)
-            list.Add(new { id = $"a-{i}", number = num++, partCode = "A", type = "short_answer", text = "q", correctAnswer = "x", skillTag = "note_completion", transcriptExcerpt = "x", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published" });
+            list.Add(new { id = $"a-{i}", number = num++, partCode = "A", type = "short_answer", text = "q", correctAnswer = "x", skillTag = "note_completion", transcriptExcerpt = "x", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", rationale = "Why this answer is correct." });
         for (var i = 0; i < 6; i++)
             list.Add(new { id = $"b-{i}", number = num++, partCode = PartBCodes[i], type = "multiple_choice_3", text = "q",
-                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "detail", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" } });
+                options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "detail", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", rationale = "Why this answer is correct.", optionDistractorCategory = new string?[] { null, "too_weak", "reused_keyword" } });
         for (var i = 0; i < 12; i++)
-            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
+            list.Add(new { id = $"c-{i}", number = num++, partCode = "C", type = "multiple_choice_3", text = "q", options = new[] { "1", "2", "3" }, correctAnswer = "1", skillTag = "attitude", transcriptExcerpt = "1", transcriptEvidenceStartMs = num * 1000, transcriptEvidenceEndMs = num * 1000 + 500, difficultyLevel = 3, validationStatus = "published", rationale = "Why this answer is correct.", optionDistractorCategory = new string?[] { null, "too_weak", "opposite_meaning" } });
         var extracts = new List<object>
         {
             new { partCode = "A", displayOrder = 1, kind = "consultation", title = "A", audioStartMs = 0, audioEndMs = 120_000, difficultyRating = 3 },
@@ -473,7 +478,7 @@ public class ListeningStructureServiceTests
     }
 
     [Fact]
-    public async Task JsonPartB_WithInvalidDistractorCategory_IsAdvisoryWarning()
+    public async Task JsonPartB_WithInvalidDistractorCategory_BlocksPublish()
     {
         var (db, svc) = Build();
         using var doc = JsonDocument.Parse(BuildQuestionsJson(24, 6, 12));
@@ -486,9 +491,10 @@ public class ListeningStructureServiceTests
 
         var report = await svc.ValidatePaperAsync(paper.Id, default);
 
-        // Distractor-category validity is advisory; it no longer blocks publish.
-        Assert.Contains(report.Issues, issue => issue.Code == "listening_distractor_categories_invalid" && issue.Severity == "warning");
-        Assert.DoesNotContain(report.Issues, issue => issue.Code == "listening_distractor_categories_invalid" && issue.Severity == "error");
+        // Distractor-category validity is a hard publish blocker (LR
+        // publication evidence); it must NOT be downgraded to a warning.
+        Assert.Contains(report.Issues, issue => issue.Code == "listening_distractor_categories_invalid" && issue.Severity == "error");
+        Assert.DoesNotContain(report.Issues, issue => issue.Code == "listening_distractor_categories_invalid" && issue.Severity == "warning");
     }
 
     [Fact]
@@ -937,6 +943,7 @@ public class ListeningStructureServiceTests
                     TranscriptEvidenceEndMs = qNum * 1000 + 500,
                     DifficultyLevel = 3,
                     ValidationStatus = "published",
+                    ExplanationMarkdown = "Why this answer is correct.",
                     CreatedAt = now,
                     UpdatedAt = now,
                 };
@@ -1074,7 +1081,7 @@ public class ListeningStructureServiceTests
         var seed = await SeedCanonicalRelationalAsync(db);
         // Preserve total 42 while moving one mark from C to A.
         seed.Questions[0].Points = 2;
-        seed.Questions.Single(q => q.ListeningPartId == seed.Parts[ListeningPartCode.C1].Id).Points = 0;
+        seed.Questions.First(q => q.ListeningPartId == seed.Parts[ListeningPartCode.C1].Id).Points = 0;
         await db.SaveChangesAsync();
 
         var report = await svc.ValidatePaperAsync(seed.Paper.Id, default);

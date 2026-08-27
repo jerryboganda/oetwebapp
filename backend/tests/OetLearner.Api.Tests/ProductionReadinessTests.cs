@@ -370,7 +370,9 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
 
     private async Task<HttpClient> CreateLearnerClientAsync(string userId)
     {
-        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        // Seed content used here (st-001 speaking handover) is nursing-scoped;
+        // the Master Catalogue profession-isolation gate 404s otherwise.
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId, "nursing");
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
@@ -482,6 +484,10 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             ["Conversation:AsrProvider"] = "deepgram",
             ["Conversation:DeepgramApiKey"] = "deepgram-conversation-key",
             ["Conversation:TtsProvider"] = "off",
+            // ListeningTtsProviderPolicy refuses the 'stub' provider in Production.
+            // The ElevenLabs provider resolves its API key lazily at synthesis
+            // time and these tests never synthesise, so naming the provider is enough.
+            ["Listening:TtsProvider"] = "elevenlabs",
             // C7 PasswordPolicy HIBP check hits real network from tests; disable it here.
             ["PasswordPolicy:BreachCheckEnabled"] = "false"
         };

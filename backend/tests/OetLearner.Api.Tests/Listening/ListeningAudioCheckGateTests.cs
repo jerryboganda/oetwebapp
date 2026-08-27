@@ -40,10 +40,18 @@ public class ListeningAudioCheckGateTests
 
     private const string UserId = "learner-1";
 
-    private static LearnerDbContext NewDb() => new(
-        new DbContextOptionsBuilder<LearnerDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
-            .Options);
+    private static LearnerDbContext NewDb()
+    {
+        var db = new LearnerDbContext(
+            new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+                .Options);
+        // Attempt start fails closed without an effective marking policy (test
+        // hosts never run the governance seed migration).
+        OetLearner.Api.Tests.Infrastructure.AssessmentGovernanceSeeder.SeedDefaultEffectivePolicies(db);
+        db.SaveChanges();
+        return db;
+    }
 
     private static ListeningSessionService NewSessionService(LearnerDbContext db, TimeProvider clock)
         => new(
