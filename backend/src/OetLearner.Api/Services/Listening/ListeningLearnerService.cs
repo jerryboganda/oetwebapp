@@ -4409,45 +4409,127 @@ public sealed class ListeningLearnerService(
         return new ListeningDrillDto(drillId, title, focusLabel, description, normalized, minutes, highlights, launchRoute, reviewRoute);
     }
 
-    private static string CleanListeningPrompt(string? raw)
+    private static readonly System.Text.RegularExpressions.Regex SentinelPattern =
+        new(@"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex OptionPlaceholderPattern =
+        new(@"^Option\s+[ABC]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex[] ArtifactLinePatterns =
+    [
+        new(@"^\s*[-=]{2,}\s*PAGE\s*\d+\s*[-=]{2,}\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        new(@"^\s*PAGE\s*\d+\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        new(@"^\s*Practice Test\s*\d+\s*:?\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        new(@"^\s*\uF0B7\s*$", System.Text.RegularExpressions.RegexOptions.Compiled)
+    ];
+
+    private static readonly System.Text.RegularExpressions.Regex[] InlineArtifactPatterns =
+    [
+        new(@"^\s*PAGE\s+\d+\s+", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        new(@"^\s*[-=]{2,}\s*PAGE\s*\d+\s*[-=]{2,}\s*", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled),
+        new(@"^\s*Practice Test\s*\d+\s*[:\-]?\s*", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled)
+    ];
+
+    private static readonly System.Text.RegularExpressions.Regex MultipleWhitespacePattern =
+        new(@"\s{2,}", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public static string SanitizeQuestionPrompt(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         var text = raw.Trim();
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
-        var lines = text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+        if (SentinelPattern.IsMatch(text)) return string.Empty;
+
+        var lines = text.Split(["\r\n", "\n", "\r"], StringSplitOptions.None);
         var kept = new List<string>();
         foreach (var line in lines)
         {
             var t = line.Trim();
             if (string.IsNullOrWhiteSpace(t)) continue;
-            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
-            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^[-=]{2,}\s*PAGE\s+\d+\s*[-=]{2,}\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
-            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*PAGE\s+\d+\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
-            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*Practice Test[^\n]*:?\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
-            if (t == "\uF0B7") continue;
-            kept.Add(t);
+            if (SentinelPattern.IsMatch(t)) continue;
+            var isArtifact = false;
+            foreach (var pattern in ArtifactLinePatterns)
+            {
+                if (pattern.IsMatch(t))
+                {
+                    isArtifact = true;
+                    break;
+                }
+            }
+            if (!isArtifact) kept.Add(t);
         }
+
+        if (kept.Count == 0) return string.Empty;
+
         text = string.Join(" ", kept).Trim();
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*PAGE\s+\d+\s+", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*[-=]{2,}\s*PAGE\s+\d+\s*[-=]{2,}\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s{2,}", " ").Trim();
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        foreach (var pattern in InlineArtifactPatterns)
+        {
+            text = pattern.Replace(text, string.Empty).Trim();
+        }
+
+        // Global inline artifacts (trailing " ===== PAGE 4 =====" etc.)
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*={2,}\s*PAGE\s*\d+\s*={2,}\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*-{2,}\s*PAGE\s*\d+\s*-{2,}\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*PAGE\s*\d+\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*o\s*Practice Test\s*\d+\s*:?\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*Practice Test\s*\d+\s*:?\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = text.Replace("\uF0B7", " ");
+
+        text = MultipleWhitespacePattern.Replace(text, " ").Trim();
+        if (SentinelPattern.IsMatch(text)) return string.Empty;
         return text;
     }
 
-    private static string CleanListeningOption(string? raw)
+    public static string CleanListeningPrompt(string? raw) => SanitizeQuestionPrompt(raw);
+
+    public static string SanitizeOptionText(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         var text = raw.Trim();
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^Option\s+[ABC]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^[-=]{2,}\s*PAGE\s+\d+\s*[-=]{2,}\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\s*PAGE\s+\d+\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\s*Practice Test[^\n]*:?\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
-        text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*PAGE\s+\d+\s+", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^Option\s+[ABC]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
-        return text.Trim();
+        if (OptionPlaceholderPattern.IsMatch(text)) return string.Empty;
+        if (SentinelPattern.IsMatch(text)) return string.Empty;
+
+        var lines = text.Split(["\r\n", "\n", "\r"], StringSplitOptions.None);
+        var kept = new List<string>();
+        foreach (var line in lines)
+        {
+            var t = line.Trim();
+            if (string.IsNullOrWhiteSpace(t)) continue;
+            if (SentinelPattern.IsMatch(t)) continue;
+            if (OptionPlaceholderPattern.IsMatch(t)) continue;
+            var isArtifact = false;
+            foreach (var pattern in ArtifactLinePatterns)
+            {
+                if (pattern.IsMatch(t))
+                {
+                    isArtifact = true;
+                    break;
+                }
+            }
+            if (!isArtifact) kept.Add(t);
+        }
+
+        if (kept.Count == 0) return string.Empty;
+
+        text = string.Join(" ", kept).Trim();
+        foreach (var pattern in InlineArtifactPatterns)
+        {
+            text = pattern.Replace(text, string.Empty).Trim();
+        }
+
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*={2,}\s*PAGE\s*\d+\s*={2,}\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*-{2,}\s*PAGE\s*\d+\s*-{2,}\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*PAGE\s*\d+\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*o\s*Practice Test\s*\d+\s*:?\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s*Practice Test\s*\d+\s*:?\s*", " ", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+        text = text.Replace("\uF0B7", " ");
+
+        text = MultipleWhitespacePattern.Replace(text, " ").Trim();
+        if (OptionPlaceholderPattern.IsMatch(text)) return string.Empty;
+        if (SentinelPattern.IsMatch(text)) return string.Empty;
+        return text;
     }
+
+    public static string CleanListeningOption(string? raw) => SanitizeOptionText(raw);
 
     private static string NormalizeDrillId(string value)
     {
