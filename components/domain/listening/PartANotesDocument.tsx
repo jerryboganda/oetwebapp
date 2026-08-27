@@ -1,6 +1,10 @@
 'use client';
 
-import { parseNotesDocument, countGaps } from '@/lib/listening-part-a-notes';
+import {
+  parseNotesDocument,
+  countGaps,
+  normalizeLegacyDetachedPartAGaps,
+} from '@/lib/listening-part-a-notes';
 import type { NotesNode, NotesSegment } from '@/lib/listening-part-a-notes';
 
 export interface PartANotesDocumentProps {
@@ -195,8 +199,12 @@ export function PartANotesDocument({
   locked = false,
   highlightingEnabled = false,
 }: PartANotesDocumentProps) {
-  const nodes = parseNotesDocument(notesBody);
-  const gapCount = countGaps(notesBody);
+  const normalizedNotesBody = normalizeLegacyDetachedPartAGaps(
+    notesBody,
+    questions.map((question) => question.number),
+  );
+  const nodes = parseNotesDocument(normalizedNotesBody);
+  const gapCount = countGaps(normalizedNotesBody);
 
   // Determine which questions are "leftover" (their index >= gap count in the document)
   const leftoverQuestions = questions.slice(gapCount);

@@ -200,6 +200,68 @@ export function countGaps(body: string | null | undefined): number {
 }
 
 /**
+ * Repair the legacy Nova Part A import shape without changing correctly
+ * authored Atlas/Nova notes.
+ *
+ * Some Nova source documents were imported with numbered placeholders in the
+ * running notes (for example, `Total weight reduction 1)`) while the twelve
+ * canonical `____` markers were appended as a detached answer grid after a
+ * `Practice Test …` footer. The learner renderer then bound those trailing
+ * markers, producing twelve answer boxes at the bottom instead of at their OET
+ * note-completion positions.
+ *
+ * This function is deliberately fail-closed: it only considers a body with a
+ * detached Practice Test gap grid, only replaces numbers supplied by the
+ * section's real questions, and returns the original body unless the result
+ * has exactly one inline gap per question. Already-canonical notes are returned
+ * byte-for-byte unchanged.
+ */
+export function normalizeLegacyDetachedPartAGaps(
+  body: string | null | undefined,
+  questionNumbers: readonly number[],
+): string {
+  if (!body || questionNumbers.length === 0) return body ?? '';
+
+  const normalizedLineEndings = body.replace(/\r\n?/g, '\n');
+  const footerMatches = Array.from(
+    normalizedLineEndings.matchAll(/^[ \t]*Practice Test[^\n]*:?[ \t]*$/gim),
+  );
+  const footer = footerMatches.at(-1);
+  if (!footer || footer.index === undefined) return body;
+
+  const beforeFooter = normalizedLineEndings.slice(0, footer.index).trimEnd();
+  const footerAndGrid = normalizedLineEndings.slice(footer.index);
+  if (countGaps(footerAndGrid) === 0) return body;
+
+  const expectedNumbers = Array.from(new Set(questionNumbers))
+    .filter((number) => Number.isInteger(number) && number > 0)
+    .sort((left, right) => left - right);
+  if (expectedNumbers.length !== questionNumbers.length) return body;
+
+  // Do not inspect the source-title line (`Q(1-12) Answersheet`), because its
+  // closing number is metadata rather than a learner answer position.
+  const firstLineBreak = beforeFooter.indexOf('\n');
+  const titleLine = firstLineBreak >= 0 ? beforeFooter.slice(0, firstLineBreak + 1) : '';
+  let noteContent = firstLineBreak >= 0 ? beforeFooter.slice(firstLineBreak + 1) : beforeFooter;
+
+  for (const number of expectedNumbers) {
+    const marker = new RegExp(
+      `(^|[^\\d])\\(?${number}\\)(?:[ \\t]*_{3,})?`,
+      'gm',
+    );
+    noteContent = noteContent.replace(marker, '$1____');
+  }
+
+  const candidate = `${titleLine}${noteContent}`
+    // Nova's PDF extraction emitted a private-use Word bullet glyph. Convert
+    // it to the same markdown bullet grammar already used by Atlas.
+    .replace(/^[ \t]*[\u2022\uF0B7][ \t]*/gm, '- ')
+    .trimEnd();
+
+  return countGaps(candidate) === expectedNumbers.length ? candidate : body;
+}
+
+/**
  * Paste-parser: clean raw pasted text/HTML from official OET notes into a
  * canonical body and report the gap count.
  *

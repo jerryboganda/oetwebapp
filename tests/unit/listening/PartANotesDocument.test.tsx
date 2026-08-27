@@ -81,6 +81,45 @@ function NotesHarness({
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('PartANotesDocument', () => {
+  it('renders legacy Nova numbered placeholders inline instead of as a detached answer grid', () => {
+    const body = `Part A – Extract 1 Q(1-12) Answersheet
+You hear a GP talking to a patient about recent weight loss.
+ Patient: Mrs Jacobs
+Total weight reduction 1)
+Associated problem: 2)
+Primary cause 3)
+History 4)
+Medication 5)
+Urea indicates 6)
+Potassium causes 7)
+Suspected presence 8)
+Stomach retained 9)
+Further tests 10)
+Possible cause 11)
+Cancer location 12)
+Practice Test 10 :
+____
+____
+____
+____
+____
+____
+____
+____
+____
+____
+____
+____`;
+
+    render(<NotesHarness body={body} questions={Q1_12} />);
+
+    expect(screen.getAllByRole('textbox')).toHaveLength(12);
+    expect(screen.queryByText(/additional answers/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/practice test 10/i)).not.toBeInTheDocument();
+    const firstAnswer = screen.getByRole('textbox', { name: 'Answer for question 1' });
+    expect(firstAnswer.closest('p')?.textContent).toContain('Total weight reduction');
+  });
+
   it('renders the container with the expected testid', () => {
     render(<NotesHarness />);
     expect(screen.getByTestId('part-a-notes-document')).toBeInTheDocument();

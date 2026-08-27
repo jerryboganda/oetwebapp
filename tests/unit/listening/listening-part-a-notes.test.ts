@@ -4,7 +4,37 @@ import {
   countGaps,
   parseNotesDocument,
   detectPastedGaps,
+  normalizeLegacyDetachedPartAGaps,
 } from '@/lib/listening-part-a-notes';
+
+const NOVA_TEST_10_EXTRACT_1_LEGACY = `Part A – Extract 1 Q(1-12) Answersheet
+You hear a GP talking to a patient about recent weight loss.
+ Patient: Mrs Jacobs
+Total weight reduction 1)
+kg in four months
+ Associated problem: 2)
+Primary cause 3)
+History 4)
+Medication 5)
+Urea indicates 6)
+Potassium causes 7)
+Suspected presence 8)
+Stomach retained 9)
+Further tests: 10) and biopsy
+Possible causes: 11) or cancer in 12)
+Practice Test 10 :
+____
+____
+____
+____
+____
+____
+____
+____
+____
+____
+____
+____`;
 
 // ── 1. countGaps ─────────────────────────────────────────────────────────────
 
@@ -35,6 +65,64 @@ describe('countGaps', () => {
 
   it('counts three gaps', () => {
     expect(countGaps('____ text ____ more text ____')).toBe(3);
+  });
+});
+
+describe('normalizeLegacyDetachedPartAGaps', () => {
+  it('moves the Nova Test 10 detached grid into its numbered note positions', () => {
+    const normalized = normalizeLegacyDetachedPartAGaps(
+      NOVA_TEST_10_EXTRACT_1_LEGACY,
+      Array.from({ length: 12 }, (_, index) => index + 1),
+    );
+
+    expect(countGaps(normalized)).toBe(12);
+    expect(normalized).toContain('Total weight reduction ____');
+    expect(normalized).toContain('Further tests: ____ and biopsy');
+    expect(normalized).toContain('Possible causes: ____ or cancer in ____');
+    expect(normalized).toContain('- Patient: Mrs Jacobs');
+    expect(normalized).not.toContain('Practice Test 10');
+  });
+
+  it('repairs a mixed body with eleven inline gaps and one numbered/detached gap', () => {
+    const inlineEleven = Array.from({ length: 11 }, (_, index) => `- Note ${index + 1}: ____`).join('\n');
+    const mixed = `Part A – Extract 1 Q(1-12) Answersheet\n${inlineEleven}\n- Reduced exercise due to lack of 12)\nPractice Test 16 :\n____`;
+
+    const normalized = normalizeLegacyDetachedPartAGaps(
+      mixed,
+      Array.from({ length: 12 }, (_, index) => index + 1),
+    );
+
+    expect(countGaps(normalized)).toBe(12);
+    expect(normalized).toContain('lack of ____');
+    expect(normalized).not.toContain('Practice Test 16');
+  });
+
+  it('binds Extract 2 question numbers 13 through 24 in order', () => {
+    const numberedLines = Array.from(
+      { length: 12 },
+      (_, index) => `- Extract 2 note ${index + 13})`,
+    ).join('\n');
+    const detachedGrid = Array.from({ length: 12 }, () => '____').join('\n');
+    const legacy = `Part A – Extract 2 Q(13-24) Answersheet\n${numberedLines}\nPractice Test 10 :\n${detachedGrid}`;
+
+    const normalized = normalizeLegacyDetachedPartAGaps(
+      legacy,
+      Array.from({ length: 12 }, (_, index) => index + 13),
+    );
+
+    expect(countGaps(normalized)).toBe(12);
+    expect(normalized).toContain('Extract 2 note ____');
+    expect(normalized.split('\n').slice(1).join('\n')).not.toMatch(/\b(?:1[3-9]|2[0-4])\)/);
+  });
+
+  it('leaves an already-canonical Atlas body byte-for-byte unchanged', () => {
+    const atlas = 'Patient Suzanne Hinds\n- painful ____\n- increased number of ____';
+    expect(normalizeLegacyDetachedPartAGaps(atlas, [1, 2])).toBe(atlas);
+  });
+
+  it('fails closed when detached blanks cannot be reconciled to the question count', () => {
+    const malformed = 'Title\n- Missing 1)\nPractice Test 1 :\n____\n____';
+    expect(normalizeLegacyDetachedPartAGaps(malformed, [1, 2, 3])).toBe(malformed);
   });
 });
 
