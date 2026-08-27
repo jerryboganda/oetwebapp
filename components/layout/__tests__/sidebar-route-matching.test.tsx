@@ -18,6 +18,7 @@ vi.mock('@/lib/mobile/haptics', () => ({
 }));
 
 import { BottomNav, Sidebar, learnNavItems, mobileNavItems, type NavGroup } from '../sidebar';
+import { within } from '@testing-library/react';
 
 const adminUser = {
   userId: 'admin-1',
@@ -71,5 +72,43 @@ describe('Sidebar route matching', () => {
     ]);
     expect(screen.getByRole('link', { name: /study plan/i })).toHaveAttribute('href', '/study-plan');
     expect(screen.getByRole('link', { name: /mocks/i })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('renders the live Billing Ops badge pill when a positive count is provided', () => {
+    const groupsWithBadge: NavGroup[] = [
+      {
+        label: 'Operations',
+        items: [
+          { href: '/admin/billing', label: 'Billing Ops', icon: <Library className="h-4 w-4" />, badge: 3 },
+        ],
+      },
+    ];
+
+    const view = renderWithRouter(<Sidebar workspaceRole="admin" groups={groupsWithBadge} />, { pathname: '/dashboard' });
+
+    expect(within(view.container).getByText('3')).toBeInTheDocument();
+    expect(within(view.container).getByText('3').className).toContain('bg-amber-500');
+  });
+
+  it('omits the badge pill when the count is zero or missing', () => {
+    const makeGroups = (badge?: number): NavGroup[] => [
+      {
+        label: 'Operations',
+        items: [
+          {
+            href: '/admin/billing',
+            label: 'Billing Ops',
+            icon: <Library className="h-4 w-4" />,
+            ...(badge !== undefined ? { badge } : {}),
+          },
+        ],
+      },
+    ];
+
+    const zero = renderWithRouter(<Sidebar workspaceRole="admin" groups={makeGroups(0)} />, { pathname: '/dashboard' });
+    const absent = renderWithRouter(<Sidebar workspaceRole="admin" groups={makeGroups()} />, { pathname: '/dashboard' });
+
+    expect(zero.container.querySelector('.bg-amber-500')).toBeNull();
+    expect(absent.container.querySelector('.bg-amber-500')).toBeNull();
   });
 });

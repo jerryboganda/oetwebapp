@@ -18,6 +18,7 @@ import {
   sidebarPermissionMap,
 } from '@/lib/admin-permissions';
 import { useAuth } from '@/contexts/auth-context';
+import { useAdminAlerts } from '@/hooks/use-admin-alerts';
 import { Children, isValidElement, cloneElement, useMemo } from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -83,6 +84,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   const { loading, user } = useAuth();
   const perms = user?.adminPermissions;
+  // Backend-computed count of paid orders awaiting manual fulfilment + proofs
+  // pending review (GET /v1/admin/alerts via the shared ref-counted store).
+  const { totalAlertCount } = useAdminAlerts();
 
   const routePath = useMemo(() => {
     const query = searchParams?.toString();
@@ -91,6 +95,20 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
 
   const filteredNavItems = useMemo(() => filterNavByPermissions(adminNavItems, perms), [perms]);
   const filteredNavGroups = useMemo(() => filterGroupsByPermissions(adminNavGroups, perms), [perms]);
+
+  // Stamp the live fulfilment count onto Billing Ops (href untouched — deep
+  // links remain /admin/billing per the agreed UX). Capped at 99 to protect
+  // the sidebar pill width; the hook itself only counts relevant alerts.
+  const navGroupsWithBadge = useMemo(() => (
+    totalAlertCount > 0
+      ? filteredNavGroups.map((group) => ({
+        ...group,
+        items: group.items.map((item) => (
+          item.href === '/admin/billing' ? { ...item, badge: Math.min(totalAlertCount, 99) } : item
+        )),
+      }))
+      : filteredNavGroups
+  ), [filteredNavGroups, totalAlertCount]);
   const filteredMobileNavItems = useMemo(() => filterNavByPermissions(adminMobileNavItems, perms), [perms]);
   const filteredMobileMenuSections = useMemo(() => filterSectionsByPermissions(adminMobileMenuSections, perms), [perms]);
 
@@ -102,7 +120,7 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     <AdminDashboardShell
       pageTitle={pageTitle}
       navItems={filteredNavItems}
-      navGroups={filteredNavGroups}
+      navGroups={navGroupsWithBadge}
       mobileNavItems={filteredMobileNavItems}
       mobileMenuSections={filteredMobileMenuSections}
       requiredRole="admin"

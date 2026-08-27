@@ -49,6 +49,12 @@ export interface NavItem {
    * is hidden for learners whose plan has that admin-togglable module disabled. Fail-open otherwise.
    */
   moduleKey?: string;
+  /**
+   * Live operational count rendered as a pill beside the label (hidden when
+   * 0/undefined). Only honoured by `NavSection` — the collapsed rail and the
+   * mobile bottom nav intentionally stay badge-free.
+   */
+  badge?: number;
 }
 
 export interface NavGroup {
@@ -261,6 +267,11 @@ function NavSection({
                   {item.icon}
                 </span>
                 <span className="relative z-10">{item.label}</span>
+                {typeof item.badge === 'number' && item.badge > 0 && (
+                  <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white shadow-sm">
+                    {item.badge > 99 ? '99+' : item.badge}
+                  </span>
+                )}
               </Link>
             </motion.li>
           );

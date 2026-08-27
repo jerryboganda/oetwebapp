@@ -1,7 +1,7 @@
 'use client';
 
 import * as Popover from '@radix-ui/react-popover';
-import { forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { useCallback, forwardRef, useEffect, useMemo, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import {
   AlertTriangle,
   Bell,
@@ -30,6 +30,7 @@ import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
 import { useNotificationCenter, useNotificationState } from '@/contexts/notification-center-context';
+import { useAdminAlerts, type AdminAlertItem } from '@/hooks/use-admin-alerts';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/modal';
 import { cn } from '@/lib/utils';
@@ -174,6 +175,29 @@ function HeaderIconButton({
 /*  Notification Item                                             */
 /* ────────────────────────────────────────────────────────────── */
 
+/*
+ * Admin fulfilment alerts reuse the generic NotificationItem renderer, mapped
+ * onto the feed-item shape. They are ephemeral (never stored in the user's
+ * inbox), so they are always isRead:false and never pass through markRead —
+ * the count clears only when the backend queue drains.
+ */
+function toAdminAlertFeedItem(alert: AdminAlertItem): NotificationFeedItem {
+  const eventKey = `admin-alert:${alert.alertType}`;
+  return {
+    id: eventKey,
+    eventKey,
+    category: 'operations',
+    title: alert.title,
+    body: alert.description,
+    actionUrl: alert.actionRoute,
+    severity: alert.severity,
+    isRead: false,
+    channels: [],
+    createdAt: alert.detectedAt,
+    readAt: null,
+  };
+}
+
 function NotificationItem({
   item,
   index,
@@ -271,6 +295,9 @@ function NotificationCenterContent({
     markRead,
     markAllRead,
   } = useNotificationCenter();
+  // Backend-side ops alerts (manual fulfilment queue). Rendered as a pinned
+  // group above the personal feed; adds to the bell's unread pill below.
+  const { alerts: adminAlerts } = useAdminAlerts();
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const [tab, setTab] = useState<'all' | 'unread'>('all');
   const [category, setCategory] = useState<string | null>(null);
@@ -299,6 +326,14 @@ function NotificationCenterContent({
     onNavigate?.();
     if (item.actionUrl) window.location.assign(item.actionUrl);
   };
+
+  // Admin alerts navigate straight to their action route WITHOUT markRead —
+  // they are derived view models, not inbox rows, and stay visible until the
+  // backend clears them (order fulfilled / proof reviewed).
+  const handleOpenAdminAlert = useCallback((item: NotificationFeedItem) => {
+    if (item.actionUrl) window.location.assign(item.actionUrl);
+    onNavigate?.();
+  }, [onNavigate]);
 
   const isDrawer = variant === 'drawer';
   let globalIdx = 0;
@@ -420,6 +455,34 @@ function NotificationCenterContent({
       {/* ━━ Error ━━ */}
       {error && (
         <div className="mx-0.5 mt-2 shrink-0 rounded-lg bg-red-50/80 px-3 py-2 text-[12px] text-red-700 dark:bg-red-950/40 dark:text-red-300">{error}</div>
+      )}
+
+      {/* ━━ Admin ops alerts (above the personal feed, independent of tabs/filters) ━━ */}
+      {adminAlerts.length > 0 && (
+        <div className="mx-0.5 mt-2 shrink-0 overflow-hidden rounded-xl border border-amber-200/70 dark:border-amber-900/50">
+          <div className="flex items-center justify-between border-b border-inherit bg-amber-50/80 px-3 py-2 dark:bg-amber-950/40">
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-300">
+              Admin alerts
+            </p>
+            <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold tabular-nums leading-none text-white">
+              {adminAlerts.length}
+            </span>
+          </div>
+          <div className="space-y-0.5 px-1 py-1">
+            {adminAlerts.map((alert, index) => {
+              const feedItem = toAdminAlertFeedItem(alert);
+              return (
+                <NotificationItem
+                  key={feedItem.id}
+                  item={feedItem}
+                  index={index}
+                  reducedMotion={reducedMotion}
+                  onOpen={handleOpenAdminAlert}
+                />
+              );
+            })}
+          </div>
+        </div>
       )}
 
       {/* ━━ Notification list ━━ */}
@@ -547,6 +610,10 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
     // state-only context so the bell button skips re-renders caused by action
     // reference changes.
     const { unreadCount, connectionStatus } = useNotificationState();
+    // Admin fulfilment alerts ride the EXISTING unread pill (added, not a
+    // separate dot) so ops load is visible at a glance alongside inbox mail.
+    const { totalAlertCount: adminAlertCount } = useAdminAlerts();
+    const displayUnreadCount = unreadCount + adminAlertCount;
     const isDegraded = connectionStatus === 'reconnecting' || connectionStatus === 'disconnected';
     return (
       <button
@@ -556,14 +623,14 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
           'relative inline-flex h-11 w-11 items-center justify-center rounded-lg p-2.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           className,
         )}
-        aria-label={buttonProps['aria-label'] ?? `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}${isDegraded ? ' — live updates paused' : ''}`}
+        aria-label={buttonProps['aria-label'] ?? `Notifications${displayUnreadCount > 0 ? ` (${displayUnreadCount} unread)` : ''}${isDegraded ? ' — live updates paused' : ''}`}
         aria-expanded={open ?? buttonProps['aria-expanded']}
         {...buttonProps}
       >
         <Bell className="h-5 w-5" aria-hidden="true" />
-        {unreadCount > 0 && (
+        {displayUnreadCount > 0 && (
           <span className="absolute -right-0.5 -top-0.5 inline-flex min-w-[16px] items-center justify-center rounded-full bg-primary px-1 py-px text-[9px] font-bold leading-none text-white shadow-sm shadow-primary/25 dark:bg-violet-700 lg:min-w-[18px] lg:text-[10px]">
-            {unreadCount > 99 ? '99+' : unreadCount}
+            {displayUnreadCount > 99 ? '99+' : displayUnreadCount}
           </span>
         )}
         {isDegraded && (
