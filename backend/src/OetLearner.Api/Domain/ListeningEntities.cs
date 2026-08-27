@@ -652,13 +652,47 @@ public class ListeningAnswer
     [MaxLength(1024)]
     public string? AiRationale { get; set; }
 
-    /// <summary>When the AI verdict was written. Also the idempotency guard — the
-    /// scorer only processes answers where this is null.</summary>
+    /// <summary>When the AI verdict was written. One of the two idempotency
+    /// guards — the scorer only processes answers where this AND
+    /// <see cref="AiSkipReason"/> are both null. Never set on a skip.</summary>
     public DateTimeOffset? AiScoredAt { get; set; }
 
     /// <summary>Model id that produced the verdict (e.g. claude-sonnet-5).</summary>
     [MaxLength(64)]
     public string? AiModel { get; set; }
+
+    // ── Part A AI advisory scheduling / terminal state (W0, 2026-08-27) ─────────
+    // Cost-incident fix: the scorer could POST an evidence-free prompt, never
+    // stamp AiScoredAt, and be re-selected by the 20 s worker forever. These
+    // columns give the worker an explicit terminal state and a bounded, durable
+    // retry schedule. They are advisory bookkeeping only — they never award
+    // credit and never influence IsCorrect / PointsEarned / MissReason.
+
+    /// <summary>Terminal reason the AI advisory review will not (re)run for this
+    /// answer — one of <c>skipped_no_evidence</c>, <c>no_matching_verdicts</c>,
+    /// <c>credential_quarantined</c>, <c>provider_rejected</c>,
+    /// <c>indeterminate_timeout</c>, <c>retries_exhausted</c> (see
+    /// <c>ListeningPartAAiSkipReasons</c>). Non-null means terminal: the worker
+    /// never re-selects the row. <see cref="AiScoredAt"/> deliberately stays null
+    /// because a skip is not an AI score.</summary>
+    [MaxLength(64)]
+    public string? AiSkipReason { get; set; }
+
+    /// <summary>Durable count of provider attempts already spent on this answer.
+    /// Bounded by <c>ListeningPartAAiRetryPolicy.MaxAttempts</c> scheduled
+    /// attempts; cross-slot exactly-once arrives with W4 coordinator leasing.</summary>
+    public int AiAttemptCount { get; set; }
+
+    /// <summary>Earliest UTC instant the worker may retry. Null = eligible now.
+    /// Populated from the provider's <c>Retry-After</c> when supplied, otherwise
+    /// from jittered exponential backoff.</summary>
+    public DateTimeOffset? AiNextAttemptAt { get; set; }
+
+    /// <summary>Operational incident tag (e.g. <c>INC-2026-CLAUDE-01</c>) applied
+    /// by <c>scripts/ops/close-listening-incident-attempts.sql</c>. Tag only —
+    /// rows are never deleted and the deterministic mark is never touched.</summary>
+    [MaxLength(64)]
+    public string? AiIncidentId { get; set; }
 
     public ListeningAttempt? Attempt { get; set; }
     public ListeningQuestion? Question { get; set; }

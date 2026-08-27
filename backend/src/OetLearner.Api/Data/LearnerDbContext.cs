@@ -639,6 +639,13 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             modelBuilder.Entity<ListeningAttempt>().Property(x => x.HumanScoreOverridesJson).HasColumnType("jsonb");
             modelBuilder.Entity<ListeningAttempt>().Property(x => x.LastQuestionVersionMapJson).HasColumnType("jsonb");
 
+            // W0 (2026-08-27) — Listening Part A AI advisory skip/incident string
+            // lengths, pinned to match the hand-authored migration
+            // (20261101090000). Additive + advisory: these columns gate the AI
+            // worker only and must never influence IsCorrect / PointsEarned.
+            modelBuilder.Entity<ListeningAnswer>().Property(x => x.AiSkipReason).HasMaxLength(64);
+            modelBuilder.Entity<ListeningAnswer>().Property(x => x.AiIncidentId).HasMaxLength(64);
+
             // Reading — R08 parity: rule-out / highlight annotations stored as
             // jsonb (same hot-JSON convention as the ListeningAttempt columns
             // above). Read the whole row then parse client-side; never LINQ

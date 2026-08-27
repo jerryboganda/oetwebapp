@@ -12,6 +12,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddVoiceDesignBatchTracking), "20260523200000_AddVoiceDesignBatchTracking")]
     [InlineData(typeof(AddListeningTtsJobAndAudioSha), "20260527100000_AddListeningTtsJobAndAudioSha")]
     [InlineData(typeof(AddRecallAudioElevenLabsSettings), "20260608001000_AddRecallAudioElevenLabsSettings")]
+    [InlineData(typeof(AddListeningAnswerAiSkipAndRetry), "20261101090000_AddListeningAnswerAiSkipAndRetry")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

@@ -17,22 +17,41 @@ namespace OetLearner.Api.Services.Listening;
 // stays the score of record. This service adds a SEPARATE per-gap AI judgement
 // (lenient on paraphrase / word-form / spelling, the way a human OET marker is)
 // onto each Part A fill-in-the-blank answer, surfaced to the learner review and
-// the tutor checking flow. It runs after submit (via the background worker), is
-// idempotent (only touches answers where AiScoredAt is null), and NEVER throws
-// into the candidate submission path. The deterministic server mark remains
-// authoritative; these fields are tutor-only advisory metadata.
-// into the submit/grade path — a provider failure just leaves the answer
-// unscored for the next worker pass.
+// the tutor checking flow. It runs after submit (via the background worker) and
+// NEVER throws into the candidate submission path. The deterministic server mark
+// remains authoritative; these fields are tutor-only advisory metadata.
+//
+// W0 (2026-08-27, incident INC-2026-CLAUDE-01) — cost/reliability repair:
+//   • Approved/effective rationales are resolved BEFORE any provider resolution
+//     or invocation. Zero eligible evidence is terminal `skipped_no_evidence`
+//     with zero HTTP calls and no AiScoredAt.
+//   • A locally valid but empty/unmatchable response is terminal too — replaying
+//     identical evidence would only buy the same unusable answer again.
+//   • Every physical call is durably counted. At most three attempts are ever
+//     SCHEDULED per answer, honouring Retry-After or jittered backoff, and no
+//     retry at all on auth/config/model rejections or an ambiguous outcome.
+//     This bounds the loop; it is not yet a global exactly-once guarantee,
+//     because the worker still runs in both API slots and two slots can race
+//     the same answer. Cross-slot exactly-once arrives with W4 coordinator
+//     database leasing.
+//   • Raw provider error bodies are never persisted (they can echo candidate
+//     text); only a sanitized error class is recorded.
 // ═════════════════════════════════════════════════════════════════════════════
 
 public interface IListeningPartAAiScoringService
 {
-    /// <summary>Score every not-yet-AI-scored Part A short-answer answer on a
-    /// submitted attempt in one batched Claude call. Idempotent + best-effort.</summary>
+    /// <summary>Score every not-yet-AI-scored, not-yet-terminally-skipped Part A
+    /// short-answer answer on a submitted attempt in one batched Claude call.
+    /// Idempotent, best-effort, and cost-bounded: it makes at most one physical
+    /// provider call per invocation and schedules at most
+    /// <see cref="ListeningPartAAiRetryPolicy.MaxAttempts"/> attempts per answer.
+    /// Concurrent callers (the worker runs in both API slots) are not yet
+    /// serialised here — cross-slot exactly-once is supplied by the W4
+    /// coordinator's database leasing.</summary>
     Task ScoreAttemptAsync(string attemptId, CancellationToken ct);
 }
 
-public sealed class ListeningPartAAiScoringService(
+public sealed partial class ListeningPartAAiScoringService(
     LearnerDbContext db,
     IAiProviderRegistry registry,
     IHttpClientFactory httpClientFactory,
@@ -41,26 +60,42 @@ public sealed class ListeningPartAAiScoringService(
     ILogger<ListeningPartAAiScoringService> logger) : IListeningPartAAiScoringService
 {
     public const string AnthropicProviderCode = "anthropic";
-    private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
-    private const string DefaultModel = "claude-sonnet-5";
-    private const string ToolName = "emit_part_a_verdicts";
-
-    private static readonly JsonSerializerOptions CamelJson = new()
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        PropertyNameCaseInsensitive = true,
-    };
 
     private sealed record GapItem(int Number, string Context, string UserAnswer, string Canonical, IReadOnlyList<string> Accepted, string ApprovedRationale);
     private sealed record Verdict(int Number, string? Verdict_, string? Rationale);
+
+    private enum CallDisposition { Success, Retryable, Terminal }
+
+    /// <summary>Classified result of one physical provider invocation. Carries no
+    /// raw provider body — only a short, sanitized error class.</summary>
+    private sealed record ProviderCallOutcome(
+        CallDisposition Disposition,
+        IReadOnlyList<Verdict> Verdicts,
+        string ErrorClass,
+        string? TerminalSkipReason,
+        TimeSpan? RetryAfter)
+    {
+        public static ProviderCallOutcome Succeeded(IReadOnlyList<Verdict> verdicts)
+            => new(CallDisposition.Success, verdicts, "ok", null, null);
+
+        public static ProviderCallOutcome Retry(string errorClass, TimeSpan? retryAfter)
+            => new(CallDisposition.Retryable, Array.Empty<Verdict>(), errorClass, null, retryAfter);
+
+        public static ProviderCallOutcome Terminal(string errorClass, string skipReason)
+            => new(CallDisposition.Terminal, Array.Empty<Verdict>(), errorClass, skipReason, null);
+    }
 
     public async Task ScoreAttemptAsync(string attemptId, CancellationToken ct)
     {
         var attempt = await db.ListeningAttempts.FirstOrDefaultAsync(a => a.Id == attemptId, ct);
         if (attempt is null || attempt.Status != ListeningAttemptStatus.Submitted) return;
 
+        // AiScoredAt = "an AI verdict exists"; AiSkipReason = "terminally closed".
+        // Both are idempotency guards, so neither class of row is reconsidered.
         var answers = await db.ListeningAnswers
-            .Where(a => a.ListeningAttemptId == attemptId && a.AiScoredAt == null)
+            .Where(a => a.ListeningAttemptId == attemptId
+                && a.AiScoredAt == null
+                && a.AiSkipReason == null)
             .ToListAsync(ct);
         if (answers.Count == 0) return;
 
@@ -72,14 +107,35 @@ public sealed class ListeningPartAAiScoringService(
             .ToListAsync(ct);
         if (questions.Count == 0) return;
         var qById = questions.ToDictionary(q => q.Id);
+
+        var partAAnswers = answers.Where(a => qById.ContainsKey(a.ListeningQuestionId)).ToList();
+        if (partAAnswers.Count == 0) return;
+
+        var now = clock.GetUtcNow();
+
+        // Bounded durable attempts. The worker query already excludes capped and
+        // future-scheduled rows; this is defence in depth because
+        // ScoreAttemptAsync is a public entry point.
+        var attemptsSpent = partAAnswers.Max(a => a.AiAttemptCount);
+        if (attemptsSpent >= ListeningPartAAiRetryPolicy.MaxAttempts)
+        {
+            StampTerminal(partAAnswers, ListeningPartAAiSkipReasons.RetriesExhausted, attemptsSpent);
+            await db.SaveChangesAsync(ct);
+            logger.LogWarning(
+                "Part A AI advisory review closed attempt {AttemptId} after {Attempts} durable attempts.",
+                attemptId, attemptsSpent);
+            return;
+        }
+        if (partAAnswers.Any(a => a.AiNextAttemptAt is { } next && next > now)) return;
+
+        // ── Evidence resolution happens BEFORE any provider work ────────────────
+        // This ordering is the incident fix: an attempt with no effective approved
+        // rationale must never reach ResolveProviderAsync, let alone the network.
         var rationaleByQuestionId = await db.AssessmentRationales.AsNoTracking()
             .Where(r => r.Assessment == "listening"
                 && r.Status == AssessmentGovernanceStatus.Effective
                 && questionIds.Contains(r.QuestionRevisionId))
             .ToDictionaryAsync(r => r.QuestionRevisionId, r => r.RationaleText, ct);
-
-        var partAAnswers = answers.Where(a => qById.ContainsKey(a.ListeningQuestionId)).ToList();
-        if (partAAnswers.Count == 0) return;
 
         var extractIds = questions
             .Where(q => !string.IsNullOrEmpty(q.ListeningExtractId))
@@ -103,208 +159,145 @@ public sealed class ListeningPartAAiScoringService(
             .Where(x => !string.IsNullOrWhiteSpace(x.ApprovedRationale))
             .ToList();
 
+        if (items.Count == 0)
+        {
+            // Terminal: zero eligible evidence => zero provider invocation, no
+            // AiScoredAt, no retry. Approving a rationale later does NOT re-arm
+            // this row by itself: re-running it is new, versioned work and is a
+            // W5 coordinator requirement (see
+            // docs/ops/postmortem-INC-2026-CLAUDE-01.md, follow-up 9). Clearing
+            // AiSkipReason by hand is not a supported shortcut.
+            StampTerminal(partAAnswers, ListeningPartAAiSkipReasons.NoEvidence, attemptsSpent);
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation(
+                "Part A AI advisory review skipped attempt {AttemptId}: no effective approved rationale for {Gaps} gaps (zero provider calls).",
+                attemptId, partAAnswers.Count);
+            return;
+        }
+
         var provider = await ResolveProviderAsync(ct);
         if (provider is null)
         {
-            logger.LogDebug("Part A AI scoring skipped for attempt {AttemptId}: anthropic provider/key not configured.", attemptId);
+            // NOT terminal and NOT an attempt: nothing left the process and an
+            // admin can still configure/rotate the platform credential. The
+            // cool-off only stops the 20 s re-selection spin.
+            var deferUntil = now + ListeningPartAAiRetryPolicy.UnconfiguredProviderCooldown;
+            foreach (var a in partAAnswers) a.AiNextAttemptAt = deferUntil;
+            await db.SaveChangesAsync(ct);
+            logger.LogDebug(
+                "Part A AI scoring deferred for attempt {AttemptId}: anthropic provider/key not configured.",
+                attemptId);
             return;
         }
 
-        List<Verdict> verdicts;
-        try
+        var attemptNumber = attemptsSpent + 1;
+        var outcome = await CallClaudeVerdictsAsync(items, attempt.UserId, provider, ct);
+
+        if (outcome.Disposition != CallDisposition.Success)
         {
-            verdicts = await CallClaudeVerdictsAsync(items, attempt.UserId, provider, ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogWarning(ex, "Part A AI scoring call failed for attempt {AttemptId}; leaving unscored for retry.", attemptId);
+            ApplyFailureOutcome(partAAnswers, outcome, attemptNumber, now, attemptId);
+            await db.SaveChangesAsync(ct);
             return;
         }
 
-        var verdictByNumber = verdicts
+        var verdictByNumber = outcome.Verdicts
             .GroupBy(v => v.Number)
             .ToDictionary(g => g.Key, g => g.First());
 
-        var now = clock.GetUtcNow();
+        // The gaps that were actually in the prompt. A verdict is persisted ONLY
+        // for a number in this set: a provider that answers about a gap it was
+        // never given has no grounding evidence for it, so that answer is
+        // discarded and the row is closed `skipped_no_evidence` — never stamped
+        // with AiScoredAt.
+        var eligibleNumbers = items.Select(i => i.Number).ToHashSet();
+
         var scored = 0;
+        var closed = 0;
         foreach (var a in partAAnswers)
         {
             var q = qById[a.ListeningQuestionId];
-            if (!verdictByNumber.TryGetValue(q.QuestionNumber, out var v)) continue;
-            a.AiVerdict = NormalizeVerdict(v.Verdict_);
-            a.AiRationale = Truncate(v.Rationale ?? string.Empty, 1024);
-            a.AiScoredAt = now;
-            a.AiModel = provider.Model;
-            scored++;
-        }
-        if (scored > 0) await db.SaveChangesAsync(ct);
-        logger.LogInformation("Part A AI advisory review: stamped {Scored}/{Total} answers on attempt {AttemptId}.", scored, partAAnswers.Count, attemptId);
-    }
+            a.AiAttemptCount = attemptNumber;
 
-    // ── Claude call (forced tool) ───────────────────────────────────────────────
-
-    private sealed record Provider(string BaseUrl, string Model, string ApiKey, AiProvider Row);
-
-    private async Task<Provider?> ResolveProviderAsync(CancellationToken ct)
-    {
-        var row = await registry.FindByCodeAsync(AnthropicProviderCode, ct);
-        if (row is null) return null;
-        var apiKey = await registry.GetPlatformKeyAsync(AnthropicProviderCode, ct);
-        if (string.IsNullOrWhiteSpace(apiKey)) return null;
-
-        var baseUrl = NormalizeBaseUrl(string.IsNullOrWhiteSpace(row.BaseUrl) ? DefaultAnthropicBaseUrl : row.BaseUrl);
-        if (AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl) is not null) return null;
-        var model = string.IsNullOrWhiteSpace(row.DefaultModel) ? DefaultModel : row.DefaultModel;
-        return new Provider(baseUrl, model, apiKey, row);
-    }
-
-    private async Task<List<Verdict>> CallClaudeVerdictsAsync(
-        IReadOnlyList<GapItem> items, string learnerId, Provider provider, CancellationToken ct)
-    {
-        var sb = new StringBuilder();
-        sb.AppendLine("Judge each candidate gap answer for OET Listening Part A note-completion.");
-        foreach (var grp in items.GroupBy(i => i.Context))
-        {
-            sb.AppendLine();
-            sb.AppendLine("CONSULTATION NOTE (blanks shown as ____):");
-            sb.AppendLine(string.IsNullOrWhiteSpace(grp.Key) ? "(note text unavailable)" : grp.Key);
-            sb.AppendLine("GAPS:");
-            foreach (var it in grp.OrderBy(i => i.Number))
+            var isEligible = eligibleNumbers.Contains(q.QuestionNumber);
+            if (isEligible && verdictByNumber.TryGetValue(q.QuestionNumber, out var v))
             {
-                var accepted = it.Accepted.Count > 0 ? " | also accepted: " + string.Join(", ", it.Accepted) : string.Empty;
-                sb.AppendLine($"({it.Number}) candidate: \"{it.UserAnswer}\" | official answer: \"{it.Canonical}\"{accepted}");
-                sb.AppendLine($"    approved rationale: {it.ApprovedRationale}");
+                // Advisory only — IsCorrect / PointsEarned / MissReason untouched.
+                a.AiVerdict = NormalizeVerdict(v.Verdict_);
+                a.AiRationale = Truncate(v.Rationale ?? string.Empty, 1024);
+                a.AiScoredAt = now;
+                a.AiModel = provider.Model;
+                a.AiNextAttemptAt = null;
+                scored++;
+                continue;
             }
-        }
-        var userText = sb.ToString();
 
-        var startedAt = clock.GetUtcNow();
-        var usageContext = new AiUsageContext(
-            UserId: learnerId,
-            AuthAccountId: null,
-            TenantId: null,
-            FeatureCode: AiFeatureCodes.ListeningPartAScore,
-            RulebookVersion: null,
-            PromptTemplateId: ToolName,
-            SystemPrompt: SystemPrompt,
-            UserPrompt: userText,
-            StartedAt: startedAt);
-        int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
-
-        var payload = new Dictionary<string, object?>
-        {
-            ["model"] = provider.Model,
-            ["max_tokens"] = 4000,
-            ["system"] = new object[]
-            {
-                new Dictionary<string, object?>
-                {
-                    ["type"] = "text",
-                    ["text"] = SystemPrompt,
-                    ["cache_control"] = new Dictionary<string, object?> { ["type"] = "ephemeral" },
-                },
-            },
-            ["messages"] = new object[]
-            {
-                new Dictionary<string, object?> { ["role"] = "user", ["content"] = userText },
-            },
-            ["tools"] = new object[]
-            {
-                new Dictionary<string, object?>
-                {
-                    ["name"] = ToolName,
-                    ["description"] = "Emit one post-submit advisory review per provided gap number; never change the deterministic mark.",
-                    ["input_schema"] = JsonSerializer.Deserialize<JsonElement>(ToolSchemaJson),
-                },
-            },
-            ["tool_choice"] = new Dictionary<string, object?> { ["type"] = "tool", ["name"] = ToolName },
-        };
-
-        var client = httpClientFactory.CreateClient("ListeningPartAScoringAnthropic");
-        client.BaseAddress = new Uri(provider.BaseUrl + "/");
-        client.DefaultRequestHeaders.Remove("x-api-key");
-        client.DefaultRequestHeaders.Add("x-api-key", provider.ApiKey);
-        client.DefaultRequestHeaders.Remove("anthropic-version");
-        client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
-
-        HttpResponseMessage response;
-        string body;
-        try
-        {
-            response = await client.PostAsync(
-                "v1/messages",
-                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
-                ct);
-            body = await response.Content.ReadAsStringAsync(ct);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            await usageRecorder.RecordFailureAsync(
-                usageContext, AnthropicProviderCode, provider.Model, AiCallOutcome.ProviderError,
-                "anthropic_network", ex.Message, LatencyMs(), "listening.parta.score", ct);
-            throw;
+            // The call succeeded but produced nothing usable for this gap (or
+            // produced an out-of-prompt number we refuse to trust). Close it
+            // terminally rather than re-queueing a second paid call for the
+            // exact same evidence.
+            a.AiSkipReason = isEligible
+                ? ListeningPartAAiSkipReasons.NoMatchingVerdicts
+                : ListeningPartAAiSkipReasons.NoEvidence;
+            a.AiNextAttemptAt = null;
+            closed++;
         }
 
-        if (!response.IsSuccessStatusCode)
-        {
-            response.Dispose();
-            await usageRecorder.RecordFailureAsync(
-                usageContext, AnthropicProviderCode, provider.Model, AiCallOutcome.ProviderError,
-                $"http_{(int)response.StatusCode}", Truncate(body, 500), LatencyMs(), "listening.parta.score", ct);
-            throw new InvalidOperationException($"Claude scoring failed: HTTP {(int)response.StatusCode}. {Truncate(body, 300)}");
-        }
-        response.Dispose();
-
-        using var doc = JsonDocument.Parse(body);
-        var usage = ParseAnthropicUsage(doc.RootElement);
-        if (doc.RootElement.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var block in content.EnumerateArray())
-            {
-                if (block.TryGetProperty("type", out var t)
-                    && string.Equals(t.GetString(), "tool_use", StringComparison.Ordinal)
-                    && block.TryGetProperty("input", out var input))
-                {
-                    var cost = usage is null
-                        ? 0m
-                        : provider.Row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
-                          + provider.Row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
-                    await usageRecorder.RecordSuccessAsync(
-                        usageContext, AnthropicProviderCode, provider.Model, usage,
-                        LatencyMs(), "listening.parta.score", cost, ct);
-                    return ParseVerdicts(input);
-                }
-            }
-        }
-
-        await usageRecorder.RecordFailureAsync(
-            usageContext, AnthropicProviderCode, provider.Model, AiCallOutcome.ProviderError,
-            "no_tool_use", "Claude did not return a verdicts tool_use block.", LatencyMs(), "listening.parta.score", ct);
-        throw new InvalidOperationException("Claude did not return a verdicts tool_use block.");
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "Part A AI advisory review: stamped {Scored}, terminally closed {Closed} of {Total} answers on attempt {AttemptId} (attempt {AttemptNumber}/{MaxAttempts}).",
+            scored, closed, partAAnswers.Count, attemptId, attemptNumber, ListeningPartAAiRetryPolicy.MaxAttempts);
     }
 
-    private static List<Verdict> ParseVerdicts(JsonElement input)
+    // ── Terminal / retry bookkeeping ────────────────────────────────────────────
+
+    /// <summary>Close answers permanently. <c>AiScoredAt</c> is deliberately left
+    /// untouched (a skip is not an AI score) and no deterministic field is read
+    /// or written.</summary>
+    private static void StampTerminal(IEnumerable<ListeningAnswer> answers, string reason, int attemptCount)
     {
-        var result = new List<Verdict>();
-        if (!input.TryGetProperty("verdicts", out var arr) || arr.ValueKind != JsonValueKind.Array)
-            return result;
-        foreach (var v in arr.EnumerateArray())
+        foreach (var a in answers)
         {
-            var number = v.TryGetProperty("number", out var n) && n.ValueKind == JsonValueKind.Number ? n.GetInt32() : -1;
-            if (number < 0) continue;
-            var verdict = v.TryGetProperty("verdict", out var vd) ? vd.GetString() : null;
-            var rationale = v.TryGetProperty("rationale", out var r) ? r.GetString() : null;
-            result.Add(new Verdict(number, verdict, rationale));
+            a.AiSkipReason = reason;
+            a.AiAttemptCount = attemptCount;
+            a.AiNextAttemptAt = null;
         }
-        return result;
     }
 
-    private static AiUsage? ParseAnthropicUsage(JsonElement root)
+    private void ApplyFailureOutcome(
+        List<ListeningAnswer> answers,
+        ProviderCallOutcome outcome,
+        int attemptNumber,
+        DateTimeOffset now,
+        string attemptId)
     {
-        if (!root.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) return null;
-        var input = u.TryGetProperty("input_tokens", out var it) && it.ValueKind == JsonValueKind.Number ? it.GetInt32() : 0;
-        var output = u.TryGetProperty("output_tokens", out var ot) && ot.ValueKind == JsonValueKind.Number ? ot.GetInt32() : 0;
-        return new AiUsage { PromptTokens = input, CompletionTokens = output };
+        if (outcome.TerminalSkipReason is { } terminal)
+        {
+            StampTerminal(answers, terminal, attemptNumber);
+            logger.LogError(
+                "Part A AI advisory review terminally failed for attempt {AttemptId} ({ErrorClass}); marked {SkipReason}. No retry scheduled.",
+                attemptId, outcome.ErrorClass, terminal);
+            return;
+        }
+
+        if (attemptNumber >= ListeningPartAAiRetryPolicy.MaxAttempts)
+        {
+            StampTerminal(answers, ListeningPartAAiSkipReasons.RetriesExhausted, attemptNumber);
+            logger.LogError(
+                "Part A AI advisory review exhausted {MaxAttempts} attempts for attempt {AttemptId} ({ErrorClass}).",
+                ListeningPartAAiRetryPolicy.MaxAttempts, attemptId, outcome.ErrorClass);
+            return;
+        }
+
+        var delay = ListeningPartAAiRetryPolicy.NextDelay(attemptNumber, outcome.RetryAfter);
+        var nextAttemptAt = now + delay;
+        foreach (var a in answers)
+        {
+            a.AiAttemptCount = attemptNumber;
+            a.AiNextAttemptAt = nextAttemptAt;
+        }
+        logger.LogWarning(
+            "Part A AI advisory review attempt {AttemptNumber}/{MaxAttempts} failed for attempt {AttemptId} ({ErrorClass}); next attempt at {NextAttemptAt:o}.",
+            attemptNumber, ListeningPartAAiRetryPolicy.MaxAttempts, attemptId, outcome.ErrorClass, nextAttemptAt);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -346,54 +339,5 @@ public sealed class ListeningPartAAiScoringService(
         };
     }
 
-    private static string NormalizeBaseUrl(string baseUrl)
-    {
-        var trimmed = baseUrl.TrimEnd('/');
-        if (trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-            trimmed = trimmed[..^3].TrimEnd('/');
-        return trimmed;
-    }
-
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];
-
-    private const string SystemPrompt = """
-You provide a post-submit advisory review of OET (Occupational English Test) Listening Part A
-note-completion answers. The server's deterministic mark is authoritative and is never changed by
-this call. You must not award partial credit, approve a synonym, excuse a misspelling, or infer an
-accepted variant. Do not claim to provide an official OET result.
-
-For each numbered gap you receive: the consultation note for context, the candidate's typed answer,
-the canonical answer, explicitly authorised variants, and the author-approved rationale. Use only
-that stored evidence. If the evidence is incomplete, say so in the rationale and mark the advisory
-verdict "incorrect"; do not invent an explanation.
-
-Call the emit_part_a_verdicts tool exactly once with one advisory verdict per gap:
-  - "correct": only when the stored deterministic answer/variant evidence shows an exact match.
-  - "incorrect": when it does not show an exact match, the answer is blank, or evidence is missing.
-  - "acceptable" is forbidden and must never be emitted.
-
-Give a concise evidence-based rationale per gap and return EXACTLY one verdict object per gap number
-you were given. This advisory output is tutor-facing only and must not be presented as a score.
-""";
-
-    private const string ToolSchemaJson = """
-{
-  "type": "object",
-  "properties": {
-    "verdicts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "number": { "type": "integer" },
-          "verdict": { "type": "string", "enum": ["correct", "incorrect"] },
-          "rationale": { "type": "string" }
-        },
-        "required": ["number", "verdict"]
-      }
-    }
-  },
-  "required": ["verdicts"]
-}
-""";
 }
