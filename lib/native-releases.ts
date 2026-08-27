@@ -56,6 +56,8 @@ export interface ReleaseAsset {
   absPath: string;
   contentType: string;
   cacheControl: string;
+  contentDisposition: string;
+  filename: string;
   size: number;
 }
 
@@ -113,10 +115,19 @@ export function resolveDownloadUrl(platform: DownloadPlatform): string | null {
   const download = feed?.downloads?.[platform];
   if (download && isTrustedReleaseUrl(download.url)) return download.url;
 
-  const fallbackTarget = platform === 'windows' ? 'windows-x86_64' : 'darwin-aarch64';
-  const artifact = feed?.platforms?.[fallbackTarget];
-  if (artifact && isTrustedReleaseUrl(artifact.url) && !artifact.url.endsWith('.tar.gz')) {
-    return artifact.url;
+  // Fallback to updater platform artifact only if it is a direct installer
+  // (not the .app.tar.gz updater bundle). For macOS the feed now publishes
+  // a Universal dmg via downloads.mac; the platform entries are tar.gz for
+  // auto-update. This fallback loop keeps Intel + Apple Silicon supported if
+  // a future release omits downloads.mac and ships a raw dmg as a platform.
+  const fallbackTargets = platform === 'windows'
+    ? ['windows-x86_64']
+    : ['darwin-aarch64', 'darwin-x86_64'];
+  for (const target of fallbackTargets) {
+    const artifact = feed?.platforms?.[target];
+    if (artifact && isTrustedReleaseUrl(artifact.url) && !artifact.url.endsWith('.tar.gz')) {
+      return artifact.url;
+    }
   }
   return null;
 }
@@ -137,12 +148,23 @@ export function resolveReleaseAsset(relativePath: string): ReleaseAsset | null {
 
   const stat = statSync(absPath);
   const isManifest = ext === '.json' || /(^|[\\/])current\.json$/.test(absPath);
+  const filename = path.basename(absPath);
+  // For direct-install downloads we force a friendly filename so the browser
+  // always treats the response as a download (critical for Safari on .dmg).
+  // The spec requires `OET.with.Dr.Hesham.dmg` for the Mac installer; other
+  // platforms use the on-disk basename but still as `attachment`.
+  const dispositionFilename = ext === '.dmg' ? 'OET.with.Dr.Hesham.dmg' : ext === '.ipa' ? 'OET.with.Dr.Hesham.ipa' : ext === '.apk' ? 'OET.with.Dr.Hesham.apk' : ext === '.exe' ? 'OET.with.Dr.Hesham.exe' : filename;
+  const contentDisposition = isManifest
+    ? 'inline'
+    : `attachment; filename="${dispositionFilename}"; filename*=UTF-8''${encodeURIComponent(dispositionFilename)}`;
   return {
     absPath,
     contentType: contentTypeFor(ext),
     cacheControl: isManifest
       ? 'public, max-age=30, must-revalidate'
       : 'public, max-age=31536000, immutable',
+    contentDisposition,
+    filename,
     size: stat.size,
   };
 }
@@ -217,6 +239,20 @@ function contentTypeFor(ext: string): string {
       return 'application/json; charset=utf-8';
     case '.txt':
       return 'text/plain; charset=utf-8';
+    case '.dmg':
+      return 'application/x-apple-diskimage';
+    case '.exe':
+      return 'application/vnd.microsoft.portable-executable';
+    case '.apk':
+      return 'application/vnd.android.package-archive';
+    case '.ipa':
+      return 'application/octet-stream';
+    case '.aab':
+      return 'application/octet-stream';
+    case '.sig':
+      return 'application/octet-stream';
+    case '.gz':
+      return 'application/gzip';
     default:
       return 'application/octet-stream';
   }

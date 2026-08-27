@@ -37,7 +37,15 @@ function run(cmd, args) {
 }
 
 function buildAll() {
-  run('pnpm', ['dlx', TAURI_CLI, 'build']);
+  // On macOS we always produce a Universal binary (arm64 + x86_64) so a single
+  // .dmg supports Apple Silicon (M1/M2/M3/M4) and Intel Macs. This requires the
+  // two Rust targets to be installed (aarch64-apple-darwin, x86_64-apple-darwin)
+  // — the workflow installs them before calling this script.
+  if (process.platform === 'darwin') {
+    run('pnpm', ['dlx', TAURI_CLI, 'build', '--target', 'universal-apple-darwin']);
+  } else {
+    run('pnpm', ['dlx', TAURI_CLI, 'build']);
+  }
 }
 
 const command = process.argv[2] || 'build';

@@ -28,6 +28,7 @@ export async function GET(
     headers: {
       'Content-Type': asset.contentType,
       'Content-Length': String(asset.size),
+      'Content-Disposition': asset.contentDisposition,
       'Cache-Control': asset.cacheControl,
       'X-Content-Type-Options': 'nosniff',
       'Accept-Ranges': 'bytes',

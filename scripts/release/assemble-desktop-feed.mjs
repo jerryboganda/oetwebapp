@@ -62,10 +62,14 @@ const macTar = files.find((file) => file.endsWith('.app.tar.gz'));
 const macTarSig = files.find((file) => file.endsWith('.app.tar.gz.sig'));
 if (macTar && macTarSig) {
   const macName = sanitizeName(path.basename(macTar));
-  platforms['darwin-aarch64'] = {
-    signature: readFileSync(macTarSig, 'utf8').trim(),
-    url: `${publicBase}/releases/desktop/${version}/${macName}`,
-  };
+  const sig = readFileSync(macTarSig, 'utf8').trim();
+  const url = `${publicBase}/releases/desktop/${version}/${macName}`;
+  // Universal updater tar (built with --target universal-apple-darwin) works for
+  // both Apple Silicon and Intel. Publish it for both darwin targets so
+  // auto-update succeeds on either architecture. If separate arch tars ever
+  // exist, they will still be respected via DESKTOP_TARGETS validation.
+  platforms['darwin-aarch64'] = { signature: sig, url };
+  platforms['darwin-x86_64'] = { signature: sig, url };
 }
 
 const dmg = files.find((file) => file.endsWith('.dmg'));

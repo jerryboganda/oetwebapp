@@ -111,7 +111,7 @@ export default function GetAppPage() {
             <PlatformGlyph platform="mac" className="h-8 w-8 text-primary" />
             <div>
               <h2 className="text-sm font-bold text-navy">macOS</h2>
-              <p className="mt-1 text-xs text-muted">Disk image (.dmg) — auto-updates</p>
+              <p className="mt-1 text-xs text-muted">Universal .dmg — Intel & Apple Silicon (M1/M2/M3/M4) — auto-updates</p>
             </div>
             <PlatformDownloadBadge platform="mac" href={MAC_DOWNLOAD_URL} className="max-w-[220px]" />
           </div>

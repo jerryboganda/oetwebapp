@@ -1,6 +1,7 @@
 name: Tauri Desktop Release
 
-# Builds the Tauri 2 desktop shell (src-tauri/) for Windows (NSIS) and macOS (dmg).
+# Builds the Tauri 2 desktop shell (src-tauri/) for Windows (NSIS) and macOS
+# Universal dmg (Intel x64 + Apple Silicon arm64 via --target universal-apple-darwin).
 # The shell is a remote-only thin client: it bundles no backend, no Next.js
 # renderer, and no Node runtime, so the build is just `tauri build` (Rust core +
 # a tiny bundled splash). See docs/tauri-desktop-shell.md.
@@ -85,9 +86,9 @@ jobs:
           - name: Windows x64 (NSIS)
             os: windows-latest
             bundle-glob: src-tauri/target/release/bundle/nsis/*
-          - name: macOS arm64 (dmg)
+          - name: macOS Universal (Intel + Apple Silicon) (dmg)
             os: macos-latest
-            bundle-glob: src-tauri/target/release/bundle/dmg/*.dmg
+            bundle-glob: src-tauri/target/**/bundle/dmg/*.dmg
     runs-on: ${{ matrix.platform.os }}
     timeout-minutes: 90
     steps:
@@ -106,6 +107,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
+      - name: Add Rust targets for macOS Universal (Intel + Apple Silicon)
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -248,12 +253,14 @@ jobs:
         run: |
           set -e
           # Use `find` (not bash `globstar`) — macOS runners ship bash 3.2 where
-          # `shopt -s globstar` is unavailable.
+          # `shopt -s globstar` is unavailable. Search the whole target tree so
+          # both `release` (Windows) and `universal-apple-darwin/release`
+          # (macOS Universal) are found.
           mkdir -p dist/tauri-desktop
           found=0
           while IFS= read -r f; do
             cp "$f" dist/tauri-desktop/ && found=1
-          done < <(find src-tauri/target/release/bundle -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.sig' -o -name '*.app.tar.gz' \))
+          done < <(find src-tauri/target -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.sig' -o -name '*.app.tar.gz' \))
           if [ "$found" -eq 0 ]; then
             echo "No bundle artifacts found for checksum generation." >&2; exit 1
           fi

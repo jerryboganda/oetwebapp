@@ -6,6 +6,9 @@ export const PLATFORM_LABELS: Record<PlatformKey, string> = {
   windows: 'Windows',
   mac: 'Mac',
   android: 'Google Play',
+  // Until the iOS App Store listing is live the button serves a direct .ipa.
+  // Keep the label honest ("Download iOS App") while on the direct route; once
+  // NEXT_PUBLIC_IOS_APP_STORE_URL is configured the badge renders as "App Store".
   ios: 'App Store',
 };
 
@@ -15,6 +18,12 @@ export const PLATFORM_ARIA_LABELS: Record<PlatformKey, string> = {
   android: 'Get the OET app on Google Play',
   ios: 'Download the OET app on the App Store',
 };
+
+// Direct IPA is used until the App Store listing is live. Detect the direct
+// route at render time so the badge label stays truthful without a rebuild.
+function isIosDirectDownload(href: string): boolean {
+  return href.includes('/api/download/ios') || href.endsWith('.ipa');
+}
 
 export const PLATFORM_ORDER: PlatformKey[] = ['windows', 'mac', 'android', 'ios'];
 
@@ -72,14 +81,19 @@ export interface PlatformDownloadBadgeProps {
 const badgeBaseClassName = 'inline-flex w-full items-center justify-center rounded-2xl border border-black/40 bg-black text-white shadow-sm transition-[background-color,border-color,transform] duration-200 hover:border-black/60 hover:bg-black/85 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:active:scale-100';
 
 export function PlatformDownloadBadge({ platform, href, compact = false, className }: PlatformDownloadBadgeProps) {
+  const directIosDownload = platform === 'ios' && isIosDirectDownload(href);
+  const label = directIosDownload ? 'Download iOS App' : PLATFORM_LABELS[platform];
+  const ariaLabel = directIosDownload
+    ? 'Download the OET app for iPhone and iPad (direct IPA)'
+    : PLATFORM_ARIA_LABELS[platform];
   return (
     <a
       href={href}
-      aria-label={PLATFORM_ARIA_LABELS[platform]}
+      aria-label={ariaLabel}
       className={cn(badgeBaseClassName, compact ? 'h-16 gap-3 px-5' : 'h-20 gap-4 px-7', className)}
     >
       <PlatformGlyph platform={platform} className={compact ? 'h-7 w-7' : 'h-9 w-9'} />
-      <span className={cn('font-semibold leading-none', compact ? 'text-sm' : 'text-base')}>{PLATFORM_LABELS[platform]}</span>
+      <span className={cn('font-semibold leading-none', compact ? 'text-sm' : 'text-base')}>{label}</span>
     </a>
   );
 }
