@@ -368,107 +368,92 @@ export default function ListeningReviewPage() {
               const hasApprovedConversion = hasApprovedListeningConversion(review);
               return (
                 <>
-            <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
-              AI Practice Score — not an official OET result.
-            </p>
-            <ResultsScorePanel
-              eyebrow="Listening review"
-              icon={Headphones}
-              title={review.paper.title}
-              subtitle={hasApprovedConversion && review.scoreDisplay
-                ? review.scoreDisplay
-                : `${review.rawScore}/${review.maxRawScore} raw${hasApprovedConversion ? ` · ${review.scaledScore}/500 scaled` : ''}`}
-              gaugeValue={review.maxRawScore > 0 ? (review.rawScore / review.maxRawScore) * 100 : 0}
-              gaugeLabel="Accuracy"
-              gaugeColor={hasApprovedConversion ? (review.passed ? 'var(--color-success)' : 'var(--color-warning)') : 'var(--color-primary)'}
-              grade={hasApprovedConversion ? { label: `Grade ${review.grade}`, tone: review.passed ? 'success' : 'warning' } : null}
-               stats={[
-                { label: 'Correct', value: review.correctCount, tone: 'success', icon: <CheckCircle2 /> },
-                { label: 'Incorrect', value: review.incorrectCount, tone: 'danger', icon: <XCircle /> },
-                { label: 'Unanswered', value: review.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
-                {
-                  label: hasApprovedConversion ? 'Scaled' : 'Raw',
-                  value: hasApprovedConversion ? `${review.scaledScore}/500` : `${review.rawScore}/${review.maxRawScore}`,
-                  tone: 'info',
-                  icon: <Target />,
-                 },
-               ]}
-               chartSlot={(
-                 <ScoreBandGraph
-                   rawScore={review.rawScore}
-                   maxRawScore={review.maxRawScore}
-                   scaledScore={hasApprovedConversion ? review.scaledScore : null}
-                   passed={hasApprovedConversion ? review.passed : null}
-                   grade={hasApprovedConversion ? review.grade : null}
-                   tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
-                 />
-               )}
-              />
-
-            <section
-              id="show-script"
-              aria-labelledby="listening-show-script-heading"
-              className="scroll-mt-24 rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm"
-            >
-              <LearnerSurfaceSectionHeader
-                eyebrow="Post-submit access"
-                title={scriptVisible ? 'Complete Listening Script' : 'Show Script'}
-                description={
-                  review.paper.audioScriptUrl || review.transcriptSegments.length > 0
-                    ? `Open the complete script${availableScriptParts(review).length === 3 ? 's for Parts A, B, and C' : availableScriptParts(review).length > 0 ? ` for Part ${availableScriptParts(review).join(', Part ')}` : ''}. Every authored line is shown; evidence excerpts are only used to highlight the relevant lines.`
-                    : 'No complete time-coded script or authored Audio Script PDF was published for this submitted scope yet.'
-                }
-                className="mb-4"
-              />
-              {scriptVisible ? (
-                <div className="space-y-5">
-                  {review.paper.audioScriptUrl ? (
-                    <ListeningQuestionPaperViewer url={review.paper.audioScriptUrl} partLabel="Audio Script" />
-                  ) : null}
-
-                  <ListeningFullTranscriptViewer
-                    transcriptSegments={review.transcriptSegments}
-                    extracts={review.paper.extracts}
-                    highlightedEvidence={highlightedEvidence}
-                    onPlayEvidence={playEvidence}
-                    attemptId={attemptId ?? ''}
+                  <ResultsScorePanel
+                    eyebrow="Listening review"
+                    icon={Headphones}
+                    title={review.paper.title}
+                    subtitle={hasApprovedConversion && review.scoreDisplay
+                      ? review.scoreDisplay
+                      : `${review.rawScore}/${review.maxRawScore} raw${hasApprovedConversion ? ` · ${review.scaledScore}/500 scaled` : ''}`}
+                    gaugeValue={review.maxRawScore > 0 ? (review.rawScore / review.maxRawScore) * 100 : 0}
+                    gaugeLabel="Accuracy"
+                    gaugeColor={hasApprovedConversion ? (review.passed ? 'var(--color-success)' : 'var(--color-warning)') : 'var(--color-primary)'}
+                    grade={hasApprovedConversion ? { label: `Grade ${review.grade}`, tone: review.passed ? 'success' : 'warning' } : null}
+                    stats={[
+                      { label: 'Correct', value: review.correctCount, tone: 'success', icon: <CheckCircle2 /> },
+                      { label: 'Incorrect', value: review.incorrectCount, tone: 'danger', icon: <XCircle /> },
+                      { label: 'Unanswered', value: review.unansweredCount, tone: 'warning', icon: <MinusCircle /> },
+                      {
+                        label: hasApprovedConversion ? 'Scaled' : 'Raw',
+                        value: hasApprovedConversion ? `${review.scaledScore}/500` : `${review.rawScore}/${review.maxRawScore}`,
+                        tone: 'info',
+                        icon: <Target />,
+                      },
+                    ]}
+                    chartSlot={(
+                      <ScoreBandGraph
+                        rawScore={review.rawScore}
+                        maxRawScore={review.maxRawScore}
+                        scaledScore={hasApprovedConversion ? review.scaledScore : null}
+                        passed={hasApprovedConversion ? review.passed : null}
+                        grade={hasApprovedConversion ? review.grade : null}
+                        tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
+                      />
+                    )}
+                  />
+                  <ScoreConversionEvidence
+                    assessment="Listening"
+                    rawScore={review.rawScore}
+                    maxRawScore={review.maxRawScore}
+                    scaledScore={hasApprovedConversion ? review.scaledScore : null}
+                    passed={hasApprovedConversion ? review.passed : null}
+                    grade={hasApprovedConversion ? review.grade : null}
+                    tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
+                    errorCode={review.scoreConversionErrorCode}
                   />
 
-                  {!review.paper.audioScriptUrl && review.transcriptSegments.length === 0 ? (
-                    <InlineAlert variant="warning">
-                      This paper has no complete script published yet. Per-question evidence remains visible in the item review below.
-                    </InlineAlert>
-                  ) : null}
-                </div>
-              ) : (
-                <Button type="button" onClick={() => setScriptVisible(true)} className="gap-2">
-                  <BookOpen className="h-4 w-4" />
-                  Show Script
-                </Button>
-              )}
-            </section>
-            <ScoreConversionEvidence
-              assessment="Listening"
-              rawScore={review.rawScore}
-              maxRawScore={review.maxRawScore}
-              scaledScore={hasApprovedConversion ? review.scaledScore : null}
-              passed={hasApprovedConversion ? review.passed : null}
-              grade={hasApprovedConversion ? review.grade : null}
-              tableVersion={hasApprovedConversion ? review.scoreConversionTableVersionKey : null}
-              errorCode={review.scoreConversionErrorCode}
-            />
-            <ListeningPartBreakdown items={review.itemReview} />
-            <TimeUsedSummary
-              totalMilliseconds={review.timeUsed?.totalMilliseconds ?? null}
-              sections={(review.timeUsed?.sections ?? []).map((section) => ({
-                label: section.sectionCode,
-                milliseconds: section.elapsedMilliseconds,
-              }))}
-              description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
-            />
-            <p className="mt-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
-              This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
-            </p>
+                  <section
+                    id="show-script"
+                    aria-labelledby="listening-show-script-heading"
+                    className="scroll-mt-24 rounded-2xl border border-primary/30 bg-primary/5 p-6 shadow-sm"
+                  >
+                    <LearnerSurfaceSectionHeader
+                      eyebrow="Post-submit access"
+                      title={scriptVisible ? 'Complete Listening Script' : 'Show Script'}
+                      description={
+                        review.paper.audioScriptUrl || review.transcriptSegments.length > 0
+                          ? `Open the complete script${availableScriptParts(review).length === 3 ? 's for Parts A, B, and C' : availableScriptParts(review).length > 0 ? ` for Part ${availableScriptParts(review).join(', Part ')}` : ''}. Every authored line is shown; evidence excerpts are only used to highlight the relevant lines.`
+                          : 'No complete time-coded script or authored Audio Script PDF was published for this submitted scope yet.'
+                      }
+                      className="mb-4"
+                    />
+                    {scriptVisible ? (
+                      <div className="space-y-5">
+                        {review.paper.audioScriptUrl ? (
+                          <ListeningQuestionPaperViewer url={review.paper.audioScriptUrl} partLabel="Audio Script" />
+                        ) : null}
+
+                        <ListeningFullTranscriptViewer
+                          transcriptSegments={review.transcriptSegments}
+                          extracts={review.paper.extracts}
+                          highlightedEvidence={highlightedEvidence}
+                          onPlayEvidence={playEvidence}
+                          attemptId={attemptId ?? ''}
+                        />
+
+                        {!review.paper.audioScriptUrl && review.transcriptSegments.length === 0 ? (
+                          <InlineAlert variant="warning">
+                            This paper has no complete script published yet. Per-question evidence remains visible in the item review below.
+                          </InlineAlert>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <Button type="button" onClick={() => setScriptVisible(true)} className="gap-2">
+                        <BookOpen className="h-4 w-4" />
+                        Show Script
+                      </Button>
+                    )}
+                  </section>
                 </>
               );
             })()}
@@ -671,6 +656,22 @@ export default function ListeningReviewPage() {
                 </div>
               </section>
             ) : null}
+
+            <ListeningPartBreakdown items={review.itemReview} />
+            <TimeUsedSummary
+              totalMilliseconds={review.timeUsed?.totalMilliseconds ?? null}
+              sections={(review.timeUsed?.sections ?? []).map((section) => ({
+                label: section.sectionCode,
+                milliseconds: section.elapsedMilliseconds,
+              }))}
+              description="Time is reported from server-persisted attempt and audio telemetry. Unavailable telemetry is shown as not recorded."
+            />
+            <p className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
+              AI Practice Score — not an official OET result.
+            </p>
+            <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
+              This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
+            </p>
 
             <section className="space-y-4">
               <LearnerSurfaceSectionHeader

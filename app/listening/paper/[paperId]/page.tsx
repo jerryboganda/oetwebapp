@@ -31,6 +31,8 @@ import { fetchAuthorizedObjectUrl } from '@/lib/api';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { PartANotesDocument } from '@/components/domain/listening/PartANotesDocument';
+import { BCQuestionRenderer } from '@/components/domain/listening/BCQuestionRenderer';
+import { ListeningAudioTransport } from '@/components/domain/listening/player/ListeningAudioTransport';
 import { TechReadinessCheck } from '@/components/domain/listening/TechReadinessCheck';
 import { QuestionPaperPdfViewer, type ReadingPdfAsset } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
@@ -672,8 +674,13 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
                 resumeAudioAtMs={attempt.audioPlaybackSection === activeSubSection.partCode ? attempt.audioResumeAtMs : null}
                 resumeAudioQuestionIndex={attempt.audioPlaybackSection === activeSubSection.partCode ? attempt.audioQuestionIndex : null}
                 onAnswerChange={setAnswer}
+                onPersistAnswer={persistAnswer}
                 onIntegrityEvent={logIntegrityEvent}
                 onAdvance={() => void advance()}
+                saveState={saveState}
+                answeredCount={answeredCount}
+                totalQuestions={totalQuestions}
+                onSubmit={() => setShowExamSubmitConfirm(true)}
               />
             ) : null}
 
@@ -944,8 +951,13 @@ function ActiveSubSectionPanel({
   resumeAudioAtMs,
   resumeAudioQuestionIndex,
   onAnswerChange,
+  onPersistAnswer,
   onIntegrityEvent,
   onAdvance,
+  saveState,
+  answeredCount,
+  totalQuestions,
+  onSubmit,
 }: {
   attemptId: string;
   paperId: string;
@@ -968,11 +980,16 @@ function ActiveSubSectionPanel({
   resumeAudioAtMs?: number | null;
   resumeAudioQuestionIndex?: number | null;
   onAnswerChange: (question: ListeningSessionQuestionDto, value: string) => void;
+  onPersistAnswer: (questionId: string, value: string) => Promise<unknown>;
   onIntegrityEvent: (
     eventType: Parameters<typeof recordListeningIntegrityEvent>[1],
     details?: Record<string, unknown>,
   ) => void;
   onAdvance: () => void;
+  saveState: SaveState;
+  answeredCount: number;
+  totalQuestions: number;
+  onSubmit: () => void;
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [timerExpired, setTimerExpired] = useState(false);
@@ -1017,11 +1034,6 @@ function ActiveSubSectionPanel({
     setShowConfirm(true);
   }, []);
 
-  // Stable identities so SubSectionAudio's blob-fetch effect does not re-run
-  // on every parent render (the timer ticks each second, and answer edits also
-  // re-render this panel). An inline arrow here would reset the audio source
-  // and revoke the in-use object URL every second, interrupting play() and
-  // leaving the section stuck on the buffering banner.
   const handleAudioFailure = useCallback(() => setAudioFailure(true), []);
   const handlePartBExtractComplete = useCallback(() => setPartBExtractEnded(true), []);
 
@@ -1056,70 +1068,60 @@ function ActiveSubSectionPanel({
     setShowConfirm(true);
   };
 
-  // Part A is note-completion (inline gaps); Part B/C are PDF-backed answer
-  // sheets. This mirrors the Reading paper player: the question paper PDF is the
-  // authoritative surface for B/C, while Part A renders the structured notes
-  // with inline gap inputs positioned in the running text (real OET layout).
   const isPartA = subSection.partCode.startsWith('A');
   const notesBody = subSection.extract?.notesBody?.trim() || '';
   const showNotes = isPartA && notesBody.length > 0;
-  // Annotations key off the media asset id (parsed from the PDF URL); the viewer
-  // matches annotations to the asset by this id, so it must be stable + match
-  // what the create callback sends. Fall back to a synthetic id (display only,
-  // annotations disabled) if the URL is not the expected /v1/media shape.
   const mediaAssetId = mediaAssetIdFromUrl(questionPaperUrl);
   const assetId = mediaAssetId ?? `qp-${subSection.partCode}`;
   const pdfAssets: ReadingPdfAsset[] = questionPaperUrl
     ? [{ id: assetId, part: subSection.partCode, title: subSection.title, downloadPath: questionPaperUrl }]
     : [];
-  // Learner Listening never shows the scanned question paper. Interactive
-  // questions plus audio/part indicators are the only candidate surface.
   const showPdf = false;
   const canAnnotate = false;
 
   return (
-    <div
-      className={cn(
-        'grid grid-cols-1 gap-4',
-        showPdf
-          ? 'xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]'
-          : 'xl:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)]',
-      )}
-    >
-      <section className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-        <SubSectionTimer label={subSection.label} remaining={remaining} />
-        <SubSectionAudio
-          key={`${attemptId}:${subSection.index}:${shouldSliceExamPartB ? partBQuestionIndex : 'all'}`}
-          attemptId={attemptId}
-          subSection={subSection}
-          cueStartMs={shouldSliceExamPartB ? (activePartBExtract?.audioStartMs ?? null) : null}
-          cueEndMs={shouldSliceExamPartB ? (activePartBExtract?.audioEndMs ?? null) : null}
-           onExtractComplete={shouldSliceExamPartB ? handlePartBExtractComplete : undefined}
-           resumeState={resumeAudioState}
-           resumeAtMs={resumeAudioAtMs}
-           questionIndex={shouldSliceExamPartB ? partBQuestionIndex : null}
-           onIntegrityEvent={onIntegrityEvent}
-           onBufferingChange={setAudioBuffering}
-           onAudioFailure={handleAudioFailure}
-           onePlayOnly={onePlayOnly}
+    <div className="space-y-6">
+      <SubSectionAudio
+        key={`${attemptId}:${subSection.index}:${shouldSliceExamPartB ? partBQuestionIndex : 'all'}`}
+        attemptId={attemptId}
+        subSection={subSection}
+        cueStartMs={shouldSliceExamPartB ? (activePartBExtract?.audioStartMs ?? null) : null}
+        cueEndMs={shouldSliceExamPartB ? (activePartBExtract?.audioEndMs ?? null) : null}
+        onExtractComplete={shouldSliceExamPartB ? handlePartBExtractComplete : undefined}
+        resumeState={resumeAudioState}
+        resumeAtMs={resumeAudioAtMs}
+        questionIndex={shouldSliceExamPartB ? partBQuestionIndex : null}
+        onIntegrityEvent={onIntegrityEvent}
+        onBufferingChange={setAudioBuffering}
+        onAudioFailure={handleAudioFailure}
+        audioFailure={audioFailure}
+        onePlayOnly={onePlayOnly}
+        saveState={saveState}
+        answeredCount={answeredCount}
+        totalQuestions={totalQuestions}
+        attemptSecondsRemaining={remaining}
+        onSubmit={onSubmit}
+      />
+
+      {showPdf ? (
+        <QuestionPaperPdfViewer
+          paperId={paperId}
+          partCode={subSection.partCode}
+          assets={pdfAssets}
+          annotations={annotations}
+          readOnly={!canAnnotate}
+          onCreateAnnotation={onCreateAnnotation}
+          onDeleteAnnotation={onDeleteAnnotation}
+          documentNoun="Listening paper"
         />
-        {showPdf ? (
-          <QuestionPaperPdfViewer
-            paperId={paperId}
-            partCode={subSection.partCode}
-            assets={pdfAssets}
-            annotations={annotations}
-            readOnly={!canAnnotate}
-            onCreateAnnotation={onCreateAnnotation}
-            onDeleteAnnotation={onDeleteAnnotation}
-            documentNoun="Listening paper"
-          />
-        ) : null}
-      </section>
+      ) : null}
 
       <section className="rounded-[20px] border border-border bg-surface p-5 shadow-sm" aria-label={`Questions for ${subSection.label}`}>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Questions</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Questions</h2>
+            <span className="text-sm font-bold text-navy">{subSection.label}</span>
+          </div>
           <Badge variant="info">
             {shouldSliceExamPartB
               ? `Question ${partBQuestionIndex + 1} of ${subSection.questions.length}`
@@ -1146,12 +1148,15 @@ function ActiveSubSectionPanel({
         ) : (
           <div className="space-y-6">
             {visibleQuestions.map((question) => (
-              <QuestionItem
+              <BCQuestionRenderer
                 key={question.id}
-                question={question}
+                questionNumber={question.number}
                 partLabel={subSection.label}
+                prompt={question.text}
+                options={question.options}
+                optionKeys={question.optionKeys}
                 value={answers[question.id] ?? ''}
-                disabled={audioFailure}
+                locked={audioFailure}
                 onChange={(value) => {
                   if (!audioFailure) onAnswerChange(question, value);
                 }}
@@ -1166,12 +1171,24 @@ function ActiveSubSectionPanel({
             onClick={requestAdvance}
             loading={advancing}
             disabled={audioFailure || (shouldSliceExamPartB && !partBExtractEnded && !timerExpired)}
-            aria-label={isLastSection ? 'Submit attempt' : 'Advance to next sub-section'}
+            aria-label={canMoveToNextPartBQuestion ? 'Next question' : isLastSection ? 'Submit attempt' : 'Advance to next sub-section'}
           >
-            {isLastSection ? <Send className="h-4 w-4" aria-hidden="true" /> : <ArrowRight className="h-4 w-4" aria-hidden="true" />}
-            {canMoveToNextPartBQuestion
-              ? 'Next question'
-              : isLastSection ? 'Submit' : 'Next sub-section'}
+            {canMoveToNextPartBQuestion ? (
+              <>
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                Next question
+              </>
+            ) : isLastSection ? (
+              <>
+                <Send className="h-4 w-4" aria-hidden="true" />
+                Submit
+              </>
+            ) : (
+              <>
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                Next sub-section
+              </>
+            )}
           </Button>
         </div>
       </section>
@@ -1208,6 +1225,12 @@ function ActiveSubSectionPanel({
               if (canMoveToNextPartBQuestion) {
                 const nextQuestionIndex = partBQuestionIndex + 1;
                 const nextExtract = partBExtracts[nextQuestionIndex];
+                if (activePartBQuestion) {
+                  const currentVal = answers[activePartBQuestion.id] ?? '';
+                  if (currentVal) {
+                    void onPersistAnswer(activePartBQuestion.id, currentVal);
+                  }
+                }
                 onIntegrityEvent('audio_started', {
                   section: subSection.partCode,
                   cuePointMs: nextExtract?.audioStartMs ?? 0,
@@ -1231,25 +1254,6 @@ function ActiveSubSectionPanel({
   );
 }
 
-function SubSectionTimer({ label, remaining }: { label: string; remaining: number }) {
-  const low = remaining <= 10;
-  return (
-    <div
-      className="flex items-center gap-3 rounded-[20px] border border-border bg-surface p-4 shadow-sm"
-      role="timer"
-      aria-live="polite"
-      aria-atomic="true"
-      aria-label={`${label}, ${formatCountdown(remaining)} remaining`}
-    >
-      <Clock className={cn('h-5 w-5', low ? 'text-danger' : 'text-primary')} aria-hidden="true" />
-      <div className="flex flex-col">
-        <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{label}</span>
-        <span className={cn('font-mono text-2xl font-bold', low ? 'text-danger' : 'text-navy')}>{formatCountdown(remaining)}</span>
-      </div>
-    </div>
-  );
-}
-
 // Per-sub-section audio. Uploaded `/v1/media/{id}/content` URLs need the Bearer
 // token, which a bare <audio src> cannot attach, so those are blob-fetched via
 // fetchAuthorizedObjectUrl. Anonymous TTS `/v1/listening/audio/{sha}.wav` URLs
@@ -1267,7 +1271,13 @@ function SubSectionAudio({
   onIntegrityEvent,
   onBufferingChange,
   onAudioFailure,
+  audioFailure,
   onePlayOnly,
+  saveState,
+  answeredCount,
+  totalQuestions,
+  attemptSecondsRemaining,
+  onSubmit,
 }: {
   attemptId: string;
   subSection: ListeningExamSubSection;
@@ -1283,7 +1293,13 @@ function SubSectionAudio({
   ) => void;
   onBufferingChange: (buffering: boolean) => void;
   onAudioFailure: () => void;
+  audioFailure: boolean;
   onePlayOnly: boolean;
+  saveState: SaveState;
+  answeredCount: number;
+  totalQuestions: number;
+  attemptSecondsRemaining: number | null;
+  onSubmit: () => void;
 }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [resolvedSrc, setResolvedSrc] = useState<string | null>(
@@ -1304,15 +1320,6 @@ function SubSectionAudio({
   const hasStartedRef = useRef(false);
   const autoPlayTriedRef = useRef(false);
 
-  const formatBlackPlayerTime = (seconds: number) => {
-    if (!seconds || Number.isNaN(seconds)) return '00:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
-  // One-shot attempt marker: when a play() attempt is interrupted (AbortError
-  // from a seek/revoke race), the next canplay/seeked retries it instead of
-  // leaving the section permanently stuck on the buffering banner.
   const playAbortPendingRef = useRef(false);
   const playAbortCountRef = useRef(0);
   const onAudioFailureRef = useRef(onAudioFailure);
@@ -1387,10 +1394,6 @@ function SubSectionAudio({
         const isAbort = err instanceof DOMException && err.name === 'AbortError';
         const isNotAllowed = err instanceof DOMException && err.name === 'NotAllowedError';
         if (isAbort || msg.includes('play() request was interrupted')) {
-          // Seek-then-play race or teardown mid-play — keep buffering paused and
-          // retry on the next canplay/seeked. Bounded: after two interrupted
-          // attempts we stop auto-retrying and surface the explicit Play button,
-          // because a real user gesture always satisfies the media policies.
           setBuffering(true);
           if (playAbortCountRef.current >= 2) {
             setNeedsUserPlay(true);
@@ -1402,7 +1405,6 @@ function SubSectionAudio({
           return;
         }
         if (isNotAllowed || msg.includes('gesture') || msg.includes('user') || msg.includes('NotAllowed')) {
-          // Autoplay blocked — keep timer paused and show explicit Play button instead of infinite spinner.
           setBuffering(true);
           setNeedsUserPlay(true);
           setAudioError(null);
@@ -1414,9 +1416,6 @@ function SubSectionAudio({
     }
   }, []);
 
-  // Defer autoplay until the element can actually play. Setting currentTime before
-  // metadata is loaded causes an AbortError that leaves the section stuck on
-  // "Loading audio…". We set the initial cue only after loadedmetadata.
   const handleLoadedMetadata = useCallback(() => {
     const el = audioRef.current;
     if (el) {
@@ -1433,9 +1432,6 @@ function SubSectionAudio({
     const initialTime = resumeAt ?? cueStart;
     if (initialTime != null && Number.isFinite(initialTime)) {
       try {
-        // Skip a no-op seek when already at the target: assigning currentTime
-        // at (or within) its current value still starts a seeking cycle, which
-        // can interrupt the very first play() and surface AbortError.
         if (Math.abs(el.currentTime - initialTime) > 0.05) {
           programmaticSeekTargetRef.current = initialTime;
           el.currentTime = initialTime;
@@ -1455,8 +1451,6 @@ function SubSectionAudio({
     onIntegrityEvent('audio_buffering_end', { section: subSection.partCode, questionIndex });
     if (resumeState === 'ended') return;
     const el = audioRef.current;
-    // Already playing (recovery canplay after an interrupted attempt) — nothing
-    // left to do for this section.
     if (el && !el.paused && !el.ended) {
       autoPlayTriedRef.current = true;
       playAbortPendingRef.current = false;
@@ -1465,10 +1459,18 @@ function SubSectionAudio({
     if (autoPlayTriedRef.current && !playAbortPendingRef.current) return;
     playAbortPendingRef.current = false;
     autoPlayTriedRef.current = true;
-    // Gesture-chained via Start/Next click — most browsers allow it. If blocked,
-    // tryPlay will flip needsUserPlay and show the explicit button.
     tryPlay();
   }, [onIntegrityEvent, questionIndex, resumeState, subSection.partCode, tryPlay]);
+
+  const handleTogglePlayPause = useCallback(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (isPlaying) {
+      if (!onePlayOnly) el.pause();
+      return;
+    }
+    tryPlay();
+  }, [isPlaying, onePlayOnly, tryPlay]);
 
   if (!subSection.audioUrl) {
     return (
@@ -1481,65 +1483,72 @@ function SubSectionAudio({
     );
   }
 
-  const widthPercent = durationSeconds > 0 ? (progressSeconds / durationSeconds) * 100 : 0;
-  const controlDisabled = hasPlayedToEnd || (onePlayOnly && isPlaying);
-  const canTogglePlay = !controlDisabled && !audioError;
-
   return (
-    <div
-      data-testid="listening-black-player"
-      className="rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5"
-    >
-      <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
-        <span className="inline-flex min-w-0 items-center gap-2 text-sm font-bold text-white">
-          <Volume2 className="h-4 w-4 shrink-0 text-white" aria-hidden="true" />
-          <span className="truncate">{subSection.title}</span>
-        </span>
-        {onePlayOnly ? <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-warning">Plays once</span> : null}
-      </div>
-      <div className="flex items-center gap-3 sm:gap-4">
-        <button
-          type="button"
-          onClick={() => {
-            const el = audioRef.current;
-            if (!el) return;
-            if (isPlaying) {
-              if (!onePlayOnly) el.pause();
-              return;
-            }
-            tryPlay();
-          }}
-          disabled={!canTogglePlay}
-          aria-label={isPlaying ? (onePlayOnly ? 'Audio cannot be paused' : 'Pause audio') : 'Play audio'}
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
-            !canTogglePlay ? 'cursor-not-allowed bg-white/10 text-white/30' : 'bg-white text-navy hover:bg-white/90'
-          }`}
-        >
-          {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="ml-0.5 h-6 w-6" />}
-        </button>
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <div className="flex justify-between font-mono text-xs font-bold text-white/70">
-            <span>{formatBlackPlayerTime(progressSeconds)}</span>
-            <span>{formatBlackPlayerTime(durationSeconds)}</span>
+    <div className="space-y-3">
+      <ListeningAudioTransport
+        isPlaying={isPlaying}
+        progressSeconds={progressSeconds}
+        durationSeconds={durationSeconds}
+        canScrub={false}
+        canPause={false}
+        isPreviewPhase={false}
+        isHalted={audioFailure || Boolean(audioError)}
+        audioState={isBuffering ? 'buffering' : audioError ? 'error' : 'ready'}
+        saveState={saveState}
+        answeredCount={answeredCount}
+        totalQuestions={totalQuestions}
+        attemptSecondsRemaining={attemptSecondsRemaining}
+        onTogglePlayPause={handleTogglePlayPause}
+        onScrub={() => {}}
+        onSubmit={onSubmit}
+        submitDisabled={audioFailure || Boolean(audioError)}
+      />
+
+      {needsUserPlay && !audioError ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-warning/30 bg-warning/10 p-3.5 text-navy">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <Volume2 className="h-4 w-4 text-warning shrink-0" aria-hidden="true" />
+            <span>Audio is ready. Tap Play to begin playback (plays once).</span>
           </div>
-          <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/20">
-            <div
-              className="absolute left-0 top-0 h-full origin-left bg-sky-400 transition-transform duration-100 ease-linear"
-              style={{ transform: `scaleX(${Math.max(0, Math.min(100, widthPercent)) / 100})` }}
-            />
-          </div>
+          <Button
+            variant="primary"
+            onClick={() => tryPlay()}
+            className="gap-2 bg-white text-navy hover:bg-white/90"
+          >
+            <Play className="h-4 w-4" aria-hidden="true" /> Tap to Play — {subSection.title}
+          </Button>
         </div>
-      </div>
+      ) : null}
+
+      {audioError ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-danger/30 bg-danger/10 p-3.5 text-danger">
+          <p className="text-xs sm:text-sm font-semibold">{audioError}</p>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setAudioError(null);
+              setNeedsUserPlay(false);
+              autoPlayTriedRef.current = false;
+              setAudioRetryKey((k) => k + 1);
+            }}
+            className="h-8 px-3 text-xs text-danger hover:bg-danger/20"
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {isBuffering && !audioError && !needsUserPlay ? (
+        <p className="text-xs font-semibold text-muted" role="status">
+          Audio is buffering; the section timer is paused until playback is ready.
+        </p>
+      ) : null}
+
       {resolvedSrc ? (
         <audio
           ref={audioRef}
           src={resolvedSrc}
-          // Autoplay is handled via handleCanPlay -> tryPlay (gesture-chained).
-          // Keep native autoPlay off to avoid the double-play AbortError.
           autoPlay={false}
-          // This route is the strict computer-based exam surface. Browser
-          // media controls remain disabled even if a malformed/legacy session
-          // response reports a permissive transport flag.
           controls={false}
           controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
           preload="auto"
@@ -1552,18 +1561,18 @@ function SubSectionAudio({
             if (el.duration && Number.isFinite(el.duration) && el.duration > 0) setDurationSeconds(el.duration);
             if (!el || el.seeking || !onePlayOnly) return;
             if (cueEndMs != null && el.currentTime * 1000 >= cueEndMs && !hasPlayedToEnd) {
-             allowedProgrammaticPauseRef.current = true;
-             onIntegrityEvent('audio_stopped', {
+              allowedProgrammaticPauseRef.current = true;
+              onIntegrityEvent('audio_stopped', {
                 section: subSection.partCode,
                 cuePointMs: Math.round(el.currentTime * 1000),
                 questionIndex,
                 reason: 'programmatic',
               });
-             hasStartedRef.current = false;
-             setHasPlayedToEnd(true);
-             setIsPlaying(false);
+              hasStartedRef.current = false;
+              setHasPlayedToEnd(true);
+              setIsPlaying(false);
               setBuffering(false);
-             el.pause();
+              el.pause();
               onIntegrityEvent('audio_ended', {
                 section: subSection.partCode,
                 cuePointMs: Math.round(el.currentTime * 1000),
@@ -1690,10 +1699,6 @@ function SubSectionAudio({
           }}
           onSeeked={() => {
             programmaticSeekTargetRef.current = null;
-            // A seek that interrupted a pending play() (the cue-start seek at
-            // metadata time races the first play) is only safe to retry once the
-            // seek has settled — that is now. Bounded like tryPlay: two misses
-            // and the learner gets the explicit Play button instead.
             if (playAbortPendingRef.current) {
               playAbortPendingRef.current = false;
               if (playAbortCountRef.current >= 2) {
@@ -1707,156 +1712,12 @@ function SubSectionAudio({
           }}
         />
       ) : (
-        <div className="flex items-center gap-2 text-sm text-white/70">
-          <Loader2 className="h-4 w-4 motion-safe:animate-spin text-white" aria-hidden="true" />
+        <div className="flex items-center gap-2 text-sm text-muted">
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
           Loading audio…
         </div>
       )}
-      {needsUserPlay && !audioError ? (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button onClick={() => tryPlay()} className="gap-2 bg-white text-navy hover:bg-white/90">
-            <Play className="h-4 w-4" aria-hidden="true" /> Tap to Play — {subSection.title}
-          </Button>
-          <span className="text-xs font-semibold text-white/70">Audio is ready. Tap Play (plays once).</span>
-        </div>
-      ) : null}
-      {audioError ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <p className="text-xs font-semibold text-red-300">{audioError}</p>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              setAudioError(null);
-              setNeedsUserPlay(false);
-              autoPlayTriedRef.current = false;
-              setAudioRetryKey((k) => k + 1);
-            }}
-            className="h-7 px-2 text-xs"
-          >
-            Retry
-          </Button>
-        </div>
-      ) : null}
-      {isBuffering && !audioError && !needsUserPlay ? (
-        <p className="mt-2 text-xs font-semibold text-amber-300" role="status">
-          Audio is buffering; the section timer is paused until playback is ready.
-        </p>
-      ) : null}
     </div>
-  );
-}
-
-function QuestionItem({
-  question,
-  partLabel,
-  value,
-  disabled,
-  onChange,
-}: {
-  question: ListeningSessionQuestionDto;
-  partLabel?: string;
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  const isMcq = question.type === 'multiple_choice_3';
-  const cleanedPrompt = cleanListeningPrompt(question.text);
-  const [flagged, setFlagged] = useState(false);
-  const displayLabel = partLabel ?? (question.partCode ? `Part ${question.partCode.toUpperCase()}` : '');
-  return (
-    <div className={`space-y-3 border-b border-border pb-5 last:border-b-0 last:pb-0 ${flagged ? 'rounded-xl border-warning bg-warning/5 p-3 ring-1 ring-warning/20' : ''}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex-1">
-          {displayLabel ?           <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">{displayLabel}</p> : null}
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {question.number}</p>
-          <h3 className="mt-2 break-words text-base font-semibold leading-7 text-navy">{cleanedPrompt}</h3>
-          {flagged ? <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-widest text-warning"><Flag className="h-3 w-3" /> Flagged for review</span> : null}
-        </div>
-        {isMcq ? (
-          <Button
-            type="button"
-            variant={flagged ? 'secondary' : 'outline'}
-            size="sm"
-            aria-pressed={flagged}
-            aria-label={flagged ? `Remove flag from question ${question.number}` : `Flag question ${question.number} for review`}
-            onClick={() => !disabled && setFlagged((v) => !v)}
-            disabled={disabled}
-            className="shrink-0"
-          >
-            <Flag className="h-4 w-4" aria-hidden="true" />
-            Flag
-          </Button>
-        ) : null}
-      </div>
-      {isMcq ? (
-        <McqControl question={question} value={value} disabled={disabled} onChange={onChange} />
-      ) : (
-        <TextAnswerControl value={value} disabled={disabled} onChange={onChange} />
-      )}
-    </div>
-  );
-}
-
-function McqControl({
-  question,
-  value,
-  disabled,
-  onChange,
-}: {
-  question: ListeningSessionQuestionDto;
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      {question.options.map((optionText, index) => {
-        const letter = String.fromCharCode(65 + index);
-        const selected = value === letter;
-        const displayText = cleanListeningOption(optionText);
-        return (
-          <label
-            key={`${question.id}-${letter}-${index}`}
-            className={cn(
-              'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
-              selected && 'border-primary bg-primary/5',
-              disabled && 'cursor-not-allowed opacity-60',
-            )}
-          >
-            <input
-              type="radio"
-              name={question.id}
-              className="mt-1"
-              disabled={disabled}
-              checked={selected}
-              onChange={() => onChange(letter)}
-            />
-            <span className="font-mono font-bold text-navy">{letter}.</span>
-            <span className="leading-6 text-navy">{displayText}</span>
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-function TextAnswerControl({
-  value,
-  disabled,
-  onChange,
-}: {
-  value: string;
-  disabled: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <input
-      className="min-h-11 w-full rounded-lg border border-border bg-background-light px-3 py-2 text-sm text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/20"
-      placeholder="Type your answer"
-      value={value}
-      disabled={disabled}
-      onChange={(event) => onChange(event.target.value)}
-    />
   );
 }
 
@@ -1868,10 +1729,4 @@ function handleAudioPlaybackError(error: unknown, onVisibleError: (message: stri
     return;
   }
   onVisibleError('Audio could not start. Check your device output, then reload the page.');
-}
-
-function formatCountdown(totalSec: number): string {
-  const minutes = Math.floor(totalSec / 60);
-  const seconds = totalSec % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }

@@ -6,7 +6,7 @@ import { BCQuestionRenderer } from '../BCQuestionRenderer';
 const OPTIONS = ['Increase fluids', 'Reduce the dose', 'Refer to a specialist'];
 
 describe('BCQuestionRenderer', () => {
-  it('renders the real stem + option prose', () => {
+  it('renders the question prompt as a clean heading and displays option prose', () => {
     render(
       <BCQuestionRenderer
         questionNumber={25}
@@ -18,8 +18,28 @@ describe('BCQuestionRenderer', () => {
         onChange={vi.fn()}
       />,
     );
-    expect(screen.getByText('What does the nurse advise?')).toBeInTheDocument();
+    const heading = screen.getByRole('heading', { level: 3, name: 'What does the nurse advise?' });
+    expect(heading).toBeInTheDocument();
     expect(screen.getByText('Reduce the dose')).toBeInTheDocument();
+  });
+
+  it('renders the Flag button and completely omits any Stem highlighter button', () => {
+    render(
+      <BCQuestionRenderer
+        questionNumber={25}
+        partLabel="PART B"
+        prompt="What does the nurse advise?"
+        options={OPTIONS}
+        optionKeys={['A', 'B', 'C']}
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+    // Flag button is present
+    expect(screen.getByRole('button', { name: /flag question 25 for review/i })).toBeInTheDocument();
+    // Stem highlighter button is absent
+    expect(screen.queryByRole('button', { name: /stem/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /highlight/i })).not.toBeInTheDocument();
   });
 
   it('submits the option KEY (letter), not the display text', async () => {

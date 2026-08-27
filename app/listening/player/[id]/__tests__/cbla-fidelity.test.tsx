@@ -463,7 +463,8 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     render(<ListeningPlayer />);
 
     await waitFor(() => expect(screen.getByText('What should the nurse do next?')).toBeInTheDocument());
-    expect(screen.getByRole('button', { name: /highlight question 7 stem/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /flag question 7/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /stem/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /strike out option a/i })).toBeInTheDocument();
     const questionSurface = screen.getByTestId('listening-question-surface');
     expect(questionSurface).toHaveStyle({ fontSize: '100%' });

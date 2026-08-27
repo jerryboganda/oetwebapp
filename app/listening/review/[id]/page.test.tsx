@@ -190,13 +190,29 @@ describe('Listening review audio replay', () => {
     });
   });
 
-  it('places Show Script before score evidence and exposes full replay', async () => {
+  it('places Score Summary Panel before Show Script and Performance Breakdown in disciplined order', async () => {
     const { container } = render(<ListeningReviewPage />);
 
-    expect(await screen.findByTestId('score-panel')).toBeInTheDocument();
-    const showScript = screen.getByRole('button', { name: /show script/i });
+    const scorePanel = await screen.findByTestId('score-panel');
     const scoreEvidence = screen.getByTestId('score-conversion');
-    expect(showScript.compareDocumentPosition(scoreEvidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const showScript = screen.getByRole('button', { name: /show script/i });
+    const partBreakdown = screen.getByTestId('part-breakdown');
+    const timeUsed = screen.getByTestId('time-used');
+
+    // 1. Score Summary Panel: score panel -> score conversion
+    expect(scorePanel.compareDocumentPosition(scoreEvidence) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 2. Full Transcript & Audio Review: show script follows score conversion
+    expect(scoreEvidence.compareDocumentPosition(showScript) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // 3. Performance Breakdown: part breakdown and time used follow transcript section
+    expect(showScript.compareDocumentPosition(partBreakdown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(partBreakdown.compareDocumentPosition(timeUsed) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // Verify zero drill recommendation cards or texts
+    expect(screen.queryByText(/recommended next step/i)).toBeNull();
+    expect(screen.queryByText(/don't leave gaps drill/i)).toBeNull();
+    expect(screen.queryByText(/next drill/i)).toBeNull();
+    expect(screen.queryByText(/start drill/i)).toBeNull();
+    expect(screen.queryByText(/open recommended drill/i)).toBeNull();
 
     await waitFor(() => {
       const audio = container.querySelector('audio');

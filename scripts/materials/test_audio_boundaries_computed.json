@@ -1,0 +1,662 @@
+[
+  {
+    "test_num": 1,
+    "filename": "L1 Melissa Gordon.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L1 Melissa Gordon.mp3",
+    "duration": 2105.143,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 401.367,
+        "dur": 401.367
+      },
+      "A2": {
+        "start": 401.367,
+        "end": 647.519,
+        "dur": 246.152
+      },
+      "B": {
+        "start": 647.519,
+        "end": 1204.933,
+        "dur": 557.414
+      },
+      "C1": {
+        "start": 1204.933,
+        "end": 1652.661,
+        "dur": 447.728
+      },
+      "C2": {
+        "start": 1652.661,
+        "end": 2105.143,
+        "dur": 452.482
+      }
+    }
+  },
+  {
+    "test_num": 2,
+    "filename": "L2 Sara Croft.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L2 Sara Croft.mp3",
+    "duration": 2163.265,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 421.713,
+        "dur": 421.713
+      },
+      "A2": {
+        "start": 421.713,
+        "end": 728.84,
+        "dur": 307.127
+      },
+      "B": {
+        "start": 728.84,
+        "end": 1241.486,
+        "dur": 512.646
+      },
+      "C1": {
+        "start": 1241.486,
+        "end": 1669.271,
+        "dur": 427.785
+      },
+      "C2": {
+        "start": 1669.271,
+        "end": 2163.265,
+        "dur": 493.994
+      }
+    }
+  },
+  {
+    "test_num": 3,
+    "filename": "L3 Robert Miller.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L3 Robert Miller.mp3",
+    "duration": 2110.028,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 435.936,
+        "dur": 435.936
+      },
+      "A2": {
+        "start": 435.936,
+        "end": 659.41,
+        "dur": 223.474
+      },
+      "B": {
+        "start": 659.41,
+        "end": 1188.791,
+        "dur": 529.381
+      },
+      "C1": {
+        "start": 1188.791,
+        "end": 1673.929,
+        "dur": 485.138
+      },
+      "C2": {
+        "start": 1673.929,
+        "end": 2110.028,
+        "dur": 436.099
+      }
+    }
+  },
+  {
+    "test_num": 4,
+    "filename": "L4 Ray Sands.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L4 Ray Sands.mp3",
+    "duration": 2059.455,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 442.658,
+        "dur": 442.658
+      },
+      "A2": {
+        "start": 442.658,
+        "end": 674.957,
+        "dur": 232.299
+      },
+      "B": {
+        "start": 674.957,
+        "end": 1225.582,
+        "dur": 550.625
+      },
+      "C1": {
+        "start": 1225.582,
+        "end": 1662.37,
+        "dur": 436.788
+      },
+      "C2": {
+        "start": 1662.37,
+        "end": 2059.455,
+        "dur": 397.085
+      }
+    }
+  },
+  {
+    "test_num": 5,
+    "filename": "LISTENING TEST 5.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Benchmark Exams/Audio/LISTENING TEST 5.mp3",
+    "duration": 2169.545,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 402.771,
+        "dur": 402.771
+      },
+      "A2": {
+        "start": 402.771,
+        "end": 639.562,
+        "dur": 236.791
+      },
+      "B": {
+        "start": 639.562,
+        "end": 1171.865,
+        "dur": 532.303
+      },
+      "C1": {
+        "start": 1171.865,
+        "end": 1593.93,
+        "dur": 422.065
+      },
+      "C2": {
+        "start": 1593.93,
+        "end": 2169.545,
+        "dur": 575.615
+      }
+    }
+  },
+  {
+    "test_num": 6,
+    "filename": "L6 Tainatongo.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L6 Tainatongo.mp3",
+    "duration": 2422.713,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 339.567,
+        "dur": 339.567
+      },
+      "A2": {
+        "start": 339.567,
+        "end": 1245.692,
+        "dur": 906.125
+      },
+      "B": {
+        "start": 1245.692,
+        "end": 1681.217,
+        "dur": 435.525
+      },
+      "C1": {
+        "start": 1681.217,
+        "end": 2094.358,
+        "dur": 413.141
+      },
+      "C2": {
+        "start": 2094.358,
+        "end": 2422.713,
+        "dur": 328.355
+      }
+    }
+  },
+  {
+    "test_num": 7,
+    "filename": "L7 Sedif Dagli.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L7 Sedif Dagli.mp3",
+    "duration": 2282.593,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 299.732,
+        "dur": 299.732
+      },
+      "A2": {
+        "start": 299.732,
+        "end": 499.87,
+        "dur": 200.138
+      },
+      "B": {
+        "start": 499.87,
+        "end": 1127.983,
+        "dur": 628.113
+      },
+      "C1": {
+        "start": 1127.983,
+        "end": 1236.974,
+        "dur": 108.991
+      },
+      "C2": {
+        "start": 1236.974,
+        "end": 2282.593,
+        "dur": 1045.619
+      }
+    }
+  },
+  {
+    "test_num": 8,
+    "filename": "L8 Bernardito.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L8 Bernardito.mp3",
+    "duration": 2520.333,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 496.175,
+        "dur": 496.175
+      },
+      "A2": {
+        "start": 496.175,
+        "end": 844.237,
+        "dur": 348.062
+      },
+      "B": {
+        "start": 844.237,
+        "end": 1327.526,
+        "dur": 483.289
+      },
+      "C1": {
+        "start": 1327.526,
+        "end": 1780.466,
+        "dur": 452.94
+      },
+      "C2": {
+        "start": 1780.466,
+        "end": 2520.333,
+        "dur": 739.867
+      }
+    }
+  },
+  {
+    "test_num": 9,
+    "filename": "LISTENING TEST 9.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Benchmark Exams/Audio/LISTENING TEST 9.mp3",
+    "duration": 2186.558,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 407.154,
+        "dur": 407.154
+      },
+      "A2": {
+        "start": 407.154,
+        "end": 626.175,
+        "dur": 219.021
+      },
+      "B": {
+        "start": 626.175,
+        "end": 1175.22,
+        "dur": 549.045
+      },
+      "C1": {
+        "start": 1175.22,
+        "end": 1599.152,
+        "dur": 423.932
+      },
+      "C2": {
+        "start": 1599.152,
+        "end": 2186.558,
+        "dur": 587.406
+      }
+    }
+  },
+  {
+    "test_num": 10,
+    "filename": "L10 Bryan Haris.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L10 Bryan Haris.mp3",
+    "duration": 2322.769,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 368.318,
+        "dur": 368.318
+      },
+      "A2": {
+        "start": 368.318,
+        "end": 622.089,
+        "dur": 253.771
+      },
+      "B": {
+        "start": 622.089,
+        "end": 1145.864,
+        "dur": 523.775
+      },
+      "C1": {
+        "start": 1145.864,
+        "end": 1668.86,
+        "dur": 522.996
+      },
+      "C2": {
+        "start": 1668.86,
+        "end": 2322.769,
+        "dur": 653.909
+      }
+    }
+  },
+  {
+    "test_num": 11,
+    "filename": "L11 Ms Elissa.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L11 Ms Elissa.mp3",
+    "duration": 2367.517,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 389.394,
+        "dur": 389.394
+      },
+      "A2": {
+        "start": 389.394,
+        "end": 655.3,
+        "dur": 265.906
+      },
+      "B": {
+        "start": 655.3,
+        "end": 1176.785,
+        "dur": 521.485
+      },
+      "C1": {
+        "start": 1176.785,
+        "end": 1670.584,
+        "dur": 493.799
+      },
+      "C2": {
+        "start": 1670.584,
+        "end": 2367.517,
+        "dur": 696.933
+      }
+    }
+  },
+  {
+    "test_num": 12,
+    "filename": "L12 Chong Walton.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L12 Chong Walton.mp3",
+    "duration": 2412.552,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 348.938,
+        "dur": 348.938
+      },
+      "A2": {
+        "start": 348.938,
+        "end": 517.971,
+        "dur": 169.033
+      },
+      "B": {
+        "start": 517.971,
+        "end": 1076.991,
+        "dur": 559.02
+      },
+      "C1": {
+        "start": 1076.991,
+        "end": 1514.238,
+        "dur": 437.247
+      },
+      "C2": {
+        "start": 1514.238,
+        "end": 2412.552,
+        "dur": 898.314
+      }
+    }
+  },
+  {
+    "test_num": 13,
+    "filename": "L13 Magtanggol.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L13 Magtanggol.mp3",
+    "duration": 1973.303,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 343.532,
+        "dur": 343.532
+      },
+      "A2": {
+        "start": 343.532,
+        "end": 517.008,
+        "dur": 173.476
+      },
+      "B": {
+        "start": 517.008,
+        "end": 1096.609,
+        "dur": 579.601
+      },
+      "C1": {
+        "start": 1096.609,
+        "end": 1375.396,
+        "dur": 278.787
+      },
+      "C2": {
+        "start": 1375.396,
+        "end": 1973.303,
+        "dur": 597.907
+      }
+    }
+  },
+  {
+    "test_num": 14,
+    "filename": "L15 Eugenusz.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L15 Eugenusz.mp3",
+    "duration": 2193.489,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 336.289,
+        "dur": 336.289
+      },
+      "A2": {
+        "start": 336.289,
+        "end": 771.599,
+        "dur": 435.31
+      },
+      "B": {
+        "start": 771.599,
+        "end": 1447.893,
+        "dur": 676.294
+      },
+      "C1": {
+        "start": 1447.893,
+        "end": 1812.063,
+        "dur": 364.17
+      },
+      "C2": {
+        "start": 1812.063,
+        "end": 2193.489,
+        "dur": 381.426
+      }
+    }
+  },
+  {
+    "test_num": 15,
+    "filename": "L16 Hiromichi.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L16 Hiromichi.mp3",
+    "duration": 2195.632,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 270.343,
+        "dur": 270.343
+      },
+      "A2": {
+        "start": 270.343,
+        "end": 485.82,
+        "dur": 215.477
+      },
+      "B": {
+        "start": 485.82,
+        "end": 1024.542,
+        "dur": 538.722
+      },
+      "C1": {
+        "start": 1024.542,
+        "end": 1412.184,
+        "dur": 387.642
+      },
+      "C2": {
+        "start": 1412.184,
+        "end": 2195.632,
+        "dur": 783.448
+      }
+    }
+  },
+  {
+    "test_num": 16,
+    "filename": "L17 Greg Mathew.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L17 Greg Mathew.mp3",
+    "duration": 2429.949,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 321.954,
+        "dur": 321.954
+      },
+      "A2": {
+        "start": 321.954,
+        "end": 582.333,
+        "dur": 260.379
+      },
+      "B": {
+        "start": 582.333,
+        "end": 1147.831,
+        "dur": 565.498
+      },
+      "C1": {
+        "start": 1147.831,
+        "end": 1254.784,
+        "dur": 106.953
+      },
+      "C2": {
+        "start": 1254.784,
+        "end": 2429.949,
+        "dur": 1175.165
+      }
+    }
+  },
+  {
+    "test_num": 17,
+    "filename": "L18 Mrs Melissa.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L18 Mrs Melissa.mp3",
+    "duration": 2267.598,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 448.09,
+        "dur": 448.09
+      },
+      "A2": {
+        "start": 448.09,
+        "end": 1140.5,
+        "dur": 692.41
+      },
+      "B": {
+        "start": 1140.5,
+        "end": 1885.252,
+        "dur": 744.752
+      },
+      "C1": {
+        "start": 1885.252,
+        "end": 2185.252,
+        "dur": 300.0
+      },
+      "C2": {
+        "start": 2185.252,
+        "end": 2267.598,
+        "dur": 82.346
+      }
+    }
+  },
+  {
+    "test_num": 18,
+    "filename": "L20 Polina Semyonova.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L20 Polina Semyonova.mp3",
+    "duration": 2035.151,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 343.761,
+        "dur": 343.761
+      },
+      "A2": {
+        "start": 343.761,
+        "end": 483.592,
+        "dur": 139.831
+      },
+      "B": {
+        "start": 483.592,
+        "end": 1149.322,
+        "dur": 665.73
+      },
+      "C1": {
+        "start": 1149.322,
+        "end": 1471.011,
+        "dur": 321.689
+      },
+      "C2": {
+        "start": 1471.011,
+        "end": 2035.151,
+        "dur": 564.14
+      }
+    }
+  },
+  {
+    "test_num": 19,
+    "filename": "L21 Breegi.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L21 Breegi.mp3",
+    "duration": 2618.318,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 283.268,
+        "dur": 283.268
+      },
+      "A2": {
+        "start": 283.268,
+        "end": 578.669,
+        "dur": 295.401
+      },
+      "B": {
+        "start": 578.669,
+        "end": 1334.029,
+        "dur": 755.36
+      },
+      "C1": {
+        "start": 1334.029,
+        "end": 1827.222,
+        "dur": 493.193
+      },
+      "C2": {
+        "start": 1827.222,
+        "end": 2618.318,
+        "dur": 791.096
+      }
+    }
+  },
+  {
+    "test_num": 20,
+    "filename": "L22 Duzambel.mp3",
+    "path": "OET Materials & Videos Data/Materials/Listening/Extra Listening Exams/L22 Duzambel.mp3",
+    "duration": 2821.316,
+    "bounds": {
+      "A1": {
+        "start": 0.0,
+        "end": 367.598,
+        "dur": 367.598
+      },
+      "A2": {
+        "start": 367.598,
+        "end": 552.553,
+        "dur": 184.955
+      },
+      "B": {
+        "start": 552.553,
+        "end": 1477.214,
+        "dur": 924.661
+      },
+      "C1": {
+        "start": 1477.214,
+        "end": 1910.14,
+        "dur": 432.926
+      },
+      "C2": {
+        "start": 1910.14,
+        "end": 2821.316,
+        "dur": 911.176
+      }
+    }
+  }
+]

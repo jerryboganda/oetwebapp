@@ -1128,4 +1128,135 @@ public class UserAccessAllocationServiceTests
         Assert.Equal(0, healed.ListeningTestsRemaining);
         Assert.Equal(0, healed.ReadingTestsRemaining);
     }
+
+    [Fact]
+    public async Task UpdatePackageDates_EmptyRequest_ThrowsValidation()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-dates-empty");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", "learner-dates-empty",
+            new AdminUserAccessPackageRequest("med", null, null, true, false, false), default);
+
+        await Assert.ThrowsAsync<ApiException>(() => svc.UpdatePackageDatesAsync(
+            "admin", "Admin", "learner-dates-empty", granted.Subscriptions.Single().Id,
+            new AdminUserAccessPackageDatesRequest(null, null, ClearExpiresAt: false), default));
+    }
+
+    [Fact]
+    public async Task UpdatePackageDates_EndBeforeStart_ThrowsValidation()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-dates-order");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", "learner-dates-order",
+            new AdminUserAccessPackageRequest("med", null, null, true, false, false), default);
+
+        await Assert.ThrowsAsync<ApiException>(() => svc.UpdatePackageDatesAsync(
+            "admin", "Admin", "learner-dates-order", granted.Subscriptions.Single().Id,
+            new AdminUserAccessPackageDatesRequest(
+                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(-1), ClearExpiresAt: false), default));
+    }
+
+    [Fact]
+    public async Task UpdatePackageDates_PastExpiry_ExpirePackage_AndExpireGiftedCredits()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-dates-past");
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine Full Course",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 5,
+        });
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = CreateService(db, credits);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", "learner-dates-past",
+            new AdminUserAccessPackageRequest("full-condensed-medicine", null, null, true, false, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+        Assert.Equal(5, (await credits.GetSnapshotAsync("learner-dates-past", 20, default)).SharedCredits);
+
+        var access = await svc.UpdatePackageDatesAsync("admin", "Admin", "learner-dates-past", subscriptionId,
+            new AdminUserAccessPackageDatesRequest(null, DateTimeOffset.UtcNow.AddDays(-1), ClearExpiresAt: false), default);
+
+        // Package expires immediately and the learner loses the primary plan pointer.
+        Assert.Equal(SubscriptionStatus.Expired.ToString(),
+            access.Subscriptions.Single(s => s.Id == subscriptionId).Status);
+        Assert.Equal(SubscriptionStatus.Expired, await db.Subscriptions.Where(s => s.Id == subscriptionId)
+            .Select(s => s.Status).SingleAsync());
+        Assert.Null((await db.Users.FirstAsync(u => u.Id == "learner-dates-past")).CurrentPlanId);
+
+        // Linked course-gifted credit lots expire in lock-step: nothing spendable remains.
+        var snapshot = await credits.GetSnapshotAsync("learner-dates-past", 20, default);
+        Assert.Equal(0, snapshot.SharedCredits);
+    }
+
+    [Fact]
+    public async Task UpdatePackageDates_ExtendExpiry_ReplacesDates_AndRevivesOverrideExpiredCredits()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-dates-extend");
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine Full Course",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 5,
+        });
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = CreateService(db, credits);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", "learner-dates-extend",
+            new AdminUserAccessPackageRequest("full-condensed-medicine", null, null, true, false, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+
+        // Past end first — lots expire (the editor's "expire now" case)…
+        await svc.UpdatePackageDatesAsync("admin", "Admin", "learner-dates-extend", subscriptionId,
+            new AdminUserAccessPackageDatesRequest(null, DateTimeOffset.UtcNow.AddDays(-1), ClearExpiresAt: false), default);
+        Assert.Equal(0, (await credits.GetSnapshotAsync("learner-dates-extend", 20, default)).SharedCredits);
+
+        // …then a later end replaces the window wholesale and revives the unused lots.
+        var newEnd = DateTimeOffset.UtcNow.AddDays(30);
+        var access = await svc.UpdatePackageDatesAsync("admin", "Admin", "learner-dates-extend", subscriptionId,
+            new AdminUserAccessPackageDatesRequest(DateTimeOffset.UtcNow, newEnd, ClearExpiresAt: false), default);
+
+        var sub = access.Subscriptions.Single(s => s.Id == subscriptionId);
+        Assert.Equal(newEnd, sub.ExpiresAt);
+        Assert.Equal(5, (await credits.GetSnapshotAsync("learner-dates-extend", 20, default)).SharedCredits);
+        var lot = await db.AiPackageCreditLots.SingleAsync(l => l.UserId == "learner-dates-extend");
+        Assert.False(lot.Expired);
+        Assert.Null(lot.ExpiredAt);
+    }
+
+    [Fact]
+    public async Task UpdatePackageDates_ClearExpiry_RemovesDeadline_AndKeepsStatus()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-dates-clear");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", "learner-dates-clear",
+            new AdminUserAccessPackageRequest("med", null, null, true, false, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+
+        var access = await svc.UpdatePackageDatesAsync("admin", "Admin", "learner-dates-clear", subscriptionId,
+            new AdminUserAccessPackageDatesRequest(null, null, ClearExpiresAt: true), default);
+
+        var sub = access.Subscriptions.Single(s => s.Id == subscriptionId);
+        Assert.Null(sub.ExpiresAt);
+        Assert.Equal(SubscriptionStatus.Active.ToString(), sub.Status);
+        Assert.Null(await db.Subscriptions.Where(s => s.Id == subscriptionId)
+            .Select(s => s.ExpiresAt).SingleAsync());
+    }
 }

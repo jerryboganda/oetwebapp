@@ -3,8 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Headphones, Loader2, MinusCircle, Quote, Target, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Headphones, Loader2, MinusCircle, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';

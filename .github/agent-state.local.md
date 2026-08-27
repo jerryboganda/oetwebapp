@@ -1,11 +1,13 @@
 # Agent State (local)
 
-## Current task — Course-family mutual visibility — SHIPPED + LIVE
-- Implemented centralized `CourseFamilyPolicy` for Full/Crash/Shared classification and backend family gating across video access, collection visibility, materials trees, and direct-access 404s. Commits: 2e1e90eee, 6c18f31e9, d46aaeab3 (tag-only deny-by-default, non-bypassable gate), 318d720ad (restored shared fallback + carve-outs).
-- Validation: `pnpm run ship:gate` OK (re-run 2026-08-27); targeted backend entitlement validation passed for two-way family access, crash rules, package transitions, and materials restrictions.
-- DEPLOYED 2026-08-27: Build & Deploy (web + API) run `33012983731` SUCCESS 21:14 UTC on SHA `318d720ad`. Health 200: app /api/health, api /health/ready (db+migrations+jobs+storage ok), /health/live. VPS green slots on `318d720ad` (oet-web-green + oet-api-green); blue still on `8ccfdbe6c`. Repo PRIVATE.
-- Note: unrelated dirty test files left in working tree (profession-scoped test fixes + AssessmentGovernanceSeeder.cs; see diff) — NOT staged/committed with this task; preserve for their own commit.
-- QA Smoke (in-progress at ship time) + Speaking Module CI red are chronically red per AGENTS.md — ignored.
+## Current task — Listening Exam Final Implementation — VERIFIED
+- Unified black OET-style player (`ListeningAudioTransport`) across Full Exam (`app/listening/paper/[paperId]`), Part A, Part B, Part C practice, C1, and C2.
+- Enabled gesture-chained sequential autoplay across sub-sections ($A1 \to A2 \to B \to C1 \to C2$) with seamless transitions and resilient single-tap fallback.
+- Disciplined candidate results screen: stripped all post-submit drill recommendations ("Don't Leave Gaps Drill", "Recommended Next Step", etc.) and reordered layout to place Full Transcript & Audio Review directly below Score Summary.
+- Cleaned Part B/C items: removed "Stem" highlighter button (Flag retained), sanitized "See PDF" / "CPDF" sentinels and document artifacts (`PAGE 4`, `Practice Test 1`), fixed Part B Next Question advancement.
+- 20-Test Audio Pipeline: executed `split-listening-benchmark-audio.py` segmenting 20 tests into 100 discrete high-quality cuts at exact spoken transition cues, verified via `docs/listening/audio-split-audit-report.md`.
+- Validation: `pnpm run ship:gate` OK; Vitest listening suite 30/30 files, 243/243 tests green; backend sanitization tests 20/20 green.
+
 
 ## Current task — Admin Verify Email recovery — SHIPPED + LIVE
 - Feature `9d5edaa2e` (feat(admin): add manual candidate email verification): POST /v1/admin/users/{id}/verify-email (AdminUsersWrite) sets EmailVerifiedAt, consumes pending verify_email OTPs, revokes all sessions via ISessionRevocationService (refresh-token fallback if unavailable), writes audit; one-click `Verify Email` button (MailCheck) after Set Password on /admin/users/[id]; instant badge + verified toast; failure keeps current state. Build & Deploy run 32975533469 SUCCESS 2026-08-26; health 200 app/api-ready/api-live; web-blue/api-blue/agent-gateway images tagged 9d5edaa2e...; repo PRIVATE.

@@ -83,9 +83,10 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
   return (
     <div
       data-testid="listening-audio-transport"
-      className="flex items-center gap-4 rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5"
+      className="flex flex-wrap items-center gap-3 sm:gap-4 rounded-2xl bg-navy p-3.5 sm:p-5 text-white shadow-xl shadow-navy/10 sm:flex-nowrap"
     >
       <button
+        type="button"
         onClick={onTogglePlayPause}
         disabled={controlDisabled}
         aria-label={isHalted
@@ -93,16 +94,16 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
           : isPlaying
             ? (canPause ? 'Pause audio' : 'Audio cannot be paused')
             : 'Play audio'}
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
+        className={`flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
           controlDisabled
             ? 'cursor-not-allowed bg-white/10 text-white/30'
-            : 'bg-surface text-navy hover:bg-background-light'
+            : 'bg-surface text-navy hover:bg-background-light active:scale-95'
         }`}
       >
-        {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="ml-1 h-6 w-6" />}
+        {isPlaying ? <Pause className="h-5 w-5 sm:h-6 sm:w-6" /> : <Play className="ml-0.5 sm:ml-1 h-5 w-5 sm:h-6 sm:w-6" />}
       </button>
 
-      <div className="flex flex-1 flex-col gap-1.5">
+      <div className="flex min-w-[120px] flex-1 flex-col gap-1.5 order-2 sm:order-none w-full sm:w-auto">
         <div className="flex justify-between font-mono text-xs font-bold text-white/70">
           <span>{formatTime(progressSeconds)}</span>
           <span>{formatTime(durationSeconds)}</span>
@@ -126,7 +127,7 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
         </div>
       </div>
 
-      <div className="hidden items-center gap-2 text-xs font-bold text-white/60 sm:flex">
+      <div className="hidden items-center gap-2 text-xs font-bold text-white/60 md:flex">
         {audioState === 'buffering' ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : audioState === 'error' ? (
@@ -145,40 +146,42 @@ export function ListeningAudioTransport(props: ListeningAudioTransportProps) {
                 : `${answeredCount}/${totalQuestions} saved`}
       </div>
 
-      {attemptSecondsRemaining !== null ? (
-        <div
-          data-testid="listening-attempt-timer"
-          className={`flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 font-mono text-sm font-black ${
-            attemptSecondsRemaining === 0
-              ? 'bg-danger/20 text-danger'
-              : attemptSecondsRemaining <= dangerThreshold
+      <div className="flex items-center gap-2 shrink-0 ml-auto sm:ml-0">
+        {attemptSecondsRemaining !== null ? (
+          <div
+            data-testid="listening-attempt-timer"
+            className={`flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 font-mono text-xs sm:text-sm font-black ${
+              attemptSecondsRemaining === 0
                 ? 'bg-danger/20 text-danger'
-                : attemptSecondsRemaining <= warningThreshold
-                  ? 'bg-warning/20 text-warning'
-                  : 'bg-white/10 text-white'
-          }`}
-          aria-label={`Attempt time remaining ${formatReviewSeconds(attemptSecondsRemaining)}`}
-        >
-          <Clock className="h-4 w-4" />
-          {attemptSecondsRemaining === 0 ? 'Time up' : formatReviewSeconds(attemptSecondsRemaining)}
-        </div>
-      ) : null}
-      {onSubmit ? (
-        <button
-          type="button"
-          onClick={onSubmit}
-          disabled={submitDisabled}
-          data-testid="listening-submit-exam"
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-black transition-colors ${
-            submitDisabled
-              ? 'cursor-not-allowed bg-white/10 text-white/30'
-              : 'bg-white text-navy hover:bg-background-light'
-          }`}
-        >
-          <Send className="h-4 w-4" />
-          Submit
-        </button>
-      ) : null}
+                : attemptSecondsRemaining <= dangerThreshold
+                  ? 'bg-danger/20 text-danger'
+                  : attemptSecondsRemaining <= warningThreshold
+                    ? 'bg-warning/20 text-warning'
+                    : 'bg-white/10 text-white'
+            }`}
+            aria-label={`Attempt time remaining ${formatReviewSeconds(attemptSecondsRemaining)}`}
+          >
+            <Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {attemptSecondsRemaining === 0 ? 'Time up' : formatReviewSeconds(attemptSecondsRemaining)}
+          </div>
+        ) : null}
+        {onSubmit ? (
+          <button
+            type="button"
+            onClick={onSubmit}
+            disabled={submitDisabled}
+            data-testid="listening-submit-exam"
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-2.5 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm font-black transition-colors ${
+              submitDisabled
+                ? 'cursor-not-allowed bg-white/10 text-white/30'
+                : 'bg-white text-navy hover:bg-background-light active:scale-95'
+            }`}
+          >
+            <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            Submit
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
