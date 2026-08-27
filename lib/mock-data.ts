@@ -417,7 +417,7 @@ export interface ListeningResult {
   total: number;
   questions: ListeningResultQuestion[];
   invalidCount?: number;
-  recommendedDrill: { id: string; title: string; description: string };
+  recommendedDrill?: { id: string; title: string; description: string } | null;
 }
 
 export interface ListeningDrill {

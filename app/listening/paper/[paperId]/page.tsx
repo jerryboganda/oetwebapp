@@ -7,14 +7,17 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Flag,
   Headphones,
   Loader2,
   Lock,
+  Pause,
   Play,
   Save,
   Send,
   Volume2,
 } from 'lucide-react';
+import { cleanListeningPrompt, cleanListeningOption } from '@/lib/listening-question-clean';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -1146,6 +1149,7 @@ function ActiveSubSectionPanel({
               <QuestionItem
                 key={question.id}
                 question={question}
+                partLabel={subSection.label}
                 value={answers[question.id] ?? ''}
                 disabled={audioFailure}
                 onChange={(value) => {
@@ -1290,12 +1294,22 @@ function SubSectionAudio({
   const [hasPlayedToEnd, setHasPlayedToEnd] = useState(resumeState === 'ended');
   const [needsUserPlay, setNeedsUserPlay] = useState(false);
   const [audioRetryKey, setAudioRetryKey] = useState(0);
+  const [progressSeconds, setProgressSeconds] = useState(0);
+  const [durationSeconds, setDurationSeconds] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const lastKnownTimeRef = useRef(0);
   const lastProgressLoggedAtRef = useRef(0);
   const allowedProgrammaticPauseRef = useRef(false);
   const programmaticSeekTargetRef = useRef<number | null>(null);
   const hasStartedRef = useRef(false);
   const autoPlayTriedRef = useRef(false);
+
+  const formatBlackPlayerTime = (seconds: number) => {
+    if (!seconds || Number.isNaN(seconds)) return '00:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
   // One-shot attempt marker: when a play() attempt is interrupted (AbortError
   // from a seek/revoke race), the next canplay/seeked retries it instead of
   // leaving the section permanently stuck on the buffering banner.
@@ -1405,6 +1419,10 @@ function SubSectionAudio({
   // "Loading audio…". We set the initial cue only after loadedmetadata.
   const handleLoadedMetadata = useCallback(() => {
     const el = audioRef.current;
+    if (el) {
+      const dur = Number.isFinite(el.duration) ? el.duration : 0;
+      if (dur > 0) setDurationSeconds(dur);
+    }
     if (!el || !onePlayOnly) return;
     el.defaultPlaybackRate = 1;
     el.playbackRate = 1;
@@ -1425,6 +1443,7 @@ function SubSectionAudio({
           programmaticSeekTargetRef.current = null;
         }
         lastKnownTimeRef.current = initialTime;
+        setProgressSeconds(initialTime);
       } catch {
         programmaticSeekTargetRef.current = null;
       }
@@ -1453,8 +1472,8 @@ function SubSectionAudio({
 
   if (!subSection.audioUrl) {
     return (
-      <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
-        <div className="flex items-center gap-2 text-sm font-semibold text-muted">
+      <div className="rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5" data-testid="listening-black-player">
+        <div className="flex items-center gap-2 text-sm font-semibold text-white/80">
           <Volume2 className="h-4 w-4" aria-hidden="true" />
           No audio is attached to this sub-section.
         </div>
@@ -1462,14 +1481,54 @@ function SubSectionAudio({
     );
   }
 
+  const widthPercent = durationSeconds > 0 ? (progressSeconds / durationSeconds) * 100 : 0;
+  const controlDisabled = hasPlayedToEnd || (onePlayOnly && isPlaying);
+  const canTogglePlay = !controlDisabled && !audioError;
+
   return (
-    <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-2 text-sm font-bold text-navy">
-          <Volume2 className="h-4 w-4 text-primary" aria-hidden="true" />
-          {subSection.title}
+    <div
+      data-testid="listening-black-player"
+      className="rounded-2xl bg-navy p-4 text-white shadow-xl shadow-navy/10 sm:p-5"
+    >
+      <div className="mb-3 flex min-w-0 items-center justify-between gap-2">
+        <span className="inline-flex min-w-0 items-center gap-2 text-sm font-bold text-white">
+          <Volume2 className="h-4 w-4 shrink-0 text-white" aria-hidden="true" />
+          <span className="truncate">{subSection.title}</span>
         </span>
-        {onePlayOnly ? <Badge variant="warning">Plays once</Badge> : null}
+        {onePlayOnly ? <span className="shrink-0 rounded-full bg-warning/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-widest text-warning">Plays once</span> : null}
+      </div>
+      <div className="flex items-center gap-3 sm:gap-4">
+        <button
+          type="button"
+          onClick={() => {
+            const el = audioRef.current;
+            if (!el) return;
+            if (isPlaying) {
+              if (!onePlayOnly) el.pause();
+              return;
+            }
+            tryPlay();
+          }}
+          disabled={!canTogglePlay}
+          aria-label={isPlaying ? (onePlayOnly ? 'Audio cannot be paused' : 'Pause audio') : 'Play audio'}
+          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
+            !canTogglePlay ? 'cursor-not-allowed bg-white/10 text-white/30' : 'bg-white text-navy hover:bg-white/90'
+          }`}
+        >
+          {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="ml-0.5 h-6 w-6" />}
+        </button>
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex justify-between font-mono text-xs font-bold text-white/70">
+            <span>{formatBlackPlayerTime(progressSeconds)}</span>
+            <span>{formatBlackPlayerTime(durationSeconds)}</span>
+          </div>
+          <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/20">
+            <div
+              className="absolute left-0 top-0 h-full origin-left bg-sky-400 transition-transform duration-100 ease-linear"
+              style={{ transform: `scaleX(${Math.max(0, Math.min(100, widthPercent)) / 100})` }}
+            />
+          </div>
+        </div>
       </div>
       {resolvedSrc ? (
         <audio
@@ -1484,10 +1543,13 @@ function SubSectionAudio({
           controls={false}
           controlsList="nodownload noplaybackrate nofullscreen noremoteplayback"
           preload="auto"
-          className="w-full"
+          className="hidden"
           onLoadedMetadata={handleLoadedMetadata}
           onTimeUpdate={() => {
             const el = audioRef.current;
+            if (!el) return;
+            if (!el.seeking && Number.isFinite(el.currentTime)) setProgressSeconds(el.currentTime);
+            if (el.duration && Number.isFinite(el.duration) && el.duration > 0) setDurationSeconds(el.duration);
             if (!el || el.seeking || !onePlayOnly) return;
             if (cueEndMs != null && el.currentTime * 1000 >= cueEndMs && !hasPlayedToEnd) {
              allowedProgrammaticPauseRef.current = true;
@@ -1499,6 +1561,7 @@ function SubSectionAudio({
               });
              hasStartedRef.current = false;
              setHasPlayedToEnd(true);
+             setIsPlaying(false);
               setBuffering(false);
              el.pause();
               onIntegrityEvent('audio_ended', {
@@ -1521,6 +1584,7 @@ function SubSectionAudio({
           }}
           onEnded={() => {
             setBuffering(false);
+            setIsPlaying(false);
             hasStartedRef.current = false;
             setHasPlayedToEnd(true);
             onIntegrityEvent('audio_ended', {
@@ -1528,7 +1592,7 @@ function SubSectionAudio({
               cuePointMs: Math.round((audioRef.current?.currentTime ?? 0) * 1000),
               questionIndex,
             });
-            if (cueEndMs != null) onExtractComplete?.();
+            if (onExtractComplete) onExtractComplete();
           }}
           onError={() => {
             setBuffering(true);
@@ -1563,6 +1627,10 @@ function SubSectionAudio({
           }}
           onPlay={() => {
             setBuffering(false);
+            setIsPlaying(true);
+            if (audioRef.current?.duration && Number.isFinite(audioRef.current.duration) && audioRef.current.duration > 0) {
+              setDurationSeconds(audioRef.current.duration);
+            }
             playAbortCountRef.current = 0;
             playAbortPendingRef.current = false;
             const el = audioRef.current;
@@ -1570,6 +1638,7 @@ function SubSectionAudio({
             if (hasPlayedToEnd) {
               allowedProgrammaticPauseRef.current = true;
               el.pause();
+              setIsPlaying(false);
               return;
             }
             if (!hasStartedRef.current) {
@@ -1582,6 +1651,7 @@ function SubSectionAudio({
             hasStartedRef.current = true;
           }}
           onPause={() => {
+            setIsPlaying(false);
             const el = audioRef.current;
             const wasStarted = hasStartedRef.current;
             const wasProgrammatic = allowedProgrammaticPauseRef.current;
@@ -1637,22 +1707,22 @@ function SubSectionAudio({
           }}
         />
       ) : (
-        <div className="flex items-center gap-2 text-sm text-muted">
-          <Loader2 className="h-4 w-4 motion-safe:animate-spin" aria-hidden="true" />
+        <div className="flex items-center gap-2 text-sm text-white/70">
+          <Loader2 className="h-4 w-4 motion-safe:animate-spin text-white" aria-hidden="true" />
           Loading audio…
         </div>
       )}
       {needsUserPlay && !audioError ? (
-        <div className="mt-3 flex items-center gap-2">
-          <Button variant="primary" onClick={() => tryPlay()} className="gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button onClick={() => tryPlay()} className="gap-2 bg-white text-navy hover:bg-white/90">
             <Play className="h-4 w-4" aria-hidden="true" /> Tap to Play — {subSection.title}
           </Button>
-          <span className="text-xs font-semibold text-muted">Audio is ready. Tap Play (plays once).</span>
+          <span className="text-xs font-semibold text-white/70">Audio is ready. Tap Play (plays once).</span>
         </div>
       ) : null}
       {audioError ? (
-        <div className="mt-2 flex items-center gap-2">
-          <p className="text-xs font-semibold text-danger">{audioError}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="text-xs font-semibold text-red-300">{audioError}</p>
           <Button
             variant="ghost"
             onClick={() => {
@@ -1668,7 +1738,7 @@ function SubSectionAudio({
         </div>
       ) : null}
       {isBuffering && !audioError && !needsUserPlay ? (
-        <p className="mt-2 text-xs font-semibold text-warning" role="status">
+        <p className="mt-2 text-xs font-semibold text-amber-300" role="status">
           Audio is buffering; the section timer is paused until playback is ready.
         </p>
       ) : null}
@@ -1678,21 +1748,45 @@ function SubSectionAudio({
 
 function QuestionItem({
   question,
+  partLabel,
   value,
   disabled,
   onChange,
 }: {
   question: ListeningSessionQuestionDto;
+  partLabel?: string;
   value: string;
   disabled: boolean;
   onChange: (value: string) => void;
 }) {
   const isMcq = question.type === 'multiple_choice_3';
+  const cleanedPrompt = cleanListeningPrompt(question.text);
+  const [flagged, setFlagged] = useState(false);
+  const displayLabel = partLabel ?? (question.partCode ? `Part ${question.partCode.toUpperCase()}` : '');
   return (
-    <div className="space-y-3 border-b border-border pb-5 last:border-b-0 last:pb-0">
-      <div>
-        <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {question.number}</p>
-        <h3 className="mt-2 text-base font-semibold leading-7 text-navy">{question.text}</h3>
+    <div className={`space-y-3 border-b border-border pb-5 last:border-b-0 last:pb-0 ${flagged ? 'rounded-xl border-warning bg-warning/5 p-3 ring-1 ring-warning/20' : ''}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1">
+          {displayLabel ?           <p className="text-xs font-black uppercase tracking-[0.14em] text-muted">{displayLabel}</p> : null}
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-muted">Question {question.number}</p>
+          <h3 className="mt-2 break-words text-base font-semibold leading-7 text-navy">{cleanedPrompt}</h3>
+          {flagged ? <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-warning/20 px-2 py-0.5 text-[0.7rem] font-semibold uppercase tracking-widest text-warning"><Flag className="h-3 w-3" /> Flagged for review</span> : null}
+        </div>
+        {isMcq ? (
+          <Button
+            type="button"
+            variant={flagged ? 'secondary' : 'outline'}
+            size="sm"
+            aria-pressed={flagged}
+            aria-label={flagged ? `Remove flag from question ${question.number}` : `Flag question ${question.number} for review`}
+            onClick={() => !disabled && setFlagged((v) => !v)}
+            disabled={disabled}
+            className="shrink-0"
+          >
+            <Flag className="h-4 w-4" aria-hidden="true" />
+            Flag
+          </Button>
+        ) : null}
       </div>
       {isMcq ? (
         <McqControl question={question} value={value} disabled={disabled} onChange={onChange} />
@@ -1719,9 +1813,10 @@ function McqControl({
       {question.options.map((optionText, index) => {
         const letter = String.fromCharCode(65 + index);
         const selected = value === letter;
+        const displayText = cleanListeningOption(optionText);
         return (
           <label
-            key={`${letter}-${optionText}`}
+            key={`${question.id}-${letter}-${index}`}
             className={cn(
               'flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border bg-background-light p-3 text-sm transition-colors',
               selected && 'border-primary bg-primary/5',
@@ -1737,7 +1832,7 @@ function McqControl({
               onChange={() => onChange(letter)}
             />
             <span className="font-mono font-bold text-navy">{letter}.</span>
-            <span className="leading-6 text-navy">{optionText}</span>
+            <span className="leading-6 text-navy">{displayText}</span>
           </label>
         );
       })}

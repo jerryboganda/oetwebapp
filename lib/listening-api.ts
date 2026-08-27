@@ -429,7 +429,7 @@ export interface ListeningReviewDto {
   adminReviewReason?: string | null;
   itemReview: ListeningReviewItemDto[];
   errorClusters: Array<{ errorType: string; label: string; count: number; affectedQuestionIds: string[] }>;
-  recommendedNextDrill: ListeningDrillDto;
+  recommendedNextDrill?: ListeningDrillDto | null;
   transcriptAccess: {
     policy: string;
     state: 'restricted' | 'partial' | 'available';

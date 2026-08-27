@@ -482,7 +482,6 @@ export default function ListeningReviewPage() {
               highlights={[
                 { icon: Quote, label: 'Transcript', value: `${review.transcriptSegments.length} segments` },
                 { icon: Target, label: 'Questions', value: `${review.itemReview.length} reviewed` },
-                { icon: Target, label: 'Next drill', value: review.recommendedNextDrill ? 'Recommended' : 'Not assigned' },
               ]}
             />
 
@@ -725,27 +724,6 @@ export default function ListeningReviewPage() {
                 );
               })}
             </section>
-
-            {review.recommendedNextDrill ? (
-              <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Next Drill"
-                  title="Move directly into the error-type drill"
-                  description="The learner should not need to hunt for the next recommended practice step after understanding the transcript evidence."
-                  className="mb-4"
-                />
-                <div className="flex flex-col gap-4 rounded-2xl border border-border bg-background-light p-4 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <p className="font-bold text-navy">{review.recommendedNextDrill.title}</p>
-                    <p className="mt-1 text-sm text-muted">{review.recommendedNextDrill.description}</p>
-                  </div>
-                  <Button onClick={() => router.push(review.recommendedNextDrill.launchRoute)}>
-                    <Target className="h-4 w-4" />
-                    Open recommended drill
-                  </Button>
-                </div>
-              </section>
-            ) : null}
 
             {tutorFeedback ? (
               <section className="rounded-2xl border border-primary/20 bg-primary/5 p-6 shadow-sm">

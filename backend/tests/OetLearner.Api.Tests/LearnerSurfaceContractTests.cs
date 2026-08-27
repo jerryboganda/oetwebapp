@@ -135,7 +135,11 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         Assert.True(listeningJson.RootElement.TryGetProperty("itemReview", out var listeningReview));
         Assert.NotEqual(0, listeningReview.GetArrayLength());
         Assert.True(listeningJson.RootElement.TryGetProperty("transcriptAccess", out _));
-        Assert.True(listeningJson.RootElement.TryGetProperty("recommendedNextDrill", out _));
+        // Listening post-submit drill recommendation removed per final Listening spec (no Recommended Next Step / Don't Leave Gaps Drill).
+        if (listeningJson.RootElement.TryGetProperty("recommendedNextDrill", out var drill))
+        {
+            Assert.True(drill.ValueKind == System.Text.Json.JsonValueKind.Null || drill.ValueKind == System.Text.Json.JsonValueKind.Object);
+        }
     }
 
     [Fact]

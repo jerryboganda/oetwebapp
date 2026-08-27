@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, FileText, Headphones, Loader2, MinusCircle, Quote, Target, XCircle } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, FileText, Headphones, Loader2, MinusCircle, Quote, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { MotionCollapse, MotionItem, MotionList, MotionSection } from '@/components/ui/motion-primitives';
@@ -264,6 +264,22 @@ function ListeningResultsContent() {
           errorCode={result.scoreConversionErrorCode}
         />
 
+        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Full transcript & audio — permanent access</p>
+              <p className="mt-2 text-sm leading-6 text-muted">The full transcript for the submitted part (Part A with A1/A2, Part B, Part C with C1/C2) and its audio are available permanently after submission. You can reopen them any time, replay the audio as many times as you want, and look up any word in the transcript. Non-submitted parts remain hidden until submitted.</p>
+              <p className="mt-1 text-xs text-muted">Tip: use the Part A / B / C tabs in the review to jump to the relevant section. The supporting lines for each question are highlighted.</p>
+            </div>
+            <Button variant="outline" className="gap-2 shrink-0" asChild>
+              <Link href={`/listening/review/${result.attemptId}`}>
+                <FileText className="h-4 w-4" />
+                Open Transcript Review
+              </Link>
+            </Button>
+          </div>
+        </section>
+
         <section
           aria-labelledby="listening-show-script-heading"
           className="rounded-2xl border border-primary/30 bg-primary/5 p-5 shadow-sm"
@@ -305,28 +321,6 @@ function ListeningResultsContent() {
         <p className="rounded-xl border border-border bg-surface px-4 py-3 text-sm leading-6 text-muted">
           This platform grades minor spelling variations strictly to build exam-safe habits — some real OET examiners may allow minor variants at their discretion.
         </p>
-
-        {result.recommendedNextDrill ? (
-          <MotionSection delayIndex={1}>
-            <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Recommended Next Step</h2>
-            <Link href={result.recommendedNextDrill.launchRoute} className="group block rounded-2xl border border-primary/30 bg-primary/10 p-6 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/40 hover:shadow-md">
-              <div className="flex items-start gap-4">
-                <Target className="mt-1 h-6 w-6 shrink-0 text-primary" aria-hidden />
-                <div className="flex-1">
-                  <h3 className="mb-1 text-lg font-black text-primary">
-                    {result.recommendedNextDrill.title}
-                  </h3>
-                  <p className="mb-4 text-sm leading-relaxed text-primary/80">
-                    {result.recommendedNextDrill.description}
-                  </p>
-                  <span className="inline-flex items-center gap-2 rounded-xl bg-surface px-4 py-2 text-sm font-bold text-primary shadow-sm transition-colors group-hover:bg-primary group-hover:text-white">
-                    Start Drill <ArrowRight className="h-4 w-4" />
-                  </span>
-                </div>
-              </div>
-            </Link>
-          </MotionSection>
-        ) : null}
 
         <MotionSection delayIndex={2}>
           <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Detailed Review</h2>
@@ -437,22 +431,6 @@ function ListeningResultsContent() {
             })}
           </MotionList>
         </MotionSection>
-
-        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Full transcript & audio — permanent access</p>
-              <p className="mt-2 text-sm leading-6 text-muted">The full transcript for the submitted part (Part A with A1/A2, Part B, Part C with C1/C2) and its audio are available permanently after submission. You can reopen them any time, replay the audio as many times as you want, and look up any word in the transcript. Non-submitted parts remain hidden until submitted.</p>
-              <p className="mt-1 text-xs text-muted">Tip: use the Part A / B / C tabs in the review to jump to the relevant section. The supporting lines for each question are highlighted.</p>
-            </div>
-            <Button variant="outline" className="gap-2 shrink-0" asChild>
-              <Link href={`/listening/review/${result.attemptId}`}>
-                <FileText className="h-4 w-4" />
-                Open Transcript Review
-              </Link>
-            </Button>
-          </div>
-        </section>
       </div>
     </LearnerDashboardShell>
   );

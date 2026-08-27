@@ -2699,9 +2699,9 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
     };
   });
 
-  const recommendedNextDrill = evaluation.recommendedNextDrill ?? {};
   const rawScore = Number(evaluation.rawScore ?? questions.filter((question: ListeningResult['questions'][number]) => question.isCorrect).length);
   const maxRawScore = Number(evaluation.maxRawScore ?? 42);
+  const hasRecommendedDrill = evaluation.recommendedNextDrill && typeof evaluation.recommendedNextDrill === 'object';
 
   return {
     id: taskId,
@@ -2710,11 +2710,13 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
     total: maxRawScore,
     questions,
     invalidCount: Number(evaluation.invalidCount ?? questions.filter((question) => question.isInvalid === true).length),
-    recommendedDrill: {
-      id: recommendedNextDrill.drillId ?? recommendedNextDrill.id ?? 'listening-drill-detail_capture',
-      title: recommendedNextDrill.title ?? 'Exact Detail Capture Drill',
-      description: recommendedNextDrill.description ?? recommendedNextDrill.rationale ?? 'Practise the listening error type that appeared most often in this result.',
-    },
+    recommendedDrill: hasRecommendedDrill
+      ? {
+          id: (evaluation.recommendedNextDrill as ApiRecord).drillId ?? (evaluation.recommendedNextDrill as ApiRecord).id ?? 'listening-drill-detail_capture',
+          title: (evaluation.recommendedNextDrill as ApiRecord).title ?? 'Exact Detail Capture Drill',
+          description: (evaluation.recommendedNextDrill as ApiRecord).description ?? (evaluation.recommendedNextDrill as ApiRecord).rationale ?? 'Practise the listening error type that appeared most often in this result.',
+        }
+      : null,
   };
 }
 
@@ -2744,13 +2746,7 @@ export async function fetchListeningReview(taskId: string): Promise<ListeningRev
     id: taskId,
     title: evaluation.title ?? 'Listening transcript-backed review',
     transcriptPolicy: evaluation.transcriptAccess?.policy ?? 'per_item_post_attempt',
-    recommendedDrill: evaluation.recommendedNextDrill
-      ? {
-          id: evaluation.recommendedNextDrill.drillId ?? evaluation.recommendedNextDrill.id,
-          title: evaluation.recommendedNextDrill.title,
-          description: evaluation.recommendedNextDrill.description ?? evaluation.recommendedNextDrill.rationale ?? 'Continue with the recommended drill.',
-        }
-      : undefined,
+    recommendedDrill: undefined,
     questions: (evaluation.itemReview ?? []).map((item: ApiRecord, index: number) => ({
       id: item.questionId ?? `listening-review-${index + 1}`,
       number: Number(item.number ?? index + 1),

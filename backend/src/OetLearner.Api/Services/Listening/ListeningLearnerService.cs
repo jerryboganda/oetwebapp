@@ -3106,7 +3106,7 @@ public sealed class ListeningLearnerService(
         var options = question.Options
             .OrderBy(option => option.DisplayOrder)
             .ToList();
-        var optionTexts = options.Select(option => option.Text).ToList();
+        var optionTexts = options.Select(option => CleanListeningOption(option.Text)).ToList();
         var correctOption = options.FirstOrDefault(option => option.IsCorrect);
         var rawCorrect = ReadJsonString(question.CorrectAnswerJson) ?? string.Empty;
         var correctDisplay = correctOption?.Text ?? rawCorrect;
@@ -3122,7 +3122,7 @@ public sealed class ListeningLearnerService(
             Id: question.Id,
             Number: question.QuestionNumber,
             PartCode: PartCodeString(question.Part?.PartCode ?? ListeningPartCode.A1),
-            Text: question.Stem,
+            Text: CleanListeningPrompt(question.Stem),
             // FillInBlank surfaces to the learner as a text-input gap-fill —
             // identical wire type to ShortAnswer so the answer never leaks via
             // option text and the player renders a free-text box.
@@ -3561,9 +3561,7 @@ public sealed class ListeningLearnerService(
             grade,
             passed);
         var clusters = BuildErrorClusters(items);
-        var recommended = clusters.Count > 0
-            ? BuildDrill(clusters[0].ErrorType, Source.Id, AttemptId)
-            : BuildDrill("detail_capture", Source.Id, AttemptId);
+        ListeningDrillDto? recommended = null;
         var allowedTranscriptIds = items
             .Where(item => item.Transcript is not null && item.Transcript.Allowed)
             .Select(item => item.QuestionId)
@@ -3639,7 +3637,7 @@ public sealed class ListeningLearnerService(
             QuestionId: q.Id,
             Number: q.Number,
             PartCode: q.PartCode,
-            Prompt: q.Text,
+            Prompt: CleanListeningPrompt(q.Text),
             Type: q.Type,
             LearnerAnswer: learnerAnswer ?? string.Empty,
             CorrectAnswer: q.CorrectAnswer,
@@ -3653,7 +3651,7 @@ public sealed class ListeningLearnerService(
             // unavailable-evidence condition without implying a reason.
             Explanation: q.Explanation,
             ErrorType: errorType,
-            Options: q.Options,
+            Options: q.Options.Select(CleanListeningOption).ToList(),
             Transcript: transcript,
             DistractorExplanation: q.DistractorExplanation,
             OptionAnalysis: optionAnalysis,
@@ -3940,9 +3938,9 @@ public sealed class ListeningLearnerService(
                 Id: id,
                 Number: number,
                 PartCode: ReadString(question.GetValueOrDefault("partCode")) ?? ReadString(question.GetValueOrDefault("part")) ?? "A",
-                Text: ReadString(question.GetValueOrDefault("text")) ?? ReadString(question.GetValueOrDefault("stem")) ?? string.Empty,
+                Text: CleanListeningPrompt(ReadString(question.GetValueOrDefault("text")) ?? ReadString(question.GetValueOrDefault("stem")) ?? string.Empty),
                 Type: type,
-                Options: options,
+                Options: options.Select(CleanListeningOption).ToList(),
                 CorrectAnswer: correct,
                 AcceptedAnswers: accepted.Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
                 Explanation: ReadString(question.GetValueOrDefault("explanation")) ?? ReadString(question.GetValueOrDefault("explanationMarkdown")),
@@ -3969,14 +3967,14 @@ public sealed class ListeningLearnerService(
         q.Id,
         q.Number,
         q.PartCode,
-        text = q.Text,
+        text = CleanListeningPrompt(q.Text),
         // Learner wire type. The 3 authored content types collapse to 2 input
         // shapes for the player: MCQ renders options; FillInBlank + ShortAnswer
         // both render a free-text box. Never surface "fill_in_blank" raw — it
         // would have no renderer and could imply a different (answer-leaking)
         // shape. Options are only non-empty for MCQ items.
         type = LearnerWireType(q.Type),
-        options = q.Options,
+        options = q.Options.Select(CleanListeningOption).ToList(),
         // Positional option keys (A/B/C). The learner card submits the KEY, not
         // the display text, so replacing "Option A/B/C" with real prose is
         // grading-neutral. Empty for non-MCQ (free-text) items.
@@ -4409,6 +4407,46 @@ public sealed class ListeningLearnerService(
             ? "/listening"
             : $"/listening/review/{Uri.EscapeDataString(attemptId)}?drill={Uri.EscapeDataString(drillId)}";
         return new ListeningDrillDto(drillId, title, focusLabel, description, normalized, minutes, highlights, launchRoute, reviewRoute);
+    }
+
+    private static string CleanListeningPrompt(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        var text = raw.Trim();
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        var lines = text.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+        var kept = new List<string>();
+        foreach (var line in lines)
+        {
+            var t = line.Trim();
+            if (string.IsNullOrWhiteSpace(t)) continue;
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^[-=]{2,}\s*PAGE\s+\d+\s*[-=]{2,}\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*PAGE\s+\d+\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
+            if (System.Text.RegularExpressions.Regex.IsMatch(t, @"^\s*Practice Test[^\n]*:?\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) continue;
+            if (t == "\uF0B7") continue;
+            kept.Add(t);
+        }
+        text = string.Join(" ", kept).Trim();
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*PAGE\s+\d+\s+", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*[-=]{2,}\s*PAGE\s+\d+\s*[-=]{2,}\s*", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"\s{2,}", " ").Trim();
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        return text;
+    }
+
+    private static string CleanListeningOption(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        var text = raw.Trim();
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^Option\s+[ABC]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^[-=]{2,}\s*PAGE\s+\d+\s*[-=]{2,}\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\s*PAGE\s+\d+\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^\s*Practice Test[^\n]*:?\s*$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        text = System.Text.RegularExpressions.Regex.Replace(text, @"^\s*PAGE\s+\d+\s+", string.Empty, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (System.Text.RegularExpressions.Regex.IsMatch(text, @"^Option\s+[ABC]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase)) return string.Empty;
+        return text.Trim();
     }
 
     private static string NormalizeDrillId(string value)
@@ -5460,7 +5498,7 @@ public sealed class ListeningLearnerService(
         int UnansweredCount,
         IReadOnlyList<ListeningReviewItemDto> ItemReview,
         IReadOnlyList<ListeningErrorClusterDto> ErrorClusters,
-        ListeningDrillDto RecommendedNextDrill,
+        ListeningDrillDto? RecommendedNextDrill,
         ListeningTranscriptAccessDto TranscriptAccess,
         // Phase 5: paper-level time-coded transcript segments to power the
         // post-attempt review player's jump-to-evidence UI.

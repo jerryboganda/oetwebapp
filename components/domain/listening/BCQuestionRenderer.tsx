@@ -1,10 +1,11 @@
 'use client';
 
 import { useRef, useState, type KeyboardEvent } from 'react';
-import { Flag, Highlighter, Strikethrough } from 'lucide-react';
+import { Flag, Strikethrough } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { ListeningQuestionAnnotation } from '@/hooks/use-listening-annotations';
+import { cleanListeningPrompt, cleanListeningOption } from '@/lib/listening-question-clean';
 
 export interface BCQuestionRendererProps {
   questionNumber: number;
@@ -46,28 +47,13 @@ export function BCQuestionRenderer({
   onAnnotationChange,
 }: BCQuestionRendererProps) {
   const controlled = annotation !== undefined && onAnnotationChange !== undefined;
-  const [localStemHighlighted, setLocalStemHighlighted] = useState(false);
   const [localStruckOptions, setLocalStruckOptions] = useState<Set<string>>(() => new Set());
   const [localFlagged, setLocalFlagged] = useState(false);
 
-  const isStemHighlighted = controlled
-    ? Boolean(annotation?.stemHighlighted)
-    : localStemHighlighted;
   const struckOptions = controlled
     ? new Set(annotation?.struckOptions ?? [])
     : localStruckOptions;
   const isFlagged = controlled ? Boolean(annotation?.flagged) : localFlagged;
-
-  const setIsStemHighlighted = (nextOrFn: boolean | ((current: boolean) => boolean)) => {
-    if (controlled) {
-      onAnnotationChange?.((current) => ({
-        ...current,
-        stemHighlighted: typeof nextOrFn === 'function' ? nextOrFn(Boolean(current.stemHighlighted)) : nextOrFn,
-      }));
-    } else {
-      setLocalStemHighlighted((prev) => (typeof nextOrFn === 'function' ? nextOrFn(prev) : nextOrFn));
-    }
-  };
 
   const setStruckOptionsForOption = (option: string) => {
     if (controlled) {
@@ -187,38 +173,25 @@ export function BCQuestionRenderer({
             <Flag className="h-4 w-4" aria-hidden="true" />
             Flag
           </Button>
-          <Button
-            type="button"
-            variant={isStemHighlighted ? 'secondary' : 'outline'}
-            size="sm"
-            aria-pressed={isStemHighlighted}
-            aria-label={`${isStemHighlighted ? 'Remove highlight from' : 'Highlight'} question ${questionNumber} stem`}
-            onClick={() => !locked && setIsStemHighlighted((current) => !current)}
-            disabled={locked}
-          >
-            <Highlighter className="h-4 w-4" aria-hidden="true" />
-            Stem
-          </Button>
         </div>
       </div>
 
       <h3
         id={headingId}
-        className={`mb-6 rounded-xl p-3 text-[1.125em] font-medium leading-relaxed text-navy transition-colors ${
-          isStemHighlighted ? 'bg-warning/20 ring-2 ring-warning/30' : 'bg-background-light'
-        }`}
+        className="mb-6 rounded-xl bg-background-light p-3 text-[1.125em] font-medium leading-relaxed text-navy"
       >
-        {prompt}
+        {cleanListeningPrompt(prompt)}
       </h3>
 
       <div role="radiogroup" aria-labelledby={headingId} aria-describedby={statusId} className="space-y-3">
         {options.map((option, index) => {
+          const cleanedOption = cleanListeningOption(option) || option;
           const optionKey = keyFor(index);
           const isSelected = value === optionKey;
           const isStruck = struckOptions.has(option);
           const optionLabel = String.fromCharCode(65 + index);
           return (
-            <div key={option} className="flex gap-2">
+            <div key={`${option}-${index}`} className="flex gap-2">
               <button
                 type="button"
                 role="radio"
@@ -246,7 +219,7 @@ export function BCQuestionRenderer({
                 }`}>
                   {optionLabel}
                 </span>
-                <span className={`leading-relaxed ${isStruck ? 'text-muted line-through decoration-2' : ''}`}>{option}</span>
+                <span className={`leading-relaxed ${isStruck ? 'text-muted line-through decoration-2' : ''}`}>{cleanedOption}</span>
               </button>
               <Button
                 type="button"

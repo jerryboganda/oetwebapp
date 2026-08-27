@@ -46,13 +46,14 @@ function ControlledBCHarness() {
 }
 
 describe('BCQuestionRenderer', () => {
-  it('selects options and toggles stem highlight', async () => {
+  it('selects options (stem highlight removed per spec)', async () => {
     const user = userEvent.setup();
     render(<BCHarness />);
 
-    const highlight = screen.getByRole('button', { name: /highlight question 14 stem/i });
-    await user.click(highlight);
-    await waitFor(() => expect(screen.getByRole('button', { name: /remove highlight from question 14 stem/i })).toHaveAttribute('aria-pressed', 'true'));
+    // Stem button removed — verify it does not exist (Flag remains)
+    expect(screen.queryByRole('button', { name: /highlight question 14 stem/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /remove highlight from question 14 stem/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /flag question 14 for review/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole('radio', { name: /check the medication chart/i }));
     expect(screen.getByRole('radio', { name: /check the medication chart/i })).toHaveAttribute('aria-checked', 'true');
@@ -112,8 +113,9 @@ describe('BCQuestionRenderer', () => {
     try {
       render(<BCHarness locked />);
 
-      expect(screen.getByRole('button', { name: /highlight question 14 stem/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /flag question 14 for review/i })).toBeDisabled();
       expect(screen.getByRole('button', { name: /strike out option a/i })).toBeDisabled();
+      expect(screen.queryByRole('button', { name: /highlight question 14 stem/i })).not.toBeInTheDocument();
       await user.click(screen.getByRole('radio', { name: /ask the nurse/i }));
       expect(screen.getByRole('radio', { name: /ask the nurse/i })).toHaveAttribute('aria-checked', 'false');
     } finally {
