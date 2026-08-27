@@ -8,6 +8,17 @@ map $http_x_forwarded_proto $public_forwarded_proto {
     '' $scheme;
 }
 
+# Force download for installers — critical for Safari on .dmg (otherwise it
+# renders the binary as text). Nginx serves /releases/ directly (sendfile)
+# so the Next.js route's headers are bypassed; this map restores them here.
+map $request_uri $release_disposition {
+    default "attachment";
+    "~*\.dmg(\?|$)"  "attachment; filename=\"OET.with.Dr.Hesham.dmg\"; filename*=UTF-8''OET.with.Dr.Hesham.dmg";
+    "~*\.ipa(\?|$)"  "attachment; filename=\"OET.with.Dr.Hesham.ipa\"; filename*=UTF-8''OET.with.Dr.Hesham.ipa";
+    "~*\.apk(\?|$)"  "attachment; filename=\"OET.with.Dr.Hesham.apk\"; filename*=UTF-8''OET.with.Dr.Hesham.apk";
+    "~*\.exe(\?|$)"  "attachment; filename=\"OET.with.Dr.Hesham.exe\"; filename*=UTF-8''OET.with.Dr.Hesham.exe";
+}
+
 server {
     listen 3000;
     server_name _;
@@ -31,10 +42,15 @@ server {
         gzip off;
         add_header X-Content-Type-Options nosniff always;
         add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header Content-Disposition $release_disposition always;
         types {
             application/json json;
             text/plain txt;
-            application/octet-stream exe dmg apk aab ipa sig gz;
+            application/x-apple-diskimage dmg;
+            application/vnd.microsoft.portable-executable exe;
+            application/vnd.android.package-archive apk;
+            application/octet-stream aab ipa sig;
+            application/gzip gz;
         }
         default_type application/octet-stream;
     }
