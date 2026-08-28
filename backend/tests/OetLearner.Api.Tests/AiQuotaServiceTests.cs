@@ -607,6 +607,40 @@ public class AiQuotaServiceTests
         Assert.Equal("anonymous.unmetered", decision.PolicyTrace);
         await db.DisposeAsync();
     }
+
+    [Fact]
+    public async Task Anonymous_IsBlocked_WhenGlobalBudgetExhausted()
+    {
+        var (db, quota) = Build();
+        var global = Assert.Single(db.AiGlobalPolicies);
+        global.MonthlyBudgetUsd = 10m;
+        global.HardKillPct = 100;
+        global.CurrentSpendUsd = 10m;
+        await db.SaveChangesAsync();
+
+        var decision = await quota.TryReserveAsync(null, AiFeatureCodes.AdminContentGeneration, AiKeySource.Platform, default);
+        Assert.False(decision.Allowed);
+        Assert.Equal("global_budget_exhausted", decision.ErrorCode);
+        Assert.Equal("global_budget.hard_kill", decision.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Byok_StaysDollarExempt_WhenGlobalBudgetExhausted()
+    {
+        var (db, quota) = Build();
+        var global = Assert.Single(db.AiGlobalPolicies);
+        global.MonthlyBudgetUsd = 10m;
+        global.HardKillPct = 100;
+        global.CurrentSpendUsd = 10m;
+        global.AllowByokOnNonScoringFeatures = true;
+        await db.SaveChangesAsync();
+
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.AdminContentGeneration, AiKeySource.Byok, default);
+        Assert.True(decision.Allowed);
+        Assert.Equal("byok.unmetered", decision.PolicyTrace);
+        await db.DisposeAsync();
+    }
 }
 
 public class AiGatewayQuotaIntegrationTests

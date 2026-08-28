@@ -153,6 +153,25 @@ public sealed class AiQuotaService(
             }
         }
 
+        // ── Global budget (platform keys + anonymous/system). BYOK is
+        // dollar-exempt and is checked after this block so a learner using
+        // their own key is never blocked by our card. Anonymous used to
+        // short-circuit BEFORE this check despite the comment claiming
+        // otherwise — that leak is closed here.
+        if (prospectiveKeySource != AiKeySource.Byok
+            && global.MonthlyBudgetUsd > 0
+            && global.HardKillPct > 0
+            && global.CurrentSpendUsd >= global.MonthlyBudgetUsd * (global.HardKillPct / 100m))
+        {
+            return new AiQuotaDecision(
+                Allowed: false,
+                ErrorCode: "global_budget_exhausted",
+                ErrorMessage: "Platform AI budget has been reached. Try again after the next budget cycle.",
+                PolicyTrace: "global_budget.hard_kill",
+                GlobalPolicy: global, Plan: null, Override: null,
+                TokensUsedThisPeriod: 0, TokensCapThisPeriod: 0);
+        }
+
         // ── BYOK bypasses quota — user pays with their own key ───────────────
         if (prospectiveKeySource == AiKeySource.Byok)
         {
@@ -164,8 +183,8 @@ public sealed class AiQuotaService(
                 TokensUsedThisPeriod: 0, TokensCapThisPeriod: int.MaxValue);
         }
 
-        // Anonymous / system calls (no user) bypass quota. Platform-wide kill
-        // switch and global budget still apply.
+        // Anonymous / system calls (no user) bypass per-user quota. Kill
+        // switch (above) and global budget (above) still apply.
         if (string.IsNullOrWhiteSpace(userId))
         {
             return new AiQuotaDecision(
@@ -174,20 +193,6 @@ public sealed class AiQuotaService(
                 PolicyTrace: "anonymous.unmetered",
                 GlobalPolicy: global, Plan: null, Override: null,
                 TokensUsedThisPeriod: 0, TokensCapThisPeriod: int.MaxValue);
-        }
-
-        // ── Global budget ────────────────────────────────────────────────────
-        if (global.MonthlyBudgetUsd > 0
-            && global.HardKillPct > 0
-            && global.CurrentSpendUsd >= global.MonthlyBudgetUsd * (global.HardKillPct / 100m))
-        {
-            return new AiQuotaDecision(
-                Allowed: false,
-                ErrorCode: "global_budget_exhausted",
-                ErrorMessage: "Platform AI budget has been reached. Try again after the next budget cycle.",
-                PolicyTrace: "global_budget.hard_kill",
-                GlobalPolicy: global, Plan: null, Override: null,
-                TokensUsedThisPeriod: 0, TokensCapThisPeriod: 0);
         }
 
         // ── Per-user override: admin-disabled ────────────────────────────────
