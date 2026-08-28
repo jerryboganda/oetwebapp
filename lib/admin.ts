@@ -767,6 +767,7 @@ export async function getAdminBillingInvoiceData(params?: Parameters<typeof fetc
       status: toStringValue(item.status),
       date: toStringValue(item.date),
       plan: toStringValue(item.plan),
+      source: toStringValue(item.source, 'gateway') as 'gateway' | 'manual_proof' | 'admin_grant',
     })),
   };
 }
@@ -800,6 +801,8 @@ export async function getAdminBillingInvoiceEvidenceData(invoiceId: string): Pro
       couponVersionId: toNullableString(invoice.couponVersionId),
       quoteId: toNullableString(invoice.quoteId),
       checkoutSessionId: toNullableString(invoice.checkoutSessionId),
+      subscriptionId: toNullableString(invoice.subscriptionId),
+      source: toStringValue(invoice.source, 'gateway') as 'gateway' | 'manual_proof' | 'admin_grant',
     },
     quote: quote
       ? {
@@ -847,6 +850,21 @@ export async function getAdminBillingInvoiceEvidenceData(invoiceId: string): Pro
       createdAt: toStringValue(payment.createdAt),
       updatedAt: toStringValue(payment.updatedAt),
     })),
+    proof: raw.proof == null
+      ? null
+      : (() => {
+        const proof = asRecord(raw.proof);
+        return {
+          id: toStringValue(proof.id),
+          method: toStringValue(proof.method),
+          kind: toStringValue(proof.kind),
+          gateway: toNullableString(proof.gateway),
+          reference: toStringValue(proof.reference),
+          status: toStringValue(proof.status).toLowerCase(),
+          submittedAt: toStringValue(proof.submittedAt),
+          reviewedAt: toNullableString(proof.reviewedAt),
+        };
+      })(),
     redemptions: asArray(raw.redemptions).map((redemption) => ({
       id: toStringValue(redemption.id),
       couponCode: toStringValue(redemption.couponCode),

@@ -425,6 +425,7 @@ export interface AdminBillingInvoice {
   status: string;
   date: string;
   plan: string;
+  source: 'gateway' | 'manual_proof' | 'admin_grant';
 }
 
 export interface AdminBillingQuoteLineItem {
@@ -451,6 +452,8 @@ export interface AdminBillingInvoiceEvidenceInvoice {
   couponVersionId: string | null;
   quoteId: string | null;
   checkoutSessionId: string | null;
+  subscriptionId: string | null;
+  source: 'gateway' | 'manual_proof' | 'admin_grant';
 }
 
 export interface AdminBillingInvoiceEvidenceQuote {
@@ -537,10 +540,24 @@ export interface AdminBillingInvoiceEvidenceCatalogAnchors {
   source: string;
 }
 
+/** Evidence view of the manual-proof (bank transfer / gateway-receipt) row backing a
+ * "manual_proof"-source invoice — a trimmed mirror of the ManualPaymentDto shape. */
+export interface AdminBillingInvoiceEvidenceProof {
+  id: string;
+  method: string;
+  kind: string;
+  gateway: string | null;
+  reference: string;
+  status: string;
+  submittedAt: string;
+  reviewedAt: string | null;
+}
+
 export interface AdminBillingInvoiceEvidence {
   invoice: AdminBillingInvoiceEvidenceInvoice;
   quote: AdminBillingInvoiceEvidenceQuote | null;
   payments: AdminBillingInvoiceEvidencePayment[];
+  proof: AdminBillingInvoiceEvidenceProof | null;
   redemptions: AdminBillingInvoiceEvidenceRedemption[];
   subscriptionItems: AdminBillingInvoiceEvidenceSubscriptionItem[];
   events: AdminBillingInvoiceEvidenceEvent[];

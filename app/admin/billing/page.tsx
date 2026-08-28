@@ -21,6 +21,7 @@ import { BillingConfirmDialog } from '@/components/admin/billing/confirm-dialog'
 import { BillingConflictBanner, isConflictError } from '@/components/admin/billing/conflict-banner';
 import { NoBillingPermission } from '@/components/admin/billing/no-billing-permission';
 import { filterCatalogVersionSummary } from '@/components/admin/billing/version-drawer-fields';
+import { invoiceStatusBadge } from '@/components/admin/billing/invoice-status';
 import {
   createAdminBillingAddOn,
   createAdminBillingCoupon,
@@ -48,6 +49,7 @@ import {
   PROFESSION_CATALOG_FALLBACK,
   type ProfessionCatalogEntry,
 } from '@/lib/api/professions';
+import { listAdminPaymentGateways, type AdminPaymentGatewayDto } from '@/lib/api/billing-expansion';
 import {
   getAdminBillingAddOnData,
   getAdminBillingAddOnVersionHistoryData,
@@ -585,6 +587,20 @@ function toCouponForm(coupon: AdminBillingCoupon): BillingCouponFormState {
   };
 }
 
+// Used only while the live payment-gateway catalog (listAdminPaymentGateways) is still
+// loading, came back empty, or errored — the gateway filter options normally derive from
+// that fetched catalog so a newly-registered PaymentGatewayNames entry shows up on its own.
+const FALLBACK_GATEWAY_OPTIONS: { id: string; label: string }[] = [
+  { id: 'whop', label: 'Whop' },
+  { id: 'fawaterak', label: 'Fawaterak' },
+  { id: 'stripe', label: 'Stripe' },
+  { id: 'paypal', label: 'PayPal' },
+  { id: 'paymob', label: 'Paymob' },
+  { id: 'paytabs', label: 'PayTabs' },
+  { id: 'checkoutcom', label: 'Checkout.com' },
+  { id: 'easykash', label: 'EasyKash' },
+];
+
 export default function BillingPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const { user } = useAuth();
@@ -647,6 +663,7 @@ export default function BillingPage() {
   const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [professionCatalog, setProfessionCatalog] = useState<ProfessionCatalogEntry[]>(PROFESSION_CATALOG_FALLBACK);
+  const [paymentGatewayCatalog, setPaymentGatewayCatalog] = useState<AdminPaymentGatewayDto[]>([]);
 
   // 409 conflict banner state — one banner per editor surface so we never
   // silently overwrite a concurrent admin's catalog edits.
@@ -1104,6 +1121,24 @@ export default function BillingPage() {
     void fetchProfessionCatalog().then((entries) => {
       if (!cancelled) setProfessionCatalog(entries);
     });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Live gateway catalog for the Payment / Provider Signal "Gateway" filters, so a
+  // newly-registered PaymentGatewayNames entry shows up without a code change. Falls
+  // back to FALLBACK_GATEWAY_OPTIONS below while loading or if the request fails.
+  useEffect(() => {
+    let cancelled = false;
+    listAdminPaymentGateways()
+      .then((gateways) => {
+        if (!cancelled) setPaymentGatewayCatalog(gateways);
+      })
+      .catch(() => {
+        // Leave paymentGatewayCatalog empty — the filter groups fall back to
+        // FALLBACK_GATEWAY_OPTIONS whenever the fetched list is empty.
+      });
     return () => {
       cancelled = true;
     };
@@ -1604,11 +1639,10 @@ export default function BillingPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (invoice) => (
-        <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'failed' ? 'danger' : 'warning'}>
-          {invoice.status}
-        </Badge>
-      ),
+      render: (invoice) => {
+        const badge = invoiceStatusBadge(invoice.status, invoice.source);
+        return <Badge variant={badge.variant}>{badge.label}</Badge>;
+      },
     },
     {
       key: 'actions',
@@ -1970,16 +2004,16 @@ export default function BillingPage() {
     </div>
   );
 
-  const invoiceMobileCardRender = (invoice: AdminBillingInvoice) => (
+  const invoiceMobileCardRender = (invoice: AdminBillingInvoice) => {
+    const statusBadge = invoiceStatusBadge(invoice.status, invoice.source);
+    return (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate font-semibold text-admin-fg-strong">{invoice.userName}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{invoice.plan}</p>
         </div>
-        <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'failed' ? 'danger' : 'warning'}>
-          {invoice.status}
-        </Badge>
+        <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>
       </div>
 
       <div className="grid grid-cols-2 gap-3 text-sm">
@@ -2008,7 +2042,8 @@ export default function BillingPage() {
         </Button>
       </div>
     </div>
-  );
+    );
+  };
 
   const paymentMobileCardRender = (payment: AdminBillingPaymentTransaction) => (
     <div className="space-y-3">
@@ -2167,6 +2202,16 @@ export default function BillingPage() {
     },
   ];
 
+  // Live gateway options, sourced from the actual payment-gateway catalog so a newly
+  // registered PaymentGatewayNames entry appears here without a code change; falls back
+  // to FALLBACK_GATEWAY_OPTIONS while paymentGatewayCatalog is still loading, came back
+  // empty, or errored. "manual" (ManualPaymentService's own gateway tag for
+  // proof-approved orders) is not a catalog row, so it's always appended in code for the
+  // Payment filter only — raw provider webhook signals never originate from a manual path.
+  const liveGatewayOptions = paymentGatewayCatalog.length > 0
+    ? paymentGatewayCatalog.map((gateway) => ({ id: gateway.name, label: gateway.label }))
+    : FALLBACK_GATEWAY_OPTIONS;
+
   const paymentFilterGroups: FilterGroup[] = [
     {
       id: 'status',
@@ -2182,22 +2227,7 @@ export default function BillingPage() {
     {
       id: 'gateway',
       label: 'Gateway',
-      // Every gateway PaymentGatewayService.SupportedGateways can produce a
-      // PaymentTransaction.Gateway value for, plus "manual" (ManualPaymentService's
-      // own gateway tag for proof-approved orders) — kept in sync by hand since the
-      // backend accepts any string here. Add a new gateway's id here when it's added
-      // to PaymentGatewayNames (backend/.../Domain/PaymentGatewayToggle.cs).
-      options: [
-        { id: 'whop', label: 'Whop' },
-        { id: 'fawaterak', label: 'Fawaterak' },
-        { id: 'stripe', label: 'Stripe' },
-        { id: 'paypal', label: 'PayPal' },
-        { id: 'paymob', label: 'Paymob' },
-        { id: 'paytabs', label: 'PayTabs' },
-        { id: 'checkoutcom', label: 'Checkout.com' },
-        { id: 'easykash', label: 'EasyKash' },
-        { id: 'manual', label: 'Manual (proof-approved)' },
-      ],
+      options: [...liveGatewayOptions, { id: 'manual', label: 'Manual (proof-approved)' }],
     },
     {
       id: 'transactionType',
@@ -2229,16 +2259,7 @@ export default function BillingPage() {
     {
       id: 'gateway',
       label: 'Gateway',
-      options: [
-        { id: 'whop', label: 'Whop' },
-        { id: 'fawaterak', label: 'Fawaterak' },
-        { id: 'stripe', label: 'Stripe' },
-        { id: 'paypal', label: 'PayPal' },
-        { id: 'paymob', label: 'Paymob' },
-        { id: 'paytabs', label: 'PayTabs' },
-        { id: 'checkoutcom', label: 'Checkout.com' },
-        { id: 'easykash', label: 'EasyKash' },
-      ],
+      options: liveGatewayOptions,
     },
     {
       id: 'processingStatus',
@@ -3103,7 +3124,10 @@ export default function BillingPage() {
             <div className="border-b border-border pb-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="default">read only</Badge>
-                {invoiceEvidence ? <Badge variant={invoiceEvidence.invoice.status === 'paid' ? 'success' : invoiceEvidence.invoice.status === 'failed' ? 'danger' : 'warning'}>{invoiceEvidence.invoice.status}</Badge> : null}
+                {invoiceEvidence ? (() => {
+                  const badge = invoiceStatusBadge(invoiceEvidence.invoice.status, invoiceEvidence.invoice.source);
+                  return <Badge variant={badge.variant}>{badge.label}</Badge>;
+                })() : null}
                 {invoiceEvidence?.payments.length ? <Badge variant="info">{invoiceEvidence.payments.length} payment {invoiceEvidence.payments.length === 1 ? 'record' : 'records'}</Badge> : null}
                 {invoiceEvidence?.notRecorded.length ? <Badge variant="default">partial local evidence</Badge> : null}
               </div>
@@ -3164,8 +3188,14 @@ export default function BillingPage() {
                     <EvidenceField label="Learner">{invoiceEvidence.invoice.userName}</EvidenceField>
                     <EvidenceField label="Issued">{formatDateTime(invoiceEvidence.invoice.issuedAt)}</EvidenceField>
                     <EvidenceField label="Amount">{formatCurrency(invoiceEvidence.invoice.amount, invoiceEvidence.invoice.currency)}</EvidenceField>
-                    <EvidenceField label="Quote ID">{invoiceEvidence.invoice.quoteId ?? 'Not recorded'}</EvidenceField>
-                    <EvidenceField label="Checkout Session">{invoiceEvidence.invoice.checkoutSessionId ?? 'Not recorded'}</EvidenceField>
+                    <EvidenceField label="Quote ID">
+                      {invoiceEvidence.invoice.quoteId ??
+                        (invoiceEvidence.invoice.source !== 'gateway' ? 'Not applicable (Manual/Admin)' : 'Not recorded')}
+                    </EvidenceField>
+                    <EvidenceField label="Checkout Session">
+                      {invoiceEvidence.invoice.checkoutSessionId ??
+                        (invoiceEvidence.invoice.source !== 'gateway' ? 'Not applicable (Manual/Admin)' : 'Not recorded')}
+                    </EvidenceField>
                   </dl>
                 </EvidenceSection>
 

@@ -728,8 +728,11 @@ public static class BillingExpansionEndpoints
     /// lazily created when the learner reads their own billing history
     /// (<c>LearnerService.EnsureSubscriptionInvoiceAsync</c>, which resolves "the
     /// user's current subscription" — not usable here since we need one exact
-    /// order) — an order fulfilled today may have no Invoice row yet. Idempotent:
-    /// the invoice id is a deterministic hash of
+    /// order) — an order fulfilled today may have no Invoice row yet. Resolves real
+    /// payment evidence via <see cref="InvoiceEvidenceResolver.ResolveAsync"/> before
+    /// minting the invoice, so QuoteId/CheckoutSessionId/SubscriptionId/Source
+    /// genuinely reflect whatever evidence exists instead of being left blank.
+    /// Idempotent: the invoice id is a deterministic hash of
     /// (subscriptionId, planId, startedAt), so repeat calls for the same order
     /// always converge on the same row instead of creating duplicates.
     /// </summary>
@@ -770,6 +773,8 @@ public static class BillingExpansionEndpoints
             ? planName
             : $"{planName} ({subscription.Interval})";
 
+        var evidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, ct);
+
         db.Invoices.Add(new Invoice
         {
             Id = invoiceId,
@@ -781,6 +786,11 @@ public static class BillingExpansionEndpoints
             Status = "Paid",
             Description = description,
             PlanVersionId = subscription.PlanVersionId,
+            SubscriptionId = subscription.Id,
+            Source = evidence.Source,
+            QuoteId = evidence.Quote?.Id,
+            CheckoutSessionId = evidence.Quote?.CheckoutSessionId ?? evidence.Payment?.GatewayTransactionId,
+            ReconciledAt = DateTimeOffset.UtcNow,
         });
 
         try
