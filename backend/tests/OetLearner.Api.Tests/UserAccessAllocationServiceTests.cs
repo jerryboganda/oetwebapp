@@ -1259,4 +1259,159 @@ public class UserAccessAllocationServiceTests
         Assert.Null(await db.Subscriptions.Where(s => s.Id == subscriptionId)
             .Select(s => s.ExpiresAt).SingleAsync());
     }
+
+    // ── Course removal must revoke only that course's UNUSED credits (Part 27) ──
+
+    [Fact]
+    public async Task RemoveCourse_AfterPartialGenuineUsage_PreservesUsedAndRevokesOnlyUnused()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-preserve-used";
+        await SeedLearnerAsync(db, userId);
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine Full Course",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 5,
+        });
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = CreateService(db, credits);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("full-condensed-medicine", null, null, true, false, false), default);
+
+        // Genuine consumption: 4 of the 5 course-granted shared credits.
+        for (var i = 1; i <= 4; i++)
+        {
+            var debit = await credits.DeductObjectivePracticeAsync(userId, "reading", $"usage-ref-{i}", default);
+            Assert.True(debit.Debited);
+        }
+        var before = await credits.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(5, before.SharedCreditsGranted);
+        Assert.Equal(4, before.SharedCreditsUsed);
+        Assert.Equal(1, before.SharedCredits);
+
+        await svc.RemovePackageAsync("admin", "Admin", userId, granted.Subscriptions.Single().Id, default);
+
+        // Only the 1 unused entitlement is revoked; the 4 genuine usages stay recorded:
+        // Total 4 / Used 4 / Remaining 0 — never 0/4/0.
+        var after = await credits.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(4, after.SharedCreditsGranted);
+        Assert.Equal(4, after.SharedCreditsUsed);
+        Assert.Equal(0, after.SharedCredits);
+    }
+
+    [Fact]
+    public async Task RemoveCourse_PreservesAdminGrantedCredits()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-preserve-admin";
+        await SeedLearnerAsync(db, userId);
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "full-condensed-medicine",
+            Name = "Medicine Full Course",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            BundledAiCredits = 5,
+        });
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = CreateService(db, credits);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("full-condensed-medicine", null, null, true, false, false), default);
+
+        // Separately admin-granted standalone credits (unrelated source).
+        await credits.AdjustAsync(userId,
+            new AiPackageCreditAdjustmentRequest(0, 0, 0, 0, 0, 0, null, "Admin top-up", SharedCreditsDelta: 10),
+            "admin-1", default);
+        Assert.Equal(15, (await credits.GetSnapshotAsync(userId, 20, default)).SharedCredits);
+
+        await svc.RemovePackageAsync("admin", "Admin", userId, granted.Subscriptions.Single().Id, default);
+
+        // Only the course's unused 5 credits are revoked; the 10 admin-granted credits remain.
+        var after = await credits.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(10, after.SharedCredits);
+        Assert.Equal(0, after.SharedCreditsUsed);
+        Assert.Equal(SubscriptionStatus.Cancelled, (await db.Subscriptions.SingleAsync(s => s.Id == granted.Subscriptions.Single().Id)).Status);
+    }
+
+    // ── Master Access Expiry is a genuine global cap (Part 18/19) ──
+
+    [Fact]
+    public async Task SyncAccessExpiry_AdminCapSticks_WhilePackagesChange()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-master-cap";
+        await SeedLearnerAsync(db, userId, "auth-master-cap");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        await db.SaveChangesAsync();
+        var svc = CreateService(db);
+        var packageEnd = DateTimeOffset.UtcNow.AddDays(170); // ≈ the 18/02/2027 style saved end
+        var granted = await svc.GrantPackageAsync("admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("med", null, packageEnd, true, false, false), default);
+        var subscriptionId = granted.Subscriptions.Single().Id;
+        Assert.Equal(packageEnd, (await db.Users.FirstAsync(u => u.Id == userId)).AccessExpiresAt);
+
+        // Admin deliberately caps access earlier than the package end.
+        var masterCap = DateTimeOffset.UtcNow.AddDays(90);
+        await svc.PutScopeAsync("admin", "Admin", userId,
+            new AdminUserAccessScopeRequest(null, null, null, masterCap, ClearAccessExpiry: false), default);
+        Assert.Equal(masterCap, (await db.Users.FirstAsync(u => u.Id == userId)).AccessExpiresAt);
+
+        // Extending the package past the cap must NOT lift the cap…
+        await svc.UpdatePackageDatesAsync("admin", "Admin", userId, subscriptionId,
+            new AdminUserAccessPackageDatesRequest(null, DateTimeOffset.UtcNow.AddDays(200), ClearExpiresAt: false), default);
+        Assert.Equal(masterCap, (await db.Users.FirstAsync(u => u.Id == userId)).AccessExpiresAt);
+
+        // …while shrinking the package below the cap tightens the effective gate.
+        var tightened = DateTimeOffset.UtcNow.AddDays(30);
+        await svc.UpdatePackageDatesAsync("admin", "Admin", userId, subscriptionId,
+            new AdminUserAccessPackageDatesRequest(null, tightened, ClearExpiresAt: false), default);
+        Assert.Equal(tightened, (await db.Users.FirstAsync(u => u.Id == userId)).AccessExpiresAt);
+
+        // Clearing the cap removes the global gate entirely: per-package end dates
+        // govern access again until the next package mutation re-mirrors the max.
+        await svc.PutScopeAsync("admin", "Admin", userId,
+            new AdminUserAccessScopeRequest(null, null, null, null, ClearAccessExpiry: true), default);
+        var afterClear = await db.Users.FirstAsync(u => u.Id == userId);
+        Assert.Null(afterClear.AccessExpiresAt);
+        Assert.False(afterClear.AccessExpiresAtIsAdminCap);
+
+        var reMirrored = DateTimeOffset.UtcNow.AddDays(31);
+        await svc.UpdatePackageDatesAsync("admin", "Admin", userId, subscriptionId,
+            new AdminUserAccessPackageDatesRequest(null, reMirrored, ClearExpiresAt: false), default);
+        Assert.Equal(reMirrored, (await db.Users.FirstAsync(u => u.Id == userId)).AccessExpiresAt);
+    }
+
+    // ── One-time packages must not fabricate a billing renewal date (Part 21) ──
+
+    [Fact]
+    public async Task GrantPackage_OneTimePlan_NextRenewalMirrorsAccessEnd()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-one-time");
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-med",
+            Code = "med",
+            Name = "Medicine",
+            DurationMonths = 0,
+            IsRenewable = false,
+            AccessDurationDays = 180,
+        });
+        await db.SaveChangesAsync();
+        var customExpiry = DateTimeOffset.UtcNow.AddDays(90);
+
+        var access = await CreateService(db).GrantPackageAsync("admin", "Admin", "learner-one-time",
+            new AdminUserAccessPackageRequest("med", null, customExpiry, true, false, false), default);
+
+        var sub = await db.Subscriptions.SingleAsync(s => s.Id == access.Subscriptions.Single().Id);
+        Assert.Equal(customExpiry, sub.ExpiresAt);
+        Assert.Equal(customExpiry, sub.NextRenewalAt);
+    }
 }

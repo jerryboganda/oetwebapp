@@ -1490,8 +1490,15 @@ export default function UserDetailPage() {
                         <p className="mt-1 text-sm font-medium text-admin-fg-strong">{formatDate(user.subscription.startedAt)}</p>
                       </div>
                       <div className="rounded-2xl border border-border/60 bg-admin-bg-subtle p-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Next renewal</p>
-                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">{formatDate(user.subscription.nextRenewalAt)}</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Access ends</p>
+                        <p className="mt-1 text-sm font-medium text-admin-fg-strong">
+                          {formatDate(user.subscription.expiresAt ?? user.subscription.nextRenewalAt)}
+                        </p>
+                        <p className="mt-1 text-xs text-muted">
+                          {user.subscription.expiresAt
+                            ? 'Real access cutoff. Billing renewal (renewable plans only) is shown on the billing page.'
+                            : 'No explicit end date — mirrors the billing renewal date.'}
+                        </p>
                       </div>
                     </div>
                   </SettingsSection>

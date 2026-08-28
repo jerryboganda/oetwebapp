@@ -213,6 +213,7 @@ export function ManageAccessPanel({
           subscriptions={value.subscriptions as UserAccessSubscriptionRow[]}
           onChange={(subscriptions) => onChange({ ...value, subscriptions })}
           learnerProfessionId={learnerProfessionId}
+          masterAccessExpiresAt={value.accessExpiresAt}
           onSuspend={userId ? (id) => applyPackageTransition(id, suspendUserPackage) : undefined}
           onRestore={userId ? (id) => applyPackageTransition(id, restoreUserPackage) : undefined}
           onSetPrimary={userId ? (id) => applyPackageTransition(id, setPrimaryUserPackage) : undefined}
@@ -332,6 +333,12 @@ export function ManageAccessPanel({
 
       <section className="space-y-2">
         <h3 className="text-sm font-semibold text-navy">Master access expiry</h3>
+        <p className="text-xs text-muted">
+          Global access cap: once set, the learner loses <strong>all</strong> access after this date —
+          login and token checks enforce it, even when a package card above shows a later end date.
+          Package mutations tighten it but never extend it. Clear it to hand control back to the
+          per-package end dates.
+        </p>
         <div className="flex flex-wrap items-end gap-3">
           <Input
             label="Access expires"
