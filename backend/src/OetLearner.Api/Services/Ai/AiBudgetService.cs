@@ -149,27 +149,43 @@ public sealed class AiBudgetService(
             var periodKey = $"month:{DateTimeOffset.UtcNow:yyyy-MM}";
             var periodId = $"{scope}:{periodKey}";
 
-            await EnsurePeriodRowExistsAsync(db, periodId, scope, periodKey, limitUsd, ct);
-
-            var affected = await db.AiBudgetPeriods
-                .Where(p => p.Id == periodId && p.ReservedUsd + p.CommittedUsd + amount <= limitUsd)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(p => p.ReservedUsd, p => p.ReservedUsd + amount)
-                    // Re-synced on every reserve so an admin raising the budget
-                    // mid-month takes effect immediately, not just for periods
-                    // created after the change.
-                    .SetProperty(p => p.LimitUsd, limitUsd)
-                    .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow), ct);
-
-            if (affected == 0)
+            // Two attempts: the first caller creates the period row with
+            // INSERT … ON CONFLICT DO NOTHING; losers of that race used to
+            // poison their EF context via SaveChanges (aborted Postgres
+            // transaction) and then deny as budget_store_unavailable — which
+            // under-granted a $100 ceiling in CI. Raw UPSERT + one retry of
+            // the atomic UPDATE never denies a call that still has headroom.
+            for (var attempt = 0; attempt < 2; attempt++)
             {
-                logger.LogWarning(
-                    "AI platform budget exhausted for scope {Scope} period {PeriodId} (limit {Limit}); refusing the call, zero provider calls made.",
-                    scope, periodId, limitUsd);
-                return AiBudgetReservation.Denied("global_budget_exhausted");
+                await EnsurePeriodRowExistsAsync(db, periodId, scope, periodKey, limitUsd, ct);
+
+                var affected = await db.AiBudgetPeriods
+                    .Where(p => p.Id == periodId && p.ReservedUsd + p.CommittedUsd + amount <= limitUsd)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(p => p.ReservedUsd, p => p.ReservedUsd + amount)
+                        // Re-synced on every reserve so an admin raising the budget
+                        // mid-month takes effect immediately, not just for periods
+                        // created after the change.
+                        .SetProperty(p => p.LimitUsd, limitUsd)
+                        .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow), ct);
+
+                if (affected > 0)
+                {
+                    return new AiBudgetReservation(true, null, periodId, scope, amount);
+                }
+
+                var rowExists = await db.AiBudgetPeriods.AsNoTracking()
+                    .AnyAsync(p => p.Id == periodId, ct);
+                if (rowExists)
+                {
+                    break;
+                }
             }
 
-            return new AiBudgetReservation(true, null, periodId, scope, amount);
+            logger.LogWarning(
+                "AI platform budget exhausted for scope {Scope} period {PeriodId} (limit {Limit}); refusing the call, zero provider calls made.",
+                scope, periodId, limitUsd);
+            return AiBudgetReservation.Denied("global_budget_exhausted");
         }
         catch (Exception ex)
         {
@@ -195,12 +211,13 @@ public sealed class AiBudgetService(
             await using var dbScope = scopeFactory.CreateAsyncScope();
             var db = dbScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
-            await db.AiBudgetPeriods
-                .Where(p => p.Id == reservation.PeriodId)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(p => p.ReservedUsd, p => p.ReservedUsd - reserved < 0 ? 0m : p.ReservedUsd - reserved)
-                    .SetProperty(p => p.CommittedUsd, p => p.CommittedUsd + actual)
-                    .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow), ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE "AiBudgetPeriods"
+                SET "ReservedUsd" = GREATEST(0, "ReservedUsd" - {reserved}),
+                    "CommittedUsd" = "CommittedUsd" + {actual},
+                    "UpdatedAt" = {DateTimeOffset.UtcNow}
+                WHERE "Id" = {reservation.PeriodId}
+                """, ct);
 
             // Best-effort sync onto AiGlobalPolicy.CurrentSpendUsd for the
             // existing admin dashboard. AiBudgetPeriod remains authoritative for
@@ -239,11 +256,12 @@ public sealed class AiBudgetService(
             await using var dbScope = scopeFactory.CreateAsyncScope();
             var db = dbScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
-            await db.AiBudgetPeriods
-                .Where(p => p.Id == reservation.PeriodId)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(p => p.ReservedUsd, p => p.ReservedUsd - reserved < 0 ? 0m : p.ReservedUsd - reserved)
-                    .SetProperty(p => p.UpdatedAt, DateTimeOffset.UtcNow), ct);
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE "AiBudgetPeriods"
+                SET "ReservedUsd" = GREATEST(0, "ReservedUsd" - {reserved}),
+                    "UpdatedAt" = {DateTimeOffset.UtcNow}
+                WHERE "Id" = {reservation.PeriodId}
+                """, ct);
         }
         catch (Exception ex)
         {
@@ -260,39 +278,23 @@ public sealed class AiBudgetService(
         return Math.Max(0m, global.MonthlyBudgetUsd) * pct / 100m;
     }
 
-    /// <summary>Idempotent create: tolerates losing the create race to a
-    /// concurrent reserver via <c>UX_AiBudgetPeriods_Scope_PeriodKey</c> — the
-    /// caller's atomic UPDATE that follows finds the row either way.</summary>
+    /// <summary>
+    /// Idempotent create via <c>INSERT … ON CONFLICT DO NOTHING</c>. The
+    /// previous EF <c>Add</c>+<c>SaveChanges</c> path aborted the Postgres
+    /// transaction for every loser of the create race, so the follow-up
+    /// atomic UPDATE threw and was mis-classified as
+    /// <c>budget_store_unavailable</c>.
+    /// </summary>
     private static async Task EnsurePeriodRowExistsAsync(
         LearnerDbContext db, string id, string scope, string periodKey, decimal limitUsd, CancellationToken ct)
     {
-        var exists = await db.AiBudgetPeriods.AsNoTracking().AnyAsync(p => p.Id == id, ct);
-        if (exists) return;
-
         var now = DateTimeOffset.UtcNow;
-        var period = new AiBudgetPeriod
-        {
-            Id = id,
-            Scope = scope,
-            PeriodKey = periodKey,
-            LimitUsd = limitUsd,
-            ReservedUsd = 0m,
-            CommittedUsd = 0m,
-            CreatedAt = now,
-            UpdatedAt = now,
-        };
-        db.AiBudgetPeriods.Add(period);
-        try
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException)
-        {
-            // Lost the create race — fine, the row exists now either way.
-        }
-        finally
-        {
-            db.Entry(period).State = EntityState.Detached;
-        }
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "AiBudgetPeriods"
+                ("Id", "Scope", "PeriodKey", "LimitUsd", "ReservedUsd", "CommittedUsd", "CreatedAt", "UpdatedAt")
+            VALUES
+                ({id}, {scope}, {periodKey}, {limitUsd}, 0, 0, {now}, {now})
+            ON CONFLICT ("Id") DO NOTHING
+            """, ct);
     }
 }

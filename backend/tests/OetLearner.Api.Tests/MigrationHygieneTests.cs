@@ -17,6 +17,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(ExtendAiUsageRecordProvenance), "20261103090000_ExtendAiUsageRecordProvenance")]
     [InlineData(typeof(AddAiModelPricingAndFeaturePolicy), "20261104090000_AddAiModelPricingAndFeaturePolicy")]
     [InlineData(typeof(AddAiOperationResourceSlot), "20261105090000_AddAiOperationResourceSlot")]
+    [InlineData(typeof(AddAiExplanationCache), "20261106090000_AddAiExplanationCache")]
     [InlineData(typeof(RestoreListeningPartBCSourceStems), "20261129000000_RestoreListeningPartBCSourceStems")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
