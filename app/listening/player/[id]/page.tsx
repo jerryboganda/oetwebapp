@@ -1146,8 +1146,16 @@ function PlayerContent() {
   // shared file across B1..B6). Resolved by section code (A1, A2, B, C1, C2).
   // Falls back to the legacy combined paper audio (+ cue windows) for papers that
   // predate the per-section model and have no per-section uploads.
-  const perSectionAudioUrl = currentSection
-    ? session?.paper.audioUrlByPart?.[String(currentSection).toUpperCase()] ?? null
+  const currentSectionCode = currentSection ? String(currentSection).toUpperCase() : null;
+  const currentSectionParentCode = currentSectionCode && currentSectionCode.length > 1
+    ? currentSectionCode.slice(0, 1)
+    : currentSectionCode;
+  const perSectionAudioUrl = currentSectionCode
+    ? session?.paper.audioUrlByPart?.[currentSectionCode]
+      ?? (currentSectionParentCode
+        ? session?.paper.audioUrlByPart?.[currentSectionParentCode]
+        : null)
+      ?? null
     : null;
   const usingPerSectionAudio = perSectionAudioUrl != null;
   const currentSectionAudioUrl = perSectionAudioUrl ?? session?.paper.audioUrl ?? null;
@@ -1417,6 +1425,7 @@ function PlayerContent() {
     // re-render and immediately calls advanceFromReview again — which on
     // the last section triggers handleSubmit and skips the section entirely.
     const nextSection = sectionsInPaper[currentSectionIndex + 1];
+    if (!nextSection) return;
     if (currentSection && nextSection) {
       logAttemptEvent('section_transition', {
         from: currentSection,
@@ -1426,7 +1435,7 @@ function PlayerContent() {
     }
     setPhase('audio');
     setReviewSecondsRemaining(0);
-    setCurrentSectionIndex((value) => value + 1);
+    setCurrentSectionIndex(currentSectionIndex + 1);
     // The currentSection effect above arms one-shot playback for the new
     // section (strict attempts remain governed by the server preview state).
   };
@@ -2461,7 +2470,11 @@ function PlayerContent() {
               onClose={() => setShowNextConfirm(false)}
               title={shouldSlicePartB
                 ? currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'Continue to the next Part B question?' : 'Lock Part B and continue?'
-                : phase === 'review' ? 'Lock this section and continue?' : currentSectionReviewSeconds > 0 ? 'Open review window?' : 'Lock Part B and continue?'}
+                : phase === 'review'
+                  ? 'Lock this section and continue?'
+                  : currentSectionReviewSeconds > 0
+                    ? 'Open review window?'
+                    : `Lock ${currentSection ? LISTENING_SECTION_LABEL[currentSection] : 'this section'} and continue?`}
               size="sm"
             >
               <div className="space-y-4">

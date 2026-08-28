@@ -317,6 +317,10 @@ function makeStandalonePartSession(part: 'a' | 'b' | 'c') {
     ...session,
     paper: {
       ...session.paper,
+      // A Part C replacement may be uploaded once at the parent-part level;
+      // both C1 and C2 must resolve that fallback while still transitioning
+      // forward exactly once.
+      audioUrlByPart: { C: 'https://cdn.example/audio-part-c.mp3' },
       extracts: [
         {
           partCode: 'C1', displayOrder: 1, kind: 'presentation', title: 'Part C extract 1',
@@ -492,6 +496,31 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       }
     },
   );
+
+  it('moves standalone Part C from C1 to C2 when the first audio completes', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'practice';
+        if (key === 'focus') return 'part-c';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(makeStandalonePartSession('c'));
+
+    const { container } = render(<ListeningPlayer />);
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part C source question 31')).toBeInTheDocument();
+      expect(container.querySelector('audio')).not.toBeNull();
+    });
+
+    const audio = container.querySelector('audio') as HTMLAudioElement;
+    await waitFor(() => {
+      fireEvent.ended(audio);
+      expect(screen.getByText('Standalone Part C source question 37')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Standalone Part C source question 31')).not.toBeInTheDocument();
+  });
 
   it('loads all six Full Exam Part B questions in the legacy player and preserves answers across jumps', async () => {
     mockUseSearchParams.mockReturnValue({
