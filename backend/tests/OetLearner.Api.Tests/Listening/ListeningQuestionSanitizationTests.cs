@@ -37,4 +37,32 @@ public class ListeningQuestionSanitizationTests
         var sanitized = ListeningLearnerService.SanitizeOptionText(input);
         Assert.Equal(expected, sanitized);
     }
+
+    [Theory]
+    [InlineData("You hear a nurse discussing a patient's discharge plan. What does she recommend?", true)]
+    [InlineData("See PDF", false)]
+    [InlineData("PART B — WORKPLACE EXTRACTS", false)]
+    [InlineData("Q25 PART B - WORKPLACE EXTRACTS", false)]
+    [InlineData("QUESTION 25", false)]
+    [InlineData("What does the speaker identify as the main clinical priority?", false)]
+    [InlineData("What is the speaker's main point in this extract?", false)]
+    public void IsUsablePartBCStem_RejectsSentinelsHeadingsAndGenericFallbacks(string? input, bool expected)
+    {
+        Assert.Equal(expected, ListeningLearnerService.IsUsablePartBCStem(input));
+    }
+
+    [Theory]
+    [InlineData(null, 25, "B1")]
+    [InlineData("B", 30, "B6")]
+    [InlineData(null, 31, "C1")]
+    [InlineData("C", 42, "C2")]
+    [InlineData(null, 13, "A2")]
+    [InlineData("C2", 31, "C2")]
+    public void ResolveQuestionPartCode_UsesExplicitCodeOrCanonicalNumberRange(
+        string? rawPartCode,
+        int questionNumber,
+        string expected)
+    {
+        Assert.Equal(expected, ListeningLearnerService.ResolveQuestionPartCode(rawPartCode, questionNumber));
+    }
 }

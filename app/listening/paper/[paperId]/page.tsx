@@ -1438,6 +1438,23 @@ function SubSectionAudio({
     }
   }, []);
 
+  // The source can resolve after the element has mounted (authenticated media
+  // is fetched into a blob URL).  Do not rely on a future `canplay` event for
+  // autoplay: some browsers fire it before the blob is attached, and some
+  // headless/mobile implementations do not replay it after the source swap.
+  // The ref keeps this retry one-shot for the current source while still
+  // allowing the explicit Start gesture to recover from an autoplay policy
+  // rejection through the existing Tap to Play fallback.
+  useEffect(() => {
+    if (!resolvedSrc || resumeState === 'ended' || audioError) return;
+    const el = audioRef.current;
+    if (!el || (!el.paused && !el.ended)) return;
+    if (autoPlayTriedRef.current && !playAbortPendingRef.current) return;
+    autoPlayTriedRef.current = true;
+    playAbortPendingRef.current = false;
+    tryPlay();
+  }, [audioError, resolvedSrc, resumeState, tryPlay]);
+
   const handleLoadedMetadata = useCallback(() => {
     const el = audioRef.current;
     if (el) {

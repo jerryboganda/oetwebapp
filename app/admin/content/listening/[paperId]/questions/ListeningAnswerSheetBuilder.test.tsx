@@ -28,8 +28,8 @@ function mcq(number: number, partCode: string, correctAnswer = 'A'): ListeningAu
     number,
     partCode: partCode as ListeningAuthoredQuestion['partCode'],
     type: 'multiple_choice_3',
-    stem: 'See PDF',
-    options: ['Option A', 'Option B', 'Option C'],
+    stem: `What is the source question for ${number}?`,
+    options: ['First source option', 'Second source option', 'Third source option'],
     correctAnswer,
     acceptedAnswers: [],
     explanation: null,
@@ -71,6 +71,10 @@ describe('ListeningAnswerSheetBuilder', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.type(screen.getByLabelText(/question 27 stem/i), 'What is the source question for 27?');
+    await user.type(screen.getByLabelText(/question 27 option a/i), 'First source option');
+    await user.type(screen.getByLabelText(/question 27 option b/i), 'Second source option');
+    await user.type(screen.getByLabelText(/question 27 option c/i), 'Third source option');
     await user.selectOptions(screen.getByRole('combobox'), 'A');
     await user.click(screen.getByRole('button', { name: /save all/i }));
 
@@ -81,8 +85,8 @@ describe('ListeningAnswerSheetBuilder', () => {
       number: 27,
       partCode: 'B3',
       type: 'multiple_choice_3',
-      stem: 'See PDF',
-      options: ['Option A', 'Option B', 'Option C'],
+      stem: 'What is the source question for 27?',
+      options: ['First source option', 'Second source option', 'Third source option'],
       correctAnswer: 'A',
     });
   });
@@ -101,6 +105,13 @@ describe('ListeningAnswerSheetBuilder', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /generate/i }));
+    const numbers = [37, 38, 39, 40, 41, 42];
+    for (const number of numbers) {
+      await user.type(screen.getByLabelText(new RegExp(`question ${number} stem`, 'i')), `What is the source question for ${number}?`);
+      await user.type(screen.getByLabelText(new RegExp(`question ${number} option a`, 'i')), 'First source option');
+      await user.type(screen.getByLabelText(new RegExp(`question ${number} option b`, 'i')), 'Second source option');
+      await user.type(screen.getByLabelText(new RegExp(`question ${number} option c`, 'i')), 'Third source option');
+    }
     for (const select of screen.getAllByRole('combobox')) {
       await user.selectOptions(select, 'B');
     }
@@ -110,7 +121,7 @@ describe('ListeningAnswerSheetBuilder', () => {
     expect(saved.map((q) => q.number)).toEqual([37, 38, 39, 40, 41, 42]);
     expect(saved.every((q) => q.type === 'multiple_choice_3' && q.options.length === 3)).toBe(true);
     expect(saved.every((q) => q.correctAnswer === 'B')).toBe(true);
-  });
+  }, 30000);
 
   it('preserves questions from other sub-sections when saving (merge, not replace)', async () => {
     const user = userEvent.setup();
@@ -127,6 +138,10 @@ describe('ListeningAnswerSheetBuilder', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.type(screen.getByLabelText(/question 27 stem/i), 'What is the source question for 27?');
+    await user.type(screen.getByLabelText(/question 27 option a/i), 'First source option');
+    await user.type(screen.getByLabelText(/question 27 option b/i), 'Second source option');
+    await user.type(screen.getByLabelText(/question 27 option c/i), 'Third source option');
     await user.selectOptions(screen.getByRole('combobox'), 'A');
     await user.click(screen.getByRole('button', { name: /save all/i }));
 
@@ -155,6 +170,28 @@ describe('ListeningAnswerSheetBuilder', () => {
 
     expect(mockReplaceListeningStructure).not.toHaveBeenCalled();
     expect(onNotify).toHaveBeenCalledWith('error', expect.stringMatching(/correct answer/i));
+  });
+
+  it('blocks save when the source stem or options are still placeholders', async () => {
+    const user = userEvent.setup();
+    const onNotify = vi.fn();
+    render(
+      <ListeningAnswerSheetBuilder
+        paperId="paper-1"
+        partCode="B"
+        activeSection="B1"
+        allQuestions={[]}
+        onSaved={noop}
+        onNotify={onNotify}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.selectOptions(screen.getByRole('combobox'), 'A');
+    await user.click(screen.getByRole('button', { name: /save all/i }));
+
+    expect(mockReplaceListeningStructure).not.toHaveBeenCalled();
+    expect(onNotify).toHaveBeenCalledWith('error', expect.stringMatching(/source question stem/i));
   });
 
   it('seeds rows from existing questions and updates them in place (idempotent)', async () => {
@@ -193,6 +230,10 @@ describe('ListeningAnswerSheetBuilder', () => {
     );
 
     await user.click(screen.getByRole('button', { name: /generate/i }));
+    await user.type(screen.getByLabelText(/question 27 stem/i), 'What is the source question for 27?');
+    await user.type(screen.getByLabelText(/question 27 option a/i), 'First source option');
+    await user.type(screen.getByLabelText(/question 27 option b/i), 'Second source option');
+    await user.type(screen.getByLabelText(/question 27 option c/i), 'Third source option');
     await user.selectOptions(screen.getByRole('combobox'), 'A');
     await user.type(screen.getByLabelText(/rationale for question 27/i), 'The speaker confirms option A.');
     await user.click(screen.getByRole('button', { name: /save all/i }));
@@ -261,6 +302,10 @@ describe('ListeningAnswerSheetBuilder', () => {
 
     await user.click(screen.getByRole('button', { name: /generate/i }));
     await user.type(screen.getByLabelText(/scenario or context/i), 'You hear a charge nurse briefing a colleague.');
+    await user.type(screen.getByLabelText(/question 27 stem/i), 'What is the source question for 27?');
+    await user.type(screen.getByLabelText(/question 27 option a/i), 'First source option');
+    await user.type(screen.getByLabelText(/question 27 option b/i), 'Second source option');
+    await user.type(screen.getByLabelText(/question 27 option c/i), 'Third source option');
     await user.selectOptions(screen.getByRole('combobox'), 'A');
     await user.click(screen.getByRole('button', { name: /save all/i }));
 

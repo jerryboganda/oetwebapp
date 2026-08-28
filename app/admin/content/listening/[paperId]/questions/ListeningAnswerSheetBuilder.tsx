@@ -18,15 +18,10 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────
 //
-// Mirrors app/admin/content/reading/[paperId]/questions/ReadingAnswerSheetBuilder.tsx
-// so Listening Part B/C authoring is identical to Reading: read the question on
-// the uploaded PDF (shown on the left), then record only the machine-gradable
-// answer key (correct option letter) + an optional rationale per item. The stem
-// is stored as "See PDF" — the real question text lives on the question paper.
-//
-// Difference from Reading (rulebook-driven): Listening Part B AND Part C are
-// 3-option MCQ (A/B/C), whereas Reading Part C is 4-option. Counts also differ
-// (Listening B = 6×1, C = 2×6 = 12).
+// Part B/C learner cards render the printed question and all three options from
+// this authored structure. The uploaded PDF remains the source of truth, but a
+// PDF pointer is not valid candidate-facing content; operators must transcribe
+// the exact stem and options before saving.
 
 export type ListeningBuilderPart = 'B' | 'C';
 
@@ -46,9 +41,9 @@ export interface ListeningAnswerSheetBuilderProps {
 interface BuilderRow {
   id: string | null;
   number: number;
-  /** The question stem, shown inline on the learner card. Blank → "See PDF". */
+  /** The exact source question stem, shown inline on the learner card. */
   stem: string;
-  /** The three option texts (A/B/C). Blank slot → "Option {A|B|C}". */
+  /** The three exact source option texts (A/B/C). */
   options: string[];
   /** Letter of the correct option: 'A' | 'B' | 'C' (empty until chosen). */
   correctAnswer: string;
@@ -66,20 +61,31 @@ const SUB_SECTION_NUMBER_RANGES: Record<ListeningSubSectionCode, [number, number
 };
 
 const MCQ_LETTERS = ['A', 'B', 'C'] as const;
-// Fallback placeholders used ONLY when a field is left blank. Authors now type
-// the real stem + option prose, which renders inline on the learner card.
+// Legacy placeholders are recognized when reading old rows so they can be
+// cleared from the editor, but they are never written back.
 const MCQ3_OPTIONS = ['Option A', 'Option B', 'Option C'];
 const SEE_PDF_SENTINEL = 'See PDF';
 
-// A field is a "placeholder" when it is blank or still the generic
-// "See PDF" / "Option A/B/C" text. We seed real authored prose into the editor
-// and only fall back to the sentinel/placeholder when a field is left blank.
 function isSentinelStem(stem: string | undefined): boolean {
   return (stem ?? '').trim().toLowerCase() === SEE_PDF_SENTINEL.toLowerCase();
 }
+
+function isUsableSourceStem(stem: string | undefined): boolean {
+  const trimmed = (stem ?? '').trim();
+  if (!trimmed || isSentinelStem(trimmed)) return false;
+  if (/^(?:PART\s+[BC]\b.*|Q(?:UESTION)?\s*\d+\s+PART\s+[BC]\b.*|QUESTION\s+\d+\b.*)$/i.test(trimmed)) return false;
+  if (/^(?:WHAT\s+DOES\s+THE\s+SPEAKER\s+IDENTIFY\s+AS\s+THE\s+MAIN\s+CLINICAL\s+PRIORITY\?|WHAT\s+IS\s+THE\s+SPEAKER(?:'|’)S\s+MAIN\s+POINT\s+IN\s+THIS\s+EXTRACT\?)$/i.test(trimmed)) return false;
+  if (/\b(?:PAGE\s+\d+|Practice\s+Test\s+\d+)\b/i.test(trimmed)) return false;
+  return true;
+}
+
 function isPlaceholderOption(text: string | undefined, index: number): boolean {
   const trimmed = (text ?? '').trim();
   return trimmed.length === 0 || trimmed.toLowerCase() === MCQ3_OPTIONS[index].toLowerCase();
+}
+
+function isUsableSourceOption(text: string | undefined, index: number): boolean {
+  return !isPlaceholderOption(text, index) && !isSentinelStem(text);
 }
 
 function rangeFor(section: ListeningSubSectionCode): number[] {
@@ -113,7 +119,7 @@ function buildRows(
     const existing = sectionQuestions.find((q) => q.number === number);
     // Seed real authored text so re-saving never clobbers content typed here or
     // in the advanced editor; a sentinel/placeholder seeds as blank.
-    const seededStem = existing && !isSentinelStem(existing.stem) ? (existing.stem ?? '') : '';
+    const seededStem = existing && isUsableSourceStem(existing.stem) ? (existing.stem ?? '') : '';
     const seededOptions = MCQ_LETTERS.map((_, i) => {
       const opt = existing?.options?.[i];
       return isPlaceholderOption(opt, i) ? '' : (opt ?? '');
@@ -218,6 +224,16 @@ export function ListeningAnswerSheetBuilder({
       onNotify('error', `Q${invalid.number} needs a correct answer before saving.`);
       return;
     }
+    const missingStem = rows.find((row) => !isUsableSourceStem(row.stem));
+    if (missingStem) {
+      onNotify('error', `Q${missingStem.number} needs the exact source question stem before saving.`);
+      return;
+    }
+    const missingOption = rows.find((row) => row.options.some((option, index) => !isUsableSourceOption(option, index)));
+    if (missingOption) {
+      onNotify('error', `Q${missingOption.number} needs the exact source answer choices A, B and C before saving.`);
+      return;
+    }
 
     setSaving(true);
     try {
@@ -231,8 +247,8 @@ export function ListeningAnswerSheetBuilder({
           number: row.number,
           partCode: activeSection as ListeningAuthoredQuestion['partCode'],
           type: 'multiple_choice_3',
-          stem: row.stem.trim() || SEE_PDF_SENTINEL,
-          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() || MCQ3_OPTIONS[i]),
+          stem: row.stem.trim(),
+          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() ?? ''),
           correctAnswer: row.correctAnswer,
           acceptedAnswers: [],
           explanation: row.rationale.trim() ? row.rationale.trim() : null,
@@ -269,7 +285,7 @@ export function ListeningAnswerSheetBuilder({
         <div className="min-w-0">
           <CardTitle className="text-sm">Answer sheet — Part {partCode} {activeSection}</CardTitle>
           <CardDescription>
-            Type each question&apos;s stem and three options, then mark the correct one. They render inline on the learner card. Leave a field blank to keep the PDF-backed placeholder.
+            Type each question&apos;s exact source stem and three options, then mark the correct one. All four source fields are required and render inline on the learner card.
           </CardDescription>
         </div>
         {shown && !blocked ? (

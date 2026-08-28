@@ -217,6 +217,9 @@ describe('ListeningPaperPlayerPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument();
     });
+    await waitFor(() => {
+      expect(window.HTMLMediaElement.prototype.play).toHaveBeenCalled();
+    });
   });
 
   it('renders ListeningAudioTransport with exam mode props and attempt countdown', async () => {
@@ -284,11 +287,6 @@ describe('ListeningPaperPlayerPage', () => {
     const nextBtn = screen.getByRole('button', { name: /next question/i });
     expect(nextBtn).toBeEnabled();
     await user.click(nextBtn);
-
-    expect(screen.getByText(/Move to the next Part B question\?/i)).toBeInTheDocument();
-
-    const confirmBtn = screen.getByRole('button', { name: /lock & start next/i });
-    await user.click(confirmBtn);
 
     await waitFor(() => {
       expect(screen.getByText('Why does the doctor recommend rest?')).toBeInTheDocument();

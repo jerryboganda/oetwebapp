@@ -165,6 +165,7 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         // matching the post-migration relational shape. Items already coded
         // B1..B6 are left untouched.
         questions = SplitLegacyPartB(questions);
+        questions = SplitLegacyPartC(questions);
 
         // Build parts (one per partCode that has at least one question)
         var grouped = questions
@@ -453,14 +454,19 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         foreach (var item in raw.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.Object) continue;
-            // Preserve a bare legacy "B" here (do NOT floor it to B1 yet) so
-            // SplitLegacyPartB can distribute the six items across B1..B6. Any
-            // other code is normalized to its canonical form.
-            var partCode = NormalizePartCodeRaw(GetString(item, "partCode") ?? GetString(item, "part") ?? "A");
+            var number = GetInt(item, "number") ?? 0;
+            var rawPartCode = GetString(item, "partCode") ?? GetString(item, "part");
+            // Preserve a bare legacy parent code so the split pass below can
+            // distribute its questions across the canonical sub-sections.
+            // When the source omits the code entirely, infer only the
+            // structural section from the canonical OET number ranges; no
+            // question content is manufactured by this fallback.
+            var partCode = string.IsNullOrWhiteSpace(rawPartCode)
+                ? ListeningLearnerService.ResolveQuestionPartCode(null, number)
+                : NormalizePartCodeRaw(rawPartCode);
             var type = GetString(item, "type") ?? GetString(item, "questionType") ?? "short_answer";
             var stem = GetString(item, "text") ?? GetString(item, "stem") ?? string.Empty;
             var correct = GetString(item, "correctAnswer") ?? GetString(item, "answer") ?? string.Empty;
-            var number = GetInt(item, "number") ?? 0;
             var points = GetInt(item, "points") ?? 1;
 
             var options = item.TryGetProperty("options", out var optsEl) && optsEl.ValueKind == JsonValueKind.Array
@@ -562,6 +568,9 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
     private static bool IsBareLegacyB(string? raw)
         => string.Equals((raw ?? string.Empty).Trim(), "B", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsBareLegacyC(string? raw)
+        => string.Equals((raw ?? string.Empty).Trim(), "C", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Distribute legacy single-"B" Part B items across B1..B6 by question
     /// number order. Items already coded B1..B6 (or any non-B code) pass
@@ -582,6 +591,35 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
 
         return questions
             .Select(q => IsBareLegacyB(q.PartCode) && assignment.TryGetValue(q.Number, out var code)
+                ? q with { PartCode = code }
+                : q)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Distribute legacy single-"C" Part C items into C1 (Q31..Q36) and C2
+    /// (Q37..Q42). Older JSON manifests used a parent-only code, which caused
+    /// the second presentation to be grouped under C1 and omitted from the
+    /// Full Exam section map. Explicit C1/C2 rows are never changed.
+    /// </summary>
+    private static List<AuthoredQuestion> SplitLegacyPartC(List<AuthoredQuestion> questions)
+    {
+        var bareC = questions.Where(q => IsBareLegacyC(q.PartCode)).OrderBy(q => q.Number).ToList();
+        if (bareC.Count == 0) return questions;
+
+        var assignment = new Dictionary<int, string>(bareC.Count);
+        for (var i = 0; i < bareC.Count; i++)
+        {
+            var code = bareC[i].Number is >= 37 and <= 42
+                ? "C2"
+                : bareC[i].Number is >= 31 and <= 36
+                    ? "C1"
+                    : i < 6 ? "C1" : "C2";
+            assignment[bareC[i].Number] = code;
+        }
+
+        return questions
+            .Select(q => IsBareLegacyC(q.PartCode) && assignment.TryGetValue(q.Number, out var code)
                 ? q with { PartCode = code }
                 : q)
             .ToList();
@@ -611,9 +649,8 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
         var n = (raw ?? string.Empty).Trim().ToUpperInvariant();
         return n switch
         {
-            "A1" or "A2" or "B" or "B1" or "B2" or "B3" or "B4" or "B5" or "B6" or "C1" or "C2" => n,
+            "A1" or "A2" or "B" or "B1" or "B2" or "B3" or "B4" or "B5" or "B6" or "C" or "C1" or "C2" => n,
             "A" => "A1",
-            "C" => "C1",
             _ => "A1",
         };
     }

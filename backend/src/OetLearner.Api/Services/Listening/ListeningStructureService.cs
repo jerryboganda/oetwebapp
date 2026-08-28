@@ -367,11 +367,10 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         // carries a transcript excerpt). The TranscriptEvidenceText column is
         // already on ListeningQuestion; this gate ensures authors populate it
         // before publish (needed for jump-to-evidence playback and tutor review).
-        // PDF-backed B/C items (authored via the answer-sheet builder, stem
-        // "See PDF") deliberately carry no retyped transcript excerpt — the
-        // question + evidence live on the uploaded question paper, matching the
-        // Reading module's lightweight answer-key model. Exempt them from L06.1
-        // so the PDF-backed authoring workflow can publish.
+        // Legacy PDF-backed B/C items may still omit a retyped transcript
+        // excerpt, so the evidence rule retains its historical sentinel
+        // exemption. The learner-facing stem rule below is independent and
+        // fail-closed: a B/C item must still carry the exact source question.
         var missingTranscriptEvidence = rows.Count(row =>
             !IsPdfBackedItem(row.Stem)
             && string.IsNullOrWhiteSpace(row.TranscriptEvidenceText));
@@ -426,6 +425,15 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_blank_stems", "error",
                 $"Every Listening item requires learner-facing question text; {blankStems} item(s) have a blank stem."));
+        }
+
+        var invalidPartBCStems = rows.Count(row =>
+            (IsPartB(row.PartCode) || row.PartCode is ListeningPartCode.C1 or ListeningPartCode.C2)
+            && !ListeningLearnerService.IsUsablePartBCStem(row.Stem));
+        if (invalidPartBCStems > 0)
+        {
+            warnings.Add(new("listening_part_bc_stems", "error",
+                $"Every Part B/C item requires the exact source question stem above its options; {invalidPartBCStems} item(s) contain a blank, PDF sentinel, generic fallback, or section heading."));
         }
 
         var blankAnswers = rows.Count(row => string.IsNullOrWhiteSpace(ReadJsonString(row.CorrectAnswerJson)));
@@ -883,26 +891,45 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         var wrongOptionsMissingDistractorCategory = 0;
         var wrongOptionsInvalidDistractorCategory = 0;
         var unpublishedStatuses = new List<int>();
+        var invalidPartBCStems = 0;
 
         foreach (var q in questions)
         {
+            var questionNumber = TryGetInt(q, "number");
+            var rawPartCode = (q.GetValueOrDefault("partCode") ?? q.GetValueOrDefault("part"))?.ToString();
+            var partCode = ListeningLearnerService.ResolveQuestionPartCode(rawPartCode, questionNumber ?? 0);
+            var rawText = ReadString(q, "text");
+            var rawStem = ReadString(q, "stem");
+            var effectiveStem = partCode.StartsWith("B", StringComparison.Ordinal)
+                || partCode.StartsWith("C", StringComparison.Ordinal)
+                ? ListeningLearnerService.IsUsablePartBCStem(rawStem)
+                    ? ListeningLearnerService.SanitizeQuestionPrompt(rawStem)
+                    : ListeningLearnerService.SanitizeQuestionPrompt(rawText)
+                : rawText ?? rawStem;
+
             var validationStatus = (ReadString(q, "validationStatus") ?? "draft").Trim().ToLowerInvariant();
             if (!string.Equals(validationStatus, "published", StringComparison.Ordinal))
             {
-                unpublishedStatuses.Add(TryGetInt(q, "number") ?? 0);
+                unpublishedStatuses.Add(questionNumber ?? 0);
             }
 
-            if (TryGetInt(q, "number") is int number)
+            if (questionNumber is int number)
             {
                 numbers[number] = numbers.GetValueOrDefault(number) + 1;
             }
-            if (string.IsNullOrWhiteSpace(ReadString(q, "text") ?? ReadString(q, "stem"))) blankStems++;
+            if (string.IsNullOrWhiteSpace(effectiveStem)) blankStems++;
+            if ((partCode.StartsWith("B", StringComparison.Ordinal)
+                    || partCode.StartsWith("C", StringComparison.Ordinal))
+                && !ListeningLearnerService.IsUsablePartBCStem(effectiveStem))
+            {
+                invalidPartBCStems++;
+            }
             if (string.IsNullOrWhiteSpace(ReadString(q, "correctAnswer"))) blankAnswers++;
             var skillTag = ReadString(q, "skillTag");
             if (string.IsNullOrWhiteSpace(skillTag)) missingSkillTags++;
             else if (!ListeningSkillTags.IsValid(skillTag)) invalidSkillTags++;
 
-            if (!IsPdfBackedItem(ReadString(q, "stem"))
+            if (!IsPdfBackedItem(rawStem)
                 && (string.IsNullOrWhiteSpace(ReadString(q, "transcriptEvidenceText") ?? ReadString(q, "transcriptExcerpt"))
                     || !HasValidTimingWindow(TryGetInt(q, "transcriptEvidenceStartMs"), TryGetInt(q, "transcriptEvidenceEndMs"))))
             {
@@ -921,8 +948,6 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 missingQuestionDifficulty++;
             }
 
-            var partCode = (q.GetValueOrDefault("partCode") ?? q.GetValueOrDefault("part"))?.ToString()
-                ?.Trim().ToUpperInvariant() ?? "A";
             var points = TryGetInt(q, "points") ?? 1;
             if (points != 1) nonUnitPointItems++;
 
@@ -1034,6 +1059,12 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             warnings.Add(new("listening_blank_stems", "error",
                 $"Every Listening item requires learner-facing question text; {blankStems} item(s) have a blank stem."));
+        }
+
+        if (invalidPartBCStems > 0)
+        {
+            warnings.Add(new("listening_part_bc_stems", "error",
+                $"Every Part B/C item requires the exact source question stem above its options; {invalidPartBCStems} item(s) contain a blank, PDF sentinel, generic fallback, or section heading."));
         }
 
         if (blankAnswers > 0)
@@ -1192,9 +1223,9 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
     }
 
     /// <summary>
-    /// A PDF-backed answer-sheet item (Part B/C authored via the builder) stores
-    /// the sentinel stem "See PDF" — the real question text + evidence live on
-    /// the uploaded question paper, mirroring the Reading module.
+    /// Legacy evidence exemption for an answer-sheet row that still carries a
+    /// PDF sentinel. This does not make the sentinel an acceptable learner stem;
+    /// the explicit Part B/C stem gate rejects it above.
     /// </summary>
     private static bool IsPdfBackedItem(string? stem) =>
         string.Equals(stem?.Trim(), "See PDF", StringComparison.OrdinalIgnoreCase);

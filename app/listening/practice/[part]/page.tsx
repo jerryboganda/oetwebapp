@@ -46,7 +46,7 @@ const PART_DETAILS: Record<PartCode, { title: string; subtitle: string; descript
     title: 'Practice Part C',
     subtitle: 'Healthcare presentations',
     description:
-      'One or two longer extracts from a published Listening paper. You answer the authored Part C items only — ST9 is C1 (6 items) until Q37–42 exist.',
+      'One or two longer extracts from a published Listening paper. You answer the authored Part C items only — C1 contains Q31–Q36 and C2 contains Q37–Q42 when the source paper includes both extracts.',
     minutes: 15,
   },
 };

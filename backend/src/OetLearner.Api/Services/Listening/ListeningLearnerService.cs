@@ -2760,6 +2760,21 @@ public sealed class ListeningLearnerService(
             .OrderBy(q => q.QuestionNumber)
             .ToListAsync(ct);
 
+        // The relational table is the preferred source for authored metadata,
+        // but older imports can contain only a partial Part B/C projection while
+        // ExtractedTextJson still has the complete source question set. Parse the
+        // JSON once and merge by the authoritative question number below; never
+        // let the mere presence of one relational row hide the remaining source
+        // questions from the learner.
+        var questionMap = JsonSupport.Deserialize<Dictionary<string, object?>>(
+            paper.ExtractedTextJson,
+            new Dictionary<string, object?>());
+        var jsonQuestions = ExtractQuestions(
+                questionMap.TryGetValue("listeningQuestions", out var listeningQuestions)
+                    ? listeningQuestions
+                    : questionMap.GetValueOrDefault("questions"))
+            .ToList();
+
         IReadOnlyList<ListeningQuestion> questions;
         IReadOnlyList<ListeningTranscriptSegmentDto> segments;
         IReadOnlyList<ListeningExtractMetaDto> extracts;
@@ -2784,7 +2799,9 @@ public sealed class ListeningLearnerService(
                     .OrderBy(extract => extract.DisplayOrder)
                     .ToListAsync(ct);
 
-            questions = relationalQuestions.Select(MapRelationalQuestion).ToList();
+            questions = MergeRelationalAndJsonQuestions(
+                relationalQuestions.Select(MapRelationalQuestion).ToList(),
+                jsonQuestions);
             extracts = relationalExtracts
                 .Select((extract, index) =>
                 {
@@ -2806,14 +2823,20 @@ public sealed class ListeningLearnerService(
                     PartCodeString(parts.GetValueOrDefault(extract.ListeningPartId))))
                 .OrderBy(segment => segment.StartMs)
                 .ToList();
+
+            // A few early content-paper imports created relational questions
+            // before their extract rows. Keep the normalized JSON metadata as a
+            // fallback for those papers so B/C audio and extract context are not
+            // silently discarded along with the question fallback.
+            if (relationalExtracts.Count == 0)
+            {
+                segments = ExtractTranscriptSegments(questionMap.GetValueOrDefault("listeningTranscriptSegments"));
+                extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"), audioByPart);
+            }
         }
         else
         {
-            var questionMap = JsonSupport.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson, new Dictionary<string, object?>());
-            questions = ExtractQuestions(questionMap.TryGetValue("listeningQuestions", out var listeningQuestions)
-                    ? listeningQuestions
-                    : questionMap.GetValueOrDefault("questions"))
-                .ToList();
+            questions = jsonQuestions;
             segments = ExtractTranscriptSegments(questionMap.GetValueOrDefault("listeningTranscriptSegments"));
             extracts = ExtractExtractMetadata(questionMap.GetValueOrDefault("listeningExtracts"), audioByPart);
         }
@@ -3103,6 +3126,9 @@ public sealed class ListeningLearnerService(
 
     private static ListeningQuestion MapRelationalQuestion(OetLearner.Api.Domain.ListeningQuestion question)
     {
+        var resolvedPartCode = ResolveQuestionPartCode(
+            question.Part is null ? null : PartCodeString(question.Part.PartCode),
+            question.QuestionNumber);
         var options = question.Options
             .OrderBy(option => option.DisplayOrder)
             .ToList();
@@ -3121,8 +3147,18 @@ public sealed class ListeningLearnerService(
         return new ListeningQuestion(
             Id: question.Id,
             Number: question.QuestionNumber,
-            PartCode: PartCodeString(question.Part?.PartCode ?? ListeningPartCode.A1),
-            Text: CleanListeningPrompt(question.Stem),
+            // A handful of early imports left the part relationship empty or
+            // stored a bare parent code. Resolve those rows from the canonical
+            // OET question-number ranges so they cannot silently fall into
+            // Part A and disappear from the learner's B/C grouping.
+            PartCode: resolvedPartCode,
+            // Part B/C learner stems are fail-closed: metadata headings and
+            // generic fallback copy must never be rendered as if they were a
+            // real question when the source manifest is unavailable. The
+            // source JSON merge below can still supply the exact authored stem.
+            Text: IsPartBCCode(resolvedPartCode)
+                ? SelectQuestionPrompt(question.Stem, question.Stem, resolvedPartCode)
+                : CleanListeningPrompt(question.Stem),
             // FillInBlank surfaces to the learner as a text-input gap-fill —
             // identical wire type to ShortAnswer so the answer never leaks via
             // option text and the player renders a free-text box.
@@ -3141,6 +3177,151 @@ public sealed class ListeningLearnerService(
             SpeakerAttitude: question.SpeakerAttitude is null ? null : SpeakerAttitudeString(question.SpeakerAttitude.Value),
             TranscriptEvidenceStartMs: question.TranscriptEvidenceStartMs,
             TranscriptEvidenceEndMs: question.TranscriptEvidenceEndMs);
+    }
+
+    /// <summary>
+    /// Reconcile the normalized relational graph with the source question
+    /// manifest. Relational rows retain their stable IDs (so existing answers
+    /// continue to resolve), while missing/placeholder Part B/C stems and
+    /// option sets are filled from the same paper's JSON source by question
+    /// number. JSON-only B/C rows are appended when an import omitted them from
+    /// the relational table. No text is invented here: an unavailable source
+    /// remains empty and is rejected by the publish validator.
+    /// </summary>
+    private static IReadOnlyList<ListeningQuestion> MergeRelationalAndJsonQuestions(
+        IReadOnlyList<ListeningQuestion> relational,
+        IReadOnlyList<ListeningQuestion> json)
+    {
+        if (relational.Count == 0) return json.OrderBy(question => question.Number).ToList();
+        if (json.Count == 0) return relational.OrderBy(question => question.Number).ToList();
+
+        var jsonByNumber = json
+            .Where(question => IsPartBCCode(question.PartCode))
+            .GroupBy(question => question.Number)
+            .ToDictionary(group => group.Key, group => group.First());
+        var representedNumbers = new HashSet<int>();
+        var merged = new List<ListeningQuestion>(relational.Count + jsonByNumber.Count);
+
+        foreach (var relationalQuestion in relational)
+        {
+            // Only a relational B/C row represents a source B/C number. A
+            // malformed legacy Part A row can share a number with the source
+            // manifest; allowing that row to suppress the source item would
+            // recreate the missing-question defect.
+            var isRelationalPartBC = IsPartBCCode(relationalQuestion.PartCode);
+            if (isRelationalPartBC)
+            {
+                representedNumbers.Add(relationalQuestion.Number);
+            }
+
+            if (!isRelationalPartBC
+                || !jsonByNumber.TryGetValue(relationalQuestion.Number, out var sourceQuestion))
+            {
+                merged.Add(relationalQuestion);
+                continue;
+            }
+
+            var mergedQuestion = relationalQuestion;
+            if (!IsUsablePartBCStem(mergedQuestion.Text)
+                && IsUsablePartBCStem(sourceQuestion.Text))
+            {
+                mergedQuestion = mergedQuestion with { Text = sourceQuestion.Text };
+            }
+
+            if (!HasUsableMcqOptions(mergedQuestion.Options)
+                && HasUsableMcqOptions(sourceQuestion.Options))
+            {
+                mergedQuestion = mergedQuestion with
+                {
+                    Options = sourceQuestion.Options,
+                    CorrectAnswer = sourceQuestion.CorrectAnswer,
+                    AcceptedAnswers = sourceQuestion.AcceptedAnswers,
+                    OptionDistractorWhy = sourceQuestion.OptionDistractorWhy,
+                    OptionDistractorCategory = sourceQuestion.OptionDistractorCategory,
+                };
+            }
+            else if (string.IsNullOrWhiteSpace(mergedQuestion.CorrectAnswer)
+                && !string.IsNullOrWhiteSpace(sourceQuestion.CorrectAnswer))
+            {
+                mergedQuestion = mergedQuestion with
+                {
+                    CorrectAnswer = sourceQuestion.CorrectAnswer,
+                    AcceptedAnswers = sourceQuestion.AcceptedAnswers,
+                };
+            }
+
+            merged.Add(mergedQuestion);
+        }
+
+        // Preserve complete source questions that were never imported into the
+        // relational table (the historical cause of Full Exam Part B showing a
+        // single item). Only B/C rows are eligible: relational A rows remain the
+        // canonical note-completion structure for Part A.
+        foreach (var sourceQuestion in jsonByNumber.Values)
+        {
+            if (!representedNumbers.Contains(sourceQuestion.Number)) merged.Add(sourceQuestion);
+        }
+
+        return merged
+            .OrderBy(question => question.Number)
+            .ThenBy(question => question.Id, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static bool IsPartBCCode(string? partCode)
+    {
+        var normalized = (partCode ?? string.Empty).Trim().ToUpperInvariant();
+        return normalized.StartsWith('B') || normalized.StartsWith('C');
+    }
+
+    /// <summary>
+    /// Resolve a learner question's canonical sub-section. The explicit
+    /// A1/A2/B1..B6/C1/C2 code always wins. Legacy parent-only values and
+    /// missing values are normalized from the authoritative OET number ranges
+    /// (B=25..30, C1=31..36, C2=37..42). This is structural mapping only; it
+    /// never supplies question text or answer content.
+    /// </summary>
+    public static string ResolveQuestionPartCode(string? rawPartCode, int questionNumber)
+    {
+        var normalized = (rawPartCode ?? string.Empty).Trim().ToUpperInvariant();
+        if (normalized is "A1" or "A2"
+            or "B1" or "B2" or "B3" or "B4" or "B5" or "B6"
+            or "C1" or "C2")
+        {
+            return normalized;
+        }
+
+        if (normalized == "B" && questionNumber is >= 25 and <= 30)
+        {
+            return $"B{questionNumber - 24}";
+        }
+
+        if (normalized == "C")
+        {
+            return questionNumber is >= 37 and <= 42 ? "C2" : "C1";
+        }
+
+        if (normalized == "A")
+        {
+            return questionNumber is >= 13 and <= 24 ? "A2" : "A1";
+        }
+
+        return questionNumber switch
+        {
+            >= 25 and <= 30 => $"B{questionNumber - 24}",
+            >= 31 and <= 36 => "C1",
+            >= 37 and <= 42 => "C2",
+            >= 13 and <= 24 => "A2",
+            _ => "A1",
+        };
+    }
+
+    private static bool HasUsableMcqOptions(IReadOnlyCollection<string> options)
+    {
+        if (options.Count != 3) return false;
+        var cleaned = options.Select(CleanListeningOption).ToList();
+        return cleaned.All(option => !string.IsNullOrWhiteSpace(option))
+            && cleaned.Distinct(StringComparer.OrdinalIgnoreCase).Count() == 3;
     }
 
     private static void AddAccepted(List<string> accepted, string? answer)
@@ -3903,6 +4084,11 @@ public sealed class ListeningLearnerService(
 
             var type = ReadString(question.GetValueOrDefault("type")) ?? ReadString(question.GetValueOrDefault("questionType")) ?? "short_answer";
             var options = ReadStringList(question.GetValueOrDefault("options")) ?? [];
+            var rawPartCode = ReadString(question.GetValueOrDefault("partCode"))
+                ?? ReadString(question.GetValueOrDefault("part"));
+            var partCode = ResolveQuestionPartCode(rawPartCode, number);
+            var rawText = ReadString(question.GetValueOrDefault("text"));
+            var rawStem = ReadString(question.GetValueOrDefault("stem"));
 
             // MCQ (Part B/C): grade by option LETTER *or* TEXT interchangeably. The
             // correct answer may be stored as a letter (fast builder) or as the
@@ -3937,8 +4123,8 @@ public sealed class ListeningLearnerService(
             yield return new ListeningQuestion(
                 Id: id,
                 Number: number,
-                PartCode: ReadString(question.GetValueOrDefault("partCode")) ?? ReadString(question.GetValueOrDefault("part")) ?? "A",
-                Text: CleanListeningPrompt(ReadString(question.GetValueOrDefault("text")) ?? ReadString(question.GetValueOrDefault("stem")) ?? string.Empty),
+                PartCode: partCode,
+                Text: SelectQuestionPrompt(rawText, rawStem, partCode),
                 Type: type,
                 Options: options.Select(CleanListeningOption).ToList(),
                 CorrectAnswer: correct,
@@ -4412,6 +4598,17 @@ public sealed class ListeningLearnerService(
     private static readonly System.Text.RegularExpressions.Regex SentinelPattern =
         new(@"^(see pdf|cpdf|pdf|view pdf)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
+    // Part B/C headings are useful surrounding metadata, but they are never a
+    // learner-facing question. Keep this guard centralized so JSON imports,
+    // relational rows, and both candidate renderers apply the same rule.
+    private static readonly System.Text.RegularExpressions.Regex PartBCMetadataStemPattern =
+        new(@"^(?:PART\s+[BC]\b.*|Q(?:UESTION)?\s*\d+\s+PART\s+[BC]\b.*|QUESTION\s+\d+\b.*)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex PartBCGenericStemPattern =
+        new(@"^(?:WHAT\s+DOES\s+THE\s+SPEAKER\s+IDENTIFY\s+AS\s+THE\s+MAIN\s+CLINICAL\s+PRIORITY\?|WHAT\s+IS\s+THE\s+SPEAKER(?:'|’)S\s+MAIN\s+POINT\s+IN\s+THIS\s+EXTRACT\?)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
+
     private static readonly System.Text.RegularExpressions.Regex OptionPlaceholderPattern =
         new(@"^Option\s+[ABC]$", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Compiled);
 
@@ -4477,6 +4674,38 @@ public sealed class ListeningLearnerService(
         text = MultipleWhitespacePattern.Replace(text, " ").Trim();
         if (SentinelPattern.IsMatch(text)) return string.Empty;
         return text;
+    }
+
+    /// <summary>Returns true only when a Part B/C value is an actual question
+    /// sentence rather than a PDF sentinel, generic fallback, or section
+    /// heading. This is deliberately fail-closed: if the source is absent the
+    /// candidate must not be shown invented content.</summary>
+    public static bool IsUsablePartBCStem(string? raw)
+    {
+        var text = SanitizeQuestionPrompt(raw);
+        return !string.IsNullOrWhiteSpace(text)
+            && !PartBCMetadataStemPattern.IsMatch(text)
+            && !PartBCGenericStemPattern.IsMatch(text);
+    }
+
+    private static string SelectQuestionPrompt(string? rawText, string? rawStem, string? partCode)
+    {
+        if (IsPartBCCode(partCode))
+        {
+            // The authoring contract calls the field `stem`; `text` remains a
+            // supported legacy alias. Prefer a usable stem, then a usable text
+            // alias. Never return a metadata heading or generic fallback when
+            // both values are unusable: that would make an invalid record look
+            // publishable and would hide the missing source from operators.
+            foreach (var candidate in new[] { rawStem, rawText })
+            {
+                if (IsUsablePartBCStem(candidate)) return SanitizeQuestionPrompt(candidate);
+            }
+
+            return string.Empty;
+        }
+
+        return CleanListeningPrompt(rawText ?? rawStem ?? string.Empty);
     }
 
     public static string CleanListeningPrompt(string? raw) => SanitizeQuestionPrompt(raw);
@@ -4884,13 +5113,31 @@ public sealed class ListeningLearnerService(
         if (!partPractice.IsValid) return source;
 
         var scoped = ApplyQuestionScope(source, partPractice.QuestionIds);
-        if (scoped.Questions.Count == 0 && source.Questions.Count > 0)
+        var parent = partPractice.PartCode!.Trim().ToUpperInvariant();
+        var expectedPartCount = parent switch
+        {
+            "B" => 6,
+            "C" => 12,
+            "A" => 24,
+            _ => 0,
+        };
+        var sourceParentCount = source.Questions.Count(q =>
+            string.Equals(ListeningParentPartFromCode(q.PartCode), parent, StringComparison.OrdinalIgnoreCase));
+        // A part-practice scope is defined as the complete part. If its stored
+        // IDs pre-date a source backfill (or were partially persisted), keeping
+        // the matching subset would make Full/standalone B or C appear to have
+        // one question. Rebind the scope by parent part so the normalized source
+        // can expose all authored items while retaining the existing attempt.
+        if (source.Questions.Count > 0
+            && (scoped.Questions.Count == 0
+                || (expectedPartCount > 0
+                    && sourceParentCount >= expectedPartCount
+                    && scoped.Questions.Count < expectedPartCount)))
         {
             // Fallback: stored questionIds are stale (random GUIDs regenerated on
             // backfill after the attempt was created). Recover by parent part
             // so part-only review still shows the correct transcript/audio/answers
             // instead of collapsing to an empty paper.
-            var parent = partPractice.PartCode!.Trim().ToUpperInvariant();
             var fallbackIds = source.Questions
                 .Where(q => string.Equals(ListeningParentPartFromCode(q.PartCode), parent, StringComparison.OrdinalIgnoreCase))
                 .Select(q => q.Id)

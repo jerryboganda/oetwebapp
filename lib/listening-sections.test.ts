@@ -62,6 +62,20 @@ describe('listening-sections', () => {
     expect(groups.C2).toHaveLength(6);
   });
 
+  it('recovers legacy or missing codes from the authoritative B/C question ranges', () => {
+    const qs: Q[] = [
+      { id: 'b-25', partCode: '', number: 25 },
+      { id: 'b-30', partCode: 'legacy', number: 30 },
+      { id: 'c-31', partCode: 'C', number: 31 },
+      { id: 'c-37', partCode: 'C', number: 37 },
+      { id: 'c-42', partCode: '', number: 42 },
+    ];
+    const groups = groupQuestionsBySection(qs);
+    expect(groups.B.map((q) => q.number)).toEqual([25, 30]);
+    expect(groups.C1.map((q) => q.number)).toEqual([31]);
+    expect(groups.C2.map((q) => q.number)).toEqual([37, 42]);
+  });
+
   it('formats countdown seconds as mm:ss', () => {
     expect(formatReviewSeconds(120)).toBe('02:00');
     expect(formatReviewSeconds(60)).toBe('01:00');

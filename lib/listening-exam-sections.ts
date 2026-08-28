@@ -81,12 +81,22 @@ export interface ListeningExamSubSection {
  */
 export function normalizeExamPartCode(
   raw: string | null | undefined,
+  questionNumber?: number | null,
 ): ListeningExamPartCode | null {
-  if (!raw) return null;
-  const code = raw.trim().toUpperCase();
-  if (code.startsWith('B')) return 'B';
+  const code = raw?.trim().toUpperCase() ?? '';
+  if (code === 'B' || /^B[1-6]$/.test(code)) return 'B';
   if ((LISTENING_EXAM_PART_SEQUENCE as readonly string[]).includes(code)) {
     return code as ListeningExamPartCode;
+  }
+  // Older papers sometimes persisted only the parent part (A/C), or no
+  // usable code at all.  A canonical printed question number is authoritative
+  // for the split and prevents C2 (Q37–42) from disappearing into C1.
+  if (questionNumber != null && Number.isFinite(questionNumber)) {
+    if (questionNumber >= 1 && questionNumber <= 12) return 'A1';
+    if (questionNumber >= 13 && questionNumber <= 24) return 'A2';
+    if (questionNumber >= 25 && questionNumber <= 30) return 'B';
+    if (questionNumber >= 31 && questionNumber <= 36) return 'C1';
+    if (questionNumber >= 37 && questionNumber <= 42) return 'C2';
   }
   if (code === 'A') return 'A1';
   if (code === 'C') return 'C1';
@@ -133,7 +143,7 @@ export function buildListeningExamSubSections(
 
   const questionsByPart = new Map<ListeningExamPartCode, ListeningSessionQuestionDto[]>();
   for (const question of session.questions) {
-    const code = normalizeExamPartCode(question.partCode);
+    const code = normalizeExamPartCode(question.partCode, question.number);
     if (!code) continue;
     const bucket = questionsByPart.get(code);
     if (bucket) bucket.push(question);

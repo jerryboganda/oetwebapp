@@ -125,7 +125,7 @@ public class ListeningManifestImportTests
                         Type: "multiple_choice_3",
                         NoteTextBeforeGap: null,
                         Stem: $"What is the main point of extract {i + 1}?",
-                        Options: new ListeningOptionsManifest("Option A", "Option B", "Option C"),
+                        Options: new ListeningOptionsManifest("First source option", "Second source option", "Third source option"),
                         CorrectAnswer: "B",
                         AcceptedAnswers: null,
                         Explanation: "Because B.",
@@ -151,7 +151,7 @@ public class ListeningManifestImportTests
                     Number: number,
                     Type: "multiple_choice_3",
                     NoteTextBeforeGap: null,
-                    Stem: $"Part C question {number}",
+                    Stem: $"What is the source question for {number}?",
                     Options: new ListeningOptionsManifest("Choice A", "Choice B", "Choice C"),
                     CorrectAnswer: "C",
                     AcceptedAnswers: null,
@@ -233,7 +233,7 @@ public class ListeningManifestImportTests
         var b = questions.Single(q => q.Number == 25);
         Assert.Equal("B1", b.PartCode);
         Assert.Equal("multiple_choice_3", b.Type);
-        Assert.Equal(new[] { "Option A", "Option B", "Option C" }, b.Options);
+        Assert.Equal(new[] { "First source option", "Second source option", "Third source option" }, b.Options);
         Assert.Equal("B", b.CorrectAnswer);
 
         // Part C carries the extract-level speaker attitude onto each question.
@@ -379,7 +379,7 @@ public class ListeningManifestImportTests
 
         // Part B/C MCQ options + answers survive the round trip.
         var b = result.Structure.Questions.Single(q => q.Number == 25);
-        Assert.Equal(new[] { "Option A", "Option B", "Option C" }, b.Options);
+        Assert.Equal(new[] { "First source option", "Second source option", "Third source option" }, b.Options);
         Assert.Equal("B", b.CorrectAnswer);
         var c = result.Structure.Questions.Single(q => q.Number == 31);
         Assert.Equal("C", c.CorrectAnswer);

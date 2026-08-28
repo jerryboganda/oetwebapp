@@ -82,6 +82,23 @@ describe('listening-exam-sections', () => {
     expect(sections.map((x) => x.index)).toEqual([0, 1, 2, 3]);
   });
 
+  it('recovers legacy or missing question part codes from the printed number', () => {
+    expect(normalizeExamPartCode(undefined, 25)).toBe('B');
+    expect(normalizeExamPartCode('legacy-b', 25)).toBe('B');
+    expect(normalizeExamPartCode('malformed-b', 37)).toBe('C2');
+    expect(normalizeExamPartCode('legacy-c', 31)).toBe('C1');
+    expect(normalizeExamPartCode('C', 42)).toBe('C2');
+
+    const s = session(
+      [extract('B1'), extract('C1'), extract('C2')],
+      [mcq('', 25), mcq('legacy-c', 36), mcq('C', 37), mcq('', 42)],
+    );
+    const sections = buildListeningExamSubSections(s);
+    expect(sections.find((section) => section.partCode === 'B')?.questions.map((q) => q.number)).toEqual([25]);
+    expect(sections.find((section) => section.partCode === 'C1')?.questions.map((q) => q.number)).toEqual([36]);
+    expect(sections.find((section) => section.partCode === 'C2')?.questions.map((q) => q.number)).toEqual([37, 42]);
+  });
+
   it('collapses Part B B1..B6 into one "B" section with all its questions merged', () => {
     const s = session(
       [extract('B1', { timeLimitSeconds: 300 }), extract('B2'), extract('B3'), extract('B6')],
@@ -98,6 +115,46 @@ describe('listening-exam-sections', () => {
     expect(b.audioUrl).toBe('/v1/media/partB/content');
     expect(b.audioRequiresAuth).toBe(true);
     expect(b.timeLimitSeconds).toBe(300);
+  });
+
+  it('keeps the complete Part B and Part C question sets with source stems and options', () => {
+    const partBQuestions = Array.from({ length: 6 }, (_, index) => {
+      const number = 25 + index;
+      return {
+        ...mcq(`B${index + 1}`, number),
+        text: `Authoritative Part B question ${number}`,
+      };
+    });
+    const partCQuestions = Array.from({ length: 12 }, (_, index) => {
+      const number = 31 + index;
+      const extractCode = number <= 36 ? 'C1' : 'C2';
+      return {
+        ...mcq(extractCode, number),
+        text: `Authoritative Part C question ${number}`,
+      };
+    });
+    const s = session(
+      [
+        ...Array.from({ length: 6 }, (_, index) => extract(`B${index + 1}` as Extract['partCode'], { displayOrder: index })),
+        extract('C1', { displayOrder: 6 }),
+        extract('C2', { displayOrder: 7 }),
+      ],
+      [...partBQuestions, ...partCQuestions].reverse(),
+    );
+
+    const sections = buildListeningExamSubSections(s);
+    const partB = sections.find((section) => section.partCode === 'B');
+    const c1 = sections.find((section) => section.partCode === 'C1');
+    const c2 = sections.find((section) => section.partCode === 'C2');
+
+    expect(partB?.questions.map((q) => q.number)).toEqual([25, 26, 27, 28, 29, 30]);
+    expect(c1?.questions.map((q) => q.number)).toEqual([31, 32, 33, 34, 35, 36]);
+    expect(c2?.questions.map((q) => q.number)).toEqual([37, 38, 39, 40, 41, 42]);
+
+    for (const question of [...(partB?.questions ?? []), ...(c1?.questions ?? []), ...(c2?.questions ?? [])]) {
+      expect(question.text).toMatch(/^Authoritative Part [BC] question (2[5-9]|3[0-9]|4[0-2])$/);
+      expect(question.options).toHaveLength(3);
+    }
   });
 
   it('prefers the per-section audioUrlByPart map over the extract audioUrl', () => {

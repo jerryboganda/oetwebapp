@@ -3,14 +3,14 @@
 /**
  * Listening Part B / Part C — AI extraction (OCR).
  *
- * Part B/C is PDF-backed: the learner reads the MCQ on the question paper and the
- * admin only records the correct option (A/B/C) + an optional rationale. This panel
- * automates that for a WHOLE part in one go: upload the part's question paper
+ * Part B/C is source-backed: the learner receives the printed MCQ stem and all
+ * three options inline. This panel automates that for a WHOLE part in one go:
+ * upload the part's question paper
  * (Part C also uploads C2) + the answer-key PDF, the server OCRs + Claude-structures
  * them, and the admin proofreads the pre-filled answers and clicks one Save.
  *
- * Mirrors the per-sub-section `ListeningAnswerSheetBuilder` save shape (stem "See PDF",
- * placeholder options, correct letter, rationale → explanation) but spans the entire
+ * Mirrors the per-sub-section `ListeningAnswerSheetBuilder` save shape (exact stem,
+ * three exact options, correct letter, rationale → explanation) but spans the entire
  * part and persists in a single `replaceListeningStructure` call.
  */
 
@@ -47,9 +47,23 @@ const PDF_ACCEPT = 'application/pdf,.pdf,image/png,image/jpeg,image/gif,image/we
 function isSentinelStem(stem: string | undefined): boolean {
   return (stem ?? '').trim().toLowerCase() === SEE_PDF_SENTINEL.toLowerCase();
 }
+
+function isUsableSourceStem(stem: string | undefined): boolean {
+  const trimmed = (stem ?? '').trim();
+  if (!trimmed || isSentinelStem(trimmed)) return false;
+  if (/^(?:PART\s+[BC]\b.*|Q(?:UESTION)?\s*\d+\s+PART\s+[BC]\b.*|QUESTION\s+\d+\b.*)$/i.test(trimmed)) return false;
+  if (/^(?:WHAT\s+DOES\s+THE\s+SPEAKER\s+IDENTIFY\s+AS\s+THE\s+MAIN\s+CLINICAL\s+PRIORITY\?|WHAT\s+IS\s+THE\s+SPEAKER(?:'|’)S\s+MAIN\s+POINT\s+IN\s+THIS\s+EXTRACT\?)$/i.test(trimmed)) return false;
+  if (/\b(?:PAGE\s+\d+|Practice\s+Test\s+\d+)\b/i.test(trimmed)) return false;
+  return true;
+}
+
 function isPlaceholderOption(text: string | undefined, index: number): boolean {
   const trimmed = (text ?? '').trim();
   return trimmed.length === 0 || trimmed.toLowerCase() === MCQ3_OPTIONS[index].toLowerCase();
+}
+
+function isUsableSourceOption(text: string | undefined, index: number): boolean {
+  return !isPlaceholderOption(text, index) && !isSentinelStem(text);
 }
 
 const PART_RANGE: Record<ListeningExtractionPart, [number, number]> = { B: [25, 30], C: [31, 42] };
@@ -114,7 +128,7 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
         // text (never a placeholder), else blank for the reviewer to fill.
         const seedStem = ai?.stem?.trim()
           ? ai.stem.trim()
-          : existing && !isSentinelStem(existing.stem) ? (existing.stem ?? '') : '';
+          : existing && isUsableSourceStem(existing.stem) ? (existing.stem ?? '') : '';
         const aiOptions = [ai?.optionA, ai?.optionB, ai?.optionC];
         const seedOptions = MCQ_LETTERS.map((_, i) => {
           if (aiOptions[i]?.trim()) return aiOptions[i]!.trim();
@@ -162,6 +176,16 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
       onNotify('error', `Q${missing.number} needs a correct answer before saving.`);
       return;
     }
+    const missingStem = rows.find((r) => !isUsableSourceStem(r.stem));
+    if (missingStem) {
+      onNotify('error', `Q${missingStem.number} needs the exact source question stem before saving.`);
+      return;
+    }
+    const missingOption = rows.find((r) => r.options.some((option, index) => !isUsableSourceOption(option, index)));
+    if (missingOption) {
+      onNotify('error', `Q${missingOption.number} needs the exact source answer choices A, B and C before saving.`);
+      return;
+    }
     setSaving(true);
     try {
       const built: ListeningAuthoredQuestion[] = rows.map((row) => {
@@ -172,8 +196,8 @@ export function ListeningPartAiExtraction({ paperId, part, allQuestions, onSaved
           number: row.number,
           partCode: subSectionFor(part, row.number),
           type: 'multiple_choice_3',
-          stem: row.stem.trim() || SEE_PDF_SENTINEL,
-          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() || MCQ3_OPTIONS[i]),
+          stem: row.stem.trim(),
+          options: MCQ_LETTERS.map((_, i) => row.options[i]?.trim() ?? ''),
           correctAnswer: row.correctAnswer,
           acceptedAnswers: [],
           explanation: row.rationale.trim() ? row.rationale.trim() : null,

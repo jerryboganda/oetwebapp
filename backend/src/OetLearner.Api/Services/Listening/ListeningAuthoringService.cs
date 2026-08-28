@@ -420,6 +420,7 @@ public sealed class ListeningAuthoringService(
             .Select(NormalizeForStorage)
             .OrderBy(q => q.Number)
             .ToList();
+        ValidatePartBCSourceContent(normalized);
 
         var existing = ReadQuestionsArray(paper.ExtractedTextJson)
             .Select(NormalizeFromStorage)
@@ -1466,6 +1467,40 @@ public sealed class ListeningAuthoringService(
         };
     }
 
+    /// <summary>
+    /// Part B/C is candidate-facing source content, not a PDF pointer. Reject
+    /// sentinel/heading/generic stems and missing placeholder options at the
+    /// authoring boundary so no admin client (UI, import, or API caller) can
+    /// persist an item that the learner cannot actually read.
+    /// </summary>
+    private static void ValidatePartBCSourceContent(
+        IReadOnlyList<ListeningAuthoredQuestion> questions)
+    {
+        foreach (var question in questions)
+        {
+            var partCode = NormalizePartCode(question.PartCode);
+            if (!partCode.StartsWith('B') && !partCode.StartsWith('C'))
+                continue;
+
+            if (!ListeningLearnerService.IsUsablePartBCStem(question.Stem))
+            {
+                throw ApiException.Validation(
+                    "listening_part_bc_source_content_required",
+                    $"Q{question.Number} requires the exact source question stem before it can be saved.");
+            }
+
+            var options = question.Options ?? Array.Empty<string>();
+            if (options.Count < 3
+                || options.Take(3).Any(option =>
+                    string.IsNullOrWhiteSpace(ListeningLearnerService.SanitizeOptionText(option))))
+            {
+                throw ApiException.Validation(
+                    "listening_part_bc_source_content_required",
+                    $"Q{question.Number} requires the exact source answer choices A, B and C before it can be saved.");
+            }
+        }
+    }
+
     private static readonly HashSet<string> AllowedValidationStatuses = new(StringComparer.OrdinalIgnoreCase)
     {
         "draft", "in_review", "validated", "published", "rejected",
@@ -1600,6 +1635,7 @@ public sealed class ListeningAuthoringService(
         var beforeJson = JsonSerializer.Serialize(existing, CamelJson);
         var merged = ApplyQuestionPatch(existing, patch);
         var normalized = NormalizeForStorage(merged);
+        ValidatePartBCSourceContent(new[] { normalized });
         items[index] = normalized;
         var afterJson = JsonSerializer.Serialize(normalized, CamelJson);
 

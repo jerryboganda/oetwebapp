@@ -73,7 +73,8 @@ export const LISTENING_SECTION_SHORT_LABEL: Record<ListeningSectionCode, string>
 /**
  * Normalise an authored `partCode` to one of the 5 canonical section codes.
  * Accepts both granular codes (`A1`, `A2`, `C1`, `C2`) and legacy wide codes
- * (`A`, `C`, `B`). Legacy `A` and `C` items are split half-and-half by number.
+ * (`A`, `C`, `B`). Legacy `A` and `C` items use their authoritative question
+ * number when available, with an even split only as a compatibility fallback.
  */
 export function computeListeningSectionMap<T extends { id: string; partCode: string; number: number }>(
   questions: readonly T[],
@@ -82,6 +83,15 @@ export function computeListeningSectionMap<T extends { id: string; partCode: str
   const legacyA: T[] = [];
   const legacyC: T[] = [];
 
+  const sectionForQuestionNumber = (number: number): ListeningSectionCode | undefined => {
+    if (number >= 1 && number <= 12) return 'A1';
+    if (number >= 13 && number <= 24) return 'A2';
+    if (number >= 25 && number <= 30) return 'B';
+    if (number >= 31 && number <= 36) return 'C1';
+    if (number >= 37 && number <= 42) return 'C2';
+    return undefined;
+  };
+
   for (const q of questions) {
     const raw = (q.partCode ?? '').toString().toUpperCase().trim();
     if (raw === 'A1' || raw === 'A2' || raw === 'B' || raw === 'C1' || raw === 'C2') {
@@ -89,15 +99,21 @@ export function computeListeningSectionMap<T extends { id: string; partCode: str
       continue;
     }
     if (raw.startsWith('A')) {
-      legacyA.push(q);
+      const numbered = sectionForQuestionNumber(q.number);
+      if (numbered === 'A1' || numbered === 'A2') map.set(q.id, numbered);
+      else legacyA.push(q);
       continue;
     }
     if (raw.startsWith('C')) {
-      legacyC.push(q);
+      const numbered = sectionForQuestionNumber(q.number);
+      if (numbered === 'C1' || numbered === 'C2') map.set(q.id, numbered);
+      else legacyC.push(q);
       continue;
     }
-    // Default: treat as Part B.
-    map.set(q.id, 'B');
+    // Missing/unknown legacy codes can still be recovered from the official
+    // question-number ranges. Keep the historical Part B fallback only when
+    // the number itself cannot identify a Listening section.
+    map.set(q.id, sectionForQuestionNumber(q.number) ?? 'B');
   }
 
   const splitAndAssign = (items: T[], first: ListeningSectionCode, second: ListeningSectionCode) => {

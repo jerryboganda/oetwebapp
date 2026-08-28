@@ -300,7 +300,11 @@ function PlayerContent() {
   const [duration, setDuration] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
   const [showAutoplayModal, setShowAutoplayModal] = useState(false);
-  const hasAutoplayedAttemptRef = useRef(false);
+  // Autoplay is armed once per attempt/section/source. The authorized media
+  // URL resolves asynchronously, so the section-transition effect can run
+  // before the <audio> element has a source; this key lets the source-ready
+  // effect retry exactly once without restarting playback on normal rerenders.
+  const autoPlayAttemptedKeyRef = useRef<string | null>(null);
   const [activeQuestionIndexBySection, setActiveQuestionIndexBySection] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -881,9 +885,9 @@ function PlayerContent() {
       if (mockDeliveryMode) nextParams.set('deliveryMode', mockDeliveryMode);
       if (mockStrictTimer) nextParams.set('strictTimer', mockStrictTimer);
       router.replace(`/listening/player/${session.paper.id}?${nextParams.toString()}`);
-      // C8f — do NOT auto-play here. Entering hasStarted triggers the
-      // currentSection effect, which drops into the pre-audio reading
-      // window. Audio play() fires when the preview countdown hits zero.
+      // Playback is armed by the explicit Start action. The section/source
+      // effects below call play() once the authorized audio URL is mounted;
+      // strict attempts still remain in the server-controlled preview phase.
     } catch (err) {
       if (isContentLockedError(err)) {
         setContentLockedMessage(readContentLockedMessage(err));
@@ -914,15 +918,6 @@ function PlayerContent() {
     if (isPlaying) pauseAudio();
     else audioRef.current.play().catch(handlePlaybackFailure);
   };
-
-  // Start playback after the reading window elapses. Browsers queue play() on
-  // an element that is still buffering (they do not reject it), so an
-  // unconditional play() is safe; the only hostile rejection is an autoplay
-  // policy error, which handlePlaybackFailure now ignores instead of
-  // flagging the attempt for administrator review.
-  const tryAutoPlay = useCallback(() => {
-    audioRef.current?.play().catch(handlePlaybackFailure);
-  }, [handlePlaybackFailure]);
 
   const handleScrub = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (audioValidityHeld) return;
@@ -1077,6 +1072,10 @@ function PlayerContent() {
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
   useEffect(() => {
     setCurrentPartBQuestionIndex(0);
+    // The audio cursor and the visible card are separate concerns in strict
+    // Part B. Reset both when the section is entered; a jump within the part
+    // must not alter the one-play audio cue or leave a stale card selected.
+    setActiveQuestionIndexBySection((previous) => ({ ...previous, B: 0 }));
   }, [currentSection]);
   const currentExtracts = currentSection
     ? extracts
@@ -1113,6 +1112,47 @@ function PlayerContent() {
   const usingPerSectionAudio = perSectionAudioUrl != null;
   const currentSectionAudioUrl = perSectionAudioUrl ?? session?.paper.audioUrl ?? null;
   const currentSectionAudioEnded = currentSection ? endedSections.has(currentSection) : false;
+
+  // Start playback once the current section's authorized source is mounted.
+  // `play()` is intentionally imperative: bearer-authenticated media is first
+  // fetched into a blob URL, so the native autoPlay attribute cannot reliably
+  // start it. The explicit Start/Start Exam action that sets hasStarted is the
+  // browser user gesture; if a browser still rejects autoplay, the fallback
+  // modal gives the candidate a second explicit gesture.
+  const tryAutoPlay = useCallback(() => {
+    if (!hasStarted || !currentSection || !resolvedAudioSrc) return;
+    // Strict exams own the reading/audio transition in the server FSM. The
+    // source can be ready while the candidate is still in preview or review;
+    // never start scored audio during either locked phase.
+    if (strictReadinessRequired && phase !== 'audio') return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const attemptKey = [
+      attempt?.attemptId ?? 'pending',
+      currentSection,
+      resolvedAudioSrc,
+      audioRetryKey,
+    ].join(':');
+    if (autoPlayAttemptedKeyRef.current === attemptKey) return;
+    if (!audio.paused && !audio.ended) {
+      autoPlayAttemptedKeyRef.current = attemptKey;
+      return;
+    }
+
+    // Mark before invoking play() so a synchronous media event and the
+    // source-ready effect cannot issue two simultaneous playback requests.
+    autoPlayAttemptedKeyRef.current = attemptKey;
+    audio.play().catch((error) => {
+      // NotAllowedError is recoverable through the explicit modal action. A
+      // network/decoder failure remains fail-closed via handlePlaybackFailure.
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        autoPlayAttemptedKeyRef.current = null;
+      }
+      handlePlaybackFailure(error);
+    });
+  }, [attempt?.attemptId, audioRetryKey, currentSection, handlePlaybackFailure, hasStarted, phase, resolvedAudioSrc, strictReadinessRequired]);
+
   const activeExtract = visibleExtracts[0] ?? null;
   // Part B slicing (exam-only) keeps per-question cue windows; practice /
   // monolithic B shows the whole shared file at once so cues are dropped.
@@ -1304,8 +1344,8 @@ function PlayerContent() {
 
   // When entering a new section after the player has started, drop straight
   // into the audio phase. The Listening module has NO pre-audio reading-window
-  // countdown (owner directive 2026-07-05) — the learner starts each section's
-  // audio with the transport Play button. Strict @home exams keep the
+  // countdown (owner directive 2026-07-05); the explicit Start/Start Exam
+  // gesture arms the one-shot autoplay path. Strict @home exams keep the
   // server-driven window (applied by applyStrictServerState) and bail above.
   useEffect(() => {
     if (!hasStarted || !currentSection) return;
@@ -1321,6 +1361,14 @@ function PlayerContent() {
     tryAutoPlay();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentSection, hasStarted, tryAutoPlay]);
+
+  // The section effect above may run while the authorized blob URL is still
+  // resolving. Retry when the source is actually available; the one-shot key
+  // in tryAutoPlay prevents duplicate playback for the same section.
+  useEffect(() => {
+    if (!hasStarted || !currentSection || !resolvedAudioSrc) return;
+    tryAutoPlay();
+  }, [currentSection, hasStarted, phase, resolvedAudioSrc, tryAutoPlay]);
 
   const advanceToNextSection = () => {
     // Reset phase off 'review' BEFORE the section index changes. Otherwise
@@ -1339,7 +1387,8 @@ function PlayerContent() {
     setPhase('audio');
     setReviewSecondsRemaining(0);
     setCurrentSectionIndex((value) => value + 1);
-    // The currentSection effect above re-enters preview for the new section.
+    // The currentSection effect above arms one-shot playback for the new
+    // section (strict attempts remain governed by the server preview state).
   };
 
   const advanceFromReview = async () => {
@@ -1469,15 +1518,18 @@ function PlayerContent() {
     const mount = (session?.paper.audioAvailable ?? false) && (!strictReadinessRequired || hasStarted);
     if (!url || !mount) {
       setResolvedAudioSrc(null);
+      autoPlayAttemptedKeyRef.current = null;
       return;
     }
     if (/^https?:\/\//i.test(url)) {
+      autoPlayAttemptedKeyRef.current = null;
       setResolvedAudioSrc(url);
       return;
     }
     let cancelled = false;
     let objectUrl: string | null = null;
     setResolvedAudioSrc(null);
+    autoPlayAttemptedKeyRef.current = null;
     fetchAuthorizedObjectUrl(url)
       .then((blobUrl) => {
         if (cancelled) {
@@ -1548,6 +1600,7 @@ function PlayerContent() {
     pauseAudio();
     setIsPlaying(false);
     setCurrentPartBQuestionIndex(nextIndex);
+    setActiveQuestionIndexBySection((previous) => ({ ...previous, B: nextIndex }));
   };
 
   // Part B uses one shared audio asset with authored cue windows. After the
@@ -1682,15 +1735,15 @@ function PlayerContent() {
       .sort((a, b) => a - b)
     : [];
   const currentSectionUnansweredList = formatQuestionNumberList(currentSectionUnansweredNumbers);
-  const navigationQuestions = shouldSlicePartB
-    ? (activePartBQuestion ? [activePartBQuestion] : [])
-    : currentSection ? sectionGroups?.[currentSection] ?? [] : [];
+  // Keep every authored question in the navigation model, including strict
+  // Part B where the audio cue advances one extract at a time. Rendering the
+  // selected card is independent from the audio cursor, so jump/Next changes
+  // never restart or seek the scored recording.
+  const navigationQuestions = currentSection ? sectionGroups?.[currentSection] ?? [] : [];
   const visibleQuestionSections = currentSection
     ? [{
       section: currentSection,
-      questions: shouldSlicePartB
-        ? (activePartBQuestion ? [activePartBQuestion] : [])
-        : sectionGroups?.[currentSection] ?? [],
+      questions: sectionGroups?.[currentSection] ?? [],
     }]
     : [];
   const shouldMountAudio = session.paper.audioAvailable && (!strictReadinessRequired || hasStarted);
@@ -1843,6 +1896,7 @@ function PlayerContent() {
               logAttemptEvent('audio_buffering_end', currentSection ? { section: currentSection } : undefined);
             }
             setAudioState('ready');
+            tryAutoPlay();
           }}
           onPlay={() => {
             // A real playback start clears any transient audio-validity hold so
@@ -2125,10 +2179,23 @@ function PlayerContent() {
                             key={`jump-${question.id}`}
                             type="button"
                             onClick={() => {
-                              const element = document.getElementById(`listening-question-${question.id}`);
-                              element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                              const input = document.getElementById(`listening-answer-${question.id}`);
-                              (input as HTMLInputElement | null)?.focus();
+                              const index = navigationQuestions.findIndex((item) => item.id === question.id);
+                              if (index >= 0 && currentSection) {
+                                setActiveQuestionIndexBySection((previous) => ({
+                                  ...previous,
+                                  [currentSection]: index,
+                                }));
+                              }
+                              // In strict Part B only one card is mounted at a
+                              // time. Wait for the selected card to commit
+                              // before scrolling/focusing it; otherwise a jump
+                              // button would change no visible content.
+                              window.setTimeout(() => {
+                                const element = document.getElementById(`listening-question-${question.id}`);
+                                element?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                const input = document.getElementById(`listening-answer-${question.id}`);
+                                (input as HTMLInputElement | null)?.focus();
+                              }, 0);
                             }}
                             aria-label={`Go to question ${question.number}`}
                             className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-black transition-colors ${
@@ -2434,7 +2501,11 @@ function PlayerContent() {
                     variant="primary"
                     onClick={() => {
                       setShowAutoplayModal(false);
-                      audioRef.current?.play().catch(handlePlaybackFailure);
+                      // A button click is an explicit browser gesture. Clear
+                      // the failed automatic key so this click can retry even
+                      // when the source/section has not changed.
+                      autoPlayAttemptedKeyRef.current = null;
+                      tryAutoPlay();
                     }}
                   >
                     <Volume2 className="mr-2 h-4 w-4" aria-hidden="true" />

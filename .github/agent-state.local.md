@@ -1,12 +1,11 @@
 # Agent State (local)
 
-## Current task — Listening Exam Final Implementation — VERIFIED
-- Unified black OET-style player (`ListeningAudioTransport`) across Full Exam (`app/listening/paper/[paperId]`), Part A, Part B, Part C practice, C1, and C2.
-- Enabled gesture-chained sequential autoplay across sub-sections ($A1 \to A2 \to B \to C1 \to C2$) with seamless transitions and resilient single-tap fallback.
-- Disciplined candidate results screen: stripped all post-submit drill recommendations ("Don't Leave Gaps Drill", "Recommended Next Step", etc.) and reordered layout to place Full Transcript & Audio Review directly below Score Summary.
-- Cleaned Part B/C items: removed "Stem" highlighter button (Flag retained), sanitized "See PDF" / "CPDF" sentinels and document artifacts (`PAGE 4`, `Practice Test 1`), fixed Part B Next Question advancement.
-- 20-Test Audio Pipeline: executed `split-listening-benchmark-audio.py` segmenting 20 tests into 100 discrete high-quality cuts at exact spoken transition cues, verified via `docs/listening/audio-split-audit-report.md`.
-- Validation: `pnpm run ship:gate` OK; Vitest listening suite 30/30 files, 243/243 tests green; backend sanitization tests 20/20 green.
+## Current task — Listening Part B/C release-blocking fixes — LOCAL VERIFIED / DEPLOY PENDING
+- Implemented shared, fail-closed source-stem normalization for Listening B/C across backend authoring, backfill, learner DTO construction, structure validation, admin answer-sheet import, standalone player, and strict full-exam grouping. Bare/malformed part codes are recovered from canonical printed question numbers; generic headings/sentinels are rejected rather than rendered as stems.
+- Restored one verified source paper (`77114cbc020347858619a88928ed0e32`, `Benchmark Listeninig Tests.pdf` Practice Test 1) through migration `20261129000000_RestoreListeningPartBCSourceStems.cs`; migration also strips option/document artifacts and clears invalid unknown-paper B/C stems. No live database migration has been run in this checkout.
+- Full Exam Part B now groups six deterministic questions Q25–Q30; Part C groups C1 Q31–Q36 and C2 Q37–Q42. Standalone A/B/C and full-exam audio use source-ready one-shot autoplay with a browser-policy fallback, without restarting on normal question navigation.
+- Validation: rebuilt API 0 errors; focused backend Listening data/structure/authoring suite 136/136; changed frontend Vitest slice 86/86; targeted ESLint 0 errors (24 existing warnings); `pnpm run ship:gate` OK; `git diff --check` clean apart from normal CRLF notices.
+- Acceptance boundaries still explicit: no live Atlas/Nova API/database corpus audit, migration execution, authenticated desktop/tablet/mobile browser playback evidence, or production deployment yet. The strict full-exam server intentionally enforces one-way section progression; within-section jump and sequential C1→C2 are covered, but arbitrary cross-subsection backward jumps remain unverified/blocked by that contract.
 
 
 ## Current task — Admin Verify Email recovery — SHIPPED + LIVE

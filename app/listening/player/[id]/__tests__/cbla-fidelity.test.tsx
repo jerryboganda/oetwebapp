@@ -351,8 +351,8 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     expect(screen.queryByTestId('listening-preview-banner')).not.toBeInTheDocument();
     expect(mockRecordTechReadiness).not.toHaveBeenCalled();
     expect(mockV2Advance).not.toHaveBeenCalled();
-    // Audio is not auto-played — the learner starts it with the Play button.
-    expect(playCalls).toBe(0);
+    // Standalone practice starts the authorized section audio automatically.
+    await waitFor(() => expect(playCalls).toBeGreaterThanOrEqual(1));
   });
 
   it('requires tech readiness and applies the first V2 transition before strict exam start', async () => {
@@ -435,7 +435,9 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
         pathwayStage: 'foundation_partA',
       });
     });
-    expect(await screen.findByRole('button', { name: /start audio/i })).not.toBeDisabled();
+    // Standalone practice is authorized on load and should begin playback
+    // without requiring a second Start Audio click.
+    await waitFor(() => expect(playCalls).toBeGreaterThanOrEqual(1));
   });
 
   it('renders R08 tools for Part B/C questions', async () => {
