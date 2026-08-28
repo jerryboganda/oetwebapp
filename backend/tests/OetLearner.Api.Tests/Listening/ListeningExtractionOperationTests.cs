@@ -266,6 +266,13 @@ public sealed class ListeningExtractionOperationTests : IAsyncDisposable
         Assert.Equal(AiOperationState.Indeterminate, DirectAiOperationReconciler.ClassifyFailure(
             new HttpRequestException(HttpRequestError.ConnectionError), default));
 
+        // A client-side timeout (bare or wrapped) may already be accepted and
+        // billed at the provider — ambiguous, never replayable.
+        Assert.Equal(AiOperationState.Indeterminate,
+            DirectAiOperationReconciler.ClassifyFailure(new TimeoutException(), default));
+        Assert.Equal(AiOperationState.Indeterminate, DirectAiOperationReconciler.ClassifyFailure(
+            new InvalidOperationException("wrapper", new TimeoutException()), default));
+
         // Parse/save failures after a known-good response are decided.
         Assert.Equal(AiOperationState.FailedTerminal,
             DirectAiOperationReconciler.ClassifyFailure(new System.Text.Json.JsonException("bad"), default));

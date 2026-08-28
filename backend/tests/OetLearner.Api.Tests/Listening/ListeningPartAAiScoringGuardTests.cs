@@ -428,14 +428,16 @@ public sealed class ListeningPartAAiScoringGuardTests
     }
 
     [Fact]
-    public async Task CallerCancellation_DisposesTheResponse_Rethrows_AndPersistsNothing()
+    public async Task CallerCancellationDuringBodyRead_After2xx_IsTerminalIndeterminate_NotReplayable()
     {
         await using var db = NewDb();
         await SeedAttemptAsync(db, withApprovedRationale: true);
 
         using var cts = new CancellationTokenSource();
-        // Cancel while the body is being read: the response object exists and
-        // must still be disposed on the rethrow path.
+        // Cancel while the body is being read. Headers already said 200 — the
+        // call is spent and may be billed — so a caller walking away must NOT
+        // leave a replayable state behind: the next poll would pay a second
+        // time for the same evidence.
         var content = new FailingHttpContent(() =>
         {
             cts.Cancel();
@@ -446,10 +448,45 @@ public sealed class ListeningPartAAiScoringGuardTests
         var recorder = new RecordingUsageRecorder();
         var service = NewService(db, handler, recorder);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => service.ScoreAttemptAsync("att-w0", cts.Token));
+        // No rethrow: the spent call is closed terminally instead.
+        await service.ScoreAttemptAsync("att-w0", cts.Token);
 
         Assert.True(content.Disposed);
+
+        var answer = await db.ListeningAnswers.SingleAsync(a => a.Id == "ans-w0");
+        Assert.Equal(ListeningPartAAiSkipReasons.IndeterminateTimeout, answer.AiSkipReason);
+        Assert.Null(answer.AiNextAttemptAt);
+        Assert.Null(answer.AiScoredAt);
+        Assert.Equal(1, answer.AiAttemptCount);
+
+        var failure = Assert.Single(recorder.Failures);
+        Assert.Equal("anthropic_body_read", failure.ErrorCode);
+
+        // The decisive assertion: an identical follow-up poll makes no second
+        // HTTP call.
+        await service.ScoreAttemptAsync("att-w0", CancellationToken.None);
+        Assert.Single(handler.Requests);
+    }
+
+    [Fact]
+    public async Task CallerCancellationBeforeSendCompletes_Rethrows_AndPersistsNothing()
+    {
+        await using var db = NewDb();
+        await SeedAttemptAsync(db, withApprovedRationale: true);
+
+        using var cts = new CancellationTokenSource();
+        // Cancel inside SendAsync, before any response headers exist: nothing
+        // was provably spent, so shutdown stays a non-outcome.
+        var handler = new RecordingHandler((_, _) =>
+        {
+            cts.Cancel();
+            throw new OperationCanceledException(cts.Token);
+        });
+        var recorder = new RecordingUsageRecorder();
+        var service = NewService(db, handler, recorder);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => service.ScoreAttemptAsync("att-w0", cts.Token));
 
         // Shutdown is not an outcome: nothing recorded, nothing stamped.
         Assert.Empty(recorder.Failures);

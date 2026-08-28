@@ -111,6 +111,11 @@ public static class DirectAiOperationReconciler
 
         for (var current = exception; current is not null; current = current.InnerException)
         {
+            // A raw TimeoutException (Polly/timeout wrappers, custom handlers)
+            // means the client gave up while the request may still be live at
+            // the provider — the same ambiguity as an HttpClient timeout.
+            if (current is TimeoutException) return AiOperationState.Indeterminate;
+
             if (current is not HttpRequestException http) continue;
 
             // A status code means the provider answered: the outcome is known.

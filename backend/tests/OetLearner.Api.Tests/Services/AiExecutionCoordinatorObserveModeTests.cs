@@ -139,6 +139,43 @@ public sealed class AiExecutionCoordinatorObserveModeTests : IAsyncDisposable
     }
 
     /// <summary>
+    /// F-1: an ambiguous core failure (client-side timeout, mid-flight
+    /// transport loss) may already have been accepted and billed by the
+    /// provider. It must be persisted as <see cref="AiOperationState.Indeterminate"/>
+    /// — never <see cref="AiOperationState.FailedTerminal"/> — because
+    /// FailedTerminal is a replayable state: classifying it terminal would let
+    /// the identical follow-up request pay a second time for the same work.
+    /// </summary>
+    [Theory]
+    [InlineData(typeof(TimeoutException))]
+    [InlineData(typeof(TaskCanceledException))] // HttpClient timeout surfaces as this with a non-cancelled caller token
+    public async Task ExecuteAsync_CoreThrowsAmbiguousFailure_MarksIndeterminate_AndDuplicateNeverReplays(Type exceptionType)
+    {
+        await using var db = new LearnerDbContext(_options);
+        var core = new FakeCoreExecutor
+        {
+            ExceptionToThrow = (Exception)Activator.CreateInstance(exceptionType)!,
+        };
+        var coordinator = NewCoordinator(db, core);
+
+        await Assert.ThrowsAsync(exceptionType,
+            () => coordinator.ExecuteAsync(BuildRequest("sub-1", "hash-1"), CancellationToken.None));
+
+        var persisted = await db.AiOperations.AsNoTracking().SingleAsync();
+        Assert.Equal(AiOperationState.Indeterminate, persisted.State);
+        Assert.Null(persisted.ResultRef);
+        Assert.Equal(1, core.CallCount);
+
+        // The identical re-request is answered from the existing operation:
+        // no second physical provider call, ever.
+        core.ExceptionToThrow = null;
+        var replay = await coordinator.ExecuteAsync(BuildRequest("sub-1", "hash-1"), CancellationToken.None);
+        Assert.True(replay.WasDuplicate);
+        Assert.Equal(AiOperationState.Indeterminate, replay.State);
+        Assert.Equal(1, core.CallCount);
+    }
+
+    /// <summary>
     /// D-2: <see cref="AiOperation.ResultRef"/> is gated on the recorder having
     /// actually committed a usage row. A generated-but-unpersisted id must
     /// never be stamped, or the control plane points at a row that does not
@@ -250,6 +287,7 @@ public sealed class AiExecutionCoordinatorObserveModeTests : IAsyncDisposable
     {
         public int CallCount { get; private set; }
         public bool ThrowOnComplete { get; set; }
+        public Exception? ExceptionToThrow { get; set; }
         public bool UsagePersisted { get; set; } = true;
         public AiGatewayRequest? LastRequest { get; private set; }
 
@@ -257,6 +295,11 @@ public sealed class AiExecutionCoordinatorObserveModeTests : IAsyncDisposable
         {
             CallCount++;
             LastRequest = request;
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
             if (ThrowOnComplete)
             {
                 throw new InvalidOperationException("simulated provider failure");

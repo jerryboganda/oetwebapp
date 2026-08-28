@@ -190,15 +190,16 @@ public sealed partial class ListeningPartAAiScoringService
             {
                 body = await response.Content.ReadAsStringAsync(ct);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
-                throw;
-            }
             catch (Exception ex)
             {
                 // The provider answered 2xx — the call is spent and may be billed —
                 // but the body was lost. Repeating it would risk a duplicate
-                // charge for the same evidence, so this is terminal.
+                // charge for the same evidence, so this is terminal. Deliberately
+                // NO caller-cancellation rethrow here (unlike the pre-send catch
+                // above): once the 2xx status line arrived the money is spent, and
+                // rethrowing OperationCanceledException would let the reconciler
+                // classify the operation Cancelled — a replayable state — turning
+                // the next poll into a second paid call for the same evidence.
                 await RecordFailureAsync(AiCallOutcome.Timeout, "anthropic_body_read",
                     $"Anthropic 2xx response body could not be read ({ex.GetType().Name}).");
                 logger.LogError(ex, "Part A AI advisory review: Anthropic response body read failed after a 2xx.");
