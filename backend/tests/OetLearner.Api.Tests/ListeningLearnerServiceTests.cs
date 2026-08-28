@@ -134,4 +134,26 @@ public class ListeningLearnerServiceTests
         Assert.Equal("Schedule follow-up", options[1]);
         Assert.Equal("", options[2]);
     }
+
+    [Theory]
+    [InlineData(3, 3, true)]
+    [InlineData(3, 4, true)]
+    [InlineData(4, 3, true)]
+    [InlineData(4, 4, true)]
+    [InlineData(2, 3, false)]
+    [InlineData(3, 2, false)]
+    [InlineData(3, -1, false)]
+    public void PartCQuestionScope_AllowsCrossExtractAnswerEditsOnlyWhilePartCIsActive(
+        int currentCursor,
+        int questionCursor,
+        bool expected)
+    {
+        var method = typeof(ListeningLearnerService).GetMethod(
+            "IsPartCQuestionScope",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = (bool)method.Invoke(null, [currentCursor, questionCursor])!;
+        Assert.Equal(expected, result);
+    }
 }

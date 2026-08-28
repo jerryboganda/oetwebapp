@@ -20,6 +20,7 @@ import {
   startListeningAttempt,
   type ListeningAttemptDto,
   type ListeningIntegrityEventType,
+  type ListeningSessionQuestionDto,
   type ListeningSessionDto,
 } from '@/lib/listening-api';
 import {
@@ -35,6 +36,7 @@ import {
   listeningWindowSeconds,
   type ListeningFsmState,
 } from '@/lib/listening/transitions';
+import { normalizeExamPartCode } from '@/lib/listening-exam-sections';
 import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 import { InsufficientCreditsModal, isInsufficientCreditsError, readInsufficientCreditsMessage } from '@/components/domain/InsufficientCreditsModal';
 import { showCreditFeedback } from '@/lib/credit-feedback';
@@ -109,6 +111,17 @@ function formatMilliseconds(value: number | null | undefined) {
 
 function formatQuestionNumberList(numbers: number[]) {
   return numbers.map((number) => `Q${number}`).join(', ');
+}
+
+function listeningQuestionPartLabel(
+  question: Pick<ListeningSessionQuestionDto, 'partCode' | 'number'>,
+  fallback: string,
+): string {
+  const partCode = normalizeExamPartCode(question.partCode, question.number);
+  if (partCode === 'B') return 'Part B — Workplace extracts';
+  if (partCode === 'C1') return 'Part C — Extract 1';
+  if (partCode === 'C2') return 'Part C — Extract 2';
+  return fallback;
 }
 
 function isPartialSourceGapListeningSession(session: { questions: Array<{ number: number; partCode: string }> }) {
@@ -1070,13 +1083,38 @@ function PlayerContent() {
     return sections;
   }, [sectionGroups, focusParam, strictServerState?.state, session?.modePolicy?.onePlayOnly]);
   const currentSection: ListeningSectionCode | null = sectionsInPaper[currentSectionIndex] ?? null;
+  // Part C uses two sequential audio extracts but one candidate-visible
+  // question workspace. Keep both groups sorted by the authoritative printed
+  // number so Q31–Q42 can be jumped to without changing the audio cursor.
+  const partCQuestionWorkspace = useMemo<ListeningSessionQuestionDto[] | null>(
+    () => (currentSection === 'C1' || currentSection === 'C2')
+      ? [...(sectionGroups?.C1 ?? []), ...(sectionGroups?.C2 ?? [])]
+        .sort((a, b) => a.number - b.number)
+      : null,
+    [currentSection, sectionGroups],
+  );
+  const currentQuestionWorkspace = useMemo<ListeningSessionQuestionDto[]>(
+    () => partCQuestionWorkspace
+      ?? (currentSection ? sectionGroups?.[currentSection] ?? [] : []),
+    [currentSection, partCQuestionWorkspace, sectionGroups],
+  );
   useEffect(() => {
     setCurrentPartBQuestionIndex(0);
     // The audio cursor and the visible card are separate concerns in strict
     // Part B. Reset both when the section is entered; a jump within the part
     // must not alter the one-play audio cue or leave a stale card selected.
-    setActiveQuestionIndexBySection((previous) => ({ ...previous, B: 0 }));
-  }, [currentSection]);
+    setActiveQuestionIndexBySection((previous) => ({
+      ...previous,
+      B: 0,
+      ...(currentSection === 'C1' || currentSection === 'C2'
+        ? {
+          [currentSection]: currentSection === 'C2'
+            ? Math.max(0, currentQuestionWorkspace.findIndex((question) => question.number >= 37))
+            : 0,
+        }
+        : {}),
+    }));
+  }, [currentQuestionWorkspace, currentSection]);
   const currentExtracts = currentSection
     ? extracts
       .filter((extract) => {
@@ -1729,7 +1767,7 @@ function PlayerContent() {
   const unansweredQuestionNumbers = unansweredQuestions.map((question) => question.number).sort((a, b) => a - b);
   const unansweredQuestionList = formatQuestionNumberList(unansweredQuestionNumbers);
   const currentSectionUnansweredNumbers = currentSection
-    ? (sectionGroups?.[currentSection] ?? [])
+    ? currentQuestionWorkspace
       .filter((question) => (answers[question.id] ?? '').trim().length === 0)
       .map((question) => question.number)
       .sort((a, b) => a - b)
@@ -1739,11 +1777,11 @@ function PlayerContent() {
   // Part B where the audio cue advances one extract at a time. Rendering the
   // selected card is independent from the audio cursor, so jump/Next changes
   // never restart or seek the scored recording.
-  const navigationQuestions = currentSection ? sectionGroups?.[currentSection] ?? [] : [];
+  const navigationQuestions = currentQuestionWorkspace;
   const visibleQuestionSections = currentSection
     ? [{
       section: currentSection,
-      questions: sectionGroups?.[currentSection] ?? [],
+      questions: currentQuestionWorkspace,
     }]
     : [];
   const shouldMountAudio = session.paper.audioAvailable && (!strictReadinessRequired || hasStarted);
@@ -2319,7 +2357,7 @@ function PlayerContent() {
                                     ) : null}
                                     <BCQuestionRenderer
                                       questionNumber={currentQuestion.number}
-                                      partLabel={LISTENING_SECTION_LABEL[section]}
+                                      partLabel={listeningQuestionPartLabel(currentQuestion, LISTENING_SECTION_LABEL[section])}
                                       prompt={currentQuestion.text}
                                       options={currentQuestion.options}
                                       optionKeys={currentQuestion.optionKeys}
@@ -2400,6 +2438,8 @@ function PlayerContent() {
                 ? 'Part B shows one question at a time. Each short extract plays once; after it ends, Next is irreversible.'
                 : currentSection === 'B'
                   ? 'Part B — 6 short workplace extracts. Audio shares one file; all questions are visible and remain editable until you submit or advance.'
+                  : currentSection === 'C1' || currentSection === 'C2'
+                    ? 'Part C — 12 questions across Extracts 1 and 2. The extracts play in order; all Part C question cards remain available without restarting audio.'
                   : 'Audio plays once per section and cannot be paused, scrubbed, or replayed. When it ends, confirm the irreversible boundary before the next section opens.'}
               </p>
               {shouldSlicePartB && phase === 'audio' && partBQuestionAudioEnded && !audioValidityHeld ? (

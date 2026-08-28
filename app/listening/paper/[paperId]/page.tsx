@@ -69,6 +69,7 @@ import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
   buildListeningExamSubSections,
   LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
+  normalizeExamPartCode,
   type ListeningExamSubSection,
 } from '@/lib/listening-exam-sections';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
@@ -106,6 +107,17 @@ function resolveQuestionPaperUrl(
   const code = sectionCode.trim().toUpperCase();
   const parent = code.length > 1 ? code.slice(0, 1) : code;
   return map[code] ?? map[parent] ?? null;
+}
+
+function listeningQuestionPartLabel(
+  question: Pick<ListeningSessionQuestionDto, 'partCode' | 'number'>,
+  fallback: string,
+): string {
+  const partCode = normalizeExamPartCode(question.partCode, question.number);
+  if (partCode === 'B') return 'Part B — Workplace extracts';
+  if (partCode === 'C1') return 'Part C — Extract 1';
+  if (partCode === 'C2') return 'Part C — Extract 2';
+  return fallback;
 }
 
 /**
@@ -216,6 +228,20 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
     [session],
   );
   const activeSubSection = subSections[currentIndex] ?? null;
+  // Part C is two sequential audio extracts but one candidate-visible
+  // question workspace. Keep the audio/sub-section cursor one-way while
+  // exposing the complete Q31–Q42 set for jump and answer navigation.
+  const partCQuestions = useMemo<ListeningSessionQuestionDto[]>(
+    () => subSections
+      .filter((section) => section.partCode === 'C1' || section.partCode === 'C2')
+      .flatMap((section) => section.questions)
+      .sort((a, b) => a.number - b.number),
+    [subSections],
+  );
+  const activeQuestionNavigationQuestions = activeSubSection
+    && (activeSubSection.partCode === 'C1' || activeSubSection.partCode === 'C2')
+    ? partCQuestions
+    : undefined;
   const isLastSection = subSections.length > 0 && currentIndex >= subSections.length - 1;
   const onePlayOnly = session?.modePolicy.onePlayOnly ?? true;
   const allSectionsAudioReady = subSections.length > 0
@@ -662,6 +688,7 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
                 attemptId={attempt.attemptId}
                 paperId={paperId}
                 subSection={activeSubSection}
+                questionNavigationQuestions={activeQuestionNavigationQuestions}
                 questionPaperUrl={resolveQuestionPaperUrl(session, activeSubSection.partCode)}
                 annotations={annotations}
                 onCreateAnnotation={handleCreateAnnotation}
@@ -959,6 +986,7 @@ function ActiveSubSectionPanel({
   answeredCount,
   totalQuestions,
   onSubmit,
+  questionNavigationQuestions,
 }: {
   attemptId: string;
   paperId: string;
@@ -991,15 +1019,28 @@ function ActiveSubSectionPanel({
   answeredCount: number;
   totalQuestions: number;
   onSubmit: () => void;
+  /** Part C keeps C1/C2 audio sequential but exposes one Q31–Q42 workspace. */
+  questionNavigationQuestions?: ListeningSessionQuestionDto[];
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [timerExpired, setTimerExpired] = useState(false);
   const [audioFailure, setAudioFailure] = useState(false);
   const [audioBuffering, setAudioBuffering] = useState(true);
 
-  // Active question index within this sub-section (for Part B and C single-card view)
+  const questionList = questionNavigationQuestions?.length
+    ? questionNavigationQuestions
+    : subSection.questions;
+  const isCrossExtractPartC = Boolean(
+    questionNavigationQuestions?.length
+      && (subSection.partCode === 'C1' || subSection.partCode === 'C2'),
+  );
+  const firstQuestionIndexForSubSection = subSection.partCode === 'C2'
+    ? Math.max(0, questionList.findIndex((question) => question.number >= 37))
+    : 0;
+
+  // Active question index within the candidate-visible question workspace.
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(
-    Math.max(0, Math.min(subSection.questions.length - 1, resumeAudioQuestionIndex ?? 0)),
+    Math.max(0, Math.min(questionList.length - 1, resumeAudioQuestionIndex ?? firstQuestionIndexForSubSection)),
   );
   const [questionAnnotations, setQuestionAnnotations] = useState<Record<string, { flagged?: boolean; struckOptions?: string[] }>>({});
 
@@ -1019,8 +1060,12 @@ function ActiveSubSectionPanel({
 
   useEffect(() => {
     setAudioFailure(false);
-    setActiveQuestionIndex(0);
-  }, [subSection.index]);
+    setActiveQuestionIndex(
+      Math.max(0, Math.min(questionList.length - 1, subSection.partCode === 'C2'
+        ? Math.max(0, questionList.findIndex((question) => question.number >= 37))
+        : 0)),
+    );
+  }, [questionList, subSection.index, subSection.partCode]);
 
   const { remaining, pause: pauseTimer, resume: resumeTimer } = useTimer(
     subSection.timeLimitSeconds > 0 ? subSection.timeLimitSeconds : LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
@@ -1037,14 +1082,14 @@ function ActiveSubSectionPanel({
     else resumeTimer();
   }, [audioBuffering, pauseTimer, resumeTimer]);
 
-  const unansweredInSection = subSection.questions.filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
+  const unansweredInSection = questionList.filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
 
   const requestAdvance = () => {
     if (advancing || audioFailure) return;
     setShowConfirm(true);
   };
 
-  const currentQuestion = subSection.questions[activeQuestionIndex] ?? subSection.questions[0];
+  const currentQuestion = questionList[activeQuestionIndex] ?? questionList[0];
 
   return (
     <div className="space-y-6">
@@ -1073,13 +1118,13 @@ function ActiveSubSectionPanel({
             <span className="text-sm font-bold text-navy">{subSection.label}</span>
           </div>
           <Badge variant="info">
-            {!showNotes && subSection.questions.length > 1
-              ? `Question ${activeQuestionIndex + 1} of ${subSection.questions.length}`
+            {!showNotes && questionList.length > 1 && currentQuestion
+              ? `Question ${currentQuestion.number} of ${questionList.length}`
               : `${subSection.questions.length} item${subSection.questions.length === 1 ? '' : 's'}`}
           </Badge>
         </div>
 
-        {subSection.questions.length === 0 ? (
+        {questionList.length === 0 ? (
           <p className="text-sm text-muted">This sub-section has no questions — listen, then continue.</p>
         ) : showNotes ? (
           <PartANotesDocument
@@ -1097,15 +1142,20 @@ function ActiveSubSectionPanel({
           />
         ) : (
           <div className="space-y-6">
+            {isCrossExtractPartC ? (
+              <p className="rounded-2xl border border-border bg-background-light px-4 py-3 text-sm leading-6 text-muted">
+                All Part C questions are available while the two extracts play in order. Moving between question cards does not restart the audio.
+              </p>
+            ) : null}
             {/* Jump-to navigation pills */}
-            {subSection.questions.length > 1 && (
+            {questionList.length > 1 && (
               <div
                 className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background-light p-3"
                 role="tablist"
                 aria-label="Question jump navigation"
               >
                 <span className="text-xs font-black uppercase tracking-widest text-muted mr-1">Questions:</span>
-                {subSection.questions.map((q, idx) => {
+                {questionList.map((q, idx) => {
                   const isActive = idx === activeQuestionIndex;
                   const isAnswered = Boolean((answers[q.id] ?? '').trim());
                   const isFlagged = Boolean(questionAnnotations[q.id]?.flagged);
@@ -1150,7 +1200,7 @@ function ActiveSubSectionPanel({
               <BCQuestionRenderer
                 key={currentQuestion.id}
                 questionNumber={currentQuestion.number}
-                partLabel={subSection.label}
+                partLabel={listeningQuestionPartLabel(currentQuestion, subSection.label)}
                 prompt={currentQuestion.text}
                 options={currentQuestion.options}
                 optionKeys={currentQuestion.optionKeys}
@@ -1178,7 +1228,7 @@ function ActiveSubSectionPanel({
         {/* Stepper Controls */}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
           <div>
-            {!showNotes && subSection.questions.length > 1 && activeQuestionIndex > 0 ? (
+            {!showNotes && questionList.length > 1 && activeQuestionIndex > 0 ? (
               <Button
                 variant="outline"
                 onClick={() => {
@@ -1198,7 +1248,7 @@ function ActiveSubSectionPanel({
           </div>
 
           <div className="flex items-center gap-2">
-            {!showNotes && subSection.questions.length > 1 && activeQuestionIndex < subSection.questions.length - 1 ? (
+            {!showNotes && questionList.length > 1 && activeQuestionIndex < questionList.length - 1 ? (
               <Button
                 variant="primary"
                 onClick={() => {
@@ -1206,7 +1256,7 @@ function ActiveSubSectionPanel({
                     const currentVal = answers[currentQuestion.id] ?? '';
                     if (currentVal) void onPersistAnswer(currentQuestion.id, currentVal);
                   }
-                  setActiveQuestionIndex((idx) => Math.min(subSection.questions.length - 1, idx + 1));
+                  setActiveQuestionIndex((idx) => Math.min(questionList.length - 1, idx + 1));
                 }}
                 disabled={audioFailure}
                 aria-label="Next question"

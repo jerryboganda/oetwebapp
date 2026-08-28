@@ -125,6 +125,20 @@ function makeMockSession(overrides: Record<string, unknown> = {}) {
           audioStartMs: 46000,
           audioEndMs: 90000,
         },
+        {
+          id: 'ext-c-1',
+          partCode: 'C1',
+          title: 'Part C — Extract 1',
+          audioUrl: 'https://cdn.example/c1.mp3',
+          contextIntro: 'You hear a presentation about community health.',
+        },
+        {
+          id: 'ext-c-2',
+          partCode: 'C2',
+          title: 'Part C — Extract 2',
+          audioUrl: 'https://cdn.example/c2.mp3',
+          contextIntro: 'You hear a presentation about workplace wellbeing.',
+        },
       ],
     },
     questions: [
@@ -157,6 +171,19 @@ function makeMockSession(overrides: Record<string, unknown> = {}) {
         optionKeys: ['A', 'B', 'C'],
         points: 1,
       },
+      ...Array.from({ length: 12 }, (_, index) => {
+        const number = 31 + index;
+        return {
+          id: `q-${number}`,
+          number,
+          partCode: number <= 36 ? 'C1' : 'C2',
+          type: 'multiple_choice_3',
+          text: `What is the key point in question ${number}?`,
+          options: [`Option A for ${number}`, `Option B for ${number}`, `Option C for ${number}`],
+          optionKeys: ['A', 'B', 'C'],
+          points: 1,
+        };
+      }),
     ],
     modePolicy: {
       mode: 'exam',
@@ -292,5 +319,58 @@ describe('ListeningPaperPlayerPage', () => {
       expect(screen.getByText('Why does the doctor recommend rest?')).toBeInTheDocument();
     });
     expect(screen.getByText('To reduce fever')).toBeInTheDocument();
+  });
+
+  it('exposes one complete Part C workspace across C1 and C2 with jump and answer persistence', async () => {
+    const session = makeMockSession({
+      attempt: {
+        attemptId: 'attempt-c-101',
+        paperId: 'paper-1',
+        mode: 'exam',
+        // A1, B, C1, C2 are the authored sub-sections in this fixture.
+        sectionCursor: 2,
+        answers: {},
+        serverNow: new Date().toISOString(),
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(session);
+    mockSaveListeningAnswer.mockResolvedValue({ success: true });
+
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 31?')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('tab', { name: /Question 40/ })).toBeInTheDocument();
+    expect(screen.getAllByRole('tab')).toHaveLength(12);
+
+    await user.click(screen.getByRole('tab', { name: /Question 40/ }));
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 40?')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Part C — Extract 2')).toBeInTheDocument();
+
+    const q40Option = screen.getByRole('radio', { name: /Option B for 40/ });
+    await user.click(q40Option);
+    expect(q40Option).toHaveAttribute('aria-checked', 'true');
+
+    await user.click(screen.getByRole('tab', { name: /Question 34/ }));
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 34?')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: /Question 42/ }));
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 42?')).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole('tab', { name: /Question 40/ }));
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 40?')).toBeInTheDocument();
+    });
+    expect(screen.getByRole('radio', { name: /Option B for 40/ })).toHaveAttribute('aria-checked', 'true');
   });
 });

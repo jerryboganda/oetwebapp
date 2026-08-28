@@ -896,13 +896,14 @@ public sealed class ListeningLearnerService(
         {
             var currentCursor = ReadGenericSectionCursor(DeserializeAnswers(attempt.AnswersJson));
             var questionCursor = ListeningSectionCursorForPartCode(question.PartCode);
-            if (questionCursor < 0 || questionCursor < currentCursor)
+            var isPartCQuestionScope = IsPartCQuestionScope(currentCursor, questionCursor);
+            if (!isPartCQuestionScope && (questionCursor < 0 || questionCursor < currentCursor))
             {
                 throw ApiException.Validation(
                     "listening_section_locked",
                     "This Listening section is locked and its answers can no longer be changed.");
             }
-            if (questionCursor > currentCursor)
+            if (!isPartCQuestionScope && questionCursor > currentCursor)
             {
                 throw ApiException.Validation(
                     "listening_section_not_active",
@@ -2026,13 +2027,14 @@ public sealed class ListeningLearnerService(
             {
                 var questionPartString = question.PartCode.ToString();
                 var questionCursor = ListeningSectionCursorForPartCode(questionPartString);
-                if (questionCursor < 0 || currentCursor < 0 || questionCursor < currentCursor)
+                var isPartCQuestionScope = IsPartCQuestionScope(currentCursor, questionCursor);
+                if (!isPartCQuestionScope && (questionCursor < 0 || currentCursor < 0 || questionCursor < currentCursor))
                 {
                     throw ApiException.Validation(
                         "listening_section_locked",
                         $"Cannot modify answers in part {questionPartString} \u2014 this section is locked in the current exam mode.");
                 }
-                if (questionCursor > currentCursor)
+                if (!isPartCQuestionScope && questionCursor > currentCursor)
                 {
                     throw ApiException.Validation(
                         "listening_section_not_active",
@@ -3103,6 +3105,14 @@ public sealed class ListeningLearnerService(
             "C2" => 4,
             _ => -1,
         };
+    }
+
+    private static bool IsPartCQuestionScope(int currentCursor, int questionCursor)
+    {
+        // Part C audio remains one-way (C1 before C2), while Q31–Q42 share one
+        // candidate workspace once Part C is active. This lets a candidate
+        // review or correct either extract without reopening or restarting audio.
+        return (currentCursor is 3 or 4) && (questionCursor is 3 or 4);
     }
 
     private static string NormalizeExtractKind(string? raw, string partCode)

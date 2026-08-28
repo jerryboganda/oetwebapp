@@ -68,6 +68,13 @@ exam surface in stale client links.
 |**Learning**|✅|❌|✅|❌|❌|
 |**Diagnostic**|✅|❌|❌|❌|❌|
 
+The strict audio cursor remains one-way at the section boundary, but Part C is
+one candidate question workspace: once C1 is active, Q31–Q42 may be opened,
+answered, flagged, and revisited while C1 and C2 audio continue in order. The
+server keeps the audio FSM forward-only and permits answer writes for either
+Part C extract only while the Part C cursor is active; after the final C2
+review state, the normal submit lock applies.
+
 All five modes are orchestrated today by the active learner route
 `app/listening/player/[id]/page.tsx`, which branches on the attempt's
 `mode` value returned by the backend while delegating reusable player
