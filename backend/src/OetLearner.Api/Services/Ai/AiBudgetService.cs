@@ -211,13 +211,15 @@ public sealed class AiBudgetService(
             await using var dbScope = scopeFactory.CreateAsyncScope();
             var db = dbScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
+            await db.Database.ExecuteSqlRawAsync(
+                """
                 UPDATE "AiBudgetPeriods"
-                SET "ReservedUsd" = GREATEST(0, "ReservedUsd" - {reserved}),
-                    "CommittedUsd" = "CommittedUsd" + {actual},
-                    "UpdatedAt" = {DateTimeOffset.UtcNow}
-                WHERE "Id" = {reservation.PeriodId}
-                """, ct);
+                SET "ReservedUsd" = GREATEST(0, "ReservedUsd" - {0}),
+                    "CommittedUsd" = "CommittedUsd" + {1},
+                    "UpdatedAt" = NOW()
+                WHERE "Id" = {2}
+                """,
+                reserved, actual, reservation.PeriodId);
 
             // Best-effort sync onto AiGlobalPolicy.CurrentSpendUsd for the
             // existing admin dashboard. AiBudgetPeriod remains authoritative for
@@ -256,12 +258,14 @@ public sealed class AiBudgetService(
             await using var dbScope = scopeFactory.CreateAsyncScope();
             var db = dbScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
-            await db.Database.ExecuteSqlInterpolatedAsync($"""
+            await db.Database.ExecuteSqlRawAsync(
+                """
                 UPDATE "AiBudgetPeriods"
-                SET "ReservedUsd" = GREATEST(0, "ReservedUsd" - {reserved}),
-                    "UpdatedAt" = {DateTimeOffset.UtcNow}
-                WHERE "Id" = {reservation.PeriodId}
-                """, ct);
+                SET "ReservedUsd" = GREATEST(0, "ReservedUsd" - {0}),
+                    "UpdatedAt" = NOW()
+                WHERE "Id" = {1}
+                """,
+                reserved, reservation.PeriodId);
         }
         catch (Exception ex)
         {
@@ -288,13 +292,14 @@ public sealed class AiBudgetService(
     private static async Task EnsurePeriodRowExistsAsync(
         LearnerDbContext db, string id, string scope, string periodKey, decimal limitUsd, CancellationToken ct)
     {
-        var now = DateTimeOffset.UtcNow;
-        await db.Database.ExecuteSqlInterpolatedAsync($"""
+        await db.Database.ExecuteSqlRawAsync(
+            """
             INSERT INTO "AiBudgetPeriods"
                 ("Id", "Scope", "PeriodKey", "LimitUsd", "ReservedUsd", "CommittedUsd", "CreatedAt", "UpdatedAt")
             VALUES
-                ({id}, {scope}, {periodKey}, {limitUsd}, 0, 0, {now}, {now})
+                ({0}, {1}, {2}, {3}, 0, 0, NOW(), NOW())
             ON CONFLICT ("Id") DO NOTHING
-            """, ct);
+            """,
+            id, scope, periodKey, limitUsd);
     }
 }

@@ -65,7 +65,17 @@ public sealed class PostgreSqlTestDatabase : IAsyncDisposable
     /// an EF Core <c>DbContext</c>) rather than a raw sibling connection.
     /// </summary>
     public string SchemaConnectionString
-        => new NpgsqlConnectionStringBuilder(_baseConnectionString) { SearchPath = Schema }.ConnectionString;
+        => new NpgsqlConnectionStringBuilder(_baseConnectionString)
+        {
+            SearchPath = Schema,
+            // 100-way coordinator/budget races each open a scoped DbContext.
+            // Npgsql's default Max Pool Size is 100, so the 101st waiter
+            // times out and the service mis-classifies it as
+            // budget_store_unavailable. Production uses a real pool sized
+            // for the host; tests need headroom for the race.
+            MaxPoolSize = 256,
+            Timeout = 30,
+        }.ConnectionString;
 
     public async Task ExecuteAsync(string sql)
     {

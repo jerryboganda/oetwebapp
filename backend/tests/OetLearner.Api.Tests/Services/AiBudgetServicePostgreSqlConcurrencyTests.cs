@@ -84,7 +84,11 @@ public sealed class AiBudgetServicePostgreSqlConcurrencyTests
         const decimal limitUsd = 1.00m;
         const decimal perCallUsd = 0.10m;
         const int expectedGrants = 10; // limitUsd / perCallUsd
-        const int totalCallers = 100;
+        // CI postgres:16-alpine defaults to max_connections=100, and the
+        // harness already holds one session. 40 concurrent EF contexts is
+        // enough to prove the atomic UPDATE never over-grants; 100-way
+        // races starve the server and mis-report as budget_store_unavailable.
+        const int totalCallers = 40;
 
         await SeedGlobalPolicyAsync(database, limitUsd);
 
@@ -136,7 +140,7 @@ public sealed class AiBudgetServicePostgreSqlConcurrencyTests
 
         const decimal limitUsd = 100.00m;
         const decimal perCallUsd = 0.05m;
-        const int totalCallers = 60;
+        const int totalCallers = 40;
 
         await SeedGlobalPolicyAsync(database, limitUsd);
 

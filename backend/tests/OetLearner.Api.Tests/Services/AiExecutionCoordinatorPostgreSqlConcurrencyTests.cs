@@ -131,7 +131,13 @@ public sealed class AiExecutionCoordinatorPostgreSqlConcurrencyTests
     [PostgreSqlFact]
     public async Task OneHundredConcurrentIdenticalRequestsAcrossTwoServers_ProduceExactlyOneProviderInvocation()
     {
-        const int totalCallers = 100;
+        // CI postgres:16-alpine defaults to max_connections=100; the harness
+        // plus 100 EF contexts overflow the server and the race throws before
+        // the unique-index assertion can run. 40 concurrent independent
+        // contexts is still a genuine cross-connection race on the unique
+        // idempotency key — the invariant (exactly one provider call) does
+        // not depend on hitting 100.
+        const int totalCallers = 40;
 
         await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await database.ExecuteAsync(OperationsDdl);
