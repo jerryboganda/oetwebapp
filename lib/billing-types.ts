@@ -228,7 +228,9 @@ export interface AiPackageCreditTransaction {
   readingTestsDelta: number;
   mockExamsDelta: number;
   referenceId?: string | null;
+  sourceReferenceId?: string | null;
   description: string;
+  validFrom?: string | null;
   expiresAt?: string | null;
   createdAt: string;
 }
@@ -260,6 +262,9 @@ export interface AiPackageCreditGrantSource {
   totalGranted: number;
   grantedAt: string;
   expiresAt?: string | null;
+  sourceReferenceId?: string | null;
+  validFrom?: string | null;
+  daysLeft?: number | null;
 }
 
 export type AiPackageCreditBucketKey =

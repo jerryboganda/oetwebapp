@@ -38,6 +38,8 @@ export interface UserAccessSubscription {
   status: string;
   expiresAt: string | null;
   isPrimary: boolean;
+  /** ISO start of the access window. Used with expiresAt to enforce the shared StartedAt <= now < ExpiresAt rule. */
+  startedAt?: string | null;
   /** UI-only: true while this row is a local draft not yet persisted via `grantUserPackage`. */
   isPending?: boolean;
   /** UI-only: whether to grant the plan's included credits when this pending package is persisted. */
@@ -47,6 +49,7 @@ export interface UserAccessSubscription {
 export interface UserAccessAddOn {
   code: string;
   subscriptionId?: string;
+  quantity?: number;
   /** UI-only: true while this row is a local draft not yet persisted via `grantUserAddon`. */
   isPending?: boolean;
 }
@@ -95,10 +98,20 @@ export function isModuleEnabled(overrides: UserAccessModuleOverride[], moduleKey
  *
  * Best-effort UI hint only — the backend remains the real gate.
  */
-export function isEligibleSubscription(sub: Pick<UserAccessSubscription, 'status' | 'expiresAt' | 'isPending'>): boolean {
-  if (sub.isPending) return true;
+export function isEligibleSubscription(
+  sub: Pick<UserAccessSubscription, 'status' | 'expiresAt' | 'startedAt' | 'isPending'> & { startsAt?: string | null },
+): boolean {
+  const startedAtRaw = (sub as { startedAt?: string | null }).startedAt ?? sub.startsAt ?? null;
+  // Drafts are created Active with start=now, so they are eligible unless they explicitly carry a future window.
+  if (sub.isPending) {
+    if (startedAtRaw && new Date(startedAtRaw).getTime() > Date.now()) return false;
+    if (sub.expiresAt && new Date(sub.expiresAt).getTime() <= Date.now()) return false;
+    return true;
+  }
   const status = sub.status.toLowerCase();
-  if (status === 'suspended' || status === 'pending' || status === 'cancelled') return false;
+  // Mirrors EffectiveEntitlementResolver eligible set: Active/Trial/FreezeRequested only — never Frozen/Paused/PastDue/Expired.
+  if (status !== 'active' && status !== 'trial' && status !== 'freezerequested') return false;
+  if (startedAtRaw && new Date(startedAtRaw).getTime() > Date.now()) return false;
   if (sub.expiresAt && new Date(sub.expiresAt).getTime() <= Date.now()) return false;
   return true;
 }

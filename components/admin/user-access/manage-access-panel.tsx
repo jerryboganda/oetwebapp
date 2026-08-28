@@ -49,6 +49,8 @@ interface ManageAccessPanelProps {
   folderTree?: MaterialFolderDto[];
   videos?: AllocatableVideo[];
   disabled?: boolean;
+  /** Called after an immediate server mutation (suspend/restore/primary/date) so the parent can refresh derived data like AI credits. */
+  onImmediateMutation?: (nextAccess: UserAccess) => void;
 }
 
 /**
@@ -77,6 +79,7 @@ export function ManageAccessPanel({
   folderTree: folderTreeProp,
   videos: videosProp,
   disabled,
+  onImmediateMutation,
 }: ManageAccessPanelProps) {
   const [plans, setPlans] = useState<AdminBillingPlan[]>(plansProp ?? []);
   const [addons, setAddons] = useState<AdminBillingAddOn[]>(addonsProp ?? []);
@@ -165,12 +168,17 @@ export function ManageAccessPanel({
     try {
       const saved = await transition(userId, subscriptionId);
       const savedById = new Map(saved.subscriptions.map((sub) => [sub.id, sub]));
-      onChange({
+      const nextAccess: UserAccess = {
         ...value,
+        ...saved,
         subscriptions: value.subscriptions.map((sub) =>
           sub.isPending ? sub : savedById.get(sub.id) ?? sub,
         ),
-      });
+        // Server is authoritative for master expiry and the persisted subscription list — keep local drafts only for membership.
+        accessExpiresAt: saved.accessExpiresAt,
+      };
+      onChange(nextAccess);
+      onImmediateMutation?.(nextAccess);
     } catch (error) {
       console.error('Failed to change package state', error);
       setPackageError(readErrorMessage(error, 'Unable to update this package.'));

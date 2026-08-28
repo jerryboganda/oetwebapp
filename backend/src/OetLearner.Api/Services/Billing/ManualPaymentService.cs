@@ -466,11 +466,16 @@ public sealed class ManualPaymentService : IManualPaymentService
             var durationMonths = planVersion?.DurationMonths ?? plan?.DurationMonths ?? 0;
             var giftExpiry = durationMonths > 0 ? now.AddMonths(durationMonths) : now.AddDays(180);
 
-            subscription.AiCreditsRemaining += aiCredits;
+            var hasLegacyLedgerEntryBefore = await _db.AiCreditLedger.AnyAsync(
+                entry => entry.UserId == row.UserId
+                    && entry.ReferenceId == creditReferenceId
+                    && entry.Source == AiCreditSource.Purchase,
+                ct);
 
+            var authoritativeGranted = false;
             if (_aiPackageCredits is not null)
             {
-                await _aiPackageCredits.GrantCourseGiftCreditsAsync(
+                authoritativeGranted = await _aiPackageCredits.GrantCourseGiftCreditsAsync(
                     row.UserId,
                     planCodeForCredit,
                     planVersion?.Name ?? plan?.Name ?? row.CourseName,
@@ -482,13 +487,9 @@ public sealed class ManualPaymentService : IManualPaymentService
                      subscription.StartedAt);
             }
 
-            var hasLegacyLedgerEntry = await _db.AiCreditLedger.AnyAsync(
-                entry => entry.UserId == row.UserId
-                    && entry.ReferenceId == creditReferenceId
-                    && entry.Source == AiCreditSource.Purchase,
-                ct);
-            if (!hasLegacyLedgerEntry)
+            if (!hasLegacyLedgerEntryBefore)
             {
+                subscription.AiCreditsRemaining += aiCredits;
                 _db.AiCreditLedger.Add(new AiCreditLedgerEntry
                 {
                     Id = Guid.NewGuid().ToString("N"),
@@ -502,6 +503,10 @@ public sealed class ManualPaymentService : IManualPaymentService
                     CreatedAt = now,
                     CreatedByAdminId = adminId,
                 });
+            }
+            else if (authoritativeGranted)
+            {
+                // Authoritative lot was missing but legacy already exists (partial state) — ensure lot is now present without double-counting the subscription counter.
             }
         }
 

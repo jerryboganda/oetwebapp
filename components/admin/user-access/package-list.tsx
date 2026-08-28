@@ -112,6 +112,7 @@ export function PackageList({
   const isExpiryOverridden = Boolean(expiryOverride) && expiryOverride !== defaultExpiry;
   const professionMismatch = isProfessionMismatch(selectedPlan, learnerProfessionId);
   const blockedByProfession = professionMismatch && !overrideProfession;
+  const addFormExpiryBeforeStart = Boolean(startsAt && effectiveExpiry && effectiveExpiry < startsAt);
 
   function syncDraft(
     code: string,
@@ -208,16 +209,20 @@ export function PackageList({
 
   async function saveEditDates(id: string) {
     if (!onEditDates) return;
-    await onEditDates(id, {
-      startsAt: editStartsAt
-        ? new Date(`${editStartsAt}T00:00:00.000Z`).toISOString()
-        : null,
-      expiresAt: editClearExpiry || !editExpiresAt
-        ? null
-        : new Date(`${editExpiresAt}T00:00:00.000Z`).toISOString(),
-      clearExpiresAt: editClearExpiry,
-    });
-    resetEditDates();
+    try {
+      await onEditDates(id, {
+        startsAt: editStartsAt
+          ? new Date(`${editStartsAt}T00:00:00.000Z`).toISOString()
+          : null,
+        expiresAt: editClearExpiry || !editExpiresAt
+          ? null
+          : new Date(`${editExpiresAt}T00:00:00.000Z`).toISOString(),
+        clearExpiresAt: editClearExpiry,
+      });
+      resetEditDates();
+    } catch {
+      // Keep editor open so the admin can correct the input; the parent surfaces the error.
+    }
   }
 
   return (
@@ -225,6 +230,7 @@ export function PackageList({
       <div className="space-y-3 rounded-2xl border border-dashed border-border p-3">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Select
+            id="add-package-plan"
             label="Plan"
             value={planCode}
             onChange={(event) => {
@@ -237,6 +243,7 @@ export function PackageList({
             disabled={disabled}
           />
           <Input
+            id="add-package-start-date"
             label="Start date"
             type="date"
             value={startsAt}
@@ -249,6 +256,7 @@ export function PackageList({
             disabled={disabled}
           />
           <Input
+            id="add-package-expiry-date"
             label="Expiry date"
             type="date"
             value={effectiveExpiry}
@@ -325,12 +333,15 @@ export function PackageList({
             Includes {selectedPlan?.bundledAiCredits} gifted Shared AI credits, granted automatically when you add this package.
           </p>
         ) : null}
+        {addFormExpiryBeforeStart ? (
+          <InlineAlert variant="error">The end date cannot be before the start date.</InlineAlert>
+        ) : null}
         <div className="flex justify-end">
           <Button
             type="button"
             size="sm"
             onClick={handleAdd}
-            disabled={disabled || !planCode || blockedByProfession}
+            disabled={disabled || !planCode || blockedByProfession || addFormExpiryBeforeStart}
           >
             Add package
           </Button>
@@ -343,10 +354,15 @@ export function PackageList({
         <ul className="divide-y divide-border rounded-2xl border border-border">
           {subscriptions.map((sub) => {
             const isSuspended = sub.status.toLowerCase() === 'suspended';
+            const startedAtRaw = sub.startedAt ?? sub.startsAt ?? null;
+            const startedOk = !startedAtRaw || new Date(startedAtRaw).getTime() <= Date.now();
+            const notExpired = !sub.expiresAt || new Date(sub.expiresAt).getTime() > Date.now();
             const canSetPrimary = !sub.isPending
               && !sub.isPrimary
               && !isSuspended
-              && ['active', 'trial', 'freezerequested'].includes(sub.status.toLowerCase());
+              && ['active', 'trial', 'freezerequested'].includes(sub.status.toLowerCase())
+              && startedOk
+              && notExpired;
             const awaitingFulfilment = sub.fulfilmentStatus === 'pending_manual';
             const isBusy = busySubscriptionId === sub.id;
             const startedLabel = formatDate(sub.startsAt ?? sub.startedAt);
@@ -467,6 +483,7 @@ export function PackageList({
                   <div className="w-full space-y-3 rounded-xl border border-border bg-background-light p-3">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <Input
+                        id={`edit-${sub.id}-start-date`}
                         label="Start date"
                         type="date"
                         value={editStartsAt}
@@ -475,6 +492,7 @@ export function PackageList({
                         disabled={disabled || isBusy}
                       />
                       <Input
+                        id={`edit-${sub.id}-expiry-date`}
                         label="Expiry date"
                         type="date"
                         value={editClearExpiry ? '' : editExpiresAt}

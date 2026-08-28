@@ -40,10 +40,16 @@ export function CreditBucketAdjuster({
   const [reason, setReason] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const anyValue = Object.values(values).some((value) => value.trim() !== '' && Number(value) !== 0);
+  const hasAnyInput = Object.values(values).some((value) => value.trim() !== '');
+  const hasNonZeroInput = Object.values(values).some((value) => {
+    const trimmed = value.trim();
+    return trimmed !== '' && Number(trimmed) !== 0 && Number.isFinite(Number(trimmed));
+  });
+  const anyValue = mode === 'set' ? hasAnyInput : hasNonZeroInput;
 
   const submit = async () => {
     if (!anyValue && !expiresAt) return;
+    if (saving) return;
     setSaving(true);
     try {
       const payload: Record<string, unknown> = { reason: reason || undefined };
@@ -124,7 +130,7 @@ export function CreditBucketAdjuster({
         </label>
       </div>
       <div className="mt-3 flex justify-end">
-        <Button size="sm" disabled={!anyValue && !expiresAt} onClick={() => void submit()}>
+        <Button size="sm" disabled={(!anyValue && !expiresAt) || saving} loading={saving} onClick={() => void submit()}>
           {saving ? 'Saving…' : mode === 'add' ? 'Apply adjustment' : 'Set exact balances'}
         </Button>
       </div>

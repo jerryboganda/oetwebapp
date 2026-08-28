@@ -63,7 +63,9 @@ export function mapAiPackageCreditSnapshot(data: ApiRecord): AiPackageCreditSnap
       readingTestsDelta: Number(item.readingTestsDelta ?? 0),
       mockExamsDelta: Number(item.mockExamsDelta ?? 0),
       referenceId: toNullableString(item.referenceId),
+      sourceReferenceId: toNullableString(item.sourceReferenceId),
       description: String(item.description ?? ''),
+      validFrom: toNullableString(item.validFrom),
       expiresAt: toNullableString(item.expiresAt),
       createdAt: String(item.createdAt ?? ''),
     })),
@@ -116,6 +118,9 @@ function mapBuckets(value: unknown): AiPackageCreditBucket[] | null {
       totalGranted: Number(grant.totalGranted ?? 0),
       grantedAt: String(grant.grantedAt ?? ''),
       expiresAt: toNullableString(grant.expiresAt),
+      sourceReferenceId: toNullableString(grant.sourceReferenceId),
+      validFrom: toNullableString(grant.validFrom),
+      daysLeft: grant.daysLeft == null ? null : Number(grant.daysLeft),
     })),
   }));
 }

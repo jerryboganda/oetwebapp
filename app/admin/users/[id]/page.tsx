@@ -513,15 +513,23 @@ export default function UserDetailPage() {
       for (const addOn of access.addOns) {
         if (!addOn.isPending) continue;
         if (addOn.subscriptionId && !survivingSubscriptionIds.has(addOn.subscriptionId)) continue;
-        currentAccess = await grantUserAddon(user.id, { addonCode: addOn.code, subscriptionId: addOn.subscriptionId });
+        currentAccess = await grantUserAddon(user.id, {
+          addonCode: addOn.code,
+          subscriptionId: addOn.subscriptionId,
+          quantity: addOn.quantity,
+        });
       }
 
+      const hadMasterExpiry = originalAccess?.accessExpiresAt != null;
+      const wantsNoExpiry = access.accessExpiresAt == null;
+      const clearAccessExpiry = hadMasterExpiry && wantsNoExpiry;
       const saved = await putUserAccessScope(user.id, {
         modules: access.moduleOverrides,
         materialFolderIds: access.materialFolderIds,
         videoIds: access.videoIds,
         recallSetCodes: access.recallSetCodes,
-        accessExpiresAt: currentAccess.accessExpiresAt,
+        accessExpiresAt: access.accessExpiresAt,
+        clearAccessExpiry: clearAccessExpiry || undefined,
       });
 
       setAccess(saved);
@@ -1527,14 +1535,18 @@ export default function UserDetailPage() {
                     {advancedAccessOpen ? (
                       <div className="mt-3">
                         {access ? (
-                          <ManageAccessPanel
-                            userId={user.id}
-                            value={access}
-                            onChange={setAccess}
-                            learnerProfessionId={user.professionId ?? user.profession ?? ''}
-                            learnerProfessionLabel={displayedProfession}
-                            disabled={isSavingAccess}
-                          />
+                           <ManageAccessPanel
+                             userId={user.id}
+                             value={access}
+                             onChange={setAccess}
+                             learnerProfessionId={user.professionId ?? user.profession ?? ''}
+                             learnerProfessionLabel={displayedProfession}
+                             disabled={isSavingAccess}
+                             onImmediateMutation={() => {
+                               void refreshAiCredits(user.id);
+                               void reloadUser();
+                             }}
+                           />
                         ) : (
                           <p className="text-sm text-muted">Unable to load access details for this learner.</p>
                         )}

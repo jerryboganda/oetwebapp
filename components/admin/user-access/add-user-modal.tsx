@@ -126,6 +126,7 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
         currentAccess = await grantUserAddon(created.id, {
           addonCode: addOn.code,
           subscriptionId: addOn.subscriptionId,
+          quantity: addOn.quantity,
         });
       }
 
@@ -134,7 +135,7 @@ export function AddUserModal({ open, onClose, onCreated }: AddUserModalProps) {
         materialFolderIds: access.materialFolderIds,
         videoIds: access.videoIds,
         recallSetCodes: access.recallSetCodes,
-        accessExpiresAt: currentAccess.accessExpiresAt,
+        accessExpiresAt: access.accessExpiresAt ?? currentAccess.accessExpiresAt,
       });
 
       onCreated(created);

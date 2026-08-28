@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
-import { Select } from '@/components/ui/form-controls';
+import { Input, Select } from '@/components/ui/form-controls';
 import type { AdminBillingAddOn } from '@/lib/types/admin';
 import type { UserAccessAddOn, UserAccessSubscription } from '@/lib/user-access';
 
@@ -26,6 +26,7 @@ interface AddonPickerProps {
 export function AddonPicker({ addons, subscriptions, selected, onChange, disabled }: AddonPickerProps) {
   const [addonCode, setAddonCode] = useState('');
   const [subscriptionId, setSubscriptionId] = useState('');
+  const [quantity, setQuantity] = useState('1');
 
   const committedSubscriptions = subscriptions.filter((sub) => !sub.isPending);
   const addonOptions = addons.map((addon) => ({ value: addon.code, label: addon.name }));
@@ -37,9 +38,11 @@ export function AddonPicker({ addons, subscriptions, selected, onChange, disable
       (addon) => addon.code === addonCode && (addon.subscriptionId ?? '') === subscriptionId,
     );
     if (alreadySelected) return;
-    onChange([...selected, { code: addonCode, subscriptionId: subscriptionId || undefined, isPending: true }]);
+    const qty = Math.max(1, Math.min(99, Number(quantity) || 1));
+    onChange([...selected, { code: addonCode, subscriptionId: subscriptionId || undefined, quantity: qty, isPending: true }]);
     setAddonCode('');
     setSubscriptionId('');
+    setQuantity('1');
   }
 
   function handleRemove(index: number) {
@@ -58,7 +61,7 @@ export function AddonPicker({ addons, subscriptions, selected, onChange, disable
   return (
     <div className="space-y-3">
       <div className="space-y-3 rounded-2xl border border-dashed border-border p-3">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Select
             label="Add-on"
             value={addonCode}
@@ -72,6 +75,15 @@ export function AddonPicker({ addons, subscriptions, selected, onChange, disable
             onChange={(event) => setSubscriptionId(event.target.value)}
             options={[{ value: '', label: 'Standalone (no course package)' }, ...subscriptionOptions]}
             disabled={disabled || committedSubscriptions.length === 0}
+          />
+          <Input
+            label="Quantity"
+            type="number"
+            min={1}
+            max={99}
+            value={quantity}
+            onChange={(event) => setQuantity(event.target.value)}
+            disabled={disabled}
           />
         </div>
         <p className="text-xs text-muted">
@@ -94,6 +106,7 @@ export function AddonPicker({ addons, subscriptions, selected, onChange, disable
               <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-2 truncate text-sm font-medium text-navy">
                   {addonLabel(addOn.code)}
+                  {addOn.quantity && addOn.quantity > 1 ? <Badge variant="primary">x{addOn.quantity}</Badge> : null}
                   {addOn.isPending ? <Badge variant="warning">Pending</Badge> : null}
                 </p>
                 <p className="text-xs text-muted">{subscriptionLabel(addOn.subscriptionId)}</p>
