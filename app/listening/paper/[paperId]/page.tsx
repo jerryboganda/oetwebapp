@@ -4,6 +4,7 @@ import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   Clock,
@@ -994,38 +995,18 @@ function ActiveSubSectionPanel({
   const [showConfirm, setShowConfirm] = useState(false);
   const [timerExpired, setTimerExpired] = useState(false);
   const [audioFailure, setAudioFailure] = useState(false);
-  // The timed flow must stop while scored audio is buffering or stalled. The
-  // server deadline remains authoritative, so this never grants extra time;
-  // it only prevents the client timer from racing ahead while playback is
-  // unavailable.
   const [audioBuffering, setAudioBuffering] = useState(true);
-  const isPartB = subSection.partCode === 'B';
-  const partBExtracts = isPartB
-    ? (subSection.extracts?.length ? subSection.extracts : subSection.extract ? [subSection.extract] : [])
-    : [];
-  // Exam Part B slicing is only valid when each of the 6 questions has its own
-  // cue-bounded extract. Legacy/monolithic papers with a single 08:33 extract
-  // for 6 questions must show all 6 at once — otherwise Q2..Q6 are unreachable.
-  const shouldSliceExamPartB = isPartB
-    && partBExtracts.length > 1
-    && subSection.questions.length > 1
-    && partBExtracts.length === subSection.questions.length;
-  const [partBQuestionIndex, setPartBQuestionIndex] = useState(
-    shouldSliceExamPartB
-      ? Math.max(0, Math.min(subSection.questions.length - 1, resumeAudioQuestionIndex ?? 0))
-      : 0,
+
+  // Active question index within this sub-section (for Part B and C single-card view)
+  const [activeQuestionIndex, setActiveQuestionIndex] = useState(
+    Math.max(0, Math.min(subSection.questions.length - 1, resumeAudioQuestionIndex ?? 0)),
   );
-  const activePartBQuestion = shouldSliceExamPartB ? (subSection.questions[partBQuestionIndex] ?? null) : null;
-  const activePartBExtract = shouldSliceExamPartB ? (partBExtracts[partBQuestionIndex] ?? null) : null;
-  const visibleQuestions = shouldSliceExamPartB
-    ? (activePartBQuestion ? [activePartBQuestion] : [])
-    : subSection.questions;
-  const [partBExtractEnded, setPartBExtractEnded] = useState(false);
-  const canMoveToNextPartBQuestion = shouldSliceExamPartB
-    && !timerExpired
-    && partBQuestionIndex < subSection.questions.length - 1;
-  // Timer expiry opens the same explicit boundary confirmation as the Next
-  // button. Reset is implicit because the panel is remounted on every advance.
+  const [questionAnnotations, setQuestionAnnotations] = useState<Record<string, { flagged?: boolean; struckOptions?: string[] }>>({});
+
+  const isPartA = subSection.partCode.startsWith('A');
+  const notesBody = subSection.extract?.notesBody?.trim() || '';
+  const showNotes = isPartA && notesBody.length > 0;
+
   const expiredRef = useRef(false);
   const handleExpire = useCallback(() => {
     if (expiredRef.current) return;
@@ -1035,15 +1016,11 @@ function ActiveSubSectionPanel({
   }, []);
 
   const handleAudioFailure = useCallback(() => setAudioFailure(true), []);
-  const handlePartBExtractComplete = useCallback(() => setPartBExtractEnded(true), []);
-
-  useEffect(() => {
-    setPartBExtractEnded(false);
-  }, [partBQuestionIndex]);
 
   useEffect(() => {
     setAudioFailure(false);
-  }, [subSection.index, partBQuestionIndex]);
+    setActiveQuestionIndex(0);
+  }, [subSection.index]);
 
   const { remaining, pause: pauseTimer, resume: resumeTimer } = useTimer(
     subSection.timeLimitSeconds > 0 ? subSection.timeLimitSeconds : LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
@@ -1060,37 +1037,23 @@ function ActiveSubSectionPanel({
     else resumeTimer();
   }, [audioBuffering, pauseTimer, resumeTimer]);
 
-  const unansweredInSection = visibleQuestions.filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
+  const unansweredInSection = subSection.questions.filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
 
   const requestAdvance = () => {
     if (advancing || audioFailure) return;
-    if (shouldSliceExamPartB && !partBExtractEnded && !timerExpired) return;
     setShowConfirm(true);
   };
 
-  const isPartA = subSection.partCode.startsWith('A');
-  const notesBody = subSection.extract?.notesBody?.trim() || '';
-  const showNotes = isPartA && notesBody.length > 0;
-  const mediaAssetId = mediaAssetIdFromUrl(questionPaperUrl);
-  const assetId = mediaAssetId ?? `qp-${subSection.partCode}`;
-  const pdfAssets: ReadingPdfAsset[] = questionPaperUrl
-    ? [{ id: assetId, part: subSection.partCode, title: subSection.title, downloadPath: questionPaperUrl }]
-    : [];
-  const showPdf = false;
-  const canAnnotate = false;
+  const currentQuestion = subSection.questions[activeQuestionIndex] ?? subSection.questions[0];
 
   return (
     <div className="space-y-6">
       <SubSectionAudio
-        key={`${attemptId}:${subSection.index}:${shouldSliceExamPartB ? partBQuestionIndex : 'all'}`}
+        key={`${attemptId}:${subSection.index}`}
         attemptId={attemptId}
         subSection={subSection}
-        cueStartMs={shouldSliceExamPartB ? (activePartBExtract?.audioStartMs ?? null) : null}
-        cueEndMs={shouldSliceExamPartB ? (activePartBExtract?.audioEndMs ?? null) : null}
-        onExtractComplete={shouldSliceExamPartB ? handlePartBExtractComplete : undefined}
         resumeState={resumeAudioState}
         resumeAtMs={resumeAudioAtMs}
-        questionIndex={shouldSliceExamPartB ? partBQuestionIndex : null}
         onIntegrityEvent={onIntegrityEvent}
         onBufferingChange={setAudioBuffering}
         onAudioFailure={handleAudioFailure}
@@ -1103,19 +1066,6 @@ function ActiveSubSectionPanel({
         onSubmit={onSubmit}
       />
 
-      {showPdf ? (
-        <QuestionPaperPdfViewer
-          paperId={paperId}
-          partCode={subSection.partCode}
-          assets={pdfAssets}
-          annotations={annotations}
-          readOnly={!canAnnotate}
-          onCreateAnnotation={onCreateAnnotation}
-          onDeleteAnnotation={onDeleteAnnotation}
-          documentNoun="Listening paper"
-        />
-      ) : null}
-
       <section className="rounded-[20px] border border-border bg-surface p-5 shadow-sm" aria-label={`Questions for ${subSection.label}`}>
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -1123,23 +1073,23 @@ function ActiveSubSectionPanel({
             <span className="text-sm font-bold text-navy">{subSection.label}</span>
           </div>
           <Badge variant="info">
-            {shouldSliceExamPartB
-              ? `Question ${partBQuestionIndex + 1} of ${subSection.questions.length}`
+            {!showNotes && subSection.questions.length > 1
+              ? `Question ${activeQuestionIndex + 1} of ${subSection.questions.length}`
               : `${subSection.questions.length} item${subSection.questions.length === 1 ? '' : 's'}`}
           </Badge>
         </div>
 
-        {visibleQuestions.length === 0 ? (
+        {subSection.questions.length === 0 ? (
           <p className="text-sm text-muted">This sub-section has no questions — listen, then continue.</p>
         ) : showNotes ? (
           <PartANotesDocument
             partLabel={subSection.label}
             notesBody={notesBody}
-            questions={visibleQuestions.map((q) => ({ id: q.id, number: q.number }))}
+            questions={subSection.questions.map((q) => ({ id: q.id, number: q.number }))}
             answers={answers}
             onAnswerChange={(id, value) => {
               if (audioFailure) return;
-              const q = visibleQuestions.find((item) => item.id === id);
+              const q = subSection.questions.find((item) => item.id === id);
               if (q) onAnswerChange(q, value);
             }}
             locked={audioFailure}
@@ -1147,65 +1097,157 @@ function ActiveSubSectionPanel({
           />
         ) : (
           <div className="space-y-6">
-            {visibleQuestions.map((question) => (
+            {/* Jump-to navigation pills */}
+            {subSection.questions.length > 1 && (
+              <div
+                className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background-light p-3"
+                role="tablist"
+                aria-label="Question jump navigation"
+              >
+                <span className="text-xs font-black uppercase tracking-widest text-muted mr-1">Questions:</span>
+                {subSection.questions.map((q, idx) => {
+                  const isActive = idx === activeQuestionIndex;
+                  const isAnswered = Boolean((answers[q.id] ?? '').trim());
+                  const isFlagged = Boolean(questionAnnotations[q.id]?.flagged);
+                  return (
+                    <button
+                      key={q.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isActive}
+                      aria-label={`Question ${q.number}${isAnswered ? ' (answered)' : ''}${isFlagged ? ' (flagged)' : ''}`}
+                      onClick={() => {
+                        if (currentQuestion) {
+                          const currentVal = answers[currentQuestion.id] ?? '';
+                          if (currentVal) void onPersistAnswer(currentQuestion.id, currentVal);
+                        }
+                        setActiveQuestionIndex(idx);
+                      }}
+                      className={cn(
+                        "relative flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold transition-all",
+                        isActive
+                          ? "border-2 border-primary bg-primary text-white shadow-sm"
+                          : isAnswered
+                          ? "border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                          : "border border-border bg-surface text-navy hover:border-border-hover",
+                        isFlagged && !isActive && "ring-2 ring-warning",
+                      )}
+                    >
+                      {q.number}
+                      {isFlagged && (
+                        <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-warning">
+                          <span className="h-1.5 w-1.5 rounded-full bg-navy" />
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Single active question card */}
+            {currentQuestion && (
               <BCQuestionRenderer
-                key={question.id}
-                questionNumber={question.number}
+                key={currentQuestion.id}
+                questionNumber={currentQuestion.number}
                 partLabel={subSection.label}
-                prompt={question.text}
-                options={question.options}
-                optionKeys={question.optionKeys}
-                value={answers[question.id] ?? ''}
+                prompt={currentQuestion.text}
+                options={currentQuestion.options}
+                optionKeys={currentQuestion.optionKeys}
+                value={answers[currentQuestion.id] ?? ''}
                 locked={audioFailure}
+                annotation={questionAnnotations[currentQuestion.id]}
+                onAnnotationChange={(mutator) => {
+                  setQuestionAnnotations((prev) => {
+                    const existing = prev[currentQuestion.id] ?? {};
+                    const updated = mutator(existing as any);
+                    return { ...prev, [currentQuestion.id]: updated };
+                  });
+                }}
                 onChange={(value) => {
-                  if (!audioFailure) onAnswerChange(question, value);
+                  if (!audioFailure) {
+                    onAnswerChange(currentQuestion, value);
+                    void onPersistAnswer(currentQuestion.id, value);
+                  }
                 }}
               />
-            ))}
+            )}
           </div>
         )}
 
-        <div className="mt-6 flex items-center justify-end">
-          <Button
-            variant="primary"
-            onClick={requestAdvance}
-            loading={advancing}
-            disabled={audioFailure || (shouldSliceExamPartB && !partBExtractEnded && !timerExpired)}
-            aria-label={canMoveToNextPartBQuestion ? 'Next question' : isLastSection ? 'Submit attempt' : 'Advance to next sub-section'}
-          >
-            {canMoveToNextPartBQuestion ? (
-              <>
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                Next question
-              </>
-            ) : isLastSection ? (
-              <>
-                <Send className="h-4 w-4" aria-hidden="true" />
-                Submit
-              </>
+        {/* Stepper Controls */}
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+          <div>
+            {!showNotes && subSection.questions.length > 1 && activeQuestionIndex > 0 ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (currentQuestion) {
+                    const currentVal = answers[currentQuestion.id] ?? '';
+                    if (currentVal) void onPersistAnswer(currentQuestion.id, currentVal);
+                  }
+                  setActiveQuestionIndex((idx) => Math.max(0, idx - 1));
+                }}
+                disabled={audioFailure}
+                aria-label="Previous question"
+              >
+                <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                Previous Question
+              </Button>
+            ) : null}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!showNotes && subSection.questions.length > 1 && activeQuestionIndex < subSection.questions.length - 1 ? (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  if (currentQuestion) {
+                    const currentVal = answers[currentQuestion.id] ?? '';
+                    if (currentVal) void onPersistAnswer(currentQuestion.id, currentVal);
+                  }
+                  setActiveQuestionIndex((idx) => Math.min(subSection.questions.length - 1, idx + 1));
+                }}
+                disabled={audioFailure}
+                aria-label="Next question"
+              >
+                Next Question
+                <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+              </Button>
             ) : (
-              <>
-                <ArrowRight className="h-4 w-4" aria-hidden="true" />
-                Next sub-section
-              </>
+              <Button
+                variant="primary"
+                onClick={requestAdvance}
+                loading={advancing}
+                disabled={audioFailure}
+                aria-label={isLastSection ? 'Submit attempt' : 'Advance to next sub-section'}
+              >
+                {isLastSection ? (
+                  <>
+                    <Send className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                    Submit Exam
+                  </>
+                ) : (
+                  <>
+                    <ArrowRight className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                    Next Sub-section
+                  </>
+                )}
+              </Button>
             )}
-          </Button>
+          </div>
         </div>
       </section>
 
       <Modal
         open={showConfirm}
         onClose={() => setShowConfirm(false)}
-        title={canMoveToNextPartBQuestion
-          ? 'Move to the next Part B question?'
-          : isLastSection ? 'Submit Listening attempt?' : 'Move to the next sub-section?'}
+        title={isLastSection ? 'Submit Listening attempt?' : 'Move to the next sub-section?'}
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-muted">
             {timerExpired
               ? 'The sub-section timer has ended. Confirm below to save and permanently lock this sub-section.'
-              : canMoveToNextPartBQuestion
-              ? `Question ${activePartBQuestion?.number ?? ''} will be locked. The next short extract will start and you cannot return to this question.`
               : isLastSection
               ? 'This is the final sub-section. Submitting grades your attempt and you cannot return.'
               : 'You cannot return to this sub-section once you continue. Its audio and answers will be locked.'}
@@ -1222,31 +1264,11 @@ function ActiveSubSectionPanel({
             variant="primary"
             onClick={() => {
               setShowConfirm(false);
-              if (canMoveToNextPartBQuestion) {
-                const nextQuestionIndex = partBQuestionIndex + 1;
-                const nextExtract = partBExtracts[nextQuestionIndex];
-                if (activePartBQuestion) {
-                  const currentVal = answers[activePartBQuestion.id] ?? '';
-                  if (currentVal) {
-                    void onPersistAnswer(activePartBQuestion.id, currentVal);
-                  }
-                }
-                onIntegrityEvent('audio_started', {
-                  section: subSection.partCode,
-                  cuePointMs: nextExtract?.audioStartMs ?? 0,
-                  questionIndex: nextQuestionIndex,
-                  playbackIntent: 'confirmed_next_question',
-                });
-                setPartBQuestionIndex(nextQuestionIndex);
-                return;
-              }
               onAdvance();
             }}
             loading={advancing}
           >
-            {canMoveToNextPartBQuestion
-              ? 'Lock & start next'
-              : isLastSection ? 'Submit now' : 'Continue'}
+            {isLastSection ? 'Submit now' : 'Continue'}
           </Button>
         </div>
       </Modal>

@@ -4,7 +4,8 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
-import { AlertCircle, CheckCircle2, Loader2, Volume2 } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Loader2, Volume2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -298,6 +299,9 @@ function PlayerContent() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [hasStarted, setHasStarted] = useState(false);
+  const [showAutoplayModal, setShowAutoplayModal] = useState(false);
+  const hasAutoplayedAttemptRef = useRef(false);
+  const [activeQuestionIndexBySection, setActiveQuestionIndexBySection] = useState<Record<string, number>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isAdvancingPhase, setIsAdvancingPhase] = useState(false);
@@ -505,10 +509,9 @@ function PlayerContent() {
       || message.includes('user didn')
       || message.includes('gesture')
     ) {
-      // Autoplay was blocked by the browser (no user gesture / not yet ready).
-      // This is transient — do NOT flag the attempt for administrator review.
-      // The learner starts playback from the transport play button (a real
-      // gesture) and the hold is cleared when audio actually starts.
+      if (error instanceof DOMException && error.name === 'NotAllowedError') {
+        setShowAutoplayModal(true);
+      }
       return;
     }
     flagAudioFailure('Audio could not start. This attempt has been halted and flagged for administrator review; do not replay the scored audio.');
@@ -1203,7 +1206,11 @@ function PlayerContent() {
     if (!attemptIdFromRoute) {
       hydratedAttemptIdRef.current = null;
       setStrictServerState(null);
-      setHasStarted(false);
+      if (mode === 'practice' || !strictReadinessRequired) {
+        setHasStarted(true);
+      } else {
+        setHasStarted(false);
+      }
       return;
     }
     if (!strictReadinessRequired) {
@@ -1311,8 +1318,9 @@ function PlayerContent() {
     audioBufferingActiveRef.current = false;
     previewArmedRef.current = false;
     setPhase('audio');
+    tryAutoPlay();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentSection, hasStarted]);
+  }, [currentSection, hasStarted, tryAutoPlay]);
 
   const advanceToNextSection = () => {
     // Reset phase off 'review' BEFORE the section index changes. Otherwise
@@ -2163,33 +2171,78 @@ function PlayerContent() {
                               // Track the last rendered extract context so a Part C
                               // presentation shows its scenario line once (above its
                               // first card) while Part B shows each clip's own line.
-                              let lastContext: string | null = null;
-                              return questions.map((question) => {
-                                const canEdit = true;
-                                if (question.options.length === 0) {
-                                  return (
-                                    <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                                      <PartARenderer
-                                        questionNumber={question.number}
-                                        partLabel={LISTENING_SECTION_LABEL[section]}
-                                        prompt={question.text}
-                                        inputId={`listening-answer-${question.id}`}
-                                        value={answers[question.id] ?? ''}
-                                        onChange={(value) => handleAnswerChange(question.id, value)}
-                                        locked={!canEdit}
-                                      />
-                                    </div>
-                                  );
-                                }
-
-                                const questionExtract = extracts.find((e) => e.partCode === question.partCode);
-                                const contextIntro = questionExtract?.contextIntro?.trim() || null;
-                                const showContext = Boolean(contextIntro) && contextIntro !== lastContext;
-                                if (contextIntro) lastContext = contextIntro;
-
-                                return (
+                              if (questions.length > 0 && questions[0].options.length === 0) {
+                                return questions.map((question) => (
                                   <div id={`listening-question-${question.id}`} key={question.id} className="scroll-mt-48">
-                                    {showContext ? (
+                                    <PartARenderer
+                                      questionNumber={question.number}
+                                      partLabel={LISTENING_SECTION_LABEL[section]}
+                                      prompt={question.text}
+                                      inputId={`listening-answer-${question.id}`}
+                                      value={answers[question.id] ?? ''}
+                                      onChange={(value) => handleAnswerChange(question.id, value)}
+                                      locked={false}
+                                    />
+                                  </div>
+                                ));
+                              }
+
+                              const activeIdx = Math.max(0, Math.min(questions.length - 1, activeQuestionIndexBySection[section] ?? 0));
+                              const currentQuestion = questions[activeIdx] ?? questions[0];
+                              if (!currentQuestion) return null;
+
+                              const questionExtract = extracts.find((e) => e.partCode === currentQuestion.partCode);
+                              const contextIntro = questionExtract?.contextIntro?.trim() || null;
+
+                              return (
+                                <div className="space-y-6">
+                                  {/* Jump-to question selector pills */}
+                                  {questions.length > 1 && (
+                                    <div
+                                      className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background-light p-3"
+                                      role="tablist"
+                                      aria-label="Question selector"
+                                    >
+                                      <span className="text-xs font-black uppercase tracking-widest text-muted mr-1">Questions:</span>
+                                      {questions.map((q, idx) => {
+                                        const isActive = idx === activeIdx;
+                                        const isAnswered = Boolean((answers[q.id] ?? '').trim());
+                                        const isFlagged = Boolean(annotations.state.byQuestion[q.id]?.flagged);
+                                        return (
+                                          <button
+                                            key={q.id}
+                                            type="button"
+                                            role="tab"
+                                            aria-selected={isActive}
+                                            aria-label={`Question ${q.number}${isAnswered ? ' (answered)' : ''}${isFlagged ? ' (flagged)' : ''}`}
+                                            onClick={() => {
+                                              setActiveQuestionIndexBySection((prev) => ({ ...prev, [section]: idx }));
+                                            }}
+                                            className={cn(
+                                              "relative flex h-10 w-10 items-center justify-center rounded-xl text-xs font-bold transition-all",
+                                              isActive
+                                                ? "border-2 border-primary bg-primary text-white shadow-sm"
+                                                : isAnswered
+                                                ? "border border-primary/40 bg-primary/10 text-primary hover:bg-primary/20"
+                                                : "border border-border bg-surface text-navy hover:border-border-hover",
+                                              isFlagged && !isActive && "ring-2 ring-warning",
+                                            )}
+                                          >
+                                            {q.number}
+                                            {isFlagged && (
+                                              <span className="absolute -top-1 -right-1 flex h-3 w-3 items-center justify-center rounded-full bg-warning">
+                                                <span className="h-1.5 w-1.5 rounded-full bg-navy" />
+                                              </span>
+                                            )}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {/* Active question card */}
+                                  <div id={`listening-question-${currentQuestion.id}`} key={currentQuestion.id} className="scroll-mt-48 space-y-4">
+                                    {contextIntro ? (
                                       <p
                                         data-testid="listening-extract-context"
                                         className="mb-3 rounded-2xl border border-border bg-background-light px-4 py-3 text-sm font-medium leading-relaxed text-navy"
@@ -2198,20 +2251,73 @@ function PlayerContent() {
                                       </p>
                                     ) : null}
                                     <BCQuestionRenderer
-                                      questionNumber={question.number}
+                                      questionNumber={currentQuestion.number}
                                       partLabel={LISTENING_SECTION_LABEL[section]}
-                                      prompt={question.text}
-                                      options={question.options}
-                                      optionKeys={question.optionKeys}
-                                      value={answers[question.id] ?? ''}
-                                      onChange={(value) => handleAnswerChange(question.id, value)}
-                                      annotation={annotations.state.byQuestion[question.id] ?? {}}
-                                      onAnnotationChange={(mutator) => handleAnnotationChange(question.id, mutator)}
-                                      locked={!canEdit}
+                                      prompt={currentQuestion.text}
+                                      options={currentQuestion.options}
+                                      optionKeys={currentQuestion.optionKeys}
+                                      value={answers[currentQuestion.id] ?? ''}
+                                      onChange={(value) => handleAnswerChange(currentQuestion.id, value)}
+                                      annotation={annotations.state.byQuestion[currentQuestion.id] ?? {}}
+                                      onAnnotationChange={(mutator) => handleAnnotationChange(currentQuestion.id, mutator)}
+                                      locked={false}
                                     />
+
+                                    {/* Stepper Controls */}
+                                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+                                      <div>
+                                        {questions.length > 1 && activeIdx > 0 ? (
+                                          <Button
+                                            variant="outline"
+                                            onClick={() => {
+                                              setActiveQuestionIndexBySection((prev) => ({
+                                                ...prev,
+                                                [section]: Math.max(0, activeIdx - 1),
+                                              }));
+                                            }}
+                                            aria-label="Previous question"
+                                          >
+                                            <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                                            Previous Question
+                                          </Button>
+                                        ) : null}
+                                      </div>
+                                      <div>
+                                        {questions.length > 1 && activeIdx < questions.length - 1 ? (
+                                          <Button
+                                            variant="primary"
+                                            onClick={() => {
+                                              setActiveQuestionIndexBySection((prev) => ({
+                                                ...prev,
+                                                [section]: Math.min(questions.length - 1, activeIdx + 1),
+                                              }));
+                                            }}
+                                            aria-label="Next question"
+                                          >
+                                            Next Question
+                                            <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+                                          </Button>
+                                        ) : (
+                                          <Button
+                                            variant="primary"
+                                            onClick={() => {
+                                              if (isLastSection) {
+                                                setShowSubmitConfirm(true);
+                                              } else {
+                                                setShowNextConfirm(true);
+                                              }
+                                            }}
+                                            disabled={isAdvancingPhase}
+                                          >
+                                            {isLastSection ? 'Finish & Submit' : 'Next Section'}
+                                            <ArrowRight className="ml-1.5 h-4 w-4" aria-hidden="true" />
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                );
-                              });
+                                </div>
+                              );
                             })()}
                           </section>
                         ))}
@@ -2308,6 +2414,31 @@ function PlayerContent() {
                     }}
                   >
                     Submit now
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+
+            {/* Autoplay fallback modal */}
+            <Modal
+              open={showAutoplayModal}
+              onClose={() => setShowAutoplayModal(false)}
+              title="Click to Start Audio"
+            >
+              <div className="space-y-4">
+                <p className="text-sm leading-6 text-muted">
+                  Your browser requires a user interaction to begin audio playback. Click the button below to start your Listening audio.
+                </p>
+                <div className="flex justify-end">
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setShowAutoplayModal(false);
+                      audioRef.current?.play().catch(handlePlaybackFailure);
+                    }}
+                  >
+                    <Volume2 className="mr-2 h-4 w-4" aria-hidden="true" />
+                    Start Audio
                   </Button>
                 </div>
               </div>
