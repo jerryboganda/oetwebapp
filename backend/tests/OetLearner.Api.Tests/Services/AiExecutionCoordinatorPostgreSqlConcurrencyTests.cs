@@ -33,6 +33,7 @@ namespace OetLearner.Api.Tests.Services;
 /// <see cref="PostgreSqlFactAttribute"/> skips (never fails) this class when
 /// <c>OET_TEST_POSTGRES_CONNECTION</c> is unset.
 /// </summary>
+[Collection(PostgreSqlExclusiveCollection.Name)]
 public sealed class AiExecutionCoordinatorPostgreSqlConcurrencyTests
 {
     /// <summary>

@@ -23,6 +23,7 @@ namespace OetLearner.Api.Tests.Services;
 /// invariant; this class proves the money half.
 /// </para>
 /// </summary>
+[Collection(PostgreSqlExclusiveCollection.Name)]
 public sealed class AiBudgetServicePostgreSqlConcurrencyTests
 {
     private const string GlobalPolicyDdl =

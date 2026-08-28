@@ -68,13 +68,14 @@ public sealed class PostgreSqlTestDatabase : IAsyncDisposable
         => new NpgsqlConnectionStringBuilder(_baseConnectionString)
         {
             SearchPath = Schema,
-            // 100-way coordinator/budget races each open a scoped DbContext.
-            // Npgsql's default Max Pool Size is 100, so the 101st waiter
-            // times out and the service mis-classifies it as
-            // budget_store_unavailable. Production uses a real pool sized
-            // for the host; tests need headroom for the race.
-            MaxPoolSize = 256,
-            Timeout = 30,
+            // Sized for one 40-way race (one scoped DbContext per caller).
+            // A 256 cap against postgres:16-alpine max_connections=100 lets
+            // idle pools from parallel classes starve the server; keep this
+            // just above the race width and prune quickly on dispose.
+            MaxPoolSize = 48,
+            Timeout = 15,
+            ConnectionIdleLifetime = 5,
+            ConnectionPruningInterval = 1,
         }.ConnectionString;
 
     public async Task ExecuteAsync(string sql)
@@ -100,6 +101,9 @@ public sealed class PostgreSqlTestDatabase : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await Connection.CloseAsync();
+        NpgsqlConnection.ClearPool(Connection);
+        await using var schemaPool = new NpgsqlConnection(SchemaConnectionString);
+        NpgsqlConnection.ClearPool(schemaPool);
         await using var cleanup = new NpgsqlConnection(_baseConnectionString);
         await cleanup.OpenAsync();
         await using var drop = new NpgsqlCommand($"DROP SCHEMA IF EXISTS \"{Schema}\" CASCADE;", cleanup);

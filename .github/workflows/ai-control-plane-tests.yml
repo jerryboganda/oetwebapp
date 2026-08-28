@@ -28,6 +28,9 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/Infrastructure/PostgreSqlTestDatabase.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaPostgreSqlTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiBudgetServicePostgreSqlConcurrencyTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiExecutionCoordinatorPostgreSqlConcurrencyTests.cs'
+      - 'backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs'
       - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
       - '.github/workflows/ai-control-plane-tests.yml'
@@ -48,6 +51,9 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/Infrastructure/PostgreSqlTestDatabase.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaPostgreSqlTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiBudgetServicePostgreSqlConcurrencyTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiExecutionCoordinatorPostgreSqlConcurrencyTests.cs'
+      - 'backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs'
       - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
       - '.github/workflows/ai-control-plane-tests.yml'
@@ -65,24 +71,28 @@ jobs:
     name: AI control-plane schema + shared PostgreSQL harness
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: oet_ai_control_plane_tests
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d oet_ai_control_plane_tests"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     env:
       OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_ai_control_plane_tests;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start PostgreSQL with headroom for 40-way races
+        run: |
+          docker run -d --name oet-ai-pg \
+            -e POSTGRES_DB=oet_ai_control_plane_tests \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -p 5432:5432 \
+            postgres:16-alpine \
+            -c max_connections=400
+          for i in $(seq 1 30); do
+            if docker exec oet-ai-pg pg_isready -U postgres -d oet_ai_control_plane_tests; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "postgres did not become ready" >&2
+          exit 1
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
