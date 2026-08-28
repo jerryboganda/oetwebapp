@@ -95,19 +95,25 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: SpeakingAiFeatureCodes.SpeakingPatientTurnV1,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-5",
+            PrimaryModel: HaikuModel,
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o",
+            FallbackModel: "gpt-4o-mini",
             PromptCachingEnabled: true,
-            Description: "AI patient per-turn LLM (Claude Sonnet 4.6 — contextual understanding)."),
+            // Cost-tiering (owner directive 2026-08-28 AI/Cloud API plan, point
+            // 7): high-frequency, non-scoring, real-time conversational turns —
+            // exactly the "simple Q&A" cheap-tier candidate the plan names.
+            // README.md already documented this as Haiku; this restores the
+            // code to match after 20260716090000_UpgradeAiModelsToSonnet5
+            // collapsed it onto the premium model project-wide.
+            Description: "AI patient per-turn LLM (cheap tier — Claude Haiku)."),
         new SpeakingAiRouteDefault(
             FeatureCode: SpeakingAiFeatureCodes.CardDraftV1,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-5",
-            FallbackProviderCode: null,
-            FallbackModel: null,
+            PrimaryModel: HaikuModel,
+            FallbackProviderCode: "openai",
+            FallbackModel: "gpt-4o-mini",
             PromptCachingEnabled: true,
-            Description: "Admin role-play card AI draft tool."),
+            Description: "Admin role-play card AI draft tool (cheap tier — admin/background generation)."),
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ConversationOpening,
             PrimaryProviderCode: "anthropic",
@@ -153,86 +159,107 @@ public static class AiFeatureRouteDefaults
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ClassRecordingSummarize,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-5",
+            PrimaryModel: HaikuModel,
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o",
+            FallbackModel: "gpt-4o-mini",
             PromptCachingEnabled: true,
-            Description: "Class recording AI summary, chapters, action items, keyTopics."),
+            Description: "Class recording AI summary, chapters, action items, keyTopics (cheap tier — summarisation)."),
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ClassRecordingTranslate,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-5",
+            PrimaryModel: HaikuModel,
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o",
+            FallbackModel: "gpt-4o-mini",
             PromptCachingEnabled: true,
-            Description: "Class recording summary EN→AR translation."),
+            Description: "Class recording summary EN→AR translation (cheap tier)."),
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.ClassAssistantQna,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-5",
+            PrimaryModel: HaikuModel,
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o",
+            FallbackModel: "gpt-4o-mini",
             PromptCachingEnabled: true,
-            Description: "'Ask AI about this class' transcript RAG Q&A (Claude Sonnet 4.6)."),
+            Description: "'Ask AI about this class' transcript RAG Q&A (cheap tier — simple Q&A)."),
         new SpeakingAiRouteDefault(
             FeatureCode: AiFeatureCodes.TutorRecommendation,
             PrimaryProviderCode: "anthropic",
-            PrimaryModel: "claude-sonnet-5",
+            PrimaryModel: HaikuModel,
             FallbackProviderCode: "openai",
-            FallbackModel: "gpt-4o",
+            FallbackModel: "gpt-4o-mini",
             PromptCachingEnabled: true,
-            Description: "Post-attendance next-class recommendation (Claude Sonnet 4.6)."),
+            Description: "Post-attendance next-class recommendation (cheap tier)."),
 
-        // ── Universal Claude Sonnet 4.6 contextual-understanding defaults ────
-        // Every remaining text-LLM feature defaults to anthropic/claude-sonnet-5
-        // (locked product decision). Admins still override per feature via the
-        // DB-backed AiFeatureRoutes (which win over these static defaults), and
-        // the resolver's key-guard falls through to the keyed top provider when
-        // no Anthropic key is configured — so non-Anthropic deployments are
-        // untouched. Exclusions kept on their own providers: pronunciation
-        // linguistic scoring (Gemini native audio), class-recording transcribe
-        // (Whisper STT), and writing-exemplar embeddings.
-        SonnetDefault(AiFeatureCodes.WritingGrade, "Writing submission grading."),
+        // ── Premium tier: Claude Sonnet 5 ────────────────────────────────────
+        // Owner directive 2026-08-28 AI/Cloud API plan, point 7: "Keep the
+        // higher-quality Claude model for: writing official grading, speaking
+        // official assessment, and appeals/quality-sensitive assessment."
+        // Admins still override per feature via the DB-backed AiFeatureRoutes
+        // (which win over these static defaults), and the resolver's key-guard
+        // falls through to the keyed top provider when no Anthropic key is
+        // configured — so non-Anthropic deployments are untouched.
+        SonnetDefault(AiFeatureCodes.WritingGrade, "Writing submission grading — official."),
         SonnetDefault(AiFeatureCodes.WritingSampleScore, "Writing sample/exemplar scoring."),
-        SonnetDefault(AiFeatureCodes.WritingCoachSuggest, "Writing coach live suggestions."),
-        SonnetDefault(AiFeatureCodes.WritingCoachExplain, "Writing coach explanations."),
-        SonnetDefault(AiFeatureCodes.WritingCoachV1, "Writing module V2 coach."),
-        SonnetDefault(AiFeatureCodes.WritingRewriteV1, "Writing rewrite assistant."),
-        SonnetDefault(AiFeatureCodes.WritingScenarioGenerateV1, "Writing scenario generation."),
-        SonnetDefault(AiFeatureCodes.WritingAppealV1, "Writing appeal second opinion."),
-        SonnetDefault(AiFeatureCodes.WritingCanonDetectV1, "Writing canon detection."),
-        SonnetDefault(AiFeatureCodes.WritingDrillGradeV1, "Writing drill grading."),
-        SonnetDefault(AiFeatureCodes.WritingOutlineV1, "Writing outline generation."),
-        SonnetDefault(AiFeatureCodes.WritingParaphraseV1, "Writing paraphrase tool."),
-        SonnetDefault(AiFeatureCodes.WritingAskV1, "Writing ask/clarify tool."),
-        SonnetDefault(AiFeatureCodes.SpeakingGrade, "Speaking role-play grading."),
-        SonnetDefault(AiFeatureCodes.MockFullGrade, "Full mock grading."),
-        SonnetDefault(AiFeatureCodes.MockRemediationDraft, "Mock remediation plan draft."),
-        SonnetDefault(AiFeatureCodes.PronunciationTip, "Pronunciation tip generation."),
-        SonnetDefault(AiFeatureCodes.PronunciationScore, "Pronunciation scoring (text)."),
-        SonnetDefault(AiFeatureCodes.PronunciationFeedback, "Pronunciation corrective feedback."),
-        SonnetDefault(AiFeatureCodes.ReadingExplanation, "Reading question explanations."),
-        SonnetDefault(AiFeatureCodes.ReadingVocabularyCard, "Reading vocabulary cards."),
-        SonnetDefault(AiFeatureCodes.ListeningExplanation, "Listening question explanations."),
-        SonnetDefault(AiFeatureCodes.SummarisePassage, "Passage summarisation."),
-        SonnetDefault(AiFeatureCodes.VocabularyGloss, "On-demand vocabulary glossing."),
-        SonnetDefault(AiFeatureCodes.RecallsMistakeExplain, "Recalls mistake explanation."),
-        SonnetDefault(AiFeatureCodes.RecallsRevisionPlan, "Recalls revision plan."),
-        SonnetDefault(AiFeatureCodes.AdminContentGeneration, "Admin content generation draft."),
-        SonnetDefault(AiFeatureCodes.AdminGrammarDraft, "Admin grammar rule draft."),
-        SonnetDefault(AiFeatureCodes.AdminPronunciationDraft, "Admin pronunciation rule draft."),
-        SonnetDefault(AiFeatureCodes.AdminVocabularyDraft, "Admin vocabulary term draft."),
-        SonnetDefault(AiFeatureCodes.AdminConversationDraft, "Admin conversation scenario draft."),
-        SonnetDefault(AiFeatureCodes.AdminListeningDraft, "Admin listening question draft."),
-        SonnetDefault(AiFeatureCodes.AdminReadingDraft, "Admin reading passage draft."),
-        SonnetDefault(AiFeatureCodes.AdminWritingDraft, "Admin writing task draft."),
+        SonnetDefault(AiFeatureCodes.WritingRewriteV1, "Writing rewrite assistant — grading-adjacent quality."),
+        SonnetDefault(AiFeatureCodes.WritingScenarioGenerateV1, "Writing scenario generation — grading-adjacent quality."),
+        SonnetDefault(AiFeatureCodes.WritingAppealV1, "Writing appeal second opinion — quality-sensitive per owner directive."),
+        SonnetDefault(AiFeatureCodes.SpeakingGrade, "Speaking role-play grading — official."),
+        SonnetDefault(AiFeatureCodes.MockFullGrade, "Full mock grading — official."),
+        SonnetDefault(AiFeatureCodes.PronunciationScore, "Pronunciation scoring (text) — feeds a score."),
+
+        // ── Cheap tier: Claude Haiku ──────────────────────────────────────────
+        // "For cheaper/simpler tasks such as Reading explanations, Listening
+        // explanations, vocabulary, simple Q&A, summaries, and admin/background
+        // generation, please use a cheaper model where quality testing confirms
+        // it is good enough." Also restores the pre-20260716090000_
+        // UpgradeAiModelsToSonnet5 tiering WritingPromptTemplateRegistrar.cs
+        // already documents (coach / canon-detect / drill-grade / outline /
+        // paraphrase / ask), which that migration collapsed onto one model.
+        HaikuDefault(AiFeatureCodes.WritingCoachSuggest, "Writing coach live suggestions."),
+        HaikuDefault(AiFeatureCodes.WritingCoachExplain, "Writing coach explanations."),
+        HaikuDefault(AiFeatureCodes.WritingCoachV1, "Writing module V2 coach."),
+        HaikuDefault(AiFeatureCodes.WritingCanonDetectV1, "Writing canon detection."),
+        HaikuDefault(AiFeatureCodes.WritingDrillGradeV1, "Writing practice-drill grading (non-official)."),
+        HaikuDefault(AiFeatureCodes.WritingOutlineV1, "Writing outline generation."),
+        HaikuDefault(AiFeatureCodes.WritingParaphraseV1, "Writing paraphrase tool."),
+        HaikuDefault(AiFeatureCodes.WritingAskV1, "Writing ask/clarify tool."),
+        HaikuDefault(AiFeatureCodes.MockRemediationDraft, "Mock remediation plan draft — non-scoring personalisation."),
+        HaikuDefault(AiFeatureCodes.PronunciationTip, "Pronunciation tip generation — non-scoring."),
+        HaikuDefault(AiFeatureCodes.PronunciationFeedback, "Pronunciation corrective feedback — non-scoring."),
+        HaikuDefault(AiFeatureCodes.ReadingExplanation, "Reading question explanations."),
+        HaikuDefault(AiFeatureCodes.ReadingVocabularyCard, "Reading vocabulary cards."),
+        HaikuDefault(AiFeatureCodes.ListeningExplanation, "Listening question explanations."),
+        HaikuDefault(AiFeatureCodes.SummarisePassage, "Passage summarisation."),
+        HaikuDefault(AiFeatureCodes.VocabularyGloss, "On-demand vocabulary glossing."),
+        HaikuDefault(AiFeatureCodes.RecallsMistakeExplain, "Recalls mistake explanation."),
+        HaikuDefault(AiFeatureCodes.RecallsRevisionPlan, "Recalls revision plan."),
+        HaikuDefault(AiFeatureCodes.AdminContentGeneration, "Admin content generation draft."),
+        HaikuDefault(AiFeatureCodes.AdminGrammarDraft, "Admin grammar rule draft."),
+        HaikuDefault(AiFeatureCodes.AdminPronunciationDraft, "Admin pronunciation rule draft."),
+        HaikuDefault(AiFeatureCodes.AdminVocabularyDraft, "Admin vocabulary term draft."),
+        HaikuDefault(AiFeatureCodes.AdminConversationDraft, "Admin conversation scenario draft."),
+        HaikuDefault(AiFeatureCodes.AdminListeningDraft, "Admin listening question draft."),
+        HaikuDefault(AiFeatureCodes.AdminReadingDraft, "Admin reading passage draft."),
+        HaikuDefault(AiFeatureCodes.AdminWritingDraft, "Admin writing task draft."),
     };
 
-    /// <summary>Builds a default route entry pinned to the universal
-    /// contextual-understanding model (Anthropic Claude Sonnet 4.6) with an
-    /// OpenAI gpt-4o fallback and prompt caching on.</summary>
+    /// <summary>Current cheap-tier Anthropic model — see
+    /// <c>AGENTS.md</c>/environment model-id reference. Single source of truth
+    /// so every cheap-tier route below agrees.</summary>
+    private const string HaikuModel = "claude-haiku-4-5-20251001";
+
+    /// <summary>Builds a default route entry pinned to the premium
+    /// contextual-understanding model (Anthropic Claude Sonnet 5) with an
+    /// OpenAI gpt-4o fallback and prompt caching on. Reserved for official
+    /// grading, official assessment, and appeals/quality-sensitive review.</summary>
     private static SpeakingAiRouteDefault SonnetDefault(string featureCode, string description) =>
         new(featureCode, "anthropic", "claude-sonnet-5", "openai", "gpt-4o", true, description);
+
+    /// <summary>Builds a default route entry pinned to the cheap tier
+    /// (Anthropic Claude Haiku) with a cheap OpenAI gpt-4o-mini fallback and
+    /// prompt caching on. For explanations, vocabulary, simple Q&A, summaries,
+    /// and admin/background generation — never for scoring-critical calls.</summary>
+    private static SpeakingAiRouteDefault HaikuDefault(string featureCode, string description) =>
+        new(featureCode, "anthropic", HaikuModel, "openai", "gpt-4o-mini", true, description);
 }
 
 public static class SpeakingAiRouteDefaults

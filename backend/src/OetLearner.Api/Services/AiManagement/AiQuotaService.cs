@@ -93,6 +93,20 @@ public sealed class AiQuotaService(
     private const string DefaultPlanCode = "free";
     private static readonly TimeSpan GlobalPolicyCacheTtl = TimeSpan.FromSeconds(15);
 
+    /// <summary>
+    /// Conservative launch posture (owner directive, 2026-08-28 AI/Cloud API plan,
+    /// point 5): "Start with only $10 prepaid API balance... increase it later
+    /// after we confirm the real legitimate daily usage." Used both by
+    /// <c>SeedData.SeedAiGlobalPolicy</c> and by <see cref="GetGlobalPolicyAsync"/>'s
+    /// bootstrap path below, so a fresh database can never boot with an
+    /// unenforced (zero/disabled) platform-wide spend ceiling — the hard-kill
+    /// branch in <see cref="TryReserveAsync"/> is a no-op whenever
+    /// <c>MonthlyBudgetUsd &lt;= 0</c>, so "unconfigured" previously meant
+    /// "unlimited", not "safe". An admin raises this on
+    /// <c>/admin/ai-usage → Budget</c> once real usage is confirmed.
+    /// </summary>
+    public const decimal ConservativeDefaultMonthlyBudgetUsd = 10m;
+
     public async Task<AiQuotaDecision> TryReserveAsync(
         string? userId,
         string featureCode,
@@ -390,9 +404,20 @@ public sealed class AiQuotaService(
         var row = await db.AiGlobalPolicies.AsNoTracking().FirstOrDefaultAsync(x => x.Id == "global", ct);
         if (row is null)
         {
-            // Bootstrap a fresh default row. Safe: it's all-zeros defaults
-            // with kill switch off.
-            row = new AiGlobalPolicy { Id = "global", UpdatedAt = DateTimeOffset.UtcNow };
+            // Bootstrap a fresh default row. Kill switch stays off (BYOK/manual
+            // admin control remains the primary lever), but the monthly budget
+            // must NOT default to 0 — TryReserveAsync's hard-kill branch below
+            // is skipped entirely when MonthlyBudgetUsd <= 0, so an all-zeros
+            // row silently meant "unlimited platform spend" rather than "safe
+            // defaults". See ConservativeDefaultMonthlyBudgetUsd.
+            row = new AiGlobalPolicy
+            {
+                Id = "global",
+                MonthlyBudgetUsd = ConservativeDefaultMonthlyBudgetUsd,
+                HardKillPct = 100,
+                SoftWarnPct = 80,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
             db.AiGlobalPolicies.Add(row);
             try
             {

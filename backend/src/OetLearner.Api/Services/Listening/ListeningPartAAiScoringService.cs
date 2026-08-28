@@ -57,7 +57,8 @@ public sealed partial class ListeningPartAAiScoringService(
     IHttpClientFactory httpClientFactory,
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
-    ILogger<ListeningPartAAiScoringService> logger) : IListeningPartAAiScoringService
+    ILogger<ListeningPartAAiScoringService> logger,
+    IAiPricingResolver? pricingResolver = null) : IListeningPartAAiScoringService
 {
     public const string AnthropicProviderCode = "anthropic";
 
@@ -75,8 +76,13 @@ public sealed partial class ListeningPartAAiScoringService(
         string? TerminalSkipReason,
         TimeSpan? RetryAfter)
     {
-        public static ProviderCallOutcome Succeeded(IReadOnlyList<Verdict> verdicts)
-            => new(CallDisposition.Success, verdicts, "ok", null, null);
+        /// <summary>Id of the usage row this physical invocation persisted, or
+        /// null when the fail-soft recorder could not commit it. Only a non-null
+        /// value may be stamped as the operation's <c>ResultRef</c>.</summary>
+        public string? UsageRecordId { get; init; }
+
+        public static ProviderCallOutcome Succeeded(IReadOnlyList<Verdict> verdicts, string? usageRecordId)
+            => new(CallDisposition.Success, verdicts, "ok", null, null) { UsageRecordId = usageRecordId };
 
         public static ProviderCallOutcome Retry(string errorClass, TimeSpan? retryAfter)
             => new(CallDisposition.Retryable, Array.Empty<Verdict>(), errorClass, null, retryAfter);
@@ -175,6 +181,68 @@ public sealed partial class ListeningPartAAiScoringService(
             return;
         }
 
+        var attemptNumber = attemptsSpent + 1;
+
+        // ── W2: durable operation BEFORE provider resolution and send ───────────
+        // The lease is what makes "one physical call per durable attempt" true
+        // across API slots: the operation's resource slot is UNIQUE-indexed on
+        // (feature, module, learner, attempt, attemptNumber), so two slots that
+        // both read the same pre-increment AiAttemptCount cannot both send. The
+        // loser never touches the network, so it can never be billed. It is
+        // taken before ResolveProviderAsync so a refused policy cannot even
+        // reach credential resolution.
+        var lease = await usageRecorder.BeginOperationAsync(new DirectAiOperationRequest
+        {
+            FeatureCode = AiFeatureCodes.ListeningPartAScore,
+            Module = "listening",
+            UserId = attempt.UserId,
+            ResourceId = attemptId,
+            ResourceType = "listening_attempt",
+            ResourceVersion = attemptNumber,
+            RequestHash = BuildEvidenceHash(items),
+            PromptVersion = ToolName,
+            ModelRoute = AnthropicProviderCode,
+            OperationClass = AiOperationClass.ScoringCritical,
+        }, ct);
+
+        if (!lease.CanProceed)
+        {
+            ApplyDeniedLease(partAAnswers, lease, attemptsSpent, now, attemptId);
+            await db.SaveChangesAsync(ct);
+            return;
+        }
+
+        // Every exit path below owns the lease, so every exit path must
+        // reconcile it — a Leased row that is never closed blocks every future
+        // authorized attempt at this resource version (see
+        // DirectAiOperationReconciler). The explicit branches inside
+        // RunLeasedScoringAsync already close the lease themselves on every
+        // outcome they know about (unconfigured provider, retryable/terminal
+        // failure, success); this wrapper is the safety net for anything that
+        // escapes as an exception instead (a save failure, an unexpected
+        // parse/transport error) so it can never be left dangling as
+        // permanently Leased. The original exception is always re-thrown.
+        await DirectAiOperationReconciler.RunAsync(
+            usageRecorder, lease, AnthropicProviderCode,
+            async () =>
+            {
+                await RunLeasedScoringAsync(attempt, partAAnswers, qById, items, attemptId, attemptNumber, lease, now, ct);
+                return true;
+            },
+            ct);
+    }
+
+    private async Task RunLeasedScoringAsync(
+        ListeningAttempt attempt,
+        List<ListeningAnswer> partAAnswers,
+        Dictionary<string, ListeningQuestion> qById,
+        List<GapItem> items,
+        string attemptId,
+        int attemptNumber,
+        DirectAiOperationLease lease,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
         var provider = await ResolveProviderAsync(ct);
         if (provider is null)
         {
@@ -184,19 +252,30 @@ public sealed partial class ListeningPartAAiScoringService(
             var deferUntil = now + ListeningPartAAiRetryPolicy.UnconfiguredProviderCooldown;
             foreach (var a in partAAnswers) a.AiNextAttemptAt = deferUntil;
             await db.SaveChangesAsync(ct);
+            await usageRecorder.CompleteOperationAsync(
+                lease.OperationId!, AiOperationState.Cancelled, null, AnthropicProviderCode, null, CancellationToken.None,
+                lease.BudgetReservation);
             logger.LogDebug(
                 "Part A AI scoring deferred for attempt {AttemptId}: anthropic provider/key not configured.",
                 attemptId);
             return;
         }
 
-        var attemptNumber = attemptsSpent + 1;
-        var outcome = await CallClaudeVerdictsAsync(items, attempt.UserId, provider, ct);
+        var outcome = await CallClaudeVerdictsAsync(items, attempt.UserId, provider, lease, ct);
 
         if (outcome.Disposition != CallDisposition.Success)
         {
             ApplyFailureOutcome(partAAnswers, outcome, attemptNumber, now, attemptId);
-            await db.SaveChangesAsync(ct);
+            // The advisory outcome is durable before the operation is closed, so
+            // a reconciliation failure can never look like "work still to do".
+            // CancellationToken.None: after a paid provider call, a cancelled
+            // caller must not leave the operation dangling as in-flight.
+            await db.SaveChangesAsync(CancellationToken.None);
+            await usageRecorder.CompleteOperationAsync(
+                lease.OperationId!,
+                outcome.TerminalSkipReason is null ? AiOperationState.RetryScheduled : AiOperationState.FailedTerminal,
+                null, AnthropicProviderCode, provider.Model, CancellationToken.None,
+                lease.BudgetReservation);
             return;
         }
 
@@ -242,10 +321,104 @@ public sealed partial class ListeningPartAAiScoringService(
             closed++;
         }
 
-        await db.SaveChangesAsync(ct);
+        // The advisory verdicts are durable BEFORE the operation is closed —
+        // and with CancellationToken.None, because the provider call is already
+        // paid for: a caller cancelling now must not cost us the result.
+        await db.SaveChangesAsync(CancellationToken.None);
+        await usageRecorder.CompleteOperationAsync(
+            lease.OperationId!, AiOperationState.Completed, outcome.UsageRecordId,
+            AnthropicProviderCode, provider.Model, CancellationToken.None,
+            lease.BudgetReservation);
         logger.LogInformation(
             "Part A AI advisory review: stamped {Scored}, terminally closed {Closed} of {Total} answers on attempt {AttemptId} (attempt {AttemptNumber}/{MaxAttempts}).",
             scored, closed, partAAnswers.Count, attemptId, attemptNumber, ListeningPartAAiRetryPolicy.MaxAttempts);
+    }
+
+    // ── W2 control-plane helpers ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Deterministic digest of the grounding evidence that will be sent. Raw
+    /// candidate answers and note text are hashed, never persisted, so the
+    /// control plane holds no learner content while still distinguishing two
+    /// genuinely different requests.
+    /// </summary>
+    private static string BuildEvidenceHash(IReadOnlyList<GapItem> items)
+    {
+        var sb = new StringBuilder();
+        foreach (var i in items.OrderBy(i => i.Number))
+        {
+            sb.Append(i.Number).Append('\u001f')
+              .Append(i.Context).Append('\u001f')
+              .Append(i.UserAnswer).Append('\u001f')
+              .Append(i.Canonical).Append('\u001f')
+              .Append(string.Join(',', i.Accepted)).Append('\u001f')
+              .Append(i.ApprovedRationale).Append('\u001e');
+        }
+
+        return Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString())))
+            .ToLowerInvariant();
+    }
+
+    /// <summary>
+    /// The control plane refused to lease this work. Zero bytes reached the
+    /// provider in every branch, so nothing was billed. A policy refusal is
+    /// terminal (an admin must re-enable the feature). A duplicate, conflict or
+    /// store outage is a BOUNDED cool-off: each denial advances the durable
+    /// <c>AiAttemptCount</c> and, after
+    /// <see cref="ListeningPartAAiRetryPolicy.MaxLeaseDeniedRounds"/> of them,
+    /// the row is parked terminally so the 20 s worker stops re-selecting it
+    /// forever. <c>AiScoredAt</c> is never stamped and the deterministic mark is
+    /// never touched on any path.
+    /// </summary>
+    private void ApplyDeniedLease(
+        IReadOnlyList<ListeningAnswer> answers,
+        DirectAiOperationLease lease,
+        int attemptsSpent,
+        DateTimeOffset now,
+        string attemptId)
+    {
+        if (lease.Disposition == DirectAiOperationDisposition.PolicyRefused)
+        {
+            StampTerminal(answers, ListeningPartAAiSkipReasons.PolicyRefused, attemptsSpent);
+            logger.LogWarning(
+                "Part A AI advisory review refused for attempt {AttemptId} by feature policy ({Reason}); zero provider calls.",
+                attemptId, lease.Reason);
+            return;
+        }
+
+        // An existing operation whose outcome is ambiguous may already have been
+        // billed. Deferring would eventually re-run it; parking it now preserves
+        // the `indeterminate` never-auto-retry rule end to end.
+        if (lease.ExistingState == AiOperationState.Indeterminate)
+        {
+            StampTerminal(answers, ListeningPartAAiSkipReasons.IndeterminateTimeout, attemptsSpent);
+            logger.LogError(
+                "Part A AI advisory review parked for attempt {AttemptId}: the existing operation is indeterminate and must never be auto-repeated.",
+                attemptId);
+            return;
+        }
+
+        var deniedRound = attemptsSpent + 1;
+        if (deniedRound >= ListeningPartAAiRetryPolicy.MaxLeaseDeniedRounds)
+        {
+            StampTerminal(answers, ListeningPartAAiSkipReasons.LeaseDenied, deniedRound);
+            logger.LogWarning(
+                "Part A AI advisory review parked for attempt {AttemptId} after {Rounds} control-plane lease denials ({Disposition}/{Reason}); zero provider calls.",
+                attemptId, deniedRound, lease.Disposition, lease.Reason);
+            return;
+        }
+
+        var deferUntil = now + ListeningPartAAiRetryPolicy.OperationLeaseDeniedCooldown;
+        foreach (var a in answers)
+        {
+            a.AiAttemptCount = deniedRound;
+            a.AiNextAttemptAt = deferUntil;
+        }
+
+        logger.LogInformation(
+            "Part A AI advisory review deferred for attempt {AttemptId}: control plane returned {Disposition} ({Reason}); zero provider calls, denial {Round}/{Max}.",
+            attemptId, lease.Disposition, lease.Reason, deniedRound, ListeningPartAAiRetryPolicy.MaxLeaseDeniedRounds);
     }
 
     // ── Terminal / retry bookkeeping ────────────────────────────────────────────

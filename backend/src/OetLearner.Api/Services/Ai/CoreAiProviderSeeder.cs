@@ -35,6 +35,19 @@ public sealed class CoreAiProviderSeeder(
     IServiceProvider services,
     ILogger<CoreAiProviderSeeder> logger) : IHostedService
 {
+    /// <summary>
+    /// Single source of truth for the "no <c>AiProvider.DefaultModel</c>
+    /// configured" fallback used by every direct-call Anthropic caller
+    /// (Listening Part A/B/C extraction + advisory scoring). Was previously
+    /// duplicated as a private literal in three separate files — kept here so
+    /// all three definitively agree with the value this seeder itself writes
+    /// into new <c>anthropic</c> rows. This is a safe configured fallback
+    /// (used only when a row legitimately has a blank <c>DefaultModel</c>),
+    /// not a hard-coded route the registry/pricing configuration could
+    /// otherwise resolve — it is deliberately NOT removed.
+    /// </summary>
+    public const string AnthropicDefaultModel = "claude-sonnet-5";
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
@@ -108,7 +121,7 @@ public sealed class CoreAiProviderSeeder(
             Category: AiProviderCategory.TextChat,
             Dialect: AiProviderDialect.Anthropic,
             BaseUrl: "https://api.anthropic.com/v1",
-            DefaultModel: "claude-sonnet-5",
+            DefaultModel: AnthropicDefaultModel,
             PricePer1kPromptTokens: 0.003m,
             PricePer1kCompletionTokens: 0.015m,
             FailoverPriority: 20),

@@ -32,6 +32,18 @@ public partial class LearnerDbContext
                 .IsUnique()
                 .HasDatabaseName("UX_AiOperations_IdempotencyKey");
 
+            // W2 — UNIQUE PARTIAL index over non-null resource slots only.
+            // This is the structural (not advisory) guarantee that two
+            // simultaneous, different-hash requests for the same supplied
+            // business resource produce exactly one provider call and one
+            // controlled conflict. The filter keeps free-form calls (null
+            // slot) completely out of the constraint. Created by migration
+            // 20261105090000_AddAiOperationResourceSlot.
+            entity.HasIndex(x => x.ResourceSlotKey)
+                .IsUnique()
+                .HasFilter("\"ResourceSlotKey\" IS NOT NULL")
+                .HasDatabaseName("UX_AiOperations_ResourceSlotKey");
+
             entity.HasIndex(x => new { x.State, x.NextAttemptAt })
                 .HasDatabaseName("IX_AiOperations_State_NextAttemptAt");
 

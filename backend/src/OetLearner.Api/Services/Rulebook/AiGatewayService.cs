@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.AiTools;
 
@@ -55,8 +56,10 @@ public sealed class AiGatewayService(
     Microsoft.Extensions.Hosting.IHostEnvironment? hostEnvironment = null,
     IAiCreditService? creditService = null,
     OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? settingsProvider = null,
+    IAiFeaturePolicyRegistry? featurePolicyRegistry = null,
+    IAiBudgetService? budgetService = null,
     ILogger<AiGatewayService>? logger = null)
-    : IAiGatewayService
+    : IAiGatewayService, IAiGatewayCoreExecutor
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
 
@@ -151,6 +154,42 @@ public sealed class AiGatewayService(
                 ct);
             throw new PromptNotGroundedException(
                 "SystemPrompt does not carry the rulebook grounding header. Build it via AiGatewayService.BuildGroundedPrompt.");
+        }
+
+        // ── Feature policy gate (W2 remediation) ─────────────────────────────
+        // Every call must resolve a USABLE AiFeaturePolicy before a provider
+        // is ever selected. In Production this fails closed for: a blank or
+        // `unclassified` feature code, a code nobody ever registered, and —
+        // critically — a code an admin explicitly disabled, date-bounded into
+        // the future, or expired. An explicit-but-unusable row suppresses the
+        // static code default on purpose (see AiFeaturePolicyStatus).
+        // Development/Test keep the pre-W2 permissive behaviour so the
+        // existing suite is not forced to migrate wholesale in this wave —
+        // see docs/AI-USAGE-POLICY.md and Services/Rulebook/README.md.
+        if (featurePolicyRegistry is not null && hostEnvironment?.IsProduction() == true)
+        {
+            AiFeaturePolicyLookup lookup;
+            try
+            {
+                lookup = await featurePolicyRegistry.LookupAsync(featureCode, ct);
+            }
+            catch (Exception ex)
+            {
+                // A policy-store outage must not become an open door. Fail
+                // closed with a sanitized reason — the exception message is
+                // never persisted (it can carry connection strings).
+                logger?.LogError(ex, "AI feature policy lookup failed for {FeatureCode}; refusing the call.", featureCode);
+                lookup = new AiFeaturePolicyLookup(featureCode, AiFeaturePolicyStatus.Unknown, null);
+            }
+
+            if (!lookup.IsUsable)
+            {
+                await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                    errorCode: "ai_feature_policy_refused",
+                    errorMessage: $"No usable AI feature policy for '{featureCode}' ({lookup.Reason}).",
+                    ct);
+                throw new AiFeaturePolicyRefusedException(featureCode, lookup.Reason);
+            }
         }
 
         // ── Provider selection ───────────────────────────────────────────────
@@ -448,16 +487,66 @@ public sealed class AiGatewayService(
             }
         }
 
+        // ── W3 platform budget reservation ───────────────────────────────────
+        // Atomic (see AiBudgetService), and — critically — the LAST gate before
+        // any provider call: nothing after this point may fail closed without
+        // releasing the reservation. BYOK calls spend the learner's own key,
+        // never the platform budget, so they are never metered here (mirrors
+        // quotaService's own BYOK bypass above). Skipped entirely when no
+        // budget service is wired (backward compatibility + pure-rulebook
+        // tests), exactly like quotaService/creditService above.
+        // The real per-turn tool-loop cap (maxTurns) is resolved further below
+        // from the admin-configurable settings provider — reserving here, before
+        // that (possibly async/DB-backed) resolution, uses a fixed conservative
+        // upper bound instead so this gate never has to duplicate that lookup.
+        // Trues up to the REAL aggregate cost via CommitAsync once known.
+        const int conservativeMaxTurnsForReservation = 4;
+        AiBudgetReservation budgetReservation = AiBudgetReservation.Unmetered;
+        if (budgetService is not null && prospectiveKeySource == AiKeySource.Platform)
+        {
+            budgetReservation = await budgetService.ReserveAsync(
+                "global",
+                AiBudgetService.DefaultReservationEstimateUsd * conservativeMaxTurnsForReservation,
+                ct);
+
+            if (!budgetReservation.Granted)
+            {
+                stopwatch.Stop();
+                if (usageRecorder is not null)
+                {
+                    var ctx = BuildUsageContext(request, featureCode, startedAt, systemPrompt: null, userPrompt: null);
+                    try
+                    {
+                        await usageRecorder.RecordFailureAsync(
+                            ctx,
+                            providerId: null,
+                            model: null,
+                            keySource: prospectiveKeySource,
+                            outcome: AiCallOutcome.GatewayRefused,
+                            errorCode: budgetReservation.DenyReason ?? "global_budget_exhausted",
+                            errorMessage: "Platform AI budget has been reached.",
+                            latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                            retryCount: 0,
+                            policyTrace: quotaDecision?.PolicyTrace,
+                            ct: CancellationToken.None);
+                    }
+                    catch { /* fail-soft */ }
+                }
+                throw new AiBudgetExhaustedException(budgetReservation.DenyReason ?? "global_budget_exhausted");
+            }
+        }
+
         // ── Provider call + outcome recording ────────────────────────────────
         var userPrompt = BuildUserMessage(request);
         var context = BuildUsageContext(request, featureCode, startedAt, request.Prompt.SystemPrompt, userPrompt);
 
         // Phase 5 — Tool calling. When the feature is granted any tools, run
         // a bounded multi-turn loop: model → tool call(s) → tool result(s) →
-        // model → … → final text. Each turn is one provider call but all
-        // turns aggregate into ONE AiUsageRecord (token sum, max latency
-        // across turns). The grounding header is verified once on turn 0;
-        // once the system prompt is in the message list it is preserved.
+        // model → … → final text. Each turn is one physical provider call and
+        // — since W2 — gets its OWN AiUsageRecord carrying only that turn's
+        // tokens/cost. The AiGatewayResult still reports the aggregate for the
+        // caller/admin surfaces. The grounding header is verified once on
+        // turn 0; once the system prompt is in the message list it is preserved.
         IReadOnlyList<AiToolDefinition> tools = Array.Empty<AiToolDefinition>();
         if (toolRegistry is not null && toolInvoker is not null)
         {
@@ -484,10 +573,121 @@ public sealed class AiGatewayService(
         string? loopTrace = null;
         var aiUsageRecordIdForTools = Guid.NewGuid().ToString("N");
 
+        // ── W2: one physical provider invocation == one AiUsageRecord ────────
+        // Every turn below persists its OWN row with only THAT turn's tokens
+        // and cost, so N provider calls can never collapse into one billing
+        // row (and prior turns are never re-counted onto a later failure
+        // row). When the caller is the AiExecutionCoordinator
+        // (request.OperationId set) the same persistence call also writes
+        // exactly one AiOperationAttempt with a monotonic attempt number.
+        // Turn 0 keeps `aiUsageRecordIdForTools` as its id so single-turn
+        // calls — the overwhelming majority — are byte-identical to pre-W2
+        // behaviour and stay correlated with the tool-invocation audit log.
+        var isCoordinatorDriven = !string.IsNullOrWhiteSpace(request.OperationId);
+        var attemptCounter = 0;
+        string? firstPersistedUsageRecordId = null;
+        string? lastPersistedUsageRecordId = null;
+        var currentTurnUsageRecordId = aiUsageRecordIdForTools;
+        var currentTurnRecorded = false;
+
+        // Persists exactly one row for the physical invocation identified by
+        // `currentTurnUsageRecordId`. Deliberately fail-soft and isolated from
+        // the provider try/catch: a pricing/DB failure here must never be
+        // re-labelled as a provider error for a call the provider already
+        // served and billed.
+        async Task RecordTurnAsync(
+            AiUsage? turnUsage,
+            AiCallOutcome outcome,
+            string? errorCode,
+            string? errorMessage,
+            string? extraTrace,
+            bool providerInvoked)
+        {
+            if (usageRecorder is null)
+            {
+                currentTurnRecorded = true;
+                return;
+            }
+
+            var attemptNumber = isCoordinatorDriven ? ++attemptCounter : (int?)null;
+            var turnTrace = ComposeTrace(
+                ComposeTrace(resolution?.PolicyTrace, quotaDecision?.PolicyTrace),
+                extraTrace);
+
+            try
+            {
+                var turnCost = turnUsage is not null
+                    ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, turnUsage, CancellationToken.None)
+                    : 0m;
+
+                if (outcome == AiCallOutcome.Success)
+                {
+                    var persisted = await usageRecorder.RecordSuccessAsync(
+                        context,
+                        providerId: selectedProviderCode ?? provider.Name,
+                        model: effectiveModel,
+                        keySource: prospectiveKeySource,
+                        usage: turnUsage,
+                        latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                        retryCount: 0,
+                        policyTrace: turnTrace,
+                        ct: CancellationToken.None,
+                        accountId: completion?.AccountId,
+                        failoverTrace: completion?.FailoverTrace,
+                        costEstimateUsd: turnCost,
+                        usageRecordId: currentTurnUsageRecordId,
+                        operationId: request.OperationId,
+                        attemptNumber: attemptNumber,
+                        providerInvoked: providerInvoked);
+                    if (persisted is not null)
+                    {
+                        firstPersistedUsageRecordId ??= persisted;
+                        lastPersistedUsageRecordId = persisted;
+                    }
+                }
+                else
+                {
+                    await usageRecorder.RecordFailureAsync(
+                        context,
+                        providerId: selectedProviderCode ?? provider.Name,
+                        model: effectiveModel,
+                        keySource: prospectiveKeySource,
+                        outcome: outcome,
+                        errorCode: errorCode ?? "provider_error",
+                        errorMessage: errorMessage,
+                        latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                        retryCount: 0,
+                        policyTrace: turnTrace,
+                        ct: CancellationToken.None,
+                        accountId: completion?.AccountId,
+                        failoverTrace: completion?.FailoverTrace,
+                        usage: turnUsage,
+                        costEstimateUsd: turnCost,
+                        usageRecordId: currentTurnUsageRecordId,
+                        operationId: request.OperationId,
+                        attemptNumber: attemptNumber,
+                        providerInvoked: providerInvoked);
+                }
+            }
+            catch (Exception recorderEx)
+            {
+                logger?.LogError(recorderEx,
+                    "AI usage accounting failed for feature {FeatureCode}, operation {OperationId}, usage record {UsageRecordId}.",
+                    featureCode, request.OperationId, currentTurnUsageRecordId);
+            }
+            finally
+            {
+                currentTurnRecorded = true;
+            }
+        }
+
         try
         {
             for (var turn = 0; turn < maxTurns; turn++)
             {
+                currentTurnUsageRecordId = turn == 0 ? aiUsageRecordIdForTools : Guid.NewGuid().ToString("N");
+                currentTurnRecorded = false;
+
                 completion = await provider.CompleteAsync(new AiProviderRequest
                 {
                     ProviderCode = selectedProviderCode,
@@ -511,7 +711,36 @@ public sealed class AiGatewayService(
                 }
 
                 var calls = completion.ToolCalls;
-                if (calls is null || calls.Count == 0)
+                var hasToolCalls = calls is not null && calls.Count > 0;
+
+                // The loop is about to run out of turns while the model still
+                // wants tools: this physical invocation IS the truncation, so
+                // its own row carries the outcome. No extra N+1 row is ever
+                // written for the truncation itself.
+                var isTruncatingTurn = hasToolCalls && turn == maxTurns - 1;
+                if (isTruncatingTurn)
+                {
+                    loopTrace = "tool_loop_truncated";
+                    await RecordTurnAsync(
+                        completion.Usage,
+                        AiCallOutcome.ProviderError,
+                        errorCode: "tool_loop_truncated",
+                        errorMessage: "AI tool loop reached the maximum turn limit before producing a final answer.",
+                        extraTrace: "tool_loop_truncated",
+                        providerInvoked: true);
+                }
+                else
+                {
+                    await RecordTurnAsync(
+                        completion.Usage,
+                        AiCallOutcome.Success,
+                        errorCode: null,
+                        errorMessage: null,
+                        extraTrace: hasToolCalls ? "tool_loop_turn" : null,
+                        providerInvoked: true);
+                }
+
+                if (!hasToolCalls)
                 {
                     break; // final text turn
                 }
@@ -526,7 +755,7 @@ public sealed class AiGatewayService(
 
                 // Execute every requested tool sequentially (parallel safe but
                 // deterministic ordering keeps the audit log easy to read).
-                foreach (var call in calls)
+                foreach (var call in calls!)
                 {
                     var toolCtx = new AiToolContext(
                         FeatureCode: featureCode,
@@ -552,68 +781,29 @@ public sealed class AiGatewayService(
                         Content = toolPayload,
                     });
                 }
-
-                if (turn == maxTurns - 1)
-                {
-                    loopTrace = "tool_loop_truncated";
-                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             stopwatch.Stop();
-            if (usageRecorder is not null)
-            {
-                await usageRecorder.RecordFailureAsync(
-                    context,
-                    providerId: selectedProviderCode ?? provider.Name,
-                    model: effectiveModel,
-                    keySource: prospectiveKeySource,
-                    outcome: AiCallOutcome.Cancelled,
-                    errorCode: "cancelled",
-                    errorMessage: "Call cancelled by caller.",
-                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
-                    retryCount: 0,
-                    policyTrace: null,
-                    ct: CancellationToken.None);
-            }
+            // One failure row for the invocation that was in flight, with no
+            // token usage and zero cost: the provider produced nothing for it,
+            // and prior turns already have their own rows.
+            await RecordFailedInvocationAsync(
+                AiCallOutcome.Cancelled, "cancelled", "Call cancelled by caller.");
             throw;
         }
         catch (TimeoutException tex)
         {
             stopwatch.Stop();
-            var partialUsage = BuildAggregatedUsage(aggregatePromptTokens, aggregateCompletionTokens, completion?.Usage);
-            var partialCostEstimate = partialUsage is not null
-                ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, partialUsage, CancellationToken.None)
-                : 0m;
-            if (usageRecorder is not null)
-            {
-                await usageRecorder.RecordFailureAsync(
-                    context,
-                    providerId: selectedProviderCode ?? provider.Name,
-                    model: effectiveModel,
-                    keySource: prospectiveKeySource,
-                    outcome: AiCallOutcome.Timeout,
-                    errorCode: "timeout",
-                    errorMessage: tex.Message,
-                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
-                    retryCount: 0,
-                    policyTrace: null,
-                    ct: CancellationToken.None,
-                    usage: partialUsage,
-                    costEstimateUsd: partialCostEstimate,
-                    usageRecordId: aiUsageRecordIdForTools);
-            }
+            await RecordFailedInvocationAsync(
+                AiCallOutcome.Timeout, "timeout", tex.Message);
             throw;
         }
         catch (Exception ex)
         {
             stopwatch.Stop();
             var errorCode = ClassifyError(ex);
-            var partialUsage = BuildAggregatedUsage(aggregatePromptTokens, aggregateCompletionTokens, completion?.Usage);
-            var partialCostEstimate = partialUsage is not null
-                ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, partialUsage, CancellationToken.None)
-                : 0m;
 
             // BYOK auth failure: invalidate the credential so the resolver
             // will skip it until the configured cooldown expires. Non-fatal
@@ -642,28 +832,45 @@ public sealed class AiGatewayService(
                 catch { /* best effort */ }
             }
 
-            if (usageRecorder is not null)
-            {
-                var failover = ex as AiProviderFailoverException;
-                await usageRecorder.RecordFailureAsync(
-                    context,
-                    providerId: selectedProviderCode ?? provider.Name,
-                    model: effectiveModel,
-                    keySource: prospectiveKeySource,
-                    outcome: AiCallOutcome.ProviderError,
-                    errorCode: errorCode,
-                    errorMessage: SanitiseProviderErrorMessage(ex, errorCode),
-                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
-                    retryCount: 0,
-                    policyTrace: resolution?.PolicyTrace,
-                    ct: CancellationToken.None,
-                    accountId: failover?.LastAccountId,
-                    failoverTrace: failover?.FailoverTrace,
-                    usage: partialUsage,
-                    costEstimateUsd: partialCostEstimate,
-                    usageRecordId: aiUsageRecordIdForTools);
-            }
+            await RecordFailedInvocationAsync(
+                AiCallOutcome.ProviderError, errorCode, SanitiseProviderErrorMessage(ex, errorCode));
             throw;
+        }
+
+        // Local helper: record the single failure row for whichever physical
+        // invocation was in flight when the loop threw. When the in-flight
+        // turn already got its own row (i.e. the throw came from tool
+        // execution, not the provider), a fresh id is allocated so the
+        // AiUsageRecord primary key and the (OperationId, AttemptNumber)
+        // composite key can never collide with the row already written.
+        async Task RecordFailedInvocationAsync(AiCallOutcome outcome, string errorCode, string? message)
+        {
+            if (currentTurnRecorded)
+            {
+                currentTurnUsageRecordId = Guid.NewGuid().ToString("N");
+            }
+
+            await RecordTurnAsync(
+                turnUsage: null,
+                outcome,
+                errorCode,
+                message,
+                extraTrace: null,
+                providerInvoked: !currentTurnRecorded);
+
+            // W3: every exit path from a granted budget reservation must
+            // reconcile it. CommitAsync(reservation, partialCost) both banks
+            // any real spend from turns that succeeded before this one failed
+            // AND releases the unspent remainder — it is never a no-op call
+            // for an Unmetered/denied reservation (see AiBudgetService).
+            if (budgetService is not null)
+            {
+                var partialUsage = BuildAggregatedUsage(aggregatePromptTokens, aggregateCompletionTokens, fallback: null);
+                var partialCost = partialUsage is not null
+                    ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, partialUsage, CancellationToken.None)
+                    : 0m;
+                await budgetService.CommitAsync(budgetReservation, partialCost, CancellationToken.None);
+            }
         }
 
         stopwatch.Stop();
@@ -678,60 +885,34 @@ public sealed class AiGatewayService(
             ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, aggregatedUsage, CancellationToken.None)
             : 0m;
 
+        // W3: true up the reservation to the real aggregate cost now that it is
+        // known — covers both the normal-success and the tool_loop_truncated
+        // (thrown just below) exits, since both reach this exact point first.
+        if (budgetService is not null)
+        {
+            await budgetService.CommitAsync(budgetReservation, costEstimate, CancellationToken.None);
+        }
+
         if (string.Equals(loopTrace, "tool_loop_truncated", StringComparison.Ordinal))
         {
-            if (usageRecorder is not null)
-            {
-                await usageRecorder.RecordFailureAsync(
-                    context,
-                    providerId: selectedProviderCode ?? provider.Name,
-                    model: effectiveModel,
-                    keySource: prospectiveKeySource,
-                    outcome: AiCallOutcome.ProviderError,
-                    errorCode: "tool_loop_truncated",
-                    errorMessage: "AI tool loop reached the maximum turn limit before producing a final answer.",
-                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
-                    retryCount: 0,
-                    policyTrace: resolution?.PolicyTrace,
-                    ct: CancellationToken.None,
-                    usage: aggregatedUsage,
-                    costEstimateUsd: costEstimate,
-                    usageRecordId: aiUsageRecordIdForTools);
-            }
-
+            // The truncating physical invocation already owns its row (written
+            // inside the loop with outcome=ProviderError/tool_loop_truncated),
+            // so throwing here adds NO extra N+1 usage record.
             throw new InvalidOperationException("AI tool loop reached the maximum turn limit before producing a final answer.");
         }
 
-        string usageRecordId = aiUsageRecordIdForTools;
-        string? debitUsageRecordId = null;
+        // Every physical turn already persisted its own AiUsageRecord (and,
+        // on the coordinator path, its own AiOperationAttempt). Writing an
+        // aggregated row here would be an N+1 billing row for calls that were
+        // already accounted, so the gateway now only *selects* which persisted
+        // row downstream credit/quota correlation points at.
+        string usageRecordId = firstPersistedUsageRecordId ?? aiUsageRecordIdForTools;
+        string? debitUsageRecordId = lastPersistedUsageRecordId;
 
-        if (usageRecorder is not null)
+        if (usageRecorder is not null && lastPersistedUsageRecordId is null && shouldDebitLearnerCredit)
         {
-            var persistedUsageRecordId = await usageRecorder.RecordSuccessAsync(
-                context,
-                providerId: selectedProviderCode ?? provider.Name,
-                model: effectiveModel,
-                keySource: prospectiveKeySource,
-                usage: aggregatedUsage,
-                latencyMs: (int)stopwatch.ElapsedMilliseconds,
-                retryCount: 0,
-                policyTrace: ComposeTrace(ComposeTrace(resolution?.PolicyTrace, quotaDecision?.PolicyTrace), loopTrace),
-                ct: CancellationToken.None,
-                accountId: completion.AccountId,
-                failoverTrace: completion.FailoverTrace,
-                costEstimateUsd: costEstimate,
-                usageRecordId: aiUsageRecordIdForTools);
-            if (persistedUsageRecordId is null && shouldDebitLearnerCredit)
-            {
-                logger?.LogWarning("AI usage accounting failed before learner credit debit could be posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, aiUsageRecordIdForTools);
-                throw new InvalidOperationException("AI usage accounting failed for this paid feature call.");
-            }
-
-            if (persistedUsageRecordId is not null)
-            {
-                usageRecordId = persistedUsageRecordId;
-                debitUsageRecordId = persistedUsageRecordId;
-            }
+            logger?.LogWarning("AI usage accounting failed before learner credit debit could be posted for user {UserId}, feature {FeatureCode}, usage record {UsageRecordId}.", request.UserId, featureCode, aiUsageRecordIdForTools);
+            throw new InvalidOperationException("AI usage accounting failed for this paid feature call.");
         }
 
         // Commit token usage against the per-user counters. BYOK calls are
@@ -811,6 +992,7 @@ public sealed class AiGatewayService(
             ResolvedModel = effectiveModel,
             ResolvedProvider = selectedProviderCode ?? provider.Name,
             UsageRecordId = usageRecordId,
+            UsagePersisted = lastPersistedUsageRecordId is not null,
             LatencyMs = (int)Math.Min(int.MaxValue, stopwatch.ElapsedMilliseconds),
             EstimatedCostUsd = costEstimate,
             RetryCount = 0,
@@ -1647,7 +1829,7 @@ public sealed class AiGroundedPromptMetadata
     public IReadOnlyList<string> AppliedRuleIds { get; init; } = Array.Empty<string>();
 }
 
-public sealed class AiGatewayRequest
+public sealed record AiGatewayRequest
 {
     public AiGroundedPrompt? Prompt { get; init; }
     public string? UserInput { get; init; }
@@ -1688,6 +1870,38 @@ public sealed class AiGatewayRequest
     /// <see cref="AiAssessmentContext.None"/> — in-memory only, never persisted.
     /// </summary>
     public AiAssessmentContext AssessmentContext { get; init; } = AiAssessmentContext.None;
+
+    /// <summary>
+    /// W2 of the AI cost/reliability remediation — set by
+    /// <c>CoordinatedAiGatewayService</c>/<c>AiExecutionCoordinator</c> before
+    /// delegating to the core gateway. Non-null means "this physical call is
+    /// already owned by a durable AiOperation": the gateway then writes one
+    /// <see cref="Domain.AiOperationAttempt"/> alongside each per-turn
+    /// <see cref="Domain.AiUsageRecord"/>, and the coordinating facade treats
+    /// the presence of this value as a permanent recursion fence (it delegates
+    /// straight to the core instead of opening a second operation).
+    /// </summary>
+    public string? OperationId { get; init; }
+
+    /// <summary>
+    /// W2 — the stable domain row this call is processing (submission id,
+    /// answer id, …), when the caller has one. Together with
+    /// <see cref="ResourceType"/>/<see cref="ResourceVersion"/> this forms the
+    /// operation's resource slot, which is UNIQUE-indexed so two concurrent
+    /// different-payload calls for the same resource cannot both reach a
+    /// provider. Leave null when there is no stable caller resource — a null
+    /// slot never participates in the constraint, so unrelated interactive
+    /// calls are never conflated.
+    /// </summary>
+    public string? ResourceId { get; init; }
+
+    /// <summary>W2 — discriminator for <see cref="ResourceId"/>.</summary>
+    public string? ResourceType { get; init; }
+
+    /// <summary>W2 — version of <see cref="ResourceId"/> this call targets, so
+    /// a later edit of the same resource is a new operation rather than a
+    /// conflict.</summary>
+    public int? ResourceVersion { get; init; }
 }
 
 public sealed class AiGatewayResult
@@ -1716,6 +1930,17 @@ public sealed class AiGatewayResult
 
     /// <summary>The single usage-ledger id for this gateway completion.</summary>
     public string? UsageRecordId { get; init; }
+
+    /// <summary>
+    /// W2 — true only when at least one <see cref="Domain.AiUsageRecord"/> for
+    /// this completion was actually committed to the database.
+    /// <see cref="UsageRecordId"/> is a *generated* correlation id and is
+    /// populated even when persistence failed (the recorder is fail-soft), so
+    /// anything durable that points at a usage row — notably
+    /// <see cref="Domain.AiOperation.ResultRef"/> — must gate on this flag
+    /// instead, or it would reference a row that does not exist.
+    /// </summary>
+    public bool UsagePersisted { get; init; }
 
     /// <summary>End-to-end gateway latency, including any provider retries.</summary>
     public int LatencyMs { get; init; }

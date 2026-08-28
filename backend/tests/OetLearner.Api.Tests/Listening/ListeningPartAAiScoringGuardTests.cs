@@ -634,20 +634,179 @@ public sealed class ListeningPartAAiScoringGuardTests
         Assert.Empty(handler.Requests);
     }
 
+    // ── W2: pricing resolver must never cost us a paid, successful call ─────────
+
+    /// <summary>
+    /// A pricing-resolver outage happens AFTER the provider has already been
+    /// paid. It must not be re-classified as a provider failure, must not
+    /// suppress the advisory stamp, and must not buy a second call: the cost
+    /// falls back to the legacy provider rate card.
+    /// </summary>
+    [Fact]
+    public async Task ThrowingPricingResolver_StillStampsAdvisory_WithOneCall_AndLegacyCost()
+    {
+        await using var db = NewDb();
+        await SeedAttemptAsync(db, withApprovedRationale: true);
+
+        var handler = new RecordingHandler((_, _) => Task.FromResult(
+            JsonResponse(HttpStatusCode.OK, ToolUseBody(
+                "[{\"number\":1,\"verdict\":\"correct\",\"rationale\":\"Matches the key.\"}]",
+                inputTokens: 1000,
+                outputTokens: 500))));
+        var recorder = new RecordingUsageRecorder();
+        var service = NewService(db, handler, recorder, pricingResolver: new ThrowingPricingResolver());
+
+        await service.ScoreAttemptAsync("att-w0", CancellationToken.None);
+
+        Assert.Single(handler.Requests);
+        Assert.Equal(1, recorder.Successes);
+        Assert.Empty(recorder.Failures);
+
+        var answer = await db.ListeningAnswers.SingleAsync(a => a.Id == "ans-w0");
+        Assert.Equal("correct", answer.AiVerdict);
+        Assert.NotNull(answer.AiScoredAt);
+        Assert.Null(answer.AiSkipReason);
+
+        // Legacy fallback: StubProviderRegistry's flat rate card, not zero and
+        // not an effective-dated price (the resolver never returned one).
+        Assert.True(recorder.LastCostUsd > 0m);
+        Assert.Null(recorder.LastCacheTokens);
+
+        // A second pass must not re-invoke the provider.
+        await service.ScoreAttemptAsync("att-w0", CancellationToken.None);
+        Assert.Single(handler.Requests);
+    }
+
+    /// <summary>
+    /// W2 — when the control plane refuses the lease (policy disabled, duplicate,
+    /// conflict, or store outage) the provider is never invoked.
+    /// </summary>
+    [Fact]
+    public async Task DeniedOperationLease_MakesNoProviderCall()
+    {
+        await using var db = NewDb();
+        await SeedAttemptAsync(db, withApprovedRationale: true);
+
+        var handler = new RecordingHandler((_, _) => Task.FromResult(
+            JsonResponse(HttpStatusCode.OK, ToolUseBody(
+                "[{\"number\":1,\"verdict\":\"correct\",\"rationale\":\"Should never be requested.\"}]"))));
+        var recorder = new RecordingUsageRecorder
+        {
+            LeaseOverride = DirectAiOperationLease.Blocked(
+                DirectAiOperationDisposition.PolicyRefused, "policy_disabled"),
+        };
+        var service = NewService(db, handler, recorder);
+
+        await service.ScoreAttemptAsync("att-w0", CancellationToken.None);
+
+        Assert.Empty(handler.Requests);
+        Assert.Equal(0, recorder.Successes);
+        Assert.Empty(recorder.Failures);
+
+        var answer = await db.ListeningAnswers.SingleAsync(a => a.Id == "ans-w0");
+        Assert.Equal(ListeningPartAAiSkipReasons.PolicyRefused, answer.AiSkipReason);
+        Assert.Null(answer.AiScoredAt);
+    }
+
+    /// <summary>
+    /// W2 item 5 — the denied-lease cool-off is BOUNDED. Before this fix a
+    /// permanently-refused lease (a duplicate/conflict/store outage that never
+    /// clears) armed a fresh 5-minute deferral on every pass, so the 20 s worker
+    /// re-selected the same attempt for ever. After a small deterministic number
+    /// of denials the row is parked terminally with a sanitized skip reason —
+    /// still with zero provider calls, no <c>AiScoredAt</c>, and the
+    /// deterministic mark untouched.
+    /// </summary>
+    [Fact]
+    public async Task RepeatedDeniedLeases_TerminallyPark_AfterABoundedNumberOfRounds()
+    {
+        await using var db = NewDb();
+        await SeedAttemptAsync(db, withApprovedRationale: true);
+
+        var handler = new RecordingHandler((_, _) =>
+            throw new InvalidOperationException("a denied lease must never reach the provider"));
+        var recorder = new RecordingUsageRecorder
+        {
+            LeaseOverride = DirectAiOperationLease.Blocked(
+                DirectAiOperationDisposition.Duplicate, "duplicate_operation"),
+        };
+
+        // Each pass runs well after the previous cool-off has expired, i.e. the
+        // worker really would keep picking this row up.
+        for (var round = 1; round <= ListeningPartAAiRetryPolicy.MaxLeaseDeniedRounds; round++)
+        {
+            var service = NewService(db, handler, recorder, clock: new FixedClock(Now.AddHours(round)));
+            await service.ScoreAttemptAsync("att-w0", CancellationToken.None);
+        }
+
+        Assert.Empty(handler.Requests);
+        Assert.Equal(0, recorder.Successes);
+        Assert.Empty(recorder.Failures);
+
+        var answer = await db.ListeningAnswers.SingleAsync(a => a.Id == "ans-w0");
+        Assert.Equal(ListeningPartAAiSkipReasons.LeaseDenied, answer.AiSkipReason);
+        Assert.Equal(ListeningPartAAiRetryPolicy.MaxLeaseDeniedRounds, answer.AiAttemptCount);
+        Assert.Null(answer.AiScoredAt);
+        Assert.Null(answer.AiNextAttemptAt);
+
+        // The deterministic score is never read or written by this path.
+        Assert.True(answer.IsCorrect);
+        Assert.Equal(1, answer.PointsEarned);
+
+        // ...and the worker stops selecting it, for ever.
+        var eligible = await ListeningPartAAiScoringWorker
+            .EligibleAttemptIds(db, Now.AddDays(30)).ToListAsync();
+        Assert.DoesNotContain("att-w0", eligible);
+    }
+
+    /// <summary>
+    /// W2 item 5 — `indeterminate` keeps its never-auto-retry semantics through
+    /// the lease path too: an existing operation whose outcome is ambiguous may
+    /// already have been billed, so the row parks immediately rather than being
+    /// deferred into an eventual re-run.
+    /// </summary>
+    [Fact]
+    public async Task DeniedLeaseOverAnIndeterminateOperation_ParksImmediately_WithoutDeferring()
+    {
+        await using var db = NewDb();
+        await SeedAttemptAsync(db, withApprovedRationale: true);
+
+        var handler = new RecordingHandler((_, _) =>
+            throw new InvalidOperationException("an indeterminate predecessor must never be re-called"));
+        var recorder = new RecordingUsageRecorder
+        {
+            LeaseOverride = DirectAiOperationLease.Blocked(
+                DirectAiOperationDisposition.Duplicate, "duplicate_operation",
+                operationId: "op-ambiguous", existingState: AiOperationState.Indeterminate),
+        };
+
+        await NewService(db, handler, recorder).ScoreAttemptAsync("att-w0", CancellationToken.None);
+
+        Assert.Empty(handler.Requests);
+
+        var answer = await db.ListeningAnswers.SingleAsync(a => a.Id == "ans-w0");
+        Assert.Equal(ListeningPartAAiSkipReasons.IndeterminateTimeout, answer.AiSkipReason);
+        Assert.Null(answer.AiScoredAt);
+        Assert.Null(answer.AiNextAttemptAt);
+    }
+
     // ── Fixtures ────────────────────────────────────────────────────────────────
 
     private static ListeningPartAAiScoringService NewService(
         LearnerDbContext db,
         RecordingHandler handler,
         IDirectAiCallRecorder? recorder = null,
-        IAiProviderRegistry? registry = null)
+        IAiProviderRegistry? registry = null,
+        IAiPricingResolver? pricingResolver = null,
+        TimeProvider? clock = null)
         => new(
             db,
             registry ?? new StubProviderRegistry(),
             new StaticHttpClientFactory(handler),
             recorder ?? new RecordingUsageRecorder(),
-            new FixedClock(Now),
-            NullLogger<ListeningPartAAiScoringService>.Instance);
+            clock ?? new FixedClock(Now),
+            NullLogger<ListeningPartAAiScoringService>.Instance,
+            pricingResolver);
 
     private static async Task SeedAttemptAsync(LearnerDbContext db, bool withApprovedRationale)
     {
@@ -835,7 +994,10 @@ public sealed class ListeningPartAAiScoringGuardTests
         => new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     private static string ToolUseBody(string verdictsJsonArray)
-        => "{\"usage\":{\"input_tokens\":10,\"output_tokens\":5},\"content\":[{\"type\":\"tool_use\","
+        => ToolUseBody(verdictsJsonArray, inputTokens: 10, outputTokens: 5);
+
+    private static string ToolUseBody(string verdictsJsonArray, int inputTokens, int outputTokens)
+        => $"{{\"usage\":{{\"input_tokens\":{inputTokens},\"output_tokens\":{outputTokens}}},\"content\":[{{\"type\":\"tool_use\","
            + "\"name\":\"emit_part_a_verdicts\",\"input\":{\"verdicts\":" + verdictsJsonArray + "}}]}";
 
     private sealed class RecordingHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> respond)
@@ -914,24 +1076,59 @@ public sealed class ListeningPartAAiScoringGuardTests
 
     private sealed record RecordedFailure(string ErrorCode, string? ErrorMessage);
 
+    /// <summary>W2 — a pricing resolver that is down. Every call throws, so the
+    /// scorer must fall back to the legacy provider rate card.</summary>
+    private sealed class ThrowingPricingResolver : IAiPricingResolver
+    {
+        public Task<AiPricingResolution?> ResolveAsync(
+            string providerCode, string model, DateTimeOffset at, CancellationToken ct)
+            => throw new InvalidOperationException("pricing table unavailable");
+    }
+
     private sealed class RecordingUsageRecorder : IDirectAiCallRecorder
     {
         public List<RecordedFailure> Failures { get; } = new();
         public int Successes { get; private set; }
+        public AiCacheTokenBreakdown? LastCacheTokens { get; private set; }
+        public decimal LastCostUsd { get; private set; }
+        public int BeginCalls { get; private set; }
+        public List<string> CompletedOperationIds { get; } = new();
 
-        public Task RecordSuccessAsync(
+        /// <summary>Set to deny the W2 lease and prove zero provider calls.</summary>
+        public DirectAiOperationLease? LeaseOverride { get; set; }
+
+        public Task<string?> RecordSuccessAsync(
             AiUsageContext context, string providerId, string model, AiUsage? usage,
-            int latencyMs, string? policyTrace, decimal costEstimateUsd, CancellationToken ct)
+            int latencyMs, string? policyTrace, decimal costEstimateUsd, CancellationToken ct,
+            AiCacheTokenBreakdown? cacheTokens = null, string? operationId = null, int? attemptNumber = null)
         {
             Successes++;
-            return Task.CompletedTask;
+            LastCacheTokens = cacheTokens;
+            LastCostUsd = costEstimateUsd;
+            return Task.FromResult<string?>("usage-" + Successes);
         }
 
-        public Task RecordFailureAsync(
+        public Task<string?> RecordFailureAsync(
             AiUsageContext context, string? providerId, string? model, AiCallOutcome outcome,
-            string errorCode, string? errorMessage, int latencyMs, string? policyTrace, CancellationToken ct)
+            string errorCode, string? errorMessage, int latencyMs, string? policyTrace, CancellationToken ct,
+            string? operationId = null, int? attemptNumber = null)
         {
             Failures.Add(new RecordedFailure(errorCode, errorMessage));
+            return Task.FromResult<string?>("usage-failure-" + Failures.Count);
+        }
+
+        public Task<DirectAiOperationLease> BeginOperationAsync(DirectAiOperationRequest request, CancellationToken ct)
+        {
+            BeginCalls++;
+            return Task.FromResult(LeaseOverride
+                ?? DirectAiOperationLease.Granted($"op-{BeginCalls}", request.ResourceVersion ?? 1));
+        }
+
+        public Task CompleteOperationAsync(
+            string operationId, AiOperationState state, string? resultRef,
+            string? providerId, string? model, CancellationToken ct)
+        {
+            CompletedOperationIds.Add(operationId);
             return Task.CompletedTask;
         }
     }

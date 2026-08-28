@@ -497,6 +497,41 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 "ai_credits_insufficient",
                 "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
         }
+        catch (OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx)
+        {
+            // W3 — this exact grading action is already in flight or already
+            // completed elsewhere (a genuinely concurrent double-click/page-
+            // refresh race the app-level LetterContentHash reuse check above
+            // did not catch because both requests reached it before either
+            // committed). The control plane already guaranteed the SECOND
+            // call never reached Claude — no duplicate charge — so this is
+            // NOT a service failure: a short client-side retry will find the
+            // grade the winning request just persisted, either through this
+            // pipeline's own hash-reuse path above or via the normal "grade
+            // ready" read path. Distinct error code so the client can retry
+            // silently instead of showing a generic failure toast.
+            logger.LogInformation(
+                "Writing rubric call for submission {SubmissionId} resolved to an existing AI operation {OperationId} in state {State}; no second call was made.",
+                submission.Id, dupEx.OperationId, dupEx.State);
+            throw ApiException.Conflict(
+                "writing_rubric_already_in_progress",
+                "This submission is already being graded (or was just graded). Please wait a moment and try again.");
+        }
+        catch (OetLearner.Api.Services.Ai.AiBudgetExhaustedException budgetEx)
+        {
+            // W3 — refused before any provider call; zero cost incurred.
+            // Distinct, honest error code rather than a generic failure — an
+            // admin must raise the platform budget, retrying won't help.
+            logger.LogWarning(
+                "Writing rubric call blocked for submission {SubmissionId}: platform AI budget exhausted ({Reason}).",
+                submission.Id, budgetEx.Reason);
+            submission.Status = "failed";
+            await db.SaveChangesAsync(ct);
+            throw ApiException.ServiceUnavailable(
+                "ai_platform_budget_exhausted",
+                "AI grading is temporarily unavailable — the platform's AI budget has been reached. Please try again later.",
+                retryable: true);
+        }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Writing rubric AI call failed for submission {SubmissionId}", submission.Id);

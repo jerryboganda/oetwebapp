@@ -48,6 +48,21 @@ public static class ListeningPartAAiSkipReasons
 
     /// <summary>All durable attempts were spent on transient failures.</summary>
     public const string RetriesExhausted = "retries_exhausted";
+
+    /// <summary>The W2 feature policy explicitly refuses this feature (disabled,
+    /// expired, not yet effective, or unknown). Terminal and zero provider
+    /// calls: re-enabling the policy is an admin action, and the requeue script
+    /// is the supported way to hand the work back.</summary>
+    public const string PolicyRefused = "policy_refused";
+
+    /// <summary>The W2 control plane refused to lease this work
+    /// <see cref="ListeningPartAAiRetryPolicy.MaxLeaseDeniedRounds"/> times in a
+    /// row (a duplicate/conflicting owner or an unreachable operation store).
+    /// Terminal so the 20 s worker stops re-selecting the row forever; zero
+    /// provider calls were ever made, so nothing was billed and the
+    /// deterministic mark is untouched. The requeue script hands it back once
+    /// the control plane is healthy.</summary>
+    public const string LeaseDenied = "operation_lease_denied";
 }
 
 /// <summary>
@@ -71,6 +86,27 @@ public static class ListeningPartAAiRetryPolicy
     /// attempt: nothing left the process, and an admin can still add or rotate
     /// the key. It only stops the 20 s re-selection spin.</summary>
     public static readonly TimeSpan UnconfiguredProviderCooldown = TimeSpan.FromMinutes(15);
+
+    /// <summary>Cool-off applied when the W2 control plane will not lease this
+    /// work — another slot already owns the same operation, a different payload
+    /// holds the resource slot, or the operation store is unreachable. Zero
+    /// bytes reached the provider, so nothing was billed and the row stays
+    /// eligible once the owner finishes (or its lease lapses).
+    /// <para>
+    /// BOUNDED: each denial is recorded on the answer's durable
+    /// <c>AiAttemptCount</c> and after
+    /// <see cref="MaxLeaseDeniedRounds"/> denials the row is parked terminally
+    /// with <see cref="ListeningPartAAiSkipReasons.LeaseDenied"/>. Without that
+    /// bound a permanently unavailable control plane (or a duplicate that never
+    /// resolves) re-queued the same answer every five minutes forever.
+    /// </para></summary>
+    public static readonly TimeSpan OperationLeaseDeniedCooldown = TimeSpan.FromMinutes(5);
+
+    /// <summary>Hard cap on consecutive control-plane lease denials before the
+    /// answer is terminally parked. Deliberately small and deterministic — a
+    /// denial costs nothing, so the only thing worth bounding is how long the
+    /// worker keeps re-selecting a row nobody will ever let it run.</summary>
+    public const int MaxLeaseDeniedRounds = 3;
 
     private static readonly TimeSpan BaseDelay = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(30);

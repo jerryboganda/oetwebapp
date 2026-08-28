@@ -4005,7 +4005,13 @@ public static partial class SeedData
             Id = "global",
             KillSwitchEnabled = false,
             KillSwitchScope = AiKillSwitchScope.PlatformKeysOnly,
-            MonthlyBudgetUsd = 0m,                  // admin sets this on /admin/ai-usage → Budget
+            // Conservative launch default (owner directive, 2026-08-28 AI/Cloud API
+            // plan, point 5): "$10 prepaid... increase later after confirming real
+            // usage". AiQuotaService.TryReserveAsync's hard-kill check is a no-op
+            // when this is <= 0, so leaving it at 0 meant NO platform-wide dollar
+            // ceiling was enforced out of the box. Admins raise this on
+            // /admin/ai-usage → Budget once real usage is confirmed.
+            MonthlyBudgetUsd = OetLearner.Api.Services.AiManagement.AiQuotaService.ConservativeDefaultMonthlyBudgetUsd,
             SoftWarnPct = 80,
             HardKillPct = 100,
             AllowByokOnScoringFeatures = false,     // safe default; see §1

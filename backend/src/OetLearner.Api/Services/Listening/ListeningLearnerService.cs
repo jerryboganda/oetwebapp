@@ -2479,13 +2479,7 @@ public sealed class ListeningLearnerService(
     private static bool HasAudioForSection(
         IReadOnlyDictionary<string, string> audioByPart,
         string section)
-    {
-        if (audioByPart.TryGetValue(section, out var exact)
-            && !string.IsNullOrWhiteSpace(exact)) return true;
-        var parent = section.Length > 1 ? section[..1] : section;
-        return audioByPart.TryGetValue(parent, out var fallback)
-            && !string.IsNullOrWhiteSpace(fallback);
-    }
+        => !string.IsNullOrWhiteSpace(ResolveUploadedAudioForSection(audioByPart, section));
 
     private sealed record AttemptEligibilityRow(
         DateTimeOffset StartedAt,
@@ -2727,6 +2721,16 @@ public sealed class ListeningLearnerService(
         var assetByRole = assets
             .GroupBy(a => a.Role)
             .ToDictionary(g => g.Key, g => g.OrderBy(a => a.DisplayOrder).First());
+        // A paper-level audio URL is only valid for an unscoped Audio asset.
+        // Never expose the first per-section upload (for example Part A) as a
+        // full-paper fallback: doing so makes every section play the wrong file
+        // when the paper has separate A/B/C assets.
+        var fullAudioAsset = assets
+            .Where(a => a.Role == PaperAssetRole.Audio
+                && a.MediaAsset is not null
+                && string.IsNullOrWhiteSpace(a.Part))
+            .OrderBy(a => a.DisplayOrder)
+            .FirstOrDefault();
 
         // Per-sub-section uploaded-audio map: at most one primary Audio asset
         // per part code (A1..C2). Mirrors ReadingLearnerEndpoints' per-Part
@@ -2852,9 +2856,7 @@ public sealed class ListeningLearnerService(
         var audioUrlBySection = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var section in LearnerAudioSections)
         {
-            var uploaded = section == "B"
-                ? audioByPart.GetValueOrDefault("B") ?? audioByPart.GetValueOrDefault("B1")
-                : audioByPart.GetValueOrDefault(section);
+            var uploaded = ResolveUploadedAudioForSection(audioByPart, section);
             var url = uploaded
                 ?? extracts.FirstOrDefault(e => SectionForPartCode(e.PartCode) == section)?.AudioUrl;
             if (!string.IsNullOrWhiteSpace(url)) audioUrlBySection[section] = url;
@@ -2868,7 +2870,7 @@ public sealed class ListeningLearnerService(
             Difficulty: paper.Difficulty,
             EstimatedDurationMinutes: paper.EstimatedDurationMinutes,
             ScenarioType: "oet_listening",
-            AudioUrl: AssetDownloadPath(assetByRole.GetValueOrDefault(PaperAssetRole.Audio)),
+            AudioUrl: AssetDownloadPath(fullAudioAsset),
             QuestionPaperUrl: AssetDownloadPath(assetByRole.GetValueOrDefault(PaperAssetRole.QuestionPaper)),
             AnswerKeyUrl: AssetDownloadPath(assetByRole.GetValueOrDefault(PaperAssetRole.AnswerKey)),
             AudioScriptUrl: AssetDownloadPath(assetByRole.GetValueOrDefault(PaperAssetRole.AudioScript)),
@@ -3006,8 +3008,9 @@ public sealed class ListeningLearnerService(
                 // Part B/C scenario line — not gated Part-A-only (unlike notesBody).
                 var contextIntro = ReadString(seg.GetValueOrDefault("contextIntro"));
                 // JSON-path papers have no TTS extract sha here, so only uploaded
-                // per-part Audio assets resolve; else null.
-                var audioUrl = audioByPart.GetValueOrDefault(partCode.Trim().ToUpperInvariant());
+                // per-part Audio assets resolve; parent-part uploads (A/C) and
+                // legacy B1..B6 uploads are accepted through the same resolver.
+                var audioUrl = ResolveUploadedAudioForSection(audioByPart, partCode);
                 output.Add(new ListeningExtractMetaDto(
                     PartCode: partCode,
                     DisplayOrder: displayOrder,
@@ -3232,8 +3235,17 @@ public sealed class ListeningLearnerService(
             }
 
             var mergedQuestion = relationalQuestion;
-            if (!IsUsablePartBCStem(mergedQuestion.Text)
-                && IsUsablePartBCStem(sourceQuestion.Text))
+            // The source manifest is the authority for learner-facing Part B/C
+            // stems. A relational row can contain a syntactically valid but
+            // stale/repeated heading (the production bug this guard addresses),
+            // so do not preserve it merely because it passes the generic stem
+            // validator. Keep the relational text only when the source has no
+            // usable stem at all; the publish gate will reject that paper.
+            if (IsUsablePartBCStem(sourceQuestion.Text)
+                && !string.Equals(
+                    SanitizeQuestionPrompt(mergedQuestion.Text),
+                    SanitizeQuestionPrompt(sourceQuestion.Text),
+                    StringComparison.Ordinal))
             {
                 mergedQuestion = mergedQuestion with { Text = sourceQuestion.Text };
             }
@@ -3375,8 +3387,8 @@ public sealed class ListeningLearnerService(
         string? partCodeString,
         string? audioContentSha)
     {
-        if (!string.IsNullOrWhiteSpace(partCodeString)
-            && audioByPart.TryGetValue(partCodeString.Trim().ToUpperInvariant(), out var uploaded))
+        var uploaded = ResolveUploadedAudioForSection(audioByPart, partCodeString);
+        if (!string.IsNullOrWhiteSpace(uploaded))
         {
             return uploaded;
         }
@@ -3398,6 +3410,51 @@ public sealed class ListeningLearnerService(
     {
         var code = (partCode ?? string.Empty).Trim().ToUpperInvariant();
         return code.StartsWith('B') ? "B" : code;
+    }
+
+    /// <summary>
+    /// Resolve an uploaded Audio asset for a learner-facing section. Exact
+    /// sub-section keys win; parent-part uploads (A/C) are valid for both
+    /// children; and legacy Part B uploads (B1..B6) are accepted for the
+    /// collapsed learner-facing B section. The first non-empty match is the
+    /// authored priority, so a specific replacement can safely override a
+    /// parent fallback.
+    /// </summary>
+    private static string? ResolveUploadedAudioForSection(
+        IReadOnlyDictionary<string, string> audioByPart,
+        string? rawPartCode)
+    {
+        var code = (rawPartCode ?? string.Empty).Trim().ToUpperInvariant();
+        var section = SectionForPartCode(code);
+        var candidates = new List<string>();
+
+        void Add(string candidate)
+        {
+            if (!string.IsNullOrWhiteSpace(candidate)
+                && !candidates.Contains(candidate, StringComparer.Ordinal))
+            {
+                candidates.Add(candidate);
+            }
+        }
+
+        Add(code);
+        Add(section);
+        if (section.Length > 1) Add(section[..1]);
+        if (section == "B")
+        {
+            for (var i = 1; i <= 6; i++) Add($"B{i}");
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (audioByPart.TryGetValue(candidate, out var url)
+                && !string.IsNullOrWhiteSpace(url))
+            {
+                return url;
+            }
+        }
+
+        return null;
     }
 
     private static IReadOnlyList<ListeningSpeakerDto> ReadSpeakersJson(string? json)

@@ -209,17 +209,17 @@ public sealed class AiAssistantGatewayToolCallParserTests
         public string? RecordedUsageId { get; private set; }
         public string? FailureErrorCode { get; private set; }
 
-        public Task<string?> RecordSuccessAsync(AiUsageContext context, string providerId, string model, AiKeySource keySource, AiUsage? usage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, decimal costEstimateUsd = 0, string? usageRecordId = null)
+        public Task<string?> RecordSuccessAsync(AiUsageContext context, string providerId, string model, AiKeySource keySource, AiUsage? usage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, decimal costEstimateUsd = 0, string? usageRecordId = null, string? operationId = null, int? attemptNumber = null, AiCacheTokenBreakdown? cacheTokens = null, bool? providerInvoked = null)
         {
             RequestedUsageId = usageRecordId;
             RecordedUsageId = returnNull ? null : persistedUsageId ?? usageRecordId ?? "assistant-usage-1";
             return Task.FromResult<string?>(RecordedUsageId);
         }
 
-        public Task RecordFailureAsync(AiUsageContext context, string? providerId, string? model, AiKeySource keySource, AiCallOutcome outcome, string errorCode, string? errorMessage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, AiUsage? usage = null, decimal costEstimateUsd = 0, string? usageRecordId = null)
+        public Task<string?> RecordFailureAsync(AiUsageContext context, string? providerId, string? model, AiKeySource keySource, AiCallOutcome outcome, string errorCode, string? errorMessage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, AiUsage? usage = null, decimal costEstimateUsd = 0, string? usageRecordId = null, string? operationId = null, int? attemptNumber = null, bool? providerInvoked = null)
         {
             FailureErrorCode = errorCode;
-            return Task.CompletedTask;
+            return Task.FromResult<string?>(RecordedUsageId);
         }
     }
 

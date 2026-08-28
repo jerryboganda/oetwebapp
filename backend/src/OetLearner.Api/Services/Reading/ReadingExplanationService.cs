@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Assessment;
 using OetLearner.Api.Services.Rulebook;
 
@@ -51,14 +52,76 @@ public sealed class ReadingExplanationService(
     LearnerDbContext db,
     IRulebookLoader rulebookLoader,
     IAiGatewayService gateway,
-    ILogger<ReadingExplanationService>? logger = null)
+    ILogger<ReadingExplanationService>? logger = null,
+    IAiExplanationCacheService? explanationCache = null)
     : IReadingExplanationService
 {
     private const string PromptTemplateId = "reading.explanation.v1";
+    private const string Module = "reading";
 
     // ── AI generation ───────────────────────────────────────────────────────
 
     private async Task<ExplanationDto> GenerateExplanationAsync(
+        ReadingQuestion question,
+        string correctAnswer,
+        string wrongOption,
+        string language,
+        string approvedRationale,
+        string sourceSentence,
+        string? sourcePassage,
+        string? userId,
+        CancellationToken ct)
+    {
+        // ── W3 cache reuse (owner directive 2026-08-28 AI/Cloud API plan,
+        // point 8): two learners making the identical mistake on the identical
+        // question, against the identical approved evidence, get the same
+        // explanation without a second provider call. See
+        // AiExplanationCacheService / AiExplanationCacheEntry.
+        string? cacheKey = null;
+        if (explanationCache is not null)
+        {
+            cacheKey = explanationCache.BuildCacheKey(
+                Module, question.Id, questionVersion: null,
+                normalizedSelectedAnswer: wrongOption, language,
+                approvedRationale, sourceSentence, extraEvidence: sourcePassage);
+
+            var cached = await TryReadCacheAsync(cacheKey, language, ct);
+            if (cached is not null) return cached;
+        }
+
+        var generated = await CallGatewayAsync(
+            question, correctAnswer, wrongOption, language, approvedRationale, sourceSentence, sourcePassage, userId, ct);
+
+        if (cacheKey is not null)
+        {
+            await explanationCache!.StoreAsync(
+                Module, question.Id, language, cacheKey, System.Text.Json.JsonSerializer.Serialize(generated), CancellationToken.None);
+        }
+
+        return generated;
+    }
+
+    private async Task<ExplanationDto?> TryReadCacheAsync(string cacheKey, string language, CancellationToken ct)
+    {
+        var cachedJson = await explanationCache!.TryGetAsync(cacheKey, ct);
+        if (cachedJson is null) return null;
+        try
+        {
+            var dto = System.Text.Json.JsonSerializer.Deserialize<ExplanationDto>(cachedJson);
+            // Re-stamp Language: the cache key already includes language, so
+            // this is always the same value, but never trust a deserialized
+            // value over the caller's own request for the field that decides
+            // which language the client renders.
+            return dto is null ? null : dto with { Language = language };
+        }
+        catch (System.Text.Json.JsonException ex)
+        {
+            logger?.LogWarning(ex, "ReadingExplanationService — cached explanation for key {CacheKey} failed to deserialize; generating fresh.", cacheKey);
+            return null;
+        }
+    }
+
+    private async Task<ExplanationDto> CallGatewayAsync(
         ReadingQuestion question,
         string correctAnswer,
         string wrongOption,
@@ -283,8 +346,6 @@ public sealed class ReadingExplanationService(
             return null;
         }
     }
-
-    // ── Cache persistence ───────────────────────────────────────────────────
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 

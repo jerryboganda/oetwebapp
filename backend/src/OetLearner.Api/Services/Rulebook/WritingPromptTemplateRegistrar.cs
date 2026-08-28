@@ -178,6 +178,14 @@ public sealed class WritingPromptTemplateRegistry : IWritingPromptTemplateRegist
 /// </summary>
 public static class WritingPromptTemplateRegistrar
 {
+    /// <summary>Current cheap-tier Anthropic model (owner directive 2026-08-28
+    /// AI/Cloud API plan, point 7). Matches
+    /// <see cref="AiFeatureRouteResolver"/>'s own <c>HaikuModel</c> constant —
+    /// kept as a second literal (not a cross-file reference) because this
+    /// registry's templates are meant to be readable in isolation, same as the
+    /// per-template Model field always has been.</summary>
+    private const string HaikuModel = "claude-haiku-4-5-20251001";
+
     /// <summary>Feature codes the registrar guarantees to register at boot.
     /// Kept as a static list so the fail-fast guard below can assert each
     /// code resolves through the registry post-registration.</summary>
@@ -207,7 +215,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingCoachV1,
             TemplateId = "writing.coach.v1",
-            Model = "claude-sonnet-5",
+            Model = HaikuModel,
             SystemPrompt = WritingPromptTemplates.CoachV1,
             Temperature = 0.2,
             MaxInputTokens = 8_000,
@@ -295,7 +303,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingCanonDetectV1,
             TemplateId = "writing.canon.detect.v1",
-            Model = "claude-sonnet-5",
+            Model = HaikuModel,
             SystemPrompt = WritingPromptTemplates.CanonDetectV1,
             Temperature = 0.2,
             MaxInputTokens = 8_000,
@@ -314,7 +322,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingDrillGradeV1,
             TemplateId = "writing.drill.grade.v1",
-            Model = "claude-sonnet-5",
+            Model = HaikuModel,
             SystemPrompt = WritingPromptTemplates.DrillGradeV1,
             Temperature = 0.2,
             MaxInputTokens = 2_000,
@@ -330,7 +338,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingOutlineV1,
             TemplateId = "writing.outline.v1",
-            Model = "claude-sonnet-5",
+            Model = HaikuModel,
             SystemPrompt = WritingPromptTemplates.OutlineV1,
             Temperature = 0.2,
             MaxInputTokens = 4_000,
@@ -348,7 +356,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingParaphraseV1,
             TemplateId = "writing.paraphrase.v1",
-            Model = "claude-sonnet-5",
+            Model = HaikuModel,
             SystemPrompt = WritingPromptTemplates.ParaphraseV1,
             Temperature = 0.7,
             MaxInputTokens = 1_000,
@@ -366,7 +374,7 @@ public static class WritingPromptTemplateRegistrar
         {
             FeatureCode = AiFeatureCodes.WritingAskV1,
             TemplateId = "writing.ask.v1",
-            Model = "claude-sonnet-5",
+            Model = HaikuModel,
             SystemPrompt = WritingPromptTemplates.AskV1,
             Temperature = 0.2,
             MaxInputTokens = 8_000,
