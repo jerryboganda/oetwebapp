@@ -1,5 +1,7 @@
 ﻿using OetLearner.Api.Services.Listening;
 
+using System.Reflection;
+
 namespace OetLearner.Api.Tests.Listening;
 
 public class ListeningQuestionSanitizationTests
@@ -64,5 +66,31 @@ public class ListeningQuestionSanitizationTests
         string expected)
     {
         Assert.Equal(expected, ListeningLearnerService.ResolveQuestionPartCode(rawPartCode, questionNumber));
+    }
+
+    [Theory]
+    [InlineData("A2", "parent-a")]
+    [InlineData("C1", "exact-c1")]
+    [InlineData("C2", "parent-c")]
+    [InlineData("B", "legacy-b4")]
+    public void ResolveUploadedAudioForSection_UsesExactParentAndLegacyFallbacks(
+        string section,
+        string expected)
+    {
+        var audioByPart = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["A"] = "parent-a",
+            ["C"] = "parent-c",
+            ["C1"] = "exact-c1",
+            ["B4"] = "legacy-b4",
+        };
+        var resolver = typeof(ListeningLearnerService).GetMethod(
+            "ResolveUploadedAudioForSection",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(resolver);
+        var resolved = resolver!.Invoke(null, new object?[] { audioByPart, section }) as string;
+
+        Assert.Equal(expected, resolved);
     }
 }

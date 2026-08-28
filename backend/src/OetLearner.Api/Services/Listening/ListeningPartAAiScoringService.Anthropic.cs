@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Listening;
@@ -19,7 +20,8 @@ namespace OetLearner.Api.Services.Listening;
 public sealed partial class ListeningPartAAiScoringService
 {
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
-    private const string DefaultModel = "claude-sonnet-5";
+    // Single source of truth: CoreAiProviderSeeder.AnthropicDefaultModel.
+    private const string DefaultModel = CoreAiProviderSeeder.AnthropicDefaultModel;
     private const string ToolName = "emit_part_a_verdicts";
 
     // ── Claude call (forced tool) ───────────────────────────────────────────────
@@ -40,7 +42,8 @@ public sealed partial class ListeningPartAAiScoringService
     }
 
     private async Task<ProviderCallOutcome> CallClaudeVerdictsAsync(
-        IReadOnlyList<GapItem> items, string learnerId, Provider provider, CancellationToken ct)
+        IReadOnlyList<GapItem> items, string learnerId, Provider provider,
+        DirectAiOperationLease lease, CancellationToken ct)
     {
         var sb = new StringBuilder();
         sb.AppendLine("Judge each candidate gap answer for OET Listening Part A note-completion.");
@@ -217,6 +220,7 @@ public sealed partial class ListeningPartAAiScoringService
             using (doc)
             {
                 var usage = ParseAnthropicUsage(doc.RootElement);
+                var (cacheWriteTokens, cacheReadTokens) = ParseAnthropicCacheTokens(doc.RootElement);
                 if (doc.RootElement.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
                 {
                     foreach (var block in content.EnumerateArray())
@@ -225,14 +229,14 @@ public sealed partial class ListeningPartAAiScoringService
                             && string.Equals(t.GetString(), "tool_use", StringComparison.Ordinal)
                             && block.TryGetProperty("input", out var input))
                         {
-                            var cost = usage is null
-                                ? 0m
-                                : provider.Row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
-                                  + provider.Row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
-                            await usageRecorder.RecordSuccessAsync(
+                            var (cost, cacheBreakdown) = await ComputeCostAsync(
+                                provider, usage, cacheWriteTokens, cacheReadTokens);
+                            var usageRecordId = await usageRecorder.RecordSuccessAsync(
                                 usageContext, AnthropicProviderCode, provider.Model, usage,
-                                LatencyMs(), AiFeatureCodes.ListeningPartAScore, cost, ct);
-                            return ProviderCallOutcome.Succeeded(ParseVerdicts(input));
+                                LatencyMs(), AiFeatureCodes.ListeningPartAScore, cost, CancellationToken.None,
+                                cacheTokens: cacheBreakdown,
+                                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+                            return ProviderCallOutcome.Succeeded(ParseVerdicts(input), usageRecordId);
                         }
                     }
                 }
@@ -251,9 +255,15 @@ public sealed partial class ListeningPartAAiScoringService
         }
 
         Task RecordFailureAsync(AiCallOutcome outcome, string errorClass, string sanitizedMessage)
+            // CancellationToken.None on purpose: every caller of this local
+            // helper runs AFTER a send attempt, so the physical call may already
+            // have been accepted and billed. A cancelled caller must never cost
+            // us the durable record of that spend.
             => usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, provider.Model, outcome,
-                errorClass, sanitizedMessage, LatencyMs(), AiFeatureCodes.ListeningPartAScore, ct);
+                errorClass, sanitizedMessage, LatencyMs(), AiFeatureCodes.ListeningPartAScore,
+                CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
     }
 
     /// <summary>
@@ -314,9 +324,79 @@ public sealed partial class ListeningPartAAiScoringService
     private static AiUsage? ParseAnthropicUsage(JsonElement root)
     {
         if (!root.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) return null;
-        var input = u.TryGetProperty("input_tokens", out var it) && it.ValueKind == JsonValueKind.Number ? it.GetInt32() : 0;
-        var output = u.TryGetProperty("output_tokens", out var ot) && ot.ValueKind == JsonValueKind.Number ? ot.GetInt32() : 0;
-        return new AiUsage { PromptTokens = input, CompletionTokens = output };
+        return new AiUsage
+        {
+            PromptTokens = GetUsageInt(u, "input_tokens"),
+            CompletionTokens = GetUsageInt(u, "output_tokens"),
+        };
+    }
+
+    /// <summary>
+    /// Anthropic's prompt-caching token counts (Messages API, "usage" object):
+    /// <c>cache_creation_input_tokens</c> — tokens written to a NEW cache entry
+    /// this call (billed once, at the cache-write rate); <c>cache_read_input_tokens</c>
+    /// — tokens served from an existing cache entry (billed at the far cheaper
+    /// cache-read rate). Both are disjoint from <c>input_tokens</c> — a provider
+    /// never reports the same token in both a normal and a cache bucket, so
+    /// summing them for cost never double-counts.
+    /// </summary>
+    private static (int CacheWriteTokens, int CacheReadTokens) ParseAnthropicCacheTokens(JsonElement root)
+    {
+        if (!root.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) return (0, 0);
+        return (GetUsageInt(u, "cache_creation_input_tokens"), GetUsageInt(u, "cache_read_input_tokens"));
+    }
+
+    private static int GetUsageInt(JsonElement usage, string property)
+        => usage.TryGetProperty(property, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+
+    /// <summary>
+    /// Resolves an effective-dated <see cref="AiPricingResolution"/> when a
+    /// resolver is wired (W2+) and prices normal + cache tokens without
+    /// double-counting; falls back to the pre-W2 flat <see cref="AiProvider"/>
+    /// rate card (no cache-aware pricing) when no resolver is configured, no
+    /// effective row exists yet, <b>or the resolver itself fails</b>, so cost is
+    /// never silently zeroed by a missing migration/seed — and, critically, a
+    /// pricing outage can never relabel a paid, successful 2xx as a provider
+    /// failure. This runs only after the provider has already answered, so it
+    /// deliberately ignores caller cancellation: the call is spent either way.
+    /// </summary>
+    private async Task<(decimal CostUsd, AiCacheTokenBreakdown? CacheTokens)> ComputeCostAsync(
+        Provider provider, AiUsage? usage, int cacheWriteTokens, int cacheReadTokens)
+    {
+        AiPricingResolution? pricing = null;
+        if (pricingResolver is not null)
+        {
+            try
+            {
+                pricing = await pricingResolver.ResolveAsync(
+                    AnthropicProviderCode, provider.Model, clock.GetUtcNow(), CancellationToken.None);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex,
+                    "Part A AI advisory review: effective pricing lookup failed for {Model}; falling back to the provider rate card.",
+                    provider.Model);
+            }
+        }
+
+        if (pricing is null)
+        {
+            var legacyCost = usage is null
+                ? 0m
+                : provider.Row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
+                  + provider.Row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
+            return (legacyCost, null);
+        }
+
+        var cost = pricing.ComputeCostUsd(
+            normalInputTokens: usage?.PromptTokens ?? 0,
+            normalOutputTokens: usage?.CompletionTokens ?? 0,
+            cacheWriteTokens: cacheWriteTokens,
+            cacheReadTokens: cacheReadTokens);
+
+        var billedClass = cacheWriteTokens > 0 ? "cache_write" : cacheReadTokens > 0 ? "cache_read" : "normal";
+        var breakdown = new AiCacheTokenBreakdown(cacheWriteTokens, cacheReadTokens, pricing.PricingVersion, cost, billedClass);
+        return (cost, breakdown);
     }
 
     private static string NormalizeBaseUrl(string baseUrl)

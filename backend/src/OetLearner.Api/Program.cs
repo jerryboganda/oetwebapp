@@ -1493,6 +1493,36 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderAccountRe
 // gateway between explicit pins and the registry-default fallback.
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiFeatureRouteResolver,
     OetLearner.Api.Services.Rulebook.AiFeatureRouteResolver>();
+// W2 of the AI cost/reliability remediation — versioned feature policy
+// registry (fail-closed pre-provider gate in Production) + effective-dated
+// pricing resolver + observe-mode execution coordinator. See
+// Services/Rulebook/AiFeaturePolicyRegistry.cs / Services/Ai/AiPricingResolver.cs /
+// Services/Ai/AiExecutionCoordinator.cs.
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiFeaturePolicyRegistry,
+    OetLearner.Api.Services.Rulebook.AiFeaturePolicyRegistry>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiPricingResolver,
+    OetLearner.Api.Services.Ai.AiPricingResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiOperationStore,
+    OetLearner.Api.Services.Ai.AiOperationStore>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiExecutionCoordinator,
+    OetLearner.Api.Services.Ai.AiExecutionCoordinator>();
+// W3 of the AI cost/reliability remediation — atomic, concurrency-safe
+// platform budget reservation (owner directive 2026-08-28 AI/Cloud API plan,
+// points 4/5). See Services/Ai/AiBudgetService.cs. Wired into both the
+// gateway path (AiGatewayService.CompleteAsync) and the direct-call path
+// (DirectAiCallRecorder). Singleton — its implementation only depends on
+// IServiceScopeFactory (opens its own short-lived scope per DB call, exactly
+// like AiOperationStore/DirectAiCallRecorder), and IDirectAiCallRecorder
+// itself is registered Singleton below, so this must not be Scoped (a
+// singleton cannot capture a scoped dependency).
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiBudgetService,
+    OetLearner.Api.Services.Ai.AiBudgetService>();
+// W3 — reusable, cross-learner explanation cache (owner directive 2026-08-28
+// AI/Cloud API plan, point 8). See Services/Ai/AiExplanationCacheService.cs.
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiExplanationCacheService,
+    OetLearner.Api.Services.Ai.AiExplanationCacheService>();
+builder.Services.Configure<OetLearner.Api.Services.Ai.AiExecutionCoordinationOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Services.Ai.AiExecutionCoordinationOptions.SectionName));
 // Phase 4: admin connectivity probe. Bypasses gateway grounding +
 // quota on purpose — see AiProviderConnectionTester XML doc.
 builder.Services.AddHttpClient(nameof(OetLearner.Api.Services.Rulebook.AiProviderConnectionTester))
@@ -1688,8 +1718,19 @@ builder.Services.AddScoped<OetLearner.Api.Services.Seeding.MockSampleSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
+// ── AI gateway composition (W2 of the AI cost/reliability remediation) ──
+// The concrete AiGatewayService is registered ONCE and exposed as
+// IAiGatewayCoreExecutor. IAiGatewayService — the interface ~40 call sites
+// already inject — resolves to CoordinatedAiGatewayService, which opens a
+// durable AiOperation, delegates to the core executor, and reconciles the
+// outcome. AiExecutionCoordinator injects IAiGatewayCoreExecutor and NEVER
+// IAiGatewayService, so there is no cycle; AiGatewayRequest.OperationId is the
+// second, structural recursion fence. AiGatewayCompositionTests asserts both.
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.AiGatewayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayCoreExecutor>(
+    sp => sp.GetRequiredService<OetLearner.Api.Services.Rulebook.AiGatewayService>());
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
-    OetLearner.Api.Services.Rulebook.AiGatewayService>();
+    OetLearner.Api.Services.Ai.CoordinatedAiGatewayService>();
 
 // ── Writing Module V2 prompt templates (OET_WRITING_MODULE_PATHWAY.md §12+§13) ──
 // Singleton registry so the 10 templates (coach, rewrite, scenario.generate,
@@ -2182,6 +2223,43 @@ app.UseExceptionHandler(handler =>
                 correlationId
             };
             await context.Response.WriteAsync(JsonSupport.Serialize(cooldownPayload));
+            return;
+        }
+
+        // ── W2 AI control plane (incident INC-2026-CLAUDE-01) ──────────────────
+        // These are deliberate, truthful refusals from the AI coordinator —
+        // never server faults. Without an explicit branch they fell through to
+        // the generic 500 below, which both lied to the caller and alerted as a
+        // crash. Mapping lives in Services/Ai/AiControlPlaneProblemMapper.cs so
+        // it can be unit tested; only sanitized machine reasons are echoed.
+        if (OetLearner.Api.Services.Ai.AiControlPlaneProblemMapper.TryMap(exception) is { } aiProblem)
+        {
+            context.Response.StatusCode = aiProblem.StatusCode;
+            if (aiProblem.RetryAfterSeconds is int retryAfterSeconds)
+            {
+                context.Response.Headers.RetryAfter =
+                    retryAfterSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            app.Logger.LogWarning(
+                "AI control plane refused {Method} {Path} as {Code} ({Status}). CorrelationId: {CorrelationId}",
+                context.Request.Method,
+                context.Request.Path,
+                aiProblem.Code,
+                aiProblem.StatusCode,
+                correlationId ?? "missing");
+
+            var aiPayload = new
+            {
+                code = aiProblem.Code,
+                message = aiProblem.Message,
+                retryable = aiProblem.Retryable,
+                retryAfterSeconds = aiProblem.RetryAfterSeconds,
+                operationId = aiProblem.OperationId,
+                operationState = aiProblem.State,
+                correlationId
+            };
+            await context.Response.WriteAsync(JsonSupport.Serialize(aiPayload));
             return;
         }
 

@@ -13,9 +13,10 @@ namespace OetLearner.Api.Services.Listening;
 // ═════════════════════════════════════════════════════════════════════════════
 // Listening Part B / Part C — AI-assisted answer-key entry.
 //
-// Part B/C are PDF-backed: the learner reads the printed MCQ on the question
-// paper; the only authored data per question is the correct option letter
-// (A/B/C) + an optional "why correct" rationale. This service automates that:
+// Part B/C questions are source-backed: the learner must receive the printed
+// question stem and all three options as normalized authored data, alongside
+// the correct option letter (A/B/C) + an optional "why correct" rationale.
+// This service automates that:
 //
 //   1. Mistral OCR the QuestionPaper PDF(s) → Markdown (Part C has two extracts:
 //      C1 + C2, uploaded as two documents).
@@ -35,8 +36,10 @@ public sealed record ListeningPartBCAnswer(
     int Number,
     string CorrectAnswer,
     string? Rationale,
-    // Real inline question text extracted from the question paper (optional — weak
-    // OCR may leave these null; the admin fills any gaps in the review UI).
+    // Real inline question text extracted from the question paper. Empty values
+    // are retained in the projection only so the admin can correct an OCR miss;
+    // the authoring API refuses to persist a Part B/C item until these fields
+    // are present and source-backed.
     string? Stem = null,
     string? OptionA = null,
     string? OptionB = null,
@@ -53,8 +56,9 @@ public interface IListeningPartBCExtractionService
 {
     /// <summary>Run the OCR + Claude pipeline against AD-HOC uploaded question
     /// paper(s) + answer-key file for Listening Part B or Part C, and return the
-    /// projected per-question correct option (A/B/C) + rationale for the admin to
-    /// review then Save. Fast-fails (409) if learner attempts already exist.</summary>
+    /// projected source-backed stem/options + correct option (A/B/C) + rationale
+    /// for the admin to review then Save. Fast-fails (409) if learner attempts
+    /// already exist.</summary>
     Task<ListeningPartBCImportResult> ExtractFromUploadAsync(
         string paperId, string part,
         IReadOnlyList<(byte[] Bytes, string Mime)> questionDocs,
@@ -76,7 +80,7 @@ public sealed class ListeningPartBCExtractionService(
     // a projection only; the admin must still review and save it explicitly.
     private const string AnthropicProviderCode = "anthropic";
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
-    private const string DefaultModel = "claude-sonnet-5";
+    private const string DefaultModel = CoreAiProviderSeeder.AnthropicDefaultModel;
     private const string ToolName = "emit_part_bc_answers";
 
     private static readonly JsonSerializerOptions CamelJson = new()
@@ -116,9 +120,31 @@ public sealed class ListeningPartBCExtractionService(
 
         // Projection-only Part B/C imports do not create a review draft, so
         // record each permitted attempt in the existing audit ledger before
-        // spending any OCR or model budget.
-        await EnsureExtractionAllowedAsync(paperId, part, adminId, ct);
+        // spending any OCR or model budget. The guard returns the ordinal it
+        // authorized for THIS run.
+        var extractionAttempt = await EnsureExtractionAllowedAsync(paperId, part, adminId, ct);
 
+        // ── W2: durable operation BEFORE OCR and before the provider ────────────
+        // OCR is itself a paid direct AI call, so a duplicate/conflicting/refused
+        // run must be stopped before ANY spend.
+        var lease = await BeginExtractionOperationAsync(
+            paperId, part, adminId, extractionAttempt, questionDocs, answerBytes, ct);
+
+        // Every exit path below owns a lease, so every exit path must reconcile
+        // it — otherwise a transport/parse/save failure leaves the row Leased
+        // and blocks every future authorized attempt. Errors are re-thrown.
+        return await DirectAiOperationReconciler.RunAsync(
+            usageRecorder, lease, AnthropicProviderCode,
+            () => RunPartBCExtractionAsync(paperId, part, questionDocs, answerBytes, answerMime, adminId, lease, ct),
+            ct);
+    }
+
+    private async Task<ListeningPartBCImportResult> RunPartBCExtractionAsync(
+        string paperId, string part,
+        IReadOnlyList<(byte[] Bytes, string Mime)> questionDocs,
+        byte[] answerBytes, string answerMime,
+        string adminId, DirectAiOperationLease lease, CancellationToken ct)
+    {
         // OCR each question document (Part C ships two extracts: C1 + C2) and the key.
         var questionMarkdownParts = new List<string>();
         for (var i = 0; i < questionDocs.Count; i++)
@@ -131,7 +157,7 @@ public sealed class ListeningPartBCExtractionService(
         var questionMarkdown = string.Join("\n\n", questionMarkdownParts);
         var answerMarkdown = await ocr.OcrToMarkdownAsync(answerBytes, answerMime, AiFeatureCodes.OcrListeningPartBC, adminId, ct);
 
-        var rawJson = await CallClaudeAnswersAsync(part, questionMarkdown, answerMarkdown, adminId, ct);
+        var rawJson = await CallClaudeAnswersAsync(part, questionMarkdown, answerMarkdown, adminId, lease, ct);
 
         BcToolOutput? parsed;
         try
@@ -151,13 +177,91 @@ public sealed class ListeningPartBCExtractionService(
             ? $"AI extraction for Part {part} with {warnings.Count} issue(s) to review — {answers.Count} answer(s)."
             : $"AI extraction OK for Part {part} — {answers.Count} answer(s).";
 
+        // Projection-only: there is no draft row to point at, so the operation
+        // closes with no ResultRef rather than a pointer to nothing.
+        await usageRecorder.CompleteOperationAsync(
+            lease.OperationId!, AiOperationState.Completed, null,
+            AnthropicProviderCode, null, CancellationToken.None, lease.BudgetReservation);
+
         return new ListeningPartBCImportResult(
             part, isStub, isStub ? Truncate(string.Join("; ", warnings), 512) : null, summary, answers);
     }
 
+    /// <summary>
+    /// W2 — opens the durable control-plane operation for one Part B/C
+    /// extraction run, BEFORE any OCR or Anthropic spend. The request hash is a
+    /// digest of the uploaded bytes; raw file content is never persisted.
+    /// <para>
+    /// <paramref name="extractionAttempt"/> is the ordinal the owner-policy
+    /// guard authorized for THIS run, so each policy-authorized retry gets its
+    /// own idempotency key and resource slot while a concurrent duplicate of the
+    /// SAME attempt still collides. Hard-coding 1 was a one-run-ever lockout.
+    /// </para>
+    /// </summary>
+    private async Task<DirectAiOperationLease> BeginExtractionOperationAsync(
+        string paperId, string part, string adminId, int extractionAttempt,
+        IReadOnlyList<(byte[] Bytes, string Mime)> questionDocs, byte[] answerBytes, CancellationToken ct)
+    {
+        var lease = await usageRecorder.BeginOperationAsync(new DirectAiOperationRequest
+        {
+            FeatureCode = AiFeatureCodes.ListeningPartBCExtract,
+            Module = "listening",
+            UserId = adminId,
+            ResourceId = $"{paperId}:{part}",
+            ResourceType = "content_paper_partbc",
+            ResourceVersion = extractionAttempt,
+            RequestHash = HashInputs(questionDocs, answerBytes),
+            PromptVersion = ToolName,
+            ModelRoute = AnthropicProviderCode,
+            OperationClass = AiOperationClass.AdminBatch,
+            // The audit-ledger attempt ordinal above IS this caller's durable
+            // attempt counter and AiExtractionMaxRetriesPerPaper is the single
+            // authority on how many runs are allowed, so the recorder must not
+            // invent extra rounds of its own.
+            AllowRetryAfterFailure = false,
+        }, ct);
+
+        if (lease.CanProceed) return lease;
+
+        logger.LogWarning(
+            "Part B/C extraction refused for paper {PaperId} part {Part}: {Disposition} ({Reason}); zero provider calls.",
+            paperId, part, lease.Disposition, lease.Reason);
+
+        throw lease.Disposition switch
+        {
+            DirectAiOperationDisposition.PolicyRefused => ApiException.Conflict(
+                "listening_partbc_policy_refused",
+                "AI extraction is disabled for this feature. Re-enable the feature policy and try again."),
+            DirectAiOperationDisposition.Unavailable => ApiException.Conflict(
+                "listening_partbc_unavailable",
+                "AI extraction is temporarily unavailable. Please try again shortly."),
+            _ => ApiException.Conflict(
+                "listening_partbc_already_running",
+                "An AI extraction for this paper part and these files is already running or has already completed. Refresh and try again, or upload a new revision."),
+        };
+    }
+
+    /// <summary>SHA-256 over the exact bytes that will be sent for OCR. Never
+    /// persisted in raw form.</summary>
+    private static string HashInputs(IReadOnlyList<(byte[] Bytes, string Mime)> questionDocs, byte[] answerBytes)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        foreach (var (bytes, _) in questionDocs)
+        {
+            if (bytes.Length > 0) sha.TransformBlock(bytes, 0, bytes.Length, null, 0);
+        }
+        sha.TransformFinalBlock(answerBytes, 0, answerBytes.Length);
+        return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
+    }
+
     // ── Validation (deterministic; never trust the model) ───────────────────────
 
-    private async Task EnsureExtractionAllowedAsync(
+    /// <summary>
+    /// Owner-policy gate for one Part B/C extraction run. Returns the 1-based
+    /// ordinal of THIS authorized run (existing durable starts + 1), which
+    /// becomes the operation's resource version.
+    /// </summary>
+    private async Task<int> EnsureExtractionAllowedAsync(
         string paperId,
         string part,
         string adminId,
@@ -200,6 +304,8 @@ public sealed class ListeningPartBCExtractionService(
             Details = JsonSerializer.Serialize(new { part, projectionOnly = true }),
         });
         await db.SaveChangesAsync(ct);
+
+        return attemptedSoFar + 1;
     }
 
     private static (IReadOnlyList<ListeningPartBCAnswer> Answers, IReadOnlyList<string> Warnings)
@@ -223,14 +329,21 @@ public sealed class ListeningPartBCExtractionService(
                 continue;
             }
             var rationale = string.IsNullOrWhiteSpace(a.Rationale) ? null : Truncate(a.Rationale.Trim(), 1024);
-            // Stem + option texts are best-effort: carry them when present, never
-            // hard-fail on a missing one (the letter is the machine-gradable payload).
+            var stem = CleanSourceStem(a.Stem);
+            var optionA = CleanSourceOption(a.OptionA);
+            var optionB = CleanSourceOption(a.OptionB);
+            var optionC = CleanSourceOption(a.OptionC);
+            if (stem is null)
+                warnings.Add($"Q{a.Number} is missing a source question stem; transcribe the exact printed question before saving.");
+            if (optionA is null || optionB is null || optionC is null)
+                warnings.Add($"Q{a.Number} is missing one or more source answer choices; transcribe A, B and C before saving.");
+
             byNumber[a.Number] = new ListeningPartBCAnswer(
                 a.Number, letter, rationale,
-                Stem: CleanText(a.Stem, 2048),
-                OptionA: CleanText(a.OptionA, 1024),
-                OptionB: CleanText(a.OptionB, 1024),
-                OptionC: CleanText(a.OptionC, 1024));
+                Stem: stem,
+                OptionA: optionA,
+                OptionB: optionB,
+                OptionC: optionC);
         }
 
         for (var n = lo; n <= hi; n++)
@@ -251,9 +364,25 @@ public sealed class ListeningPartBCExtractionService(
     private static string? CleanText(string? value, int max)
         => string.IsNullOrWhiteSpace(value) ? null : Truncate(value.Trim(), max);
 
+    private static string? CleanSourceStem(string? value)
+    {
+        var cleaned = ListeningLearnerService.SanitizeQuestionPrompt(value);
+        return ListeningLearnerService.IsUsablePartBCStem(cleaned)
+            ? Truncate(cleaned, 2048)
+            : null;
+    }
+
+    private static string? CleanSourceOption(string? value)
+    {
+        var cleaned = ListeningLearnerService.SanitizeOptionText(value);
+        return string.IsNullOrWhiteSpace(cleaned) ? null : Truncate(cleaned, 1024);
+    }
+
     // ── Claude call (forced tool, no temperature for Opus 4.7/4.8) ──────────────
 
-    private async Task<string> CallClaudeAnswersAsync(string part, string questionMarkdown, string answerMarkdown, string adminId, CancellationToken ct)
+    private async Task<string> CallClaudeAnswersAsync(
+        string part, string questionMarkdown, string answerMarkdown, string adminId,
+        DirectAiOperationLease lease, CancellationToken ct)
     {
         var row = await registry.FindByCodeAsync(AnthropicProviderCode, ct)
             ?? throw new InvalidOperationException(
@@ -310,7 +439,7 @@ public sealed class ListeningPartBCExtractionService(
                 new Dictionary<string, object?>
                 {
                     ["name"] = ToolName,
-                    ["description"] = "Emit the OET Listening Part B/C answer key (per-question correct option + rationale).",
+                    ["description"] = "Emit the OET Listening Part B/C source question, all three options, correct option and rationale for every requested item.",
                     ["input_schema"] = JsonSerializer.Deserialize<JsonElement>(ToolSchemaJson),
                 },
             },
@@ -336,20 +465,30 @@ public sealed class ListeningPartBCExtractionService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Only the exception TYPE is persisted: provider/transport messages
+            // can carry URLs, request bodies and credential fragments.
             await usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-                "anthropic_network", ex.Message, LatencyMs(), "listening.partbc.extract", ct);
+                "anthropic_network", $"Anthropic transport failure ({ex.GetType().Name}).",
+                LatencyMs(), "listening.partbc.extract", CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             throw;
         }
 
         if (!response.IsSuccessStatusCode)
         {
             response.Dispose();
+            // The raw provider body is deliberately NOT persisted: it echoes the
+            // OCR'd paper and, on some gateways, credential fragments. The
+            // status line alone is enough to classify the failure.
             await usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-                $"http_{(int)response.StatusCode}", Truncate(body, 500), LatencyMs(), "listening.partbc.extract", ct);
+                $"http_{(int)response.StatusCode}",
+                $"Anthropic returned HTTP {(int)response.StatusCode} for {AiFeatureCodes.ListeningPartBCExtract}.",
+                LatencyMs(), "listening.partbc.extract", CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             throw new InvalidOperationException(
-                $"Claude extraction failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase}. {Truncate(body, 500)}");
+                $"Claude extraction failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
         }
         response.Dispose();
 
@@ -369,7 +508,8 @@ public sealed class ListeningPartBCExtractionService(
                           + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
                     await usageRecorder.RecordSuccessAsync(
                         usageContext, AnthropicProviderCode, model, usage,
-                        LatencyMs(), "listening.partbc.extract", cost, ct);
+                        LatencyMs(), "listening.partbc.extract", cost, CancellationToken.None,
+                        operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
                     return input.GetRawText();
                 }
             }
@@ -377,7 +517,9 @@ public sealed class ListeningPartBCExtractionService(
 
         await usageRecorder.RecordFailureAsync(
             usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-            "no_tool_use", "Claude did not return a tool_use answers block.", LatencyMs(), "listening.partbc.extract", ct);
+            "no_tool_use", "Claude did not return a tool_use answers block.",
+            LatencyMs(), "listening.partbc.extract", CancellationToken.None,
+            operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
         throw new InvalidOperationException("Claude did not return a tool_use answers block.");
     }
 
@@ -430,11 +572,12 @@ HARD REQUIREMENTS:
   - Emit ONLY questions in the requested part's range (Part B → 25-30; Part C → 31-42).
     Never invent numbers outside that range.
   - correctAnswer MUST be a single uppercase letter: A, B, or C.
-  - Provide EVERY question in the range. If the answer key is unclear for one, use your
-    best reading of the question paper and still choose a letter.
+  - Provide EVERY question in the range. If the source text is unclear, emit an empty
+    stem or option field for that item and let the deterministic validator flag it for
+    human correction; never substitute a heading, "See PDF", "Option A/B/C", or guessed prose.
   - Transcribe stem + optionA/B/C VERBATIM from the QUESTION PAPER. If the OCR is unclear,
-    transcribe your best reading — never invent content. Omit a field only if it is truly
-    illegible (the reviewer will fill it in).
+    preserve the source wording when legible and otherwise leave the field empty for a
+    reviewer. Do not invent, summarize, or reconstruct content from answer choices.
   - Do not fabricate. Base each rationale on the actual printed options.
 """;
 
@@ -455,7 +598,7 @@ HARD REQUIREMENTS:
           "correctAnswer": { "type": "string", "enum": ["A", "B", "C"] },
           "rationale": { "type": "string" }
         },
-        "required": ["number", "correctAnswer"]
+        "required": ["number", "stem", "optionA", "optionB", "optionC", "correctAnswer"]
       }
     }
   },

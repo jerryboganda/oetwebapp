@@ -215,6 +215,142 @@ public class AiGatewayRoutingTests
         Assert.Null(mockProvider.LastRequest);
     }
 
+    // ── W2 feature-policy gate ────────────────────────────────────────────────
+    // Binding W2 outcome: a Production call that cannot resolve an active
+    // AiFeaturePolicy must fail BEFORE any provider is selected/invoked.
+    // Development/Test stay backward compatible (no registry wired, or the
+    // registry itself resolves null) so the existing suite is not forced to
+    // adopt policy rows in this wave.
+
+    [Fact]
+    public async Task CompleteAsync_InProduction_FailsClosedWhenFeaturePolicyUnregistered()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            providerRegistry: new FakeProviderRegistry("openai-platform", AiProviderDialect.OpenAiCompatible),
+            hostEnvironment: new TestHostEnvironment("Production"),
+            featurePolicyRegistry: new StubFeaturePolicyRegistry());
+
+        var ex = await Assert.ThrowsAsync<AiFeaturePolicyRefusedException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.AdminWritingDraft,
+            }));
+
+        Assert.Equal(AiFeatureCodes.AdminWritingDraft, ex.FeatureCode);
+        // No provider was ever selected/invoked — the gate runs before
+        // "Provider selection".
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    /// <summary>
+    /// E-2 — an EXPLICIT policy row that is disabled, not yet effective, or
+    /// expired must refuse the call in Production before any provider is
+    /// selected. The static default must NOT rescue it: that is the difference
+    /// between "never registered" and "deliberately switched off".
+    /// </summary>
+    [Theory]
+    [InlineData(AiFeaturePolicyStatus.DbDisabled, "policy_disabled")]
+    [InlineData(AiFeaturePolicyStatus.DbNotYetEffective, "policy_not_yet_effective")]
+    [InlineData(AiFeaturePolicyStatus.DbExpired, "policy_expired")]
+    [InlineData(AiFeaturePolicyStatus.Unknown, "policy_unknown")]
+    public async Task CompleteAsync_InProduction_RefusesNonUsablePolicy_WithZeroProviderCalls(
+        AiFeaturePolicyStatus status, string expectedReason)
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            providerRegistry: new FakeProviderRegistry("openai-platform", AiProviderDialect.OpenAiCompatible),
+            hostEnvironment: new TestHostEnvironment("Production"),
+            featurePolicyRegistry: new StubFeaturePolicyRegistry(status));
+
+        var ex = await Assert.ThrowsAsync<AiFeaturePolicyRefusedException>(async () =>
+            await gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.AdminWritingDraft,
+            }));
+
+        Assert.Equal(AiFeatureCodes.AdminWritingDraft, ex.FeatureCode);
+        Assert.Contains(expectedReason, ex.Message, StringComparison.Ordinal);
+        Assert.Null(registryProvider.LastRequest);
+    }
+
+    /// <summary>An ACTIVE DB policy row lets the call through unchanged.</summary>
+    [Fact]
+    public async Task CompleteAsync_InProduction_AllowsActiveDbPolicy()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            providerRegistry: new FakeProviderRegistry("openai-platform", AiProviderDialect.OpenAiCompatible),
+            hostEnvironment: new TestHostEnvironment("Production"),
+            featurePolicyRegistry: new StubFeaturePolicyRegistry(
+                AiFeaturePolicyStatus.DbActive,
+                new AiFeaturePolicyResolution(
+                    AiFeatureCodes.AdminWritingDraft, "admin", AiOperationClass.AdminBatch,
+                    RequiresGrounding: true, PolicyVersion: 1,
+                    CacheDimensions: AiFeaturePolicyDefaults.DefaultCacheDimensions)));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.AdminWritingDraft,
+        });
+
+        Assert.Equal("completion from registry", result.Completion);
+        Assert.NotNull(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_InDevelopment_StaysBackwardCompatible_WhenFeaturePolicyUnregistered()
+    {
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            providerRegistry: new FakeProviderRegistry("openai-platform", AiProviderDialect.OpenAiCompatible),
+            hostEnvironment: new TestHostEnvironment("Development"),
+            featurePolicyRegistry: new StubFeaturePolicyRegistry());
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.AdminWritingDraft,
+        });
+
+        Assert.Equal("completion from registry", result.Completion);
+        Assert.NotNull(registryProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_WithNoFeaturePolicyRegistryWired_StaysBackwardCompatible_EvenInProduction()
+    {
+        // No featurePolicyRegistry argument at all — every pre-W2 call site
+        // (DI not yet updated to resolve IAiFeaturePolicyRegistry, or a test
+        // that constructs the gateway directly) must be completely
+        // unaffected by the new gate.
+        var registryProvider = new CapturingProvider("registry");
+        var gateway = new AiGatewayService(
+            _loader,
+            new IAiModelProvider[] { registryProvider },
+            providerRegistry: new FakeProviderRegistry("openai-platform", AiProviderDialect.OpenAiCompatible),
+            hostEnvironment: new TestHostEnvironment("Production"));
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = AiFeatureCodes.AdminWritingDraft,
+        });
+
+        Assert.Equal("completion from registry", result.Completion);
+    }
+
     // ── No AI for mock WRITING + SPEAKING — gateway backstop ─────────────────
     // The gateway must hard-refuse every banned assessment code when the call's
     // AssessmentContext is Mock, BEFORE any provider is contacted. SpeakingGrade
@@ -385,6 +521,18 @@ public class AiGatewayRoutingTests
             => throw new InvalidOperationException("route resolver unavailable");
 
         public bool IsKnownFeatureCode(string requestedFeatureCode) => true;
+    }
+
+    /// <summary>W2 test double: reports a fixed lookup status for every feature
+    /// code, so the gateway's feature-policy gate can be exercised without a
+    /// real database. Defaults to <c>Unknown</c> (nothing registered).</summary>
+    private sealed class StubFeaturePolicyRegistry(
+        AiFeaturePolicyStatus status = AiFeaturePolicyStatus.Unknown,
+        AiFeaturePolicyResolution? policy = null) : IAiFeaturePolicyRegistry
+    {
+        public Task<AiFeaturePolicyLookup> LookupAsync(string? featureCode, CancellationToken ct)
+            => Task.FromResult(new AiFeaturePolicyLookup(
+                featureCode ?? AiFeatureCodes.Unclassified, status, policy));
     }
 
     private sealed class TestHostEnvironment(string environmentName) : IHostEnvironment

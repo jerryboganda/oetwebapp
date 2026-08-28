@@ -1450,6 +1450,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // LearnerDbContext.AiControlPlane.cs.
         OnModelCreatingAiControlPlane(modelBuilder);
 
+        // W2 of the AI cost/reliability remediation — versioned feature
+        // policy registry + effective-dated pricing rate card. Partial class
+        // in LearnerDbContext.AiPolicyPricing.cs.
+        OnModelCreatingAiPolicyPricing(modelBuilder);
+
+        // W3 of the AI cost/reliability remediation — reusable, cross-learner
+        // explanation cache. Partial class in
+        // LearnerDbContext.AiExplanationCache.cs.
+        OnModelCreatingAiExplanationCache(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1618,6 +1628,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiControlPlane.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiControlPlane(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiPolicyPricing.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAiPolicyPricing(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiExplanationCache.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAiExplanationCache(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

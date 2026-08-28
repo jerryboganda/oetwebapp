@@ -40,11 +40,17 @@ public interface IAiUsageRecorder
         string? accountId = null,
         string? failoverTrace = null,
         decimal costEstimateUsd = 0m,
-        string? usageRecordId = null);
+        string? usageRecordId = null,
+        string? operationId = null,
+        int? attemptNumber = null,
+        AiCacheTokenBreakdown? cacheTokens = null,
+        bool? providerInvoked = null);
 
     /// <summary>Record a call that did not succeed. <paramref name="outcome"/>
-    /// must not be <see cref="AiCallOutcome.Success"/>.</summary>
-    Task RecordFailureAsync(
+    /// must not be <see cref="AiCallOutcome.Success"/>. Returns the persisted
+    /// row id, or null when the row could not be committed (the recorder is
+    /// fail-soft), so a caller can tell "recorded" from "silently lost".</summary>
+    Task<string?> RecordFailureAsync(
         AiUsageContext context,
         string? providerId,
         string? model,
@@ -60,7 +66,10 @@ public interface IAiUsageRecorder
         string? failoverTrace = null,
         AiUsage? usage = null,
         decimal costEstimateUsd = 0m,
-        string? usageRecordId = null);
+        string? usageRecordId = null,
+        string? operationId = null,
+        int? attemptNumber = null,
+        bool? providerInvoked = null);
 }
 
 /// <summary>
@@ -80,6 +89,25 @@ public readonly record struct AiUsageContext(
     string? UserPrompt,
     DateTimeOffset StartedAt);
 
+/// <summary>
+/// W2 of the AI cost/reliability remediation — Anthropic prompt-caching
+/// token breakdown for a single physical call. <see cref="NormalInputTokens"/>/
+/// <see cref="NormalOutputTokens"/> are the non-cached counterparts already
+/// carried by <see cref="AiUsage"/>; this record adds the two additional
+/// disjoint buckets a caching-aware provider reports
+/// (<c>cache_creation_input_tokens</c>/<c>cache_read_input_tokens</c> in the
+/// Anthropic Messages API), plus the resolved pricing provenance so
+/// <see cref="AiUsageRecord.CalculatedCostUsd"/> is auditable against
+/// <see cref="AiUsageRecord.PricingVersion"/> independent of the flat
+/// <see cref="AiUsageRecord.CostEstimateUsd"/> rate-card estimate.
+/// </summary>
+public sealed record AiCacheTokenBreakdown(
+    int CacheWriteTokens,
+    int CacheReadTokens,
+    string? PricingVersion,
+    decimal? CalculatedCostUsd,
+    string? BilledTokenClass = null);
+
 public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder> logger) : IAiUsageRecorder
 {
     public Task<string?> RecordSuccessAsync(
@@ -95,7 +123,11 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         string? accountId = null,
         string? failoverTrace = null,
         decimal costEstimateUsd = 0m,
-        string? usageRecordId = null)
+        string? usageRecordId = null,
+        string? operationId = null,
+        int? attemptNumber = null,
+        AiCacheTokenBreakdown? cacheTokens = null,
+        bool? providerInvoked = null)
         => PersistAsync(
             context,
             providerId,
@@ -112,9 +144,13 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
             failoverTrace: failoverTrace,
             costEstimateUsd: costEstimateUsd,
             usageRecordId: usageRecordId,
+            operationId: operationId,
+            attemptNumber: attemptNumber,
+            cacheTokens: cacheTokens,
+            providerInvoked: providerInvoked,
             ct: ct);
 
-    public Task RecordFailureAsync(
+    public Task<string?> RecordFailureAsync(
         AiUsageContext context,
         string? providerId,
         string? model,
@@ -130,14 +166,17 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         string? failoverTrace = null,
         AiUsage? usage = null,
         decimal costEstimateUsd = 0m,
-        string? usageRecordId = null)
+        string? usageRecordId = null,
+        string? operationId = null,
+        int? attemptNumber = null,
+        bool? providerInvoked = null)
     {
         if (outcome == AiCallOutcome.Success)
         {
             throw new ArgumentException("RecordFailureAsync must not be used for successful calls.", nameof(outcome));
         }
 
-        return PersistFailureAsync(
+        return PersistAsync(
             context,
             providerId,
             model,
@@ -153,43 +192,12 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
             failoverTrace: failoverTrace,
             costEstimateUsd: costEstimateUsd,
             usageRecordId: usageRecordId,
+            operationId: operationId,
+            attemptNumber: attemptNumber,
+            cacheTokens: null,
+            providerInvoked: providerInvoked,
             ct: ct);
     }
-
-    private async Task PersistFailureAsync(
-        AiUsageContext context,
-        string? providerId,
-        string? model,
-        AiKeySource keySource,
-        AiCallOutcome outcome,
-        string? errorCode,
-        string? errorMessage,
-        AiUsage? usage,
-        int latencyMs,
-        int retryCount,
-        string? policyTrace,
-        string? accountId,
-        string? failoverTrace,
-        decimal costEstimateUsd,
-        string? usageRecordId,
-        CancellationToken ct)
-        => await PersistAsync(
-            context,
-            providerId,
-            model,
-            keySource,
-            outcome,
-            errorCode,
-            errorMessage,
-            usage,
-            latencyMs,
-            retryCount,
-            policyTrace,
-            accountId,
-            failoverTrace,
-            costEstimateUsd: costEstimateUsd,
-            usageRecordId: usageRecordId,
-            ct: ct);
 
     private async Task<string?> PersistAsync(
         AiUsageContext context,
@@ -207,6 +215,10 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
         string? failoverTrace,
         decimal costEstimateUsd,
         string? usageRecordId,
+        string? operationId,
+        int? attemptNumber,
+        AiCacheTokenBreakdown? cacheTokens,
+        bool? providerInvoked,
         CancellationToken ct)
     {
         try
@@ -243,9 +255,39 @@ public sealed class AiUsageRecorder(LearnerDbContext db, ILogger<AiUsageRecorder
                 CreatedAt = createdAt,
                 PeriodMonthKey = createdAt.ToString("yyyy-MM"),
                 PeriodDayKey = createdAt.ToString("yyyy-MM-dd"),
+                OperationId = operationId,
+                AttemptNumber = attemptNumber,
+                ProviderInvoked = providerInvoked ?? (operationId is null ? null : true),
+                NormalInputTokens = cacheTokens is null ? null : usage?.PromptTokens ?? 0,
+                NormalOutputTokens = cacheTokens is null ? null : usage?.CompletionTokens ?? 0,
+                CacheWriteTokens = cacheTokens?.CacheWriteTokens,
+                CacheReadTokens = cacheTokens?.CacheReadTokens,
+                BilledTokenClass = cacheTokens?.BilledTokenClass,
+                PricingVersion = cacheTokens?.PricingVersion,
+                CalculatedCostUsd = cacheTokens?.CalculatedCostUsd,
             };
 
             db.AiUsageRecords.Add(record);
+
+            // W2 of the AI cost/reliability remediation: when this row is one
+            // physical attempt against a durable AiOperation (coordinator
+            // path), also persist the matching AiOperationAttempt row in the
+            // same SaveChanges call — the composite (OperationId,
+            // AttemptNumber) primary key is the structural guarantee that a
+            // retry can never silently double-write the same attempt.
+            if (!string.IsNullOrWhiteSpace(operationId) && attemptNumber is { } number)
+            {
+                db.AiOperationAttempts.Add(new AiOperationAttempt
+                {
+                    OperationId = operationId,
+                    AttemptNumber = number,
+                    AiUsageRecordId = record.Id,
+                    ProviderInvoked = record.ProviderInvoked ?? true,
+                    ErrorClass = Truncate(errorCode, 64),
+                    CreatedAt = createdAt,
+                });
+            }
+
             await db.SaveChangesAsync(ct);
             return record.Id;
         }

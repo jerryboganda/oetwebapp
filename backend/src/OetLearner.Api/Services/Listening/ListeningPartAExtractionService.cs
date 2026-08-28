@@ -123,7 +123,8 @@ public sealed class ListeningPartAExtractionService(
     private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
     // Claude Sonnet 4.6 is the app-wide contextual-understanding model; the
     // registered `anthropic` row's DefaultModel overrides this when set.
-    private const string DefaultModel = "claude-sonnet-5";
+    // Single source of truth: CoreAiProviderSeeder.AnthropicDefaultModel.
+    private const string DefaultModel = CoreAiProviderSeeder.AnthropicDefaultModel;
     private const string ToolName = "emit_part_a_manifest";
 
     private static readonly JsonSerializerOptions CamelJson = new()
@@ -162,14 +163,38 @@ public sealed class ListeningPartAExtractionService(
         var questionBytes = await ReadAssetBytesAsync(questionPaper, ct);
         var answerBytes = await ReadAssetBytesAsync(answerKey, ct);
 
-        await EnsureExtractionAllowedAsync(paperId, adminId, ct);
+        // The policy guard is authoritative for "how many extractions may this
+        // paper have"; it returns the ordinal of THIS authorized run so the
+        // operation identity varies per run instead of being pinned to 1.
+        var extractionAttempt = await EnsureExtractionAllowedAsync(paperId, adminId, ct);
 
+        // ── W2: durable operation BEFORE OCR and before the provider ────────────
+        // Taken ahead of OCR on purpose: OCR is itself a paid direct AI call, so
+        // a duplicate/conflicting/refused run must be stopped before ANY spend.
+        var lease = await BeginExtractionOperationAsync(
+            paperId, adminId, extractionAttempt, questionBytes, answerBytes, ct);
+
+        // Every exit path below owns a lease, so every exit path must reconcile
+        // it — a Leased row that is never closed blocks all future authorized
+        // attempts at this version. The original exception is always re-thrown.
+        return await DirectAiOperationReconciler.RunAsync(
+            usageRecorder, lease, AnthropicProviderCode,
+            () => RunExtractionAsync(paperId, adminId, questionPaper, answerKey, questionBytes, answerBytes, lease, ct),
+            ct);
+    }
+
+    private async Task<ListeningExtractionRunResult> RunExtractionAsync(
+        string paperId, string adminId,
+        ContentPaperAsset questionPaper, ContentPaperAsset answerKey,
+        byte[] questionBytes, byte[] answerBytes,
+        DirectAiOperationLease lease, CancellationToken ct)
+    {
         var questionMarkdown = await ocr.OcrToMarkdownAsync(
             questionBytes, questionPaper.MediaAsset!.MimeType, AiFeatureCodes.OcrListeningPartA, adminId, ct);
         var answerMarkdown = await ocr.OcrToMarkdownAsync(
             answerBytes, answerKey.MediaAsset!.MimeType, AiFeatureCodes.OcrListeningPartA, adminId, ct);
 
-        var manifestJson = await CallClaudeManifestAsync(questionMarkdown, answerMarkdown, adminId, ct);
+        var manifestJson = await CallClaudeManifestAsync(questionMarkdown, answerMarkdown, adminId, lease, ct);
 
         ListeningStructureManifest? manifest;
         try
@@ -205,7 +230,10 @@ public sealed class ListeningPartAExtractionService(
             RawAiResponseJson = Truncate(manifestJson, 65536),
         };
         db.ListeningExtractionDrafts.Add(draft);
-        await db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await usageRecorder.CompleteOperationAsync(
+            lease.OperationId!, AiOperationState.Completed, draft.Id,
+            AnthropicProviderCode, null, CancellationToken.None, lease.BudgetReservation);
 
         return new ListeningExtractionRunResult(
             draft.Id, "pending", gapsA1, gapsA2, ansA1, ansA2, warnings, summary);
@@ -287,8 +315,24 @@ public sealed class ListeningPartAExtractionService(
             throw ApiException.Validation("listening_extract_missing_question_paper",
                 "Upload the Part A question-paper PDF or image to import.");
 
-        await EnsureExtractionAllowedAsync(paperId, adminId, ct);
+        var extractionAttempt = await EnsureExtractionAllowedAsync(paperId, adminId, ct);
 
+        // ── W2: durable operation BEFORE OCR and before the provider ────────────
+        var lease = await BeginExtractionOperationAsync(
+            paperId, adminId, extractionAttempt, questionBytes, answerBytes, ct);
+
+        return await DirectAiOperationReconciler.RunAsync(
+            usageRecorder, lease, AnthropicProviderCode,
+            () => RunUploadExtractionAsync(paperId, adminId, questionBytes, questionMime, answerBytes, answerMime, lease, ct),
+            ct);
+    }
+
+    private async Task<ListeningExtractionDraftDetail> RunUploadExtractionAsync(
+        string paperId, string adminId,
+        byte[] questionBytes, string questionMime,
+        byte[]? answerBytes, string? answerMime,
+        DirectAiOperationLease lease, CancellationToken ct)
+    {
         var questionMarkdown = await ocr.OcrToMarkdownAsync(
             questionBytes, questionMime, AiFeatureCodes.OcrListeningPartA, adminId, ct);
         // Answer key is optional for ad-hoc import: without it the operator fills
@@ -297,7 +341,7 @@ public sealed class ListeningPartAExtractionService(
             ? await ocr.OcrToMarkdownAsync(answerBytes, answerMime ?? questionMime, AiFeatureCodes.OcrListeningPartA, adminId, ct)
             : "(No separate answer key supplied. Leave correctAnswer empty where the answer is unknown.)";
 
-        var manifestJson = await CallClaudeManifestAsync(questionMarkdown, answerMarkdown, adminId, ct);
+        var manifestJson = await CallClaudeManifestAsync(questionMarkdown, answerMarkdown, adminId, lease, ct);
 
         ListeningStructureManifest? manifest;
         try
@@ -336,12 +380,23 @@ public sealed class ListeningPartAExtractionService(
             RawAiResponseJson = Truncate(manifestJson, 65536),
         };
         db.ListeningExtractionDrafts.Add(draft);
-        await db.SaveChangesAsync(ct);
+        await db.SaveChangesAsync(CancellationToken.None);
+        await usageRecorder.CompleteOperationAsync(
+            lease.OperationId!, AiOperationState.Completed, draft.Id,
+            AnthropicProviderCode, null, CancellationToken.None, lease.BudgetReservation);
 
         return BuildDraftDetail(draft);
     }
 
-    private async Task EnsureExtractionAllowedAsync(string paperId, string adminId, CancellationToken ct)
+    /// <summary>
+    /// Owner-policy gate for one extraction run. Returns the 1-based ordinal of
+    /// THIS authorized run (existing durable starts + 1), which becomes the
+    /// operation's resource version so each policy-authorized run has its own
+    /// control-plane identity. The policy's
+    /// <c>AiExtractionMaxRetriesPerPaper</c> stays the single authority on how
+    /// many runs a paper may have.
+    /// </summary>
+    private async Task<int> EnsureExtractionAllowedAsync(string paperId, string adminId, CancellationToken ct)
     {
         var policy = listeningPolicyService is not null
             ? await listeningPolicyService.GetGlobalAsync(ct)
@@ -382,6 +437,8 @@ public sealed class ListeningPartAExtractionService(
         });
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
+
+        return attemptedSoFar + 1;
     }
 
     // ── Approve ──────────────────────────────────────────────────────────────
@@ -488,7 +545,9 @@ public sealed class ListeningPartAExtractionService(
 
     // ── Claude call (forced tool, no temperature for Opus 4.7/4.8) ──────────────
 
-    private async Task<string> CallClaudeManifestAsync(string questionMarkdown, string answerMarkdown, string adminId, CancellationToken ct)
+    private async Task<string> CallClaudeManifestAsync(
+        string questionMarkdown, string answerMarkdown, string adminId,
+        DirectAiOperationLease lease, CancellationToken ct)
     {
         var row = await registry.FindByCodeAsync(AnthropicProviderCode, ct)
             ?? throw new InvalidOperationException(
@@ -568,20 +627,30 @@ public sealed class ListeningPartAExtractionService(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            // Only the exception TYPE is persisted: provider/transport messages
+            // can carry URLs, request bodies and credential fragments.
             await usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-                "anthropic_network", ex.Message, LatencyMs(), "listening.parta.extract", ct);
+                "anthropic_network", $"Anthropic transport failure ({ex.GetType().Name}).",
+                LatencyMs(), "listening.parta.extract", CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             throw;
         }
 
         if (!response.IsSuccessStatusCode)
         {
             response.Dispose();
+            // The raw provider body is deliberately NOT persisted: it echoes the
+            // OCR'd paper and, on some gateways, credential fragments. The
+            // status line alone is enough to classify the failure.
             await usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-                $"http_{(int)response.StatusCode}", Truncate(body, 500), LatencyMs(), "listening.parta.extract", ct);
+                $"http_{(int)response.StatusCode}",
+                $"Anthropic returned HTTP {(int)response.StatusCode} for {AiFeatureCodes.ListeningPartAExtract}.",
+                LatencyMs(), "listening.parta.extract", CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             throw new InvalidOperationException(
-                $"Claude extraction failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase}. {Truncate(body, 500)}");
+                $"Claude extraction failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
         }
         response.Dispose();
 
@@ -601,7 +670,8 @@ public sealed class ListeningPartAExtractionService(
                           + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
                     await usageRecorder.RecordSuccessAsync(
                         usageContext, AnthropicProviderCode, model, usage,
-                        LatencyMs(), "listening.parta.extract", cost, ct);
+                        LatencyMs(), "listening.parta.extract", cost, CancellationToken.None,
+                        operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
                     return input.GetRawText();
                 }
             }
@@ -609,8 +679,78 @@ public sealed class ListeningPartAExtractionService(
 
         await usageRecorder.RecordFailureAsync(
             usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-            "no_tool_use", "Claude did not return a tool_use manifest block.", LatencyMs(), "listening.parta.extract", ct);
+            "no_tool_use", "Claude did not return a tool_use manifest block.",
+            LatencyMs(), "listening.parta.extract", CancellationToken.None,
+            operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
         throw new InvalidOperationException("Claude did not return a tool_use manifest block.");
+    }
+
+    /// <summary>
+    /// W2 — opens the durable control-plane operation for one Part A extraction
+    /// run, BEFORE any OCR or Anthropic spend. The request hash is a digest of
+    /// the uploaded bytes, so re-running with the same files is recognised as
+    /// the same action while a genuinely new upload is new work. Raw file
+    /// content is never persisted.
+    /// <para>
+    /// <paramref name="extractionAttempt"/> is the ordinal the owner-policy
+    /// guard authorized for THIS run, so a corrected re-upload (or a retry after
+    /// a failed run) gets a distinct idempotency key and resource slot while a
+    /// concurrent duplicate of the SAME authorized attempt still collides and is
+    /// refused. Hard-coding 1 here was a one-run-ever lockout.
+    /// </para>
+    /// </summary>
+    private async Task<DirectAiOperationLease> BeginExtractionOperationAsync(
+        string paperId, string adminId, int extractionAttempt,
+        byte[] questionBytes, byte[]? answerBytes, CancellationToken ct)
+    {
+        var lease = await usageRecorder.BeginOperationAsync(new DirectAiOperationRequest
+        {
+            FeatureCode = AiFeatureCodes.ListeningPartAExtract,
+            Module = "listening",
+            UserId = adminId,
+            ResourceId = paperId,
+            ResourceType = "content_paper_parta",
+            ResourceVersion = extractionAttempt,
+            RequestHash = HashInputs(questionBytes, answerBytes),
+            PromptVersion = ToolName,
+            ModelRoute = AnthropicProviderCode,
+            OperationClass = AiOperationClass.AdminBatch,
+            // The audit-ledger attempt ordinal above IS this caller's durable
+            // attempt counter, and AiExtractionMaxRetriesPerPaper is the single
+            // authority on how many runs are allowed — so the recorder must not
+            // invent extra rounds of its own.
+            AllowRetryAfterFailure = false,
+        }, ct);
+
+        if (lease.CanProceed) return lease;
+
+        logger.LogWarning(
+            "Part A extraction refused for paper {PaperId}: {Disposition} ({Reason}); zero provider calls.",
+            paperId, lease.Disposition, lease.Reason);
+
+        throw lease.Disposition switch
+        {
+            DirectAiOperationDisposition.PolicyRefused => ApiException.Conflict(
+                "listening_extract_policy_refused",
+                "AI extraction is disabled for this feature. Re-enable the feature policy and try again."),
+            DirectAiOperationDisposition.Unavailable => ApiException.Conflict(
+                "listening_extract_unavailable",
+                "AI extraction is temporarily unavailable. Please try again shortly."),
+            _ => ApiException.Conflict(
+                "listening_extract_already_running",
+                "An AI extraction for this paper and these files is already running or has already completed. Refresh the drafts list, or upload a new revision."),
+        };
+    }
+
+    /// <summary>SHA-256 over the exact bytes that will be sent for OCR. Never
+    /// persisted in raw form.</summary>
+    private static string HashInputs(byte[] questionBytes, byte[]? answerBytes)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        sha.TransformBlock(questionBytes, 0, questionBytes.Length, null, 0);
+        var tail = answerBytes ?? Array.Empty<byte>();
+        sha.TransformFinalBlock(tail, 0, tail.Length);
+        return Convert.ToHexString(sha.Hash!).ToLowerInvariant();
     }
 
     /// <summary>Parse the Anthropic <c>usage</c> block (input_tokens /

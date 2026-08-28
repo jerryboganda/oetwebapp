@@ -1129,14 +1129,14 @@ public class AiGatewayQuotaIntegrationTests
     {
         public bool SuccessAttempted { get; private set; }
 
-        public Task<string?> RecordSuccessAsync(AiUsageContext context, string providerId, string model, AiKeySource keySource, AiUsage? usage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, decimal costEstimateUsd = 0, string? usageRecordId = null)
+        public Task<string?> RecordSuccessAsync(AiUsageContext context, string providerId, string model, AiKeySource keySource, AiUsage? usage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, decimal costEstimateUsd = 0, string? usageRecordId = null, string? operationId = null, int? attemptNumber = null, AiCacheTokenBreakdown? cacheTokens = null, bool? providerInvoked = null)
         {
             SuccessAttempted = true;
             return Task.FromResult<string?>(null);
         }
 
-        public Task RecordFailureAsync(AiUsageContext context, string? providerId, string? model, AiKeySource keySource, AiCallOutcome outcome, string errorCode, string? errorMessage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, AiUsage? usage = null, decimal costEstimateUsd = 0, string? usageRecordId = null)
-            => Task.CompletedTask;
+        public Task<string?> RecordFailureAsync(AiUsageContext context, string? providerId, string? model, AiKeySource keySource, AiCallOutcome outcome, string errorCode, string? errorMessage, int latencyMs, int retryCount, string? policyTrace, CancellationToken ct, string? accountId = null, string? failoverTrace = null, AiUsage? usage = null, decimal costEstimateUsd = 0, string? usageRecordId = null, string? operationId = null, int? attemptNumber = null, bool? providerInvoked = null)
+            => Task.FromResult<string?>(null);
     }
 
     private sealed class TokenReportingProvider(int prompt, int completion) : IAiModelProvider

@@ -137,6 +137,22 @@ public class AiOperation
     [MaxLength(256)]
     public string IdempotencyKey { get; set; } = default!;
 
+    /// <summary>
+    /// W2 — stable business-identity slot for this operation
+    /// (feature/module/user/resource/version/prompt/rulebook), deliberately
+    /// EXCLUDING <see cref="RequestHash"/> and the model route. Backed by a
+    /// UNIQUE partial index over non-null values
+    /// (<c>UX_AiOperations_ResourceSlotKey</c>), so two concurrent requests
+    /// that target the same caller-supplied resource but carry a DIFFERENT
+    /// payload hash can never both create an operation: exactly one wins the
+    /// insert and the loser is reported as a controlled conflict. Null when
+    /// the caller has no stable resource identity to bind (free-form
+    /// interactive calls) — a null slot never participates in the unique
+    /// index, so unrelated interactions are never conflated.
+    /// </summary>
+    [MaxLength(64)]
+    public string? ResourceSlotKey { get; set; }
+
     public AiOperationState State { get; set; } = AiOperationState.Queued;
 
     public AiOperationClass OperationClass { get; set; } = AiOperationClass.InteractiveLearning;

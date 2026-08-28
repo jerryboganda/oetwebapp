@@ -59,6 +59,14 @@ public sealed class PostgreSqlTestDatabase : IAsyncDisposable
 
     public NpgsqlCommand Command(string sql) => new(sql, Connection);
 
+    /// <summary>
+    /// Connection string that resolves unqualified names to this test's
+    /// isolated schema, for callers that need their own connection pool (e.g.
+    /// an EF Core <c>DbContext</c>) rather than a raw sibling connection.
+    /// </summary>
+    public string SchemaConnectionString
+        => new NpgsqlConnectionStringBuilder(_baseConnectionString) { SearchPath = Schema }.ConnectionString;
+
     public async Task ExecuteAsync(string sql)
     {
         await using var command = Command(sql);

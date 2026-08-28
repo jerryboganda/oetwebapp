@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Listening;
@@ -35,10 +36,12 @@ public sealed record ListeningExplanationDto(
 public sealed class ListeningExplanationService(
     LearnerDbContext db,
     IAiGatewayService gateway,
-    ILogger<ListeningExplanationService>? logger = null)
+    ILogger<ListeningExplanationService>? logger = null,
+    IAiExplanationCacheService? explanationCache = null)
     : IListeningExplanationService
 {
     private const string PromptTemplateId = "listening.explanation.v1";
+    private const string Module = "listening";
 
     public async Task<ListeningExplanationDto> GetSubmittedAttemptExplanationAsync(
         string userId,
@@ -120,6 +123,34 @@ public sealed class ListeningExplanationService(
             transcriptEvidence,
             lang);
 
+        // ── W3 cache reuse (owner directive 2026-08-28 AI/Cloud API plan,
+        // point 8): two learners making the identical mistake on the
+        // identical question, against the identical approved evidence, get
+        // the same explanation without a second provider call.
+        string? cacheKey = null;
+        if (explanationCache is not null)
+        {
+            cacheKey = explanationCache.BuildCacheKey(
+                Module, question.Id, question.Version,
+                normalizedSelectedAnswer: storedAnswer, lang,
+                approvedRationale.RationaleText, approvedRationale.SourceSentence,
+                extraEvidence: transcriptEvidence);
+
+            var cachedJson = await explanationCache.TryGetAsync(cacheKey, ct);
+            if (cachedJson is not null)
+            {
+                try
+                {
+                    var cached = JsonSerializer.Deserialize<ListeningExplanationDto>(cachedJson);
+                    if (cached is not null) return cached with { Language = lang };
+                }
+                catch (JsonException ex)
+                {
+                    logger?.LogWarning(ex, "ListeningExplanationService — cached explanation for key {CacheKey} failed to deserialize; generating fresh.", cacheKey);
+                }
+            }
+        }
+
         var groundedPrompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
             Kind = RuleKind.Listening,
@@ -127,6 +158,7 @@ public sealed class ListeningExplanationService(
             Task = AiTaskMode.GenerateListeningExplanation,
         });
 
+        ListeningExplanationDto generated;
         try
         {
             var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -139,7 +171,7 @@ public sealed class ListeningExplanationService(
                 PromptTemplateId = PromptTemplateId,
                 UserId = userId,
             }, ct);
-            return TryParse(result.Completion, lang)
+            generated = TryParse(result.Completion, lang)
                 ?? throw new ListeningGroundedExplanationUnavailableException(
                     "The grounded gateway returned no usable explanation for this question.");
         }
@@ -155,6 +187,14 @@ public sealed class ListeningExplanationService(
             throw new ListeningGroundedExplanationUnavailableException(
                 "The grounded explanation is unavailable because the gateway failed.");
         }
+
+        if (cacheKey is not null)
+        {
+            await explanationCache!.StoreAsync(
+                Module, question.Id, lang, cacheKey, JsonSerializer.Serialize(generated), CancellationToken.None);
+        }
+
+        return generated;
     }
 
     private static string BuildPrompt(

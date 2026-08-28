@@ -15,6 +15,9 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddListeningAnswerAiSkipAndRetry), "20261101090000_AddListeningAnswerAiSkipAndRetry")]
     [InlineData(typeof(AddAiControlPlaneCore), "20261102090000_AddAiControlPlaneCore")]
     [InlineData(typeof(ExtendAiUsageRecordProvenance), "20261103090000_ExtendAiUsageRecordProvenance")]
+    [InlineData(typeof(AddAiModelPricingAndFeaturePolicy), "20261104090000_AddAiModelPricingAndFeaturePolicy")]
+    [InlineData(typeof(AddAiOperationResourceSlot), "20261105090000_AddAiOperationResourceSlot")]
+    [InlineData(typeof(RestoreListeningPartBCSourceStems), "20261129000000_RestoreListeningPartBCSourceStems")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

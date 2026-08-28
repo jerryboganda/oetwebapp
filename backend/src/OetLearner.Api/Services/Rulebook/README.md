@@ -122,6 +122,14 @@ content block. For Speaking:
 - `card.draft.v1`: cache the **system prompt + style examples** so a
   batch of card drafts in the same admin session shares one cache.
 
-Cache hits are visible in the Anthropic dashboard (cache hit %) and on
-`AiUsageRecord.CacheHit` (boolean column populated by the gateway when the
-provider returns a cache-hit indicator).
+Cache hits are visible in the Anthropic dashboard (cache hit %) and, for
+W2-migrated direct-call paths (currently Listening Part A advisory scoring;
+see `Services/Listening/ListeningPartAAiScoringService.Anthropic.cs`), on the
+real token-level fields `AiUsageRecord.CacheWriteTokens` /
+`AiUsageRecord.CacheReadTokens` (raw Anthropic
+`cache_creation_input_tokens` / `cache_read_input_tokens` counts) plus
+`AiUsageRecord.BilledTokenClass` and the effective
+`AiUsageRecord.PricingVersion` / `AiUsageRecord.CalculatedCostUsd` used to
+price them. There is no `AiUsageRecord.CacheHit` boolean column — the
+gateway's own tool-loop path does not yet populate these per-turn fields;
+that migration is tracked for a later wave.
