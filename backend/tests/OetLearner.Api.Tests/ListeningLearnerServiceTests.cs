@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.Json;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Listening;
 
@@ -61,6 +62,45 @@ public class ListeningLearnerServiceTests
         Assert.Equal(0, dtoType.GetProperty("partBCount")!.GetValue(dto));
         Assert.Equal(0, dtoType.GetProperty("partCCount")!.GetValue(dto));
         Assert.Equal("/listening/paper/listen-paper-locked", dtoType.GetProperty("route")!.GetValue(dto));
+    }
+
+    [Fact]
+    public void PaperHomeDto_UsesCompleteJsonQuestionSetWhenRelationalCountsArePartial()
+    {
+        var questions = Enumerable.Range(1, 42)
+            .Select(number => new
+            {
+                id = $"q{number}",
+                number,
+                partCode = number <= 24 ? "A1" : number <= 30 ? "B1" : number <= 36 ? "C1" : "C2",
+                stem = $"Authored question {number}",
+                type = "multiple_choice_3",
+                options = new[] { "A", "B", "C" },
+                correctAnswer = "A"
+            })
+            .ToArray();
+        var paper = new ContentPaper
+        {
+            Id = "listen-paper-partial-relational",
+            Title = "Listening paper with complete source JSON",
+            Slug = "listening-paper-partial-relational",
+            ExtractedTextJson = JsonSerializer.Serialize(new { listeningQuestions = questions }),
+            Assets = []
+        };
+
+        var method = typeof(ListeningLearnerService).GetMethod("PaperHomeDto", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        // Simulate the legacy partial relational projection that previously
+        // made the Part B/C dispatchers advertise only one item each.
+        var dto = method.Invoke(null, [paper, null, 1, false, 24, 1, 1]);
+        Assert.NotNull(dto);
+
+        var dtoType = dto.GetType();
+        Assert.Equal(42, dtoType.GetProperty("questionCount")!.GetValue(dto));
+        Assert.Equal(24, dtoType.GetProperty("partACount")!.GetValue(dto));
+        Assert.Equal(6, dtoType.GetProperty("partBCount")!.GetValue(dto));
+        Assert.Equal(12, dtoType.GetProperty("partCCount")!.GetValue(dto));
     }
 
     [Theory]

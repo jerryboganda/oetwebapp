@@ -4379,17 +4379,41 @@ public sealed class ListeningLearnerService(
         int relationalPartCCount = 0)
     {
         var roles = paper.Assets.Where(a => a.IsPrimary).Select(a => a.Role).ToHashSet();
-        var questions = ExtractQuestions(JsonSupport.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson, new Dictionary<string, object?>()).GetValueOrDefault("listeningQuestions")).ToList();
-        var questionCount = relationalQuestionCount > 0 ? relationalQuestionCount : questions.Count;
-        var partACount = relationalPartACount > 0
-            ? relationalPartACount
-            : questions.Count(q => ListeningParentPartFromCode(q.PartCode) == "A");
-        var partBCount = relationalPartBCount > 0
-            ? relationalPartBCount
-            : questions.Count(q => ListeningParentPartFromCode(q.PartCode) == "B");
-        var partCCount = relationalPartCCount > 0
-            ? relationalPartCCount
-            : questions.Count(q => ListeningParentPartFromCode(q.PartCode) == "C");
+        var questionMap = JsonSupport.Deserialize<Dictionary<string, object?>>(
+            paper.ExtractedTextJson,
+            new Dictionary<string, object?>());
+        var questions = ExtractQuestions(
+            questionMap.TryGetValue("listeningQuestions", out var listeningQuestions)
+                ? listeningQuestions
+                : questionMap.GetValueOrDefault("questions"))
+            .ToList();
+
+        // BuildPaperSourceAsync merges relational rows with this normalized JSON
+        // set by the authoritative printed question number. Keep the catalog
+        // counts on that same union: an old import can have one relational B/C
+        // row while the source JSON already contains all six/twelve items. A
+        // relational count must never hide the remaining source questions from
+        // the standalone-part dispatcher or the learner-facing home cards.
+        var jsonQuestionNumbers = questions.Select(q => q.Number).Distinct().ToHashSet();
+        var jsonPartACount = questions
+            .Where(q => ListeningParentPartFromCode(q.PartCode) == "A")
+            .Select(q => q.Number)
+            .Distinct()
+            .Count();
+        var jsonPartBCount = questions
+            .Where(q => ListeningParentPartFromCode(q.PartCode) == "B")
+            .Select(q => q.Number)
+            .Distinct()
+            .Count();
+        var jsonPartCCount = questions
+            .Where(q => ListeningParentPartFromCode(q.PartCode) == "C")
+            .Select(q => q.Number)
+            .Distinct()
+            .Count();
+        var questionCount = Math.Max(relationalQuestionCount, jsonQuestionNumbers.Count);
+        var partACount = Math.Max(relationalPartACount, jsonPartACount);
+        var partBCount = Math.Max(relationalPartBCount, jsonPartBCount);
+        var partCCount = Math.Max(relationalPartCCount, jsonPartCCount);
         return new
         {
             id = paper.Id,
