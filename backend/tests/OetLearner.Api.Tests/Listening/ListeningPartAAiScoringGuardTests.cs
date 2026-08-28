@@ -1126,7 +1126,8 @@ public sealed class ListeningPartAAiScoringGuardTests
 
         public Task CompleteOperationAsync(
             string operationId, AiOperationState state, string? resultRef,
-            string? providerId, string? model, CancellationToken ct)
+            string? providerId, string? model, CancellationToken ct,
+            AiBudgetReservation? budgetReservation = null)
         {
             CompletedOperationIds.Add(operationId);
             return Task.CompletedTask;
