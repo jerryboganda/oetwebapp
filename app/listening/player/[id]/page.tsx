@@ -615,6 +615,8 @@ function PlayerContent() {
     if (!attempt || !id || queued.subtest !== 'listening-answer' || queued.contentId !== attempt.attemptId) return false;
     const payload = queued.payload as Partial<OfflineAnswerPayload>;
     if (typeof payload.questionId !== 'string' || typeof payload.value !== 'string') return false;
+    const questionId = payload.questionId;
+    const value = payload.value;
 
     const latest = await getListeningSession(id, { mode, attemptId: attempt.attemptId });
     if (latest.attempt?.requiresAdminReview) {
@@ -624,37 +626,37 @@ function PlayerContent() {
       return true;
     }
 
-    const serverValue = latest.attempt?.answers?.[payload.questionId] ?? null;
+    const serverValue = latest.attempt?.answers?.[questionId] ?? null;
     const decision = reconcileOfflineAnswer(serverValue, {
-      questionId: payload.questionId,
-      value: payload.value,
+      questionId,
+      value,
       baseValue: typeof payload.baseValue === 'string' ? payload.baseValue : null,
     });
 
     if (decision === 'already-synced') {
       await markAttemptSynced(queued.id);
-      serverAnswersRef.current[payload.questionId] = payload.value;
-      delete answerBaseValuesRef.current[payload.questionId];
+      serverAnswersRef.current[questionId] = value;
+      delete answerBaseValuesRef.current[questionId];
       setSaveState('saved');
       return true;
     }
 
     if (decision === 'conflict') {
       await markAttemptConflict(queued.id);
-      serverAnswersRef.current[payload.questionId] = serverValue;
-      delete answerBaseValuesRef.current[payload.questionId];
-      setAnswers((current) => current[payload.questionId] === payload.value
-        ? { ...current, [payload.questionId]: serverValue ?? '' }
+      serverAnswersRef.current[questionId] = serverValue;
+      delete answerBaseValuesRef.current[questionId];
+      setAnswers((current) => current[questionId] === value
+        ? { ...current, [questionId]: serverValue ?? '' }
         : current);
       setSaveState('conflict');
       return true;
     }
 
     try {
-      await listeningV2Api.saveAnswer(attempt.attemptId, payload.questionId, payload.value);
+      await listeningV2Api.saveAnswer(attempt.attemptId, questionId, value);
       await markAttemptSynced(queued.id);
-      serverAnswersRef.current[payload.questionId] = payload.value;
-      delete answerBaseValuesRef.current[payload.questionId];
+      serverAnswersRef.current[questionId] = value;
+      delete answerBaseValuesRef.current[questionId];
       setSaveState('saved');
       return true;
     } catch (error) {
