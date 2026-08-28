@@ -62,6 +62,7 @@ public static class DatabaseBootstrapper
         await EnsureFreezePolicyAsync(db, cancellationToken);
         await EnsureLiveClassTutorOwnerBackfillAsync(db, cancellationToken);
         await EnsurePrivateSpeakingConfigDefaultsBackfillAsync(db, cancellationToken);
+        await OetLearner.Api.Services.Billing.InvoiceEvidenceReconciliationService.ReconcileAsync(db, cancellationToken);
 
         // Reference data (professions, subtests, criteria, content) is always seeded
         await SeedData.EnsureReferenceDataAsync(db, cancellationToken);

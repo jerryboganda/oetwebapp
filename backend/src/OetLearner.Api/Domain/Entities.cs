@@ -925,6 +925,64 @@ public class Invoice
 
     [MaxLength(256)]
     public string? CheckoutSessionId { get; set; }
+
+    /// <summary>
+    /// Links the invoice to the subscription it was issued for, when known --
+    /// lets evidence lookups and the reconciliation pass find the real
+    /// quote/payment/proof instead of guessing.
+    /// </summary>
+    [MaxLength(64)]
+    public string? SubscriptionId { get; set; }
+
+    /// <summary>
+    /// How this invoice's "Paid" status was actually established (see
+    /// <see cref="InvoiceSources"/>) -- never inferred from the mere
+    /// existence of a local record. This in-code default is only the
+    /// C#-object default for freshly-constructed instances before a caller
+    /// sets it explicitly; every real creation call site MUST set Source
+    /// explicitly from actual evidence -- do not rely on this default to be
+    /// "correct", it only prevents a null value.
+    /// </summary>
+    [MaxLength(24)]
+    public string Source { get; set; } = InvoiceSources.Gateway;
+
+    /// <summary>
+    /// The moment this row's Source/evidence-linkage was correctly
+    /// determined (either at creation, by explicitly-evidence-aware code, or
+    /// later by the one-time legacy reconciliation pass). Null means
+    /// "pre-existing row created before this evidence-source model shipped,
+    /// not yet reviewed."
+    /// </summary>
+    public DateTimeOffset? ReconciledAt { get; set; }
+}
+
+/// <summary>
+/// Well-known values for <see cref="Invoice.Source"/> -- how an invoice's
+/// "Paid" status was actually established.
+/// </summary>
+public static class InvoiceSources
+{
+    /// <summary>
+    /// Confirmed by a completed PaymentTransaction from an online payment
+    /// gateway (Stripe/PayPal/Whop/Fawaterak/...), linked via
+    /// QuoteId/CheckoutSessionId.
+    /// </summary>
+    public const string Gateway = "gateway";
+
+    /// <summary>
+    /// Confirmed by an admin-approved payment proof (ManualPaymentRequest) --
+    /// tagged Gateway="manual" on its PaymentTransaction by
+    /// ManualPaymentService.
+    /// </summary>
+    public const string ManualProof = "manual_proof";
+
+    /// <summary>
+    /// Access granted directly by an admin with no payment evidence at all
+    /// (e.g. AdminService.CreateSubscriptionCoreAsync). Legitimate for access
+    /// purposes but must never be displayed or filtered as an online gateway
+    /// payment.
+    /// </summary>
+    public const string AdminGrant = "admin_grant";
 }
 
 public class UploadSession

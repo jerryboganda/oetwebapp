@@ -5357,10 +5357,15 @@ public partial class LearnerService(
 
     /// <summary>
     /// Guarantees the learner's current paid subscription has a downloadable invoice.
-    /// Invoices are normally created only inside payment-webhook fulfillment
+    /// Invoices are normally created inside payment-webhook fulfillment
     /// (<see cref="ApplyCheckoutCompletionAsync"/>); subscriptions created another way
     /// (admin grant, complimentary, or a purchase that never ran fulfillment) would
-    /// otherwise have none. Idempotent and safe to call on every billing read:
+    /// otherwise have none. This backfill now resolves real payment evidence via
+    /// <see cref="InvoiceEvidenceResolver.ResolveAsync"/> before minting the invoice, so
+    /// the row's QuoteId/CheckoutSessionId/SubscriptionId/Source genuinely reflect
+    /// whatever evidence exists (gateway payment, approved manual proof, or none — an
+    /// admin grant) instead of being left blank. Idempotent and safe to call on every
+    /// billing read:
     ///   • no-op for free plans (PriceAmount &lt;= 0),
     ///   • no-op when an invoice already covers the current purchase (matched by plan
     ///     version or by amount) so it never duplicates a real checkout invoice,
@@ -5407,6 +5412,8 @@ public partial class LearnerService(
             ? planName
             : $"{planName} ({subscription.Interval})";
 
+        var evidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, cancellationToken);
+
         db.Invoices.Add(new Invoice
         {
             Id = invoiceId,
@@ -5417,7 +5424,12 @@ public partial class LearnerService(
             Currency = subscription.Currency,
             Status = "Paid",
             Description = description,
-            PlanVersionId = subscription.PlanVersionId
+            PlanVersionId = subscription.PlanVersionId,
+            SubscriptionId = subscription.Id,
+            Source = evidence.Source,
+            QuoteId = evidence.Quote?.Id,
+            CheckoutSessionId = evidence.Quote?.CheckoutSessionId ?? evidence.Payment?.GatewayTransactionId,
+            ReconciledAt = DateTimeOffset.UtcNow
         });
 
         try
@@ -11491,7 +11503,9 @@ public partial class LearnerService(
                 Status = "Paid",
                 Description = $"Wallet top-up: {credits} credits + {bonus} bonus credits",
                 Number = await AllocateInvoiceNumberAsync(transaction.LearnerUserId, invoiceId, ct),
-                CheckoutSessionId = transaction.GatewayTransactionId
+                CheckoutSessionId = transaction.GatewayTransactionId,
+                Source = InvoiceSources.Gateway,
+                ReconciledAt = DateTimeOffset.UtcNow
             });
         }
         else
@@ -12054,7 +12068,10 @@ public partial class LearnerService(
                 AddOnVersionIdsJson = quote.AddOnVersionIdsJson,
                 CouponVersionId = quote.CouponVersionId,
                 QuoteId = quote.Id,
-                CheckoutSessionId = transaction.GatewayTransactionId
+                CheckoutSessionId = transaction.GatewayTransactionId,
+                SubscriptionId = quote.SubscriptionId,
+                Source = InvoiceSources.Gateway,
+                ReconciledAt = now
             });
         }
         else
