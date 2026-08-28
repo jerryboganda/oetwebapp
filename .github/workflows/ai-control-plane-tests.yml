@@ -80,7 +80,7 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_ai_control_plane_tests;Username=postgres;******
+      OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_ai_control_plane_tests;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v4
 
