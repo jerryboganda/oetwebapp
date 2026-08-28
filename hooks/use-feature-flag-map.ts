@@ -22,6 +22,30 @@ let cacheGeneration = 0;
 const cachedFlagMaps = new Map<string, FeatureFlagMap>();
 const inflightFlagMaps = new Map<string, Promise<FeatureFlagMap>>();
 
+// A single transient network/auth blip on first load must not permanently
+// read as "flag disabled" — retry a couple of times with backoff before
+// falling back to fail-closed for this render (see hooks/use-enabled-modules.ts
+// for the analogous fix on the module-gating side).
+const FLAG_RETRY_DELAYS_MS = [400, 1200];
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchFlagWithRetry(key: string): Promise<FeatureFlagLoadResult> {
+  for (let attempt = 0; attempt <= FLAG_RETRY_DELAYS_MS.length; attempt += 1) {
+    try {
+      const flag = await fetchLearnerFeatureFlag(key);
+      return { key, enabled: flag.enabled, succeeded: true };
+    } catch {
+      if (attempt < FLAG_RETRY_DELAYS_MS.length) {
+        await delay(FLAG_RETRY_DELAYS_MS[attempt]);
+      }
+    }
+  }
+  return { key, enabled: false, succeeded: false };
+}
+
 function synchronizeIdentity(identity: string | null) {
   if (identity === activeIdentity) return;
 
@@ -43,16 +67,7 @@ function loadFeatureFlagMap(
   if (inflight) return inflight;
 
   const requestGeneration = cacheGeneration;
-  const request = Promise.all(
-    keys.map(async (key): Promise<FeatureFlagLoadResult> => {
-      try {
-        const flag = await fetchLearnerFeatureFlag(key);
-        return { key, enabled: flag.enabled, succeeded: true };
-      } catch {
-        return { key, enabled: false, succeeded: false };
-      }
-    }),
-  )
+  const request = Promise.all(keys.map((key) => fetchFlagWithRetry(key)))
     .then((results) => {
       const flags = Object.fromEntries(
         results.map(({ key, enabled }) => [key, enabled]),
