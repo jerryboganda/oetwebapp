@@ -947,6 +947,8 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<Invoice>().HasIndex(x => x.PlanVersionId);
         modelBuilder.Entity<Invoice>().HasIndex(x => x.QuoteId);
         modelBuilder.Entity<Invoice>().HasIndex(x => x.CheckoutSessionId);
+        modelBuilder.Entity<Invoice>().HasIndex(x => x.SubscriptionId);
+        modelBuilder.Entity<Invoice>().Property(x => x.Source).HasMaxLength(24).HasDefaultValue(InvoiceSources.Gateway);
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.QuoteId);
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.PlanVersionId);
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.CouponVersionId);

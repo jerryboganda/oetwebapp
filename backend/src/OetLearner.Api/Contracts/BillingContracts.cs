@@ -209,7 +209,9 @@ public record AdminBillingInvoiceEvidenceInvoiceResponse(
     Dictionary<string, string> AddOnVersionIds,
     string? CouponVersionId,
     string? QuoteId,
-    string? CheckoutSessionId);
+    string? CheckoutSessionId,
+    string? SubscriptionId,
+    string Source);
 
 public record AdminBillingInvoiceEvidenceQuoteResponse(
     string Id,
@@ -283,6 +285,19 @@ public record AdminBillingInvoiceEvidenceEventResponse(
     string? QuoteId,
     DateTimeOffset OccurredAt);
 
+/// <summary>Evidence view of the manual-proof (bank transfer / gateway-receipt) row backing
+/// a "manual_proof"-source invoice — a trimmed mirror of <c>ManualPaymentDto</c> carrying
+/// only what this evidence panel needs.</summary>
+public record AdminBillingInvoiceEvidenceProofResponse(
+    string Id,
+    string Method,
+    string Kind,
+    string? Gateway,
+    string Reference,
+    string Status,
+    DateTimeOffset SubmittedAt,
+    DateTimeOffset? ReviewedAt);
+
 public record AdminBillingInvoiceEvidenceCatalogAnchorResponse(
     string? PlanVersionId,
     Dictionary<string, string> AddOnVersionIds,
@@ -293,6 +308,7 @@ public record AdminBillingInvoiceEvidenceResponse(
     AdminBillingInvoiceEvidenceInvoiceResponse Invoice,
     AdminBillingInvoiceEvidenceQuoteResponse? Quote,
     IReadOnlyList<AdminBillingInvoiceEvidencePaymentResponse> Payments,
+    AdminBillingInvoiceEvidenceProofResponse? Proof,
     IReadOnlyList<AdminBillingInvoiceEvidenceRedemptionResponse> Redemptions,
     IReadOnlyList<AdminBillingInvoiceEvidenceSubscriptionItemResponse> SubscriptionItems,
     IReadOnlyList<AdminBillingInvoiceEvidenceEventResponse> Events,

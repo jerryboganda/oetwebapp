@@ -6859,7 +6859,8 @@ public partial class AdminService(
             currency = i.Currency,
             status = i.Status,
             date = i.IssuedAt,
-            plan = i.Description
+            plan = i.Description,
+            source = i.Source
         }).ToList();
 
         return new { total, page, pageSize, items };
@@ -7020,6 +7021,20 @@ public partial class AdminService(
             .OrderByDescending(payment => payment.CreatedAt)
             .ToListAsync(ct);
 
+        // "manual_proof" invoices carry no quote/payment — their evidence is the approved
+        // payment-proof row instead. Also checked defensively whenever no quote resolved and
+        // the invoice has a subscription, so a mislabeled Source still surfaces real evidence.
+        ManualPaymentRequest? proof = null;
+        if (!string.IsNullOrWhiteSpace(invoice.SubscriptionId)
+            && (invoice.Source == InvoiceSources.ManualProof || quote is null))
+        {
+            proof = await db.ManualPaymentRequests.AsNoTracking()
+                .Where(request => request.AccessGrantedSubscriptionId == invoice.SubscriptionId
+                    && (request.Status == "paid" || request.Status == "approved"))
+                .OrderByDescending(request => request.SubmittedAt)
+                .FirstOrDefaultAsync(ct);
+        }
+
         var redemptions = await db.BillingCouponRedemptions.AsNoTracking()
             .Where(redemption =>
                 (!string.IsNullOrWhiteSpace(quoteId) && redemption.QuoteId == quoteId)
@@ -7060,7 +7075,7 @@ public partial class AdminService(
             .ToListAsync(ct);
 
         var catalogAnchors = BuildCatalogAnchorEvidence(invoice, quote, payments.FirstOrDefault());
-        var notRecorded = BuildInvoiceEvidenceNotRecorded(invoice, quote, payments, redemptions, events, catalogAnchors);
+        var notRecorded = BuildInvoiceEvidenceNotRecorded(invoice, quote, payments, proof, redemptions, events, catalogAnchors);
         var integrityFlags = BuildInvoiceEvidenceIntegrityFlags(invoice, quote, payments, redemptions, legacyTopUpGatewayPrefix);
 
         return new AdminBillingInvoiceEvidenceResponse(
@@ -7077,9 +7092,12 @@ public partial class AdminService(
                 DeserializeStringDictionary(invoice.AddOnVersionIdsJson),
                 invoice.CouponVersionId,
                 invoice.QuoteId,
-                invoice.CheckoutSessionId),
+                invoice.CheckoutSessionId,
+                invoice.SubscriptionId,
+                invoice.Source),
             quote is null ? null : MapInvoiceEvidenceQuote(quote),
             payments.Select(MapInvoiceEvidencePayment).ToList(),
+            proof is null ? null : MapInvoiceEvidenceProof(proof),
             redemptions.Select(MapInvoiceEvidenceRedemption).ToList(),
             subscriptionItems.Select(MapInvoiceEvidenceSubscriptionItem).ToList(),
             events.Select(MapInvoiceEvidenceEvent).ToList(),
@@ -7723,6 +7741,17 @@ public partial class AdminService(
                 BuildProviderLifecycleIntegrityFlags(signal, new AdminBillingProviderLifecycleLocalIdsResponse([], [], [], [], [])));
     }
 
+    private static AdminBillingInvoiceEvidenceProofResponse MapInvoiceEvidenceProof(ManualPaymentRequest proof)
+        => new(
+            proof.Id,
+            proof.Method,
+            proof.Kind,
+            proof.Gateway,
+            proof.Reference,
+            proof.Status,
+            proof.SubmittedAt,
+            proof.ReviewedAt);
+
     private static AdminBillingInvoiceEvidenceRedemptionResponse MapInvoiceEvidenceRedemption(BillingCouponRedemption redemption)
         => new(
             redemption.Id,
@@ -7798,19 +7827,31 @@ public partial class AdminService(
         Invoice invoice,
         BillingQuote? quote,
         IReadOnlyCollection<PaymentTransaction> payments,
+        ManualPaymentRequest? proof,
         IReadOnlyCollection<BillingCouponRedemption> redemptions,
         IReadOnlyCollection<BillingEvent> events,
         AdminBillingInvoiceEvidenceCatalogAnchorResponse catalogAnchors)
     {
         var notRecorded = new List<string>();
-        if (quote is null)
-        {
-            notRecorded.Add("quote");
-        }
 
-        if (payments.Count == 0)
+        // Gateway invoices are expected to carry a quote + completed payment — their absence
+        // is a genuine gap. Manual-proof invoices are expected to carry an approved proof row
+        // instead. Admin-grant invoices have none of these by design, not by omission.
+        if (invoice.Source == InvoiceSources.Gateway)
         {
-            notRecorded.Add("payment");
+            if (quote is null)
+            {
+                notRecorded.Add("quote");
+            }
+
+            if (payments.Count == 0)
+            {
+                notRecorded.Add("payment");
+            }
+        }
+        else if (invoice.Source == InvoiceSources.ManualProof && proof is null)
+        {
+            notRecorded.Add("proof");
         }
 
         if (redemptions.Count == 0 && (!string.IsNullOrWhiteSpace(invoice.CouponVersionId) || !string.IsNullOrWhiteSpace(quote?.CouponCode)))
@@ -7839,6 +7880,18 @@ public partial class AdminService(
         string? legacyTopUpGatewayPrefix)
     {
         var flags = new List<string>();
+
+        // Trustworthiness safety-net: a "Paid" invoice sourced from the gateway path with no
+        // completed PaymentTransaction evidence at all is exactly the "Paid with no evidence"
+        // bug this evidence view exists to catch — flag it even after reconciliation, in case
+        // a future regression re-introduces an unevidenced gateway invoice.
+        if (string.Equals(invoice.Status, "paid", StringComparison.OrdinalIgnoreCase)
+            && invoice.Source == InvoiceSources.Gateway
+            && payments.Count == 0)
+        {
+            flags.Add("paid_status_without_gateway_evidence");
+        }
+
         if (quote is not null)
         {
             if (quote.UserId != invoice.UserId)

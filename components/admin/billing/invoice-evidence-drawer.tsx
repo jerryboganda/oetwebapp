@@ -8,6 +8,7 @@ import { Button } from '@/components/admin/ui/button';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { formatDateTime } from '@/lib/domain/datetime';
 import type { AdminBillingInvoiceEvidence } from '@/lib/types/admin';
+import { invoiceStatusBadge } from '@/components/admin/billing/invoice-status';
 
 /**
  * Read-only invoice evidence panel: quote snapshot, matched payment(s), coupon
@@ -48,19 +49,10 @@ export function InvoiceEvidenceDrawer({
           <div className="border-b border-border pb-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="default">read only</Badge>
-              {evidence ? (
-                <Badge
-                  variant={
-                    evidence.invoice.status === 'paid'
-                      ? 'success'
-                      : evidence.invoice.status === 'failed'
-                        ? 'danger'
-                        : 'warning'
-                  }
-                >
-                  {evidence.invoice.status}
-                </Badge>
-              ) : null}
+              {evidence ? (() => {
+                const statusBadge = invoiceStatusBadge(evidence.invoice.status, evidence.invoice.source);
+                return <Badge variant={statusBadge.variant}>{statusBadge.label}</Badge>;
+              })() : null}
               {evidence?.payments.length ? (
                 <Badge variant="info">
                   {evidence.payments.length} payment {evidence.payments.length === 1 ? 'record' : 'records'}
@@ -135,8 +127,14 @@ export function InvoiceEvidenceDrawer({
                   <EvidenceField label="Learner">{evidence.invoice.userName}</EvidenceField>
                   <EvidenceField label="Issued">{formatDateTime(evidence.invoice.issuedAt)}</EvidenceField>
                   <EvidenceField label="Amount">{formatCurrency(evidence.invoice.amount, evidence.invoice.currency)}</EvidenceField>
-                  <EvidenceField label="Quote ID">{evidence.invoice.quoteId ?? 'Not recorded'}</EvidenceField>
-                  <EvidenceField label="Checkout Session">{evidence.invoice.checkoutSessionId ?? 'Not recorded'}</EvidenceField>
+                  <EvidenceField label="Quote ID">
+                    {evidence.invoice.quoteId ??
+                      (evidence.invoice.source !== 'gateway' ? 'Not applicable (Manual/Admin)' : 'Not recorded')}
+                  </EvidenceField>
+                  <EvidenceField label="Checkout Session">
+                    {evidence.invoice.checkoutSessionId ??
+                      (evidence.invoice.source !== 'gateway' ? 'Not applicable (Manual/Admin)' : 'Not recorded')}
+                  </EvidenceField>
                 </dl>
               </EvidenceSection>
 
