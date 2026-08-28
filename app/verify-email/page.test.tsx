@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const authClientMock = vi.hoisted(() => ({
@@ -167,5 +167,43 @@ describe('VerifyEmailPage', () => {
       'husam_20052@yahoo.com',
       { forceNew: true },
     );
+  });
+
+  it('ignores a duplicate submit that races the auto-submit (mobile keypad implicit Go/Done)', async () => {
+    // Reproduces the mobile "false OTP is invalid" bug: entering the 6th
+    // digit auto-submits via requestSubmit(), and the on-screen numeric
+    // keypad's own implicit "Go"/"Done" action can fire a second native
+    // `submit` event on the same form before the first request resolves.
+    // Only one verify call should ever go out.
+    let resolveVerify: ((user: unknown) => void) | undefined;
+    authClientMock.verifyEmailOtp.mockImplementation(
+      () => new Promise((resolve) => { resolveVerify = resolve; }),
+    );
+
+    const { container } = renderWithRouter(<VerifyEmailPage />, {
+      pathname: '/verify-email',
+      searchParams: new URLSearchParams({ email: 'husam_20052@yahoo.com' }),
+    });
+
+    await waitFor(() => {
+      expect(authClientMock.sendEmailVerificationOtp).toHaveBeenCalledTimes(1);
+    });
+
+    const user = userEvent.setup();
+    for (let digit = 1; digit <= 6; digit += 1) {
+      await user.type(screen.getByLabelText(`OTP digit ${digit}`), String(digit));
+    }
+
+    // Typing the 6th digit already fired one auto-submit. Simulate the
+    // racing native implicit submission before that request settles.
+    const form = container.querySelector('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form as HTMLFormElement);
+
+    await waitFor(() => {
+      expect(authClientMock.verifyEmailOtp).toHaveBeenCalledTimes(1);
+    });
+
+    resolveVerify?.({ isEmailVerified: true, requiresEmailVerification: false });
   });
 });

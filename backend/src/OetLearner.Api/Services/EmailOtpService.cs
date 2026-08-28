@@ -232,6 +232,23 @@ public sealed class EmailOtpService(
 
         if (challenge is null)
         {
+            // Idempotency for duplicate submits: a mobile client can race an
+            // auto-submit against the on-screen keyboard's own "Go"/"Done"
+            // implicit form submission (or retry after a dropped response on
+            // a flaky connection), sending the SAME code twice. The first
+            // request already verified the account and consumed the
+            // challenge, so a resubmission of that exact code is a replay of
+            // an already-successful verification, not an invalid one — treat
+            // it as success instead of surfacing "The OTP is invalid" for a
+            // verification that already happened.
+            var alreadyVerifiedMatch = account.EmailVerifiedAt is not null
+                ? await FindMatchingVerifiedChallengeAsync(account.Id, EmailVerificationPurpose, code, cancellationToken)
+                : null;
+            if (alreadyVerifiedMatch is not null)
+            {
+                return account;
+            }
+
             throw ApiException.Validation("invalid_otp_code", "The verification code is invalid.");
         }
 
@@ -267,6 +284,31 @@ public sealed class EmailOtpService(
         await db.SaveChangesAsync(cancellationToken);
 
         return account;
+    }
+
+    /// <summary>
+    /// Looks up the most recently verified challenge for this account/purpose
+    /// and checks whether the presented code is the exact code that verified
+    /// it. Used only to make a duplicate/replayed verify request idempotent —
+    /// it never widens what counts as a correct code, since the hash is still
+    /// scoped to that specific (now-consumed) challenge and compared in
+    /// constant time.
+    /// </summary>
+    private async Task<EmailOtpChallenge?> FindMatchingVerifiedChallengeAsync(
+        string accountId, string purpose, string code, CancellationToken cancellationToken)
+    {
+        var lastVerified = await db.EmailOtpChallenges
+            .Where(x => x.ApplicationUserAccountId == accountId && x.Purpose == purpose && x.VerifiedAt != null)
+            .OrderByDescending(x => x.VerifiedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (lastVerified is null)
+        {
+            return null;
+        }
+
+        var presentedHash = HashOtp(lastVerified.Id, code.Trim(), accountId, purpose);
+        return FixedTimeHexEquals(lastVerified.CodeHash, presentedHash) ? lastVerified : null;
     }
 
     public async Task<OtpChallengeResponse> RequestPasswordResetOtpAsync(

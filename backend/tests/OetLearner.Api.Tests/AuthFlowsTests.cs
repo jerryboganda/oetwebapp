@@ -151,6 +151,46 @@ public class AuthFlowsTests
     }
 
     [Fact]
+    public async Task AuthEndpoints_VerifyEmailOtp_ResubmittingSameCodeAfterSuccess_IsIdempotent()
+    {
+        // Reproduces the mobile "false OTP is invalid" bug: the app can send
+        // the verify-otp request twice for the same code (auto-submit racing
+        // the on-screen keyboard's own implicit submit, or a retry after a
+        // dropped response). The FIRST request already verified the account
+        // and consumed the challenge; the duplicate resubmission of that
+        // exact code must succeed idempotently instead of failing with
+        // invalid_otp_code for a verification that already happened.
+        await using var harness = CreateAuthApiHarness();
+        await RegisterLearnerAsync(harness.Client);
+
+        var sendResponse = await harness.Client.PostAsJsonAsync("/v1/auth/email/send-verification-otp",
+            new SendEmailOtpRequest("learner@example.com", "verify_email"));
+        sendResponse.EnsureSuccessStatusCode();
+
+        var otpCode = harness.ExtractLatestOtpCode();
+
+        var firstResponse = await harness.Client.PostAsJsonAsync("/v1/auth/email/verify-otp",
+            new VerifyEmailOtpRequest("learner@example.com", "verify_email", otpCode));
+        firstResponse.EnsureSuccessStatusCode();
+
+        var secondResponse = await harness.Client.PostAsJsonAsync("/v1/auth/email/verify-otp",
+            new VerifyEmailOtpRequest("learner@example.com", "verify_email", otpCode));
+
+        Assert.Equal(HttpStatusCode.OK, secondResponse.StatusCode);
+        var currentUser = await secondResponse.Content.ReadFromJsonAsync<CurrentUserResponse>(JsonSupport.Options);
+        Assert.NotNull(currentUser);
+        Assert.True(currentUser!.IsEmailVerified);
+
+        // A resubmission with a WRONG code must still fail normally — the
+        // idempotency path only replays the exact code that already
+        // succeeded, it does not turn "already verified" into a blanket pass.
+        var wrongCodeResponse = await harness.Client.PostAsJsonAsync("/v1/auth/email/verify-otp",
+            new VerifyEmailOtpRequest("learner@example.com", "verify_email", "000000"));
+        Assert.Equal(HttpStatusCode.BadRequest, wrongCodeResponse.StatusCode);
+        Assert.Equal("invalid_otp_code", await ReadErrorCodeAsync(wrongCodeResponse));
+    }
+
+    [Fact]
     public async Task AuthEndpoints_SessionFlow_SignInRefreshMeAndSignOut()
     {
         await using var harness = CreateAuthApiHarness();

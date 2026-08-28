@@ -125,6 +125,15 @@ function VerifyEmailContent() {
   const [resendIn, setResendIn] = useState(0);
   const requestedForEmail = React.useRef<string | null>(null);
   const formRef = React.useRef<HTMLFormElement | null>(null);
+  // Synchronous re-entrancy lock for handleSubmit. `isSubmitting` state is
+  // NOT enough: on mobile the auto-submit-on-6th-digit (below) can race the
+  // on-screen numeric keypad's own implicit "Go"/"Done" form submission, and
+  // a second `submit` event can reach handleSubmit before the first call's
+  // setIsSubmitting(true) has actually committed and re-rendered. That raced
+  // second request finds the OTP already consumed by the first and fails
+  // with "invalid OTP" — even though the first request already verified the
+  // account. A ref flips synchronously, so it closes that gap.
+  const submitLockRef = React.useRef(false);
 
   useEffect(() => {
     if (resendIn <= 0) {
@@ -251,6 +260,11 @@ function VerifyEmailContent() {
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (submitLockRef.current) {
+      return;
+    }
+
     const normalizedOtp = otp.replace(/\D/g, '');
 
     if (normalizedOtp.length !== 6) {
@@ -258,6 +272,7 @@ function VerifyEmailContent() {
       return;
     }
 
+    submitLockRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
 
@@ -289,6 +304,7 @@ function VerifyEmailContent() {
     } catch (error) {
       setErrorMessage(readErrorMessage(error, 'Unable to verify the OTP code.'));
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
