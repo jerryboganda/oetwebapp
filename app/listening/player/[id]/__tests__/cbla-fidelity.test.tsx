@@ -1,5 +1,6 @@
 import { createElement } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { LISTENING_PREVIEW_SECONDS } from '@/lib/listening-sections';
 
 const {
@@ -258,6 +259,118 @@ function makeFinalReviewSession(overrides: SessionOverrides = {}) {
   };
 }
 
+/**
+ * Build the same normalized question shape used by the learner API for a
+ * focused standalone part. The player tests intentionally keep the fixture
+ * local: source fidelity is covered by the backend corpus/migration tests,
+ * while these cases exercise the real route's autoplay and question-workspace
+ * behavior for every standalone part.
+ */
+function makeStandalonePartSession(part: 'a' | 'b' | 'c') {
+  const session = makeSession({ mode: 'practice' });
+  if (part === 'a') {
+    return {
+      ...session,
+      paper: {
+        ...session.paper,
+        extracts: [
+          {
+            partCode: 'A1', displayOrder: 1, kind: 'consultation', title: 'Part A extract',
+            accentCode: 'en-GB', speakers: [], audioStartMs: 0, audioEndMs: 120_000,
+          },
+        ],
+      },
+      questions: [
+        { id: 'q-a-1', number: 1, partCode: 'A1', text: 'Standalone Part A source question 1', type: 'short_answer', options: [], points: 1 },
+      ],
+    };
+  }
+
+  if (part === 'b') {
+    return {
+      ...session,
+      paper: {
+        ...session.paper,
+        extracts: [
+          {
+            partCode: 'B', displayOrder: 1, kind: 'workplace', title: 'Part B extract',
+            accentCode: 'en-GB', speakers: [], audioStartMs: 0, audioEndMs: 240_000,
+          },
+        ],
+      },
+      questions: Array.from({ length: 6 }, (_, index) => {
+        const number = 25 + index;
+        return {
+          id: `q-b-${number}`,
+          number,
+          partCode: 'B',
+          text: `Standalone Part B source question ${number}`,
+          type: 'multiple_choice',
+          options: [`Source option A for Q${number}`, `Source option B for Q${number}`, `Source option C for Q${number}`],
+          points: 1,
+        };
+      }),
+    };
+  }
+
+  return {
+    ...session,
+    paper: {
+      ...session.paper,
+      extracts: [
+        {
+          partCode: 'C1', displayOrder: 1, kind: 'presentation', title: 'Part C extract 1',
+          accentCode: 'en-GB', speakers: [], audioStartMs: 0, audioEndMs: 240_000,
+        },
+        {
+          partCode: 'C2', displayOrder: 2, kind: 'presentation', title: 'Part C extract 2',
+          accentCode: 'en-GB', speakers: [], audioStartMs: 240_000, audioEndMs: 480_000,
+        },
+      ],
+    },
+    questions: Array.from({ length: 12 }, (_, index) => {
+      const number = 31 + index;
+      const partCode = number <= 36 ? 'C1' : 'C2';
+      return {
+        id: `q-c-${number}`,
+        number,
+        partCode,
+        text: `Standalone Part C source question ${number}`,
+        type: 'multiple_choice',
+        options: [`Source option A for Q${number}`, `Source option B for Q${number}`, `Source option C for Q${number}`],
+        points: 1,
+      };
+    }),
+  };
+}
+
+/** A full strict-player Part B fixture with one navigable card per Q25–Q30. */
+function makeFullPartBSession() {
+  const session = makeStandalonePartSession('b');
+  return {
+    ...session,
+    attempt: { ...session.attempt, mode: 'exam' as const },
+    modePolicy: { ...session.modePolicy, mode: 'exam' as const, canPause: false, canScrub: false, onePlayOnly: true },
+    paper: {
+      ...session.paper,
+      extracts: Array.from({ length: 6 }, (_, index) => ({
+        partCode: 'B', displayOrder: index + 1, kind: 'workplace', title: `Part B extract ${index + 1}`,
+        accentCode: 'en-GB', speakers: [], audioStartMs: index * 40_000, audioEndMs: (index + 1) * 40_000,
+      })),
+    },
+  };
+}
+
+/** A full strict-player Part C fixture with both extracts and Q31–Q42. */
+function makeFullPartCSession() {
+  const session = makeStandalonePartSession('c');
+  return {
+    ...session,
+    attempt: { ...session.attempt, mode: 'exam' as const },
+    modePolicy: { ...session.modePolicy, mode: 'exam' as const, canPause: false, canScrub: false, onePlayOnly: true },
+  };
+}
+
 function makeAdvanceResult(overrides: Record<string, unknown> = {}) {
   return {
     outcome: 'applied',
@@ -332,10 +445,135 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       return Promise.resolve();
     };
     proto.pause = () => undefined;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {
+      configurable: true,
+      value: vi.fn(),
+    });
   });
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it.each([
+    { part: 'a' as const, focus: 'part-a', firstNumber: 1, lastNumber: 1 },
+    { part: 'b' as const, focus: 'part-b', firstNumber: 25, lastNumber: 30 },
+    { part: 'c' as const, focus: 'part-c', firstNumber: 31, lastNumber: 42 },
+  ])(
+    'autoplays standalone Part $part and keeps playback stable while navigating its questions',
+    async ({ part, focus, firstNumber, lastNumber }) => {
+      mockUseSearchParams.mockReturnValue({
+        get: (key: string) => {
+          if (key === 'attemptId') return 'attempt-1';
+          if (key === 'mode') return 'practice';
+          if (key === 'focus') return focus;
+          return null;
+        },
+      });
+      mockGetListeningSession.mockResolvedValue(makeStandalonePartSession(part));
+
+      const { container } = render(<ListeningPlayer />);
+
+      await waitFor(() => {
+        expect(container.querySelector('audio')).not.toBeNull();
+        expect(screen.getByText(`Standalone Part ${part.toUpperCase()} source question ${firstNumber}`)).toBeInTheDocument();
+      });
+      await waitFor(() => expect(playCalls).toBeGreaterThanOrEqual(1));
+
+      if (lastNumber !== firstNumber) {
+        expect(screen.getByRole('button', { name: `Go to question ${lastNumber}` })).toBeInTheDocument();
+        const playbackCallsAfterInitialStart = playCalls;
+        fireEvent.click(screen.getByRole('button', { name: `Go to question ${lastNumber}` }));
+
+        await waitFor(() => {
+          expect(screen.getByText(`Standalone Part ${part.toUpperCase()} source question ${lastNumber}`)).toBeInTheDocument();
+        });
+        expect(playCalls).toBe(playbackCallsAfterInitialStart);
+      }
+    },
+  );
+
+  it('loads all six Full Exam Part B questions in the legacy player and preserves answers across jumps', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(makeFullPartBSession());
+    mockV2GetState.mockResolvedValue(makeV2State('b_audio'));
+
+    const { container } = render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part B source question 25')).toBeInTheDocument();
+      expect(container.querySelector('audio')).not.toBeNull();
+    });
+    await waitFor(() => expect(playCalls).toBeGreaterThanOrEqual(1));
+    expect(screen.getAllByRole('button', { name: /^Go to question (25|26|27|28|29|30)$/ })).toHaveLength(6);
+
+    const q25Options = screen.getAllByRole('radio');
+    expect(q25Options).toHaveLength(3);
+    expect(q25Options[1]).not.toBeDisabled();
+    await userEvent.setup().click(q25Options[1]);
+    await waitFor(() => expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true'));
+
+    const playbackCallsAfterInitialStart = playCalls;
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 30' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part B source question 30')).toBeInTheDocument());
+    expect(screen.getAllByRole('radio')).toHaveLength(3);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 25' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part B source question 25')).toBeInTheDocument());
+    expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true');
+    expect(playCalls).toBe(playbackCallsAfterInitialStart);
+  });
+
+  it('loads the complete Full Exam Part C workspace across C1/C2 with next, jump, and answer persistence', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'exam';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(makeFullPartCSession());
+    mockV2GetState.mockResolvedValue(makeV2State('c1_audio'));
+
+    const { container } = render(<ListeningPlayer />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part C source question 31')).toBeInTheDocument();
+      expect(container.querySelector('audio')).not.toBeNull();
+    });
+    await waitFor(() => expect(playCalls).toBeGreaterThanOrEqual(1));
+    expect(screen.getAllByRole('button', { name: /^Go to question (3[1-9]|4[0-2])$/ })).toHaveLength(12);
+
+    // Sequential Next must change the mounted card, not only its number.
+    fireEvent.click(screen.getByRole('button', { name: 'Next question' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part C source question 32')).toBeInTheDocument());
+
+    const playbackCallsAfterInitialStart = playCalls;
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 40' }));
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part C source question 40')).toBeInTheDocument();
+      expect(screen.getByText('Part C — Extract 2')).toBeInTheDocument();
+    });
+    const q40Options = screen.getAllByRole('radio');
+    expect(q40Options).toHaveLength(3);
+    expect(q40Options[1]).not.toBeDisabled();
+    await userEvent.setup().click(q40Options[1]);
+    await waitFor(() => expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 34' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part C source question 34')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 42' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part C source question 42')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 40' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part C source question 40')).toBeInTheDocument());
+    expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true');
+    expect(playCalls).toBe(playbackCallsAfterInitialStart);
   });
 
   it('drops straight into the audio phase with no pre-audio reading window', async () => {
