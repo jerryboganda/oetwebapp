@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import {
@@ -9,7 +9,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Download,
   Eye,
+  FileText,
   FileX2,
   PackageCheck,
   RefreshCw,
@@ -43,6 +45,13 @@ import { toast } from '@/components/admin/ui/toaster';
 import { InlineAlert } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import {
+  InvoiceEvidenceDrawer,
+  type InvoiceEvidenceStatus,
+  type InvoiceEvidenceTarget,
+} from '@/components/admin/billing/invoice-evidence-drawer';
+import { downloadAdminBillingInvoice, getAdminBillingInvoiceEvidenceData } from '@/lib/admin';
+import type { AdminBillingInvoiceEvidence } from '@/lib/types/admin';
+import {
   listAdminManualPayments,
   approveManualPayment,
   rejectManualPayment,
@@ -52,6 +61,7 @@ import {
   getManualPaymentProofBlob,
   listPendingFulfilment,
   markSubscriptionFulfilled,
+  ensureAdminBillingInvoiceForSubscription,
   type ManualPaymentDto,
   type PendingFulfilmentDto,
 } from '@/lib/api';
@@ -148,6 +158,14 @@ export default function AdminPaymentProofsPage() {
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
   const [proofView, setProofView] = useState<ProofView | null>(null);
   const [fulfilmentDetails, setFulfilmentDetails] = useState<PendingFulfilmentDto | null>(null);
+
+  // Invoice Evidence / PDF quick actions — same source Billing Ops' Invoices tab
+  // uses, opened inline here so the admin never has to leave this queue.
+  const [invoiceEvidenceTarget, setInvoiceEvidenceTarget] = useState<InvoiceEvidenceTarget | null>(null);
+  const [invoiceEvidence, setInvoiceEvidence] = useState<AdminBillingInvoiceEvidence | null>(null);
+  const [invoiceEvidenceStatus, setInvoiceEvidenceStatus] = useState<InvoiceEvidenceStatus>('empty');
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
+  const invoiceEvidenceRequestRef = useRef(0);
 
   const loadProofs = useCallback(async () => {
     setLoading(true);
@@ -282,6 +300,82 @@ export default function AdminPaymentProofsPage() {
       if (current) URL.revokeObjectURL(current.url);
       return null;
     });
+  }
+
+  /** Resolve the invoice for this exact order (creating it if it doesn't exist yet —
+   * a manually-fulfilled order has no invoice until this is called or the learner
+   * reads their own billing history). Returns `null` (and toasts) if there is none
+   * to show, e.g. a free order. */
+  async function resolveInvoiceId(subscriptionId: string): Promise<string | null> {
+    try {
+      const { invoiceId } = await ensureAdminBillingInvoiceForSubscription(subscriptionId);
+      if (!invoiceId) {
+        toast.error('No invoice is available for this order.');
+      }
+      return invoiceId;
+    } catch (err: any) {
+      toast.error(err?.userMessage ?? err?.message ?? 'Unable to resolve the invoice for this order.');
+      return null;
+    }
+  }
+
+  async function handleSeeEvidence(subscriptionId: string, userName: string, plan: string) {
+    const invoiceId = await resolveInvoiceId(subscriptionId);
+    if (!invoiceId) return;
+
+    const requestId = invoiceEvidenceRequestRef.current + 1;
+    invoiceEvidenceRequestRef.current = requestId;
+    setInvoiceEvidenceTarget({ id: invoiceId, userName, plan });
+    setInvoiceEvidence(null);
+    setInvoiceEvidenceStatus('loading');
+    try {
+      const evidence = await getAdminBillingInvoiceEvidenceData(invoiceId);
+      if (invoiceEvidenceRequestRef.current !== requestId) return;
+      setInvoiceEvidence(evidence);
+      setInvoiceEvidenceStatus('success');
+    } catch (err: any) {
+      if (invoiceEvidenceRequestRef.current !== requestId) return;
+      setInvoiceEvidenceStatus('error');
+      toast.error(err?.userMessage ?? err?.message ?? 'Unable to load invoice evidence.');
+    }
+  }
+
+  function closeInvoiceEvidence() {
+    invoiceEvidenceRequestRef.current += 1;
+    setInvoiceEvidenceTarget(null);
+    setInvoiceEvidence(null);
+    setInvoiceEvidenceStatus('empty');
+  }
+
+  async function handleDownloadInvoiceById(invoiceId: string) {
+    if (downloadingInvoiceId) return;
+    setDownloadingInvoiceId(invoiceId);
+    let objectUrl: string | null = null;
+    try {
+      objectUrl = await downloadAdminBillingInvoice(invoiceId);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = `${invoiceId}.pdf`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      toast.success('Invoice download started.');
+    } catch {
+      toast.error('Unable to download that invoice.');
+    } finally {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setDownloadingInvoiceId(null);
+    }
+  }
+
+  /** Row-level "Download Invoice PDF" quick action — resolves/creates the invoice
+   * for this exact order first (it may not exist yet for a just-fulfilled order),
+   * then downloads it via {@link handleDownloadInvoiceById}. */
+  async function handleDownloadInvoicePdf(subscriptionId: string) {
+    if (downloadingInvoiceId) return;
+    const invoiceId = await resolveInvoiceId(subscriptionId);
+    if (!invoiceId) return;
+    await handleDownloadInvoiceById(invoiceId);
   }
 
   /**
@@ -439,22 +533,52 @@ export default function AdminPaymentProofsPage() {
       enableHiding: false,
       cell: ({ row }) => {
         const r = row.original;
-        if (r.status === 'rejected') {
-          return (
+        const evidenceActions = r.accessGrantedSubscriptionId ? (
+          <>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => void handleReopen(r)}
-              startIcon={<RotateCcw className="h-4 w-4" />}
-              title="Reopen — move back to pending"
+              onClick={() => void handleSeeEvidence(r.accessGrantedSubscriptionId!, r.candidateFullName || r.userId, r.courseName)}
+              aria-label="See evidence"
+              title="See invoice evidence"
             >
-              Reopen
+              <FileText className="h-4 w-4 text-admin-fg-muted" />
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={downloadingInvoiceId !== null}
+              onClick={() => void handleDownloadInvoicePdf(r.accessGrantedSubscriptionId!)}
+              aria-label="Download invoice PDF"
+              title="Download invoice PDF"
+            >
+              <Download className="h-4 w-4 text-admin-fg-muted" />
+            </Button>
+          </>
+        ) : null;
+
+        if (r.status === 'rejected') {
+          return (
+            <div className="flex items-center gap-1">
+              {evidenceActions}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleReopen(r)}
+                startIcon={<RotateCcw className="h-4 w-4" />}
+                title="Reopen — move back to pending"
+              >
+                Reopen
+              </Button>
+            </div>
           );
         }
-        if (!isOpen(r.status)) return null;
+        if (!isOpen(r.status)) {
+          return evidenceActions ? <div className="flex items-center gap-1">{evidenceActions}</div> : null;
+        }
         return (
-          <div className="flex gap-1">
+          <div className="flex items-center gap-1">
+            {evidenceActions}
             <Button
               variant="ghost"
               size="sm"
@@ -628,7 +752,28 @@ export default function AdminPaymentProofsPage() {
       enableSorting: false,
       enableHiding: false,
       cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              void handleSeeEvidence(row.original.subscriptionId, row.original.displayName || row.original.userId, row.original.planName)
+            }
+            aria-label="See evidence"
+            title="See invoice evidence"
+          >
+            <FileText className="h-4 w-4 text-admin-fg-muted" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={downloadingInvoiceId !== null}
+            onClick={() => void handleDownloadInvoicePdf(row.original.subscriptionId)}
+            aria-label="Download invoice PDF"
+            title="Download invoice PDF"
+          >
+            <Download className="h-4 w-4 text-admin-fg-muted" />
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -980,6 +1125,15 @@ export default function AdminPaymentProofsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <InvoiceEvidenceDrawer
+        target={invoiceEvidenceTarget}
+        evidence={invoiceEvidence}
+        status={invoiceEvidenceStatus}
+        downloadingInvoiceId={downloadingInvoiceId}
+        onClose={closeInvoiceEvidence}
+        onDownload={(invoiceId) => void handleDownloadInvoiceById(invoiceId)}
+      />
     </AdminTableLayout>
   );
 }

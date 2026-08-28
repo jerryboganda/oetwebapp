@@ -191,6 +191,17 @@ export function markSubscriptionFulfilled(subscriptionId: string, notes?: string
   );
 }
 
+/** Resolve (creating if missing) the Invoice for one exact subscription, so the
+ * Payment Proofs / Pending Fulfilment queue can open the same Evidence / PDF views
+ * Billing Ops' Invoices tab uses. `invoiceId` is `null` for a free order — there is
+ * nothing to invoice. Idempotent; safe to call every time the admin opens the action. */
+export function ensureAdminBillingInvoiceForSubscription(subscriptionId: string): Promise<{ invoiceId: string | null }> {
+  return apiClient.post<{ invoiceId: string | null }>(
+    `/v1/admin/billing/fulfilment/subscriptions/${encodeURIComponent(subscriptionId)}/ensure-invoice`,
+    {},
+  );
+}
+
 // ── Payment methods (admin-configurable) ─────────────────────────
 
 export interface PaymentMethodConfigDto {

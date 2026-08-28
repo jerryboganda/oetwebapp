@@ -2182,9 +2182,21 @@ export default function BillingPage() {
     {
       id: 'gateway',
       label: 'Gateway',
+      // Every gateway PaymentGatewayService.SupportedGateways can produce a
+      // PaymentTransaction.Gateway value for, plus "manual" (ManualPaymentService's
+      // own gateway tag for proof-approved orders) — kept in sync by hand since the
+      // backend accepts any string here. Add a new gateway's id here when it's added
+      // to PaymentGatewayNames (backend/.../Domain/PaymentGatewayToggle.cs).
       options: [
+        { id: 'whop', label: 'Whop' },
+        { id: 'fawaterak', label: 'Fawaterak' },
         { id: 'stripe', label: 'Stripe' },
         { id: 'paypal', label: 'PayPal' },
+        { id: 'paymob', label: 'Paymob' },
+        { id: 'paytabs', label: 'PayTabs' },
+        { id: 'checkoutcom', label: 'Checkout.com' },
+        { id: 'easykash', label: 'EasyKash' },
+        { id: 'manual', label: 'Manual (proof-approved)' },
       ],
     },
     {
@@ -2218,8 +2230,14 @@ export default function BillingPage() {
       id: 'gateway',
       label: 'Gateway',
       options: [
+        { id: 'whop', label: 'Whop' },
+        { id: 'fawaterak', label: 'Fawaterak' },
         { id: 'stripe', label: 'Stripe' },
         { id: 'paypal', label: 'PayPal' },
+        { id: 'paymob', label: 'Paymob' },
+        { id: 'paytabs', label: 'PayTabs' },
+        { id: 'checkoutcom', label: 'Checkout.com' },
+        { id: 'easykash', label: 'EasyKash' },
       ],
     },
     {

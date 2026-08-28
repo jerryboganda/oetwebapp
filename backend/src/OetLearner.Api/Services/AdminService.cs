@@ -6824,8 +6824,16 @@ public partial class AdminService(
     {
         var query = db.Invoices.AsNoTracking().AsQueryable();
 
+        // Case-insensitive: every Invoice row is written with Status="Paid" (capital,
+        // Domain/Entities.cs default), while every caller — this admin filter and the
+        // learner-facing equivalent — sends lowercase ids ("paid"/"pending"/"failed").
+        // An exact `==` here made the "Paid" filter return zero rows for every invoice
+        // that has ever existed.
         if (!string.IsNullOrWhiteSpace(status) && status != "all")
-            query = query.Where(i => i.Status == status);
+        {
+            var normalizedStatus = status.Trim();
+            query = query.Where(i => i.Status.ToLower() == normalizedStatus.ToLower());
+        }
         if (!string.IsNullOrWhiteSpace(search))
             query = query.Where(i => i.UserId.Contains(search) || i.Description.Contains(search));
 

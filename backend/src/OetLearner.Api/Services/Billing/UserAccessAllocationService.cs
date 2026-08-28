@@ -138,16 +138,37 @@ public sealed class UserAccessAllocationService(
 
         await EnsureProfessionMatchAsync(adminId, adminName, learner, plan, request.OverrideProfessionMismatch, ct);
 
-        // Idempotent: if a live subscription for this plan already exists, adjust it in
-        // place (start / expiry / primary) rather than creating a duplicate row.
+        // Idempotent: if a subscription for this plan already exists — live, or
+        // Pending awaiting manual fulfilment (Pending owns its plan slot exactly like
+        // an Active one; see SubscriptionStateMachine.CurrentOwnershipStatuses) —
+        // adjust it in place rather than creating a duplicate row. Without the Pending
+        // check here, granting this exact package to a learner whose purchase is
+        // still sitting in the Pending Fulfilment queue created a second, parallel
+        // subscription: the original stayed stuck (silently orphaned, still cluttering
+        // that queue) while the new row got its own, differently-keyed entitlement
+        // grant — the two admin views would disagree about whether the order was done.
         var existing = await db.Subscriptions.FirstOrDefaultAsync(
-            s => s.UserId == userId && s.PlanId == plan.Code && AllocatedStatuses.Contains(s.Status), ct);
+            s => s.UserId == userId && s.PlanId == plan.Code
+                && (AllocatedStatuses.Contains(s.Status) || s.Status == SubscriptionStatus.Pending), ct);
 
         if (existing is not null)
         {
+            var wasPendingFulfilment = existing.Status == SubscriptionStatus.Pending;
+
             if (request.StartsAt.HasValue) existing.StartedAt = startsAt;
             if (request.ExpiresAt.HasValue) existing.ExpiresAt = request.ExpiresAt;
             existing.ChangedAt = now;
+
+            if (wasPendingFulfilment)
+            {
+                // This grant IS the hand-over for an order that was awaiting manual
+                // fulfilment — activate it and clear it from the Pending Fulfilment
+                // queue so Billing Ops and User Management never disagree about
+                // whether this order is done.
+                SubscriptionStateMachine.Transition(existing, SubscriptionStatus.Active, "admin_manual_grant_fulfilment");
+                existing.FulfilmentStatus = FulfilmentStatuses.Fulfilled;
+            }
+
             if (request.MakePrimary) learner.CurrentPlanId = plan.Code;
             await db.SaveChangesAsync(ct);
             await TryGrantCourseGiftCreditsAsync(userId, plan, existing, startsAt, ct);

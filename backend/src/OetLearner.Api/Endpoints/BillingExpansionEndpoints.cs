@@ -42,6 +42,7 @@ public static class BillingExpansionEndpoints
         var adminFul = v1.MapGroup("/admin/billing/fulfilment");
         adminFul.MapGet("/", ListPendingFulfilment).RequireAuthorization("AdminBillingRead");
         adminFul.MapPost("/subscriptions/{id}/mark-fulfilled", MarkSubscriptionFulfilled).WithAdminWrite("AdminBillingRefundWrite");
+        adminFul.MapPost("/subscriptions/{id}/ensure-invoice", EnsureSubscriptionInvoice).RequireAuthorization("AdminBillingRead");
 
         // ── Admin: scholarships ────────────────────────────────────
         var adminSc = v1.MapGroup("/admin/billing/scholarships");
@@ -448,6 +449,18 @@ public static class BillingExpansionEndpoints
                 }
                 return TypedResults.BadRequest("This order is already being fulfilled.");
             }
+
+            // The claim above is a raw ExecuteUpdateAsync — it bypasses the change
+            // tracker, so it bumps the row's real Postgres xmin (the optimistic
+            // concurrency token configured for Subscription) without refreshing the
+            // stale value this tracked `subscription` instance cached when it was
+            // loaded a few lines up. Left alone, EVERY call that reaches here would
+            // deterministically fail its own later SaveChangesAsync with
+            // DbUpdateConcurrencyException ("resource was modified by another
+            // request") — not a rare race, a guaranteed one. Reload now, before any
+            // further property is set below, so the tracked xmin matches what the
+            // claim just wrote and only a genuine concurrent conflict can still throw.
+            await db.Entry(subscription).ReloadAsync(ct);
         }
         subscription.FulfilmentStatus = FulfilmentStatuses.Processing;
 
@@ -610,7 +623,27 @@ public static class BillingExpansionEndpoints
                 : $"Marked {subscription.PlanId} fulfilled for {subscription.UserId}; access released.")
                       + (string.IsNullOrWhiteSpace(request.Notes) ? string.Empty : $" Notes: {request.Notes}"),
         });
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException) when (transaction is not null)
+        {
+            // Genuine race: something else touched this exact row between our claim
+            // and this save. The claim above makes that essentially impossible for
+            // two concurrent "mark fulfilled" clicks, but stay defensive — the
+            // action must be idempotent rather than surface a blocking error when
+            // the other writer already finished the same fulfilment.
+            await transaction.RollbackAsync(ct);
+            var current = await db.Subscriptions.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Id == id, ct);
+            if (current?.FulfilmentStatus == FulfilmentStatuses.Fulfilled)
+            {
+                return TypedResults.Ok(await BuildPendingFulfilmentResultAsync(
+                    current, db, webAccessReleased: current.Status == SubscriptionStatus.Active, ct));
+            }
+            throw;
+        }
         if (transaction is not null)
         {
             await transaction.CommitAsync(ct);
@@ -685,6 +718,83 @@ public static class BillingExpansionEndpoints
             proof?.SubmittedAt ?? payment?.UpdatedAt,
             quote?.Id,
             payment?.Status ?? (proof?.Status == "paid" ? "completed" : "verified"));
+    }
+
+    /// <summary>
+    /// Resolve (creating if missing) the <see cref="Invoice"/> for one exact
+    /// subscription, so the Payment Proofs / Pending Fulfilment queue can offer the
+    /// same "See Evidence" / "Download Invoice PDF" actions Billing Ops' Invoices
+    /// tab already has, without navigating away. Invoices are otherwise only
+    /// lazily created when the learner reads their own billing history
+    /// (<c>LearnerService.EnsureSubscriptionInvoiceAsync</c>, which resolves "the
+    /// user's current subscription" — not usable here since we need one exact
+    /// order) — an order fulfilled today may have no Invoice row yet. Idempotent:
+    /// the invoice id is a deterministic hash of
+    /// (subscriptionId, planId, startedAt), so repeat calls for the same order
+    /// always converge on the same row instead of creating duplicates.
+    /// </summary>
+    private static async Task<Results<Ok<EnsureInvoiceResponse>, NotFound>> EnsureSubscriptionInvoice(
+        string id,
+        LearnerDbContext db,
+        LearnerService learnerService,
+        CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
+        if (subscription is null)
+        {
+            return TypedResults.NotFound();
+        }
+        if (subscription.PriceAmount <= 0)
+        {
+            // Free plan — nothing was charged, so there is no invoice to show.
+            return TypedResults.Ok(new EnsureInvoiceResponse(null));
+        }
+
+        var compositeKey = $"{subscription.Id}|{subscription.PlanId}|{subscription.StartedAt.UtcTicks}";
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(compositeKey)))[..24]
+            .ToLowerInvariant();
+        var invoiceId = $"inv-sub-{hash}";
+
+        if (await db.Invoices.AsNoTracking().AnyAsync(x => x.Id == invoiceId, ct))
+        {
+            return TypedResults.Ok(new EnsureInvoiceResponse(invoiceId));
+        }
+
+        var plan = await db.BillingPlans.AsNoTracking().FirstOrDefaultAsync(p => p.Code == subscription.PlanId, ct);
+        var issuedAt = subscription.StartedAt != default
+            ? subscription.StartedAt
+            : (subscription.ChangedAt != default ? subscription.ChangedAt : DateTimeOffset.UtcNow);
+        var planName = plan?.Name ?? subscription.PlanId;
+        var description = string.IsNullOrWhiteSpace(subscription.Interval)
+            ? planName
+            : $"{planName} ({subscription.Interval})";
+
+        db.Invoices.Add(new Invoice
+        {
+            Id = invoiceId,
+            UserId = subscription.UserId,
+            Number = await learnerService.AllocateInvoiceNumberAsync(subscription.UserId, invoiceId, ct),
+            IssuedAt = issuedAt,
+            Amount = subscription.PriceAmount,
+            Currency = subscription.Currency,
+            Status = "Paid",
+            Description = description,
+            PlanVersionId = subscription.PlanVersionId,
+        });
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return TypedResults.Ok(new EnsureInvoiceResponse(invoiceId));
+        }
+        catch (DbUpdateException)
+        {
+            // Concurrent creation (e.g. the learner opened their own billing page at
+            // the same moment) — the row now exists under the same deterministic id.
+            var nowExists = await db.Invoices.AsNoTracking().AnyAsync(x => x.Id == invoiceId, ct);
+            return TypedResults.Ok(new EnsureInvoiceResponse(nowExists ? invoiceId : null));
+        }
     }
 
     /// <summary>
@@ -960,6 +1070,10 @@ public sealed record PendingFulfilmentDto(
     DateTimeOffset? PaidAt = null,
     string? OrderId = null,
     string PaymentStatus = "completed");
+
+/// <summary><c>InvoiceId</c> is <c>null</c> for a free (zero-price) order, which has
+/// nothing to invoice.</summary>
+public sealed record EnsureInvoiceResponse(string? InvoiceId);
 
 public sealed record ApproveRejectRequest(string? Notes);
 
