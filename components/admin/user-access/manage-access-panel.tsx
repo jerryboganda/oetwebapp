@@ -12,6 +12,7 @@ import {
   restoreUserPackage,
   setPrimaryUserPackage,
   suspendUserPackage,
+  updateUserPackageDates,
   type UserAccessSubscriptionRow,
 } from '@/lib/api/user-access-packages';
 import {
@@ -207,6 +208,12 @@ export function ManageAccessPanel({
           onSuspend={userId ? (id) => applyPackageTransition(id, suspendUserPackage) : undefined}
           onRestore={userId ? (id) => applyPackageTransition(id, restoreUserPackage) : undefined}
           onSetPrimary={userId ? (id) => applyPackageTransition(id, setPrimaryUserPackage) : undefined}
+          onEditDates={
+            userId
+              ? (id, input) =>
+                  applyPackageTransition(id, (uid, sid) => updateUserPackageDates(uid, sid, input))
+              : undefined
+          }
           busySubscriptionId={busySubscriptionId}
           disabled={disabled || isLoadingOptions}
         />

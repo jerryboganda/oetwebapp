@@ -301,6 +301,12 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         // single-source-of-truth — never elevate downstream.
         var eligible = subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial or SubscriptionStatus.FreezeRequested;
         var isTrial = subscription.Status == SubscriptionStatus.Trial;
+        if (eligible && !SubscriptionStateMachine.IsWithinAccessWindow(subscription, now))
+        {
+            trace.Add(subscription.StartedAt > now ? "subscription.not_started" : "subscription.expired");
+            eligible = false;
+            isTrial = false;
+        }
 
         BillingPlan? plan = null;
         var failLowReason = (string?)null;
@@ -443,10 +449,19 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         if (isExpired)
         {
             trace.Add("subscription.expired");
+            var displayPlan = ResolveBillingPlan(subscription.PlanId, plans);
             snapshot = snapshot with
             {
                 HasEligibleSubscription = false,
                 EnabledModules = Array.Empty<string>(),
+                PlanId = subscription.PlanId,
+                PlanCode = displayPlan is null
+                    ? subscription.PlanId
+                    : AiQuotaPlanMappingResolver.NormalizeCode(displayPlan.Code),
+                ExpiresAt = subscription.ExpiresAt,
+                ProductCategory = string.IsNullOrEmpty(displayPlan?.ProductCategory)
+                    ? null
+                    : displayPlan.ProductCategory,
             };
         }
 
@@ -462,6 +477,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         // in TutorBookEndpoints (TutorBookUnlocked && Active/Trial, no expiry).
         var permanentTutorBook = subscriptions.Any(s =>
             (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+            && s.StartedAt <= now
             && s.TutorBookUnlocked);
         if (permanentTutorBook)
         {
@@ -625,6 +641,13 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             };
         }
 
+        // Module overrides must not reopen an expired or future-only course. A
+        // permanent Tutor Book overlay is intentionally the sole exception.
+        if (!snapshot.HasEligibleSubscription && !permanentTutorBook)
+        {
+            snapshot = snapshot with { EnabledModules = Array.Empty<string>() };
+        }
+
         return snapshot;
     }
 
@@ -677,6 +700,10 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         DateTimeOffset now)
     {
         if (sub.Status is not (SubscriptionStatus.Active or SubscriptionStatus.Trial or SubscriptionStatus.FreezeRequested))
+        {
+            return null;
+        }
+        if (!SubscriptionStateMachine.IsWithinAccessWindow(sub, now))
         {
             return null;
         }
@@ -1023,6 +1050,8 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             .Where(subscription => subscription.Status == SubscriptionStatus.Active
                 || subscription.Status == SubscriptionStatus.Trial
                 || subscription.Status == SubscriptionStatus.FreezeRequested)
+            .Where(subscription => subscription.StartedAt <= now
+                && (subscription.ExpiresAt == null || subscription.ExpiresAt > now))
             .Select(subscription => subscription.Id)
             .Distinct(StringComparer.Ordinal)
             .ToArray();

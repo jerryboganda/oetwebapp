@@ -62,4 +62,76 @@ public class ListeningLearnerServiceTests
         Assert.Equal(0, dtoType.GetProperty("partCCount")!.GetValue(dto));
         Assert.Equal("/listening/paper/listen-paper-locked", dtoType.GetProperty("route")!.GetValue(dto));
     }
+
+    [Theory]
+    [InlineData("====== PAGE 4 ======\nPractice Test 1\nWhat is the nurse discussing with the patient?", "What is the nurse discussing with the patient?")]
+    [InlineData("PAGE 5\nWhat is the nurse discussing with the patient?", "What is the nurse discussing with the patient?")]
+    [InlineData("Practice Test 1\nWhat is the nurse discussing with the patient?", "What is the nurse discussing with the patient?")]
+    [InlineData("See PDF", "")]
+    [InlineData("CPDF", "")]
+    [InlineData("PDF", "")]
+    [InlineData("View PDF", "")]
+    [InlineData("====== PAGE 4 ======", "")]
+    [InlineData("PAGE 5", "")]
+    [InlineData("Practice Test 1", "")]
+    [InlineData("PAGE 4 Question 25 What is the patient's condition?", "Question 25 What is the patient's condition?")]
+    [InlineData("Practice Test 1 : You hear a doctor talking to a nurse.", "You hear a doctor talking to a nurse.")]
+    [InlineData("In general practice, hypertension is common.", "In general practice, hypertension is common.")]
+    [InlineData("The patient presented with Paget disease.", "The patient presented with Paget disease.")]
+    public void SanitizeQuestionPrompt_StripsArtifactsAndSentinels(string? input, string expected)
+    {
+        var result = ListeningLearnerService.SanitizeQuestionPrompt(input);
+        Assert.Equal(expected, result);
+        Assert.Equal(expected, ListeningLearnerService.CleanListeningPrompt(input));
+    }
+
+    [Theory]
+    [InlineData("Option A", "")]
+    [InlineData("Option B", "")]
+    [InlineData("Option C", "")]
+    [InlineData("See PDF", "")]
+    [InlineData("====== PAGE 4 ======\nTake 500mg paracetamol", "Take 500mg paracetamol")]
+    [InlineData("Take 500mg paracetamol orally", "Take 500mg paracetamol orally")]
+    public void SanitizeOptionText_StripsPlaceholdersAndArtifacts(string? input, string expected)
+    {
+        var result = ListeningLearnerService.SanitizeOptionText(input);
+        Assert.Equal(expected, result);
+        Assert.Equal(expected, ListeningLearnerService.CleanListeningOption(input));
+    }
+
+    [Fact]
+    public void MapRelationalQuestion_SanitizesStemAndOptions()
+    {
+        var relationalQuestion = new ListeningQuestion
+        {
+            Id = "lq-1",
+            PaperId = "paper-1",
+            QuestionNumber = 25,
+            Stem = "====== PAGE 4 ======\nPractice Test 1\nWhat is the nurse discussing with the patient?",
+            QuestionType = ListeningQuestionType.MultipleChoice3,
+            Options =
+            [
+                new ListeningQuestionOption { OptionKey = "A", DisplayOrder = 0, Text = "Option A", IsCorrect = false },
+                new ListeningQuestionOption { OptionKey = "B", DisplayOrder = 1, Text = "====== PAGE 4 ======\nSchedule follow-up", IsCorrect = true },
+                new ListeningQuestionOption { OptionKey = "C", DisplayOrder = 2, Text = "See PDF", IsCorrect = false }
+            ],
+            CorrectAnswerJson = "\"B\""
+        };
+
+        var method = typeof(ListeningLearnerService).GetMethod("MapRelationalQuestion", BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var mapped = method.Invoke(null, [relationalQuestion]);
+        Assert.NotNull(mapped);
+
+        var mappedType = mapped.GetType();
+        var text = (string)mappedType.GetProperty("Text")!.GetValue(mapped)!;
+        var options = (IReadOnlyList<string>)mappedType.GetProperty("Options")!.GetValue(mapped)!;
+
+        Assert.Equal("What is the nurse discussing with the patient?", text);
+        Assert.Equal(3, options.Count);
+        Assert.Equal("", options[0]);
+        Assert.Equal("Schedule follow-up", options[1]);
+        Assert.Equal("", options[2]);
+    }
 }

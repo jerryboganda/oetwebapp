@@ -151,6 +151,15 @@ public sealed class UserAccessAllocationService(
             if (request.MakePrimary) learner.CurrentPlanId = plan.Code;
             await db.SaveChangesAsync(ct);
             await TryGrantCourseGiftCreditsAsync(userId, plan, existing, startsAt, ct);
+            if (aiPackageCreditService is not null)
+            {
+                await aiPackageCreditService.UpdateGrantWindowAsync(
+                    userId,
+                    existing.Id,
+                    existing.StartedAt,
+                    existing.ExpiresAt,
+                    ct);
+            }
             await SyncAccessExpiryAsync(learner, ct);
             await AuditAsync(adminId, adminName, "Package Re-granted", existing.Id,
                 $"Adjusted package {plan.Code} for {userId}", ct);
@@ -235,7 +244,14 @@ public sealed class UserAccessAllocationService(
         await ReverseLinkedAddOnsAsync(userId, sub, ct);
         if (aiPackageCreditService is not null)
         {
-            await aiPackageCreditService.ReverseGrantsAsync(userId, sub.PlanId, ct);
+            await aiPackageCreditService.ReverseGrantsAsync(
+                userId,
+                AiPackageCreditSources.AdminPackage(sub.Id, sub.PlanId),
+                ct);
+            await aiPackageCreditService.ReverseGrantsAsync(
+                userId,
+                AiPackageCreditSources.Plan(sub.Id, sub.PlanId),
+                ct);
         }
 
         // Expired/Cancelled already grant nothing, and the state machine keeps Expired
@@ -316,6 +332,72 @@ public sealed class UserAccessAllocationService(
             $"Restored package {sub.PlanId} for {userId}", ct);
         return await GetAccessAsync(userId, ct);
     }
+    /// <summary>Absolute replacement of a saved package's effective access dates (PDF
+    /// date-override): provided Start/End values replace the previous ones (not additive),
+    /// the End cannot precede the Start, and a past End expires the package immediately.
+    /// Only the selected package is touched — unrelated packages and separately purchased
+    /// AI packages are never modified. Course-gifted AI credit lots sourced from this exact
+    /// subscription have their valid-until moved in lock-step via
+    /// <see cref="IAiPackageCreditService.UpdateGrantExpiryAsync"/>.</summary>
+    public async Task<UserAccessDto> UpdatePackageDatesAsync(
+        string adminId, string adminName, string userId, string subscriptionId,
+        AdminUserAccessPackageDatesRequest request, CancellationToken ct)
+    {
+        if (request.StartsAt is null && request.ExpiresAt is null && !request.ClearExpiresAt)
+        {
+            throw ApiException.Validation(
+                "dates_required",
+                "Provide a start date, an expiry date, or tick 'no expiry'.");
+        }
+
+        var (learner, sub) = await LoadPackageAsync(userId, subscriptionId, ct);
+
+        var startsAt = request.StartsAt ?? sub.StartedAt;
+        var expiresAt = request.ClearExpiresAt ? null : request.ExpiresAt ?? sub.ExpiresAt;
+        // End-before-start is nonsensical for a live window — but a deliberately past
+        // end date is the explicit "expire this package now" override, so it is allowed
+        // to precede the start (the package simply expires immediately).
+        if (expiresAt is { } end && end > timeProvider.GetUtcNow() && end < startsAt)
+        {
+            throw ApiException.Validation(
+                "expiry_before_start",
+                "The end date cannot be before the start date.");
+        }
+
+        sub.StartedAt = startsAt;
+        sub.ExpiresAt = expiresAt;
+        sub.ChangedAt = timeProvider.GetUtcNow();
+
+        // A past end date expires the package immediately — same gate as natural expiry.
+        // Access-granting statuses (Active / Trial / FreezeRequested) all allow -> Expired.
+        if (expiresAt is { } pastEnd && pastEnd <= timeProvider.GetUtcNow()
+            && AccessGrantingStatuses.Contains(sub.Status))
+        {
+            SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Expired, "admin_date_override_expired");
+            await RepointPrimaryAwayFromAsync(learner, sub, ct);
+        }
+        else if (sub.Status == SubscriptionStatus.Expired
+            && (expiresAt is null || expiresAt > timeProvider.GetUtcNow()))
+        {
+            SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Active, "admin_date_override_extended");
+        }
+
+        await db.SaveChangesAsync(ct);
+        await SyncAccessExpiryAsync(learner, ct);
+
+        // Keep the course-gifted AI credit lots granted from this subscription aligned:
+        // a later end extends the linked (unused) credits, a past end expires them, and
+        // clearing the expiry lifts their deadline. Used history is never touched.
+        if (aiPackageCreditService is not null)
+        {
+            await aiPackageCreditService.UpdateGrantWindowAsync(userId, sub.Id, sub.StartedAt, sub.ExpiresAt, ct);
+        }
+
+        await AuditAsync(adminId, adminName, "Package Dates Updated", sub.Id,
+            $"Set package {sub.PlanId} for {userId}: start {startsAt:u}, end "
+            + (expiresAt is { } e ? $"{e:u}" : "no expiry"), ct);
+        return await GetAccessAsync(userId, ct);
+    }
 
     public async Task<UserAccessDto> GrantAddonAsync(
         string adminId, string adminName, string userId, AdminUserAccessAddonRequest request, CancellationToken ct)
@@ -369,32 +451,31 @@ public sealed class UserAccessAllocationService(
         }
 
         var quantity = Math.Max(1, request.Quantity);
-        var appliedUnits = 0;
-        for (var unit = 0; unit < quantity; unit++)
+        // Each admin request is one idempotent grant event. The quantity is applied
+        // atomically so counters, AI lots, and the subscription item stay aligned.
+        var eventId = $"admin:{Guid.NewGuid():N}";
+        var result = await addonGrantProcessor.ApplyAsync(
+            eventId,
+            targetSubId,
+            addonCode,
+            ct,
+            quantity,
+            AiPackageCreditSources.Addon(targetSubId, addon.Code));
+        if (!result.Applied && !result.DuplicateSkipped)
         {
-            // Short event ids: the previous admin_alloc:{userId}:{code}:{sub}:{unit}
-            // key overflowed IdempotencyRecord.Key and StripeSessionId (varchar 128),
-            // so Reading Pro / other AI add-ons failed on Save Access.
-            var eventId = $"admin:{unit}";
-            var result = await addonGrantProcessor.ApplyAsync(eventId, targetSubId, addonCode, ct);
-            if (!result.Applied && !result.DuplicateSkipped)
-            {
-                throw ApiException.Validation(
-                    "addon_grant_failed",
-                    $"Unable to grant add-on '{addonCode}': {result.Reason ?? "unknown"}.");
-            }
-
-            if (result.Applied) appliedUnits++;
+            throw ApiException.Validation(
+                "addon_grant_failed",
+                $"Unable to grant add-on '{addonCode}': {result.Reason ?? "unknown"}.");
         }
 
-        await EnsureAddonSubscriptionItemAsync(targetSubId, addonCode, ct);
+        await EnsureAddonSubscriptionItemAsync(targetSubId, addonCode, quantity, ct);
         if (IsTutorBookAddOn(addon))
         {
             await SetTutorBookUnlockedAsync(targetSubId, true, ct);
         }
 
         await AuditAsync(adminId, adminName, "Add-on Granted", targetSubId,
-            $"Granted add-on {addonCode} x{quantity} to {userId} ({appliedUnits} new)", ct);
+            $"Granted add-on {addonCode} x{quantity} to {userId} ({(result.Applied ? quantity : 0)} new)", ct);
         return await GetAccessAsync(userId, ct);
     }
 
@@ -429,16 +510,18 @@ public sealed class UserAccessAllocationService(
             item.Status = SubscriptionItemStatus.Cancelled;
             item.EndsAt = now;
             item.UpdatedAt = now;
-            await addonGrantProcessor.ReverseAsync($"admin-remove:{item.Id}", item.SubscriptionId, code, ct);
+            await addonGrantProcessor.ReverseAsync(
+                $"admin-remove:{item.Id}",
+                item.SubscriptionId,
+                code,
+                ct,
+                Math.Max(1, item.Quantity),
+                AiPackageCreditSources.Addon(item.SubscriptionId, code));
         }
 
         if (items.Count > 0)
         {
             await db.SaveChangesAsync(ct);
-            if (aiPackageCreditService is not null)
-            {
-                await aiPackageCreditService.ReverseGrantsAsync(userId, code, ct);
-            }
         }
 
         if (aiPackageCreditService is not null)
@@ -584,14 +667,21 @@ public sealed class UserAccessAllocationService(
     private static bool IsStandaloneAddonPlan(string? planId)
         => string.Equals(planId, Subscription.StandaloneAddonPlanId, StringComparison.OrdinalIgnoreCase);
 
-    private async Task EnsureAddonSubscriptionItemAsync(string subscriptionId, string addonCode, CancellationToken ct)
+    private async Task EnsureAddonSubscriptionItemAsync(string subscriptionId, string addonCode, int quantity, CancellationToken ct)
     {
-        var exists = await db.SubscriptionItems.AnyAsync(
+        quantity = Math.Max(1, quantity);
+        var existing = await db.SubscriptionItems.FirstOrDefaultAsync(
             item => item.SubscriptionId == subscriptionId
                     && item.ItemCode == addonCode
                     && item.Status == SubscriptionItemStatus.Active,
             ct);
-        if (exists) return;
+        if (existing is not null)
+        {
+            existing.Quantity += quantity;
+            existing.UpdatedAt = timeProvider.GetUtcNow();
+            await db.SaveChangesAsync(ct);
+            return;
+        }
 
         var addOn = await db.BillingAddOns.AsNoTracking().FirstAsync(a => a.Code == addonCode, ct);
         var now = timeProvider.GetUtcNow();
@@ -601,7 +691,7 @@ public sealed class UserAccessAllocationService(
             SubscriptionId = subscriptionId,
             ItemCode = addonCode,
             ItemType = addOn.IsRecurring ? "recurring_addon" : "addon",
-            Quantity = 1,
+            Quantity = quantity,
             Status = SubscriptionItemStatus.Active,
             StartsAt = now,
             EndsAt = addOn.DurationDays > 0 ? now.AddDays(addOn.DurationDays) : null,
@@ -627,11 +717,13 @@ public sealed class UserAccessAllocationService(
             item.Status = SubscriptionItemStatus.Cancelled;
             item.EndsAt = now;
             item.UpdatedAt = now;
-            await addonGrantProcessor.ReverseAsync($"admin-remove:{item.Id}", item.SubscriptionId, item.ItemCode, ct);
-            if (aiPackageCreditService is not null)
-            {
-                await aiPackageCreditService.ReverseGrantsAsync(userId, item.ItemCode, ct);
-            }
+            await addonGrantProcessor.ReverseAsync(
+                $"admin-remove:{item.Id}",
+                item.SubscriptionId,
+                item.ItemCode,
+                ct,
+                Math.Max(1, item.Quantity),
+                AiPackageCreditSources.Addon(item.SubscriptionId, item.ItemCode));
         }
 
         await db.SaveChangesAsync(ct);
@@ -706,7 +798,9 @@ public sealed class UserAccessAllocationService(
             plan.BundledAiCredits,
             $"admin-package:{subscription.Id}:{plan.Code}",
             subscription.ExpiresAt ?? startsAt.AddDays(plan.AccessDurationDays > 0 ? plan.AccessDurationDays : 180),
-            ct);
+            ct,
+            AiPackageCreditSources.AdminPackage(subscription.Id, plan.Code),
+            startsAt);
     }
 
     private async Task<(LearnerUser Learner, Subscription Subscription)> LoadPackageAsync(

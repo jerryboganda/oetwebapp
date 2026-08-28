@@ -1,0 +1,100 @@
+name: AI Control Plane Schema Tests
+
+# W1 of the AI cost/reliability remediation (incident INC-2026-CLAUDE-01).
+# Runs the schema-only AiOperation/AiOperationAttempt/AiBudgetPeriod/
+# AiCreditReservation coverage (Services/AiControlPlaneSchemaTests.cs +
+# Services/AiControlPlaneSchemaPostgreSqlTests.cs), the shared PostgreSQL
+# test harness precedent (PostgreSqlPerformanceProviderTests.cs), and the
+# migration-hygiene contract for the two new hand-authored migrations —
+# against a real PostgreSQL 16 service, since several of those tests assert
+# provider-specific DDL (xmin concurrency tokens, partition-safe conditional
+# indexes) that SQLite/InMemory cannot faithfully emulate.
+#
+# No runtime service reads or writes these tables yet, so this workflow is
+# scoped narrowly and kept separate from deploy.yml.
+on:
+  pull_request:
+    paths:
+      - 'backend/src/OetLearner.Api/Domain/AiOperationEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiOperationAttemptEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiBudgetEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiCreditReservationEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiEntities.cs'
+      - 'backend/src/OetLearner.Api/Data/LearnerDbContext.cs'
+      - 'backend/src/OetLearner.Api/Data/LearnerDbContext.AiControlPlane.cs'
+      - 'backend/src/OetLearner.Api/Data/Migrations/20261102090000_AddAiControlPlaneCore.cs'
+      - 'backend/src/OetLearner.Api/Data/Migrations/20261103090000_ExtendAiUsageRecordProvenance.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Infrastructure/PostgreSqlFactAttribute.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Infrastructure/PostgreSqlTestDatabase.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaPostgreSqlTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
+      - '.github/workflows/ai-control-plane-tests.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/src/OetLearner.Api/Domain/AiOperationEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiOperationAttemptEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiBudgetEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiCreditReservationEntities.cs'
+      - 'backend/src/OetLearner.Api/Domain/AiEntities.cs'
+      - 'backend/src/OetLearner.Api/Data/LearnerDbContext.cs'
+      - 'backend/src/OetLearner.Api/Data/LearnerDbContext.AiControlPlane.cs'
+      - 'backend/src/OetLearner.Api/Data/Migrations/20261102090000_AddAiControlPlaneCore.cs'
+      - 'backend/src/OetLearner.Api/Data/Migrations/20261103090000_ExtendAiUsageRecordProvenance.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Infrastructure/PostgreSqlFactAttribute.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Infrastructure/PostgreSqlTestDatabase.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiControlPlaneSchemaPostgreSqlTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
+      - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
+      - '.github/workflows/ai-control-plane-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-control-plane-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai-control-plane-schema:
+    name: AI control-plane schema + shared PostgreSQL harness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: oet_ai_control_plane_tests
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d oet_ai_control_plane_tests"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_ai_control_plane_tests;Username=postgres;******
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+
+      - name: Test (AI control-plane + PostgreSQL harness scope)
+        run: >
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+          --configuration Debug --no-restore --nologo
+          --logger "console;verbosity=normal"
+          --filter "FullyQualifiedName~AiControlPlane|FullyQualifiedName~PostgreSql|FullyQualifiedName~MigrationHygieneTests"

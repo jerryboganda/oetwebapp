@@ -475,9 +475,11 @@ public sealed class ManualPaymentService : IManualPaymentService
                     planCodeForCredit,
                     planVersion?.Name ?? plan?.Name ?? row.CourseName,
                     aiCredits,
-                    creditReferenceId,
-                    giftExpiry,
-                    ct);
+                     creditReferenceId,
+                     giftExpiry,
+                     ct,
+                     AiPackageCreditSources.Plan(subscription.Id, planCodeForCredit),
+                     subscription.StartedAt);
             }
 
             var hasLegacyLedgerEntry = await _db.AiCreditLedger.AnyAsync(

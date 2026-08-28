@@ -82,6 +82,8 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
             return Fail(addOnCode, name: "?", kind: null, flag: null, reason: "addon_not_found", redirect: null);
         }
 
+        var now = DateTimeOffset.UtcNow;
+
         // Add-ons that do not require an eligible parent skip the check.
         if (!addOn.RequiresEligibleParent)
         {
@@ -103,7 +105,9 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
             var alreadyOwnsPlatformTutorBook = await db.Subscriptions.AsNoTracking()
                 .AnyAsync(s => s.UserId == userId
                     && s.TutorBookUnlocked
-                    && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial), ct);
+                    && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+                    && s.StartedAt <= now
+                    && (s.ExpiresAt == null || s.ExpiresAt > now), ct);
             var alreadyPurchasedTutorBook = await db.Subscriptions.AsNoTracking()
                 .Where(s => s.UserId == userId)
                 .AnyAsync(s =>
@@ -116,8 +120,8 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
                         item.SubscriptionId == s.Id
                         && item.ItemCode == "tutor-book-addon"
                         && item.Status == SubscriptionItemStatus.Active
-                        && item.StartsAt <= DateTimeOffset.UtcNow
-                        && (item.EndsAt == null || item.EndsAt > DateTimeOffset.UtcNow)
+                        && item.StartsAt <= now
+                        && (item.EndsAt == null || item.EndsAt > now)
                         && (s.Status == SubscriptionStatus.Active
                             || s.Status == SubscriptionStatus.Trial
                             || s.Status == SubscriptionStatus.FreezeRequested)), ct);
@@ -133,10 +137,12 @@ public sealed class AddonEligibilityService(LearnerDbContext db) : IAddonEligibi
         var flag = addOn.EligibilityFlag?.Trim().ToLowerInvariant() ?? string.Empty;
 
         // Query the user's active subscriptions joined to their plan to read the three flag columns.
-        var now = DateTimeOffset.UtcNow;
         var candidateRows = await db.Subscriptions.AsNoTracking()
             .Where(s => s.UserId == userId
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+                && (s.Status == SubscriptionStatus.Active
+                    || s.Status == SubscriptionStatus.Trial
+                    || s.Status == SubscriptionStatus.FreezeRequested)
+                && s.StartedAt <= now
                 && (s.ExpiresAt == null || s.ExpiresAt > now))
             .SelectMany(
                 s => db.BillingPlans.AsNoTracking()

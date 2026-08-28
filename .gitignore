@@ -271,3 +271,4 @@ config/local-prod-db.password
 
 pdf-policy-release/
 pdf-policy-release2/
+scripts/materials/.cache/

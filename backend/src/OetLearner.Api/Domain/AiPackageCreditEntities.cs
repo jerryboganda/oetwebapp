@@ -53,6 +53,7 @@ public class AiPackageCreditAccount
 }
 
 [Index(nameof(UserId), nameof(CreatedAt))]
+[Index(nameof(UserId), nameof(SourceReferenceId))]
 public class AiPackageCreditTransaction
 {
     [Key]
@@ -90,12 +91,21 @@ public class AiPackageCreditTransaction
     [MaxLength(128)]
     public string? ReferenceId { get; set; }
 
+    /// <summary>
+    /// Stable purchase owner used when a learner has multiple grants with the
+    /// same package code. Activity/refund references remain in
+    /// <see cref="ReferenceId"/>.
+    /// </summary>
+    [MaxLength(128)]
+    public string? SourceReferenceId { get; set; }
+
     [MaxLength(64)]
     public string? JobId { get; set; }
 
     [MaxLength(512)]
     public string Description { get; set; } = string.Empty;
 
+    public DateTimeOffset? ValidFrom { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
@@ -134,6 +144,7 @@ public class AiPackageCreditLot
     public bool UnlimitedGrading { get; set; }
     public bool UnlimitedListening { get; set; }
     public bool UnlimitedReading { get; set; }
+    public DateTimeOffset? ValidFrom { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
 
     [MaxLength(128)]

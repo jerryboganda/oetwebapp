@@ -4,18 +4,18 @@ using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Npgsql;
 using OetLearner.Api.Data.Migrations;
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
 public sealed class PostgreSqlPerformanceProviderTests
 {
-    private const string ConnectionVariable = "OET_TEST_POSTGRES_CONNECTION";
     private const string NpgsqlProvider = "Npgsql.EntityFrameworkCore.PostgreSQL";
 
     [PostgreSqlFact]
     public async Task DateAggregate_GroupsTimestampWithTimeZoneByUtcCalendarDate()
     {
-        await using var database = await PostgreSqlTestSchema.CreateAsync();
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await database.ExecuteAsync(
             """
             CREATE TABLE "AnalyticsEvents" (
@@ -49,7 +49,7 @@ public sealed class PostgreSqlPerformanceProviderTests
     [PostgreSqlFact]
     public async Task ILikeSearch_IsCaseInsensitiveAndEscapesLiteralWildcards()
     {
-        await using var database = await PostgreSqlTestSchema.CreateAsync();
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await database.ExecuteAsync(
             """
             CREATE TABLE "ContentSearch" (
@@ -82,7 +82,7 @@ public sealed class PostgreSqlPerformanceProviderTests
     [PostgreSqlFact]
     public async Task ContentIndexes_ExecuteTwiceAndRemainValidAndReady()
     {
-        await using var database = await PostgreSqlTestSchema.CreateAsync();
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await database.ExecuteAsync(
             """
             CREATE TABLE "ContentItems" (
@@ -143,7 +143,7 @@ public sealed class PostgreSqlPerformanceProviderTests
     [PostgreSqlFact]
     public async Task JobClaim_SkipsRowsLockedByAnotherWorker()
     {
-        await using var database = await PostgreSqlTestSchema.CreateAsync();
+        await using var database = await PostgreSqlTestDatabase.CreateAsync();
         await database.ExecuteAsync(
             """
             CREATE TABLE "BackgroundJobs" (
@@ -208,82 +208,13 @@ public sealed class PostgreSqlPerformanceProviderTests
     }
 
     private static async Task ExecuteOperationsAsync(
-        PostgreSqlTestSchema database,
+        PostgreSqlTestDatabase database,
         IEnumerable<SqlOperation> operations)
     {
         foreach (var operation in operations)
         {
             Assert.True(operation.SuppressTransaction);
             await database.ExecuteAsync(operation.Sql);
-        }
-    }
-
-    private sealed class PostgreSqlTestSchema : IAsyncDisposable
-    {
-        private readonly string _baseConnectionString;
-
-        private PostgreSqlTestSchema(string baseConnectionString, string schema, NpgsqlConnection connection)
-        {
-            _baseConnectionString = baseConnectionString;
-            Schema = schema;
-            Connection = connection;
-        }
-
-        public string Schema { get; }
-        public NpgsqlConnection Connection { get; }
-
-        public static async Task<PostgreSqlTestSchema> CreateAsync()
-        {
-            var baseConnectionString = Environment.GetEnvironmentVariable(ConnectionVariable)
-                ?? throw new InvalidOperationException($"{ConnectionVariable} is required.");
-            var schema = $"performance_{Guid.NewGuid():N}";
-            var connection = new NpgsqlConnection(baseConnectionString);
-            await connection.OpenAsync();
-            await using (var create = new NpgsqlCommand($"CREATE SCHEMA \"{schema}\";", connection))
-                await create.ExecuteNonQueryAsync();
-            await SetSearchPathAsync(connection, schema);
-            return new PostgreSqlTestSchema(baseConnectionString, schema, connection);
-        }
-
-        public NpgsqlCommand Command(string sql) => new(sql, Connection);
-
-        public async Task ExecuteAsync(string sql)
-        {
-            await using var command = Command(sql);
-            await command.ExecuteNonQueryAsync();
-        }
-
-        public async Task<NpgsqlConnection> OpenSiblingAsync()
-        {
-            var connection = new NpgsqlConnection(_baseConnectionString);
-            await connection.OpenAsync();
-            await SetSearchPathAsync(connection, Schema);
-            return connection;
-        }
-
-        public async ValueTask DisposeAsync()
-        {
-            await Connection.CloseAsync();
-            await using var cleanup = new NpgsqlConnection(_baseConnectionString);
-            await cleanup.OpenAsync();
-            await using var drop = new NpgsqlCommand($"DROP SCHEMA IF EXISTS \"{Schema}\" CASCADE;", cleanup);
-            await drop.ExecuteNonQueryAsync();
-            await Connection.DisposeAsync();
-        }
-
-        private static async Task SetSearchPathAsync(NpgsqlConnection connection, string schema)
-        {
-            await using var command = new NpgsqlCommand($"SET search_path TO \"{schema}\";", connection);
-            await command.ExecuteNonQueryAsync();
-        }
-    }
-
-    private sealed class PostgreSqlFactAttribute : FactAttribute
-    {
-        public PostgreSqlFactAttribute()
-        {
-            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(ConnectionVariable)))
-                Skip = $"Set {ConnectionVariable} to run PostgreSQL provider coverage.";
         }
     }
 }

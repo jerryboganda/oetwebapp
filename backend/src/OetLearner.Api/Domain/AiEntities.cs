@@ -220,6 +220,74 @@ public class AiUsageRecord
     // Optional FK for admin explorer joins. Not required, because usage
     // records can exist for users whose accounts were later deleted.
     public ApplicationUserAccount? AuthAccount { get; set; }
+
+    // ── W1 control-plane provenance (schema-only; all nullable, additive) ──
+    // Backfilled by migration 20261103090000_ExtendAiUsageRecordProvenance for
+    // historical rows. No call site sets these yet — the gateway keeps
+    // recording exactly one AiUsageRecord per call exactly as before; a later
+    // wave links each record to the AiOperation/AiOperationAttempt that
+    // produced it and stops relying on estimated CostEstimateUsd alone.
+
+    /// <summary>The <see cref="AiOperation"/> this record was produced by,
+    /// once operations are wired up. Null for all pre-W1 rows and any call
+    /// that still bypasses the control plane.</summary>
+    [MaxLength(64)]
+    public string? OperationId { get; set; }
+
+    /// <summary>Which <see cref="AiOperationAttempt"/> (1-based) produced
+    /// this record.</summary>
+    public int? AttemptNumber { get; set; }
+
+    /// <summary>Mirrors <see cref="AiOperationAttempt.ProviderInvoked"/> for
+    /// records that originate from the control plane.</summary>
+    public bool? ProviderInvoked { get; set; }
+
+    /// <summary>Mirrors <see cref="AiOperationAttempt.ProviderRequestId"/>.</summary>
+    [MaxLength(128)]
+    public string? ProviderRequestId { get; set; }
+
+    /// <summary>Mirrors <see cref="AiOperationAttempt.ProviderHttpStatus"/>.</summary>
+    public int? ProviderHttpStatus { get; set; }
+
+    /// <summary>Non-cached input tokens billed at the standard rate. Split
+    /// out from <see cref="PromptTokens"/> once providers report cache
+    /// read/write tokens separately, so historical totals stay comparable.</summary>
+    public int? NormalInputTokens { get; set; }
+
+    /// <summary>Non-cached output tokens billed at the standard rate.</summary>
+    public int? NormalOutputTokens { get; set; }
+
+    /// <summary>Tokens billed at the (higher) prompt-cache write rate.</summary>
+    public int? CacheWriteTokens { get; set; }
+
+    /// <summary>Tokens billed at the (lower) prompt-cache read rate.</summary>
+    public int? CacheReadTokens { get; set; }
+
+    /// <summary>Which billed-token pricing tier applied (e.g. <c>normal</c>,
+    /// <c>cache_write</c>, <c>cache_read</c>, <c>mixed</c>).</summary>
+    [MaxLength(32)]
+    public string? BilledTokenClass { get; set; }
+
+    /// <summary>Version tag of the rate card used to compute
+    /// <see cref="CalculatedCostUsd"/>. Historical rows are backfilled with
+    /// <c>legacy-pre-remediation</c> so a null value always means "never
+    /// recalculated", never "used the current rate card".</summary>
+    [MaxLength(32)]
+    public string? PricingVersion { get; set; }
+
+    /// <summary>Cost recomputed from actual billed token classes and
+    /// <see cref="PricingVersion"/>, superseding the call-time
+    /// <see cref="CostEstimateUsd"/> estimate once available.</summary>
+    public decimal? CalculatedCostUsd { get; set; }
+
+    /// <summary>Mirrors <see cref="AiOperationAttempt.RetryReason"/> for the
+    /// attempt that produced this record.</summary>
+    [MaxLength(64)]
+    public string? RetryReason { get; set; }
+
+    /// <summary>Mirrors <see cref="AiOperationAttempt.ErrorClass"/>.</summary>
+    [MaxLength(64)]
+    public string? ErrorClass { get; set; }
 }
 
 /// <summary>

@@ -570,9 +570,11 @@ public static class BillingExpansionEndpoints
                     targetPlanCode,
                     plan?.Name ?? subscription.PlanId,
                     aiCredits,
-                    $"plan:{subscription.Id}:{targetPlanCode}",
-                    giftExpiry,
-                    ct);
+                     $"plan:{subscription.Id}:{targetPlanCode}",
+                     giftExpiry,
+                     ct,
+                     AiPackageCreditSources.Plan(subscription.Id, targetPlanCode),
+                     subscription.StartedAt);
             }
         }
 

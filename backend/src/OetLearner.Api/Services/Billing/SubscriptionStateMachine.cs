@@ -132,6 +132,15 @@ public static class SubscriptionStateMachine
     public static bool IsLegal(SubscriptionStatus from, SubscriptionStatus to)
         => Allowed.TryGetValue(from, out var set) && set.Contains(to);
 
+    /// <summary>
+    /// Shared subscription validity rule. Status is checked separately because a
+    /// future or expired window must never be converted into active access merely
+    /// by having an access-granting status.
+    /// </summary>
+    public static bool IsWithinAccessWindow(Subscription subscription, DateTimeOffset now)
+        => subscription.StartedAt <= now
+            && (subscription.ExpiresAt is null || subscription.ExpiresAt > now);
+
     public static IReadOnlySet<SubscriptionStatus> AllowedFrom(SubscriptionStatus from)
         => Allowed.TryGetValue(from, out var set) ? set : new HashSet<SubscriptionStatus>();
 

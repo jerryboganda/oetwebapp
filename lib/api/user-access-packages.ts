@@ -63,6 +63,33 @@ export function setPrimaryUserPackage(userId: string, subscriptionId: string): P
   );
 }
 
+/** Payload for the absolute package date override (PDF date-override requirements):
+ *  Start/End replace the saved values; `ClearExpiresAt` lifts the end date entirely. */
+export interface UpdateUserPackageDatesInput {
+  startsAt?: string | null;
+  expiresAt?: string | null;
+  clearExpiresAt?: boolean;
+}
+
+/** Absolute replacement of a saved package's access window — mirrors
+ *  `PUT /v1/admin/users/{userId}/access/packages/{id}/dates`
+ *  (`AdminUserAccessPackageDatesRequest`). A past end date expires the package
+ *  immediately and its course-gifted AI credit lots follow in lock-step. */
+export function updateUserPackageDates(
+  userId: string,
+  subscriptionId: string,
+  input: UpdateUserPackageDatesInput,
+): Promise<UserAccess> {
+  return apiClient.put<UserAccess>(
+    `/v1/admin/users/${encodeURIComponent(userId)}/access/packages/${encodeURIComponent(subscriptionId)}/dates`,
+    {
+      startsAt: input.startsAt ?? null,
+      expiresAt: input.clearExpiresAt ? null : input.expiresAt ?? null,
+      clearExpiresAt: input.clearExpiresAt ?? false,
+    },
+  );
+}
+
 // ── Allocation rules (mirrored from the backend so the form can pre-empt them) ──
 
 export function planAccessDurationDays(plan: AdminBillingPlan | undefined): number {

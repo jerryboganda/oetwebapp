@@ -34,11 +34,16 @@ public sealed class RefundService
 {
     private readonly LearnerDbContext _db;
     private readonly IPaymentGatewayProvider _gateways;
+    private readonly IAiPackageCreditService? _aiPackageCredits;
 
-    public RefundService(LearnerDbContext db, IPaymentGatewayProvider gateways)
+    public RefundService(
+        LearnerDbContext db,
+        IPaymentGatewayProvider gateways,
+        IAiPackageCreditService? aiPackageCredits = null)
     {
         _db = db;
         _gateways = gateways;
+        _aiPackageCredits = aiPackageCredits;
     }
 
     public async Task<RefundResponse> IssueRefundAsync(RefundRequest request, CancellationToken ct)
@@ -372,15 +377,23 @@ public sealed class RefundService
     private async Task<bool> ReverseEntitlementsAsync(PaymentTransaction transaction, CancellationToken ct)
     {
         var changed = false;
+        var quote = string.IsNullOrWhiteSpace(transaction.QuoteId)
+            ? null
+            : await _db.BillingQuotes.AsNoTracking()
+                .FirstOrDefaultAsync(row => row.Id == transaction.QuoteId, ct);
 
         // End any subscription items that were activated by this transaction.
         var items = await _db.SubscriptionItems
-            .Where(i => i.Status == SubscriptionItemStatus.Active
-                        && (i.CheckoutSessionId == transaction.GatewayTransactionId
-                            || (transaction.QuoteId != null && i.QuoteId == transaction.QuoteId)))
+            .Where(i => i.CheckoutSessionId == transaction.GatewayTransactionId
+                        || (transaction.QuoteId != null && i.QuoteId == transaction.QuoteId))
             .ToListAsync(ct);
         foreach (var item in items)
         {
+            if (item.Status != SubscriptionItemStatus.Active)
+            {
+                continue;
+            }
+
             item.Status = SubscriptionItemStatus.Cancelled;
             item.EndsAt = DateTimeOffset.UtcNow;
             item.UpdatedAt = DateTimeOffset.UtcNow;
@@ -390,10 +403,19 @@ public sealed class RefundService
         // For subscription payments, downgrade the active subscription.
         if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
         {
-            var sub = await _db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == transaction.LearnerUserId, ct);
-            if (sub is not null && sub.Status == SubscriptionStatus.Active)
+            var subscriptionIds = items.Select(item => item.SubscriptionId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(quote?.SubscriptionId))
             {
-                SubscriptionStateMachine.Transition(sub, SubscriptionStatus.Cancelled, "payment_refund_full");
+                subscriptionIds.Add(quote.SubscriptionId);
+            }
+
+            var subscriptions = await _db.Subscriptions
+                .Where(subscription => subscription.UserId == transaction.LearnerUserId
+                    && subscriptionIds.Contains(subscription.Id))
+                .ToListAsync(ct);
+            foreach (var subscription in subscriptions.Where(row => row.Status == SubscriptionStatus.Active))
+            {
+                SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Cancelled, "payment_refund_full");
                 changed = true;
             }
         }
@@ -405,19 +427,77 @@ public sealed class RefundService
     {
         if (string.IsNullOrWhiteSpace(transaction.QuoteId)) return false;
 
-        var subscription = await _db.Subscriptions.FirstOrDefaultAsync(s => s.UserId == transaction.LearnerUserId, ct);
-        if (subscription is null) return false;
+        var quote = await _db.BillingQuotes.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.Id == transaction.QuoteId, ct);
+        if (quote is null) return false;
 
-        var purchaseEntries = await _db.AiCreditLedger.AsNoTracking()
+        var items = await _db.SubscriptionItems.AsNoTracking()
+            .Where(item => item.CheckoutSessionId == transaction.GatewayTransactionId
+                || item.QuoteId == transaction.QuoteId)
+            .ToListAsync(ct);
+        var subscriptionIds = items.Select(item => item.SubscriptionId)
+            .Append(quote.SubscriptionId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
+        if (subscriptionIds.Count == 0) return false;
+
+        var subscriptions = await _db.Subscriptions
+            .Where(subscription => subscription.UserId == transaction.LearnerUserId
+                && subscriptionIds.Contains(subscription.Id))
+            .ToListAsync(ct);
+        if (subscriptions.Count == 0) return false;
+
+        var sourceReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var subscription in subscriptions)
+        {
+            if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(quote.PlanCode))
+            {
+                sourceReferences.Add(AiPackageCreditSources.Plan(subscription.Id, quote.PlanCode));
+            }
+        }
+
+        foreach (var item in items)
+        {
+            sourceReferences.Add(AiPackageCreditSources.Addon(item.SubscriptionId, item.ItemCode));
+        }
+
+        var changed = false;
+        var authoritativeReversed = 0;
+        if (_aiPackageCredits is not null)
+        {
+            foreach (var sourceReference in sourceReferences)
+            {
+                authoritativeReversed += await _aiPackageCredits.ReverseGrantsAsync(
+                    transaction.LearnerUserId,
+                    sourceReference,
+                    ct);
+            }
+            changed = authoritativeReversed > 0;
+        }
+
+        var legacyPrefixes = new HashSet<string>(StringComparer.Ordinal)
+        {
+            $"addon:{transaction.QuoteId}:",
+            $"plan:{transaction.QuoteId}:",
+        };
+        foreach (var item in items)
+        {
+            legacyPrefixes.Add($"addon:{item.SubscriptionId}:{item.ItemCode}:");
+        }
+
+        var purchaseEntries = (await _db.AiCreditLedger.AsNoTracking()
             .Where(entry => entry.UserId == transaction.LearnerUserId
                             && entry.Source == AiCreditSource.Purchase
                             && entry.TokensDelta > 0
-                            && entry.ReferenceId != null
-                            && (entry.ReferenceId.StartsWith("addon:" + transaction.QuoteId + ":")
-                                || entry.ReferenceId.StartsWith("plan:" + transaction.QuoteId + ":")))
-            .ToListAsync(ct);
-        var changed = false;
+                            && entry.ReferenceId != null)
+            .ToListAsync(ct))
+            .Where(entry => legacyPrefixes.Any(prefix => entry.ReferenceId!.StartsWith(prefix, StringComparison.Ordinal)))
+            .ToList();
         var reversedTotal = 0;
+        var legacySubscription = subscriptions.FirstOrDefault();
         foreach (var purchase in purchaseEntries)
         {
             var reversalReferenceId = BuildAiCreditRefundReference(purchase.ReferenceId!);
@@ -429,7 +509,12 @@ public sealed class RefundService
                     ct);
             if (alreadyReversed) continue;
 
-            subscription.AiCreditsRemaining = Math.Max(0, subscription.AiCreditsRemaining - purchase.TokensDelta);
+            if (legacySubscription is not null)
+            {
+                legacySubscription.AiCreditsRemaining = Math.Max(
+                    0,
+                    legacySubscription.AiCreditsRemaining - purchase.TokensDelta);
+            }
             _db.AiCreditLedger.Add(new AiCreditLedgerEntry
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -451,7 +536,8 @@ public sealed class RefundService
             {
                 Id = $"bill-evt-ai-refund-{Guid.NewGuid():N}",
                 UserId = transaction.LearnerUserId,
-                SubscriptionId = subscription.Id,
+                SubscriptionId = quote.SubscriptionId
+                    ?? subscriptions.Select(row => row.Id).FirstOrDefault(),
                 QuoteId = transaction.QuoteId,
                 EventType = "ai_package_credits_refunded",
                 EntityType = nameof(OrderRefund),

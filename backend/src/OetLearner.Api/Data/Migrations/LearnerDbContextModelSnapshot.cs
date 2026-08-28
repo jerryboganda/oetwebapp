@@ -1378,6 +1378,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("ValidFrom")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("FlexibleCredits")
                         .HasColumnType("integer");
 
@@ -1469,6 +1472,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("ValidFrom")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("FlexibleCreditsDelta")
                         .HasColumnType("integer");
 
@@ -1497,6 +1503,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("ReferenceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("SourceReferenceId")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
@@ -1531,6 +1541,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasFilter("\"ReferenceId\" IS NOT NULL");
 
                     b.HasIndex("UserId", "CreatedAt");
+
+                    b.HasIndex("UserId", "SourceReferenceId")
+                        .HasDatabaseName("IX_AiPackageCreditTransactions_UserId_SourceReferenceId")
+                        .HasFilter("\"SourceReferenceId\" IS NOT NULL");
 
                     b.ToTable("AiPackageCreditTransactions");
                 });

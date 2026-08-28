@@ -139,18 +139,23 @@ public static class SubscriptionBundleInitializer
     /// caller wraps in their own idempotency window — this helper does not
     /// inspect history.</summary>
     public static void ApplyAddOnGrant(Subscription subscription, BillingAddOn addon)
+        => ApplyAddOnGrant(subscription, addon, 1);
+
+    /// <summary>Apply an add-on grant for the requested number of purchased units.</summary>
+    public static void ApplyAddOnGrant(Subscription subscription, BillingAddOn addon, int quantity)
     {
+        quantity = Math.Max(1, quantity);
         if (addon.LettersGranted > 0)
         {
-            subscription.WritingAssessmentsRemaining = checked(subscription.WritingAssessmentsRemaining + addon.LettersGranted);
+            subscription.WritingAssessmentsRemaining = checked(subscription.WritingAssessmentsRemaining + addon.LettersGranted * quantity);
         }
         if (addon.SessionsGranted > 0)
         {
-            subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + addon.SessionsGranted);
+            subscription.SpeakingSessionsRemaining = checked(subscription.SpeakingSessionsRemaining + addon.SessionsGranted * quantity);
         }
         if (addon.GrantCredits > 0)
         {
-            subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + addon.GrantCredits);
+            subscription.AiCreditsRemaining = checked(subscription.AiCreditsRemaining + addon.GrantCredits * quantity);
         }
     }
 

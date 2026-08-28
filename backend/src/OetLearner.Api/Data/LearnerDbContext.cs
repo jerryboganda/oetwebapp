@@ -1205,6 +1205,10 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             .IsUnique()
             .HasDatabaseName("UX_AiPackageCreditTransactions_Reference_Reason")
             .HasFilter("\"ReferenceId\" IS NOT NULL");
+        modelBuilder.Entity<AiPackageCreditTransaction>()
+            .HasIndex(x => new { x.UserId, x.SourceReferenceId })
+            .HasDatabaseName("IX_AiPackageCreditTransactions_UserId_SourceReferenceId")
+            .HasFilter("\"SourceReferenceId\" IS NOT NULL");
 
         modelBuilder.Entity<AiPackageCreditLot>()
             .HasIndex(x => new { x.UserId, x.Expired, x.ExpiresAt })
@@ -1440,6 +1444,12 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Partial class in LearnerDbContext.VideoLibrary.cs.
         OnModelCreatingVideoLibrary(modelBuilder);
 
+        // AI control plane (W1 of the AI cost/reliability remediation,
+        // incident INC-2026-CLAUDE-01) — schema-only durable operation/
+        // attempt/budget/credit-reservation tables. Partial class in
+        // LearnerDbContext.AiControlPlane.cs.
+        OnModelCreatingAiControlPlane(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1603,6 +1613,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.VideoLibrary.cs (partial).
     /// </summary>
     partial void OnModelCreatingVideoLibrary(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiControlPlane.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAiControlPlane(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

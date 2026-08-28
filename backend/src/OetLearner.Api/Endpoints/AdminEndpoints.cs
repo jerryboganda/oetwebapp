@@ -319,6 +319,13 @@ public static class AdminEndpoints
             => Results.Ok(await svc.RestorePackageAsync(http.AdminId(), http.AdminName(), userId, subscriptionId, ct)))
             .WithAdminWrite("AdminBillingSubscriptionWrite");
 
+        // Absolute Start/End date override for an already-saved package (PDF date-override).
+        admin.MapPut("/users/{userId}/access/packages/{subscriptionId}/dates", async (string userId, string subscriptionId,
+            AdminUserAccessPackageDatesRequest request, HttpContext http,
+            OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)
+            => Results.Ok(await svc.UpdatePackageDatesAsync(http.AdminId(), http.AdminName(), userId, subscriptionId, request, ct)))
+            .WithAdminWrite("AdminBillingSubscriptionWrite");
+
         admin.MapPost("/users/{userId}/access/addons", async (string userId, HttpContext http,
             AdminUserAccessAddonRequest request,
             OetLearner.Api.Services.Billing.UserAccessAllocationService svc, CancellationToken ct)

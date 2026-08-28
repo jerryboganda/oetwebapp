@@ -9,10 +9,33 @@ namespace OetLearner.Api.Services.Billing;
 
 sealed record CreditUsage(int Shared, int Flexible, int Writing, int Speaking, int ListeningTests, int ReadingTests, int MockExams);
 
+public static class AiPackageCreditSources
+{
+    public static string Addon(string subscriptionId, string addOnCode, string? sourceSuffix = null)
+        => AddonGrantProcessor.FitDatabaseKey(
+            string.IsNullOrWhiteSpace(sourceSuffix)
+                ? $"addon:{subscriptionId}:{addOnCode}"
+                : $"addon:{subscriptionId}:{addOnCode}:{sourceSuffix}");
+
+    public static string Plan(string subscriptionId, string planCode)
+        => AddonGrantProcessor.FitDatabaseKey($"plan:{subscriptionId}:{planCode}");
+
+    public static string AdminPackage(string subscriptionId, string planCode)
+        => AddonGrantProcessor.FitDatabaseKey($"admin-package:{subscriptionId}:{planCode}");
+}
+
 public interface IAiPackageCreditService
 {
     Task<AiPackageCreditSnapshot> GetSnapshotAsync(string userId, int transactionLimit, CancellationToken ct);
-    Task<AiPackageCreditSnapshot> GrantPackageAsync(string userId, BillingAddOn addOn, int quantity, string stripeSessionId, string? quoteId, CancellationToken ct);
+    Task<AiPackageCreditSnapshot> GrantPackageAsync(
+        string userId,
+        BillingAddOn addOn,
+        int quantity,
+        string stripeSessionId,
+        string? quoteId,
+        CancellationToken ct,
+        string? sourceReferenceId = null,
+        DateTimeOffset? validFrom = null);
 
     /// <summary>
     /// Grant Full Course gifted AI credits into the Shared pool. Idempotent on
@@ -26,7 +49,9 @@ public interface IAiPackageCreditService
         int credits,
         string referenceId,
         DateTimeOffset? expiresAt,
-        CancellationToken ct);
+        CancellationToken ct,
+        string? sourceReferenceId = null,
+        DateTimeOffset? validFrom = null);
     Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct);
 
     /// <summary>
@@ -54,11 +79,10 @@ public interface IAiPackageCreditService
     Task<AiPackageCreditSnapshot> RecordExamOutcomeAsync(string userId, LearnerExamOutcomeRequest request, string adminId, string adminName, CancellationToken ct);
 
     /// <summary>
-    /// Reverse unreversed Purchase rows for <paramref name="packageId"/> (AI
-    /// add-on or Full Course gift). Remaining pools clamp at zero so spent
-    /// credits are not restored as a negative balance.
+    /// Reverse unreversed Purchase rows for the exact grant source. Product
+    /// codes are not sufficient because a learner may own the same package twice.
     /// </summary>
-    Task<int> ReverseGrantsAsync(string userId, string packageId, CancellationToken ct);
+    Task<int> ReverseGrantsAsync(string userId, string sourceReferenceId, CancellationToken ct);
 
     /// <summary>
     /// If unlimited Listening/Reading was lost because the last unlimited
@@ -74,6 +98,12 @@ public interface IAiPackageCreditService
     /// history is untouched and unrelated credits are never modified.
     /// </summary>
     Task UpdateGrantExpiryAsync(string userId, string subscriptionId, DateTimeOffset? expiresAt, CancellationToken ct);
+    Task UpdateGrantWindowAsync(
+        string userId,
+        string subscriptionId,
+        DateTimeOffset? validFrom,
+        DateTimeOffset? expiresAt,
+        CancellationToken ct);
 
     /// <summary>
     /// Read-only check whether the learner holds an active objective-practice
@@ -174,7 +204,10 @@ public sealed record AiPackageCreditGrantSourceDto(
     string Description,
     int TotalGranted,
     DateTimeOffset GrantedAt,
-    DateTimeOffset? ExpiresAt);
+    DateTimeOffset? ExpiresAt,
+    string? SourceReferenceId = null,
+    DateTimeOffset? ValidFrom = null,
+    int? DaysLeft = null);
 
 public sealed record AiPackageCreditTransactionDto(
     string Id,
@@ -191,7 +224,9 @@ public sealed record AiPackageCreditTransactionDto(
     string? ReferenceId,
     string Description,
     DateTimeOffset? ExpiresAt,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    string? SourceReferenceId = null,
+    DateTimeOffset? ValidFrom = null);
 
 public sealed record AiPackageDebitResult(
     bool Debited,
@@ -237,7 +272,15 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         return await ProjectSnapshotAsync(account.UserId, Math.Clamp(transactionLimit, 0, 200), ct);
     }
 
-    public async Task<AiPackageCreditSnapshot> GrantPackageAsync(string userId, BillingAddOn addOn, int quantity, string stripeSessionId, string? quoteId, CancellationToken ct)
+    public async Task<AiPackageCreditSnapshot> GrantPackageAsync(
+        string userId,
+        BillingAddOn addOn,
+        int quantity,
+        string stripeSessionId,
+        string? quoteId,
+        CancellationToken ct,
+        string? sourceReferenceId = null,
+        DateTimeOffset? validFrom = null)
     {
         if (!string.Equals(addOn.AddonKind, "ai_package", StringComparison.OrdinalIgnoreCase))
         {
@@ -259,9 +302,13 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         var grant = AiPackageGrant.FromAddOn(addOn, Math.Max(1, quantity));
         var now = DateTimeOffset.UtcNow;
-        var newExpiry = now.AddDays(Math.Max(1, addOn.DurationDays));
+        var grantValidFrom = validFrom ?? now;
+        DateTimeOffset? newExpiry = addOn.DurationDays > 0
+            ? grantValidFrom.AddDays(addOn.DurationDays)
+            : null;
         var referenceId = AddonGrantProcessor.FitDatabaseKey(
             quoteId is null ? $"stripe:{stripeSessionId}" : $"quote:{quoteId}:{addOn.Code}");
+        sourceReferenceId = AddonGrantProcessor.FitDatabaseKey(sourceReferenceId ?? referenceId);
 
         AddLot(account, new AiPackageCreditLot
         {
@@ -278,6 +325,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             UnlimitedGrading = grant.UnlimitedGrading,
             UnlimitedListening = grant.ListeningTests is null,
             UnlimitedReading = grant.ReadingTests is null,
+            ValidFrom = grantValidFrom,
             ExpiresAt = newExpiry,
             SourceReferenceId = referenceId,
             CreatedAt = now,
@@ -302,7 +350,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             MockExamsDelta = grant.MockExams,
             Reason = AiPackageCreditReason.Purchase,
             ReferenceId = referenceId,
+            SourceReferenceId = sourceReferenceId,
             Description = $"{addOn.Name} purchased",
+            ValidFrom = grantValidFrom,
             ExpiresAt = newExpiry,
             CreatedAt = now
         });
@@ -319,7 +369,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         int credits,
         string referenceId,
         DateTimeOffset? expiresAt,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? sourceReferenceId = null,
+        DateTimeOffset? validFrom = null)
     {
         if (credits <= 0 || string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(referenceId))
         {
@@ -330,8 +382,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
         var now = DateTimeOffset.UtcNow;
+        var giftValidFrom = validFrom ?? now;
+        sourceReferenceId = AddonGrantProcessor.FitDatabaseKey(sourceReferenceId ?? referenceId);
         await ExpireIfNeededAsync(account, now, ct);
-        if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.Purchase, ct))
+        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.Purchase, ct))
         {
             return false;
         }
@@ -349,6 +403,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             ReadingTestsRemaining = 0,
             ExpiresAt = expiresAt is { } expiry && expiry > now ? expiry : expiresAt,
             SourceReferenceId = referenceId,
+            ValidFrom = giftValidFrom,
             CreatedAt = now,
         });
         RebuildAccountFromLots(account);
@@ -365,7 +420,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             SharedCreditsDelta = credits,
             Reason = AiPackageCreditReason.Purchase,
             ReferenceId = referenceId,
+            SourceReferenceId = sourceReferenceId,
             Description = $"{planName} gifted Shared AI practice credits",
+            ValidFrom = giftValidFrom,
             ExpiresAt = expiresAt,
             CreatedAt = now
         });
@@ -375,15 +432,15 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         return true;
     }
 
-    public async Task<int> ReverseGrantsAsync(string userId, string packageId, CancellationToken ct)
+    public async Task<int> ReverseGrantsAsync(string userId, string sourceReferenceId, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(packageId))
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(sourceReferenceId))
         {
             return 0;
         }
 
         var reversed = 0;
-        while (await ReverseOneGrantAsync(userId, packageId, ct))
+        while (await ReverseOneGrantAsync(userId, sourceReferenceId, ct))
         {
             reversed++;
         }
@@ -410,6 +467,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                   && (subscription.Status == SubscriptionStatus.Active
                       || subscription.Status == SubscriptionStatus.Trial
                       || subscription.Status == SubscriptionStatus.FreezeRequested)
+                  && subscription.StartedAt <= now
+                  && (subscription.ExpiresAt == null || subscription.ExpiresAt > now)
                   && item.Status == SubscriptionItemStatus.Active
                   && item.StartsAt <= now
                   && (item.EndsAt == null || item.EndsAt > now)
@@ -470,6 +529,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
     /// Used history is untouched; unrelated lots/packages are never modified.
     /// </summary>
     public async Task UpdateGrantExpiryAsync(string userId, string subscriptionId, DateTimeOffset? expiresAt, CancellationToken ct)
+        => await UpdateGrantWindowAsync(userId, subscriptionId, null, expiresAt, ct);
+
+    public async Task UpdateGrantWindowAsync(
+        string userId,
+        string subscriptionId,
+        DateTimeOffset? validFrom,
+        DateTimeOffset? expiresAt,
+        CancellationToken ct)
     {
         var prefix = AddonGrantProcessor.FitDatabaseKey($"admin-package:{subscriptionId}:");
         var account = await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
@@ -482,7 +549,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var linkedLots = db.AiPackageCreditLots.Local
             .Where(lot => lot.AccountId == account.Id
                 && lot.SourceReferenceId is { } source
-                && source.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                && source.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && LotHasRemaining(lot))
             .ToList();
         if (linkedLots.Count == 0)
         {
@@ -490,16 +558,37 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
 
         var now = DateTimeOffset.UtcNow;
+        var linkedSources = linkedLots
+            .Select(lot => lot.SourceReferenceId!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var linkedTransactions = await db.AiPackageCreditTransactions
+            .Where(row => row.UserId == userId
+                && row.Reason == AiPackageCreditReason.Purchase
+                && row.SourceReferenceId != null
+                && row.SourceReferenceId.StartsWith(prefix))
+            .ToListAsync(ct);
         foreach (var lot in linkedLots)
         {
-            lot.ExpiresAt = expiresAt;
-            // A past end expires the linked (unused) credits immediately, exactly as
-            // the package itself expired — spending any remaining balance is blocked.
-            if (expiresAt is { } exp && exp <= now && !lot.Expired)
+            if (validFrom is not null)
             {
-                lot.Expired = true;
-                lot.ExpiredAt = now;
+                lot.ValidFrom = validFrom;
             }
+            lot.ExpiresAt = expiresAt;
+            var temporallyExpired = expiresAt is { } end && end <= now;
+            // A temporal expiry may be extended later. A reversed lot has no
+            // remaining balance and is excluded above, so removal/refund cannot revive it.
+            lot.Expired = temporallyExpired;
+            lot.ExpiredAt = temporallyExpired ? now : null;
+        }
+
+        foreach (var transaction in linkedTransactions.Where(row =>
+                     row.SourceReferenceId is not null && linkedSources.Contains(row.SourceReferenceId)))
+        {
+            if (validFrom is not null)
+            {
+                transaction.ValidFrom = validFrom;
+            }
+            transaction.ExpiresAt = expiresAt;
         }
 
         RebuildAccountFromLots(account);
@@ -523,7 +612,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var now = DateTimeOffset.UtcNow;
         await ExpireIfNeededAsync(account, now, ct);
         quantity = ResolveGradingActivities(account, normalized, quantity);
-        if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.GradingDeduct, ct))
+        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.GradingDeduct, ct))
         {
             return new(true, "already_debited", "This grading job has already consumed a credit.", referenceId);
         }
@@ -635,7 +724,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(true, null, null, referenceId, Bypassed: true);
         }
 
-        if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.ObjectivePracticeDeduct, ct))
+        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.ObjectivePracticeDeduct, ct))
         {
             return new(true, null, null, referenceId);
         }
@@ -771,7 +860,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
         await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
-        if (await TransactionExistsAsync(referenceId, AiPackageCreditReason.MockDeduct, ct))
+        if (await TransactionExistsAsync(userId, referenceId, AiPackageCreditReason.MockDeduct, ct))
         {
             return new(true, "already_debited", "This mock has already consumed allowance.", referenceId);
         }
@@ -822,8 +911,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
     {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
-        if (await TransactionExistsAsync(refundReferenceId, AiPackageCreditReason.RefundOnFailure, ct)
-            || await TransactionExistsAsync(refundReferenceId, AiPackageCreditReason.MockRefundOnFailure, ct))
+        if (await TransactionExistsAsync(userId, refundReferenceId, AiPackageCreditReason.RefundOnFailure, ct)
+            || await TransactionExistsAsync(userId, refundReferenceId, AiPackageCreditReason.MockRefundOnFailure, ct))
         {
             return false;
         }
@@ -890,12 +979,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                 row.FlexibleCreditsDelta,
                 row.WritingOnlyCreditsDelta,
                 row.SpeakingOnlyCreditsDelta,
-                row.ListeningTestsDelta,
-                row.ReadingTestsDelta,
-                row.MockExamsDelta,
-                row.ExpiresAt,
-                row.CreatedAt,
-                row.ReferenceId))
+                 row.ListeningTestsDelta,
+                 row.ReadingTestsDelta,
+                 row.MockExamsDelta,
+                 row.ValidFrom,
+                 row.ExpiresAt,
+                 row.CreatedAt,
+                 row.ReferenceId,
+                 row.SourceReferenceId))
             .ToListAsync(ct);
         var usage = ComputeUsage(ledgerRows);
 
@@ -1035,25 +1126,15 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return;
         }
 
-        var lots = LiveLots(account);
-        var expiredLots = lots
+        await EnsureLotsLoadedAsync(account, ct);
+        var expiredLots = AccountLots(account)
             .Where(lot => !lot.Expired && lot.ExpiresAt is { } expires && expires <= now)
             .ToList();
-        if (expiredLots.Count == 0)
-        {
-            if (!db.AiPackageCreditLots.Local.Any(lot => lot.AccountId == account.Id))
-            {
-                await EnsureLotsLoadedAsync(account, ct);
-                expiredLots = LiveLots(account)
-                    .Where(lot => !lot.Expired && lot.ExpiresAt is { } expires && expires <= now)
-                    .ToList();
-            }
-        }
 
         var accountExpired = account.ExpiresAt is { } accountExpiry && accountExpiry <= now;
         if (expiredLots.Count == 0 && accountExpired)
         {
-            expiredLots = LiveLots(account).ToList();
+            expiredLots = AccountLots(account).Where(lot => !lot.Expired).ToList();
         }
 
         if (expiredLots.Count == 0)
@@ -1095,17 +1176,12 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                 MockExamsDelta = -lot.MockExamsRemaining,
                 Reason = AiPackageCreditReason.Expiry,
                 ReferenceId = referenceId,
+                SourceReferenceId = lot.SourceReferenceId,
                 Description = "AI package credits expired.",
+                ValidFrom = lot.ValidFrom,
                 ExpiresAt = lot.ExpiresAt,
                 CreatedAt = now
             });
-            lot.SharedCredits = 0;
-            lot.FlexibleCredits = 0;
-            lot.WritingOnlyCredits = 0;
-            lot.SpeakingOnlyCredits = 0;
-            lot.ListeningTestsRemaining = lot.UnlimitedListening ? lot.ListeningTestsRemaining : 0;
-            lot.ReadingTestsRemaining = lot.UnlimitedReading ? lot.ReadingTestsRemaining : 0;
-            lot.MockExamsRemaining = 0;
         }
 
         RebuildAccountFromLots(account);
@@ -1122,14 +1198,13 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         db.AiPackageCreditTransactions.Add(row);
     }
 
-    private async Task<bool> ReverseOneGrantAsync(string userId, string packageId, CancellationToken ct)
+    private async Task<bool> ReverseOneGrantAsync(string userId, string sourceReferenceId, CancellationToken ct)
     {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
         var account = await GetOrCreateAccountAsync(userId, ct);
         await EnsureLotsLoadedAsync(account, ct);
         var purchases = await db.AiPackageCreditTransactions.AsNoTracking()
             .Where(row => row.UserId == userId
-                          && row.PackageId == packageId
                           && row.Reason == AiPackageCreditReason.Purchase
                           && row.ReferenceId != null)
             .OrderBy(row => row.CreatedAt)
@@ -1143,31 +1218,21 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             .ToListAsync(ct))
             .ToHashSet(StringComparer.Ordinal);
         var purchase = purchases.FirstOrDefault(row =>
-        {
-            var reverseReference = AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{row.ReferenceId}");
-            return !reversedReferences.Contains(row.ReferenceId!)
-                   && !reversedReferences.Contains(reverseReference);
-        });
+            SourceMatches(row, sourceReferenceId)
+            && !reversedReferences.Contains(row.ReferenceId!)
+            && !reversedReferences.Contains(AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{row.ReferenceId}")));
         if (purchase is null)
         {
             return false;
         }
 
         await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
-        var lots = LiveLots(account)
-            .Where(lot => string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.Ordinal)
-                          || string.Equals(lot.PackageId, packageId, StringComparison.OrdinalIgnoreCase))
+        var matchingLots = AccountLots(account)
+            .Where(lot => LotHasRemaining(lot)
+                && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
+                    || (purchase.SourceReferenceId is not null
+                        && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))))
             .ToList();
-        var matchingLots = lots
-            .Where(lot => string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.Ordinal))
-            .ToList();
-        if (matchingLots.Count == 0)
-        {
-            matchingLots = lots
-                .Where(lot => string.Equals(lot.PackageId, packageId, StringComparison.OrdinalIgnoreCase) && !lot.Expired)
-                .Take(1)
-                .ToList();
-        }
 
         var shared = 0;
         var flexible = 0;
@@ -1178,7 +1243,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var reading = 0;
         foreach (var lot in matchingLots)
         {
-            shared += -Math.Min(lot.SharedCredits, Math.Max(0, purchase.SharedCreditsDelta > 0 ? purchase.SharedCreditsDelta : lot.SharedCredits));
+            shared += -lot.SharedCredits;
             flexible += -lot.FlexibleCredits;
             writing += -lot.WritingOnlyCredits;
             speaking += -lot.SpeakingOnlyCredits;
@@ -1205,23 +1270,6 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             lot.ExpiredAt = DateTimeOffset.UtcNow;
         }
 
-        if (matchingLots.Count == 0)
-        {
-            shared = -Math.Min(account.SharedCredits, Math.Max(0, purchase.SharedCreditsDelta));
-            flexible = -Math.Min(account.FlexibleCredits, Math.Max(0, purchase.FlexibleCreditsDelta));
-            writing = -Math.Min(account.WritingOnlyCredits, Math.Max(0, purchase.WritingOnlyCreditsDelta));
-            speaking = -Math.Min(account.SpeakingOnlyCredits, Math.Max(0, purchase.SpeakingOnlyCreditsDelta));
-            mocks = -Math.Min(account.MockExamsRemaining, Math.Max(0, purchase.MockExamsDelta));
-            if (account.ListeningTestsRemaining is int listeningRemaining && purchase.ListeningTestsDelta > 0)
-            {
-                listening = -Math.Min(listeningRemaining, purchase.ListeningTestsDelta);
-            }
-            if (account.ReadingTestsRemaining is int readingRemaining && purchase.ReadingTestsDelta > 0)
-            {
-                reading = -Math.Min(readingRemaining, purchase.ReadingTestsDelta);
-            }
-        }
-
         RebuildAccountFromLots(account);
         account.UpdatedAt = DateTimeOffset.UtcNow;
         var reverseReference = AddonGrantProcessor.FitDatabaseKey($"grant-reverse:{purchase.ReferenceId}");
@@ -1239,7 +1287,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             MockExamsDelta = mocks,
             Reason = AiPackageCreditReason.GrantReversed,
             ReferenceId = reverseReference,
+            SourceReferenceId = purchase.SourceReferenceId ?? sourceReferenceId,
             Description = $"{purchase.PackageId} grant reversed",
+            ValidFrom = purchase.ValidFrom,
+            ExpiresAt = purchase.ExpiresAt,
             CreatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync(ct);
@@ -1249,52 +1300,55 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private async Task ReverseOrphanedGrantsAsync(string userId, DateTimeOffset now, CancellationToken ct)
     {
-        var livePlanIds = (await db.Subscriptions.AsNoTracking()
+        var ownedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ownedSubscriptions = await db.Subscriptions.AsNoTracking()
             .Where(subscription => subscription.UserId == userId
-                                   && subscription.PlanId != Subscription.StandaloneAddonPlanId
-                                   && (subscription.Status == SubscriptionStatus.Active
-                                       || subscription.Status == SubscriptionStatus.Trial
-                                       || subscription.Status == SubscriptionStatus.FreezeRequested))
-            .Select(subscription => subscription.PlanId)
-            .ToListAsync(ct))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                && subscription.Status != SubscriptionStatus.Cancelled)
+            .ToListAsync(ct);
+        foreach (var subscription in ownedSubscriptions)
+        {
+            if (subscription.PlanId != Subscription.StandaloneAddonPlanId)
+            {
+                ownedSources.Add(AiPackageCreditSources.Plan(subscription.Id, subscription.PlanId));
+                ownedSources.Add(AiPackageCreditSources.AdminPackage(subscription.Id, subscription.PlanId));
+            }
+        }
 
-        var liveItemCodes = (await (
+        var ownedItems = await (
             from item in db.SubscriptionItems.AsNoTracking()
             join subscription in db.Subscriptions.AsNoTracking()
                 on item.SubscriptionId equals subscription.Id
             where subscription.UserId == userId
-                  && (subscription.Status == SubscriptionStatus.Active
-                      || subscription.Status == SubscriptionStatus.Trial
-                      || subscription.Status == SubscriptionStatus.FreezeRequested)
+                  && subscription.Status != SubscriptionStatus.Cancelled
                   && item.Status == SubscriptionItemStatus.Active
-                  && item.StartsAt <= now
-                  && (item.EndsAt == null || item.EndsAt > now)
-            select item.ItemCode).ToListAsync(ct))
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            select new { item.SubscriptionId, item.ItemCode })
+            .ToListAsync(ct);
+        foreach (var item in ownedItems)
+        {
+            ownedSources.Add(AiPackageCreditSources.Addon(item.SubscriptionId, item.ItemCode));
+        }
 
-        var packageIds = (await db.AiPackageCreditTransactions.AsNoTracking()
+        var purchaseSources = await db.AiPackageCreditTransactions.AsNoTracking()
             .Where(row => row.UserId == userId
                           && row.Reason == AiPackageCreditReason.Purchase
-                          && row.PackageId != null)
-            .Select(row => row.PackageId!)
+                          && row.SourceReferenceId != null)
+            .Select(row => row.SourceReferenceId!)
             .Distinct()
-            .ToListAsync(ct));
-
-        foreach (var packageId in packageIds)
+            .ToListAsync(ct);
+        foreach (var sourceReference in purchaseSources)
         {
-            if (livePlanIds.Contains(packageId) || liveItemCodes.Contains(packageId))
+            if (ownedSources.Contains(sourceReference))
             {
                 continue;
             }
 
-            await ReverseGrantsAsync(userId, packageId, ct);
+            await ReverseGrantsAsync(userId, sourceReference, ct);
         }
     }
 
-    private async Task<bool> TransactionExistsAsync(string referenceId, AiPackageCreditReason reason, CancellationToken ct)
+    private async Task<bool> TransactionExistsAsync(string userId, string referenceId, AiPackageCreditReason reason, CancellationToken ct)
         => await db.AiPackageCreditTransactions.AsNoTracking()
-            .AnyAsync(row => row.ReferenceId == referenceId && row.Reason == reason, ct);
+            .AnyAsync(row => row.UserId == userId && row.ReferenceId == referenceId && row.Reason == reason, ct);
 
     private async Task<bool> HasActiveUnlimitedGradingAsync(string userId, DateTimeOffset now, CancellationToken ct)
     {
@@ -1306,6 +1360,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                   && (subscription.Status == SubscriptionStatus.Active
                       || subscription.Status == SubscriptionStatus.Trial
                       || subscription.Status == SubscriptionStatus.FreezeRequested)
+                  && subscription.StartedAt <= now
+                  && (subscription.ExpiresAt == null || subscription.ExpiresAt > now)
                   && item.ItemCode == "pkg_oet_mastery"
                   && item.Status == SubscriptionItemStatus.Active
                   && item.StartsAt <= now
@@ -1387,11 +1443,13 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                     row.SpeakingOnlyCreditsDelta,
                     row.ListeningTestsDelta,
                     row.ReadingTestsDelta,
-                    row.MockExamsDelta,
-                    row.ReferenceId,
-                    row.Description,
-                    row.ExpiresAt,
-                    row.CreatedAt))
+                     row.MockExamsDelta,
+                     row.ReferenceId,
+                     row.Description,
+                     row.ExpiresAt,
+                     row.CreatedAt,
+                     row.SourceReferenceId,
+                     row.ValidFrom))
                 .ToListAsync(ct);
 
         var ledgerRows = await db.AiPackageCreditTransactions.AsNoTracking()
@@ -1404,12 +1462,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                 row.FlexibleCreditsDelta,
                 row.WritingOnlyCreditsDelta,
                 row.SpeakingOnlyCreditsDelta,
-                row.ListeningTestsDelta,
-                row.ReadingTestsDelta,
-                row.MockExamsDelta,
-                row.ExpiresAt,
-                row.CreatedAt,
-                row.ReferenceId))
+                 row.ListeningTestsDelta,
+                 row.ReadingTestsDelta,
+                 row.MockExamsDelta,
+                 row.ValidFrom,
+                 row.ExpiresAt,
+                 row.CreatedAt,
+                 row.ReferenceId,
+                 row.SourceReferenceId))
             .ToListAsync(ct);
 
         var grantRows = ledgerRows.Where(row => IsGrantReason(row.Reason)).ToList();
@@ -1426,7 +1486,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var lots = await db.AiPackageCreditLots.AsNoTracking()
             .Where(lot => lot.UserId == userId)
             .ToListAsync(ct);
-        var liveLots = lots.Where(lot => !lot.Expired && (lot.ExpiresAt is null || lot.ExpiresAt > now)).ToList();
+        var liveLots = lots.Where(lot => IsLive(lot, now)).ToList();
         var listeningUnlimited = liveLots.Any(lot => lot.UnlimitedListening);
         var readingUnlimited = liveLots.Any(lot => lot.UnlimitedReading);
         var activities = debitRows
@@ -1488,9 +1548,11 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         int ListeningTestsDelta,
         int ReadingTestsDelta,
         int MockExamsDelta,
+        DateTimeOffset? ValidFrom,
         DateTimeOffset? ExpiresAt,
         DateTimeOffset CreatedAt,
-        string? ReferenceId);
+        string? ReferenceId,
+        string? SourceReferenceId);
 
     /// <summary>Genuine learner consumption (never admin adjustments / reversals /
     /// expiry). Per-bucket usage used to project Total = Used + Remaining.</summary>
@@ -1547,7 +1609,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         List<AiPackageCreditGrantSourceDto> GrantsFor(Func<LedgerRow, int> deltaSelector)
             => grantRows
                 .Where(row => deltaSelector(row) > 0)
-                .GroupBy(row => row.PackageId ?? row.Description)
+                .GroupBy(row => new { row.PackageId, row.SourceReferenceId, row.Description })
                 .Select(group =>
                 {
                     var first = group.First();
@@ -1556,7 +1618,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                         first.Description,
                         group.Sum(row => deltaSelector(row)),
                         group.Min(row => row.CreatedAt),
-                        group.Max(row => row.ExpiresAt));
+                        group.Max(row => row.ExpiresAt),
+                        first.SourceReferenceId,
+                        group.Min(row => row.ValidFrom ?? row.CreatedAt),
+                        DaysLeft(group.Max(row => row.ExpiresAt), now));
                 })
                 .OrderBy(source => source.GrantedAt)
                 .ToList();
@@ -1570,8 +1635,12 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             // learner-usage number (see ProjectSnapshotAsync.ComputeUsage).
             var effectiveUsed = unlimited ? 0 : Math.Clamp(used, 0, int.MaxValue);
             var totalGranted = remaining + effectiveUsed;
-            var activeGrants = grants.Where(source => source.ExpiresAt is null || source.ExpiresAt > now).ToList();
-            DateTimeOffset? validFrom = activeGrants.Count > 0 ? activeGrants.Min(source => source.GrantedAt) : null;
+            var activeGrants = grants.Where(source =>
+                (source.ValidFrom is null || source.ValidFrom <= now)
+                && (source.ExpiresAt is null || source.ExpiresAt > now)).ToList();
+            DateTimeOffset? validFrom = activeGrants.Count > 0
+                ? activeGrants.Min(source => source.ValidFrom ?? source.GrantedAt)
+                : null;
             DateTimeOffset? expiresAt = activeGrants.Any(source => source.ExpiresAt is null)
                 ? null
                 : activeGrants.Select(source => source.ExpiresAt).Max();
@@ -1641,6 +1710,42 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
     private static int DaysLeft(DateTimeOffset? expiresAt, DateTimeOffset now)
         => expiresAt is null ? -1 : Math.Max(0, (int)Math.Ceiling((expiresAt.Value - now).TotalDays));
 
+    private static bool IsLive(AiPackageCreditLot lot, DateTimeOffset now)
+        => !lot.Expired
+            && (lot.ValidFrom is null || lot.ValidFrom <= now)
+            && (lot.ExpiresAt is null || lot.ExpiresAt > now);
+
+    private static bool LotHasRemaining(AiPackageCreditLot lot)
+        => lot.SharedCredits > 0
+            || lot.FlexibleCredits > 0
+            || lot.WritingOnlyCredits > 0
+            || lot.SpeakingOnlyCredits > 0
+            || lot.MockExamsRemaining > 0
+            || lot.ListeningTestsRemaining is null
+            || lot.ListeningTestsRemaining > 0
+            || lot.ReadingTestsRemaining is null
+            || lot.ReadingTestsRemaining > 0
+            || lot.UnlimitedGrading
+            || lot.UnlimitedListening
+            || lot.UnlimitedReading;
+
+    private static bool SourceMatches(AiPackageCreditTransaction row, string sourceReferenceId)
+    {
+        if (string.Equals(row.SourceReferenceId, sourceReferenceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(row.SourceReferenceId))
+        {
+            return row.SourceReferenceId.StartsWith(sourceReferenceId + ":", StringComparison.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(row.ReferenceId, sourceReferenceId, StringComparison.OrdinalIgnoreCase)
+            || row.ReferenceId?.StartsWith(sourceReferenceId + ":", StringComparison.OrdinalIgnoreCase) == true
+            || row.ReferenceId?.StartsWith("stripe:" + sourceReferenceId + ":", StringComparison.OrdinalIgnoreCase) == true;
+    }
+
     private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is not null || db.Database.IsInMemory())
@@ -1691,7 +1796,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private void EnsureSyntheticLotIfNeeded(AiPackageCreditAccount account)
     {
-        if (LiveLots(account).Count > 0)
+        if (AccountLots(account).Count > 0)
         {
             return;
         }
@@ -1723,6 +1828,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             MockExamsRemaining = Math.Max(0, account.MockExamsRemaining),
             UnlimitedListening = account.ListeningTestsRemaining is null,
             UnlimitedReading = account.ReadingTestsRemaining is null,
+            ValidFrom = DateTimeOffset.UtcNow,
             ExpiresAt = account.ExpiresAt,
             CreatedAt = DateTimeOffset.UtcNow,
         });
@@ -1735,7 +1841,15 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private List<AiPackageCreditLot> LiveLots(AiPackageCreditAccount account)
         => db.AiPackageCreditLots.Local
-            .Where(lot => lot.AccountId == account.Id && !lot.Expired)
+            .Where(lot => lot.AccountId == account.Id && IsLive(lot, DateTimeOffset.UtcNow))
+            .OrderBy(lot => lot.ExpiresAt ?? DateTimeOffset.MaxValue)
+            .ThenBy(lot => lot.CreatedAt)
+            .ThenBy(lot => lot.Id)
+            .ToList();
+
+    private List<AiPackageCreditLot> AccountLots(AiPackageCreditAccount account)
+        => db.AiPackageCreditLots.Local
+            .Where(lot => lot.AccountId == account.Id)
             .OrderBy(lot => lot.ExpiresAt ?? DateTimeOffset.MaxValue)
             .ThenBy(lot => lot.CreatedAt)
             .ThenBy(lot => lot.Id)
@@ -2099,7 +2213,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private void ZeroAllLots(AiPackageCreditAccount account, DateTimeOffset now)
     {
-        foreach (var lot in LiveLots(account))
+        foreach (var lot in AccountLots(account).Where(lot => !lot.Expired))
         {
             lot.SharedCredits = 0;
             lot.FlexibleCredits = 0;

@@ -3,14 +3,14 @@
 > Written against the **Postmortem Template** in
 > [`docs/ops/incident-response-runbook.md`](./incident-response-runbook.md).
 > All figures below are either (a) produced by the queries named in-line or
-> (b) an externally confirmed card/prepaid transaction. **No figure in this
-> document is estimated or invented.** Where a number is not yet exported it is
-> marked `PENDING EXPORT` together with the exact query that produces it.
+> (b) an externally confirmed card/prepaid transaction. The query-derived cost
+> remains labelled as an estimate because it applies the stored per-token rates;
+> no figure is invented.
 
 - **Incident title:** Listening Part A AI advisory scorer — unbounded paid retry loop on evidence-free attempts
 - **Severity:** SEV-2 (provider/cost incident; no candidate-facing outage, no data loss)
-- **Start/end time UTC:** `PENDING EXPORT` — take `first_call_utc` / `last_call_utc` from
-  `scripts/ops/export-ai-incident-evidence.sql` **section 1**
+- **Start/end time UTC:** `2026-08-25T18:41:05.014899Z` /
+  `2026-08-27T21:40:25.089979Z` — final production export, section 1
 - **Customer impact:** None to marking. Listening scores are produced by the
   deterministic answer-key grader (`ListeningGradingService`) and were never
   touched. The only candidate-visible effect is that four submitted attempts
@@ -60,8 +60,8 @@ different things and must never be added together or presented as one:
 
 | # | Figure | Value | Evidence |
 |---|---|---|---|
-| 1 | **Successful provider requests** (the only requests that can consume credit) | `PENDING EXPORT` — `successful_rows` and `estimated_billable_usd` | `export-ai-incident-evidence.sql` §1, §2 (rows with `outcome_enum = 0`), §3 |
-| 2 | **Failed authentication calls** (HTTP 401/403) | count = `PENDING EXPORT`; **provider usage = $0.00** — Anthropic does not charge failed requests | `export-ai-incident-evidence.sql` §2, filtered to `error_class = 'http_401'` / `'http_403'` |
+| 1 | **Successful provider requests** (the only requests that can consume credit) | **14,825**; stored-rate estimate **$59.4239** | Final production export at `2026-08-27T21:50:17Z`: `export-ai-incident-evidence.sql` §1–§3 |
+| 2 | **Failed authentication calls** (HTTP 401/403) | **40,833**; **provider usage = $0.00** — Anthropic does not charge failed requests. One additional network-error row is excluded from this authentication count | Final production export: `export-ai-incident-evidence.sql` §2 |
 | 3 | **Card / prepaid-credit reload** | **$30.00** (single confirmed card transaction) | Anthropic billing console + card statement. This is a *balance top-up*, **not** a measure of usage. |
 
 Reading the table correctly:
@@ -118,6 +118,17 @@ docker exec -i -e PGPASSWORD="$POSTGRES_PASSWORD" oet-postgres \
 ---
 
 ## Remediation shipped (W0)
+
+Production release `bc811dd16fb5edc2bbc16d4d6fa22b8a3e906427`
+completed through workflow run `33117672602`. Because the inactive green API
+slot still held the pre-fix image and continued running hosted workers, it was
+stopped and the same SHA was rolled through workflow run `33119261224`.
+Both API slots now run the repaired image.
+
+A production export at `2026-08-27T22:12:29.161100Z` still reported
+`2026-08-27T21:40:25.089979Z` as the last `listening.parta.score` invocation:
+**32 minutes 4 seconds with zero new calls**, satisfying the W0 observation
+gate before replacement-credential activation.
 
 | Change | Location |
 |---|---|
@@ -269,7 +280,7 @@ actions 7 and 9 below carry that work.
 | 2 | Provision + atomically activate the replacement Anthropic credential, run one low-token canary per critical route, confirm a successful usage row, then revoke the old key | Dr Faisal Maqsood | after action 1 |
 | 3 | Run the fail-closed closure with the stable cutoff (`incident_cutoff` defaults to `2026-08-26T11:00:00Z`; expected count 4) and keep the printed before/after deterministic marks with the incident record | Dr Faisal Maqsood | after action 1 |
 | 4 | Run `scripts/ops/requeue-listening-credential-quarantined.sql` with the explicit confirmation token to hand the preserved 401 work back to the repaired scorer. **Only after action 2 is verified.** Re-check export §8 afterwards: the `credential_quarantined` bucket must be empty and every other skip bucket unchanged | Dr Faisal Maqsood | after action 2 |
-| 5 | Run the final production export and fill in figures 1 and 2 above (they stay `PENDING EXPORT` until then), then reconcile figure 1 against the Anthropic console's successful-usage view | Dr Faisal Maqsood | after actions 2–4 |
+| 5 | Final production database export completed and figures 1 and 2 were filled above. Reconcile figure 1 against the Anthropic console's successful-usage view | Dr Faisal Maqsood | after action 2 |
 | 6 | Move the scorer behind the canonical provider adapter/coordinator and add the architecture test that rejects direct Anthropic transport outside it | Dr Faisal Maqsood | W1+ |
 | 7 | Move cost-bearing hosted workers out of both API slots into a dedicated worker run-mode with database leasing (`SKIP LOCKED`) — this is what turns the W0 per-answer bound into cross-slot exactly-once. The worker's deterministic oldest-due-first ordering is the W0 half of this: it makes the batch slice reproducible and starvation-free, but it does not stop two slots claiming the same row | Dr Faisal Maqsood | W4 |
 | 8 | Parse and price `cache_creation_input_tokens` / `cache_read_input_tokens` so admin totals reconcile with the provider console | Dr Faisal Maqsood | W1+ |

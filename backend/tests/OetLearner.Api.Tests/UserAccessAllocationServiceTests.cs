@@ -19,9 +19,9 @@ public class UserAccessAllocationServiceTests
 
     private sealed class NoopAddonProcessor : IAddonGrantProcessor
     {
-        public Task<AddonGrantResult> ApplyAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
+        public Task<AddonGrantResult> ApplyAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default, int quantity = 1, string? sourceReferenceId = null)
             => throw new NotSupportedException();
-        public Task<AddonGrantResult> ReverseAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
+        public Task<AddonGrantResult> ReverseAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default, int quantity = 1, string? sourceReferenceId = null)
             => Task.FromResult(new AddonGrantResult(false, false, "noop"));
     }
 
@@ -1159,7 +1159,7 @@ public class UserAccessAllocationServiceTests
         await Assert.ThrowsAsync<ApiException>(() => svc.UpdatePackageDatesAsync(
             "admin", "Admin", "learner-dates-order", granted.Subscriptions.Single().Id,
             new AdminUserAccessPackageDatesRequest(
-                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddDays(-1), ClearExpiresAt: false), default));
+                DateTimeOffset.UtcNow.AddDays(30), DateTimeOffset.UtcNow.AddDays(10), ClearExpiresAt: false), default));
     }
 
     [Fact]

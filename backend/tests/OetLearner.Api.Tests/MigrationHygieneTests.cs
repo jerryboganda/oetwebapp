@@ -13,6 +13,8 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddListeningTtsJobAndAudioSha), "20260527100000_AddListeningTtsJobAndAudioSha")]
     [InlineData(typeof(AddRecallAudioElevenLabsSettings), "20260608001000_AddRecallAudioElevenLabsSettings")]
     [InlineData(typeof(AddListeningAnswerAiSkipAndRetry), "20261101090000_AddListeningAnswerAiSkipAndRetry")]
+    [InlineData(typeof(AddAiControlPlaneCore), "20261102090000_AddAiControlPlaneCore")]
+    [InlineData(typeof(ExtendAiUsageRecordProvenance), "20261103090000_ExtendAiUsageRecordProvenance")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

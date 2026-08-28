@@ -21,8 +21,20 @@ namespace OetLearner.Api.Services.Billing;
 /// </summary>
 public interface IAddonGrantProcessor
 {
-    Task<AddonGrantResult> ApplyAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default);
-    Task<AddonGrantResult> ReverseAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default);
+    Task<AddonGrantResult> ApplyAsync(
+        string eventId,
+        string subscriptionId,
+        string addOnCode,
+        CancellationToken ct = default,
+        int quantity = 1,
+        string? sourceReferenceId = null);
+    Task<AddonGrantResult> ReverseAsync(
+        string eventId,
+        string subscriptionId,
+        string addOnCode,
+        CancellationToken ct = default,
+        int quantity = 1,
+        string? sourceReferenceId = null);
 }
 
 public sealed record AddonGrantResult(bool Applied, bool DuplicateSkipped, string? Reason);
@@ -35,7 +47,13 @@ public sealed class AddonGrantProcessor(
     private const string GrantScope = "addon_grant";
     private const string RefundScope = "addon_refund";
 
-    public async Task<AddonGrantResult> ApplyAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
+    public async Task<AddonGrantResult> ApplyAsync(
+        string eventId,
+        string subscriptionId,
+        string addOnCode,
+        CancellationToken ct = default,
+        int quantity = 1,
+        string? sourceReferenceId = null)
     {
         if (string.IsNullOrWhiteSpace(eventId)) return new(false, false, "event_id_missing");
 
@@ -55,12 +73,14 @@ public sealed class AddonGrantProcessor(
             .FirstOrDefaultAsync(a => a.Code == addOnCode || a.Id == addOnCode, ct);
         if (addOn is null) return new(false, false, "addon_missing");
 
-        SubscriptionBundleInitializer.ApplyAddOnGrant(subscription, addOn);
+        quantity = Math.Max(1, quantity);
+        sourceReferenceId = FitDatabaseKey(sourceReferenceId ?? AiPackageCreditSources.Addon(subscription.Id, addOn.Code));
+        SubscriptionBundleInitializer.ApplyAddOnGrant(subscription, addOn, quantity);
 
-        var aiCreditGrant = ResolveAiCreditGrant(addOn.GrantEntitlementsJson, addOn.GrantCredits);
+        var aiCreditGrant = ResolveAiCreditGrant(addOn.GrantEntitlementsJson, addOn.GrantCredits) * quantity;
         if (aiCreditGrant > 0)
         {
-            var creditReferenceId = FitDatabaseKey($"addon:{idemKey}");
+            var creditReferenceId = FitDatabaseKey($"{sourceReferenceId}:{eventId}");
             var creditAlreadyGranted = await db.AiCreditLedger.AsNoTracking()
                 .AnyAsync(entry => entry.UserId == subscription.UserId
                                    && entry.Source == AiCreditSource.Purchase
@@ -92,7 +112,14 @@ public sealed class AddonGrantProcessor(
                 : DateTimeOffset.UtcNow.AddDays(180);
             if (string.Equals(addOn.AddonKind, "ai_package", StringComparison.OrdinalIgnoreCase))
             {
-                await aiPackageCredits.GrantPackageAsync(subscription.UserId, addOn, 1, walletReference, null, ct);
+                await aiPackageCredits.GrantPackageAsync(
+                    subscription.UserId,
+                    addOn,
+                    quantity,
+                    walletReference,
+                    null,
+                    ct,
+                    sourceReferenceId);
             }
             else if (aiCreditGrant > 0)
             {
@@ -103,7 +130,8 @@ public sealed class AddonGrantProcessor(
                     aiCreditGrant,
                     walletReference,
                     walletExpiry,
-                    ct);
+                    ct,
+                    sourceReferenceId);
             }
         }
 
@@ -142,7 +170,13 @@ public sealed class AddonGrantProcessor(
         return new(true, false, null);
     }
 
-    public async Task<AddonGrantResult> ReverseAsync(string eventId, string subscriptionId, string addOnCode, CancellationToken ct = default)
+    public async Task<AddonGrantResult> ReverseAsync(
+        string eventId,
+        string subscriptionId,
+        string addOnCode,
+        CancellationToken ct = default,
+        int quantity = 1,
+        string? sourceReferenceId = null)
     {
         if (string.IsNullOrWhiteSpace(eventId)) return new(false, false, "event_id_missing");
 
@@ -158,19 +192,31 @@ public sealed class AddonGrantProcessor(
             .FirstOrDefaultAsync(a => a.Code == addOnCode || a.Id == addOnCode, ct);
         if (addOn is null) return new(false, false, "addon_missing");
 
-        var aiCreditGrant = ResolveAiCreditGrant(addOn.GrantEntitlementsJson, addOn.GrantCredits);
+        quantity = Math.Max(1, quantity);
+        sourceReferenceId = FitDatabaseKey(sourceReferenceId ?? AiPackageCreditSources.Addon(subscription.Id, addOn.Code));
+        var aiCreditGrant = ResolveAiCreditGrant(addOn.GrantEntitlementsJson, addOn.GrantCredits) * quantity;
+        var authoritativeReversed = aiPackageCredits is null
+            ? 0
+            : await aiPackageCredits.ReverseGrantsAsync(
+                subscription.UserId,
+                sourceReferenceId,
+                ct);
         var aiCreditReversal = await ResolveUnreversedPurchaseRefundReferenceAsync(
             subscription.UserId,
             subscriptionId,
             addOnCode,
             addOn.Code,
+            sourceReferenceId,
             ct);
-        if (aiCreditGrant > 0 && !aiCreditReversal.FoundMatchingPurchase)
+        if (aiCreditGrant > 0 && authoritativeReversed == 0 && !aiCreditReversal.FoundMatchingPurchase)
         {
             return new(false, false, "ai_credit_purchase_missing");
         }
 
-        if (aiCreditReversal.FoundMatchingPurchase && aiCreditReversal.ReversalReferenceId is null)
+        if (aiCreditGrant > 0
+            && authoritativeReversed == 0
+            && aiCreditReversal.FoundMatchingPurchase
+            && aiCreditReversal.ReversalReferenceId is null)
         {
             return new(false, false, "ai_credit_purchase_already_reversed");
         }
@@ -180,11 +226,11 @@ public sealed class AddonGrantProcessor(
         // Counters clamp at zero inside the helper.
         if (addOn.LettersGranted > 0)
         {
-            subscription.WritingAssessmentsRemaining = Math.Max(0, subscription.WritingAssessmentsRemaining - addOn.LettersGranted);
+            subscription.WritingAssessmentsRemaining = Math.Max(0, subscription.WritingAssessmentsRemaining - addOn.LettersGranted * quantity);
         }
         if (addOn.SessionsGranted > 0)
         {
-            subscription.SpeakingSessionsRemaining = Math.Max(0, subscription.SpeakingSessionsRemaining - addOn.SessionsGranted);
+            subscription.SpeakingSessionsRemaining = Math.Max(0, subscription.SpeakingSessionsRemaining - addOn.SessionsGranted * quantity);
         }
         if (aiCreditReversal.ReversalReferenceId is not null && aiCreditReversal.Credits > 0)
         {
@@ -242,10 +288,12 @@ public sealed class AddonGrantProcessor(
         string subscriptionId,
         string requestedAddOnCode,
         string canonicalAddOnCode,
+        string sourceReferenceId,
         CancellationToken ct)
     {
         var prefixes = new[]
             {
+                $"{sourceReferenceId}:",
                 $"addon:{subscriptionId}:{requestedAddOnCode}:",
                 $"addon:{subscriptionId}:{canonicalAddOnCode}:",
             }

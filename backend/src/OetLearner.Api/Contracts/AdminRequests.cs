@@ -302,6 +302,17 @@ public record AdminUserAccessPackageRequest(
     bool GrantIncludedCredits,
     bool OverrideProfessionMismatch);
 
+/// <summary>
+/// Absolute replacement of a saved package's effective access dates (PDF date-override
+/// requirements): Start and End replace the previous values (not additive), End cannot
+/// precede Start, and a past End expires the package immediately. Applies to the selected
+/// package only; unrelated packages and separately purchased AI packages are untouched.
+/// </summary>
+public record AdminUserAccessPackageDatesRequest(
+    DateTimeOffset? StartsAt,
+    DateTimeOffset? ExpiresAt,
+    bool ClearExpiresAt = false);
+
 /// <summary>Grant an add-on to a user, applied to a target subscription (defaults to the
 /// user's primary/latest). Idempotent per (user, addon, subscription).</summary>
 public record AdminUserAccessAddonRequest(

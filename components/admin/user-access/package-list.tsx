@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PauseCircle, PlayCircle, Star, Trash2 } from 'lucide-react';
+import { CalendarClock, PauseCircle, PlayCircle, Star, Trash2 } from 'lucide-react';
 import { Button } from '@/components/admin/ui/button';
 import { Badge } from '@/components/admin/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
@@ -10,6 +10,7 @@ import type { AdminBillingPlan } from '@/lib/types/admin';
 import {
   isProfessionMismatch,
   planAccessDurationDays,
+  type UpdateUserPackageDatesInput,
   type UserAccessSubscriptionRow,
 } from '@/lib/api/user-access-packages';
 
@@ -23,6 +24,13 @@ interface PackageListProps {
   onSuspend?: (subscriptionId: string) => void | Promise<void>;
   onRestore?: (subscriptionId: string) => void | Promise<void>;
   onSetPrimary?: (subscriptionId: string) => void | Promise<void>;
+  /** Absolute date override for a persisted package (PDF date-override): replaces
+   *  Start/End wholesale, expires immediately on a past End, and syncs the
+   *  course-gifted AI credit lots sourced from this package. */
+  onEditDates?: (
+    subscriptionId: string,
+    input: UpdateUserPackageDatesInput,
+  ) => void | Promise<void>;
   busySubscriptionId?: string | null;
   disabled?: boolean;
 }
@@ -52,6 +60,13 @@ function formatDate(iso: string | null | undefined): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleDateString();
 }
 
+/** ISO timestamp → `yyyy-mm-dd` for a date input; '' when absent/unparseable. */
+function isoToDateInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const parsed = new Date(iso);
+  return Number.isNaN(parsed.getTime()) ? '' : toDateInput(parsed);
+}
+
 /**
  * Add-a-package form + current package list. New rows are local drafts
  * (`isPending: true`) until the caller persists them via `grantUserPackage`
@@ -69,6 +84,7 @@ export function PackageList({
   onSuspend,
   onRestore,
   onSetPrimary,
+  onEditDates,
   busySubscriptionId,
   disabled,
 }: PackageListProps) {
@@ -79,6 +95,10 @@ export function PackageList({
   const [overrideProfession, setOverrideProfession] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
   const [activeDraftId, setActiveDraftId] = useState<string | null>(null);
+  const [editingDatesId, setEditingDatesId] = useState<string | null>(null);
+  const [editStartsAt, setEditStartsAt] = useState('');
+  const [editExpiresAt, setEditExpiresAt] = useState('');
+  const [editClearExpiry, setEditClearExpiry] = useState(false);
 
   const planOptions = plans.map((plan) => ({
     value: plan.code ?? plan.id,
@@ -170,6 +190,34 @@ export function PackageList({
     } else {
       onChange(subscriptions.filter((sub) => sub.id !== id));
     }
+  }
+
+  function beginEditDates(sub: UserAccessSubscriptionRow) {
+    setEditingDatesId(sub.id);
+    setEditStartsAt(isoToDateInput(sub.startedAt ?? sub.startsAt));
+    setEditExpiresAt(isoToDateInput(sub.expiresAt));
+    setEditClearExpiry(!sub.expiresAt);
+  }
+
+  function resetEditDates() {
+    setEditingDatesId(null);
+    setEditStartsAt('');
+    setEditExpiresAt('');
+    setEditClearExpiry(false);
+  }
+
+  async function saveEditDates(id: string) {
+    if (!onEditDates) return;
+    await onEditDates(id, {
+      startsAt: editStartsAt
+        ? new Date(`${editStartsAt}T00:00:00.000Z`).toISOString()
+        : null,
+      expiresAt: editClearExpiry || !editExpiresAt
+        ? null
+        : new Date(`${editExpiresAt}T00:00:00.000Z`).toISOString(),
+      clearExpiresAt: editClearExpiry,
+    });
+    resetEditDates();
   }
 
   return (
@@ -352,6 +400,21 @@ export function PackageList({
                       Restore
                     </Button>
                   ) : null}
+                  {!sub.isPending && onEditDates ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        editingDatesId === sub.id ? resetEditDates() : beginEditDates(sub)
+                      }
+                      disabled={disabled || isBusy}
+                      title="Replace this package's start/end dates (PDF date override)"
+                    >
+                      <CalendarClock className="h-4 w-4" />
+                      {editingDatesId === sub.id ? 'Close dates' : 'Edit dates'}
+                    </Button>
+                  ) : null}
                   {!sub.isPending && !isSuspended && onSuspend ? (
                     <Button
                       type="button"
@@ -400,6 +463,69 @@ export function PackageList({
                     </Button>
                   )}
                 </div>
+                {editingDatesId === sub.id && !sub.isPending ? (
+                  <div className="w-full space-y-3 rounded-xl border border-border bg-background-light p-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <Input
+                        label="Start date"
+                        type="date"
+                        value={editStartsAt}
+                        onChange={(event) => setEditStartsAt(event.target.value)}
+                        hint="Replaces the saved start date."
+                        disabled={disabled || isBusy}
+                      />
+                      <Input
+                        label="Expiry date"
+                        type="date"
+                        value={editClearExpiry ? '' : editExpiresAt}
+                        onChange={(event) => setEditExpiresAt(event.target.value)}
+                        hint="Replaces the saved end date. A past date expires the package immediately."
+                        disabled={disabled || isBusy || editClearExpiry}
+                      />
+                    </div>
+                    <Checkbox
+                      label="No expiry (access never ends)"
+                      checked={editClearExpiry}
+                      onChange={(event) => setEditClearExpiry(event.target.checked)}
+                      disabled={disabled || isBusy}
+                    />
+                    {editStartsAt && !editClearExpiry && editExpiresAt && editExpiresAt < editStartsAt ? (
+                      <InlineAlert variant="error">
+                        The end date cannot be before the start date.
+                      </InlineAlert>
+                    ) : null}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => void saveEditDates(sub.id)}
+                        disabled={
+                          disabled
+                          || isBusy
+                          || Boolean(
+                            editStartsAt
+                            && !editClearExpiry
+                            && editExpiresAt
+                            && editExpiresAt < editStartsAt,
+                          )
+                          || (!editStartsAt && !editClearExpiry && !editExpiresAt)
+                        }
+                        loading={isBusy}
+                      >
+                        Save dates
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={resetEditDates}
+                        disabled={disabled || isBusy}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
               </li>
             );
           })}

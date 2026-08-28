@@ -11729,12 +11729,14 @@ public partial class LearnerService(
                                 : now.AddDays(180);
                             await aiPackageCreditService.GrantCourseGiftCreditsAsync(
                                 transaction.LearnerUserId,
-                                targetPlan.Code,
-                                targetPlan.Name,
-                                targetPlan.BundledAiCredits,
-                                $"plan:{quote.Id}:{targetPlan.Code}",
-                                giftExpiry,
-                                ct);
+                                 targetPlan.Code,
+                                 targetPlan.Name,
+                                 targetPlan.BundledAiCredits,
+                                 $"plan:{quote.Id}:{targetPlan.Code}",
+                                 giftExpiry,
+                                 ct,
+                                 AiPackageCreditSources.Plan(subscription.Id, targetPlan.Code),
+                                 subscription.StartedAt);
                         }
                     }
                 }
@@ -11965,10 +11967,12 @@ public partial class LearnerService(
                         await aiPackageCreditService.GrantPackageAsync(
                             transaction.LearnerUserId,
                             liveAddOnForPackage,
-                            Math.Max(1, item.Quantity),
-                            transaction.GatewayTransactionId,
-                            quote.Id,
-                            ct);
+                             Math.Max(1, item.Quantity),
+                             transaction.GatewayTransactionId,
+                             quote.Id,
+                             ct,
+                             AiPackageCreditSources.Addon(subscription.Id, addOn.Code),
+                             now);
                     }
                 }
             }
