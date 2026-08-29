@@ -70,9 +70,29 @@ public interface IListeningPartBCSourceRecoveryService
     /// per printed number, which items still have no candidate-facing question.</summary>
     Task<IReadOnlyList<ListeningPartBCRecoveryReport>> AuditAllAsync(
         bool publishedOnly, CancellationToken ct);
+
+    /// <summary>Run recovery across every Listening paper in one pass. Papers are
+    /// independent: one failing never aborts the sweep.</summary>
+    Task<ListeningPartBCSweepReport> RecoverAllAsync(
+        bool publishedOnly, bool dryRun, string adminId, CancellationToken ct);
 }
 
-public sealed class ListeningPartBCSourceRecoveryService(LearnerDbContext db)
+/// <summary>Fleet-wide result for the whole Listening catalogue.</summary>
+public sealed record ListeningPartBCSweepReport(
+    bool DryRun,
+    int PapersScanned,
+    int PapersChanged,
+    int PapersFullyClean,
+    int PapersNeedingManualEntry,
+    int PapersWithoutSourceText,
+    int TotalRecovered,
+    int TotalStillUnrecoverable,
+    IReadOnlyList<ListeningPartBCRecoveryReport> Papers,
+    IReadOnlyList<string> Failures);
+
+public sealed class ListeningPartBCSourceRecoveryService(
+    LearnerDbContext db,
+    Content.IContentTextExtractionService? textExtraction = null)
     : IListeningPartBCSourceRecoveryService
 {
     private const string QuestionsKey = "listeningQuestions";
@@ -94,6 +114,48 @@ public sealed class ListeningPartBCSourceRecoveryService(LearnerDbContext db)
             reports.Add(await RecoverPaperAsync(paperId, dryRun: true, adminId: "system:audit", ct));
         }
         return reports;
+    }
+
+    public async Task<ListeningPartBCSweepReport> RecoverAllAsync(
+        bool publishedOnly, bool dryRun, string adminId, CancellationToken ct)
+    {
+        var query = db.ContentPapers.AsNoTracking().Where(p => p.SubtestCode == "listening");
+        if (publishedOnly) query = query.Where(p => p.Status == ContentStatus.Published);
+
+        var papers = await query
+            .OrderBy(p => p.Title)
+            .Select(p => new { p.Id, p.Title })
+            .ToListAsync(ct);
+
+        var reports = new List<ListeningPartBCRecoveryReport>(papers.Count);
+        var failures = new List<string>();
+
+        foreach (var paper in papers)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                reports.Add(await RecoverPaperAsync(paper.Id, dryRun, adminId, ct));
+            }
+            catch (Exception ex)
+            {
+                // One bad paper must never abort the sweep — the whole point is
+                // to get every other paper readable in a single pass.
+                failures.Add($"{paper.Title} ({paper.Id}): {ex.Message}");
+            }
+        }
+
+        return new ListeningPartBCSweepReport(
+            DryRun: dryRun,
+            PapersScanned: reports.Count,
+            PapersChanged: reports.Count(r => r.Recovered > 0),
+            PapersFullyClean: reports.Count(r => r.IsClean),
+            PapersNeedingManualEntry: reports.Count(r => r.Unrecoverable > 0),
+            PapersWithoutSourceText: reports.Count(r => !r.SourceTextAvailable && r.PartBCQuestionCount > 0),
+            TotalRecovered: reports.Sum(r => r.Recovered),
+            TotalStillUnrecoverable: reports.Sum(r => r.Unrecoverable),
+            Papers: reports,
+            Failures: failures);
     }
 
     public async Task<ListeningPartBCRecoveryReport> RecoverPaperAsync(
@@ -138,6 +200,28 @@ public sealed class ListeningPartBCSourceRecoveryService(LearnerDbContext db)
 
         var sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(
             ReadAssetTexts(paper));
+
+        // A paper ingested before the PDF engine was configured has an empty
+        // cached extraction, and the normal extraction pass skips any asset that
+        // already has an entry — so it would stay blank forever and recovery
+        // would silently find nothing. Force one re-extraction and retry before
+        // giving up. This runs BEFORE any stem edit is staged so the extraction
+        // service's own SaveChanges cannot flush a half-finished repair, and it
+        // only rewrites cache entries that are unusable.
+        if (sourceText is null && wanted.Count > 0 && textExtraction is not null)
+        {
+            try
+            {
+                await textExtraction.ExtractForPaperAsync(paper.Id, ct, force: true);
+                sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper));
+            }
+            catch (Exception)
+            {
+                // Extraction is best-effort; a failure is reported as "no source
+                // text" below rather than failing the whole recovery.
+            }
+        }
+
         var parsed = wanted.Count == 0
             ? ListeningPartBCSourceParseResult.Empty
             : ListeningPartBCSourceParser.Parse(sourceText, wanted);

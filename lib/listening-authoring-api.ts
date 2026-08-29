@@ -1062,3 +1062,34 @@ export const recoverListeningPartBCSource = (paperId: string, dryRun = false) =>
     `/v1/admin/papers/${paperId}/listening/part-bc/recover-source?dryRun=${dryRun}`,
     { method: 'POST' },
   );
+
+/** Fleet-wide sweep result across the whole Listening catalogue. */
+export interface ListeningPartBCSweepReport {
+  dryRun: boolean;
+  papersScanned: number;
+  papersChanged: number;
+  papersFullyClean: number;
+  papersNeedingManualEntry: number;
+  papersWithoutSourceText: number;
+  totalRecovered: number;
+  totalStillUnrecoverable: number;
+  papers: ListeningPartBCRecoveryReport[];
+  failures: string[];
+}
+
+/** Dry-run audit across every Listening paper in one call. */
+export const auditAllListeningPartBCSource = (publishedOnly = true) =>
+  api<{ papersScanned: number; papersNeedingManualEntry: number; papersWithoutSourceText: number; totalRecoverable: number; totalUnrecoverable: number; papers: ListeningPartBCRecoveryReport[] }>(
+    `/v1/admin/listening/part-bc/source-audit?publishedOnly=${publishedOnly}`,
+  );
+
+/**
+ * Restore printed Part B/C questions across every Listening paper in one pass.
+ * Repairing ~46 Atlas/Nova papers one at a time is exactly the manual loop that
+ * leaves a gap, so this is the intended way to run the fix.
+ */
+export const recoverAllListeningPartBCSource = (publishedOnly = true, dryRun = false) =>
+  api<ListeningPartBCSweepReport>(
+    `/v1/admin/listening/part-bc/recover-source?publishedOnly=${publishedOnly}&dryRun=${dryRun}`,
+    { method: 'POST' },
+  );

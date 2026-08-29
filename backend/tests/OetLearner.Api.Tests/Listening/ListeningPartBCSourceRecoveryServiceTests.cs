@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Tests.Listening;
@@ -330,5 +331,158 @@ public class ListeningPartBCSourceRecoveryServiceTests
         var service = new ListeningPartBCSourceRecoveryService(db);
         await Assert.ThrowsAsync<ApiException>(() =>
             service.RecoverPaperAsync("reading-1", dryRun: true, adminId: "admin-1", CancellationToken.None));
+    }
+    // ── Re-extraction fallback + fleet sweep ─────────────────────────────
+
+    /// <summary>
+    /// Stands in for the PDF pipeline. A paper ingested before the extractor was
+    /// configured has an empty cached entry, and the normal extraction pass
+    /// skips any asset that already has one — so without a forced retry the
+    /// paper stays blank forever and recovery finds nothing.
+    /// </summary>
+    private sealed class StubTextExtraction(LearnerDbContext db, string? textToWrite)
+        : IContentTextExtractionService
+    {
+        public int Calls { get; private set; }
+        public bool LastForce { get; private set; }
+
+        public async Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct, bool force = false)
+        {
+            Calls++;
+            LastForce = force;
+            if (textToWrite is null) return 0;
+
+            var paper = await db.ContentPapers.FirstAsync(p => p.Id == paperId, ct);
+            var root = JsonSerializer.Deserialize<Dictionary<string, object?>>(paper.ExtractedTextJson)
+                       ?? new Dictionary<string, object?>();
+            root[QuestionPaperAssetId] = textToWrite;
+            paper.ExtractedTextJson = JsonSerializer.Serialize(root);
+            await db.SaveChangesAsync(ct);
+            return 1;
+        }
+    }
+
+    [Fact]
+    public async Task Re_extracts_the_pdf_when_the_cached_text_is_empty_then_recovers()
+    {
+        await using var db = NewDb();
+        await SeedPaperAsync(db, q27Stem: "", q28Stem: "A real authored Part B question?", questionPaperText: "");
+        var extraction = new StubTextExtraction(db, QuestionPaperText);
+
+        var report = await new ListeningPartBCSourceRecoveryService(db, extraction)
+            .RecoverPaperAsync(PaperId, dryRun: false, adminId: "admin-1", CancellationToken.None);
+
+        Assert.Equal(1, extraction.Calls);
+        Assert.True(extraction.LastForce);
+        Assert.True(report.SourceTextAvailable);
+        Assert.Equal(1, report.Recovered);
+
+        var q27 = await db.ListeningQuestions.SingleAsync(q => q.Id == "q-27");
+        Assert.StartsWith("You hear the beginning of a training session", q27.Stem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Reports_cleanly_when_re_extraction_still_yields_no_text()
+    {
+        await using var db = NewDb();
+        await SeedPaperAsync(db, q27Stem: "", q28Stem: "", questionPaperText: "");
+        var extraction = new StubTextExtraction(db, textToWrite: null);
+
+        var report = await new ListeningPartBCSourceRecoveryService(db, extraction)
+            .RecoverPaperAsync(PaperId, dryRun: true, adminId: "admin-1", CancellationToken.None);
+
+        Assert.Equal(1, extraction.Calls);
+        Assert.False(report.SourceTextAvailable);
+        Assert.Equal(2, report.Unrecoverable);
+        Assert.Equal(0, report.Recovered);
+    }
+
+    [Fact]
+    public async Task Does_not_re_extract_when_the_cached_text_already_works()
+    {
+        await using var db = NewDb();
+        await SeedPaperAsync(db, q27Stem: "", q28Stem: "A real authored Part B question?");
+        var extraction = new StubTextExtraction(db, QuestionPaperText);
+
+        await new ListeningPartBCSourceRecoveryService(db, extraction)
+            .RecoverPaperAsync(PaperId, dryRun: false, adminId: "admin-1", CancellationToken.None);
+
+        Assert.Equal(0, extraction.Calls);
+    }
+
+    [Fact]
+    public async Task Sweep_covers_every_listening_paper_and_totals_the_outcome()
+    {
+        await using var db = NewDb();
+        await SeedPaperAsync(db, q27Stem: "", q28Stem: "A real authored Part B question?");
+
+        // A second Listening paper whose source cannot support Q27.
+        var now = DateTimeOffset.UtcNow;
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "paper-nova-01",
+            SubtestCode = "listening",
+            Title = "Nova Practice Series — Listening Sample Test 01",
+            Slug = "nova-practice-series-listening-sample-test-01",
+            Difficulty = "standard",
+            Status = ContentStatus.Published,
+            ExtractedTextJson = "{}",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ListeningQuestions.Add(new ListeningQuestion
+        {
+            Id = "nova-q-27",
+            PaperId = "paper-nova-01",
+            ListeningPartId = "part-b",
+            QuestionNumber = 27,
+            DisplayOrder = 27,
+            Points = 1,
+            QuestionType = ListeningQuestionType.MultipleChoice3,
+            Stem = "",
+            CorrectAnswerJson = "\"B\"",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var sweep = await new ListeningPartBCSourceRecoveryService(db)
+            .RecoverAllAsync(publishedOnly: true, dryRun: false, adminId: "admin-1", CancellationToken.None);
+
+        Assert.Equal(2, sweep.PapersScanned);
+        Assert.Equal(1, sweep.PapersChanged);
+        Assert.Equal(1, sweep.TotalRecovered);
+        Assert.Equal(1, sweep.TotalStillUnrecoverable);
+        Assert.Equal(1, sweep.PapersWithoutSourceText);
+        Assert.Empty(sweep.Failures);
+        Assert.False(sweep.DryRun);
+
+        // The Atlas paper was actually written; the Nova one was left blank
+        // rather than filled with a guess.
+        Assert.StartsWith(
+            "You hear the beginning of a training session",
+            (await db.ListeningQuestions.SingleAsync(q => q.Id == "q-27")).Stem,
+            StringComparison.Ordinal);
+        Assert.Equal(string.Empty, (await db.ListeningQuestions.SingleAsync(q => q.Id == "nova-q-27")).Stem);
+    }
+
+    [Fact]
+    public async Task Sweep_ignores_non_listening_papers()
+    {
+        await using var db = NewDb();
+        await SeedPaperAsync(db, q27Stem: "", q28Stem: "A real authored Part B question?");
+        var now = DateTimeOffset.UtcNow;
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "reading-1", SubtestCode = "reading", Title = "Reading paper", Slug = "reading-paper",
+            Difficulty = "standard", Status = ContentStatus.Published, CreatedAt = now, UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var sweep = await new ListeningPartBCSourceRecoveryService(db)
+            .RecoverAllAsync(publishedOnly: true, dryRun: true, adminId: "admin-1", CancellationToken.None);
+
+        Assert.Equal(1, sweep.PapersScanned);
+        Assert.All(sweep.Papers, r => Assert.Equal(PaperId, r.PaperId));
     }
 }

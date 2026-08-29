@@ -44,7 +44,12 @@ public interface IContentTextExtractionService
     /// into <c>ContentPaper.ExtractedTextJson</c> as asset-id string entries.
     /// Existing structured authoring keys such as <c>listeningQuestions</c>
     /// are preserved.</summary>
-    Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct);
+    /// <param name="force">Re-extract assets whose cached entry is missing OR
+    /// empty/too short to be real page text. A failed extraction caches an
+    /// empty string and the normal pass then skips that asset forever, so a
+    /// paper that was ingested before the PDF engine was configured stays
+    /// permanently blank without this.</param>
+    Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct, bool force = false);
 }
 
 public sealed class ContentTextExtractionService(
@@ -53,7 +58,11 @@ public sealed class ContentTextExtractionService(
     IPdfTextExtractor extractor,
     ILogger<ContentTextExtractionService> logger) : IContentTextExtractionService
 {
-    public async Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct)
+    /// <summary>Below this, a cached entry is page furniture or an extraction
+    /// failure rather than a usable document body.</summary>
+    private const int MinUsableCachedTextLength = 200;
+
+    public async Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct, bool force = false)
     {
         var paper = await db.ContentPapers
             .Include(p => p.Assets)
@@ -68,7 +77,14 @@ public sealed class ContentTextExtractionService(
         {
             if (asset.MediaAsset is null) continue;
             if (!string.Equals(asset.MediaAsset.Format, "pdf", StringComparison.OrdinalIgnoreCase)) continue;
-            if (existing.ContainsKey(asset.Id)) continue;
+            if (existing.TryGetValue(asset.Id, out var cached))
+            {
+                if (!force) continue;
+                // Only redo an entry that is actually unusable; never discard a
+                // good extraction just because force was requested.
+                var cachedText = cached.ValueKind == JsonValueKind.String ? cached.GetString() : null;
+                if (!string.IsNullOrWhiteSpace(cachedText) && cachedText!.Length >= MinUsableCachedTextLength) continue;
+            }
 
             try
             {

@@ -144,6 +144,7 @@ public static class ListeningAuthoringAdminEndpoints
             return Results.Ok(new { recovery = report, validation });
         });
 
+
         // Section 12: candidate preview must be projected without the answer
         // key. The marking preview continues to use the admin structure route,
         // which is permission-protected and intentionally carries answers.
@@ -1095,6 +1096,44 @@ public static class ListeningAuthoringAdminEndpoints
                 .FirstOrDefaultAsync(p => p.Id == paperId, ct);
             if (paper is null) return Results.NotFound();
             var report = await svc.ValidateForPaperAsync(paperId, body, ct);
+            return Results.Ok(report);
+        });
+
+        // ── Fleet-wide Part B/C source recovery ────────────────────────────
+        // The per-paper routes above are keyed on {paperId}; these sweep the
+        // whole Listening catalogue in one call. Restoring ~46 Atlas/Nova papers
+        // one at a time is exactly the kind of manual loop that leaves a gap,
+        // so the sweep is the intended way to run the repair.
+        var fleet = app.MapGroup("/v1/admin/listening/part-bc")
+            .RequireAuthorization("AdminContentWrite")
+            .RequireRateLimiting("PerUserWrite");
+
+        fleet.MapGet("/source-audit", async (
+            bool? publishedOnly,
+            IListeningPartBCSourceRecoveryService svc,
+            CancellationToken ct) =>
+        {
+            var reports = await svc.AuditAllAsync(publishedOnly ?? true, ct);
+            return Results.Ok(new
+            {
+                papersScanned = reports.Count,
+                papersNeedingManualEntry = reports.Count(r => r.Unrecoverable > 0),
+                papersWithoutSourceText = reports.Count(r => !r.SourceTextAvailable && r.PartBCQuestionCount > 0),
+                totalRecoverable = reports.Sum(r => r.Recovered),
+                totalUnrecoverable = reports.Sum(r => r.Unrecoverable),
+                papers = reports,
+            });
+        });
+
+        fleet.MapPost("/recover-source", async (
+            bool? publishedOnly,
+            bool? dryRun,
+            IListeningPartBCSourceRecoveryService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var report = await svc.RecoverAllAsync(publishedOnly ?? true, dryRun ?? false, adminId, ct);
             return Results.Ok(report);
         });
 
