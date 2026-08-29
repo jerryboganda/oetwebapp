@@ -130,9 +130,12 @@ fi
 
 # Recreate ONLY the inactive web/API slot + backup sidecar.
 # Never recreate postgres. Never pass -v. Named volumes stay mounted.
+echo "--- draining outgoing ai-worker leases ---"
+docker stop -t 90 oet-ai-worker >/dev/null 2>&1 || true
+
 echo "--- starting target slot ($target_slot) ---"
 compose "$target_slot" up -d --no-build --force-recreate \
-  "web-$target_slot" "learner-api-$target_slot" db-backup agent-gateway
+  "web-$target_slot" "learner-api-$target_slot" db-backup agent-gateway ai-worker
 
 # --- health gate on the target slot (prod still served by $prev_slot) ---
 healthcheck() {
@@ -150,6 +153,7 @@ healthcheck() {
 echo "--- health-gating target slot ---"
 healthcheck "oet-api-$target_slot" "curl --fail --silent http://127.0.0.1:8080/health/ready" "API ($target_slot)"
 healthcheck "oet-web-$target_slot" "wget -qO- http://127.0.0.1:3000/api/health" "WEB ($target_slot)"
+healthcheck "oet-ai-worker" "curl --fail --silent http://127.0.0.1:8080/health/live" "AI WORKER"
 if [ -n "$AGENT_GATEWAY_IMAGE" ]; then
   # Liveness only: /v1/readyz stays 503 when GEMINI_API_KEY is empty.
   # Do not invent a key; web/API must still promote in that degraded state.

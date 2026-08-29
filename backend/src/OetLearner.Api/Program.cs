@@ -26,6 +26,9 @@ using OetLearner.Api.Services.LiveClasses;
 using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+var oetRunModeIsWorker = OetLearner.Api.Services.Ai.AiRunMode.IsWorker(builder.Configuration);
+var enableAiCostBearingWorkers = OetLearner.Api.Services.Ai.AiRunMode.EnableCostBearingHostedWorkers(
+    builder.Configuration, builder.Environment);
 // H10: wire Sentry early so host-level startup exceptions are captured. No-op unless Sentry:Dsn is set.
 builder.AddSentryIfConfigured();
 const string HybridDevelopmentAuthScheme = "DevelopmentOrJwt";
@@ -1081,10 +1084,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartBCSou
 // `Listening:PartAAiScoring:Enabled` so it never runs in tests/CI and only marks
 // when an anthropic provider + key are configured.
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPartAAiScoringService, OetLearner.Api.Services.Listening.ListeningPartAAiScoringService>();
-if (builder.Configuration.GetValue<bool>("Listening:PartAAiScoring:Enabled"))
-{
-    builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningPartAAiScoringWorker>();
-}
+// W4: ListeningPartAAiScoringWorker is registered only on ai-worker (or API drain-on).
 // Listening TTS synthesis. The DI seam picks between provider implementations
 // based on appsettings `Listening:TtsProvider`. Supported values:
 //   "stub"        — emits silence, in-process, no creds (default in dev/CI).
@@ -1118,9 +1118,7 @@ if (builder.Configuration.GetValue<bool>("Listening:PartAAiScoring:Enabled"))
 builder.Services.AddScoped<
     OetLearner.Api.Services.Listening.IListeningTtsService,
     OetLearner.Api.Services.Listening.ListeningTtsService>();
-// TTS background job worker (polls ListeningTtsJobs table, runs synthesise
-// jobs through whichever provider is registered above).
-builder.Services.AddHostedService<OetLearner.Api.Services.Listening.ListeningTtsJobWorker>();
+// TTS background job worker — W4: registered on ai-worker / API drain-on only.
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningCurriculumService, OetLearner.Api.Services.Listening.ListeningCurriculumService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningPathwayService, OetLearner.Api.Services.Listening.ListeningPathwayService>();
 // ── Listening V2 — strategy + FSM + version-pinned grading + pathway + classes ──
@@ -1155,7 +1153,7 @@ builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeli
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingEvaluationPipeline, OetLearner.Api.Services.Writing.WritingEvaluationPipeline>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingAudioRetentionWorker>();
 // Speaking module rebuild (2026-06-11) — server-authoritative exam auto-advance.
-builder.Services.AddHostedService<OetLearner.Api.Services.Speaking.SpeakingExamAutoAdvanceWorker>();
+// W4: hosted on ai-worker (API drain-on) so in-process timers are not duplicated.
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<ExpertOnboardingService>();
 builder.Services.AddScoped<ExpertMessagingService>();
@@ -1634,8 +1632,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiPackageCreditServi
     OetLearner.Api.Services.Billing.AiPackageCreditService>();
 builder.Services.AddScoped<OetLearner.Api.Services.ILearnerAttemptHistoryService,
     OetLearner.Api.Services.LearnerAttemptHistoryService>();
-builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditRenewalWorker>();
-builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiAccountQuotaResetWorker>();
+// W4: AiCreditRenewalWorker + AiAccountQuotaResetWorker register via AiCostBearingHostedServiceRegistration.
 
 // Content Upload subsystem (Slice 2). IFileStorage sits in front of disk
 // access. Wave 4: provider is runtime-selected via Storage:Provider.
@@ -2023,16 +2020,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCalibrationSe
     OetLearner.Api.Services.Writing.WritingCalibrationService>();
 // HttpClient used by OCR to call Google Cloud Vision REST endpoint.
 builder.Services.AddHttpClient("writing-ocr-gcv");
-// 8 hosted crons — gated by Writing:CronsEnabled (default true). Each runs
-// on its own cadence inside WritingCronBase; the daily ones run hourly and
-// short-circuit unless the current UTC hour matches.
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingDailyPlanCron>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingReadinessCron>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingBatchGradingCron>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingAnalyticsAggregationCron>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingTutorQueueAlertCron>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingDraftCleanupCron>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Writing.Crons.WritingContentAuditCron>();
+// 8 hosted crons — gated by Writing:CronsEnabled (default true) inside
+// WritingCronBase. W4 registers them only on ai-worker / API drain-on.
 
 // ── Private Speaking Sessions ──
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));
@@ -2053,6 +2042,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Classes.ITutorService,
 builder.Services.AddScoped<OetLearner.Api.Services.Classes.IClassFeedbackService,
     OetLearner.Api.Services.Classes.ClassFeedbackService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Classes.IClassNotificationService, OetLearner.Api.Services.Classes.ClassNotificationService>();
+
+OetLearner.Api.Services.Ai.AiCostBearingHostedServiceRegistration.Add(
+    builder.Services,
+    builder.Configuration,
+    enableAiCostBearingWorkers,
+    oetRunModeIsWorker);
 
 var app = builder.Build();
 
@@ -2577,6 +2572,8 @@ app.MapGet("/health", async (LearnerDbContext db, CancellationToken ct) =>
         : Results.Json(new { status = "failed", service = "OET Learner API", database = "unavailable", timestamp = DateTimeOffset.UtcNow }, statusCode: StatusCodes.Status503ServiceUnavailable);
 }).AllowAnonymous();
 
+if (!oetRunModeIsWorker)
+{
 app.MapAuthEndpoints();
 app.MapProfessionCatalogEndpoints();
 app.MapPublicSupportEndpoints();
@@ -2772,6 +2769,7 @@ app.MapHub<OetLearner.Api.Hubs.SpeakingLiveRoomHub>("/v1/speaking/live-rooms/hub
 app.MapHub<OetLearner.Api.Hubs.WritingSubmissionHub>("/hubs/writing-submissions").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
 app.MapHub<OetLearner.Api.Hubs.WritingCoachHub>("/hubs/writing-coach").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
 app.MapHub<OetLearner.Api.Hubs.WritingTodayHub>("/hubs/writing-today").RequireAuthorization("LearnerOnly").RequireRateLimiting("HubConnect");
+}
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

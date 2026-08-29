@@ -117,19 +117,24 @@ for key in WEB_IMAGE API_IMAGE DB_BACKUP_IMAGE ROUTER_IMAGE; do
   verify_image_revision "$key" "$deploy_sha"
 done
 
+echo "[rollout] draining outgoing ai-worker leases"
+docker stop -t 90 oet-ai-worker >/dev/null 2>&1 || true
+
 echo "[rollout] starting target slot from digest images"
-ACTIVE_SLOT="$target_slot" compose up -d --no-build --force-recreate "learner-api-$target_slot" "web-$target_slot" db-backup
+ACTIVE_SLOT="$target_slot" compose up -d --no-build --force-recreate "learner-api-$target_slot" "web-$target_slot" db-backup ai-worker
 
 echo "[rollout] waiting for target slot health"
 api_container=$(ACTIVE_SLOT="$target_slot" compose ps -q "learner-api-$target_slot")
 web_container=$(ACTIVE_SLOT="$target_slot" compose ps -q "web-$target_slot")
-if [ -z "$api_container" ] || [ -z "$web_container" ]; then
+worker_container=$(ACTIVE_SLOT="$target_slot" compose ps -q ai-worker)
+if [ -z "$api_container" ] || [ -z "$web_container" ] || [ -z "$worker_container" ]; then
   echo "[rollout] failed to resolve target slot containers." >&2
   exit 1
 fi
 
 healthcheck_container "$api_container" "curl --fail --silent --show-error http://127.0.0.1:8080/health/ready" "target API readiness"
 healthcheck_container "$web_container" "wget -qO- http://127.0.0.1:3000/api/health" "target web health"
+healthcheck_container "$worker_container" "curl --fail --silent --show-error http://127.0.0.1:8080/health/live" "ai-worker liveness"
 
 echo "[rollout] switching stable routers to $target_slot"
 ACTIVE_SLOT="$target_slot" compose up -d --no-build --force-recreate learner-api web

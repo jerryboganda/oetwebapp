@@ -12,6 +12,7 @@ x-learner-api-slot: &learner-api-slot
   # Cap each slot so a memory leak or request spike can never starve postgres
   # on the shared VPS. .NET GC respects cgroup limits; 2G is ample headroom.
   mem_limit: 2g
+  stop_grace_period: 30s
   depends_on:
     postgres:
       condition: service_healthy
@@ -23,7 +24,9 @@ x-learner-api-slot: &learner-api-slot
     # Always include loopback, the stable router service, and both slot names
     # so Docker healthchecks, web proxy calls, and blue/green traffic switches
     # are not rejected by ASP.NET's HostFilteringMiddleware.
-    AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost;learner-api;learner-api-blue;learner-api-green
+    AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost;learner-api;learner-api-blue;learner-api-green;ai-worker;oet-ai-worker
+    OET_RUN_MODE: ${OET_RUN_MODE:-api}
+    Ai__HostedWorkers__Enabled: ${AI__HOSTEDWORKERS__ENABLED:-false}
     ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
     AUTHTOKENS__ISSUER: ${AUTHTOKENS__ISSUER}
     AUTHTOKENS__AUDIENCE: ${AUTHTOKENS__AUDIENCE}
@@ -285,6 +288,21 @@ services:
   learner-api-green:
     <<: *learner-api-slot
     container_name: oet-api-green
+
+  ai-worker:
+    <<: *learner-api-slot
+    container_name: oet-ai-worker
+    stop_grace_period: 90s
+    environment:
+      <<: *api-env
+      OET_RUN_MODE: worker
+      Ai__HostedWorkers__Enabled: "true"
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail http://127.0.0.1:8080/health/live || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
 
   agent-gateway:
     image: ${AGENT_GATEWAY_IMAGE:-oetwebsite-agent-gateway:local}
