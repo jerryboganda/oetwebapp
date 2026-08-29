@@ -56,6 +56,12 @@ public class LearnerUser
     // defaulting to the latest allocated package expiry but admin-overridable.
     public DateTimeOffset? AccessExpiresAt { get; set; }
 
+    // True when AccessExpiresAt was deliberately set by an administrator (PutScope)
+    // rather than mirrored from the packages. While true, the value is a genuine
+    // global access cap: SyncAccessExpiryAsync may only tighten it (min semantics)
+    // and never extends it — lifting the cap is an explicit admin action.
+    public bool AccessExpiresAtIsAdminCap { get; set; }
+
     // ── Engagement tracking ──
     public int CurrentStreak { get; set; }
     public int LongestStreak { get; set; }

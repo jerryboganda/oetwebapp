@@ -21,6 +21,9 @@ interface PackageListProps {
   /** The learner's registered profession id. `undefined` = unknown to this caller,
    *  which disables the mismatch check (a blank string is a real mismatch). */
   learnerProfessionId?: string | null;
+  /** Admin-set master access expiry (global cap). When it ends access earlier
+   *  than a package's own expiry, the card shows the effective cutoff. */
+  masterAccessExpiresAt?: string | null;
   onSuspend?: (subscriptionId: string) => void | Promise<void>;
   onRestore?: (subscriptionId: string) => void | Promise<void>;
   onSetPrimary?: (subscriptionId: string) => void | Promise<void>;
@@ -81,6 +84,7 @@ export function PackageList({
   subscriptions,
   onChange,
   learnerProfessionId,
+  masterAccessExpiresAt,
   onSuspend,
   onRestore,
   onSetPrimary,
@@ -367,6 +371,15 @@ export function PackageList({
             const isBusy = busySubscriptionId === sub.id;
             const startedLabel = formatDate(sub.startsAt ?? sub.startedAt);
             const expiresLabel = formatDate(sub.expiresAt);
+            // Effective access cutoff = min(package end, master cap). The backend
+            // enforces the master cap on every login/token check, so the card must
+            // never advertise an expiry the learner does not actually have.
+            const masterCapTime = masterAccessExpiresAt ? new Date(masterAccessExpiresAt).getTime() : null;
+            const packageEndTime = sub.expiresAt ? new Date(sub.expiresAt).getTime() : null;
+            const cappedByMaster = masterCapTime !== null
+              && !Number.isNaN(masterCapTime)
+              && (packageEndTime === null || masterCapTime < packageEndTime);
+            const effectiveEndLabel = cappedByMaster ? formatDate(masterAccessExpiresAt) : expiresLabel;
             return (
               <li key={sub.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
                 <div className="min-w-0">
@@ -380,8 +393,14 @@ export function PackageList({
                   <p className="text-xs text-muted">
                     Status: {sub.status}
                     {startedLabel ? ` · Starts ${startedLabel}` : ''}
-                    {expiresLabel ? ` · Expires ${expiresLabel}` : ''}
+                    {effectiveEndLabel ? ` · Expires ${effectiveEndLabel}` : ' · No expiry'}
                   </p>
+                  {cappedByMaster && effectiveEndLabel ? (
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      Master access expiry caps this package — real access ends {effectiveEndLabel}, before the saved end date
+                      {expiresLabel ? ` (${expiresLabel})` : ''}.
+                    </p>
+                  ) : null}
                   {awaitingFulfilment ? (
                     <p className="text-xs text-amber-700 dark:text-amber-300">
                       Manually delivered — stays inactive until it is marked fulfilled.

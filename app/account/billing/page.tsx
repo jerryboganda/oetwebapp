@@ -90,7 +90,11 @@ export default function AccountBillingPage() {
                 {formatMoney(subscription.price, { currency: subscription.currency })} / {subscription.interval}
               </p>
               <p className="mt-2 text-xs text-muted">
-                Next renewal: {subscription.nextRenewalAt ? formatDate(subscription.nextRenewalAt) : 'Not scheduled'}
+                {subscription.endDate
+                  ? `Access expires: ${formatDate(subscription.endDate)}`
+                  : subscription.nextRenewalAt
+                    ? `Next renewal: ${formatDate(subscription.nextRenewalAt)}`
+                    : 'Not scheduled'}
               </p>
             </>
           ) : (

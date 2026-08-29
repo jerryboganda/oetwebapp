@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Tests;
@@ -742,5 +743,120 @@ public sealed class AiPackageCreditServiceTests
 
         Assert.False(withOneShared.Debited);
         Assert.True(withTwoShared.Debited);
+    }
+
+    // ── Admin credit adjustment semantics (Part 27 Tests A–F) ──
+    // Admin Add/Remove/Set-Exact change TOTAL only; Used is genuine learner
+    // consumption and is read-only for allocation operations; Remaining = Total - Used.
+
+    private static async Task SeedSharedAsync(AiPackageCreditService service, string userId, int credits)
+        => await service.GrantCourseGiftCreditsAsync(
+            userId, "full-course", "Full Course", credits,
+            $"admin-package:seed:{userId}", null, CancellationToken.None);
+
+    private static AiPackageCreditAdjustmentRequest SharedAdjustment(
+        int? delta = null, int? set = null, string reason = "Admin AI package credit adjustment")
+        => new(0, 0, 0, 0, 0, 0, ExpiresAt: null, Reason: reason, SharedCreditsDelta: delta ?? 0, SharedCreditsSet: set);
+
+    [Fact]
+    public async Task AdjustAsync_RemoveOneWithNoUsage_ChangesTotalNotUsed()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await SeedSharedAsync(service, "learner-admin-remove", 5);
+
+        var after = await service.AdjustAsync("learner-admin-remove", SharedAdjustment(delta: -1), "admin-1", CancellationToken.None);
+
+        Assert.Equal(4, after.SharedCreditsGranted);
+        Assert.Equal(0, after.SharedCreditsUsed);
+        Assert.Equal(4, after.SharedCredits);
+    }
+
+    [Fact]
+    public async Task AdjustAsync_AddThree_ChangesTotalNotUsed()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await SeedSharedAsync(service, "learner-admin-add", 5);
+
+        var after = await service.AdjustAsync("learner-admin-add", SharedAdjustment(delta: 3), "admin-1", CancellationToken.None);
+
+        Assert.Equal(8, after.SharedCreditsGranted);
+        Assert.Equal(0, after.SharedCreditsUsed);
+        Assert.Equal(8, after.SharedCredits);
+    }
+
+    [Fact]
+    public async Task AdjustAsync_RemoveAfterRealUsage_PreservesGenuineUsed()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await SeedSharedAsync(service, "learner-admin-remove-used", 5);
+        await service.DeductObjectivePracticeAsync("learner-admin-remove-used", "reading", "ref-usage-1", CancellationToken.None);
+        await service.DeductObjectivePracticeAsync("learner-admin-remove-used", "reading", "ref-usage-2", CancellationToken.None);
+
+        var before = await service.GetSnapshotAsync("learner-admin-remove-used", 20, CancellationToken.None);
+        Assert.Equal(5, before.SharedCreditsGranted);
+        Assert.Equal(2, before.SharedCreditsUsed);
+        Assert.Equal(3, before.SharedCredits);
+
+        var after = await service.AdjustAsync("learner-admin-remove-used", SharedAdjustment(delta: -1), "admin-1", CancellationToken.None);
+
+        Assert.Equal(4, after.SharedCreditsGranted);
+        Assert.Equal(2, after.SharedCreditsUsed);
+        Assert.Equal(2, after.SharedCredits);
+    }
+
+    [Fact]
+    public async Task AdjustAsync_SetExact_IsAbsoluteNotAdditive()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await SeedSharedAsync(service, "learner-admin-set", 5);
+
+        var after = await service.AdjustAsync("learner-admin-set", SharedAdjustment(set: 3), "admin-1", CancellationToken.None);
+
+        Assert.Equal(3, after.SharedCreditsGranted);
+        Assert.Equal(0, after.SharedCreditsUsed);
+        Assert.Equal(3, after.SharedCredits);
+    }
+
+    [Fact]
+    public async Task AdjustAsync_SetExactAfterRealUsage_TargetsTotalAndPreservesUsed()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await SeedSharedAsync(service, "learner-admin-set-used", 5);
+        for (var i = 1; i <= 4; i++)
+        {
+            await service.DeductObjectivePracticeAsync("learner-admin-set-used", "reading", $"ref-usage-{i}", CancellationToken.None);
+        }
+
+        var after = await service.AdjustAsync("learner-admin-set-used", SharedAdjustment(set: 7), "admin-1", CancellationToken.None);
+
+        Assert.Equal(7, after.SharedCreditsGranted);
+        Assert.Equal(4, after.SharedCreditsUsed);
+        Assert.Equal(3, after.SharedCredits);
+    }
+
+    [Fact]
+    public async Task AdjustAsync_SetExactBelowUsed_RejectedWithoutMutation()
+    {
+        await using var db = NewContext();
+        var service = NewService(db);
+        await SeedSharedAsync(service, "learner-admin-set-low", 5);
+        for (var i = 1; i <= 4; i++)
+        {
+            await service.DeductObjectivePracticeAsync("learner-admin-set-low", "reading", $"ref-usage-{i}", CancellationToken.None);
+        }
+
+        await Assert.ThrowsAsync<ApiException>(() => service.AdjustAsync(
+            "learner-admin-set-low", SharedAdjustment(set: 3), "admin-1", CancellationToken.None));
+
+        // No data mutation: balance stays 5 Total / 4 Used / 1 Remaining.
+        var snapshot = await service.GetSnapshotAsync("learner-admin-set-low", 20, CancellationToken.None);
+        Assert.Equal(5, snapshot.SharedCreditsGranted);
+        Assert.Equal(4, snapshot.SharedCreditsUsed);
+        Assert.Equal(1, snapshot.SharedCredits);
     }
 }

@@ -282,6 +282,9 @@ export interface AdminUserSubscriptionSnapshot {
   planCode?: string | null;
   status: string;
   startedAt: string | null;
+  /** Authoritative package access end (subscription.ExpiresAt). */
+  expiresAt?: string | null;
+  /** Billing renewal date — only meaningful for genuinely renewable plans. */
   nextRenewalAt: string | null;
   changedAt: string | null;
   priceAmount: number;

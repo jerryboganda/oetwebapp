@@ -10715,6 +10715,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("AccessExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("AccessExpiresAtIsAdminCap")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("AccountStatus")
                         .IsConcurrencyToken()
                         .IsRequired()

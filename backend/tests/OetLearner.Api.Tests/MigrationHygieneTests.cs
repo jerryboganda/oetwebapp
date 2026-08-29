@@ -20,6 +20,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddAiExplanationCache), "20261106090000_AddAiExplanationCache")]
     [InlineData(typeof(AddAiCircuitStateAndBudgetOverrides), "20261106120000_AddAiCircuitStateAndBudgetOverrides")]
     [InlineData(typeof(RestoreListeningPartBCSourceStems), "20261129000000_RestoreListeningPartBCSourceStems")]
+    [InlineData(typeof(AdminMasterAccessCapAndOneTimeRenewal), "20260829090000_AdminMasterAccessCapAndOneTimeRenewal")]
     [InlineData(typeof(AddInvoiceEvidenceSourceTracking), "20261130090000_AddInvoiceEvidenceSourceTracking")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {

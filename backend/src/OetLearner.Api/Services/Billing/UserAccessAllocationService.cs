@@ -157,6 +157,12 @@ public sealed class UserAccessAllocationService(
 
             if (request.StartsAt.HasValue) existing.StartedAt = startsAt;
             if (request.ExpiresAt.HasValue) existing.ExpiresAt = request.ExpiresAt;
+            // One-time plans have no billing renewal — keep NextRenewalAt pinned to
+            // the real access end across re-grants (mirrors the create path below).
+            if (!plan.IsRenewable || plan.DurationMonths <= 0)
+            {
+                existing.NextRenewalAt = existing.ExpiresAt ?? existing.NextRenewalAt;
+            }
             existing.ChangedAt = now;
 
             if (wasPendingFulfilment)
@@ -205,6 +211,14 @@ public sealed class UserAccessAllocationService(
         // (plan.AccessDurationDays, 180 by default); then honour a custom expiry.
         SubscriptionBundleInitializer.ApplyBundle(subscription, plan, startsAt);
         if (request.ExpiresAt.HasValue) subscription.ExpiresAt = request.ExpiresAt;
+        // A one-time package has no billing renewal: mirror the real access end into
+        // NextRenewalAt instead of an invented start+months date, so "Next renewal"
+        // surfaces and lifecycle notifications never contradict the actual expiry.
+        // Genuinely renewable plans keep their billing-cycle date.
+        if (!plan.IsRenewable || plan.DurationMonths <= 0)
+        {
+            subscription.NextRenewalAt = subscription.ExpiresAt ?? subscription.NextRenewalAt;
+        }
         db.Subscriptions.Add(subscription);
 
         if (request.MakePrimary || string.IsNullOrWhiteSpace(learner.CurrentPlanId))
@@ -654,10 +668,15 @@ public sealed class UserAccessAllocationService(
         if (request.ClearAccessExpiry)
         {
             learner.AccessExpiresAt = null;
+            learner.AccessExpiresAtIsAdminCap = false;
         }
         else if (request.AccessExpiresAt.HasValue)
         {
             learner.AccessExpiresAt = request.AccessExpiresAt;
+            // Deliberately set: a genuine global access cap. Package mutations may
+            // tighten it (min semantics) but never extend it until an admin clears
+            // or re-sets it here.
+            learner.AccessExpiresAtIsAdminCap = true;
         }
 
         await db.SaveChangesAsync(ct);
@@ -934,7 +953,10 @@ public sealed class UserAccessAllocationService(
     /// <summary>Mirror the master login gate (<see cref="LearnerUser.AccessExpiresAt"/>) onto the
     /// furthest expiry across the learner's access-granting packages. A package that never
     /// expires clears the gate. With no access-granting package left the admin-set value is
-    /// left alone — the packages themselves already grant nothing.</summary>
+    /// left alone — the packages themselves already grant nothing.
+    /// When an administrator deliberately set the gate (<see cref="LearnerUser.AccessExpiresAtIsAdminCap"/>),
+    /// it is a genuine global cap: package mutations may only tighten it
+    /// (<c>EffectiveEnd = min(PackageEnd, MasterAccessExpiry)</c>), never extend it.</summary>
     private async Task SyncAccessExpiryAsync(LearnerUser learner, CancellationToken ct)
     {
         var expiries = await db.Subscriptions.AsNoTracking()
@@ -945,7 +967,22 @@ public sealed class UserAccessAllocationService(
             .ToListAsync(ct);
         if (expiries.Count == 0) return;
 
-        learner.AccessExpiresAt = expiries.Any(e => e is null) ? null : expiries.Max();
+        var computed = expiries.Any(e => e is null) ? null : expiries.Max();
+        if (learner.AccessExpiresAtIsAdminCap)
+        {
+            // Cap sticks: tighten only when the packages now end earlier than the cap.
+            // An earlier cap keeps capping newer/extended packages until lifted.
+            if (computed is { } tightened
+                && (learner.AccessExpiresAt is null || tightened < learner.AccessExpiresAt))
+            {
+                learner.AccessExpiresAt = tightened;
+            }
+        }
+        else
+        {
+            learner.AccessExpiresAt = computed;
+        }
+
         await db.SaveChangesAsync(ct);
     }
 

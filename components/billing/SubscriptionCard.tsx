@@ -94,9 +94,20 @@ export function SubscriptionCard({ subscription, onChanged }: SubscriptionCardPr
       ) : null}
 
       <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-        <Detail icon={<Calendar className="h-4 w-4" />} label="Next renewal">
-          {formatDate(subscription.nextRenewalAt)}
-        </Detail>
+        {/* Access expiry and billing renewal are different concepts. When the
+            subscription has a real access end (endDate) that matches
+            nextRenewalAt — a one-time package — show only "Access expires"; a
+            separate renewal date means a genuinely recurring plan. */}
+        {subscription.endDate ? (
+          <Detail icon={<Calendar className="h-4 w-4" />} label="Access expires">
+            {formatDate(subscription.endDate)}
+          </Detail>
+        ) : null}
+        {subscription.nextRenewalAt && !sameDay(subscription.nextRenewalAt, subscription.endDate) ? (
+          <Detail icon={<Calendar className="h-4 w-4" />} label="Next renewal">
+            {formatDate(subscription.nextRenewalAt)}
+          </Detail>
+        ) : null}
         {subscription.trialEndsAt ? (
           <Detail icon={<Calendar className="h-4 w-4" />} label="Trial ends">
             {formatDate(subscription.trialEndsAt)}
@@ -232,4 +243,15 @@ function formatDate(value: string | null | undefined): string {
   if (!value) return 'Not scheduled';
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Not scheduled' : date.toLocaleDateString();
+}
+
+/** True when both timestamps fall on the same calendar day (UTC). */
+function sameDay(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const da = new Date(a);
+  const db = new Date(b);
+  if (Number.isNaN(da.getTime()) || Number.isNaN(db.getTime())) return false;
+  return da.getUTCFullYear() === db.getUTCFullYear()
+    && da.getUTCMonth() === db.getUTCMonth()
+    && da.getUTCDate() === db.getUTCDate();
 }

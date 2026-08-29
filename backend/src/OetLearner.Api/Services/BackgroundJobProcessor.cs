@@ -2250,6 +2250,14 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var now = DateTimeOffset.UtcNow;
         var renewalWindow = now.AddDays(7);
 
+        // "Renews on …" is a billing event. One-time packages (plan not renewable)
+        // must never receive it — their end date is access expiry, not a renewal.
+        var renewablePlanCodes = (await db.BillingPlans.AsNoTracking()
+            .Where(plan => plan.IsRenewable && plan.Code != null)
+            .Select(plan => plan.Code)
+            .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         List<Subscription> renewingSoon;
         List<Subscription> expired;
         if (db.Database.IsSqlite())
@@ -2261,6 +2269,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
             renewingSoon = activeSubscriptions
                 .Where(subscription => subscription.NextRenewalAt > now && subscription.NextRenewalAt <= renewalWindow)
+                .Where(subscription => renewablePlanCodes.Contains(subscription.PlanId))
                 .ToList();
             expired = activeSubscriptions
                 .Where(subscription => subscription.NextRenewalAt <= now)
@@ -2275,6 +2284,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                     && subscription.NextRenewalAt > now
                     && subscription.NextRenewalAt <= renewalWindow)
                 .ToListAsync(cancellationToken);
+            renewingSoon = renewingSoon
+                .Where(subscription => renewablePlanCodes.Contains(subscription.PlanId))
+                .ToList();
 
             expired = await db.Subscriptions
                 .AsNoTracking()

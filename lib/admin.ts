@@ -502,6 +502,7 @@ export async function getAdminUserDetailData(userId: string): Promise<AdminUserD
         planCode: toNullableString(subscriptionRaw.planCode),
         status: toStringValue(subscriptionRaw.status),
         startedAt: toNullableString(subscriptionRaw.startedAt),
+        expiresAt: toNullableString(subscriptionRaw.expiresAt),
         nextRenewalAt: toNullableString(subscriptionRaw.nextRenewalAt),
         changedAt: toNullableString(subscriptionRaw.changedAt),
         priceAmount: toNumberValue(subscriptionRaw.priceAmount),

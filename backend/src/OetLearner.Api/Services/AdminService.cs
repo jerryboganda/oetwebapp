@@ -4814,6 +4814,9 @@ public partial class AdminService(
             planCode = plan?.Code ?? subscription.PlanId,
             status = subscription.Status.ToString().ToLowerInvariant(),
             startedAt = subscription.StartedAt,
+            // Authoritative access end (package expiry). Admin UI labels this
+            // "Access ends"; NextRenewalAt is only a billing date for renewable plans.
+            expiresAt = subscription.ExpiresAt,
             nextRenewalAt = subscription.NextRenewalAt,
             changedAt = subscription.ChangedAt,
             priceAmount = subscription.PriceAmount,
