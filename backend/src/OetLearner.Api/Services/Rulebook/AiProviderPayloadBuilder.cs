@@ -234,11 +234,12 @@ internal static class AiProviderPayloadBuilder
                 continue;
             }
 
-            if (!part.TryGetProperty("id", out var id) || !part.TryGetProperty("name", out var name)) continue;
+            if (!part.TryGetProperty("name", out var name)) continue;
+            var id = part.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
             var args = part.TryGetProperty("input", out var input) ? input.GetRawText() : "{}";
             output.Add(new AiToolCall
             {
-                Id = id.GetString() ?? Guid.NewGuid().ToString("N"),
+                Id = string.IsNullOrWhiteSpace(id) ? Guid.NewGuid().ToString("N") : id,
                 ToolCode = name.GetString() ?? string.Empty,
                 ArgsJson = string.IsNullOrWhiteSpace(args) ? "{}" : args,
             });

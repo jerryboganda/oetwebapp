@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Listening;
@@ -79,7 +80,6 @@ public sealed class ListeningPartBCExtractionService(
     // Owner policy is checked before any OCR or model call. This path returns
     // a projection only; the admin must still review and save it explicitly.
     private const string AnthropicProviderCode = "anthropic";
-    private const string DefaultAnthropicBaseUrl = "https://api.anthropic.com";
     private const string DefaultModel = CoreAiProviderSeeder.AnthropicDefaultModel;
     private const string ToolName = "emit_part_bc_answers";
 
@@ -388,13 +388,15 @@ public sealed class ListeningPartBCExtractionService(
             ?? throw new InvalidOperationException(
                 $"Anthropic provider '{AnthropicProviderCode}' is not registered. Add a row in /admin/ai-providers with Code={AnthropicProviderCode}.");
 
-        var baseUrl = NormalizeBaseUrl(string.IsNullOrWhiteSpace(row.BaseUrl) ? DefaultAnthropicBaseUrl : row.BaseUrl);
         var model = string.IsNullOrWhiteSpace(row.DefaultModel) ? DefaultModel : row.DefaultModel;
         var apiKey = await registry.GetPlatformKeyAsync(AnthropicProviderCode, ct)
             ?? throw new InvalidOperationException($"Platform API key missing for provider {AnthropicProviderCode}.");
-
-        var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
-        if (unsafeReason is not null) throw new InvalidOperationException(unsafeReason);
+        var baseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? null : AnthropicProvider.NormalizeBaseUrl(row.BaseUrl);
+        if (baseUrl is not null)
+        {
+            var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+            if (unsafeReason is not null) throw new InvalidOperationException(unsafeReason);
+        }
 
         var range = part == "B" ? "25-30 (six 3-option MCQs)" : "31-42 (twelve 3-option MCQs)";
         var userText =
@@ -415,58 +417,70 @@ public sealed class ListeningPartBCExtractionService(
             StartedAt: startedAt);
         int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
 
-        var payload = new Dictionary<string, object?>
-        {
-            ["model"] = model,
-            // Widened output (stem + 3 option texts + rationale per question, up to 12
-            // questions for Part C) needs more headroom than the letter-only key.
-            ["max_tokens"] = 8000,
-            ["system"] = new object[]
-            {
-                new Dictionary<string, object?>
-                {
-                    ["type"] = "text",
-                    ["text"] = SystemPrompt,
-                    ["cache_control"] = new Dictionary<string, object?> { ["type"] = "ephemeral" },
-                },
-            },
-            ["messages"] = new object[]
-            {
-                new Dictionary<string, object?> { ["role"] = "user", ["content"] = userText },
-            },
-            ["tools"] = new object[]
-            {
-                new Dictionary<string, object?>
-                {
-                    ["name"] = ToolName,
-                    ["description"] = "Emit the OET Listening Part B/C source question, all three options, correct option and rationale for every requested item.",
-                    ["input_schema"] = JsonSerializer.Deserialize<JsonElement>(ToolSchemaJson),
-                },
-            },
-            ["tool_choice"] = new Dictionary<string, object?> { ["type"] = "tool", ["name"] = ToolName },
-        };
-
-        var client = httpClientFactory.CreateClient("ListeningExtractionAnthropic");
-        client.BaseAddress = new Uri(baseUrl + "/");
-        client.DefaultRequestHeaders.Remove("x-api-key");
-        client.DefaultRequestHeaders.Add("x-api-key", apiKey);
-        client.DefaultRequestHeaders.Remove("anthropic-version");
-        client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
-
-        HttpResponseMessage response;
-        string body;
         try
         {
-            response = await client.PostAsync(
-                "v1/messages",
-                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            var completion = await new AnthropicProvider(httpClientFactory, registry).CompleteAsync(
+                new AiProviderRequest
+                {
+                    ProviderCode = AnthropicProviderCode,
+                    Model = model,
+                    SystemPrompt = SystemPrompt,
+                    UserPrompt = userText,
+                    MaxTokens = 8000,
+                    ApiKeyOverride = apiKey,
+                    BaseUrlOverride = baseUrl,
+                    Tools =
+                    [
+                        new AiToolDefinition(
+                            ToolName,
+                            ToolName,
+                            "Emit the OET Listening Part B/C source question, all three options, correct option and rationale for every requested item.",
+                            AiToolCategory.Read,
+                            ToolSchemaJson),
+                    ],
+                    ToolChoice = ToolName,
+                },
                 ct);
-            body = await response.Content.ReadAsStringAsync(ct);
+
+            var toolCall = completion.ToolCalls?.FirstOrDefault(call =>
+                string.Equals(call.ToolCode, ToolName, StringComparison.Ordinal));
+            if (toolCall is null || string.IsNullOrWhiteSpace(toolCall.ArgsJson))
+            {
+                await usageRecorder.RecordFailureAsync(
+                    usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
+                    "no_tool_use", "Claude did not return a tool_use answers block.",
+                    LatencyMs(), "listening.partbc.extract", CancellationToken.None,
+                    operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+                throw new InvalidOperationException("Claude did not return a tool_use answers block.");
+            }
+
+            var usage = completion.Usage;
+            var cost = usage is null
+                ? 0m
+                : row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
+                  + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
+            await usageRecorder.RecordSuccessAsync(
+                usageContext, AnthropicProviderCode, model, usage,
+                LatencyMs(), "listening.partbc.extract", cost, CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            return toolCall.ArgsJson;
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (OperationCanceledException)
         {
-            // Only the exception TYPE is persisted: provider/transport messages
-            // can carry URLs, request bodies and credential fragments.
+            throw;
+        }
+        catch (AiProviderHttpException ex)
+        {
+            await usageRecorder.RecordFailureAsync(
+                usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
+                $"http_{ex.StatusCode}",
+                $"Anthropic returned HTTP {ex.StatusCode} for {AiFeatureCodes.ListeningPartBCExtract}.",
+                LatencyMs(), "listening.partbc.extract", CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            throw new InvalidOperationException($"Claude extraction failed: HTTP {ex.StatusCode}.");
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
             await usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
                 "anthropic_network", $"Anthropic transport failure ({ex.GetType().Name}).",
@@ -474,70 +488,6 @@ public sealed class ListeningPartBCExtractionService(
                 operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             throw;
         }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            response.Dispose();
-            // The raw provider body is deliberately NOT persisted: it echoes the
-            // OCR'd paper and, on some gateways, credential fragments. The
-            // status line alone is enough to classify the failure.
-            await usageRecorder.RecordFailureAsync(
-                usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-                $"http_{(int)response.StatusCode}",
-                $"Anthropic returned HTTP {(int)response.StatusCode} for {AiFeatureCodes.ListeningPartBCExtract}.",
-                LatencyMs(), "listening.partbc.extract", CancellationToken.None,
-                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
-            throw new InvalidOperationException(
-                $"Claude extraction failed: HTTP {(int)response.StatusCode} {response.ReasonPhrase}.");
-        }
-        response.Dispose();
-
-        using var doc = JsonDocument.Parse(body);
-        var usage = ParseAnthropicUsage(doc.RootElement);
-        if (doc.RootElement.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var block in content.EnumerateArray())
-            {
-                if (block.TryGetProperty("type", out var t)
-                    && string.Equals(t.GetString(), "tool_use", StringComparison.Ordinal)
-                    && block.TryGetProperty("input", out var input))
-                {
-                    var cost = usage is null
-                        ? 0m
-                        : row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
-                          + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
-                    await usageRecorder.RecordSuccessAsync(
-                        usageContext, AnthropicProviderCode, model, usage,
-                        LatencyMs(), "listening.partbc.extract", cost, CancellationToken.None,
-                        operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
-                    return input.GetRawText();
-                }
-            }
-        }
-
-        await usageRecorder.RecordFailureAsync(
-            usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
-            "no_tool_use", "Claude did not return a tool_use answers block.",
-            LatencyMs(), "listening.partbc.extract", CancellationToken.None,
-            operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
-        throw new InvalidOperationException("Claude did not return a tool_use answers block.");
-    }
-
-    private static AiUsage? ParseAnthropicUsage(JsonElement root)
-    {
-        if (!root.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object)
-            return null;
-        var input = u.TryGetProperty("input_tokens", out var it) && it.ValueKind == JsonValueKind.Number ? it.GetInt32() : 0;
-        var output = u.TryGetProperty("output_tokens", out var ot) && ot.ValueKind == JsonValueKind.Number ? ot.GetInt32() : 0;
-        return new AiUsage { PromptTokens = input, CompletionTokens = output };
-    }
-
-    private static string NormalizeBaseUrl(string baseUrl)
-    {
-        var trimmed = baseUrl.TrimEnd('/');
-        if (trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase))
-            trimmed = trimmed[..^3].TrimEnd('/');
-        return trimmed;
     }
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max];

@@ -110,6 +110,33 @@ public sealed class ListeningQuestionQnaService(
                 "The Listening rulebook is unavailable; grounded Q&A is blocked.");
         }
 
+        var sessionId = $"{attemptId}:{questionId}";
+        var clientTurnId = string.IsNullOrWhiteSpace(request.ClientTurnId)
+            ? null
+            : request.ClientTurnId.Trim();
+        if (clientTurnId is not null)
+        {
+            var existing = await db.ListeningQnaTurns.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    t => t.SessionId == sessionId && t.ClientTurnId == clientTurnId,
+                    ct);
+            if (existing is not null)
+            {
+                var cachedHistory = NormalizeHistory(request.History);
+                cachedHistory.Add(new ChatMessageDto("user", request.Message.Trim()));
+                cachedHistory.Add(new ChatMessageDto("assistant", existing.Reply));
+                return new ListeningQuestionQnaResponse(
+                    Reply: existing.Reply,
+                    History: cachedHistory,
+                    Grounded: true,
+                    AdvisoryOnly: true,
+                    MarksUnaffected: true,
+                    AiOperationId: existing.AiOperationId,
+                    AiState: "completed",
+                    Cached: true);
+            }
+        }
+
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
             Kind = RuleKind.Listening,
@@ -147,12 +174,41 @@ public sealed class ListeningQuestionQnaService(
             var history = NormalizeHistory(request.History);
             history.Add(new ChatMessageDto("user", request.Message.Trim()));
             history.Add(new ChatMessageDto("assistant", reply));
+            string? operationId = result.UsagePersisted ? result.UsageRecordId : null;
+            if (clientTurnId is not null)
+            {
+                try
+                {
+                    db.ListeningQnaTurns.Add(new ListeningQnaTurn
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        SessionId = sessionId,
+                        ClientTurnId = clientTurnId,
+                        UserId = userId,
+                        AttemptId = attemptId,
+                        QuestionId = questionId,
+                        Message = request.Message.Trim(),
+                        Reply = reply,
+                        AiOperationId = operationId,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
+                    await db.SaveChangesAsync(CancellationToken.None);
+                }
+                catch (DbUpdateException)
+                {
+                    // Lost the insert race — a concurrent duplicate already stored.
+                }
+            }
+
             return new ListeningQuestionQnaResponse(
                 Reply: reply,
                 History: history,
                 Grounded: true,
                 AdvisoryOnly: true,
-                MarksUnaffected: true);
+                MarksUnaffected: true,
+                AiOperationId: operationId,
+                AiState: operationId is null ? null : "completed",
+                Cached: false);
         }
         catch (OperationCanceledException)
         {

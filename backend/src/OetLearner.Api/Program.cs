@@ -1601,6 +1601,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiCreditReservationS
 // AI/Cloud API plan, point 8). See Services/Ai/AiExplanationCacheService.cs.
 builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiExplanationCacheService,
     OetLearner.Api.Services.Ai.AiExplanationCacheService>();
+    builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiResultCacheService,
+        OetLearner.Api.Services.Ai.AiResultCacheService>();
 builder.Services.Configure<OetLearner.Api.Services.Ai.AiExecutionCoordinationOptions>(
     builder.Configuration.GetSection(OetLearner.Api.Services.Ai.AiExecutionCoordinationOptions.SectionName));
 // Phase 4: admin connectivity probe. Bypasses gateway grounding +

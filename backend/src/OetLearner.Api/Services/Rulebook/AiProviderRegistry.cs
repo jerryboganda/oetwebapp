@@ -246,6 +246,36 @@ public sealed class AnthropicProvider(
             || m.StartsWith("claude-opus-4-8", StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// Maps <see cref="AiProviderRequest.ToolChoice"/> onto Anthropic's
+    /// <c>tool_choice</c> object. Empty/<c>auto</c> stays auto; <c>none</c>
+    /// and <c>any</c> are honoured; any other value is a forced named tool.
+    /// </summary>
+    public static Dictionary<string, object?> ResolveAnthropicToolChoice(string? toolChoice)
+    {
+        var choice = (toolChoice ?? string.Empty).Trim();
+        if (choice.Length == 0 || string.Equals(choice, "auto", StringComparison.OrdinalIgnoreCase))
+            return new Dictionary<string, object?> { ["type"] = "auto" };
+        if (string.Equals(choice, "none", StringComparison.OrdinalIgnoreCase))
+            return new Dictionary<string, object?> { ["type"] = "none" };
+        if (string.Equals(choice, "any", StringComparison.OrdinalIgnoreCase))
+            return new Dictionary<string, object?> { ["type"] = "any" };
+        return new Dictionary<string, object?> { ["type"] = "tool", ["name"] = choice };
+    }
+
+    private static TimeSpan? ReadRetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        if (header is null) return null;
+        if (header.Delta is { } delta && delta > TimeSpan.Zero) return delta;
+        if (header.Date is { } date)
+        {
+            var wait = date - DateTimeOffset.UtcNow;
+            if (wait > TimeSpan.Zero) return wait;
+        }
+        return null;
+    }
+
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
         var held = false;
@@ -315,16 +345,32 @@ public sealed class AnthropicProvider(
         if (anthropicTools.Count > 0)
         {
             payload["tools"] = anthropicTools;
-            payload["tool_choice"] = new Dictionary<string, object?> { ["type"] = "auto" };
+            payload["tool_choice"] = ResolveAnthropicToolChoice(request.ToolChoice);
         }
 
         async Task<(HttpResponseMessage Response, string Body)> SendAsync()
         {
-            var res = await client.PostAsync(
-                "v1/messages",
-                new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
-                ct);
-            var resBody = await res.Content.ReadAsStringAsync(ct);
+            using var req = new HttpRequestMessage(HttpMethod.Post, "v1/messages")
+            {
+                Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            };
+            // ResponseHeadersRead keeps a 2xx-with-unreadable-body separable from
+            // a send failure: HttpClient.PostAsync buffers the body first.
+            var res = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            string resBody;
+            try
+            {
+                resBody = await res.Content.ReadAsStringAsync(ct);
+            }
+            catch (Exception ex)
+            {
+                var status = (int)res.StatusCode;
+                res.Dispose();
+                if (status is >= 200 and < 300)
+                    throw new AiProviderBodyReadException("Anthropic", ex);
+                throw;
+            }
+
             return (res, resBody);
         }
 
@@ -345,14 +391,11 @@ public sealed class AnthropicProvider(
         using var _response = response;
         if (!response.IsSuccessStatusCode)
         {
-            // Include Anthropic's error body (truncated) — a bare "HTTP 400" hides
-            // the actionable reason (bad model id, empty content block, etc.) and
-            // makes production failures undiagnosable from logs.
-            var reason = string.IsNullOrWhiteSpace(body)
-                ? response.ReasonPhrase
-                : body.Length > 600 ? body[..600] : body;
-            throw new InvalidOperationException(
-                $"{AiProviderErrorMessages.HttpFailure("Anthropic", (int)response.StatusCode, response.ReasonPhrase)} Body: {reason}");
+            throw new AiProviderHttpException(
+                "Anthropic",
+                (int)response.StatusCode,
+                response.ReasonPhrase,
+                ReadRetryAfter(response));
         }
 
         using var doc = JsonDocument.Parse(body);
@@ -373,6 +416,8 @@ public sealed class AnthropicProvider(
             {
                 PromptTokens = usageEl.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0,
                 CompletionTokens = usageEl.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0,
+                CacheWriteTokens = usageEl.TryGetProperty("cache_creation_input_tokens", out var cwt) ? cwt.GetInt32() : 0,
+                CacheReadTokens = usageEl.TryGetProperty("cache_read_input_tokens", out var crt) ? crt.GetInt32() : 0,
             };
         }
 

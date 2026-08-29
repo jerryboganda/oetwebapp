@@ -61,14 +61,19 @@ public class AudioCheckResponse
 /// </summary>
 public sealed record ListeningQuestionQnaRequest(
     string Message,
-    List<ChatMessageDto> History);
+    List<ChatMessageDto> History,
+    string? ClientTurnId = null);
 
 public sealed record ListeningQuestionQnaResponse(
     string Reply,
     IReadOnlyList<ChatMessageDto> History,
     bool Grounded,
     bool AdvisoryOnly,
-    bool MarksUnaffected);
+    bool MarksUnaffected,
+    string? AiOperationId = null,
+    string? AiState = null,
+    bool? Cached = null,
+    int? RetryAfterSeconds = null);
 
 /// <summary>Returned when a learner begins the 23-question diagnostic (§6.1).</summary>
 public class StartDiagnosticResponse

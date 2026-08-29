@@ -31,13 +31,18 @@ public sealed record ListeningExplanationDto(
     string WhyWrong,
     string TrapName,
     string AvoidTip,
-    string Language);
+    string Language,
+    string? AiOperationId = null,
+    string? AiState = null,
+    bool? Cached = null,
+    int? RetryAfterSeconds = null);
 
 public sealed class ListeningExplanationService(
     LearnerDbContext db,
     IAiGatewayService gateway,
     ILogger<ListeningExplanationService>? logger = null,
-    IAiExplanationCacheService? explanationCache = null)
+    IAiExplanationCacheService? explanationCache = null,
+    IAiResultCacheService? resultCache = null)
     : IListeningExplanationService
 {
     private const string PromptTemplateId = "listening.explanation.v1";
@@ -123,10 +128,30 @@ public sealed class ListeningExplanationService(
             transcriptEvidence,
             lang);
 
-        // ── W3 cache reuse (owner directive 2026-08-28 AI/Cloud API plan,
-        // point 8): two learners making the identical mistake on the
-        // identical question, against the identical approved evidence, get
-        // the same explanation without a second provider call.
+        // ── W5 AiResultCache (attempt + question revision + answer hash +
+        // language + prompt/rulebook versions), then the W3 cross-learner
+        // explanation cache as a second hit path.
+        string? resultCacheKey = null;
+        if (resultCache is not null)
+        {
+            resultCacheKey = resultCache.BuildCacheKey(
+                AiFeatureCodes.ListeningExplanation,
+                Module,
+                attemptId,
+                question.Id,
+                storedAnswer,
+                lang,
+                PromptTemplateId,
+                approvedRationale.Id);
+            var cachedJson = await resultCache.TryGetAsync(resultCacheKey, ct);
+            if (cachedJson is not null
+                && TryDeserializeExplanation(cachedJson, lang, out var fromResultCache)
+                && fromResultCache is not null)
+            {
+                return fromResultCache with { Cached = true };
+            }
+        }
+
         string? cacheKey = null;
         if (explanationCache is not null)
         {
@@ -137,17 +162,11 @@ public sealed class ListeningExplanationService(
                 extraEvidence: transcriptEvidence);
 
             var cachedJson = await explanationCache.TryGetAsync(cacheKey, ct);
-            if (cachedJson is not null)
+            if (cachedJson is not null
+                && TryDeserializeExplanation(cachedJson, lang, out var cached)
+                && cached is not null)
             {
-                try
-                {
-                    var cached = JsonSerializer.Deserialize<ListeningExplanationDto>(cachedJson);
-                    if (cached is not null) return cached with { Language = lang };
-                }
-                catch (JsonException ex)
-                {
-                    logger?.LogWarning(ex, "ListeningExplanationService — cached explanation for key {CacheKey} failed to deserialize; generating fresh.", cacheKey);
-                }
+                return cached with { Cached = true };
             }
         }
 
@@ -188,13 +207,44 @@ public sealed class ListeningExplanationService(
                 "The grounded explanation is unavailable because the gateway failed.");
         }
 
+        var payload = JsonSerializer.Serialize(generated);
+        if (resultCacheKey is not null)
+        {
+            await resultCache!.StoreAsync(
+                resultCacheKey,
+                AiFeatureCodes.ListeningExplanation,
+                Module,
+                payload,
+                PromptTemplateId,
+                approvedRationale.Id,
+                question.Version.ToString(),
+                ttl: TimeSpan.FromDays(30),
+                CancellationToken.None);
+        }
+
         if (cacheKey is not null)
         {
             await explanationCache!.StoreAsync(
-                Module, question.Id, lang, cacheKey, JsonSerializer.Serialize(generated), CancellationToken.None);
+                Module, question.Id, lang, cacheKey, payload, CancellationToken.None);
         }
 
-        return generated;
+        return generated with { Cached = false };
+    }
+
+    private static bool TryDeserializeExplanation(string json, string lang, out ListeningExplanationDto? dto)
+    {
+        dto = null;
+        try
+        {
+            var cached = JsonSerializer.Deserialize<ListeningExplanationDto>(json);
+            if (cached is null) return false;
+            dto = cached with { Language = lang, Cached = true };
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static string BuildPrompt(

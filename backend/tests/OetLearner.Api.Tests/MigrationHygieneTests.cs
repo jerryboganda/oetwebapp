@@ -22,6 +22,8 @@ public class MigrationHygieneTests
     [InlineData(typeof(RestoreListeningPartBCSourceStems), "20261129000000_RestoreListeningPartBCSourceStems")]
     [InlineData(typeof(AdminMasterAccessCapAndOneTimeRenewal), "20260829090000_AdminMasterAccessCapAndOneTimeRenewal")]
     [InlineData(typeof(AddInvoiceEvidenceSourceTracking), "20261130090000_AddInvoiceEvidenceSourceTracking")]
+    [InlineData(typeof(AddAiResultCache), "20261201090000_AddAiResultCache")]
+    [InlineData(typeof(AddListeningQnaTurns), "20261202090000_AddListeningQnaTurns")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

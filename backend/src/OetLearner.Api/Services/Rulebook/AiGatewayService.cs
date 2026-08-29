@@ -2062,6 +2062,12 @@ public sealed class AiUsage
 {
     public int PromptTokens { get; init; }
     public int CompletionTokens { get; init; }
+
+    /// <summary>Anthropic prompt-cache write tokens; disjoint from <see cref="PromptTokens"/>.</summary>
+    public int CacheWriteTokens { get; init; }
+
+    /// <summary>Anthropic prompt-cache read tokens; disjoint from <see cref="PromptTokens"/>.</summary>
+    public int CacheReadTokens { get; init; }
 }
 
 public sealed class PromptNotGroundedException(string message) : InvalidOperationException(message);
