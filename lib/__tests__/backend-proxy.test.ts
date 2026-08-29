@@ -22,14 +22,13 @@ describe('backend proxy helpers', () => {
     expect(() => validateProxyPathSegments(['v1', '..', 'admin'])).toThrow('Invalid proxy path.');
   });
 
-  it('removes debug and forwarding headers before proxying', () => {
+  it('removes debug and hop-by-hop headers before proxying', () => {
     const headers = new Headers({
       Authorization: 'Bearer token',
       'Content-Type': 'application/json',
       'X-Debug-Role': 'admin',
       Host: 'evil.example.test',
       Connection: 'keep-alive',
-      'X-Forwarded-For': '1.2.3.4',
     });
 
     const sanitized = sanitizeProxyHeaders(headers);
@@ -39,7 +38,53 @@ describe('backend proxy helpers', () => {
     expect(sanitized.get('X-Debug-Role')).toBeNull();
     expect(sanitized.get('Host')).toBeNull();
     expect(sanitized.get('Connection')).toBeNull();
-    expect(sanitized.get('X-Forwarded-For')).toBeNull();
+  });
+
+  it('forwards x-forwarded-for so the API can resolve the real client IP', () => {
+    // Stripping this collapsed the API's AuthBruteforce limiter into ONE global
+    // 100/min bucket for every learner, because Connection.RemoteIpAddress was
+    // always this container. The API only honours hops from Proxy:KnownNetworks
+    // (ForwardedHeadersMiddleware), so passing the chain through is safe.
+    const headers = new Headers({ 'X-Forwarded-For': '203.0.113.7, 172.18.0.4' });
+
+    expect(sanitizeProxyHeaders(headers).get('X-Forwarded-For')).toBe('203.0.113.7, 172.18.0.4');
+  });
+
+  it('still strips x-forwarded-host, which would 400 the API host filter', () => {
+    // The inbound value is the WEB host, which is absent from the API's
+    // AllowedHosts — forwarding it makes HostFilteringMiddleware reject every
+    // proxied request.
+    const headers = new Headers({
+      'X-Forwarded-Host': 'app.oetwithdrhesham.co.uk',
+      'X-Forwarded-Proto': 'https',
+      Forwarded: 'for=203.0.113.7',
+    });
+
+    const sanitized = sanitizeProxyHeaders(headers);
+
+    expect(sanitized.get('X-Forwarded-Host')).toBeNull();
+    expect(sanitized.get('X-Forwarded-Proto')).toBeNull();
+    expect(sanitized.get('Forwarded')).toBeNull();
+  });
+
+  it('drops caller-supplied edge headers that the API treats as authoritative', () => {
+    // No Cloudflare fronts this deployment, so nothing legitimately sets these.
+    // The API trusted CF-Connecting-IP for security-event IPs and CF-IPCountry
+    // for the sign-in country allow-list and billing region detection, so
+    // forwarding them let any caller forge all three.
+    const headers = new Headers({
+      'CF-Connecting-IP': '203.0.113.9',
+      'CF-IPCountry': 'XX',
+      'CF-Ray': 'forged',
+      'True-Client-IP': '203.0.113.9',
+    });
+
+    const sanitized = sanitizeProxyHeaders(headers);
+
+    expect(sanitized.get('CF-Connecting-IP')).toBeNull();
+    expect(sanitized.get('CF-IPCountry')).toBeNull();
+    expect(sanitized.get('CF-Ray')).toBeNull();
+    expect(sanitized.get('True-Client-IP')).toBeNull();
   });
 
   it('removes unsafe upstream response headers before streaming back to the renderer', () => {

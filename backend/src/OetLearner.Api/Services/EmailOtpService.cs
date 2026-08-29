@@ -241,11 +241,28 @@ public sealed class EmailOtpService(
             // an already-successful verification, not an invalid one — treat
             // it as success instead of surfacing "The OTP is invalid" for a
             // verification that already happened.
-            var alreadyVerifiedMatch = account.EmailVerifiedAt is not null
-                ? await FindMatchingVerifiedChallengeAsync(account.Id, EmailVerificationPurpose, code, cancellationToken)
-                : null;
+            // Do NOT gate this on account.EmailVerifiedAt. `account` was
+            // materialised into THIS request's scoped DbContext before the
+            // winning duplicate committed, and EF Core's identity resolution
+            // does not overwrite an already-tracked instance on re-query — so
+            // the in-memory copy still reads EmailVerifiedAt == null and the
+            // old pre-condition skipped the replay check for exactly the
+            // CONCURRENT case it was written for (it only ever helped the
+            // strictly sequential one). The lookup below is safe to run
+            // unconditionally: it constant-time compares the presented code
+            // against the specific challenge that verified this account, so a
+            // caller without the real code still gets invalid_otp_code.
+            var alreadyVerifiedMatch = await FindMatchingVerifiedChallengeAsync(
+                account.Id, EmailVerificationPurpose, code, cancellationToken);
             if (alreadyVerifiedMatch is not null)
             {
+                // Refresh the stale snapshot before returning: AuthService
+                // builds CurrentUserResponse straight off this instance
+                // (VerifyEmailOtpAsync -> ResolveSubjectAsync -> BuildSubjectAsync
+                // reads account.EmailVerifiedAt), so returning it unrefreshed
+                // answers 200 OK with isEmailVerified=false and bounces the
+                // learner right back onto the verify screen.
+                await db.Entry(account).ReloadAsync(cancellationToken);
                 return account;
             }
 

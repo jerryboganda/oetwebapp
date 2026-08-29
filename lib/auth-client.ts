@@ -401,6 +401,51 @@ export async function ensureFreshAccessToken(): Promise<string | null> {
   return session?.accessToken ?? null;
 }
 
+/**
+ * Force a token re-issue for the CURRENT session, ignoring the fact that the
+ * access token has not expired yet.
+ *
+ * Needed after email verification: POST /v1/auth/email/verify-otp returns only
+ * CurrentUserResponse, so the in-memory JWT still carries email_verified=false.
+ * Every learner endpoint is gated on that claim (backend EmailVerifiedGate), so
+ * without this the first dashboard call 403s with email_verification_required
+ * and lib/api.ts hard-navigates the learner straight back to /verify-email — a
+ * visible bounce that reads as a failed verification.
+ *
+ * Unlike ensureFreshSession this NEVER calls clearStoredSession and NEVER
+ * redirects. By the time it runs the OTP is already consumed server-side, so a
+ * flaky refresh must not sign the learner out or look like a bad code. On
+ * failure it returns null and leaves the existing session untouched; the normal
+ * ensureFreshSession path picks up a fresh token on the next API call, and the
+ * lib/api.ts 403 mapping remains as the backstop.
+ */
+export async function reissueSessionAfterVerification(): Promise<AuthSession | null> {
+  const record = loadStoredSessionRecord();
+  if (!record) {
+    return null;
+  }
+
+  let session: AuthSession;
+  try {
+    // Deduped: refresh tokens are single-use and rotated, so issuing our own
+    // POST alongside a concurrent background refresh would 403 whichever lands
+    // second.
+    session = await refreshSessionDeduped(record.session.refreshToken);
+  } catch {
+    return null;
+  }
+
+  try {
+    saveStoredSession(session, record.persistence);
+  } catch {
+    // Web storage unavailable (private mode / quota). saveStoredSession sets
+    // the in-memory volatile record BEFORE it touches storage, so the fresh
+    // token is already live for the next request either way.
+  }
+
+  return session;
+}
+
 export async function restoreSession(): Promise<AuthSession | null> {
   await hydrateAuthStorage();
   const record = loadStoredSessionRecord();
@@ -633,7 +678,17 @@ export async function verifyEmailOtp(email: string, code: string): Promise<Curre
     purpose: 'verify_email',
     code,
   });
-  updateStoredUser(currentUser);
+  // Best-effort cache write. persistWebStorageKey -> storage.setItem is
+  // unguarded (lib/mobile/native-storage.ts), and Safari private mode / quota
+  // exhaustion throws synchronously — which would propagate out of a
+  // verification that ALREADY SUCCEEDED and whose OTP is already burned,
+  // rendering "Unable to verify the OTP code." with no way forward. The
+  // authoritative CurrentUser is the return value; the cache is optional.
+  try {
+    updateStoredUser(currentUser);
+  } catch {
+    // Storage unavailable — the session stays in memory.
+  }
   return currentUser;
 }
 

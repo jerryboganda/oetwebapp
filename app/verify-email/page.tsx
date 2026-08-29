@@ -124,11 +124,10 @@ function VerifyEmailContent() {
   // button never invites a request the backend will reject.
   const [resendIn, setResendIn] = useState(0);
   const requestedForEmail = React.useRef<string | null>(null);
-  const formRef = React.useRef<HTMLFormElement | null>(null);
-  // Synchronous re-entrancy lock for handleSubmit. `isSubmitting` state is
+  // Synchronous re-entrancy lock for submitOtp. `isSubmitting` state is
   // NOT enough: on mobile the auto-submit-on-6th-digit (below) can race the
   // on-screen numeric keypad's own implicit "Go"/"Done" form submission, and
-  // a second `submit` event can reach handleSubmit before the first call's
+  // a second submit can reach submitOtp before the first call's
   // setIsSubmitting(true) has actually committed and re-rendered. That raced
   // second request finds the OTP already consumed by the first and fails
   // with "invalid OTP" — even though the first request already verified the
@@ -258,25 +257,33 @@ function VerifyEmailContent() {
     }
   };
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
+  // Verifies the code that is PASSED IN — never the `otp` state. The auto-submit
+  // path calls this from inside the OtpCodeInput change handler, where the
+  // `setOtp(next)` for the 6th digit has NOT committed yet: reading state here
+  // saw the previous render's 5-digit value, tripped the length guard below and
+  // rendered a false "The OTP is invalid" without ever sending the request.
+  const submitOtp = async (code: string) => {
     if (submitLockRef.current) {
       return;
     }
 
-    const normalizedOtp = otp.replace(/\D/g, '');
-
-    if (normalizedOtp.length !== 6) {
-      setErrorMessage('The OTP is invalid. Enter the 6 digit verification code.');
-      return;
-    }
-
+    // Take the lock BEFORE the length guard so the critical section starts at
+    // the first statement instead of after an early return, and release it in
+    // one finally. The invalid-length path has no await, so the lock is handed
+    // back synchronously and the "Verify OTP" button still works immediately.
     submitLockRef.current = true;
-    setIsSubmitting(true);
-    setErrorMessage(null);
 
     try {
+      const normalizedOtp = code.replace(/\D/g, '');
+
+      if (normalizedOtp.length !== 6) {
+        setErrorMessage('The OTP is invalid. Enter the 6 digit verification code.');
+        return;
+      }
+
+      setIsSubmitting(true);
+      setErrorMessage(null);
+
       // Authenticated case (e.g. the dashboard banner's "Verify now" link):
       // go through AuthContext so its `user` state — and every component
       // reading it, like EmailVerificationBanner — reflects the new
@@ -309,6 +316,13 @@ function VerifyEmailContent() {
     }
   };
 
+  // Manual path: the button, and the physical Enter key on desktop. Here `otp`
+  // IS the committed value, so passing it straight through is correct.
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    void submitOtp(otp);
+  };
+
   if (loading || !email || user?.isEmailVerified) {
     return <VerifyEmailFallback />;
   }
@@ -339,16 +353,28 @@ function VerifyEmailContent() {
         </p>
       }
     >
-      <form ref={formRef} onSubmit={handleSubmit} className={styles.passwordFlowForm}>
+      <form onSubmit={handleSubmit} className={styles.passwordFlowForm}>
         <OtpCodeInput
           value={otp}
           onChange={(value) => {
             const next = value.replace(/\D/g, '').slice(0, 6);
+            // `otp` here is the PREVIOUS committed value. The same stale closure
+            // that caused the bug is exactly what makes this a correct
+            // "did the code actually change?" test.
+            const previous = otp;
             setOtp(next);
             setErrorMessage(null);
             // Auto-submit the moment all six digits are in — no extra click.
-            if (next.length === 6 && !isSubmitting) {
-              void formRef.current?.requestSubmit();
+            // Call submitOtp DIRECTLY with `next`: requestSubmit() dispatched a
+            // nested synchronous submit event, and the handler on the other end
+            // of it closed over the pre-update `otp` (5 digits), so this screen
+            // showed "The OTP is invalid" and never sent the request.
+            // `next !== previous` only suppresses a byte-identical re-fire — a
+            // stricter "<6 → 6 transition" guard would block overwriting a digit
+            // in place, stranding mobile learners whose Verify button is behind
+            // the keypad.
+            if (next.length === 6 && next !== previous && !isSubmitting) {
+              void submitOtp(next);
             }
           }}
           length={6}
@@ -359,7 +385,7 @@ function VerifyEmailContent() {
         ) : null}
 
         {errorMessage ? (
-          <p className={`${styles.notice} ${styles.noticeDanger}`.trim()}>
+          <p role="alert" aria-live="assertive" className={`${styles.notice} ${styles.noticeDanger}`.trim()}>
             {errorMessage}
           </p>
         ) : null}

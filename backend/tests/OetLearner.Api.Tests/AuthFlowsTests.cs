@@ -1268,6 +1268,51 @@ public class AuthFlowsTests
         Assert.Equal(firstResponse.ChallengeId, challenge.Id.ToString());
     }
 
+    [Fact]
+    public async Task EmailOtpService_VerifyEmailOtp_ConcurrentDuplicateWithStaleAccountSnapshot_IsIdempotent()
+    {
+        // The sequential-replay idempotency gated the replay check on
+        // `account.EmailVerifiedAt is not null`, which is false for a CONCURRENT
+        // duplicate: request B materialises the account into its own scoped
+        // DbContext BEFORE request A commits, and EF Core identity resolution
+        // never refreshes an already-tracked instance, so B's copy still reads
+        // null. B then skipped the replay check and 400'd with invalid_otp_code
+        // even though its code is the one that had just succeeded.
+        var harness = CreateEmailOtpHarness();
+        await harness.SeedAccountAsync();
+
+        await harness.Service.RequestEmailVerificationOtpAsync("learner@example.com");
+        var otpCode = harness.ExtractLatestOtpCode();
+
+        // Request B: its own DbContext, snapshot taken while still unverified.
+        await using var concurrentDb = new LearnerDbContext(harness.DbOptions);
+        var staleAccount = await concurrentDb.ApplicationUserAccounts
+            .SingleAsync(x => x.NormalizedEmail == "LEARNER@EXAMPLE.COM");
+        Assert.Null(staleAccount.EmailVerifiedAt);
+
+        // Request A wins the race and commits on its own DbContext.
+        var winner = await harness.Service.VerifyEmailVerificationOtpAsync("learner@example.com", otpCode);
+        Assert.NotNull(winner.EmailVerifiedAt);
+
+        // Request B resumes against its stale snapshot. It must succeed...
+        var concurrentService = harness.CreateService(concurrentDb);
+        var replayed = await concurrentService.VerifyEmailVerificationOtpAsync("learner@example.com", otpCode);
+
+        // ...AND report the account as verified. AuthService builds
+        // CurrentUserResponse straight off this instance, so a stale
+        // EmailVerifiedAt here answers 200 with isEmailVerified=false and
+        // bounces the learner right back onto the OTP screen.
+        Assert.NotNull(replayed.EmailVerifiedAt);
+        Assert.Equal(winner.EmailVerifiedAt, replayed.EmailVerifiedAt);
+
+        // The replay path stays a replay: a wrong code against the same stale
+        // context still fails, so "already verified" never becomes a free pass.
+        var wrongCode = otpCode == "000000" ? "111111" : "000000";
+        var wrong = await Assert.ThrowsAsync<ApiException>(() =>
+            concurrentService.VerifyEmailVerificationOtpAsync("learner@example.com", wrongCode));
+        Assert.Equal("invalid_otp_code", wrong.Code);
+    }
+
     [Theory]
     [MemberData(nameof(AuthRequestContractSamples))]
     public void AuthRequestContracts_SerializeAndDeserializeWithExpectedShape(object sample, string[] expectedProperties)
@@ -1801,6 +1846,16 @@ public class AuthFlowsTests
                 OtpLifetime = TimeSpan.FromMinutes(10),
                 AuthenticatorIssuer = "OET Learner"
             }), sender, TimeProvider);
+
+        /// <summary>Builds a service over a caller-owned DbContext, so a test can
+        /// pre-materialise entities into it and reproduce a concurrent request
+        /// whose snapshot predates another request's commit.</summary>
+        public EmailOtpService CreateService(LearnerDbContext db)
+            => new(db, Options.Create(new AuthTokenOptions
+            {
+                OtpLifetime = TimeSpan.FromMinutes(10),
+                AuthenticatorIssuer = "OET Learner"
+            }), Sender, TimeProvider);
     }
 
     private sealed record AuthServiceHarness(

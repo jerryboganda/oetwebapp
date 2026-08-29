@@ -115,17 +115,19 @@ file static class SpeakingComplianceHttpContextExtensions
 
     internal static string? ResolveClientIp(this HttpContext http)
     {
-        // Prefer X-Forwarded-For when present (proxy / load-balancer
-        // friendly); otherwise fall back to the raw remote IP.
-        var fwd = http.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(fwd))
-        {
-            var first = fwd.Split(',').FirstOrDefault()?.Trim();
-            if (!string.IsNullOrEmpty(first))
-            {
-                return first;
-            }
-        }
+        // Read the connection directly: ForwardedHeadersMiddleware has already
+        // rewritten RemoteIpAddress from X-Forwarded-For, honouring only hops
+        // inside Proxy:KnownNetworks and capped by Proxy:ForwardLimit
+        // (Program.cs). It runs long before endpoint routing, so this is the
+        // resolved client address, not the proxy's.
+        //
+        // Do NOT parse X-Forwarded-For here. This used to take the LEFT-most
+        // entry, which is the caller-supplied end of the chain — the nginx hop
+        // APPENDS its peer with $proxy_add_x_forwarded_for, so anyone could
+        // prepend their own value and forge the IP written to this GDPR
+        // consent record. It was inert only while the web proxy stripped the
+        // header outright; that strip has been lifted so the auth brute-force
+        // limiter can see real client IPs.
         return http.Connection.RemoteIpAddress?.ToString();
     }
 }

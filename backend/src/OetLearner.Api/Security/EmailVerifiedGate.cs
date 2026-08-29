@@ -65,9 +65,14 @@ public sealed class EmailVerifiedRequirementHandler(IRuntimeSettingsProvider run
             return;
         }
 
-        // Tokens minted before the claim existed also land here — completing
-        // verification issues a fresh session with the claim set, so the gate
-        // self-heals the moment the user verifies.
+        // Tokens minted before the account was verified (or before this claim
+        // existed) land here. Note the endpoint that verifies email returns
+        // CurrentUserResponse only — it does NOT mint tokens — so the client
+        // re-issues the session itself right after a successful verify
+        // (contexts/auth-context.tsx verifyEmailOtp -> auth-client
+        // reissueSessionAfterVerification). This 403 is mapped to the verify
+        // screen by lib/api.ts and remains the backstop for when that re-issue
+        // was skipped or failed.
         context.Fail(new AuthorizationFailureReason(this, EmailVerifiedRequirement.FailureReason));
     }
 }
