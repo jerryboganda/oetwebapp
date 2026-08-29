@@ -225,6 +225,7 @@ public static class AiFeatureRouteDefaults
         HaikuDefault(AiFeatureCodes.PronunciationTip, "Pronunciation tip generation — non-scoring."),
         HaikuDefault(AiFeatureCodes.PronunciationFeedback, "Pronunciation corrective feedback — non-scoring."),
         HaikuDefault(AiFeatureCodes.ReadingExplanation, "Reading question explanations."),
+        HaikuDefault(AiFeatureCodes.ReadingPassageQna, "Reading passage Q&A."),
         HaikuDefault(AiFeatureCodes.ReadingVocabularyCard, "Reading vocabulary cards."),
         HaikuDefault(AiFeatureCodes.ListeningExplanation, "Listening question explanations."),
         HaikuDefault(AiFeatureCodes.SummarisePassage, "Passage summarisation."),
@@ -329,6 +330,7 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.TutorRecommendation,
         // Reading explanations / vocabulary cards — route to Claude Sonnet 4.6.
         AiFeatureCodes.ReadingExplanation,
+        AiFeatureCodes.ReadingPassageQna,
         AiFeatureCodes.ReadingVocabularyCard,
         AiFeatureCodes.ListeningExplanation,
         // Writing module V2 coaching tools (text LLM; embeddings excluded).

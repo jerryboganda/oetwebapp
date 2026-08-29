@@ -643,7 +643,7 @@ export const getMockResults = (sessionId: string) =>
 export const getVocabDue = () =>
   api<VocabItemDto[]>('/v1/reading-pathway/vocab/due');
 
-/** Add a word to the learner's personal vocab deck. */
+/** Add a word to the learner's personal vocab deck. Throws on unavailable generation (HTTP 503) — no stub card is stored. */
 export const addVocabWord = (word: string, source: string) =>
   api<VocabItemDto>('/v1/reading-pathway/vocab', {
     method: 'POST',

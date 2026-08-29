@@ -93,14 +93,34 @@ public sealed class WhisperPronunciationAsrProvider(
         form.Add(new StringContent("verbose_json"), "response_format");
         form.Add(new StringContent("word"), "timestamp_granularities[]");
 
-        using var response = await client.PostAsync(url, form, ct);
+        var sttLease = await usageRecorder.BeginOperationAsync(new DirectAiOperationRequest
+        {
+            FeatureCode = AiFeatureCodes.SttPronunciationTranscribe,
+            Module = "stt",
+            UserId = request.UserId,
+            ResourceId = $"{request.UserId}:{sttStartedAt.ToUnixTimeMilliseconds()}",
+            ResourceType = "pronunciation_audio",
+            RequestHash = $"{request.UserId}:{request.AudioMimeType}:{model}",
+            OperationClass = AiOperationClass.InteractiveLearning,
+            AllowRetryAfterFailure = true,
+        }, ct);
+        if (!sttLease.CanProceed)
+            throw new PronunciationAsrException("stt_unavailable", $"Pronunciation STT is unavailable ({sttLease.Reason}).");
+
+        using var response = await DirectAiOperationReconciler.RunAsync(
+            usageRecorder,
+            sttLease,
+            WhisperProviderCode,
+            async () => await client.PostAsync(url, form, ct),
+            ct);
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Whisper ASR returned {Status}: {Body}", (int)response.StatusCode, body);
             await usageRecorder.RecordFailureAsync(
                 sttContext, WhisperProviderCode, model, AiCallOutcome.ProviderError,
-                $"http_{(int)response.StatusCode}", body, SttLatencyMs(), "stt.pronunciation", ct);
+                $"http_{(int)response.StatusCode}", body, SttLatencyMs(), "stt.pronunciation", ct,
+                operationId: sttLease.OperationId, attemptNumber: sttLease.AttemptNumber);
             throw new PronunciationAsrException(
                 "whisper_error",
                 $"Whisper returned {(int)response.StatusCode}");
@@ -122,9 +142,21 @@ public sealed class WhisperPronunciationAsrProvider(
         }
         double? duration = root.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetDouble() : null;
 
-        await usageRecorder.RecordSuccessAsync(
+        var sttUsageId = await usageRecorder.RecordSuccessAsync(
             sttContext, WhisperProviderCode, model, usage: null,
-            SttLatencyMs(), $"stt.words={heardWords.Count}", costEstimateUsd: 0m, ct);
+            SttLatencyMs(), $"stt.words={heardWords.Count}", costEstimateUsd: 0.006m, ct,
+            operationId: sttLease.OperationId, attemptNumber: sttLease.AttemptNumber);
+        if (sttLease.OperationId is not null)
+        {
+            await usageRecorder.CompleteOperationAsync(
+                sttLease.OperationId,
+                AiOperationState.Completed,
+                sttUsageId,
+                WhisperProviderCode,
+                model,
+                CancellationToken.None,
+                sttLease.BudgetReservation);
+        }
 
         // ── Step 2: deterministic word-alignment scoring ─────────────────────
         var refWords = MockPronunciationAsrProvider.TokenizeWords(request.ReferenceText);

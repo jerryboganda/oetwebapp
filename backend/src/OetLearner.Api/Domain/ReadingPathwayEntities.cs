@@ -144,10 +144,13 @@ public class ReadingStrategyProgress
 }
 
 /// <summary>Master vocabulary word record shared across all users.</summary>
+[Index(nameof(NormalizedWord), IsUnique = true, Name = "UX_VocabularyWords_NormalizedWord")]
 public class VocabularyWord
 {
     public Guid Id { get; set; }
     [MaxLength(128)] public string Word { get; set; } = default!;
+    /// <summary>Trimmed lower-invariant of <see cref="Word"/>. Unique. Empty only for pre-backfill rows.</summary>
+    [MaxLength(128)] public string NormalizedWord { get; set; } = "";
     [MaxLength(32)] public string PartOfSpeech { get; set; } = "";
     public string DefinitionEn { get; set; } = "";
     public string DefinitionAr { get; set; } = "";

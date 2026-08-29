@@ -380,6 +380,8 @@ public static class AiFeatureCodes
     // Reading Module — WS4 (learner-facing, non-scoring, BYOK-eligible)
     public const string ReadingExplanation = "reading.explanation.v1";
     public const string ReadingVocabularyCard = "reading.vocabulary.card";
+    /// <summary>W9 — passage Q&amp;A is a distinct InteractiveLearning code so cost, limits, and cache do not collide with explanations.</summary>
+    public const string ReadingPassageQna = "reading.passage_qna.v1";
 
     // Listening Module — learner-facing, post-submit, grounded advisory only.
     public const string ListeningExplanation = "listening.explanation.v1";
@@ -433,6 +435,8 @@ public static class AiFeatureCodes
     public const string SttPronunciationTranscribe = "stt.pronunciation.transcribe";
     /// <summary>Whisper speech-to-text for Conversation ASR turns.</summary>
     public const string SttConversationTranscribe = "stt.conversation.transcribe";
+    /// <summary>OpenAI-compatible embeddings generation (non-Claude).</summary>
+    public const string EmbeddingsGenerate = "embeddings.generate";
 
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.

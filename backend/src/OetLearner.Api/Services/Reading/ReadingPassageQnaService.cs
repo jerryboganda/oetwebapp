@@ -19,6 +19,8 @@ public interface IReadingPassageQnaService
 
 public sealed class ReadingPassageQnaUnavailableException(string message) : Exception(message);
 
+public sealed class ReadingPassageQnaSessionLimitException(string message) : Exception(message);
+
 /// <summary>
 /// Post-submit, passage-grounded Reading Q&amp;A. Passage content is only exposed
 /// to the gateway after the learner owns a submitted attempt pinned to the
@@ -31,6 +33,9 @@ public sealed class ReadingPassageQnaService(
     ILogger<ReadingPassageQnaService>? logger = null)
     : IReadingPassageQnaService
 {
+    private const int SessionTurnCap = 50;
+    private const string PromptTemplateId = "reading.passage_qna.v1";
+
     public async Task<PassageQnaResponse> AskAsync(
         string userId,
         PassageQnaRequest request,
@@ -102,6 +107,40 @@ public sealed class ReadingPassageQnaService(
                 "The Reading rulebook is unavailable; grounded Q&A is blocked.");
         }
 
+        var sessionId = $"{request.AttemptId}:{request.PassageId}";
+        var clientTurnId = string.IsNullOrWhiteSpace(request.ClientTurnId)
+            ? null
+            : request.ClientTurnId.Trim();
+        if (clientTurnId is not null)
+        {
+            var existing = await db.ReadingQnaTurns.AsNoTracking()
+                .FirstOrDefaultAsync(
+                    t => t.SessionId == sessionId && t.ClientTurnId == clientTurnId,
+                    ct);
+            if (existing is not null)
+            {
+                var cachedHistory = NormalizeHistory(request.History);
+                cachedHistory.Add(new ChatMessageDto("user", request.Message.Trim()));
+                cachedHistory.Add(new ChatMessageDto("assistant", existing.Reply));
+                return new PassageQnaResponse(
+                    Reply: existing.Reply,
+                    History: cachedHistory,
+                    Grounded: true,
+                    AdvisoryOnly: true,
+                    MarksUnaffected: true,
+                    AiOperationId: existing.AiOperationId,
+                    AiState: "completed",
+                    Cached: true);
+            }
+        }
+
+        var sessionTurns = await db.ReadingQnaTurns.CountAsync(t => t.SessionId == sessionId, ct);
+        if (sessionTurns >= SessionTurnCap)
+        {
+            throw new ReadingPassageQnaSessionLimitException(
+                $"Passage Q&A is limited to {SessionTurnCap} turns per submitted attempt and passage.");
+        }
+
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
             Kind = RuleKind.Reading,
@@ -116,8 +155,8 @@ public sealed class ReadingPassageQnaService(
             {
                 Prompt = prompt,
                 UserInput = userInput,
-                FeatureCode = AiFeatureCodes.ReadingExplanation,
-                PromptTemplateId = "reading.passage_qna.v1",
+                FeatureCode = AiFeatureCodes.ReadingPassageQna,
+                PromptTemplateId = PromptTemplateId,
                 UserId = userId,
                 Temperature = 0.2,
                 MaxTokens = 700,
@@ -130,12 +169,41 @@ public sealed class ReadingPassageQnaService(
             var history = NormalizeHistory(request.History);
             history.Add(new ChatMessageDto("user", request.Message.Trim()));
             history.Add(new ChatMessageDto("assistant", reply));
+            string? operationId = result.UsagePersisted ? result.UsageRecordId : null;
+            if (clientTurnId is not null)
+            {
+                try
+                {
+                    db.ReadingQnaTurns.Add(new ReadingQnaTurn
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        SessionId = sessionId,
+                        ClientTurnId = clientTurnId,
+                        UserId = userId,
+                        AttemptId = request.AttemptId,
+                        PassageId = request.PassageId,
+                        Message = request.Message.Trim(),
+                        Reply = reply,
+                        AiOperationId = operationId,
+                        CreatedAt = DateTimeOffset.UtcNow,
+                    });
+                    await db.SaveChangesAsync(CancellationToken.None);
+                }
+                catch (DbUpdateException)
+                {
+                    // Lost the insert race — a concurrent duplicate already stored.
+                }
+            }
+
             return new PassageQnaResponse(
                 Reply: reply,
                 History: history,
                 Grounded: true,
                 AdvisoryOnly: true,
-                MarksUnaffected: true);
+                MarksUnaffected: true,
+                AiOperationId: operationId,
+                AiState: operationId is null ? null : "completed",
+                Cached: false);
         }
         catch (OperationCanceledException)
         {

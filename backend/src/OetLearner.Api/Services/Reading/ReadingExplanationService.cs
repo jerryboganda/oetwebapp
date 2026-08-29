@@ -46,14 +46,16 @@ public sealed record ExplanationDto(
     string WhyWrong,
     string TrapName,
     string AvoidTip,
-    string Language);   // "en" | "ar"
+    string Language,
+    bool Cached = false);   // "en" | "ar"
 
 public sealed class ReadingExplanationService(
     LearnerDbContext db,
     IRulebookLoader rulebookLoader,
     IAiGatewayService gateway,
     ILogger<ReadingExplanationService>? logger = null,
-    IAiExplanationCacheService? explanationCache = null)
+    IAiExplanationCacheService? explanationCache = null,
+    IAiResultCacheService? resultCache = null)
     : IReadingExplanationService
 {
     private const string PromptTemplateId = "reading.explanation.v1";
@@ -63,6 +65,8 @@ public sealed class ReadingExplanationService(
 
     private async Task<ExplanationDto> GenerateExplanationAsync(
         ReadingQuestion question,
+        string attemptId,
+        string rationaleId,
         string correctAnswer,
         string wrongOption,
         string language,
@@ -72,11 +76,29 @@ public sealed class ReadingExplanationService(
         string? userId,
         CancellationToken ct)
     {
-        // ── W3 cache reuse (owner directive 2026-08-28 AI/Cloud API plan,
-        // point 8): two learners making the identical mistake on the identical
-        // question, against the identical approved evidence, get the same
-        // explanation without a second provider call. See
-        // AiExplanationCacheService / AiExplanationCacheEntry.
+        // W5 AiResultCache first (attempt + question + answer + language +
+        // prompt/rulebook versions), then the W3 cross-learner explanation cache.
+        string? resultCacheKey = null;
+        if (resultCache is not null)
+        {
+            resultCacheKey = resultCache.BuildCacheKey(
+                AiFeatureCodes.ReadingExplanation,
+                Module,
+                attemptId,
+                question.Id,
+                wrongOption,
+                language,
+                PromptTemplateId,
+                rationaleId);
+            var cachedJson = await resultCache.TryGetAsync(resultCacheKey, ct);
+            if (cachedJson is not null
+                && TryDeserializeExplanation(cachedJson, language, out var fromResultCache)
+                && fromResultCache is not null)
+            {
+                return fromResultCache with { Cached = true };
+            }
+        }
+
         string? cacheKey = null;
         if (explanationCache is not null)
         {
@@ -86,19 +108,50 @@ public sealed class ReadingExplanationService(
                 approvedRationale, sourceSentence, extraEvidence: sourcePassage);
 
             var cached = await TryReadCacheAsync(cacheKey, language, ct);
-            if (cached is not null) return cached;
+            if (cached is not null) return cached with { Cached = true };
         }
 
         var generated = await CallGatewayAsync(
             question, correctAnswer, wrongOption, language, approvedRationale, sourceSentence, sourcePassage, userId, ct);
 
+        var payload = System.Text.Json.JsonSerializer.Serialize(generated);
+        if (resultCacheKey is not null)
+        {
+            await resultCache!.StoreAsync(
+                resultCacheKey,
+                AiFeatureCodes.ReadingExplanation,
+                Module,
+                payload,
+                PromptTemplateId,
+                rationaleId,
+                question.Id,
+                ttl: TimeSpan.FromDays(30),
+                CancellationToken.None);
+        }
+
         if (cacheKey is not null)
         {
             await explanationCache!.StoreAsync(
-                Module, question.Id, language, cacheKey, System.Text.Json.JsonSerializer.Serialize(generated), CancellationToken.None);
+                Module, question.Id, language, cacheKey, payload, CancellationToken.None);
         }
 
-        return generated;
+        return generated with { Cached = false };
+    }
+
+    private static bool TryDeserializeExplanation(string json, string language, out ExplanationDto? dto)
+    {
+        dto = null;
+        try
+        {
+            var cached = System.Text.Json.JsonSerializer.Deserialize<ExplanationDto>(json);
+            if (cached is null) return false;
+            dto = cached with { Language = language };
+            return true;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return false;
+        }
     }
 
     private async Task<ExplanationDto?> TryReadCacheAsync(string cacheKey, string language, CancellationToken ct)
@@ -261,6 +314,8 @@ public sealed class ReadingExplanationService(
 
         return await GenerateExplanationAsync(
             question,
+            attemptId,
+            approvedRationale.Id,
             ResolveCorrectAnswer(question),
             selectedAnswer,
             lang,

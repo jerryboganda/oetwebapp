@@ -725,8 +725,21 @@ public static class ReadingPathwayEndpoints
         {
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
-            var item = await svc.AddWordAsync(userId, request.Word, request.Source, ct);
-            return Results.Ok(item);
+            try
+            {
+                var item = await svc.AddWordAsync(userId, request.Word, request.Source, ct);
+                return Results.Ok(item);
+            }
+            catch (VocabularyGenerationUnavailableException ex)
+            {
+                return Results.Json(new
+                {
+                    code = "vocabulary_generation_unavailable",
+                    status = "unavailable",
+                    error = ex.Message,
+                    message = "A vocabulary definition is unavailable. No stub card was stored. Try again later.",
+                }, statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
         });
 
         group.MapGet("/vocab/due", async (HttpContext http, IReadingVocabularyService svc, CancellationToken ct) =>
@@ -959,6 +972,15 @@ public static class ReadingPathwayEndpoints
                     error = ex.Message,
                     message = "A grounded passage answer is unavailable; the submitted result and marks are unchanged.",
                 });
+            }
+            catch (ReadingPassageQnaSessionLimitException ex)
+            {
+                return Results.Json(new
+                {
+                    code = "passage_qna_session_limit",
+                    error = ex.Message,
+                    message = "This passage Q&A session has reached its turn limit.",
+                }, statusCode: StatusCodes.Status429TooManyRequests);
             }
             catch (ArgumentException ex)
             {

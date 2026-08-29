@@ -4,6 +4,9 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Services.AiAssistant.Indexing;
@@ -25,6 +28,7 @@ public sealed class EmbeddingService : IEmbeddingService
     private readonly IOptions<AiProviderOptions> _options;
     private readonly IRuntimeSettingsProvider _settingsProvider;
     private readonly ILogger<EmbeddingService> _logger;
+    private readonly IDirectAiCallRecorder? _usageRecorder;
 
     private const int DefaultDimension = 1536;
     private const int BatchSize = 20;
@@ -33,12 +37,14 @@ public sealed class EmbeddingService : IEmbeddingService
         IHttpClientFactory httpClientFactory,
         IOptions<AiProviderOptions> options,
         IRuntimeSettingsProvider settingsProvider,
-        ILogger<EmbeddingService> logger)
+        ILogger<EmbeddingService> logger,
+        IDirectAiCallRecorder? usageRecorder = null)
     {
         _httpClientFactory = httpClientFactory ?? throw new ArgumentNullException(nameof(httpClientFactory));
         _options = options ?? throw new ArgumentNullException(nameof(options));
         _settingsProvider = settingsProvider ?? throw new ArgumentNullException(nameof(settingsProvider));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _usageRecorder = usageRecorder;
     }
 
     public async Task<float[]> EmbedAsync(string text, CancellationToken ct)
@@ -115,8 +121,59 @@ public sealed class EmbeddingService : IEmbeddingService
             Content = new StringContent(json, Encoding.UTF8, "application/json")
         };
 
-        var response = await client.SendAsync(request, ct);
-        response.EnsureSuccessStatusCode();
+        DirectAiOperationLease? lease = null;
+        if (_usageRecorder is not null)
+        {
+            var requestHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
+            lease = await _usageRecorder.BeginOperationAsync(new DirectAiOperationRequest
+            {
+                FeatureCode = AiFeatureCodes.EmbeddingsGenerate,
+                Module = "embeddings",
+                ResourceId = $"{model}:{requestHash}",
+                ResourceType = "embedding_batch",
+                RequestHash = requestHash,
+                OperationClass = AiOperationClass.AdminBatch,
+                AllowRetryAfterFailure = true,
+            }, ct);
+            if (!lease.CanProceed)
+                throw new InvalidOperationException($"Embeddings are unavailable ({lease.Reason}).");
+        }
+
+        var startedAt = DateTimeOffset.UtcNow;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        HttpResponseMessage response;
+        if (_usageRecorder is not null && lease is not null)
+        {
+            response = await DirectAiOperationReconciler.RunAsync(
+                _usageRecorder,
+                lease,
+                "openai-embeddings",
+                async () => await client.SendAsync(request, ct),
+                ct);
+        }
+        else
+        {
+            response = await client.SendAsync(request, ct);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            sw.Stop();
+            if (_usageRecorder is not null && lease is not null)
+            {
+                await _usageRecorder.RecordFailureAsync(
+                    new AiUsageContext(
+                        UserId: null, AuthAccountId: null, TenantId: null,
+                        FeatureCode: AiFeatureCodes.EmbeddingsGenerate,
+                        RulebookVersion: null, PromptTemplateId: null,
+                        SystemPrompt: null, UserPrompt: null, StartedAt: startedAt),
+                    "openai-embeddings", model, AiCallOutcome.ProviderError,
+                    $"http_{(int)response.StatusCode}", "embedding_http_error",
+                    (int)sw.ElapsedMilliseconds, "embeddings.failed", ct,
+                    operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            }
+            response.EnsureSuccessStatusCode();
+        }
 
         var responseJson = await response.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(responseJson);
@@ -134,6 +191,33 @@ public sealed class EmbeddingService : IEmbeddingService
                 embedding[idx++] = val.GetSingle();
             }
             results.Add(embedding);
+        }
+
+        sw.Stop();
+        if (_usageRecorder is not null && lease is not null)
+        {
+            var approxTokens = texts.Sum(t => Math.Max(1, t.Length / 4));
+            var costUsd = Math.Max(0.00001m, approxTokens * 0.00000002m);
+            var usageId = await _usageRecorder.RecordSuccessAsync(
+                new AiUsageContext(
+                    UserId: null, AuthAccountId: null, TenantId: null,
+                    FeatureCode: AiFeatureCodes.EmbeddingsGenerate,
+                    RulebookVersion: null, PromptTemplateId: null,
+                    SystemPrompt: null, UserPrompt: null, StartedAt: startedAt),
+                "openai-embeddings", model, usage: null,
+                (int)sw.ElapsedMilliseconds, $"embeddings.n={texts.Count}", costUsd, ct,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            if (lease.OperationId is not null)
+            {
+                await _usageRecorder.CompleteOperationAsync(
+                    lease.OperationId,
+                    AiOperationState.Completed,
+                    usageId,
+                    "openai-embeddings",
+                    model,
+                    CancellationToken.None,
+                    lease.BudgetReservation);
+            }
         }
 
         return results;

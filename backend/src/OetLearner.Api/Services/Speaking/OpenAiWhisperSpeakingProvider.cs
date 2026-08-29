@@ -155,7 +155,25 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
             form.Add(new StringContent("verbose_json"), "response_format");
             form.Add(new StringContent("segment"), "timestamp_granularities[]");
 
-            using var response = await client.PostAsync(url, form, ct);
+            var sttLease = await _usageRecorder.BeginOperationAsync(new OetLearner.Api.Services.Ai.DirectAiOperationRequest
+            {
+                FeatureCode = Domain.AiFeatureCodes.SttSpeakingTranscribe,
+                Module = "stt",
+                ResourceId = mediaAssetReference,
+                ResourceType = "speaking_audio",
+                RequestHash = $"{creds.Model}:{language}:{mediaAssetReference}",
+                OperationClass = Domain.AiOperationClass.InteractiveLearning,
+                AllowRetryAfterFailure = true,
+            }, ct);
+            if (!sttLease.CanProceed)
+                throw new InvalidOperationException($"Speaking STT is unavailable ({sttLease.Reason}).");
+
+            using var response = await OetLearner.Api.Services.Ai.DirectAiOperationReconciler.RunAsync(
+                _usageRecorder,
+                sttLease,
+                WhisperProviderCode,
+                async () => await client.PostAsync(url, form, ct),
+                ct);
             var body = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode)
             {
@@ -163,7 +181,8 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
                 await _usageRecorder.RecordFailureAsync(
                     usageContext, WhisperProviderCode, creds.Model,
                     Domain.AiCallOutcome.ProviderError, $"http_{(int)response.StatusCode}",
-                    body, LatencyMs(), "stt.speaking", ct);
+                    body, LatencyMs(), "stt.speaking", ct,
+                    operationId: sttLease.OperationId, attemptNumber: sttLease.AttemptNumber);
                 throw new InvalidOperationException($"Speaking Whisper returned status {(int)response.StatusCode}.");
             }
 
@@ -210,9 +229,21 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
             var meanConfidence = probs.Count > 0 ? probs.Average() : 0.85;
             var segmentsJson = JsonSerializer.Serialize(segments);
 
-            await _usageRecorder.RecordSuccessAsync(
+            var sttUsageId = await _usageRecorder.RecordSuccessAsync(
                 usageContext, WhisperProviderCode, creds.Model, usage: null,
-                LatencyMs(), $"stt.words={totalWords}", costEstimateUsd: 0m, ct);
+                LatencyMs(), $"stt.words={totalWords}", costEstimateUsd: 0.006m, ct,
+                operationId: sttLease.OperationId, attemptNumber: sttLease.AttemptNumber);
+            if (sttLease.OperationId is not null)
+            {
+                await _usageRecorder.CompleteOperationAsync(
+                    sttLease.OperationId,
+                    Domain.AiOperationState.Completed,
+                    sttUsageId,
+                    WhisperProviderCode,
+                    creds.Model,
+                    CancellationToken.None,
+                    sttLease.BudgetReservation);
+            }
 
             return new SpeakingTranscriptionProviderResult
             {

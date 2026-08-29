@@ -78,14 +78,22 @@ public sealed record LessonProgressRequest(
     int? QuizScore);
 
 public sealed record PostCommentRequest(string Body);
-public sealed record PassageQnaRequest(string AttemptId, string PassageId, string Message, List<ChatMessageDto> History);
+public sealed record PassageQnaRequest(
+    string AttemptId,
+    string PassageId,
+    string Message,
+    List<ChatMessageDto> History,
+    string? ClientTurnId = null);
 public sealed record ChatMessageDto(string Role, string Content);  // role: "user"|"assistant"
 public sealed record PassageQnaResponse(
     string Reply,
     IReadOnlyList<ChatMessageDto> History,
     bool Grounded,
     bool AdvisoryOnly,
-    bool MarksUnaffected);
+    bool MarksUnaffected,
+    string? AiOperationId = null,
+    string? AiState = null,
+    bool Cached = false);
 
 public sealed record ReadingProfileResponse(
     string UserId,

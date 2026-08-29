@@ -11,6 +11,7 @@ public partial class LearnerDbContext
 {
     public DbSet<AiResultCacheEntry> AiResultCaches => Set<AiResultCacheEntry>();
     public DbSet<ListeningQnaTurn> ListeningQnaTurns => Set<ListeningQnaTurn>();
+    public DbSet<ReadingQnaTurn> ReadingQnaTurns => Set<ReadingQnaTurn>();
 
     partial void OnModelCreatingAiResultCache(ModelBuilder modelBuilder)
     {
@@ -35,6 +36,16 @@ public partial class LearnerDbContext
 
             entity.HasIndex(x => new { x.UserId, x.AttemptId, x.QuestionId })
                 .HasDatabaseName("IX_ListeningQnaTurns_User_Attempt_Question");
+        });
+
+        modelBuilder.Entity<ReadingQnaTurn>(entity =>
+        {
+            entity.HasIndex(x => new { x.SessionId, x.ClientTurnId })
+                .IsUnique()
+                .HasDatabaseName("UX_ReadingQnaTurns_Session_ClientTurn");
+
+            entity.HasIndex(x => new { x.UserId, x.AttemptId, x.PassageId })
+                .HasDatabaseName("IX_ReadingQnaTurns_User_Attempt_Passage");
         });
     }
 }

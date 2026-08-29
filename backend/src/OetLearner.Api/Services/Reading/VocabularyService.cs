@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +46,8 @@ public interface IReadingVocabularyService
     Task<VocabularyWord> EnsureWordExistsAsync(string word, CancellationToken ct);
 }
 
+public sealed class VocabularyGenerationUnavailableException(string message) : Exception(message);
+
 public sealed record VocabStatsDto(
     int TotalWords,
     int MasteredCount,      // RetentionScore >= 90
@@ -61,6 +64,8 @@ public sealed class ReadingVocabularyService(
     : IReadingVocabularyService
 {
     private const int DailyReviewCap = 30;
+    private static readonly ConcurrentDictionary<string, Task<VocabularyWord>> Inflight
+        = new(StringComparer.Ordinal);
 
     // ── AddWordAsync ────────────────────────────────────────────────────────
 
@@ -266,24 +271,75 @@ public sealed class ReadingVocabularyService(
         if (string.IsNullOrWhiteSpace(word))
             throw new ArgumentException("Word must not be empty.", nameof(word));
 
-        var normalised = word.Trim();
-        var lower = normalised.ToLowerInvariant();
+        var display = word.Trim();
+        var key = display.ToLowerInvariant();
 
-        // Case-insensitive lookup.
-        var existing = await db.VocabularyWords
-            .FirstOrDefaultAsync(w => w.Word.ToLower() == lower, ct);
+        var existing = await FindApprovedAsync(key, ct);
         if (existing is not null)
             return existing;
 
-        // Generate via AI gateway (Vocabulary rulebook + VocabularyGloss task).
-        OetRulebook rulebook;
+        while (true)
+        {
+            if (Inflight.TryGetValue(key, out var inflight))
+                return await inflight;
+
+            var tcs = new TaskCompletionSource<VocabularyWord>(TaskCreationOptions.RunContinuationsAsynchronously);
+            if (!Inflight.TryAdd(key, tcs.Task))
+                continue;
+
+            try
+            {
+                var generated = await GenerateApprovedCardAsync(display, key, ct);
+                tcs.SetResult(generated);
+                return generated;
+            }
+            catch (Exception ex)
+            {
+                tcs.SetException(ex);
+                throw;
+            }
+            finally
+            {
+                Inflight.TryRemove(key, out _);
+            }
+        }
+    }
+
+    private async Task<VocabularyWord?> FindApprovedAsync(string normalized, CancellationToken ct)
+    {
+        var existing = await db.VocabularyWords
+            .FirstOrDefaultAsync(w => w.NormalizedWord == normalized, ct);
+        if (existing is null)
+        {
+            existing = await db.VocabularyWords
+                .FirstOrDefaultAsync(w => w.Word.ToLower() == normalized, ct);
+        }
+
+        if (existing is null)
+            return null;
+        if (IsStub(existing))
+            return null;
+        return existing;
+    }
+
+    private static bool IsStub(VocabularyWord word)
+        => word.DefinitionEn.Contains("(AI unavailable).", StringComparison.OrdinalIgnoreCase);
+
+    private async Task<VocabularyWord> GenerateApprovedCardAsync(
+        string display, string normalized, CancellationToken ct)
+    {
+        var existing = await FindApprovedAsync(normalized, ct);
+        if (existing is not null)
+            return existing;
+
         try
         {
-            rulebook = rulebookLoader.Load(RuleKind.Vocabulary, ExamProfession.Medicine);
+            _ = rulebookLoader.Load(RuleKind.Vocabulary, ExamProfession.Medicine);
         }
         catch (RulebookNotFoundException)
         {
-            rulebook = new OetRulebook { Version = "fallback", Kind = RuleKind.Vocabulary };
+            throw new VocabularyGenerationUnavailableException(
+                "The Vocabulary rulebook is unavailable; a word card cannot be generated.");
         }
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
@@ -293,51 +349,78 @@ public sealed class ReadingVocabularyService(
             Task = AiTaskMode.GenerateVocabularyGloss,
         });
 
-        var userMessage = BuildWordCardPrompt(normalised);
-
         GeneratedWordCard? card = null;
         try
         {
             var result = await gateway.CompleteAsync(new AiGatewayRequest
             {
                 Prompt = prompt,
-                UserInput = userMessage,
+                UserInput = BuildWordCardPrompt(display),
                 Model = string.Empty,
                 Temperature = 0.2,
-                FeatureCode = AiFeatureCodes.VocabularyGloss,
+                FeatureCode = AiFeatureCodes.ReadingVocabularyCard,
                 UserId = null,
             }, ct);
 
             card = TryParseWordCard(result.Completion);
         }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            logger?.LogWarning(ex, "EnsureWordExistsAsync — AI generation failed for '{Word}'; using stub card.", normalised);
+            logger?.LogWarning(ex, "EnsureWordExistsAsync — AI generation failed for '{Word}'; no stub will be stored.", display);
+            throw new VocabularyGenerationUnavailableException(
+                "A vocabulary definition is unavailable because the AI gateway failed.");
         }
 
-        // Create stub if AI call failed or returned unparseable JSON.
+        if (card is null
+            || string.IsNullOrWhiteSpace(card.DefinitionEn)
+            || IsStubDefinition(card.DefinitionEn))
+        {
+            throw new VocabularyGenerationUnavailableException(
+                "A vocabulary definition is unavailable because the gateway returned no usable card.");
+        }
+
         var now = DateTimeOffset.UtcNow;
         var vocabWord = new VocabularyWord
         {
             Id = Guid.NewGuid(),
-            Word = normalised,
-            PartOfSpeech = card?.PartOfSpeech ?? "",
-            DefinitionEn = card?.DefinitionEn ?? $"Definition of {normalised} (AI unavailable).",
-            DefinitionAr = card?.DefinitionAr ?? "",
-            PronunciationIpa = card?.PronunciationIpa ?? "",
+            Word = display,
+            NormalizedWord = normalized,
+            PartOfSpeech = card.PartOfSpeech,
+            DefinitionEn = card.DefinitionEn,
+            DefinitionAr = card.DefinitionAr,
+            PronunciationIpa = card.PronunciationIpa,
             AudioUrl = null,
-            ExampleEn = card?.ExampleEn ?? $"The patient's notes referenced {normalised}.",
-            ExampleAr = card?.ExampleAr ?? "",
-            HealthcareContext = card?.HealthcareContext ?? "general",
-            ProfessionRelevanceJson = card?.ProfessionRelevanceJson ?? "[]",
-            Difficulty = card?.Difficulty ?? 5,
+            ExampleEn = card.ExampleEn,
+            ExampleAr = card.ExampleAr,
+            HealthcareContext = string.IsNullOrWhiteSpace(card.HealthcareContext) ? "general" : card.HealthcareContext,
+            ProfessionRelevanceJson = card.ProfessionRelevanceJson,
+            Difficulty = card.Difficulty,
             CreatedAt = now,
         };
 
-        db.VocabularyWords.Add(vocabWord);
-        await db.SaveChangesAsync(ct);
-        return vocabWord;
+        try
+        {
+            db.VocabularyWords.Add(vocabWord);
+            await db.SaveChangesAsync(ct);
+            return vocabWord;
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(vocabWord).State = EntityState.Detached;
+            var winner = await FindApprovedAsync(normalized, ct);
+            if (winner is not null)
+                return winner;
+            throw new VocabularyGenerationUnavailableException(
+                "A vocabulary definition is unavailable because a concurrent insert could not be resolved.");
+        }
     }
+
+    private static bool IsStubDefinition(string definition)
+        => definition.Contains("(AI unavailable).", StringComparison.OrdinalIgnoreCase);
 
     // ── Prompt + parsing helpers ────────────────────────────────────────────
 

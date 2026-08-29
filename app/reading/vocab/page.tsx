@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BookOpen, Brain, CalendarCheck, RefreshCw, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
+import { isApiError } from '@/lib/api';
 import { LearnerDashboardShell } from '@/components/layout';
 import { useAuth } from '@/contexts/auth-context';
 import {
@@ -56,8 +57,12 @@ export default function VocabHubPage() {
       const [s, due] = await Promise.all([getVocabStats(), getVocabDue()]);
       setStats(s);
       setDueItems(due);
-    } catch {
-      toast.error('Could not add word. Please try again.');
+    } catch (error) {
+      if (isApiError(error) && (error.status === 503 || error.code === 'vocabulary_generation_unavailable')) {
+        toast.error(`A definition for "${word}" is unavailable right now. No card was stored. Try again later.`);
+      } else {
+        toast.error('Could not add word. Please try again.');
+      }
     } finally {
       setAddingWord(false);
     }

@@ -1,6 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.AiTools;
 using OetLearner.Api.Services.Rulebook;
@@ -31,7 +32,8 @@ public sealed class AiAssistantGateway(
     IAiUsageRecorder? usageRecorder = null,
     IAiQuotaService? quotaService = null,
     IAiCreditService? creditService = null,
-    IHostEnvironment? hostEnvironment = null) : IAiAssistantGateway
+    IHostEnvironment? hostEnvironment = null,
+    IDirectAiCallRecorder? directRecorder = null) : IAiAssistantGateway
 {
     public async IAsyncEnumerable<LlmStreamChunk> StreamCompleteWithToolsAsync(
         string featureCode,
@@ -219,9 +221,56 @@ public sealed class AiAssistantGateway(
 
         AiProviderCompletion? completion = null;
         string? errorMessage = null;
+        DirectAiOperationLease? lease = null;
+        if (directRecorder is not null)
+        {
+            lease = await directRecorder.BeginOperationAsync(new DirectAiOperationRequest
+            {
+                FeatureCode = featureCode,
+                Module = "assistant",
+                UserId = userId,
+                ResourceId = $"{featureCode}:{userId ?? "anon"}:{startedAt.ToUnixTimeMilliseconds()}",
+                ResourceType = "assistant_turn",
+                RequestHash = $"{providerCode}:{model}:{featureCode}",
+                OperationClass = AiOperationClass.InteractiveLearning,
+                AllowRetryAfterFailure = true,
+            }, ct);
+            if (!lease.CanProceed)
+            {
+                await RecordFailureAsync(
+                    featureCode,
+                    userId,
+                    providerCode,
+                    model,
+                    AiCallOutcome.GatewayRefused,
+                    "assistant_unavailable",
+                    $"AI assistant is unavailable ({lease.Reason}).",
+                    request.SystemPrompt,
+                    request.UserPrompt,
+                    startedAt,
+                    stopwatch,
+                    CancellationToken.None,
+                    policyTrace: quotaDecision?.PolicyTrace);
+                yield return new LlmTextChunk("The AI assistant is temporarily unavailable. Please try again shortly.");
+                yield break;
+            }
+        }
+
         try
         {
-            completion = await provider.CompleteAsync(request, ct);
+            if (directRecorder is not null && lease is not null)
+            {
+                completion = await DirectAiOperationReconciler.RunAsync(
+                    directRecorder,
+                    lease,
+                    providerCode,
+                    async () => await provider.CompleteAsync(request, ct),
+                    ct);
+            }
+            else
+            {
+                completion = await provider.CompleteAsync(request, ct);
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -308,6 +357,18 @@ public sealed class AiAssistantGateway(
             {
                 logger.LogWarning(ex, "Failed to record AI usage for assistant call");
             }
+        }
+
+        if (directRecorder is not null && lease?.OperationId is not null)
+        {
+            await directRecorder.CompleteOperationAsync(
+                lease.OperationId,
+                AiOperationState.Completed,
+                persistedUsageRecordId,
+                providerCode,
+                model,
+                CancellationToken.None,
+                lease.BudgetReservation);
         }
 
         if (quotaService is not null && completion.Usage is not null && !string.IsNullOrWhiteSpace(userId))

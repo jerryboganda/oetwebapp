@@ -84,14 +84,33 @@ public sealed class WhisperConversationAsrProvider(
         form.Add(new StringContent(lang), "language");
         form.Add(new StringContent("verbose_json"), "response_format");
 
-        using var response = await client.PostAsync(url, form, ct);
+        var sttLease = await usageRecorder.BeginOperationAsync(new DirectAiOperationRequest
+        {
+            FeatureCode = AiFeatureCodes.SttConversationTranscribe,
+            Module = "stt",
+            ResourceId = $"conversation:{sttStartedAt.ToUnixTimeMilliseconds()}",
+            ResourceType = "conversation_audio",
+            RequestHash = $"{resolvedModel}:{lang}",
+            OperationClass = AiOperationClass.InteractiveLearning,
+            AllowRetryAfterFailure = true,
+        }, ct);
+        if (!sttLease.CanProceed)
+            throw new ConversationAsrException("stt_unavailable", $"Conversation STT is unavailable ({sttLease.Reason}).");
+
+        using var response = await DirectAiOperationReconciler.RunAsync(
+            usageRecorder,
+            sttLease,
+            WhisperProviderCode,
+            async () => await client.PostAsync(url, form, ct),
+            ct);
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
         {
             logger.LogWarning("Whisper ASR returned status {Status}: {Body}", (int)response.StatusCode, body);
             await usageRecorder.RecordFailureAsync(
                 sttContext, WhisperProviderCode, resolvedModel, AiCallOutcome.ProviderError,
-                $"http_{(int)response.StatusCode}", body, SttLatencyMs(), "stt.conversation", ct);
+                $"http_{(int)response.StatusCode}", body, SttLatencyMs(), "stt.conversation", ct,
+                operationId: sttLease.OperationId, attemptNumber: sttLease.AttemptNumber);
             throw new ConversationAsrException("whisper_error", $"Whisper returned {(int)response.StatusCode}");
         }
 
@@ -155,9 +174,21 @@ public sealed class WhisperConversationAsrProvider(
             if (probs.Count > 0) confidence = Math.Clamp(probs.Average(), 0.0, 1.0);
         }
 
-        await usageRecorder.RecordSuccessAsync(
+        var sttUsageId = await usageRecorder.RecordSuccessAsync(
             sttContext, WhisperProviderCode, resolvedModel, usage: null,
-            SttLatencyMs(), $"stt.chars={text.Length}", costEstimateUsd: 0m, ct);
+            SttLatencyMs(), $"stt.chars={text.Length}", costEstimateUsd: 0.006m, ct,
+            operationId: sttLease.OperationId, attemptNumber: sttLease.AttemptNumber);
+        if (sttLease.OperationId is not null)
+        {
+            await usageRecorder.CompleteOperationAsync(
+                sttLease.OperationId,
+                AiOperationState.Completed,
+                sttUsageId,
+                WhisperProviderCode,
+                resolvedModel,
+                CancellationToken.None,
+                sttLease.BudgetReservation);
+        }
 
         return new ConversationAsrResult(
             text, confidence, duration.HasValue ? (int)(duration.Value * 1000) : 0,
