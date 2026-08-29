@@ -26,6 +26,7 @@ public static class AiOperationsAdminEndpoints
             .RequireRateLimiting("PerUser");
 
         group.MapGet("/operations", ListOperationsAsync);
+        group.MapGet("/benchmark-runs", ListBenchmarkRunsAsync);
         group.MapGet("/budgets", ListBudgetsAsync);
         group.MapPost("/budgets/override", CreateBudgetOverrideAsync);
         group.MapGet("/circuits", ListCircuitsAsync);
@@ -80,6 +81,37 @@ public static class AiOperationsAdminEndpoints
             .ToListAsync(ct);
 
         return Results.Ok(new { page = pageNum, pageSize = size, total, rows });
+    }
+
+    private static async Task<IResult> ListBenchmarkRunsAsync(
+        LearnerDbContext db,
+        CancellationToken ct,
+        string? featureCode)
+    {
+        var query = db.AiProviderBenchmarkRuns.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(featureCode))
+            query = query.Where(r => r.FeatureCode == featureCode);
+
+        var rows = await query
+            .OrderByDescending(r => r.RecordedAt)
+            .Take(200)
+            .Select(r => new
+            {
+                id = r.Id,
+                featureCode = r.FeatureCode,
+                providerCode = r.ProviderCode,
+                model = r.Model,
+                corpusVersion = r.CorpusVersion,
+                passed = r.Passed,
+                rollbackTarget = r.RollbackTargetRouteId,
+                rollbackProviderCode = r.RollbackProviderCode,
+                rollbackModel = r.RollbackModel,
+                recordedAt = r.RecordedAt,
+                reportJson = r.ReportJson,
+            })
+            .ToListAsync(ct);
+
+        return Results.Ok(new { rows });
     }
 
     private static async Task<IResult> ListBudgetsAsync(LearnerDbContext db, CancellationToken ct)

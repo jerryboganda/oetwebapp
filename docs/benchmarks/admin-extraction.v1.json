@@ -1,0 +1,14 @@
+{
+  "corpusVersion": "admin-extraction.v1",
+  "class": "non-scoring",
+  "featureCode": "listening.parta.extract",
+  "promptVersion": "listening.parta.extract.v1",
+  "rulebookVersion": "listening.v1",
+  "items": [
+    {
+      "id": "ax-001",
+      "stimulus": "Extract the Part A gap answers from the authored transcript.",
+      "mustGroundInSource": true
+    }
+  ]
+}

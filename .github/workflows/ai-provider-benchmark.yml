@@ -1,0 +1,32 @@
+name: AI provider benchmark gates
+
+# W10 of INC-2026-CLAUDE-01. Manual only — never trades availability for a
+# migration claim. Identical prompt/rulebook versions across providers.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-provider-benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: Provider benchmark gate tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run locked benchmark gates
+        run: >
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+          -p:RunAnalyzers=false
+          --filter FullyQualifiedName~AiProviderBenchmarkTests
+          --verbosity minimal

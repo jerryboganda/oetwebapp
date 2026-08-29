@@ -1468,6 +1468,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // W5 — versioned AI result cache + Listening Q&A turn idempotency.
         OnModelCreatingAiResultCache(modelBuilder);
 
+        // W10 — provider benchmark runs that gate route switches.
+        OnModelCreatingAiProviderBenchmarks(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1656,6 +1659,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiResultCache.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiResultCache(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiProviderBenchmarks.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAiProviderBenchmarks(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

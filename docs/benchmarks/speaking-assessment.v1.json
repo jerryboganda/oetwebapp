@@ -1,0 +1,16 @@
+{
+  "corpusVersion": "speaking-assessment.v1",
+  "class": "scoring-critical",
+  "featureCode": "speaking.grade",
+  "promptVersion": "speaking.grade.v1",
+  "rulebookVersion": "speaking.v1",
+  "items": [
+    {
+      "id": "sp-001",
+      "profession": "nursing",
+      "stimulus": "Role-play: explain post-operative wound care to a worried relative.",
+      "expectedPass": true,
+      "criterionScores": { "intelligibility": 5, "fluency": 5, "appropriateness": 6, "resources": 5 }
+    }
+  ]
+}

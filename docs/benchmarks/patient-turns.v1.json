@@ -1,0 +1,15 @@
+{
+  "corpusVersion": "patient-turns.v1",
+  "class": "non-scoring",
+  "featureCode": "speaking.patient.turn.v1",
+  "promptVersion": "speaking.patient.turn.v1",
+  "rulebookVersion": "speaking.v1",
+  "items": [
+    {
+      "id": "pt-001",
+      "stimulus": "Candidate: Can you tell me when the pain started?",
+      "mustGroundInSource": true,
+      "persona": "anxious parent"
+    }
+  ]
+}

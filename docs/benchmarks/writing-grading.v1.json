@@ -1,0 +1,16 @@
+{
+  "corpusVersion": "writing-grading.v1",
+  "class": "scoring-critical",
+  "featureCode": "writing.grade",
+  "promptVersion": "writing.grade.v1",
+  "rulebookVersion": "writing.v1",
+  "items": [
+    {
+      "id": "wg-001",
+      "profession": "medicine",
+      "stimulus": "Referral letter for a 64-year-old with poorly controlled type 2 diabetes.",
+      "expectedPass": true,
+      "criterionScores": { "purpose": 6, "content": 6, "conciseness": 5, "genre": 6, "language": 5 }
+    }
+  ]
+}

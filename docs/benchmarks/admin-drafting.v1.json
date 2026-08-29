@@ -1,0 +1,15 @@
+{
+  "corpusVersion": "admin-drafting.v1",
+  "class": "non-scoring",
+  "featureCode": "admin.writing_draft",
+  "promptVersion": "admin.writing_draft.v1",
+  "rulebookVersion": "writing.v1",
+  "items": [
+    {
+      "id": "ad-001",
+      "stimulus": "Draft a medicine referral case notes task without fabricating sources.",
+      "mustGroundInSource": true,
+      "forbiddenClaims": ["this is an official OET paper"]
+    }
+  ]
+}

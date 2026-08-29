@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Pronunciation;
 using OetLearner.Api.Services.Rulebook;
@@ -875,10 +876,37 @@ public static class AiUsageAdminEndpoints
             });
         });
 
+        group.MapPost("/feature-routes/{featureCode}/rollback", async (
+            string featureCode,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var canonical = AiFeatureRouteResolver.CanonicalFeatureCode(featureCode);
+            if (canonical is null) return Results.NotFound();
+            var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == canonical, ct);
+            if (row is null) return Results.NotFound();
+            var latest = await db.AiProviderBenchmarkRuns
+                .Where(r => r.FeatureCode == canonical && r.RollbackProviderCode != null)
+                .OrderByDescending(r => r.RecordedAt)
+                .FirstOrDefaultAsync(ct);
+            var targetProvider = latest?.RollbackProviderCode ?? "anthropic";
+            var targetModel = latest?.RollbackModel;
+            var previous = $"{row.ProviderCode}:{row.Model}";
+            row.ProviderCode = targetProvider;
+            row.Model = targetModel;
+            row.UpdatedAt = DateTimeOffset.UtcNow;
+            row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            await SaveWithAuditAsync(db, http, "AiFeatureRouteRolledBack", row.Id,
+                $"feature={canonical} from={previous} to={targetProvider}:{targetModel} rollbackTarget={latest?.Id ?? "claude-default"}", ct);
+            return Results.Ok(new { row.Id, row.FeatureCode, row.ProviderCode, row.Model, rollbackTarget = latest?.Id ?? "claude-default" });
+        }).RequireRateLimiting("PerUserWrite");
+
         group.MapPost("/feature-routes", async (
             AiFeatureRouteUpsertDto dto,
             LearnerDbContext db,
             IAiFeatureRouteResolver resolver,
+            IAiProviderRouteApprovalService approval,
             HttpContext http,
             CancellationToken ct) =>
         {
@@ -896,7 +924,25 @@ public static class AiUsageAdminEndpoints
 
             var now = DateTimeOffset.UtcNow;
             var row = await db.AiFeatureRoutes.FirstOrDefaultAsync(r => r.FeatureCode == featureCode, ct);
+            try
+            {
+                await approval.EnsureSwitchAllowedAsync(new AiRouteSwitchRequest(
+                    featureCode,
+                    providerCode,
+                    string.IsNullOrWhiteSpace(dto.Model) ? null : dto.Model.Trim(),
+                    dto.BenchmarkRunId,
+                    row?.Id,
+                    row?.ProviderCode,
+                    row?.Model), ct);
+            }
+            catch (AiProviderRouteRefusedException ex)
+            {
+                return Results.Conflict(new { error = ex.Message });
+            }
+
             var auditEvent = row is null ? "AiFeatureRouteCreated" : "AiFeatureRouteUpdated";
+            var previousProvider = row?.ProviderCode ?? "anthropic";
+            var previousModel = row?.Model;
             if (row is null)
             {
                 row = new AiFeatureRoute
@@ -912,9 +958,19 @@ public static class AiUsageAdminEndpoints
             row.IsActive = dto.IsActive;
             row.UpdatedAt = now;
             row.UpdatedByAdminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!string.IsNullOrWhiteSpace(dto.BenchmarkRunId))
+            {
+                var run = await db.AiProviderBenchmarkRuns.FirstOrDefaultAsync(r => r.Id == dto.BenchmarkRunId, ct);
+                if (run is not null)
+                {
+                    run.RollbackTargetRouteId = row.Id;
+                    run.RollbackProviderCode = previousProvider;
+                    run.RollbackModel = previousModel;
+                }
+            }
             await SaveWithAuditAsync(db, http, auditEvent, row.Id,
-                $"feature={featureCode} provider={providerCode} active={dto.IsActive}", ct);
-            return Results.Ok(new { row.Id, row.FeatureCode, row.ProviderCode, row.Model, row.IsActive });
+                $"feature={featureCode} provider={providerCode} active={dto.IsActive} rollbackTarget={previousProvider}:{previousModel} benchmarkRun={dto.BenchmarkRunId}", ct);
+            return Results.Ok(new { row.Id, row.FeatureCode, row.ProviderCode, row.Model, row.IsActive, rollbackTarget = $"{previousProvider}:{previousModel}" });
         }).RequireRateLimiting("PerUserWrite");
 
         group.MapDelete("/feature-routes/{featureCode}", async (
@@ -935,6 +991,7 @@ public static class AiUsageAdminEndpoints
         // is registered + active so the UI can disable the button.
         group.MapPost("/feature-routes/bulk-copilot", async (
             LearnerDbContext db,
+            IAiProviderRouteApprovalService approval,
             HttpContext http,
             CancellationToken ct) =>
         {
@@ -943,6 +1000,13 @@ public static class AiUsageAdminEndpoints
                 .AnyAsync(p => p.Code == copilot && p.IsActive, ct);
             if (!copilotActive)
                 return Results.BadRequest(new { error = "Copilot provider is not registered or not active." });
+            if (!approval.IsClaudeRoute(copilot, null))
+            {
+                return Results.Conflict(new
+                {
+                    error = "Bulk Copilot routing is blocked until each target has a recorded passing benchmark run. Switch per feature with a BenchmarkRunId.",
+                });
+            }
 
             var now = DateTimeOffset.UtcNow;
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -1238,4 +1302,5 @@ public sealed record AiFeatureRouteUpsertDto(
     string FeatureCode,
     string ProviderCode,
     string? Model,
-    bool IsActive);
+    bool IsActive,
+    string? BenchmarkRunId = null);

@@ -1,0 +1,15 @@
+{
+  "corpusVersion": "explanations.v1",
+  "class": "non-scoring",
+  "featureCode": "reading.explanation.v1",
+  "promptVersion": "reading.explanation.v1",
+  "rulebookVersion": "reading.v1",
+  "items": [
+    {
+      "id": "ex-001",
+      "stimulus": "Why is option B unsupported by the discharge-plan paragraph?",
+      "mustGroundInSource": true,
+      "forbiddenClaims": ["official OET score", "guaranteed band"]
+    }
+  ]
+}
