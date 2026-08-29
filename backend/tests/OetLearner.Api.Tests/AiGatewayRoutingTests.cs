@@ -351,21 +351,12 @@ public class AiGatewayRoutingTests
         Assert.Equal("completion from registry", result.Completion);
     }
 
-    // ── No AI for mock WRITING + SPEAKING — gateway backstop ─────────────────
-    // The gateway must hard-refuse every banned assessment code when the call's
-    // AssessmentContext is Mock, BEFORE any provider is contacted. SpeakingGrade
-    // is banned (2026-06-29 owner rule: mock Speaking is human-marked via a
-    // live-tutor booking — reversing the 2026-06-11 interim AI-marking allowance).
-    // SpeakingScoreV2 is a route key, never a gateway feature code, so it stays
-    // allowed (see SpeakingRouteKeyAllowedInMock below).
+    // W8: mock Writing/Speaking are AI-graded. Only conversation evaluation
+    // remains banned as a mock assessment surface. mock.full_grade is retired.
 
     public static IEnumerable<object[]> BannedMockAssessmentCodes() => new[]
     {
-        new object[] { AiFeatureCodes.WritingGrade },
-        new object[] { AiFeatureCodes.WritingSampleScore },
-        new object[] { AiFeatureCodes.MockFullGrade },
         new object[] { AiFeatureCodes.ConversationEvaluation },
-        new object[] { AiFeatureCodes.SpeakingGrade },
     };
 
     [Theory]
@@ -385,6 +376,42 @@ public class AiGatewayRoutingTests
 
         // The model provider must NEVER have been contacted.
         Assert.Null(mockProvider.LastRequest);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_RetiresMockFullGrade()
+    {
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(_loader, new IAiModelProvider[] { mockProvider });
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            gateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = BuildWritingPrompt(gateway),
+                FeatureCode = AiFeatureCodes.MockFullGrade,
+                AssessmentContext = AiAssessmentContext.Practice,
+            }));
+        Assert.Null(mockProvider.LastRequest);
+    }
+
+    [Theory]
+    [InlineData(AiFeatureCodes.WritingGrade)]
+    [InlineData(AiFeatureCodes.WritingSampleScore)]
+    [InlineData(AiFeatureCodes.SpeakingGrade)]
+    public async Task CompleteAsync_AllowsMockWritingAndSpeakingGrade(string featureCode)
+    {
+        var mockProvider = new CapturingProvider("mock");
+        var gateway = new AiGatewayService(_loader, new IAiModelProvider[] { mockProvider });
+
+        var result = await gateway.CompleteAsync(new AiGatewayRequest
+        {
+            Prompt = BuildWritingPrompt(gateway),
+            FeatureCode = featureCode,
+            AssessmentContext = AiAssessmentContext.Mock,
+        });
+
+        Assert.Equal("completion from mock", result.Completion);
+        Assert.NotNull(mockProvider.LastRequest);
     }
 
     // SpeakingScoreV2 is a provider/route key, NOT a gateway feature code — the

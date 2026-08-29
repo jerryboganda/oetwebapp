@@ -9,11 +9,9 @@ import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { fetchMockSpeakingAccess } from '@/lib/api';
 
 /**
- * Full Mock Speaking gateway (2026-07-22 owner rule). Sits between the Mock
- * Center's Speaking section and its two completion paths — the AI two-card
- * exam and the existing live-tutor booking flow. Under 7 days to the
- * candidate's target exam, only the AI option is shown; 7+ days out, both
- * are offered.
+ * Full Mock Speaking gateway (W8). AI grades the Speaking section on the
+ * consumed Mock Attempt. A live tutor is an optional extra review, never a
+ * result-release dependency.
  */
 export default function MockSpeakingGatewayPage() {
   const searchParams = useSearchParams();
@@ -46,10 +44,7 @@ export default function MockSpeakingGatewayPage() {
     eyebrow: 'AI Exam',
     eyebrowIcon: GraduationCap,
     title: 'Start AI Speaking Exam',
-    description:
-      access?.requiresAiOnly
-        ? "Your exam is under 7 days away, so this mock's Speaking section must be completed with the AI examiner."
-        : 'The AI plays the patient and marks your two-card exam instantly.',
+    description: 'The AI plays the patient and marks your two-card exam instantly. This uses your Mock Attempt — no extra Speaking credits.',
     primaryAction: { label: 'Start AI Speaking Exam', href: aiHref },
   };
 
@@ -60,7 +55,7 @@ export default function MockSpeakingGatewayPage() {
     eyebrow: 'Live Tutor',
     eyebrowIcon: Users,
     title: 'Book a Tutor',
-    description: 'A human tutor plays the patient and marks your exam, based on available slots.',
+    description: 'Optional extra: book a human tutor for additional review. AI grading still releases your mock result.',
     primaryAction: { label: 'Book a Tutor', href: tutorHref },
   };
 
@@ -71,9 +66,9 @@ export default function MockSpeakingGatewayPage() {
       ) : !access ? (
         <p className="text-sm text-muted">Checking your Speaking options…</p>
       ) : (
-        <div className={access.requiresAiOnly ? 'max-w-md' : 'grid gap-4 sm:grid-cols-2'}>
+        <div className="grid gap-4 sm:grid-cols-2">
           <LearnerSurfaceCard card={aiCard} />
-          {access.requiresAiOnly ? null : <LearnerSurfaceCard card={tutorCard} />}
+          <LearnerSurfaceCard card={tutorCard} />
         </div>
       )}
     </LearnerDashboardShell>

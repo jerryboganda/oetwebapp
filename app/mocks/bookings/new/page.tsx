@@ -8,7 +8,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import {
   CalendarDays,
   CheckCircle2,
@@ -267,22 +266,6 @@ export default function NewMockBookingPage() {
         <InlineAlert variant={speakingAccessError ? 'error' : 'info'}>
           {speakingAccessError ?? 'Checking whether tutor booking is available...'}
         </InlineAlert>
-      </LearnerDashboardShell>
-    );
-  }
-
-  if (speakingAccess.requiresAiOnly) {
-    const aiHref = `/speaking/exam?${searchParams?.toString() ?? ''}`;
-    return (
-      <LearnerDashboardShell pageTitle="Book a Mock" backHref="/mocks">
-        <InlineAlert variant="warning">
-          Your exam is less than 7 days away, so this Full Mock Speaking section is AI-only. Tutor booking is not available.
-        </InlineAlert>
-        <div className="mt-4">
-          <Link href={aiHref} className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white">
-            Start AI Speaking Exam
-          </Link>
-        </div>
       </LearnerDashboardShell>
     );
   }

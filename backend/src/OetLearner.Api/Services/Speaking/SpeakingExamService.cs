@@ -73,25 +73,6 @@ public sealed class SpeakingExamService(
         // can't reliably be arranged in time, so only AI is allowed. At 7+
         // days out, either mode is allowed — the candidate's choice.
         var isMockLaunch = !string.IsNullOrWhiteSpace(req.MockSetId) || !string.IsNullOrWhiteSpace(req.MockAttemptId);
-        if (isMockLaunch)
-        {
-            var targetExamDate = await db.Goals.AsNoTracking()
-                .Where(g => g.UserId == userId)
-                .Select(g => (DateOnly?)g.TargetExamDate)
-                .SingleOrDefaultAsync(ct);
-            var daysUntilExam = targetExamDate is null
-                ? (int?)null
-                : targetExamDate.Value.DayNumber - DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime).DayNumber;
-
-            if (SpeakingBookingPolicy.TutorWindowClosed(
-                    targetExamDate,
-                    DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime))
-                && mode != SpeakingExamMode.Ai)
-            {
-                throw ApiException.Validation("SPEAKING_MOCK_REQUIRES_AI",
-                    "Your exam is less than 7 days away — this mock's Speaking section must be completed as an AI exam.");
-            }
-        }
 
         var (cardA, cardB, professionId) = await ResolveCardsAsync(req, ct);
 
@@ -100,7 +81,7 @@ public sealed class SpeakingExamService(
         // — UNLESS the account has a "Full Mock Speaking Exam Access" unit
         // (MockExamsRemaining), which alone funds the whole exam (see
         // DebitCardAsync). This mirrors the fallback order used at debit time.
-        if (mode == SpeakingExamMode.Ai && creditService is not null)
+        if (mode == SpeakingExamMode.Ai && creditService is not null && !isMockLaunch)
         {
             var snapshot = await creditService.GetSnapshotAsync(userId, 0, ct);
             if (snapshot.MockExamsRemaining < 1)
@@ -796,6 +777,13 @@ public sealed class SpeakingExamService(
     private async Task DebitCardAsync(SpeakingExamSession exam, string slot, CancellationToken ct)
     {
         if (exam.Mode != SpeakingExamMode.Ai || creditService is null) return;
+
+        if (!string.IsNullOrWhiteSpace(exam.MockAttemptId))
+        {
+            var covered = $"exam:{exam.Id}:mock-attempt";
+            if (slot == "a") exam.CreditARefId = covered; else exam.CreditBRefId = covered;
+            return;
+        }
 
         var alreadyDebited = slot == "a" ? exam.CreditARefId : exam.CreditBRefId;
         if (!string.IsNullOrWhiteSpace(alreadyDebited)) return;

@@ -34,17 +34,21 @@ public static class MockSpeakingGatewayEndpoints
                 ? null
                 : targetExamDate.Value.DayNumber - DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime).DayNumber;
 
-            // Fail closed when no target exam date exists: without a known
-            // date the platform cannot prove the required seven-day window.
-            var requiresAiOnly = SpeakingBookingPolicy.TutorWindowClosed(
-                targetExamDate,
-                DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime));
+            // W8: human tutor review is optional escalation, never a result-
+            // release dependency. Keep the field so existing clients parse it.
+            bool? requiresAiOnly = MockSpeakingAccessPolicy.RequiresAiOnly;
 
             return Results.Ok(new { requiresAiOnly, daysUntilExam });
         });
 
         return app;
     }
+}
+
+public static class MockSpeakingAccessPolicy
+{
+    /// <summary>W8 result-release contract: never force AI-only.</summary>
+    public static bool RequiresAiOnly => false;
 }
 
 file static class MockSpeakingGatewayHttpContextExtensions

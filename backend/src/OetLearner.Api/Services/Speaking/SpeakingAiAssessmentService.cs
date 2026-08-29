@@ -106,29 +106,16 @@ Scoring rules:
             ?? throw ApiException.NotFound("speaking_session_not_found",
                 "That Speaking session does not exist.");
 
-        // ── No AI for MOCK or LIVE-TUTOR Speaking ──────────────────────────
-        // Two ways a Speaking session is human-marked, never AI:
-        //   1. Live-tutor booking (Mode = LiveTutor) — the booked tutor plays the
-        //      patient and marks the exam.
-        //   2. A MOCK (2026-06-29 owner rule) — a two-card exam launched from a
-        //      curated Mock Set (or full mock bundle) carries a MockSetId /
-        //      MockSessionId. Mock Speaking is forced to a live-tutor booking at
-        //      creation, so in practice mocks are already LiveTutor; this second
-        //      clause also catches any legacy AI-mode mock row.
-        // In both cases the finished session is visible in the tutor review queue
-        // (TutorReviewQueueService.ListQueueAsync) and the tutor's
-        // SpeakingTutorAssessment becomes the released band. Do NOT call the AI
-        // gateway or write a SpeakingAiAssessment row.
-        //
-        // Non-mock AI sessions (AiSelfPractice / random AiExam) fall through and
-        // ARE AI-scored. For AiExam the assessment is OFFICIAL (IsAdvisory=false);
-        // for practice it is advisory (IsAdvisory=true).
-        if (session.Mode == SpeakingSessionMode.LiveTutor
-            || !string.IsNullOrWhiteSpace(session.MockSetId)
-            || !string.IsNullOrWhiteSpace(session.MockSessionId))
+        // Live-tutor (non-mock) stays human-marked. W8: mock Speaking — even
+        // when historically forced into LiveTutor mode — is AI-graded on the
+        // already-consumed Mock Attempt. Human review is an optional
+        // escalation, never a release dependency.
+        var isMock = !string.IsNullOrWhiteSpace(session.MockSetId)
+            || !string.IsNullOrWhiteSpace(session.MockSessionId);
+        if (session.Mode == SpeakingSessionMode.LiveTutor && !isMock)
         {
             logger.LogInformation(
-                "Speaking session {SessionId} is mock/live-tutor — AI assessment skipped; routed to human examiner marking.",
+                "Speaking session {SessionId} is live-tutor — AI assessment skipped; routed to human examiner marking.",
                 sessionId);
             return new SpeakingAiAssessmentProjection(
                 AssessmentId: string.Empty,
@@ -138,7 +125,7 @@ Scoring rules:
                 CriterionScores: new Dictionary<string, CriterionScore>(),
                 EstimatedScaledScore: 0,
                 ReadinessBand: "awaiting_human_review",
-                OverallSummary: "Mock Speaking is marked by a human examiner. Your result is released after marking.",
+                OverallSummary: "Live-tutor Speaking is marked by a human examiner. Your result is released after marking.",
                 ConfidenceBand: "pending",
                 GeneratedAt: DateTimeOffset.UtcNow,
                 IsAdvisory: false);

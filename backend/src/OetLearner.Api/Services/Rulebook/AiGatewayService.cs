@@ -65,35 +65,22 @@ public sealed class AiGatewayService(
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
 
     /// <summary>
-    /// Scoring feature codes that are FORBIDDEN when the call's
+    /// Feature codes that remain FORBIDDEN when
     /// <see cref="AiGatewayRequest.AssessmentContext"/> is
-    /// <see cref="AiAssessmentContext.Mock"/>. Mock WRITING and mock SPEAKING are
-    /// graded by a human examiner — never by AI.
+    /// <see cref="AiAssessmentContext.Mock"/>.
     ///
-    /// SPEAKING policy (2026-06-29 owner rule): in a MOCK — a two-card exam
-    /// launched from a curated Mock Set, or a full mock bundle — Speaking is
-    /// human-marked via a live-tutor booking, never by AI. This reverses the
-    /// 2026-06-11 interim decision that allowed AI marking of mock Speaking, so
-    /// <c>SpeakingGrade</c> is now banned in Mock context. Random two-card
-    /// "AI exam" simulations and single-card practice are NOT mocks — their
-    /// sessions carry no MockSetId/MockSessionId, so the assessor tags them
-    /// <see cref="AiAssessmentContext.Practice"/> and they keep AI marking.
-    /// <c>SpeakingScoreV2</c> is a provider/route key, never a gateway feature
-    /// code, so it is intentionally NOT listed.
-    ///
-    /// These codes remain valid for <see cref="AiAssessmentContext.Practice"/>
-    /// (the ban is context-scoped, not code-scoped). Pronunciation/Reading/
-    /// Listening codes are intentionally NOT listed — pronunciation is a
-    /// practice sub-skill, and R&amp;L grading is deterministic.
+    /// W8 catalogue policy (master catalogue L1340 + owner ruling): mock
+    /// Writing and mock Speaking are AI-graded on the already-consumed Mock
+    /// Attempt. <c>writing.grade</c>, <c>writing.sample_score</c>, and
+    /// <c>speaking.grade</c> are therefore allowed in Mock context.
+    /// <c>mock.full_grade</c> is retired entirely (refused below, not merely
+    /// context-banned). Conversation evaluation is not a mock assessment
+    /// surface and stays banned.
     /// </summary>
     private static readonly HashSet<string> BannedMockAssessmentFeatureCodes =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            AiFeatureCodes.WritingGrade,
-            AiFeatureCodes.WritingSampleScore,
-            AiFeatureCodes.MockFullGrade,
             AiFeatureCodes.ConversationEvaluation,
-            AiFeatureCodes.SpeakingGrade,
         };
 
     public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
@@ -107,20 +94,22 @@ public sealed class AiGatewayService(
             ? AiFeatureCodes.Unclassified
             : request.FeatureCode!;
 
-        // ── Mock invariant: physically refuse AI WRITING + SPEAKING assessment ──
-        // Product rule: in mock exams, WRITING and SPEAKING are graded by a human
-        // examiner — never by AI. Both module pipelines branch away from AI
-        // before ever calling the gateway (mock Writing parks as awaiting_review;
-        // mock Speaking is forced to a live-tutor booking); this is the belt-and-
-        // suspenders backstop so any future caller that forgets fails loud (and
-        // is audited) instead of silently grading. The refusal happens before
-        // provider selection or any credit debit, so no credits are consumed.
+        if (string.Equals(featureCode, AiFeatureCodes.MockFullGrade, StringComparison.OrdinalIgnoreCase))
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "mock_full_grade_retired",
+                errorMessage: "mock.full_grade is retired. Full mock reports aggregate the four section results.",
+                ct);
+            throw new InvalidOperationException("mock.full_grade is retired.");
+        }
+
+        // Conversation evaluation is not a mock assessment surface.
         if (request.AssessmentContext == AiAssessmentContext.Mock
             && BannedMockAssessmentFeatureCodes.Contains(featureCode))
         {
             await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
                 errorCode: "mock_assessment_forbidden",
-                errorMessage: "AI assessment is forbidden for Writing and Speaking in a mock context.",
+                errorMessage: "This AI feature is not a mock assessment surface.",
                 ct);
             throw new MockAssessmentForbiddenException(featureCode);
         }
@@ -1210,7 +1199,6 @@ public sealed class AiGatewayService(
     private static bool ShouldDebitAiCredit(string featureCode)
         => string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.WritingSampleScore, StringComparison.OrdinalIgnoreCase)
-           || string.Equals(featureCode, AiFeatureCodes.MockFullGrade, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.PronunciationScore, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.PronunciationLinguisticScore, StringComparison.OrdinalIgnoreCase)
            || string.Equals(featureCode, AiFeatureCodes.PronunciationFeedback, StringComparison.OrdinalIgnoreCase)

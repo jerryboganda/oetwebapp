@@ -26,6 +26,7 @@ public interface IMockEntitlementService
 {
     Task<MockEntitlementCheck> CheckAsync(string userId, string mockType, CancellationToken ct);
     Task<MockEntitlementDebit> DebitAsync(string userId, string mockType, string mockAttemptId, CancellationToken ct);
+    Task CommitAsync(string userId, string mockType, string mockAttemptId, CancellationToken ct);
     Task<bool> RefundAsync(string userId, string mockType, string referenceId, string refundReferenceId, CancellationToken ct);
     Task<MockEntitlementSummary> SummariseAsync(string userId, CancellationToken ct);
 }
@@ -71,7 +72,8 @@ public sealed class MockEntitlementService(
 
         var (granted, _) = await SumGrantedAsync(userId, normalised, ct);
         var consumed = await db.MockEntitlementLedgers.AsNoTracking()
-            .CountAsync(r => r.UserId == userId && r.MockType == normalised && r.ReversedAt == null, ct);
+            .CountAsync(r => r.UserId == userId && r.MockType == normalised && r.ReversedAt == null
+                && r.ReservationState != MockEntitlementReservationStates.Released, ct);
         var remaining = Math.Max(0, granted - consumed);
 
         if (remaining <= 0)
@@ -108,9 +110,21 @@ public sealed class MockEntitlementService(
                 ReasonAllowedSubscription, "Subscription covers mock attempt — no credit consumed.");
         }
 
+        if (!string.IsNullOrWhiteSpace(mockAttemptId))
+        {
+            var existing = await db.MockEntitlementLedgers
+                .FirstOrDefaultAsync(r => r.UserId == userId && r.MockAttemptId == mockAttemptId && r.ReversedAt == null, ct);
+            if (existing is not null)
+            {
+                return new MockEntitlementDebit(true, normalised, 0, 0, existing.Id,
+                    ReasonAllowedCredits, "Mock attempt already reserved — resume does not charge again.");
+            }
+        }
+
         var (granted, sourceAddOnId) = await SumGrantedAsync(userId, normalised, ct);
         var consumed = await db.MockEntitlementLedgers
-            .CountAsync(r => r.UserId == userId && r.MockType == normalised && r.ReversedAt == null, ct);
+            .CountAsync(r => r.UserId == userId && r.MockType == normalised && r.ReversedAt == null
+                && r.ReservationState != MockEntitlementReservationStates.Released, ct);
         var remaining = Math.Max(0, granted - consumed);
         if (remaining <= 0)
         {
@@ -126,6 +140,7 @@ public sealed class MockEntitlementService(
             MockType = normalised,
             ConsumedAt = DateTimeOffset.UtcNow,
             MockAttemptId = string.IsNullOrWhiteSpace(mockAttemptId) ? null : mockAttemptId,
+            ReservationState = MockEntitlementReservationStates.Reserved,
         };
         db.MockEntitlementLedgers.Add(entry);
         try
@@ -144,6 +159,20 @@ public sealed class MockEntitlementService(
         var nowRemaining = Math.Max(0, remaining - 1);
         return new MockEntitlementDebit(true, normalised, nowRemaining, granted, entry.Id,
             ReasonAllowedCredits, $"{nowRemaining} of {granted} mock credits remaining after this attempt.");
+    }
+
+    public async Task CommitAsync(string userId, string mockType, string mockAttemptId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(mockAttemptId)) return;
+
+        var row = await db.MockEntitlementLedgers
+            .FirstOrDefaultAsync(r => r.UserId == userId && r.MockAttemptId == mockAttemptId && r.ReversedAt == null, ct);
+        if (row is null) return;
+        if (row.ReservationState == MockEntitlementReservationStates.Committed) return;
+        if (row.ReservationState == MockEntitlementReservationStates.Released) return;
+
+        row.ReservationState = MockEntitlementReservationStates.Committed;
+        await db.SaveChangesAsync(ct);
     }
 
     public async Task<bool> RefundAsync(
@@ -198,7 +227,8 @@ public sealed class MockEntitlementService(
 
         // Aggregate consumed credits from the ledger.
         var consumedRows = await db.MockEntitlementLedgers.AsNoTracking()
-            .Where(r => r.UserId == userId && r.ReversedAt == null)
+            .Where(r => r.UserId == userId && r.ReversedAt == null
+                && r.ReservationState != MockEntitlementReservationStates.Released)
             .GroupBy(r => r.MockType)
             .Select(g => new { MockType = g.Key, Consumed = g.Count() })
             .ToListAsync(ct);

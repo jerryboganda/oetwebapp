@@ -26,6 +26,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddListeningQnaTurns), "20261202090000_AddListeningQnaTurns")]
     [InlineData(typeof(AddWritingSubmissionIdempotency), "20261203090000_AddWritingSubmissionIdempotency")]
     [InlineData(typeof(AddSpeakingAssessmentIdentityAndTurns), "20261204090000_AddSpeakingAssessmentIdentityAndTurns")]
+    [InlineData(typeof(AddMockLifecycleReservation), "20261205090000_AddMockLifecycleReservation")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

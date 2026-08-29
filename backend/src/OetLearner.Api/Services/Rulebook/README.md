@@ -45,7 +45,7 @@ without a DB row (CI, fresh DBs, isolated unit tests).
 | `writing.coach.suggest` | Inline writing-coach suggestions | platform default | BYOK-eligible. |
 | `writing.coach.explain` | "Explain this fix" copilot | platform default | BYOK-eligible. |
 | `speaking.grade` | Legacy Speaking grader | platform default | Use `speaking.score.v2` for new code paths. |
-| `mock.full_grade` | Full mock scoring (all subtests) | `anthropic` | Scoring-critical. |
+| `mock.full_grade` | **Retired (W8).** Full mock report is deterministic aggregation of four section results. Never invoke. | — | Do not route. |
 | `mock.remediation_draft` | 7-day remediation-plan personalisation | platform default | BYOK-eligible — non-scoring. |
 | `conversation.opening` | Self-practice opening line | platform default | BYOK-eligible. |
 | `conversation.reply` | Self-practice per-turn replies | platform default | BYOK-eligible. |

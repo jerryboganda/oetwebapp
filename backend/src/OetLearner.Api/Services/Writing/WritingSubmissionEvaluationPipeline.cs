@@ -138,23 +138,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var submission = await db.WritingSubmissions.FirstOrDefaultAsync(s => s.Id == submissionId, ct)
             ?? throw ApiException.NotFound("writing_submission_not_found", "Submission was not found.");
 
-        // ── No AI for mock Writing (defense-in-depth) ─────────────────────────
-        // Mock Writing is graded by a human examiner — never by AI. The dedicated
-        // mock submit path already parks the submission as "awaiting_review" and
-        // routes it to a tutor; this guard ensures that even if some other caller
-        // invokes the pipeline on a mock submission, it can never reach the AI
-        // rubric (CallRubricAsync) NOR reuse a prior practice grade via the
-        // idempotency cache below.
-        if (submission.Mode == "mock")
-        {
-            if (submission.Status != WritingSubmissionStatuses.AwaitingReview)
-            {
-                submission.Status = WritingSubmissionStatuses.AwaitingReview;
-                await db.SaveChangesAsync(ct);
-            }
-            return new WritingSubmissionGradeOutcome(submission.Id, Guid.Empty, 0, "pending", false);
-        }
-
         var claimed = await TryClaimSubmissionAsync(submission, ct);
         if (!claimed)
         {
@@ -448,7 +431,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var operationId = submission.GradeOperationId ?? Guid.NewGuid().ToString("N");
         try
         {
-            if (creditReservations is not null)
+            if (creditReservations is not null
+                && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
             {
                 var ticket = await creditReservations.ReserveWritingAsync(
                     submission.UserId, operationId, businessReference, ct);
@@ -664,9 +648,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 FeatureCode = AiFeatureCodes.WritingGrade,
                 PromptTemplateId = "writing.score.v1",
                 UserId = submission.UserId,
-                // Arms the gateway backstop: a mock submission must never reach
-                // the AI rubric. The mock paths branch away before here; if one
-                // ever doesn't, the gateway hard-refuses (MockAssessmentForbidden).
                 AssessmentContext = submission.Mode == "mock"
                     ? AiAssessmentContext.Mock
                     : AiAssessmentContext.Practice,

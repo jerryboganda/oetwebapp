@@ -394,14 +394,7 @@ public sealed class WritingMockService(
                 IsRevision: false,
                 OriginalSubmissionId: null), ct);
 
-            // ── No AI for mock Writing ────────────────────────────────────────
-            // Mock Writing is graded by a human examiner — NEVER by AI. We do not
-            // call pipeline.EvaluateAsync (which would invoke the AI rubric and
-            // write a WritingGrade band). Instead the submission is parked as
-            // "awaiting human review" and routed to the tutor marking queue.
-            var submission = await db.WritingSubmissions.FirstAsync(s => s.Id == submissionId, ct);
-            submission.Status = WritingSubmissionStatuses.AwaitingReview;
-            await db.SaveChangesAsync(ct);
+            await pipeline.EvaluateAsync(submissionId, ct);
             await tutorReview.EnsureMockReviewAssignmentAsync(userId, submissionId, ct);
 
             await SubmitSessionAsync(userId, sessionId, submissionId, ct);
@@ -430,13 +423,10 @@ public sealed class WritingMockService(
             .FirstOrDefaultAsync(ct);
         if (grade is null)
         {
-            // Mock Writing awaiting human examiner marking — no AI band exists.
-            // Return an explicit "awaiting_review" projection (not null) so the
-            // results page can poll and show the pending-marking state.
             return new WritingMockResultsResponse(
                 WritingV2ResponseMapper.ToResponse(session),
                 Grade: null,
-                Status: WritingSubmissionStatuses.AwaitingReview);
+                Status: submission.Status);
         }
         var violations = await db.WritingCanonViolations.AsNoTracking()
             .Where(v => v.SubmissionId == submission.Id)

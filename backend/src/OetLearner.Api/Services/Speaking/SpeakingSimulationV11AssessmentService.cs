@@ -80,11 +80,9 @@ Rules:
                 "This card has no explicit profession pack. No Medicine fallback is permitted.", ct);
         }
 
-        // v1.1 is the AI-simulation assessor. A curated mock-set id identifies
-        // the card provenance, not the marking mode; the session mode is the
-        // authoritative human/AI boundary. The legacy assessor retains its
-        // separate zero-AI mock guard for historical tutor workflows.
-        if (session.Mode == SpeakingSessionMode.LiveTutor)
+        var isMock = !string.IsNullOrWhiteSpace(session.MockSetId)
+            || !string.IsNullOrWhiteSpace(session.MockSessionId);
+        if (session.Mode == SpeakingSessionMode.LiveTutor && !isMock)
             return await TechnicalAsync(session, card, SpeakingSimulationV11AudioQualityStatus.Pending,
                 "human_examiner_required", "This session is marked for human examiner assessment.", ct);
 

@@ -22,6 +22,7 @@ namespace OetLearner.Api.Domain;
 [Index(nameof(UserId), nameof(MockType))]
 [Index(nameof(UserId), nameof(ConsumedAt))]
 [Index(nameof(AddOnId))]
+[Index(nameof(UserId), nameof(MockAttemptId), IsUnique = true)]
 public class MockEntitlementLedger
 {
     [Key]
@@ -54,4 +55,15 @@ public class MockEntitlementLedger
     /// <summary>The <see cref="MockAttempt.Id"/> that consumed the credit, if known.</summary>
     [MaxLength(64)]
     public string? MockAttemptId { get; set; }
+
+    /// <summary>W8 lifecycle: reserved at attempt creation, committed on first section start, released only before usable start.</summary>
+    [MaxLength(16)]
+    public string ReservationState { get; set; } = MockEntitlementReservationStates.Committed;
+}
+
+public static class MockEntitlementReservationStates
+{
+    public const string Reserved = "reserved";
+    public const string Committed = "committed";
+    public const string Released = "released";
 }

@@ -333,14 +333,14 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CreateExam_MockLaunch_RequiresAi_WhenExamLessThan7DaysAway()
+    public async Task CreateExam_MockLaunch_AllowsTutor_WhenExamLessThan7DaysAway()
     {
+        await SeedTwoPublishedCardsAsync();
         await SeedGoalAsync(DateOnly.FromDateTime(DateTime.UtcNow.AddDays(3)));
 
-        var ex = await Assert.ThrowsAsync<ApiException>(() =>
-            _exams.CreateExamAsync(UserId,
-                new CreateSpeakingExamRequest("live_tutor", MockAttemptId: "mock_attempt_1", ProfessionId: "medicine", BookingId: "psb-mock-3"), default));
-        Assert.Equal("SPEAKING_MOCK_REQUIRES_AI", ex.ErrorCode);
+        var exam = await _exams.CreateExamAsync(UserId,
+            new CreateSpeakingExamRequest("live_tutor", MockAttemptId: "mock_attempt_1", ProfessionId: "medicine", BookingId: "psb-mock-3"), default);
+        Assert.Equal("live_tutor", exam.Mode);
     }
 
     [Fact]

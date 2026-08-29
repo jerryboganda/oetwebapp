@@ -537,6 +537,10 @@ public sealed class MockService(
             section.StartedAt = now;
             section.DeadlineAt = attempt.StrictTimer ? now.AddMinutes(bundleSection.TimeLimitMinutes) : null;
             RecordEvent(userId, "mock_section_started", new { mockAttemptId = attempt.Id, sectionId = section.Id, subtest = section.SubtestCode });
+            if (mockEntitlementService is not null)
+            {
+                await mockEntitlementService.CommitAsync(userId, attempt.MockType, attempt.Id, ct);
+            }
 
             // The webcam/environment preflight only ran client-side, so an API
             // caller could start a strict section with no check at all and

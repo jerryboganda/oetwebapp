@@ -203,7 +203,6 @@ public static class AiFeatureRouteDefaults
         SonnetDefault(AiFeatureCodes.WritingScenarioGenerateV1, "Writing scenario generation — grading-adjacent quality."),
         SonnetDefault(AiFeatureCodes.WritingAppealV1, "Writing appeal second opinion — quality-sensitive per owner directive."),
         SonnetDefault(AiFeatureCodes.SpeakingGrade, "Speaking role-play grading — official."),
-        SonnetDefault(AiFeatureCodes.MockFullGrade, "Full mock grading — official."),
         SonnetDefault(AiFeatureCodes.PronunciationScore, "Pronunciation scoring (text) — feeds a score."),
 
         // ── Cheap tier: Claude Haiku ──────────────────────────────────────────
@@ -295,7 +294,6 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.WritingCoachSuggest,
         AiFeatureCodes.WritingCoachExplain,
         AiFeatureCodes.SpeakingGrade,
-        AiFeatureCodes.MockFullGrade,
         AiFeatureCodes.MockRemediationDraft,
         AiFeatureCodes.ConversationOpening,
         AiFeatureCodes.ConversationReply,
