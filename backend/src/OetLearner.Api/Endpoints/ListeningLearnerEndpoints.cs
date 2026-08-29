@@ -452,7 +452,7 @@ public static class ListeningLearnerEndpoints
                 return Results.BadRequest(new { code = "invalid_request", error = ex.Message });
             }
         })
-            .RequireRateLimiting("PerUser")
+            .RequireRateLimiting("AiInteractive")
             .WithName("AskListeningQuestionGroundedAi")
             .WithSummary("Ask grounded advisory AI about a submitted Listening question");
 

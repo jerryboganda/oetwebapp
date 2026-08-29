@@ -58,6 +58,7 @@ public sealed class AiGatewayService(
     OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? settingsProvider = null,
     IAiFeaturePolicyRegistry? featurePolicyRegistry = null,
     IAiBudgetService? budgetService = null,
+    OetLearner.Api.Services.Ai.IAiCircuitBreakerStore? circuitBreaker = null,
     ILogger<AiGatewayService>? logger = null)
     : IAiGatewayService, IAiGatewayCoreExecutor
 {
@@ -504,8 +505,9 @@ public sealed class AiGatewayService(
         AiBudgetReservation budgetReservation = AiBudgetReservation.Unmetered;
         if (budgetService is not null && prospectiveKeySource == AiKeySource.Platform)
         {
-            budgetReservation = await budgetService.ReserveAsync(
-                "global",
+            var operationClass = await ResolveBudgetOperationClassAsync(featureCode, ct);
+            budgetReservation = await budgetService.ReserveForCallAsync(
+                operationClass,
                 AiBudgetService.DefaultReservationEstimateUsd * conservativeMaxTurnsForReservation,
                 ct);
 
@@ -681,6 +683,23 @@ public sealed class AiGatewayService(
             }
         }
 
+        var circuitProviderKey = selectedProviderCode ?? provider.Name;
+        var circuitCredentialKey = resolution?.CredentialId;
+        if (circuitBreaker is not null && prospectiveKeySource == AiKeySource.Platform)
+        {
+            var providerAllowed = await circuitBreaker.AllowAsync(
+                AiCircuitBreakerStore.KindProvider, circuitProviderKey, ct);
+            var credentialAllowed = circuitCredentialKey is null
+                || await circuitBreaker.AllowAsync(
+                    AiCircuitBreakerStore.KindCredential, circuitCredentialKey, ct);
+            if (!providerAllowed || !credentialAllowed)
+            {
+                if (budgetService is not null)
+                    await budgetService.ReleaseAsync(budgetReservation, CancellationToken.None);
+                throw new InvalidOperationException("HTTP 503 Provider circuit is open.");
+            }
+        }
+
         try
         {
             for (var turn = 0; turn < maxTurns; turn++)
@@ -688,21 +707,27 @@ public sealed class AiGatewayService(
                 currentTurnUsageRecordId = turn == 0 ? aiUsageRecordIdForTools : Guid.NewGuid().ToString("N");
                 currentTurnRecorded = false;
 
-                completion = await provider.CompleteAsync(new AiProviderRequest
-                {
-                    ProviderCode = selectedProviderCode,
-                    Model = effectiveModel,
-                    SystemPrompt = request.Prompt.SystemPrompt,
-                    UserPrompt = userPrompt,
-                    Temperature = request.Temperature,
-                    MaxTokens = request.MaxTokens,
-                    ApiKeyOverride = resolution?.ApiKeyPlaintext,
-                    BaseUrlOverride = resolution?.BaseUrlOverride,
-                    AudioAttachments = request.AudioAttachments,
-                    Messages = messages,
-                    Tools = tools.Count == 0 ? null : tools,
-                    ToolChoice = tools.Count == 0 ? null : "auto",
-                }, ct);
+                completion = await CompleteProviderTurnWithRetryAsync(
+                    provider,
+                    new AiProviderRequest
+                    {
+                        ProviderCode = selectedProviderCode,
+                        Model = effectiveModel,
+                        SystemPrompt = request.Prompt.SystemPrompt,
+                        UserPrompt = userPrompt,
+                        Temperature = request.Temperature,
+                        MaxTokens = request.MaxTokens,
+                        ApiKeyOverride = resolution?.ApiKeyPlaintext,
+                        BaseUrlOverride = resolution?.BaseUrlOverride,
+                        AudioAttachments = request.AudioAttachments,
+                        Messages = messages,
+                        Tools = tools.Count == 0 ? null : tools,
+                        ToolChoice = tools.Count == 0 ? null : "auto",
+                    },
+                    circuitProviderKey,
+                    circuitCredentialKey,
+                    prospectiveKeySource,
+                    ct);
 
                 if (completion.Usage is not null)
                 {
@@ -997,6 +1022,87 @@ public sealed class AiGatewayService(
             EstimatedCostUsd = costEstimate,
             RetryCount = 0,
         };
+    }
+
+    private async Task<AiOperationClass> ResolveBudgetOperationClassAsync(string featureCode, CancellationToken ct)
+    {
+        if (featurePolicyRegistry is not null)
+        {
+            try
+            {
+                var lookup = await featurePolicyRegistry.LookupAsync(featureCode, ct);
+                if (lookup.Policy is { } policy) return policy.OperationClass;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "Feature policy lookup failed while resolving budget class for {FeatureCode}; using feature-code fallback.", featureCode);
+            }
+        }
+
+        return AiBudgetClasses.ClassForFeature(featureCode);
+    }
+
+    private async Task<AiProviderCompletion> CompleteProviderTurnWithRetryAsync(
+        IAiModelProvider provider,
+        AiProviderRequest providerRequest,
+        string circuitProviderKey,
+        string? circuitCredentialKey,
+        AiKeySource keySource,
+        CancellationToken ct)
+    {
+        Exception? last = null;
+        for (var attempt = 1; attempt <= AiRetryPolicy.MaxProviderRetries; attempt++)
+        {
+            try
+            {
+                var completion = await provider.CompleteAsync(providerRequest, ct);
+                if (circuitBreaker is not null && keySource == AiKeySource.Platform)
+                {
+                    await circuitBreaker.RecordSuccessAsync(AiCircuitBreakerStore.KindProvider, circuitProviderKey, ct);
+                    if (!string.IsNullOrWhiteSpace(circuitCredentialKey))
+                    {
+                        await circuitBreaker.RecordSuccessAsync(
+                            AiCircuitBreakerStore.KindCredential, circuitCredentialKey, ct);
+                    }
+                }
+
+                return completion;
+            }
+            catch (Exception ex)
+            {
+                last = ex;
+                var classification = AiRetryPolicy.Classify(ex, requestLikelySent: true);
+                if (circuitBreaker is not null && keySource == AiKeySource.Platform)
+                {
+                    var failureCode = classification.Disposition == AiRetryDisposition.Quarantine
+                        ? "401"
+                        : ClassifyError(ex);
+                    if (classification.Disposition == AiRetryDisposition.Quarantine
+                        && !string.IsNullOrWhiteSpace(circuitCredentialKey))
+                    {
+                        await circuitBreaker.RecordFailureAsync(
+                            AiCircuitBreakerStore.KindCredential, circuitCredentialKey, failureCode, ct);
+                    }
+                    else
+                    {
+                        await circuitBreaker.RecordFailureAsync(
+                            AiCircuitBreakerStore.KindProvider, circuitProviderKey, failureCode, ct);
+                    }
+                }
+
+                if (classification.Disposition != AiRetryDisposition.Retry
+                    || attempt >= classification.MaxRetries)
+                {
+                    throw;
+                }
+
+                var delay = classification.SuggestedDelay
+                    ?? AiRetryPolicy.ComputeRetryDelay(attempt, retryAfter: null);
+                await Task.Delay(delay, ct);
+            }
+        }
+
+        throw last ?? new InvalidOperationException("Provider call failed.");
     }
 
     private async Task RecordRefusalAsync(

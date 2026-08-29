@@ -70,6 +70,7 @@ public static class WritingAdminContentEndpoints
             IWritingScenarioGeneratorService service,
             CancellationToken ct)
             => Results.Ok(await service.GenerateScenarioAsync(http.WritingV2UserId(), request, ct)))
+            .RequireRateLimiting("AiAdminGeneration")
             .WithAdminWrite("AdminContentWrite");
 
         g.MapGet("/{id:guid}", async (

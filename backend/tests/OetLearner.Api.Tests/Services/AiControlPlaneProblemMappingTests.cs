@@ -113,6 +113,19 @@ public sealed class AiControlPlaneProblemMappingTests
     }
 
     [Fact]
+    public void BudgetExhausted_MapsTo402_StableCode_NotRetryable()
+    {
+        var problem = AiControlPlaneProblemMapper.TryMap(new AiBudgetExhaustedException("global_budget_exhausted"));
+
+        Assert.NotNull(problem);
+        Assert.Equal(402, problem!.StatusCode);
+        Assert.Equal("global_budget_exhausted", problem.Code);
+        Assert.False(problem.Retryable);
+        Assert.Null(problem.RetryAfterSeconds);
+        Assert.DoesNotContain("Exception", problem.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void BlankReason_StillProducesAStableMachineToken()
     {
         var problem = AiControlPlaneProblemMapper.TryMap(

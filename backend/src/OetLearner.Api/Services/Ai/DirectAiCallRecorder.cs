@@ -277,8 +277,8 @@ public sealed class DirectAiCallRecorder(
                     var reservation = AiBudgetReservation.Unmetered;
                     if (budgetService is not null)
                     {
-                        reservation = await budgetService.ReserveAsync(
-                            "global", AiBudgetService.DefaultReservationEstimateUsd, ct);
+                        reservation = await budgetService.ReserveForCallAsync(
+                            operationClass, AiBudgetService.DefaultReservationEstimateUsd, ct);
                         if (!reservation.Granted)
                         {
                             logger.LogWarning(

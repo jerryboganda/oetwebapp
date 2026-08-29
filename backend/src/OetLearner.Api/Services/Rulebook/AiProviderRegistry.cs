@@ -74,14 +74,18 @@ public sealed class AiProviderRegistry(LearnerDbContext db, IDataProtectionProvi
 public sealed class RegistryBackedProvider(
     IHttpClientFactory httpClientFactory,
     IAiProviderRegistry registry,
-    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions> options) : IAiModelProvider
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions> options,
+    OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate? platformGate = null) : IAiModelProvider
 {
     public string Name => "registry";
 
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
         var (baseUrl, apiKey, reasoningEffort) = await ResolveCredentialsAsync(request, ct);
-        return await CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
+        Task<AiProviderCompletion> Invoke() => CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
+        if (platformGate is null || !string.IsNullOrWhiteSpace(request.ApiKeyOverride))
+            return await Invoke();
+        return await platformGate.RunAsync(_ => Invoke(), ct);
     }
 
     private async Task<(string baseUrl, string apiKey, string? reasoningEffort)> ResolveCredentialsAsync(AiProviderRequest request, CancellationToken ct)
@@ -205,7 +209,8 @@ public sealed class RegistryBackedProvider(
 /// </summary>
 public sealed class AnthropicProvider(
     IHttpClientFactory httpClientFactory,
-    IAiProviderRegistry registry) : IAiModelProvider
+    IAiProviderRegistry registry,
+    OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate? platformGate = null) : IAiModelProvider
 {
     public string Name => "anthropic";
 
@@ -243,6 +248,15 @@ public sealed class AnthropicProvider(
 
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
+        var held = false;
+        if (platformGate is not null && string.IsNullOrWhiteSpace(request.ApiKeyOverride))
+        {
+            await platformGate.WaitAsync(ct);
+            held = true;
+        }
+
+        try
+        {
         var baseUrl = request.BaseUrlOverride;
         var apiKey = request.ApiKeyOverride;
         if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(apiKey))
@@ -364,6 +378,12 @@ public sealed class AnthropicProvider(
 
         var finishReason = root.TryGetProperty("stop_reason", out var stopReason) ? stopReason.GetString() : null;
         return new AiProviderCompletion { Text = sb.ToString(), Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason };
+        }
+        finally
+        {
+            if (held)
+                platformGate!.Release();
+        }
     }
 }
 

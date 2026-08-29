@@ -1462,6 +1462,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // LearnerDbContext.AiExplanationCache.cs.
         OnModelCreatingAiExplanationCache(modelBuilder);
 
+        // W3 leftover — circuit breakers, audited budget overrides, alerts.
+        OnModelCreatingAiCircuits(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1640,6 +1643,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiExplanationCache.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiExplanationCache(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiCircuits.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAiCircuits(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

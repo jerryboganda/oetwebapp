@@ -444,7 +444,7 @@ public static class ListeningV2Endpoints
             catch (KeyNotFoundException) { return Results.NotFound(); }
             catch (UnauthorizedAccessException) { return Results.Forbid(); }
         })
-        .RequireRateLimiting("PerUserWrite")
+        .RequireRateLimiting("AiScoring")
         .WithName("GradeListeningV2Attempt")
         .WithSummary("Listening V2 — grade an attempt + recompute pathway");
 

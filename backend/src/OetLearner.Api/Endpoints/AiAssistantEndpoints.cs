@@ -16,6 +16,7 @@ public static class AiAssistantEndpoints
     {
         var group = app.MapGroup("/v1/ai-assistant")
             .RequireAuthorization()
+            .RequireRateLimiting("AiInteractive")
             .WithTags("AI Assistant");
 
         // Thread CRUD

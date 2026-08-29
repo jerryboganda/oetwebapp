@@ -98,6 +98,7 @@ public static class AdminEndpoints
 
         admin.MapPost("/content/generate", async (HttpContext http, ContentGenerationRequest request, ContentGenerationService service, CancellationToken ct)
             => Results.Ok(await service.QueueGenerationAsync(http.AdminId(), request, ct)))
+            .RequireRateLimiting("AiAdminGeneration")
             .WithAdminWrite("AdminContentWrite");
 
         admin.MapGet("/content/generation-jobs", async (ContentGenerationService service, CancellationToken ct, int? page, int? pageSize)

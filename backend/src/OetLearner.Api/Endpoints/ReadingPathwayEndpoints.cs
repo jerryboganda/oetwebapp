@@ -964,7 +964,8 @@ public static class ReadingPathwayEndpoints
             {
                 return Results.BadRequest(new { code = "invalid_passage_qna_request", error = ex.Message });
             }
-        });
+        })
+        .RequireRateLimiting("AiInteractive");
 
         return app;
     }

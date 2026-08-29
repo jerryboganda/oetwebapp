@@ -88,6 +88,16 @@ public static class AiControlPlaneProblemMapper
             $"This AI feature is currently unavailable ({Sanitize(refused.Reason)}). Please try again later.",
             Retryable: false),
 
+        // Platform dollar ceiling reached BEFORE any provider call. 402 is
+        // truthful (the request is fine; the wallet is not) and must never
+        // fall through to 500. Machine reason is sanitized; retryable is
+        // false because retrying the same call cannot create budget.
+        AiBudgetExhaustedException budget => new AiControlPlaneProblem(
+            StatusCodes.Status402PaymentRequired,
+            Sanitize(budget.Reason),
+            "Platform AI budget has been reached. Try again after the next budget cycle.",
+            Retryable: false),
+
         _ => null,
     };
 

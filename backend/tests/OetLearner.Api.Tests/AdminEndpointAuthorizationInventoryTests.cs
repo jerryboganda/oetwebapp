@@ -105,6 +105,11 @@ public class AdminEndpointAuthorizationInventoryTests : IClassFixture<TestWebApp
     [InlineData("/v1/admin/study-plan/{userId}", "GET", "AdminContentRead")]
     [InlineData("/v1/admin/study-plan/{userId}/regenerate", "POST", "AdminContentWrite")]
     [InlineData("/v1/admin/study-plan/{userId}/items/{itemId}/override", "POST", "AdminContentWrite")]
+    [InlineData("/v1/admin/ai/operations", "GET", "AdminAiConfig")]
+    [InlineData("/v1/admin/ai/budgets", "GET", "AdminAiConfig")]
+    [InlineData("/v1/admin/ai/budgets/override", "POST", "AdminAiConfig")]
+    [InlineData("/v1/admin/ai/circuits", "GET", "AdminAiConfig")]
+    [InlineData("/v1/admin/ai/circuits/{key}/reset", "POST", "AdminAiConfig")]
     public void SensitiveAdminRoutes_UseExpectedGranularPolicies(string routePattern, string method, string policy)
     {
         using var client = _factory.CreateClient();

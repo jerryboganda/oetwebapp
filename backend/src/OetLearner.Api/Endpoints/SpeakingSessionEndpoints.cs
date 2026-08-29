@@ -65,6 +65,7 @@ public static class SpeakingSessionEndpoints
             .Produces(StatusCodes.Status409Conflict);
 
         learner.MapPost("/{id}/start-roleplay", StartRolePlayAsync)
+            .RequireRateLimiting("AiLiveSpeaking")
             .WithSummary("Transition the session from prep → active.")
             .Produces<SpeakingSessionDetail>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)
@@ -89,6 +90,7 @@ public static class SpeakingSessionEndpoints
             .Produces(StatusCodes.Status404NotFound);
 
         learner.MapPost("/{id}/ai-assess", AiAssessAsync)
+            .RequireRateLimiting("AiScoring")
             .WithSummary("Synchronously score the session with the AI scorer (advisory).")
             .Produces<SpeakingAiAssessmentProjection>(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound)

@@ -362,6 +362,78 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0,
         });
     });
+    // W3 cost-bearing AI limits. The blanket PerUser 5000/min stays on
+    // non-AI routes; these named policies are applied per endpoint.
+    options.AddPolicy("AiScoring", httpContext =>
+    {
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"ai-scoring-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 2,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+    options.AddPolicy("AiInteractive", httpContext =>
+    {
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"ai-interactive-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 6,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
+    options.AddPolicy("AiInteractiveDay", httpContext =>
+    {
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"ai-interactive-day-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 50,
+            Window = TimeSpan.FromDays(1),
+            QueueLimit = 0,
+        });
+    });
+    options.AddPolicy("AiLiveSpeaking", httpContext =>
+    {
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetConcurrencyLimiter($"ai-live-speaking-{key}", _ => new ConcurrencyLimiterOptions
+        {
+            PermitLimit = 1,
+            QueueLimit = 0,
+        });
+    });
+    options.AddPolicy("AiAdminGeneration", httpContext =>
+    {
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetConcurrencyLimiter($"ai-admin-gen-{key}", _ => new ConcurrencyLimiterOptions
+        {
+            PermitLimit = 2,
+            QueueLimit = 0,
+        });
+    });
+    options.AddPolicy("AiAdminGenerationDay", httpContext =>
+    {
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"ai-admin-gen-day-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 30,
+            Window = TimeSpan.FromDays(1),
+            QueueLimit = 0,
+        });
+    });
     // Tighter policy for anonymous auth endpoints to mitigate credential stuffing,
     // OTP bombing, and account-enumeration probes. Partitioned by IP because callers
     // are unauthenticated; users behind NAT share a bucket. Raised generously (10 -> 100)
@@ -1517,6 +1589,15 @@ builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiExecutionCoordinator,
 // singleton cannot capture a scoped dependency).
 builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiBudgetService,
     OetLearner.Api.Services.Ai.AiBudgetService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.AiPlatformConcurrencyGate>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiBudgetOverrideService,
+    OetLearner.Api.Services.Ai.AiBudgetOverrideService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiBudgetAlertService,
+    OetLearner.Api.Services.Ai.AiBudgetAlertService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiCircuitBreakerStore,
+    OetLearner.Api.Services.Ai.AiCircuitBreakerStore>();
+builder.Services.AddScoped<OetLearner.Api.Services.Billing.IAiCreditReservationService,
+    OetLearner.Api.Services.Billing.AiCreditReservationService>();
 // W3 — reusable, cross-learner explanation cache (owner directive 2026-08-28
 // AI/Cloud API plan, point 8). See Services/Ai/AiExplanationCacheService.cs.
 builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiExplanationCacheService,
@@ -2547,6 +2628,7 @@ app.MapAnswerKeyReportAdminEndpoints();
 app.MapAdminCampaignEndpoints();
 app.MapAdminLaunchReadinessEndpoints();
 app.MapAiUsageAdminEndpoints();
+app.MapAiOperationsAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();
 app.MapAiMeEndpoints();
