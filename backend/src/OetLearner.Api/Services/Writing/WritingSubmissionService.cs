@@ -79,7 +79,8 @@ public sealed class WritingSubmissionService(
             TimeSpentSeconds: request.TimeSpentSeconds,
             StartedAt: startedAt,
             IsRevision: false,
-            OriginalSubmissionId: null), ct);
+            OriginalSubmissionId: null,
+            IdempotencyKey: request.IdempotencyKey), ct);
         var outcome = await pipeline.EvaluateAsync(submissionId, ct);
         await EnsureGradeForSubmissionAsync(submissionId, outcome, ct);
 

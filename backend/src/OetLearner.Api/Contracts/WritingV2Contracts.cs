@@ -137,7 +137,8 @@ public sealed record WritingSubmissionCreateRequest(
     [property: StringLength(32)] string? SimulationMode,
     // JSON snapshot of the learner's Case Notes highlights (`Record<page, Highlight[]>`).
     // Optional — when absent the server falls back to the user's saved highlights.
-    string? CaseNoteHighlightsJson = null);
+    string? CaseNoteHighlightsJson = null,
+    [property: StringLength(128)] string? IdempotencyKey = null);
 
 public sealed record WritingReviseRequest(
     [property: Required] string LetterContent,

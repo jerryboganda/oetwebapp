@@ -40,34 +40,41 @@ public sealed class WritingEntitlementService(
         }
 
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
-        if (entitlement.HasEligibleSubscription)
-        {
-            return new WritingEntitlement(
-                Allowed: true,
-                Tier: entitlement.IsTrial ? "trial" : "paid",
-                Remaining: int.MaxValue,
-                LimitPerWindow: int.MaxValue,
-                WindowDays: opts.FreeTierWindowDays,
-                ResetAt: null,
-                Reason: "Active subscription — unlimited writing attempts.");
-        }
-
         if (aiPackageCreditService is not null)
         {
             var snapshot = await aiPackageCreditService.GetSnapshotAsync(userId, 0, ct);
             var expired = snapshot.ExpiredBecausePassed
                 || (snapshot.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow);
-            var hasWritingCredits = !snapshot.ExpiredBecausePassed && snapshot.HasWritingActivity;
-            if (!expired && hasWritingCredits)
+            if (!expired)
             {
-                return new WritingEntitlement(
-                    Allowed: true,
-                    Tier: "ai_package",
-                    Remaining: int.MaxValue,
-                    LimitPerWindow: int.MaxValue,
-                    WindowDays: opts.FreeTierWindowDays,
-                    ResetAt: null,
-                    Reason: "Paid AI package — writing grading credits available.");
+                if (snapshot.WritingUnlimited)
+                {
+                    return new WritingEntitlement(
+                        Allowed: true,
+                        Tier: entitlement.HasEligibleSubscription
+                            ? (entitlement.IsTrial ? "trial" : "paid")
+                            : "ai_package",
+                        Remaining: int.MaxValue,
+                        LimitPerWindow: int.MaxValue,
+                        WindowDays: opts.FreeTierWindowDays,
+                        ResetAt: snapshot.ExpiresAt,
+                        Reason: "Catalogue unlimited writing grant.");
+                }
+
+                var writingCreditsRemaining = snapshot.AvailableWritingActivities;
+                if (writingCreditsRemaining > 0)
+                {
+                    return new WritingEntitlement(
+                        Allowed: true,
+                        Tier: entitlement.HasEligibleSubscription
+                            ? (entitlement.IsTrial ? "trial" : "paid")
+                            : "ai_package",
+                        Remaining: writingCreditsRemaining,
+                        LimitPerWindow: writingCreditsRemaining,
+                        WindowDays: opts.FreeTierWindowDays,
+                        ResetAt: snapshot.ExpiresAt,
+                        Reason: $"{writingCreditsRemaining} writing grading credit(s) remaining.");
+                }
             }
         }
 

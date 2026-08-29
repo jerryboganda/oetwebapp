@@ -423,6 +423,7 @@ public sealed class AiGatewayService(
         }
 
         var shouldDebitLearnerCredit = ShouldDebitAiCredit(featureCode)
+            && string.IsNullOrWhiteSpace(request.CreditReservationId)
             && !string.IsNullOrWhiteSpace(request.UserId)
             && prospectiveKeySource != AiKeySource.Byok
             && prospectiveKeySource != AiKeySource.None;
@@ -2008,6 +2009,12 @@ public sealed record AiGatewayRequest
     /// a later edit of the same resource is a new operation rather than a
     /// conflict.</summary>
     public int? ResourceVersion { get; init; }
+
+    /// <summary>
+    /// W6 — when the caller already reserved learner credits via
+    /// <c>IAiCreditReservationService</c>, skip the legacy token-ledger debit.
+    /// </summary>
+    public string? CreditReservationId { get; init; }
 }
 
 public sealed class AiGatewayResult

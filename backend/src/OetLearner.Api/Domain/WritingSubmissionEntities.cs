@@ -68,6 +68,29 @@ public class WritingSubmission
     public string CaseNoteHighlightsJson { get; set; } = "{}";
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>W6 — submit/resubmit/revise/appeal idempotency key. Unique with UserId.</summary>
+    [MaxLength(128)]
+    public string? IdempotencyKey { get; set; }
+
+    /// <summary>W6 — SHA-256 hex of the widened grade-reuse identity.</summary>
+    [MaxLength(64)]
+    public string? ReuseKeyHash { get; set; }
+
+    /// <summary>W6 — durable AiOperation id for this grade, when one was opened.</summary>
+    [MaxLength(64)]
+    public string? GradeOperationId { get; set; }
+
+    public DateTimeOffset? ClaimedAt { get; set; }
+
+    [MaxLength(128)]
+    public string? ClaimOwner { get; set; }
+
+    /// <summary>
+    /// W6 persist-before-commit: raw provider completion JSON captured after a
+    /// successful rubric call, so a later DB failure resumes without a second paid call.
+    /// </summary>
+    public string? ProviderResultJson { get; set; }
 }
 
 public class WritingGrade

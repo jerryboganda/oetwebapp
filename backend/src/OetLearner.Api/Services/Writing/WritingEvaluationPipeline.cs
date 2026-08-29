@@ -11,6 +11,11 @@ using OetLearner.Api.Services.Rulebook;
 namespace OetLearner.Api.Services.Writing;
 
 /// <summary>
+/// W6 compatibility adapter: candidate AI scoring is owned by
+/// <see cref="WritingSubmissionEvaluationPipeline"/>. This type only drains
+/// historical attempt-based jobs (fail-closed) and must not open a second
+/// paid grading path.
+///
 /// Mission-critical (per AGENTS.md): every Writing AI call MUST go through
 /// <see cref="IAiGatewayService"/> with a grounded prompt built via
 /// <see cref="IAiGatewayService.BuildGroundedPrompt"/>. The gateway physically

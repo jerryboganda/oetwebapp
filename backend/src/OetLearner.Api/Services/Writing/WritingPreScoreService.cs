@@ -33,6 +33,9 @@ public sealed record WritingPreScoreResult(
     IReadOnlyDictionary<string, string> Rationale);
 
 /// <summary>
+/// W6 compatibility adapter: heuristic pre-fill only. Paid scoring is
+/// <see cref="WritingSubmissionEvaluationPipeline"/>.
+///
 /// Pre-scores a Writing submission and emits preliminary per-criterion
 /// bands the expert reviewer can use as a starting point.
 ///

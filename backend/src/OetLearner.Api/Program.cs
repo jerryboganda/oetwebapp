@@ -1910,6 +1910,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingOptionsProvid
     OetLearner.Api.Services.Writing.WritingOptionsProvider>();
 builder.Services.AddScoped<IWritingEntitlementService,
     OetLearner.Api.Services.Writing.WritingEntitlementService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiCreditReservationService,
+    OetLearner.Api.Services.Ai.AiCreditReservationService>();
 
 // ── Writing Module V2 services and crons (OET_WRITING_MODULE_PATHWAY.md §WS5) ──
 // Config root bound from appsettings.json:Writing.* — feature flags,

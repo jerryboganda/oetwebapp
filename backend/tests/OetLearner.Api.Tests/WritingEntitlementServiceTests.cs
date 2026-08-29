@@ -29,7 +29,7 @@ public class WritingEntitlementServiceTests
     }
 
     [Fact]
-    public async Task PremiumSubscriber_AllowedUnlimited()
+    public async Task PremiumSubscriber_WithoutWritingGrant_IsNotUnlimited()
     {
         await using var db = new LearnerDbContext(NewInMemoryOptions());
         db.BillingPlans.Add(new BillingPlan { Id = "pro", Code = "pro", Name = "Pro" });
@@ -47,9 +47,10 @@ public class WritingEntitlementServiceTests
         var (svc, _, _) = BuildServices(db);
         var result = await svc.CheckAsync("user-pro", default);
 
-        Assert.True(result.Allowed);
-        Assert.Equal("paid", result.Tier);
-        Assert.Equal(int.MaxValue, result.Remaining);
+        Assert.False(result.Allowed);
+        Assert.Equal(0, result.Remaining);
+        Assert.NotEqual(int.MaxValue, result.Remaining);
+        Assert.DoesNotContain("unlimited writing attempts", result.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

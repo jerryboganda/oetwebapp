@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.Writing.Events;
@@ -21,7 +22,8 @@ public sealed record WritingSubmissionGradeContext(
     int TimeSpentSeconds,
     DateTimeOffset StartedAt,
     bool IsRevision,
-    Guid? OriginalSubmissionId);
+    Guid? OriginalSubmissionId,
+    string? IdempotencyKey = null);
 
 public sealed record WritingSubmissionGradeOutcome(
     Guid SubmissionId,
@@ -61,7 +63,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IWritingAssessmentPreflightService? assessmentPreflight = null,
     WritingAssessmentV11RuleEngine? assessmentRuleEngine = null,
     WritingCalibrationReleaseService? calibrationReleaseService = null,
-    WritingModelAnswerService? modelAnswerService = null) : IWritingSubmissionEvaluationPipeline
+    WritingModelAnswerService? modelAnswerService = null,
+    IAiCreditReservationService? creditReservations = null) : IWritingSubmissionEvaluationPipeline
 {
     public async Task<Guid> CreateSubmissionAsync(WritingSubmissionGradeContext context, CancellationToken ct)
     {
@@ -75,6 +78,16 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var now = clock.GetUtcNow();
         var hash = ComputeHash(letter);
         var wordCount = CountWords(letter);
+        var idempotencyKey = NormalizeIdempotencyKey(context.IdempotencyKey)
+            ?? BuildDerivedIdempotencyKey(context, hash);
+
+        var existing = await db.WritingSubmissions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == context.UserId && s.IdempotencyKey == idempotencyKey, ct);
+        if (existing is not null)
+        {
+            return existing.Id;
+        }
+
         var submission = new WritingSubmission
         {
             Id = Guid.NewGuid(),
@@ -93,9 +106,21 @@ public sealed class WritingSubmissionEvaluationPipeline(
             GradingTier = string.IsNullOrWhiteSpace(context.GradingTier) ? "express" : context.GradingTier,
             InputSource = string.IsNullOrWhiteSpace(context.InputSource) ? "typed" : context.InputSource,
             CreatedAt = now,
+            IdempotencyKey = idempotencyKey,
         };
         db.WritingSubmissions.Add(submission);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(submission).State = EntityState.Detached;
+            var raced = await db.WritingSubmissions.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.UserId == context.UserId && s.IdempotencyKey == idempotencyKey, ct);
+            if (raced is not null) return raced.Id;
+            throw;
+        }
 
         await events.PublishAsync(new WritingSubmissionCreated(
             context.UserId,
@@ -129,6 +154,35 @@ public sealed class WritingSubmissionEvaluationPipeline(
             }
             return new WritingSubmissionGradeOutcome(submission.Id, Guid.Empty, 0, "pending", false);
         }
+
+        var claimed = await TryClaimSubmissionAsync(submission, ct);
+        if (!claimed)
+        {
+            await db.Entry(submission).ReloadAsync(ct);
+            if (submission.Status == WritingSubmissionStatuses.Graded)
+            {
+                var existingGrade = await db.WritingGrades.AsNoTracking()
+                    .FirstOrDefaultAsync(g => g.SubmissionId == submission.Id, ct);
+                if (existingGrade is not null)
+                {
+                    return new WritingSubmissionGradeOutcome(
+                        submission.Id, existingGrade.Id, existingGrade.RawTotal, existingGrade.BandLabel, true);
+                }
+            }
+
+            if (submission.Status == WritingSubmissionStatuses.Grading
+                && string.IsNullOrWhiteSpace(submission.ProviderResultJson))
+            {
+                throw ApiException.Conflict(
+                    "writing_rubric_already_in_progress",
+                    "This submission is already being graded (or was just graded). Please wait a moment and try again.");
+            }
+        }
+
+        var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct);
+        submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, await settingsProvider.GetAsync(ct));
+        var reused = await TryReuseExistingGradeAsync(submission, ct);
+        if (reused is not null) return reused;
 
         if (assessmentPreflight is null)
         {
@@ -164,8 +218,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 $"Writing assessment is not released for this profession and letter type: {string.Join(", ", assessmentPreflightResult.ReleaseBlockCodes)}.");
         }
 
-        submission.Status = "preflight";
-        await db.SaveChangesAsync(ct);
         var quickChecks = PreflightChecks(submission);
         if (!quickChecks.Passed)
         {
@@ -174,11 +226,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             throw ApiException.Validation(quickChecks.Reason!, quickChecks.Message!);
         }
 
-        submission.Status = "grading";
-        await db.SaveChangesAsync(ct);
-
-        var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct);
-        var rubric = await CallRubricAsync(submission, scenario, assessmentPreflightResult.CaseNotesSnapshot, ct);
+        var (rubric, reservationId) = await GradeWithReservationAsync(submission, scenario, assessmentPreflightResult.CaseNotesSnapshot, ct);
 
         var canon = await canonEngine.DetectViolationsAsync(
             new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
@@ -209,45 +257,46 @@ public sealed class WritingSubmissionEvaluationPipeline(
         };
         db.WritingGrades.Add(grade);
 
-        if (assessmentRuleEngine is null)
+        if (assessmentRuleEngine is not null)
         {
-            throw ApiException.ServiceUnavailable(
-                "writing_assessment_rule_engine_unavailable",
-                "Writing assessment rule checks are not configured.",
-                retryable: false);
-        }
-        var assessmentReport = BuildAssessmentReport(
-            submission,
-            assessmentPreflightResult,
-            grade,
-            assessmentRuleEngine,
-            rubric.EstimatedScaledScore);
-        if (calibrationReleaseService is not null)
-        {
-            var release = await calibrationReleaseService.ResolveAsync(
-                grade.ModelUsed,
-                "unreleased",
-                ct);
-            var modelAnswerReady = modelAnswerService is not null
-                && (await modelAnswerService.PopulateAsync(
-                    assessmentReport.Report,
-                    assessmentReport.ModelAnswer,
-                    submission.UserId,
-                    ct)).IsReady;
-            if (release.CandidateNumericScoreEnabled && modelAnswerReady)
+            var assessmentReport = BuildAssessmentReport(
+                submission,
+                assessmentPreflightResult,
+                grade,
+                assessmentRuleEngine,
+                rubric.EstimatedScaledScore);
+            if (calibrationReleaseService is not null)
             {
-                assessmentReport.Report.Status = WritingAssessmentV11Status.CandidateReady;
-                assessmentReport.Report.CandidateNumericScoreEnabled = true;
-                assessmentReport.Report.CandidateReportVisible = true;
-                assessmentReport.ModelAnswer.IsCandidateVisible = true;
-                assessmentReport.Report.ConfidenceLabel = "medium";
-                assessmentReport.Report.ConfidenceRange = "calibration-approved range";
+                var release = await calibrationReleaseService.ResolveAsync(
+                    grade.ModelUsed,
+                    "unreleased",
+                    ct);
+                var modelAnswerReady = modelAnswerService is not null
+                    && (await modelAnswerService.PopulateAsync(
+                        assessmentReport.Report,
+                        assessmentReport.ModelAnswer,
+                        submission.UserId,
+                        ct)).IsReady;
+                if (release.CandidateNumericScoreEnabled && modelAnswerReady)
+                {
+                    assessmentReport.Report.Status = WritingAssessmentV11Status.CandidateReady;
+                    assessmentReport.Report.CandidateNumericScoreEnabled = true;
+                    assessmentReport.Report.CandidateReportVisible = true;
+                    assessmentReport.ModelAnswer.IsCandidateVisible = true;
+                    assessmentReport.Report.ConfidenceLabel = "medium";
+                    assessmentReport.Report.ConfidenceRange = "calibration-approved range";
+                }
             }
+            db.WritingAssessmentReportsV11.Add(assessmentReport.Report);
+            db.WritingAssessmentModelAnswers.Add(assessmentReport.ModelAnswer);
         }
-        db.WritingAssessmentReportsV11.Add(assessmentReport.Report);
-        db.WritingAssessmentModelAnswers.Add(assessmentReport.ModelAnswer);
+
         submission.Status = "graded";
         await db.SaveChangesAsync(ct);
+        if (!string.IsNullOrWhiteSpace(reservationId) && creditReservations is not null)
+        {
+            await creditReservations.CommitAsync(reservationId, ct);
+        }
 
         try
         {
@@ -362,16 +411,155 @@ public sealed class WritingSubmissionEvaluationPipeline(
         });
     }
 
+    private async Task<bool> TryClaimSubmissionAsync(WritingSubmission submission, CancellationToken ct)
+    {
+        if (submission.Status is not (WritingSubmissionStatuses.Queued or WritingSubmissionStatuses.Preflight))
+        {
+            return false;
+        }
+
+        var owner = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
+        if (owner.Length > 128) owner = owner[..128];
+        var now = clock.GetUtcNow();
+        var rows = await db.WritingSubmissions
+            .Where(s => s.Id == submission.Id
+                        && (s.Status == WritingSubmissionStatuses.Queued
+                            || s.Status == WritingSubmissionStatuses.Preflight))
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(s => s.Status, WritingSubmissionStatuses.Grading)
+                .SetProperty(s => s.ClaimedAt, now)
+                .SetProperty(s => s.ClaimOwner, owner), ct);
+        if (rows == 0) return false;
+
+        submission.Status = WritingSubmissionStatuses.Grading;
+        submission.ClaimedAt = now;
+        submission.ClaimOwner = owner;
+        return true;
+    }
+
+    private async Task<(RubricResult Rubric, string? ReservationId)> GradeWithReservationAsync(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        string caseNotesSnapshot,
+        CancellationToken ct)
+    {
+        string? reservationId = null;
+        var businessReference = $"writing-grade:{submission.Id:N}";
+        var operationId = submission.GradeOperationId ?? Guid.NewGuid().ToString("N");
+        try
+        {
+            if (creditReservations is not null)
+            {
+                var ticket = await creditReservations.ReserveWritingAsync(
+                    submission.UserId, operationId, businessReference, ct);
+                reservationId = ticket.ReservationId;
+                submission.GradeOperationId = ticket.OperationId;
+            }
+
+            if (TryReadPersistedRubric(submission, out var persisted))
+            {
+                return (persisted, reservationId);
+            }
+
+            var rubric = await CallRubricAsync(submission, scenario, caseNotesSnapshot, reservationId, ct);
+            submission.ProviderResultJson = JsonSerializer.Serialize(new PersistedProviderResult(
+                rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
+                rubric.EstimatedBand, rubric.EstimatedScaledScore,
+                rubric.PerCriterionFeedbackJson, rubric.TopThreePrioritiesJson,
+                rubric.ConfidenceFlag, rubric.ModelUsed));
+            submission.GradeOperationId ??= operationId;
+            await db.SaveChangesAsync(ct);
+            return (rubric, reservationId);
+        }
+        catch
+        {
+            if (reservationId is not null && creditReservations is not null)
+            {
+                try { await creditReservations.ReleaseAsync(reservationId, CancellationToken.None); }
+                catch (Exception releaseEx)
+                {
+                    logger.LogWarning(releaseEx, "Failed to release writing credit reservation {ReservationId}", reservationId);
+                }
+            }
+
+            throw;
+        }
+    }
+
+    private static bool TryReadPersistedRubric(WritingSubmission submission, out RubricResult rubric)
+    {
+        rubric = null!;
+        if (string.IsNullOrWhiteSpace(submission.ProviderResultJson)) return false;
+        try
+        {
+            var parsed = JsonSerializer.Deserialize<PersistedProviderResult>(submission.ProviderResultJson);
+            if (parsed is null) return false;
+            rubric = new RubricResult(
+                parsed.C1, parsed.C2, parsed.C3, parsed.C4, parsed.C5, parsed.C6,
+                parsed.EstimatedBand, parsed.EstimatedScaledScore,
+                parsed.PerCriterionFeedbackJson, parsed.TopThreePrioritiesJson,
+                parsed.ConfidenceFlag, parsed.ModelUsed);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string? NormalizeIdempotencyKey(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var trimmed = raw.Trim();
+        return trimmed.Length <= 128 ? trimmed : trimmed[..128];
+    }
+
+    private static string BuildDerivedIdempotencyKey(WritingSubmissionGradeContext context, string letterHash)
+    {
+        var revision = context.IsRevision ? context.OriginalSubmissionId?.ToString("N") ?? "rev" : "orig";
+        var key = $"wsubmit:{context.UserId}:{context.ScenarioId:N}:{letterHash}:{context.Mode}:{revision}";
+        return key.Length <= 128 ? key : ComputeHash(key);
+    }
+
+    private static string BuildReuseKeyHash(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        EffectiveSettings settings)
+    {
+        var profession = (scenario?.Profession ?? "medicine").Trim().ToLowerInvariant();
+        var revision = submission.IsRevision ? submission.OriginalSubmissionId?.ToString("N") ?? "rev" : "orig";
+        var material = string.Join('|',
+            submission.UserId,
+            submission.ScenarioId.ToString("N"),
+            submission.LetterContentHash,
+            profession,
+            revision,
+            "rubric:v11",
+            "rulebook:active",
+            "prompt:writing.score.v1",
+            "model:canonical",
+            settings.Writing.GradeIdempotencyTtlHours.ToString());
+        return ComputeHash(material);
+    }
+
+    private sealed record PersistedProviderResult(
+        int C1, int C2, int C3, int C4, int C5, int C6,
+        int EstimatedBand, int EstimatedScaledScore,
+        string PerCriterionFeedbackJson, string TopThreePrioritiesJson,
+        string ConfidenceFlag, string ModelUsed);
+
     private async Task<WritingSubmissionGradeOutcome?> TryReuseExistingGradeAsync(WritingSubmission submission, CancellationToken ct)
     {
         var ttl = TimeSpan.FromHours((await settingsProvider.GetAsync(ct)).Writing.GradeIdempotencyTtlHours);
         var cutoff = clock.GetUtcNow() - ttl;
+        var reuseKey = submission.ReuseKeyHash;
         var existing = await db.WritingGrades.AsNoTracking()
             .Join(db.WritingSubmissions.AsNoTracking(), g => g.SubmissionId, s => s.Id, (g, s) => new { g, s })
             .Where(x => x.s.UserId == submission.UserId
-                        && x.s.LetterContentHash == submission.LetterContentHash
                         && x.g.GradedAt >= cutoff
-                        && x.s.Id != submission.Id)
+                        && x.s.Id != submission.Id
+                        && ((reuseKey != null && x.s.ReuseKeyHash == reuseKey)
+                            || (reuseKey == null && x.s.LetterContentHash == submission.LetterContentHash)))
             .OrderByDescending(x => x.g.GradedAt)
             .Select(x => x.g)
             .FirstOrDefaultAsync(ct);
@@ -443,6 +631,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         WritingSubmission submission,
         WritingScenario? scenario,
         string caseNotesSnapshot,
+        string? creditReservationId,
         CancellationToken ct)
     {
         var letterType = scenario?.LetterType ?? "routine_referral";
@@ -481,6 +670,9 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 AssessmentContext = submission.Mode == "mock"
                     ? AiAssessmentContext.Mock
                     : AiAssessmentContext.Practice,
+                CreditReservationId = creditReservationId,
+                ResourceId = submission.Id.ToString("N"),
+                ResourceType = "writing_submission",
             }, ct);
         }
         catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)

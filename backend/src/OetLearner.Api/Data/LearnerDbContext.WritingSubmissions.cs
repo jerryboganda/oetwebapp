@@ -24,6 +24,12 @@ public partial class LearnerDbContext
             e.HasIndex(x => x.LetterContentHash);
             e.HasIndex(x => new { x.UserId, x.ScenarioId });
             e.HasIndex(x => x.OriginalSubmissionId);
+            e.HasIndex(x => new { x.UserId, x.IdempotencyKey })
+                .IsUnique()
+                .HasFilter("\"IdempotencyKey\" IS NOT NULL")
+                .HasDatabaseName("UX_WritingSubmissions_User_IdempotencyKey");
+            e.HasIndex(x => x.ReuseKeyHash)
+                .HasDatabaseName("IX_WritingSubmissions_ReuseKeyHash");
         });
 
         modelBuilder.Entity<WritingGrade>(e =>

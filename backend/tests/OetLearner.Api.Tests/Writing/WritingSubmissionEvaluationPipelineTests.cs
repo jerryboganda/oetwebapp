@@ -167,7 +167,8 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
             events: aiPathReached ? new NoopWritingEventBus() : null!,
             TimeProvider.System,
             TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
-            NullLogger<WritingSubmissionEvaluationPipeline>.Instance);
+            NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
+            assessmentPreflight: new PassThroughPreflight());
 
     private sealed class FakeAiGateway : IAiGatewayService
     {
@@ -214,5 +215,21 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
         public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)
             where TEvent : WritingEvent
             => Task.CompletedTask;
+    }
+
+    private sealed class PassThroughPreflight : IWritingAssessmentPreflightService
+    {
+        public Task<WritingAssessmentPreflightResult> ValidateAsync(WritingSubmission submission, CancellationToken ct)
+            => Task.FromResult(new WritingAssessmentPreflightResult(
+                CanScore: true,
+                Status: WritingAssessmentV11Status.CandidateReady,
+                MissingInputCodes: Array.Empty<string>(),
+                ReleaseBlockCodes: Array.Empty<string>(),
+                AppliedRulePacks: Array.Empty<string>(),
+                Profession: "medicine",
+                LetterType: "routine_referral",
+                RulePackVersion: "test",
+                TaskSnapshot: "Refer the patient.",
+                CaseNotesSnapshot: "Patient name: John Jones\nAge: 54"));
     }
 }

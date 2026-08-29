@@ -87,47 +87,10 @@ public sealed class WritingHeuristicPreAssessmentService(
         // 1) Always compute the deterministic heuristic first (offline-safe fallback).
         var heuristic = BuildHeuristic(request);
 
-        // 2) Only attempt LLM enrichment when explicitly enabled. Defaults to false so the whole
-        //    thing works with zero external dependencies in Docker-local and in tests/mocks.
-        var llmEnabled = configuration.GetValue("Writing:PreAssessmentLlmEnabled", false);
-        if (!llmEnabled)
-        {
-            return heuristic;
-        }
-
-        try
-        {
-            var grounded = aiGateway.BuildGroundedPrompt(new AiGroundingContext
-            {
-                Kind = RuleKind.Writing,
-                LetterType = NormalizeLetterTypeForGrounding(request.Scenario.LetterType),
-                Task = AiTaskMode.Score,
-            });
-
-            var result = await aiGateway.CompleteAsync(new AiGatewayRequest
-            {
-                Prompt = grounded,
-                UserInput = BuildUserInput(request, heuristic),
-                Temperature = 0.0,
-                FeatureCode = "writing.pre_assessment",
-            }, ct);
-
-            if (string.IsNullOrWhiteSpace(result?.Completion))
-            {
-                return heuristic;
-            }
-
-            return MergeLlm(heuristic, result.Completion);
-        }
-        catch (Exception ex)
-        {
-            // Missing keys / no provider / PromptNotGroundedException / transport errors all land here.
-            logger.LogWarning(
-                ex,
-                "Writing pre-assessment LLM enrichment failed for submission {SubmissionId}; using heuristic.",
-                request.SubmissionId);
-            return heuristic;
-        }
+        // W6 — paid Writing scoring is exclusively
+        // WritingSubmissionEvaluationPipeline. This adapter stays heuristic-only.
+        _ = (aiGateway, configuration, logger, ct);
+        return heuristic;
     }
 
     // ── Deterministic heuristic ────────────────────────────────────────────────────────────────

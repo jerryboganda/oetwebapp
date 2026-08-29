@@ -5,6 +5,10 @@ using OetLearner.Api.Data;
 namespace OetLearner.Api.Services.Writing;
 
 /// <summary>
+/// W6 compatibility adapter (read-only). Canonical grading lives in
+/// <see cref="WritingSubmissionEvaluationPipeline"/>; this service never
+/// invokes a provider.
+///
 /// Backs <c>GET /v1/writing/evaluations/{evaluationId}/dual-assessment</c>.
 /// Returns the AI track (from <see cref="Domain.Evaluation"/>) and — when an
 /// expert has submitted a review — the Tutor track (from the latest
