@@ -8,36 +8,37 @@ Production app: `https://app.oetwithdrhesham.co.uk` · API: `https://api.oetwith
 
 ---
 
-## 0. STOP — check this first, everything else depends on it
+## 0. Deploy status — LANDED, verified
 
-**`ac499562b` is on `main` but was NOT deployed.** The `Build & Deploy (web + API)` workflow
-(run `33260072702`) failed at the `syntax-gate` job in ~4 seconds with:
+`2cdf9b86d` (which contains the release commit `ac499562b`) **is live on production.**
+`Build & Deploy (web + API)` run `33271190604` completed **success** at 2026-08-29 19:57 UTC with
+all seven jobs green, including `migrate-production` and `deploy`.
 
-> The job was not started because recent account payments have failed or your spending limit
-> needs to be increased. Please check the 'Billing & plans' section in your settings.
+Confirmed against production before this doc was updated:
 
-Every downstream job (`build-web`, `build-api`, `migrate-production`, `deploy`) was skipped. Two
-re-runs produced the same result — it is an account-level block, not a flake. **The last image
-that actually reached production is `781b61272`** (run `33253212624`, 2026-08-29 12:43 UTC).
+| Check | Result |
+|---|---|
+| `GET /health` | `status: ok`, `database: ok` |
+| `GET /health/ready` | `database`, `migrations`, `stuck_jobs`, `storage` all `ok` |
+| `app.oetwithdrhesham.co.uk/sw.js` | `CACHE_VERSION = 'oet-v5'` and `EXAM_MEDIA_API` present — the frontend half of this release is served |
+| `GET /v1/admin/papers/{id}/listening/part-bc/source-audit` | **401** (route registered, auth-gated). A deliberately fake route under the same prefix returns **404**, so 401 proves the new endpoint is deployed |
 
-Before testing anything, confirm what is actually live:
-
-```bash
-gh run list --workflow "Build & Deploy (web + API)" --limit 3 \
-  --json databaseId,status,conclusion,headSha,createdAt
-```
-
-- If the newest **successful** run's `headSha` is **not** `ac499562b` (or a later commit that
-  contains it), **the fixes are not live** and every check below will still show the old
-  behaviour. That is expected, not a new bug. Report it and stop.
-- The owner must clear the GitHub billing block, then re-run the workflow. **Do not** change
-  repository visibility to work around it unless the owner explicitly asks.
-
-Sanity check that prod is up at all:
+If you want to re-confirm at any point:
 
 ```bash
-curl -s https://api.oetwithdrhesham.co.uk/health
+gh run list --workflow "Build & Deploy (web + API)" --limit 1   --json databaseId,status,conclusion,headSha
+curl -s https://api.oetwithdrhesham.co.uk/health/ready
+curl -s https://app.oetwithdrhesham.co.uk/sw.js | grep CACHE_VERSION   # expect oet-v5
 ```
+
+> **Project rule for any future deploy:** GitHub Actions runs require the repo to be **public**
+> for the duration of the run. Flip it public, run the workflow, then flip it back to private
+> immediately. **Never leave it public.** (`gh repo edit jerryboganda/oetwebapp --visibility
+> public|private --accept-visibility-change-consequences`.) The repo is private as of this
+> writing — confirm with `gh repo view --json visibility` before you finish.
+
+**What is live is the mechanism, not the repaired data.** Section 3 is still a required manual
+step before any Part B/C heading check can pass.
 
 ---
 
@@ -304,5 +305,5 @@ for every failure, and a screenshot for anything candidate-visible. List separat
 
 1. Every item still `unrecoverable` after the recovery sweep (paper + number + the stated reason).
 2. Any paper with `sourceTextAvailable: false`.
-3. The deployed SHA you tested against — **if it is not `ac499562b` or later, say so first**;
-   nothing in sections 4–6 is meaningful until the deploy lands.
+3. The deployed SHA you tested against. It should be `2cdf9b86d` or later; re-confirm with the
+   commands in section 0 before you start, and say so if it has moved.
