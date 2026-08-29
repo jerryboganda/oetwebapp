@@ -254,14 +254,17 @@ public static class SpeakingSessionEndpoints
         // by id without re-checking ownership.
         var userId = ResolveUserId(http);
         _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
+        var canonical = http.RequestServices.GetRequiredService<ISpeakingCanonicalAssessmentService>();
+        await canonical.AssessNowAsync(id, ct);
         if (await db.SpeakingSimulationV11PersonaRuntimeSnapshots.AsNoTracking()
             .AnyAsync(x => x.SpeakingSessionId == id, ct))
         {
-            return Results.Ok(await v11Assessor.RunAssessmentAsync(id, ct));
+            var v11Latest = await v11Assessor.GetLatestAsync(id, ct);
+            return v11Latest is null ? Results.Accepted() : Results.Ok(v11Latest);
         }
 
-        var assessment = await assessor.RunAssessmentAsync(id, ct);
-        return Results.Ok(assessment);
+        var assessment = await assessor.GetLatestAsync(id, ct);
+        return assessment is null ? Results.Accepted() : Results.Ok(assessment);
     }
 
     // ─────────────────────────────────────────────────────────────────

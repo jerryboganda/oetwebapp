@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Billing;
 
 namespace OetLearner.Api.Services.Speaking;
@@ -32,7 +33,9 @@ public sealed class SpeakingExamService(
     SpeakingAiAssessmentService assessor,
     ILogger<SpeakingExamService> logger,
     IAiPackageCreditService? creditService = null,
-    SpeakingSimulationV11PersonaService? personaService = null)
+    SpeakingSimulationV11PersonaService? personaService = null,
+    OetLearner.Api.Services.Ai.IAiCreditReservationService? creditReservations = null,
+    ISpeakingCanonicalAssessmentService? canonical = null)
 {
     private const int DefaultPrepSeconds = 180;
     private const int DefaultDiscussionSeconds = 300;
@@ -572,25 +575,13 @@ public sealed class SpeakingExamService(
             return new SpeakingExamCardResult(cardNumber, sessionId, "pending", null);
         }
 
-        // Legacy AI exam without a v1.1 persona: preserve the historical
-        // assessment path. Generate lazily if the card is finished but not
-        // yet scored (the transcript may still be settling).
         var latest = await assessor.GetLatestAsync(sessionId, ct);
         if (latest is null)
         {
             var child = await db.SpeakingSessions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == sessionId, ct);
-            if (child is not null && child.State == SpeakingSessionState.Finished)
+            if (child is not null && child.State == SpeakingSessionState.Finished && canonical is not null)
             {
-                try
-                {
-                    latest = await assessor.RunAssessmentAsync(sessionId, ct);
-                }
-                catch (ApiException ex) when (ex.ErrorCode is "speaking_session_no_transcript"
-                    or "speaking_ai_unavailable" or "speaking_ai_unparseable")
-                {
-                    logger.LogInformation(
-                        "Exam {ExamId} card {Card} not yet scorable: {Code}", exam.Id, cardNumber, ex.ErrorCode);
-                }
+                await canonical.EnqueueAsync(sessionId, ct);
             }
         }
 
@@ -748,8 +739,18 @@ public sealed class SpeakingExamService(
         var child = await db.SpeakingSessions.FirstOrDefaultAsync(s => s.Id == sessionId, ct);
         if (child is null || child.State == SpeakingSessionState.Finished) return;
         child.State = SpeakingSessionState.Active;
+        var firstStart = child.RolePlayStartedAt is null;
         child.RolePlayStartedAt ??= now;
         child.UpdatedAt = now;
+        if (firstStart && creditReservations is not null)
+        {
+            var exam = await db.SpeakingExamSessions.FirstOrDefaultAsync(e => e.Id == child.ExamSessionId, ct);
+            var refId = child.ExamSlot == "b" ? exam?.CreditBRefId : exam?.CreditARefId;
+            if (!string.IsNullOrWhiteSpace(refId))
+            {
+                await creditReservations.CommitByBusinessReferenceAsync(refId, ct);
+            }
+        }
     }
 
     private async Task EndChildIfPresentAsync(string? sessionId, DateTimeOffset endedAt, CancellationToken ct)
@@ -764,6 +765,10 @@ public sealed class SpeakingExamService(
             child.ElapsedSeconds = Math.Max(0, (int)(endedAt - started).TotalSeconds);
         }
         child.UpdatedAt = endedAt;
+        if (canonical is not null)
+        {
+            await canonical.EnqueueAsync(child.Id, ct);
+        }
 
         // Mark the legacy attempt submitted so downstream queries stay coherent.
         if (!string.IsNullOrWhiteSpace(child.AttemptId))
@@ -832,11 +837,17 @@ public sealed class SpeakingExamService(
         }
 
         var refId = $"exam:{exam.Id}:card{slot.ToUpperInvariant()}";
+        if (creditReservations is not null)
+        {
+            var operationId = Guid.NewGuid().ToString("N");
+            await creditReservations.ReserveSpeakingAsync(exam.UserId, operationId, refId, ct);
+            if (slot == "a") exam.CreditARefId = refId; else exam.CreditBRefId = refId;
+            return;
+        }
+
         var debit = await creditService.DeductGradingCreditAsync(exam.UserId, "speaking", refId, ct);
         if (!debit.Debited)
         {
-            // already_debited is benign (a retried transition); anything else is
-            // a genuine insufficient-credit refusal.
             if (string.Equals(debit.ErrorCode, "already_debited", StringComparison.Ordinal))
             {
                 if (slot == "a") exam.CreditARefId = refId; else exam.CreditBRefId = refId;

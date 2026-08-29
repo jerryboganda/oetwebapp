@@ -54,6 +54,9 @@ public partial class LearnerDbContext
             entity.HasIndex(x => new { x.ExamSessionId, x.SpeakingSessionId });
             entity.HasIndex(x => x.RolePlayCardId);
             entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.IdentityHash)
+                .IsUnique()
+                .HasFilter("\"IdentityHash\" IS NOT NULL");
             entity.HasIndex(x => new { x.ExamSessionId, x.AssessmentKind, x.CardSlot });
             entity.HasOne<SpeakingExamSession>()
                 .WithMany()

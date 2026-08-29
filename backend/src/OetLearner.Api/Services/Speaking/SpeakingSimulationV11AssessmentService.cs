@@ -136,6 +136,19 @@ Rules:
             .Where(x => x.SpeakingSessionId == sessionId && x.IsLatest)
             .OrderByDescending(x => x.GeneratedAt)
             .FirstOrDefaultAsync(ct);
+        var transcriptHash = SpeakingCanonicalAssessmentService.HashTranscript(sourceTranscript?.SegmentsJson);
+        var identityHash = SpeakingCanonicalAssessmentService.HashIdentity(
+            sessionId,
+            session.RolePlayCardId,
+            transcriptHash,
+            gate.RubricVersion,
+            PromptTemplateId);
+        var existingByIdentity = await db.SpeakingSimulationV11Assessments.AsNoTracking()
+            .Where(x => x.IdentityHash == identityHash)
+            .OrderBy(x => x.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+        if (existingByIdentity is not null)
+            return Project(existingByIdentity, ReadReport(existingByIdentity.ReportJson));
         var turnQuery = db.SpeakingSimulationV11TurnEvidenceRows.AsNoTracking()
             .Where(x => x.SpeakingSessionId == sessionId);
         if (sourceTranscript is not null)
@@ -457,6 +470,8 @@ Rules:
             SourceRecordingId = recordingId, CardVersion = cardVersion,
             GraphDisclaimer = SpeakingSimulationV11Contracts.GraphDisclaimer,
             ReportJson = JsonSerializer.Serialize(report),
+            IdentityHash = identityHash,
+            TranscriptHash = transcriptHash,
             GeneratedAt = now, CreatedAt = now, UpdatedAt = now,
         };
         db.SpeakingSimulationV11Assessments.Add(row);
@@ -491,7 +506,19 @@ Rules:
             EstimatedCostUsd = usageRow?.CostEstimateUsd ?? 0m,
             GeneratedAt = now,
         });
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            var raced = await db.SpeakingSimulationV11Assessments.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.IdentityHash == identityHash, ct);
+            if (raced is not null)
+                return Project(raced, ReadReport(raced.ReportJson));
+            throw;
+        }
         await evidenceCapture.AttachAssessmentAsync(sessionId, assessmentId, ct);
         return Project(row, report);
     }

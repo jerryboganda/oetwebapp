@@ -8,6 +8,7 @@ public partial class LearnerDbContext
     public DbSet<SpeakingSession> SpeakingSessions => Set<SpeakingSession>();
     public DbSet<SpeakingRecording> SpeakingRecordings => Set<SpeakingRecording>();
     public DbSet<SpeakingTranscript> SpeakingTranscripts => Set<SpeakingTranscript>();
+    public DbSet<SpeakingPatientTurn> SpeakingPatientTurns => Set<SpeakingPatientTurn>();
     public DbSet<SpeakingResultVisibilityConfig> SpeakingResultVisibilityConfigs => Set<SpeakingResultVisibilityConfig>();
 
     partial void OnModelCreatingSpeakingSessions(ModelBuilder modelBuilder)
@@ -39,6 +40,14 @@ public partial class LearnerDbContext
                 .WithMany()
                 .HasForeignKey(x => x.SpeakingSessionId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SpeakingPatientTurn>(e =>
+        {
+            e.HasIndex(x => new { x.SessionId, x.ClientTurnId })
+                .IsUnique()
+                .HasFilter("\"ClientTurnId\" IS NOT NULL");
+            e.HasIndex(x => new { x.SessionId, x.SequenceNumber }).IsUnique();
         });
 
         modelBuilder.Entity<SpeakingResultVisibilityConfig>(e =>

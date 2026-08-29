@@ -259,16 +259,16 @@ public partial class ConversationHub
     /// interruption is recorded on the transcript segment so the AI grader
     /// can weigh it; it never blocks the turn.
     /// </summary>
-    public Task SendSpeakingRoleplayTurn(string speakingSessionId, string audioBase64, string? mimeType, string? turnMetaJson = null)
-        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64, transcribedText: null, mimeType, turnMetaJson);
+    public Task SendSpeakingRoleplayTurn(string speakingSessionId, string audioBase64, string? mimeType, string? turnMetaJson = null, string? clientTurnId = null)
+        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64, transcribedText: null, mimeType, turnMetaJson, clientTurnId);
 
     /// <summary>
     /// Text-input variant of <see cref="SendSpeakingRoleplayTurn"/> for
     /// keyboard accessibility and automated tests — bypasses STT and feeds
     /// the supplied text straight into the in-character AI reply loop.
     /// </summary>
-    public Task SendSpeakingRoleplayText(string speakingSessionId, string text)
-        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64: null, transcribedText: text, mimeType: null, turnMetaJson: null);
+    public Task SendSpeakingRoleplayText(string speakingSessionId, string text, string? clientTurnId = null)
+        => ProcessSpeakingTurnAsync(speakingSessionId, audioBase64: null, transcribedText: text, mimeType: null, turnMetaJson: null, clientTurnId);
 
     /// <summary>
     /// Sends the neutral, server-authored response after a learner has been
@@ -398,7 +398,8 @@ public partial class ConversationHub
         string? audioBase64,
         string? transcribedText,
         string? mimeType,
-        string? turnMetaJson)
+        string? turnMetaJson,
+        string? clientTurnId = null)
     {
         var userId = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId))
@@ -426,6 +427,29 @@ public partial class ConversationHub
             // Avoid leaking session ids that belong to other learners.
             await Clients.Caller.SendAsync("SpeakingRoleplayError", "SESSION_NOT_FOUND",
                 "That Speaking session does not exist.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(clientTurnId) && !string.IsNullOrWhiteSpace(turnMetaJson))
+        {
+            try
+            {
+                using var meta = JsonDocument.Parse(turnMetaJson);
+                if (meta.RootElement.TryGetProperty("clientTurnId", out var idEl))
+                    clientTurnId = idEl.GetString();
+            }
+            catch (JsonException)
+            {
+                // Turn metadata is advisory.
+            }
+        }
+
+        var turns = sp.GetRequiredService<ISpeakingPatientTurnService>();
+        var replay = await turns.TryReplayAsync(speakingSessionId, clientTurnId, ct);
+        if (replay is not null)
+        {
+            await Clients.Caller.SendAsync("PatientUtterance",
+                JsonSerializer.Deserialize<JsonElement>(replay.ResponseJson), ct);
             return;
         }
         if (session.State != SpeakingSessionState.WarmUp
@@ -809,7 +833,7 @@ public partial class ConversationHub
         }
 
         // ── 5. Stream the patient utterance back (hidden card stays server-side) ──
-        await Clients.Caller.SendAsync("PatientUtterance", new
+        var utterance = new
         {
             speaker = isWarmUp ? "interlocutor" : "patient",
             phase = isWarmUp ? "warmup" : "roleplay",
@@ -818,7 +842,16 @@ public partial class ConversationHub
             emotionHint = reply.EmotionHint,
             shouldEnd = reply.ShouldEnd,
             timestamp = DateTimeOffset.UtcNow,
-        }, ct);
+        };
+        await turns.PersistAsync(
+            speakingSessionId,
+            clientTurnId,
+            utterance.speaker,
+            replyText,
+            utterance,
+            ct);
+        await turns.AppendSummaryAsync(speakingSessionId, learnerText, replyText, ct);
+        await Clients.Caller.SendAsync("PatientUtterance", utterance, ct);
 
         if (reply.ShouldEnd)
         {
@@ -1007,39 +1040,20 @@ public partial class ConversationHub
                     // Already ended by the client — that's fine.
                 }
 
-                // Fire AI assessment asynchronously so the client gets a
-                // notification when the row is persisted.
                 try
                 {
-                    var assessmentDb = sp.GetRequiredService<LearnerDbContext>();
-                    var hasV11 = await assessmentDb.SpeakingSimulationV11PersonaRuntimeSnapshots
-                        .AsNoTracking()
-                        .AnyAsync(x => x.SpeakingSessionId == speakingSessionId, cts.Token);
-                    string assessmentId;
-                    bool awaitingReview;
-                    if (hasV11)
-                    {
-                        var v11Assessor = sp.GetRequiredService<SpeakingSimulationV11AssessmentService>();
-                        var v11 = await v11Assessor.RunAssessmentAsync(speakingSessionId, cts.Token);
-                        assessmentId = v11.AssessmentId;
-                        awaitingReview = string.IsNullOrEmpty(v11.AssessmentId)
-                            || !string.Equals(v11.Status, "Complete", StringComparison.OrdinalIgnoreCase);
-                    }
-                    else
-                    {
-                        var assessor = sp.GetRequiredService<SpeakingAiAssessmentService>();
-                        var assessment = await assessor.RunAssessmentAsync(speakingSessionId, cts.Token);
-                        assessmentId = assessment.AssessmentId;
-                        awaitingReview = string.IsNullOrEmpty(assessment.AssessmentId);
-                    }
+                    var canonical = sp.GetRequiredService<ISpeakingCanonicalAssessmentService>();
+                    var ticket = await canonical.EnqueueAsync(speakingSessionId, cts.Token);
                     if (hubContext is not null)
                     {
-                        // Mock Speaking is human-marked: RunAssessmentAsync returns an
-                        // empty AssessmentId (no AI row) and the session is routed to
-                        // the tutor queue. Signal "AwaitingReview" instead of a score.
                         await hubContext.Clients.Group(groupName).SendAsync(
-                            awaitingReview ? "AwaitingReview" : "AssessmentReady",
-                            new { assessmentId, sessionId = speakingSessionId, awaitingReview },
+                            "AssessmentQueued",
+                            new
+                            {
+                                operationId = ticket.OperationId,
+                                sessionId = speakingSessionId,
+                                alreadyExisted = ticket.AlreadyExisted,
+                            },
                             cts.Token);
                     }
                 }

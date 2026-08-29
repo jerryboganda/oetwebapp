@@ -62,7 +62,10 @@ public static class SpeakingSimulationV11Endpoints
     {
         var userId = ResolveUserId(http);
         _ = await sessions.GetSessionForLearnerAsync(userId, id, ct);
-        return Results.Ok(await assessor.RunAssessmentAsync(id, ct));
+        var canonical = http.RequestServices.GetRequiredService<ISpeakingCanonicalAssessmentService>();
+        await canonical.AssessNowAsync(id, ct);
+        var latest = await assessor.GetLatestAsync(id, ct);
+        return latest is null ? Results.Accepted() : Results.Ok(latest);
     }
 
     private static async Task<IResult> GetSessionAssessmentAsync(

@@ -87,6 +87,31 @@ public class SpeakingAiAssessment
     /// <summary>Always true in Phase 2/4 — AI scores never become the
     /// official grade; only tutor scores flip `IsFinal`.</summary>
     public bool IsAdvisory { get; set; } = true;
+
+    /// <summary>W7 identity: session|card|transcript|rubric|prompt.</summary>
+    [MaxLength(64)]
+    public string? IdentityHash { get; set; }
+
+    [MaxLength(64)]
+    public string? TranscriptHash { get; set; }
+
+    [MaxLength(64)]
+    public string? RubricVersion { get; set; }
+
+    [MaxLength(64)]
+    public string? CardId { get; set; }
+
+    [MaxLength(64)]
+    public string? GradeOperationId { get; set; }
+
+    public DateTimeOffset? ClaimedAt { get; set; }
+
+    [MaxLength(128)]
+    public string? ClaimOwner { get; set; }
+
+    public string? ProviderResultJson { get; set; }
+
+    public bool IsDuplicate { get; set; }
 }
 
 [Index(nameof(SpeakingSessionId), nameof(IsFinal))]

@@ -201,8 +201,36 @@ public class SpeakingSession
     [MaxLength(1000)]
     public string? TechnicalIssueNote { get; set; }
 
+    /// <summary>W7 bounded history — persisted rolling conversation summary
+    /// so later provider turns do not resend the unbounded transcript.</summary>
+    public string? ConversationSummaryText { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public class SpeakingPatientTurn
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SessionId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? ClientTurnId { get; set; }
+
+    public int SequenceNumber { get; set; }
+
+    [MaxLength(16)]
+    public string Role { get; set; } = "patient";
+
+    public string Text { get; set; } = string.Empty;
+
+    public string ResponseJson { get; set; } = "{}";
+
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 [Index(nameof(SpeakingSessionId))]

@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services;
 
@@ -20,7 +21,8 @@ public sealed class SpeakingEvaluationPipeline(
     IAiGatewayService aiGateway,
     SpeakingRuleEngine ruleEngine,
     ILogger<SpeakingEvaluationPipeline> logger,
-    IAiPackageCreditService? aiPackageCreditService = null) : ISpeakingEvaluationPipeline
+    IAiPackageCreditService? aiPackageCreditService = null,
+    SpeakingAiAssessmentService? sessionAssessor = null) : ISpeakingEvaluationPipeline
 {
     public async Task CompleteTranscriptionAsync(BackgroundJobItem job, CancellationToken cancellationToken)
     {
@@ -83,186 +85,27 @@ public sealed class SpeakingEvaluationPipeline(
             return;
         }
 
-        var profession = ParseProfession(content.ProfessionId);
-        var cardType = NormalizeCardType(content.ScenarioType, content.DetailJson);
-        var turns = transcript
-            .Select(line => new SpeakingTurn(
-                line.Speaker,
-                line.Text,
-                SecondsToMilliseconds(line.StartTime),
-                SecondsToMilliseconds(line.EndTime)))
-            .ToList();
-
-        var findings = ruleEngine.Audit(new SpeakingAuditInput(turns, cardType, profession));
-        var prompt = aiGateway.BuildGroundedPrompt(new AiGroundingContext
+        if (linkedSession is not null && sessionAssessor is not null)
         {
-            Kind = RuleKind.Speaking,
-            Profession = profession,
-            Task = AiTaskMode.Score,
-            CardType = cardType,
-        });
-
-        AiGatewayResult? aiResult = null;
-        int? aiEstimatedScore = null;
-        IReadOnlyList<GatewayFinding> aiFindings = Array.Empty<GatewayFinding>();
-        OetScoring.SpeakingCriterionScores? aiCriterionScores = null;
-        string aiProvenance = "gateway";
-
-        try
-        {
-            aiResult = await aiGateway.CompleteAsync(new AiGatewayRequest
-            {
-                Prompt = prompt,
-                UserInput = BuildEvaluationUserInput(content, attempt, transcript, findings),
-                Model = string.Empty,
-                Temperature = 0.1,
-                MaxTokens = 4096,
-                FeatureCode = AiFeatureCodes.SpeakingGrade,
-                UserId = attempt.UserId,
-                PromptTemplateId = "speaking.score.v1",
-                // Arms the gateway backstop. Mock attempts branch out above and
-                // never reach here; this keeps the refusal armed if that changes.
-                AssessmentContext = string.Equals(attempt.Context, "mock", StringComparison.OrdinalIgnoreCase)
-                    ? AiAssessmentContext.Mock
-                    : AiAssessmentContext.Practice,
-            }, cancellationToken);
-
-            (aiEstimatedScore, aiFindings, aiCriterionScores) = ParseGatewayScore(aiResult.Completion, prompt.Metadata.AppliedRuleIds);
-            aiProvenance = "gateway:mock";
-        }
-        catch (PromptNotGroundedException)
-        {
-            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_ungrounded", cancellationToken);
-            throw;
-        }
-        catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException quotaEx)
-        {
-            // Balance = 0 (spec Â§9). The gateway throws before debiting, so no
-            // credit was consumed. Mark the evaluation failed with a clean,
-            // non-retryable "no credits" reason instead of a generic provider error.
-            logger.LogInformation(
-                "Speaking grading blocked â€” AI grading credits exhausted for attempt {AttemptId} ({Code}).",
-                attempt.Id, quotaEx.ErrorCode);
-            evaluation.State = AsyncState.Failed;
-            evaluation.StatusReasonCode = "ai_credits_insufficient";
-            evaluation.StatusMessage = "You have no AI grading credits remaining. Purchase an AI Credits package to continue.";
-            evaluation.Retryable = false;
-            evaluation.RetryAfterMs = null;
+            await sessionAssessor.RunAssessmentAsync(linkedSession.Id, cancellationToken);
+            attempt.State = AttemptState.Completed;
+            evaluation.State = AsyncState.Completed;
+            evaluation.StatusReasonCode = "canonical_speaking_assessment";
+            evaluation.StatusMessage = "Scored by the canonical Speaking assessment pipeline.";
             evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-            evaluation.LearnerDisclaimer = "Grading was not completed â€” no AI grading credits remaining.";
-            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_quota_denied", cancellationToken);
-            return;
-        }
-        catch (Exception ex)
-        {
-            // Q3 (docs/SPEAKING-MODULE-PLAN.md Â§6): fail loud on AI provider
-            // errors instead of silently substituting rule-engine scores.
-            // The transcript is preserved on the attempt so the learner can
-            // retry. Free-tier counter refund is the AI gateway's
-            // responsibility (writes AiUsageRecord with Outcome=ProviderError).
-            logger.LogWarning(ex, "Speaking grounded AI score call failed for attempt {AttemptId}; marking evaluation Failed (Q3 fail-loud).", attempt.Id);
-            evaluation.State = AsyncState.Failed;
-            evaluation.StatusReasonCode = "ai_provider_error";
-            evaluation.StatusMessage = "We couldn't grade this attempt because the AI grading service was unavailable. Please retry â€” your free-tier counter has not been consumed.";
-            evaluation.Retryable = true;
-            evaluation.RetryAfterMs = 30_000;
-            evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-            evaluation.LearnerDisclaimer = "Grading was not completed. Please retry.";
-            attempt.AnalysisJson = JsonSupport.Serialize(MergeAnalysis(attempt.AnalysisJson, new Dictionary<string, object?>
-            {
-                ["aiProvenance"] = new
-                {
-                    featureCode = AiFeatureCodes.SpeakingGrade,
-                    promptTemplateId = "speaking.score.v1",
-                    gateway = "gateway_error:fail_loud",
-                    error = ex.GetType().Name,
-                    advisoryOnly = true
-                }
-            }));
-            await RefundAiPackageCreditAsync(attempt, evaluation, "ai_provider_error", cancellationToken);
             return;
         }
 
-        var mergedFindings = MergeFindings(findings, aiFindings);
-        var transcriptWithMarkers = AttachMarkers(transcript, mergedFindings);
-        // When the gateway provided per-criterion scores, prefer the
-        // canonical OetScoring projection over the AI's headline number so
-        // the scaled value is always derived through the single source of
-        // truth (AGENTS.md). Otherwise fall back to the AI scaled estimate
-        // or the deterministic finding-based heuristic.
-        var scaledFromCriteria = aiCriterionScores is { } cs ? OetScoring.SpeakingProjectedScaled(cs) : (int?)null;
-        var scaledEstimate = ClampScaled(scaledFromCriteria
-            ?? aiEstimatedScore
-            ?? EstimateScaledScore(mergedFindings, transcriptWithMarkers, attempt));
-        var speakingBand = OetScoring.GradeSpeaking(scaledEstimate);
-        var readinessBand = OetScoring.SpeakingReadinessBandFromScaled(scaledEstimate);
-        var scoreRange = BuildScoreRange(scaledEstimate);
-        var confidence = ResolveConfidence(attempt, mergedFindings, aiResult);
-        var phrasing = BuildPhrasingSegments(mergedFindings);
-
-        attempt.TranscriptJson = JsonSupport.Serialize(transcriptWithMarkers);
-        attempt.State = AttemptState.Completed;
-        attempt.CompletedAt = DateTimeOffset.UtcNow;
-        attempt.AnalysisJson = JsonSupport.Serialize(MergeAnalysis(attempt.AnalysisJson, new Dictionary<string, object?>
-        {
-            ["phrasing"] = phrasing,
-            ["waveformPeaks"] = BuildWaveformPeaks(attempt.AudioMetadataJson),
-            ["rulebookFindings"] = mergedFindings.Select(f => new
-            {
-                ruleId = f.RuleId,
-                severity = f.Severity,
-                message = f.Message,
-                quote = f.Quote,
-                fixSuggestion = f.FixSuggestion
-            }).ToList(),
-            ["aiProvenance"] = new
-            {
-                featureCode = AiFeatureCodes.SpeakingGrade,
-                promptTemplateId = "speaking.score.v1",
-                gateway = aiProvenance,
-                rulebookVersion = aiResult?.RulebookVersion ?? prompt.Metadata.RulebookVersion,
-                appliedRuleIds = aiResult?.AppliedRuleIds ?? prompt.Metadata.AppliedRuleIds,
-                transcriptionProvider = ReadTranscriptionProvider(attempt.AnalysisJson),
-                scoringPassAnchor = $"{OetScoring.ScaledPassGradeB}/500",
-                advisoryOnly = true
-            },
-            ["speakingBand"] = new
-            {
-                scaledEstimate,
-                requiredScaled = speakingBand.RequiredScaled,
-                requiredGrade = speakingBand.RequiredGrade,
-                grade = speakingBand.Grade,
-                passed = speakingBand.Passed,
-                readinessBand = OetScoring.SpeakingReadinessBandCode(readinessBand),
-                rubricMax = OetScoring.SpeakingRubricMax,
-                criteriaSource = aiCriterionScores is null ? "rulebook_fallback" : "ai_grounded"
-            }
-        }));
-
-        evaluation.State = AsyncState.Completed;
-        evaluation.ScoreRange = scoreRange;
-        evaluation.GradeRange = speakingBand.Grade;
-        evaluation.ConfidenceBand = confidence;
-        evaluation.StrengthsJson = JsonSupport.Serialize(BuildStrengths(mergedFindings, transcriptWithMarkers));
-        evaluation.IssuesJson = JsonSupport.Serialize(BuildIssues(mergedFindings, attempt.AnalysisJson));
-        evaluation.CriterionScoresJson = JsonSupport.Serialize(BuildCriterionScores(mergedFindings, scaledEstimate, aiCriterionScores));
-        evaluation.FeedbackItemsJson = JsonSupport.Serialize(BuildFeedbackItems(evaluation.Id, transcriptWithMarkers, mergedFindings));
-        evaluation.GeneratedAt = DateTimeOffset.UtcNow;
-        evaluation.ModelExplanationSafe = "This advisory estimate uses the Speaking rulebook, rule-cited transcript markers, and the universal 350/500 Speaking pass anchor.";
-        evaluation.LearnerDisclaimer = ReadTranscriptionProvider(attempt.AnalysisJson) == "mock-dev"
-            ? "Training estimate only. This run used mock development ASR provenance, so treat transcript evidence as a workflow preview and request tutor review for grading confidence."
-            : "Training estimate only. This is not an official OET result; request tutor review for grading confidence.";
-        evaluation.StatusReasonCode = ReadTranscriptionProvider(attempt.AnalysisJson) == "mock-dev"
-            ? "completed_mock_asr"
-            : "completed";
-        evaluation.StatusMessage = ReadTranscriptionProvider(attempt.AnalysisJson) == "mock-dev"
-            ? "Speaking evaluation completed with mock development ASR provenance."
-            : "Speaking evaluation completed.";
+        attempt.State = AttemptState.Submitted;
+        evaluation.State = AsyncState.Failed;
+        evaluation.StatusReasonCode = "canonical_speaking_required";
+        evaluation.StatusMessage = "Legacy attempt-based Speaking grading is disabled. Submit through the typed Speaking session flow.";
         evaluation.Retryable = false;
-        evaluation.RetryAfterMs = null;
         evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-    }
+        return;
 
+    }
+
     private async Task RefundAiPackageCreditAsync(Attempt attempt, Evaluation evaluation, string reasonCode, CancellationToken cancellationToken)
     {
         if (aiPackageCreditService is null) return;

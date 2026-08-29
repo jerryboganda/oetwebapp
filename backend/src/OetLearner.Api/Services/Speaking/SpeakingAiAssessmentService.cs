@@ -177,6 +177,22 @@ Scoring rules:
                 "An AI assessment requires a transcript. Wait for transcription to complete and try again.");
         }
 
+        var transcriptHash = SpeakingCanonicalAssessmentService.HashTranscript(transcript.SegmentsJson);
+        var identityHash = SpeakingCanonicalAssessmentService.HashIdentity(
+            sessionId,
+            session.RolePlayCardId,
+            transcriptHash,
+            session.RulebookVersion ?? string.Empty,
+            PromptTemplateId);
+        var reused = await db.SpeakingAiAssessments.AsNoTracking()
+            .Where(a => a.IdentityHash == identityHash)
+            .OrderBy(a => a.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+        if (reused is not null)
+        {
+            return ProjectAssessment(reused, RehydrateCriterionScores(reused));
+        }
+
         // ── Build grounded prompt via the canonical gateway ──
         var profession = ParseProfession(card.ProfessionId);
         AiGroundedPrompt prompt;
@@ -322,12 +338,32 @@ Scoring rules:
             ConfidenceBand = NormaliseConfidenceBand(parsed.ConfidenceBand),
             GeneratedAt = now,
             RulebookFindingsJson = "[]",
-            // OFFICIAL when this is an AI exam card; advisory for practice.
             IsAdvisory = session.Mode != SpeakingSessionMode.AiExam,
+            IdentityHash = identityHash,
+            TranscriptHash = transcriptHash,
+            RubricVersion = session.RulebookVersion,
+            CardId = session.RolePlayCardId,
+            ClaimedAt = now,
+            ClaimOwner = Environment.MachineName,
         };
 
         db.SpeakingAiAssessments.Add(row);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException)
+        {
+            db.Entry(row).State = EntityState.Detached;
+            var raced = await db.SpeakingAiAssessments.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.IdentityHash == identityHash, ct);
+            if (raced is not null)
+            {
+                return ProjectAssessment(raced, RehydrateCriterionScores(raced));
+            }
+
+            throw;
+        }
 
         return ProjectAssessment(row, parsed.CriterionScores);
     }

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services.Ai;
 
@@ -44,6 +45,14 @@ public sealed class AiLeasedOperationHandler(
         if (row.State == AiOperationState.ProviderSucceeded)
         {
             await CompleteFromPersistedAsync(db, row, ct);
+            return;
+        }
+
+        if (string.Equals(row.FeatureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)
+            && row.State is AiOperationState.Queued or AiOperationState.Leased or AiOperationState.RetryScheduled)
+        {
+            var canonical = scope.ServiceProvider.GetRequiredService<ISpeakingCanonicalAssessmentService>();
+            await canonical.ExecuteQueuedAsync(row.Id, ct);
             return;
         }
 

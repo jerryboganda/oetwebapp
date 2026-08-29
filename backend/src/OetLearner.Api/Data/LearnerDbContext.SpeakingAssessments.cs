@@ -17,6 +17,9 @@ public partial class LearnerDbContext
                 .WithMany()
                 .HasForeignKey(x => x.SpeakingSessionId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => x.IdentityHash)
+                .IsUnique()
+                .HasFilter("\"IdentityHash\" IS NOT NULL");
         });
 
         modelBuilder.Entity<SpeakingTutorAssessment>(e =>

@@ -1013,6 +1013,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingResultVisib
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingComplianceService>();
 // Phase 2 (B.3) — AI-side speaking assessment scorer.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingAiAssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingCanonicalAssessmentService,
+    OetLearner.Api.Services.Speaking.SpeakingCanonicalAssessmentService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingPatientTurnService,
+    OetLearner.Api.Services.Speaking.SpeakingPatientTurnService>();
 // Speaking module rebuild (2026-06-11) — two-card exam orchestrator.
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingExamService>();
 // Phase 6 (P6) — LiveKit gateway. When LiveKit is configured (api key

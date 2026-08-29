@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Ai;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Entitlements;
 
@@ -26,7 +27,9 @@ public sealed class SpeakingSessionService(
     LearnerDbContext db,
     IAiPackageCreditService? aiPackageCreditService = null,
     IEffectiveEntitlementResolver? entitlementResolver = null,
-    SpeakingSimulationV11PersonaService? personaService = null)
+    SpeakingSimulationV11PersonaService? personaService = null,
+    OetLearner.Api.Services.Ai.IAiCreditReservationService? creditReservations = null,
+    ISpeakingCanonicalAssessmentService? canonical = null)
 {
     private const string DefaultConsentVersion = "recording.v1";
 
@@ -208,19 +211,28 @@ public sealed class SpeakingSessionService(
         // pay-per-session (no credit) and AI-exam cards are charged by
         // SpeakingExamService, so only AiSelfPractice debits here.
         string? feedbackMessage = null;
-        if (session.Mode == SpeakingSessionMode.AiSelfPractice && aiPackageCreditService is not null)
+        if (session.Mode == SpeakingSessionMode.AiSelfPractice)
         {
-            var debit = await aiPackageCreditService.DeductGradingCreditAsync(
-                userId, "speaking", $"practice:{session.Id}", ct);
-            if (!debit.Debited
-                && !string.Equals(debit.ErrorCode, "already_debited", StringComparison.Ordinal))
+            var refId = $"practice:{session.Id}";
+            if (creditReservations is not null)
             {
-                throw ApiException.PaymentRequired(
-                    debit.ErrorCode ?? "no_ai_package_credits",
-                    debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+                var operationId = Guid.NewGuid().ToString("N");
+                await creditReservations.ReserveSpeakingAsync(userId, operationId, refId, ct);
             }
+            else if (aiPackageCreditService is not null)
+            {
+                var debit = await aiPackageCreditService.DeductGradingCreditAsync(
+                    userId, "speaking", refId, ct);
+                if (!debit.Debited
+                    && !string.Equals(debit.ErrorCode, "already_debited", StringComparison.Ordinal))
+                {
+                    throw ApiException.PaymentRequired(
+                        debit.ErrorCode ?? "no_ai_package_credits",
+                        debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+                }
 
-            feedbackMessage = debit.FeedbackMessage;
+                feedbackMessage = debit.FeedbackMessage;
+            }
         }
 
         session.WarmupEndedAt = now;
@@ -288,6 +300,10 @@ public sealed class SpeakingSessionService(
         session.State = SpeakingSessionState.Active;
         session.RolePlayStartedAt = now;
         session.UpdatedAt = now;
+        if (session.Mode == SpeakingSessionMode.AiSelfPractice && creditReservations is not null)
+        {
+            await creditReservations.CommitByBusinessReferenceAsync($"practice:{session.Id}", ct);
+        }
         await db.SaveChangesAsync(ct);
 
         return await GetSessionForLearnerAsync(userId, sessionId, ct);
@@ -326,6 +342,11 @@ public sealed class SpeakingSessionService(
         }
 
         await db.SaveChangesAsync(ct);
+        if (canonical is not null)
+        {
+            await canonical.EnqueueAsync(session.Id, ct);
+        }
+
         return await GetSessionForLearnerAsync(userId, sessionId, ct);
     }
 

@@ -166,6 +166,18 @@ public class SpeakingSimulationV11Assessment
 
     public string GraphDisclaimer { get; set; } = string.Empty;
     public string? ReportJson { get; set; }
+
+    [MaxLength(64)]
+    public string? IdentityHash { get; set; }
+
+    [MaxLength(64)]
+    public string? TranscriptHash { get; set; }
+
+    [MaxLength(64)]
+    public string? GradeOperationId { get; set; }
+
+    public bool IsDuplicate { get; set; }
+
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

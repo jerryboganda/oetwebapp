@@ -136,11 +136,18 @@ public sealed class WritingDoubleSubmitRaceTests : IAsyncDisposable
                 LastId, operationId, "writing", 1, AiCreditReservationState.Reserved, ReserveCalls > 1));
         }
 
+        public Task<AiCreditReservationTicket> ReserveSpeakingAsync(
+            string userId, string operationId, string businessReference, CancellationToken ct)
+            => ReserveWritingAsync(userId, operationId, businessReference, ct);
+
         public Task CommitAsync(string reservationId, CancellationToken ct)
         {
             CommitCalls++;
             return Task.CompletedTask;
         }
+
+        public Task CommitByBusinessReferenceAsync(string businessReference, CancellationToken ct)
+            => CommitAsync(LastId, ct);
 
         public Task ReleaseAsync(string reservationId, CancellationToken ct)
         {
