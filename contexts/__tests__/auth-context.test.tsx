@@ -13,6 +13,7 @@ const authClientMock = vi.hoisted(() => ({
   getPendingDeviceChallenge: vi.fn(() => null),
   sendEmailVerificationOtp: vi.fn(),
   verifyEmailOtp: vi.fn(),
+  reissueSessionAfterVerification: vi.fn(),
   beginAuthenticatorSetup: vi.fn(),
   confirmAuthenticatorSetup: vi.fn(),
   completeMfaChallenge: vi.fn(),
@@ -42,6 +43,34 @@ function createSession(overrides: Partial<AuthSession> = {}): AuthSession {
     },
     ...overrides,
   };
+}
+
+function unverifiedSession(): AuthSession {
+  const base = createSession();
+  return createSession({
+    accessToken: 'stale-jwt-email-unverified',
+    currentUser: {
+      ...base.currentUser,
+      isEmailVerified: false,
+      requiresEmailVerification: true,
+      emailVerifiedAt: null,
+    },
+  });
+}
+
+function VerifyConsumer() {
+  const { user, session, verifyEmailOtp } = useAuth();
+
+  return (
+    <div>
+      <div data-testid="verified">{user?.isEmailVerified ? 'verified' : 'unverified'}</div>
+      <div data-testid="access-token">{session?.accessToken ?? 'none'}</div>
+      <div data-testid="email">{user?.email ?? 'none'}</div>
+      <button type="button" onClick={() => void verifyEmailOtp('123456')}>
+        Verify
+      </button>
+    </div>
+  );
 }
 
 function AuthConsumer() {
@@ -145,5 +174,75 @@ describe('AuthProvider', () => {
     // FE-001: both the TanStack Query cache and the persisted expert store are wiped.
     expect(getQueryClient().getQueryCache().getAll()).toHaveLength(0);
     expect(useExpertStore.getState().reviewDrafts).toEqual({});
+  });
+
+  it('re-issues the session after email verification so the learner is not bounced back to /verify-email', async () => {
+    // POST /v1/auth/email/verify-otp returns CurrentUserResponse only — no
+    // tokens. Without an explicit re-issue the JWT still carries
+    // email_verified=false, the first learner API call 403s on the backend
+    // EmailVerifiedGate, and lib/api.ts hard-navigates the learner straight
+    // back onto the OTP screen.
+    const stale = unverifiedSession();
+    authClientMock.restoreSession.mockResolvedValue(stale);
+    authClientMock.verifyEmailOtp.mockResolvedValue({
+      ...unverifiedSession().currentUser,
+      isEmailVerified: true,
+      requiresEmailVerification: false,
+      emailVerifiedAt: '2026-08-30T00:00:00.000Z',
+    });
+    authClientMock.reissueSessionAfterVerification.mockResolvedValue(
+      createSession({ accessToken: 'fresh-jwt-email-verified' }),
+    );
+
+    render(
+      <AuthProvider>
+        <VerifyConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('access-token')).toHaveTextContent('stale-jwt-email-unverified');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('access-token')).toHaveTextContent('fresh-jwt-email-verified');
+    });
+    expect(authClientMock.reissueSessionAfterVerification).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('verified')).toHaveTextContent('verified');
+  });
+
+  it('keeps the verified learner signed in when the post-verification re-issue fails', async () => {
+    // The OTP is already burned by this point, so a flaky refresh must NOT read
+    // as an OTP error and must NOT sign the learner out.
+    const stale = unverifiedSession();
+    authClientMock.restoreSession.mockResolvedValue(stale);
+    authClientMock.verifyEmailOtp.mockResolvedValue({
+      ...unverifiedSession().currentUser,
+      isEmailVerified: true,
+      requiresEmailVerification: false,
+      emailVerifiedAt: '2026-08-30T00:00:00.000Z',
+    });
+    authClientMock.reissueSessionAfterVerification.mockResolvedValue(null);
+
+    render(
+      <AuthProvider>
+        <VerifyConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verified')).toHaveTextContent('unverified');
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Verify' }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('verified')).toHaveTextContent('verified');
+    });
+    // Session preserved, learner still signed in — no wipe, no throw.
+    expect(screen.getByTestId('access-token')).toHaveTextContent('stale-jwt-email-unverified');
+    expect(screen.getByTestId('email')).toHaveTextContent('learner@oet-prep.dev');
   });
 });

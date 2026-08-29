@@ -167,10 +167,27 @@ const SENSITIVE_REQUEST_HEADERS = new Set([
   'content-length',
   'expect',
   'forwarded',
-  'x-forwarded-for',
+  // NOTE: 'x-forwarded-for' is deliberately NOT stripped. The API resolves it
+  // through ForwardedHeadersMiddleware, which only honours hops originating
+  // inside Proxy:KnownNetworks (the docker subnets) — see Program.cs. Stripping
+  // it made Connection.RemoteIpAddress the web container's IP for every
+  // learner, collapsing the AuthBruteforce limiter into ONE global 100/min
+  // bucket shared by sign-in, register, verify-otp, MFA and password-reset.
+  // Keep 'x-forwarded-host' stripped though: it carries the WEB host, which is
+  // absent from the API's AllowedHosts, so HostFilteringMiddleware would 400
+  // every proxied request.
   'x-forwarded-host',
   'x-forwarded-proto',
   'x-middleware-subrequest',
+  // Client-supplied edge headers. No Cloudflare fronts this deployment, so
+  // nothing legitimately produces these — yet the API treats them as
+  // authoritative (SecurityEventLogger CF-Connecting-IP, the sign-in country
+  // allow-list and IRegionDetector CF-IPCountry). Forwarding them let any
+  // caller forge their own audit IP, country gate and billing region.
+  'cf-connecting-ip',
+  'cf-ipcountry',
+  'cf-ray',
+  'true-client-ip',
 ]);
 
 const UNSAFE_RESPONSE_HEADERS = new Set([

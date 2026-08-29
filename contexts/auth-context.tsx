@@ -9,6 +9,7 @@ import {
   getPendingDeviceChallenge,
   getPendingMfaChallenge,
   registerLearner as registerLearnerRequest,
+  reissueSessionAfterVerification,
   restoreSession,
   sendEmailVerificationOtp as sendEmailVerificationOtpRequest,
   signIn as signInWithBackend,
@@ -317,13 +318,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const currentUser = await verifyEmailOtpRequest(email, code);
+
+      // The OTP is now consumed and the account IS verified, but the access
+      // token in memory was minted before that and still carries
+      // email_verified=false. Every learner endpoint is gated on that claim
+      // (backend EmailVerifiedGate), so without a token re-issue here the very
+      // next dashboard call 403s and lib/api.ts hard-navigates back to
+      // /verify-email — the "verify -> dashboard flash -> thrown back to the
+      // OTP screen" bounce learners reported as a failed verification.
+      //
+      // Deliberately NOT refreshSession(): that one wipes session+user and
+      // rethrows on failure, which would sign out a learner whose code is
+      // already burned. reissueSessionAfterVerification swallows failures and
+      // returns null; we then keep the verified user on the old token and let
+      // the normal ensureFreshSession path pick up a fresh one.
+      const reissued = await reissueSessionAfterVerification();
+      const verifiedUser = reissued?.currentUser ?? currentUser;
+
       setState((current) => ({
         ...current,
-        user: currentUser,
-        session: current.session ? { ...current.session, currentUser } : null,
+        user: verifiedUser,
+        session: reissued ?? (current.session ? { ...current.session, currentUser } : null),
         error: null,
       }));
-      return currentUser;
+      return verifiedUser;
     },
     async beginAuthenticatorSetup() {
       return beginAuthenticatorSetupRequest();

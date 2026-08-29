@@ -169,9 +169,45 @@ describe('VerifyEmailPage', () => {
     );
   });
 
+  it('verifies as soon as the sixth digit is typed, with no extra submit and no false error', async () => {
+    // Regression: the auto-submit used to go through formRef.requestSubmit(),
+    // which dispatches a NESTED synchronous `submit` while the change handler
+    // is still running. React had not committed setOtp(next) yet, so
+    // handleSubmit read the PREVIOUS render's 5-digit `otp`, tripped the length
+    // guard, rendered "The OTP is invalid. Enter the 6 digit verification code."
+    // and never sent the request. Typing six digits ALONE must verify.
+    authClientMock.verifyEmailOtp.mockResolvedValue({
+      isEmailVerified: true,
+      requiresEmailVerification: false,
+    });
+
+    renderWithRouter(<VerifyEmailPage />, {
+      pathname: '/verify-email',
+      searchParams: new URLSearchParams({ email: 'husam_20052@yahoo.com' }),
+    });
+
+    await waitFor(() => {
+      expect(authClientMock.sendEmailVerificationOtp).toHaveBeenCalledTimes(1);
+    });
+
+    const user = userEvent.setup();
+    for (let digit = 1; digit <= 6; digit += 1) {
+      await user.type(screen.getByLabelText(`OTP digit ${digit}`), String(digit));
+    }
+
+    // Deliberately no fireEvent.submit — the typing alone is the whole point.
+    await waitFor(() => {
+      expect(authClientMock.verifyEmailOtp).toHaveBeenCalledTimes(1);
+    });
+    expect(authClientMock.verifyEmailOtp).toHaveBeenCalledWith('husam_20052@yahoo.com', '123456');
+    expect(
+      screen.queryByText('The OTP is invalid. Enter the 6 digit verification code.'),
+    ).toBeNull();
+  });
+
   it('ignores a duplicate submit that races the auto-submit (mobile keypad implicit Go/Done)', async () => {
     // Reproduces the mobile "false OTP is invalid" bug: entering the 6th
-    // digit auto-submits via requestSubmit(), and the on-screen numeric
+    // digit auto-submits, and the on-screen numeric
     // keypad's own implicit "Go"/"Done" action can fire a second native
     // `submit` event on the same form before the first request resolves.
     // Only one verify call should ever go out.

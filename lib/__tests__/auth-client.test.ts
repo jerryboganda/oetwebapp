@@ -237,4 +237,52 @@ describe('auth-client', () => {
       newPassword: 'BetterPassword123!',
     });
   });
+
+  it('re-issues the session after verification even though the stored token has not expired', async () => {
+    // POST /v1/auth/email/verify-otp returns no tokens, so the in-memory JWT
+    // still says email_verified=false and every learner endpoint 403s on the
+    // backend gate. ensureFreshSession would not refresh here (the token is
+    // still valid), hence the dedicated forced re-issue.
+    const { saveStoredSession, loadStoredSession } = await import('@/lib/auth-storage');
+    saveStoredSession(
+      createSession({
+        accessToken: 'stale-access-token',
+        currentUser: createCurrentUser({ isEmailVerified: false, requiresEmailVerification: true }),
+      }),
+      'local',
+    );
+
+    const reissued = createSession({ accessToken: 'fresh-access-token', refreshToken: 'refresh-token-2' });
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify(reissued), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const { reissueSessionAfterVerification } = await import('@/lib/auth-client');
+
+    await expect(reissueSessionAfterVerification()).resolves.toEqual(reissued);
+    expect(String(vi.mocked(global.fetch).mock.calls[0]?.[0])).toContain('/v1/auth/refresh');
+    expect(loadStoredSession()?.accessToken).toBe('fresh-access-token');
+  });
+
+  it('never clears the session when the post-verification re-issue fails', async () => {
+    // The OTP is already consumed at this point, so a failed refresh must not
+    // become a sign-out or surface as a bad code.
+    const { saveStoredSession, loadStoredSession } = await import('@/lib/auth-storage');
+    saveStoredSession(createSession({ accessToken: 'stale-access-token' }), 'local');
+
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(null, { status: 401 }));
+
+    const { reissueSessionAfterVerification } = await import('@/lib/auth-client');
+
+    await expect(reissueSessionAfterVerification()).resolves.toBeNull();
+    expect(loadStoredSession()).not.toBeNull();
+  });
+
+  it('returns null from the post-verification re-issue when there is no stored session', async () => {
+    const { reissueSessionAfterVerification } = await import('@/lib/auth-client');
+
+    await expect(reissueSessionAfterVerification()).resolves.toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });

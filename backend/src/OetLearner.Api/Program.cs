@@ -278,12 +278,22 @@ if (corsOrigins.Length > 0)
 // used by the blue/green stack on the same host.
 var knownNetworksConfig = builder.Configuration.GetSection("Proxy:KnownNetworks").Get<string[]>()
     ?? new[] { "127.0.0.1/8", "::1/128", "172.16.0.0/12", "10.0.0.0/8" };
+// ForwardLimit caps how many right-hand hops may be popped, and is the only
+// thing stopping a caller-supplied left-hand entry from being adopted — the
+// KnownIPNetworks check cannot help there, because a forged public IP is never
+// "known" and the walk would stop only AFTER taking it. It therefore has to
+// match the real hop count exactly, and that count differs per environment:
+// production is NPM -> oet-web nginx -> web container (2 appended hops, since
+// the Next.js proxy forwards headers with fetch() and appends nothing), while
+// staging has no nginx router and so has one hop fewer. Configurable via
+// "Proxy:ForwardLimit" so the topology can change without a code edit.
+var forwardLimitConfig = builder.Configuration.GetValue<int?>("Proxy:ForwardLimit") ?? 2;
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
-    options.ForwardLimit = 2;
+    options.ForwardLimit = forwardLimitConfig > 0 ? forwardLimitConfig : 2;
     foreach (var cidr in knownNetworksConfig)
     {
         if (System.Net.IPNetwork.TryParse(cidr, out var network))
