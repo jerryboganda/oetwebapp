@@ -140,7 +140,14 @@ public sealed record ContentPaperAssetAttach(
     string? Part,
     string? Title,
     int DisplayOrder,
-    bool MakePrimary);
+    bool MakePrimary,
+    /// <summary>Playable length measured by the uploading client. The chunked
+    /// upload pipeline stores no duration, and the Listening publish gate
+    /// treats a primary audio asset without one as an error
+    /// (<c>listening_audio_duration</c>), so an audio replacement done through
+    /// the normal upload route would leave the paper unpublishable. Supplying
+    /// it here stamps the media asset on first attach.</summary>
+    int? DurationSeconds = null);
 
 public sealed class ContentPaperService(
     LearnerDbContext db,
@@ -926,13 +933,28 @@ public sealed class ContentPaperService(
         // If MakePrimary, flip any existing primary for the same (role, part)
         // to non-primary first. Application-level guard that also works on
         // the in-memory provider.
+        //
+        // Part is matched case- and whitespace-insensitively. An exact ordinal
+        // comparison let an attach with part "c1" leave the existing "C1"
+        // primary in place: the partial unique index did not collide either, so
+        // the paper ended up with two primaries for one section and the learner
+        // audio map — which orders by DisplayOrder and takes the first — could
+        // still resolve the OLD file after a replacement.
         if (args.MakePrimary)
         {
             foreach (var existing in paper.Assets
-                .Where(a => a.Role == args.Role && a.Part == args.Part && a.IsPrimary))
+                .Where(a => a.Role == args.Role && SamePart(a.Part, args.Part) && a.IsPrimary))
             {
                 existing.IsPrimary = false;
             }
+        }
+
+        // The chunked upload pipeline cannot measure playable length, so stamp
+        // the client-measured duration onto the media asset the first time it is
+        // attached. Never overwrite a duration that is already recorded.
+        if (args.DurationSeconds is > 0 && media.DurationSeconds is not > 0)
+        {
+            media.DurationSeconds = args.DurationSeconds;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -955,6 +977,14 @@ public sealed class ContentPaperService(
         await db.SaveChangesAsync(ct);
         return row;
     }
+
+    /// <summary>Two part labels address the same slot when they differ only by
+    /// case or surrounding whitespace; null and empty both mean "whole paper".</summary>
+    private static bool SamePart(string? left, string? right)
+        => string.Equals(
+            (left ?? string.Empty).Trim(),
+            (right ?? string.Empty).Trim(),
+            StringComparison.OrdinalIgnoreCase);
 
     public async Task<bool> RemoveAssetAsync(string paperId, string assetId, string adminId, CancellationToken ct)
     {

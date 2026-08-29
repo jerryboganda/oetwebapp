@@ -112,6 +112,38 @@ public static class ListeningAuthoringAdminEndpoints
             return Results.Ok(report);
         });
 
+        // ── Part B/C source-stem recovery ─────────────────────────────────
+        // Restores the printed question above each Part B/C item from the
+        // paper's own question-paper text. Needed because migration
+        // 20261128000000 replaced every sentinel stem with one generic heading
+        // and 20261129000000 then blanked it, leaving candidates with three
+        // options and no question. The normal authoring routes refuse to write
+        // a paper that already has learner attempts, which is every affected
+        // paper, so recovery has its own route. It can only FILL an unreadable
+        // stem or option from source — it never edits an answer key, an
+        // option's correctness, or question numbering.
+        group.MapGet("/part-bc/source-audit", async (
+            string paperId,
+            IListeningPartBCSourceRecoveryService svc,
+            CancellationToken ct) =>
+            Results.Ok(await svc.RecoverPaperAsync(paperId, dryRun: true, adminId: "system:audit", ct)));
+
+        group.MapPost("/part-bc/recover-source", async (
+            string paperId,
+            bool? dryRun,
+            IListeningPartBCSourceRecoveryService svc,
+            IListeningStructureService structure,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var report = await svc.RecoverPaperAsync(paperId, dryRun ?? false, adminId, ct);
+            // Surface the publish gate alongside the recovery result so an
+            // operator sees immediately whether anything still blocks the paper.
+            var validation = await structure.ValidatePaperAsync(paperId, ct);
+            return Results.Ok(new { recovery = report, validation });
+        });
+
         // Section 12: candidate preview must be projected without the answer
         // key. The marking preview continues to use the admin structure route,
         // which is permission-protected and intentionally carries answers.

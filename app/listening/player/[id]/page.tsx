@@ -191,6 +191,11 @@ async function advanceStrictStart(attemptId: string) {
   await advanceStrictTransition(attemptId, FIRST_STRICT_STATE);
 }
 
+// MP3 frame padding and cue rounding routinely leave an authored end cue a
+// beat past the decoded duration; allow that before declaring the cue points
+// foreign to the file.
+const CUE_WINDOW_FIT_TOLERANCE_MS = 1500;
+
 function PlayerContent() {
   const params = useParams<{ id?: string | string[] }>();
   const router = useRouter();
@@ -1158,6 +1163,16 @@ function PlayerContent() {
       ?? null
     : null;
   const usingPerSectionAudio = perSectionAudioUrl != null;
+  // A file resolved through the PARENT key ('C' backing both C1 and C2, 'A'
+  // backing A1 and A2) spans more than the current section, so the section
+  // boundary lives in the authored cue points rather than at the end of the
+  // file. Treating it as the section's own file made Part C wait for both
+  // extracts before "Lock & continue" did anything and then restarted the file
+  // from 0:00 in C2. Only an exact section-code hit is genuinely section-owned.
+  const sectionAudioSpansSiblingSections = usingPerSectionAudio
+    && currentSectionCode != null
+    && session?.paper.audioUrlByPart?.[currentSectionCode] == null;
+  const usingSectionOwnAudio = usingPerSectionAudio && !sectionAudioSpansSiblingSections;
   const currentSectionAudioUrl = perSectionAudioUrl ?? session?.paper.audioUrl ?? null;
   const currentSectionAudioEnded = currentSection ? endedSections.has(currentSection) : false;
 
@@ -1204,6 +1219,32 @@ function PlayerContent() {
   const activeExtract = visibleExtracts[0] ?? null;
   // Part B slicing (exam-only) keeps per-question cue windows; practice /
   // monolithic B shows the whole shared file at once so cues are dropped.
+  const sectionCueWindows = currentExtracts.filter((extract) => (
+    extract.audioStartMs != null
+    && extract.audioEndMs != null
+    && extract.audioEndMs > extract.audioStartMs
+  ));
+  // Authored cue offsets are measured against whichever file the paper was cut
+  // from. If the resolved source is shorter than this section's last end cue,
+  // the offsets belong to a different file (e.g. full-exam cues against a
+  // Part-only upload) and must not gate playback — otherwise the section can
+  // never complete.
+  const sectionCueEndMs = sectionCueWindows.length > 0
+    ? Math.max(...sectionCueWindows.map((extract) => extract.audioEndMs!))
+    : null;
+  // `duration` is the loaded source's length in seconds (set by onLoadedMetadata).
+  const audioDurationMs = Number.isFinite(duration) && duration > 0
+    ? Math.round(duration * 1000)
+    : null;
+  const cueWindowsFitLoadedAudio = audioDurationMs == null
+    || sectionCueEndMs == null
+    || sectionCueEndMs <= audioDurationMs + CUE_WINDOW_FIT_TOLERANCE_MS;
+  // Cue windows only carry a section boundary when the file spans more than the
+  // current section: the combined paper MP3, or a parent-key file shared by
+  // sibling sections.
+  const cueWindowsGovernSection = !usingSectionOwnAudio
+    && sectionCueWindows.length > 0
+    && cueWindowsFitLoadedAudio;
   const currentExtractWindows = shouldSlicePartB
     ? currentExtracts.filter((extract) => (
       extract.partCode === activeExtract?.partCode
@@ -1212,29 +1253,21 @@ function PlayerContent() {
       && extract.audioEndMs != null
       && extract.audioEndMs > extract.audioStartMs
     ))
-    : usingPerSectionAudio
-      ? []
-      : currentExtracts.filter((extract) => (
-        extract.audioStartMs != null
-        && extract.audioEndMs != null
-        && extract.audioEndMs > extract.audioStartMs
-      ));
+    : cueWindowsGovernSection
+      ? sectionCueWindows
+      : [];
   const currentSectionAudioStartMs = currentExtractWindows.length > 0
     ? Math.min(...currentExtractWindows.map((extract) => extract.audioStartMs!))
     : null;
   const currentSectionAudioEndMs = currentExtractWindows.length > 0
     ? Math.max(...currentExtractWindows.map((extract) => extract.audioEndMs!))
     : null;
-  const activeAudioStartMs = shouldSlicePartB
+  const activeAudioStartMs = shouldSlicePartB || cueWindowsGovernSection
     ? currentSectionAudioStartMs
-    : usingPerSectionAudio
-      ? null
-      : currentSectionAudioStartMs;
-  const activeAudioEndMs = shouldSlicePartB
+    : null;
+  const activeAudioEndMs = shouldSlicePartB || cueWindowsGovernSection
     ? currentSectionAudioEndMs
-    : usingPerSectionAudio
-      ? null
-      : currentSectionAudioEndMs;
+    : null;
   const isLastSection = currentSection !== null && currentSectionIndex >= sectionsInPaper.length - 1;
   const currentSectionReviewSeconds = currentSection ? LISTENING_REVIEW_SECONDS[currentSection] : 0;
   const canSkipPreview = session?.modePolicy.mode === 'practice';
@@ -1248,11 +1281,22 @@ function PlayerContent() {
   const partBQuestionAudioEnded = shouldSlicePartB
     && activeExtract != null
     && completedExtractIds.has(`${activeExtract.partCode}-${activeExtract.displayOrder}`);
-  const audioGateSatisfied = shouldSlicePartB
-    ? partBQuestionAudioEnded
-    : usingPerSectionAudio
-      ? currentSectionAudioEnded
-      : (allCurrentExtractsCompleted || currentSectionAudioEndMs == null);
+  // A section with no playable source can never satisfy a listen-complete gate.
+  // Separate Part practice used to land here whenever a paper's audio existed
+  // only as one combined file: the scoped session carried the section's cue
+  // windows but no audio URL, so `allCurrentExtractsCompleted` stayed false
+  // forever and "Lock & continue" silently did nothing (Part C never opened
+  // C2). Navigation must stay possible; scoring is unaffected because the gate
+  // only governs when the boundary confirmation may be taken.
+  const sectionAudioSourceMissing = !session?.paper.audioAvailable
+    || currentSectionAudioUrl == null;
+  const audioGateSatisfied = sectionAudioSourceMissing
+    ? true
+    : shouldSlicePartB
+      ? partBQuestionAudioEnded
+      : cueWindowsGovernSection
+        ? allCurrentExtractsCompleted
+        : (currentSectionAudioEnded || currentSectionAudioEndMs == null);
   const canOpenReviewWindow = Boolean(
     currentSection
     && (session?.modePolicy.canScrub !== false || audioGateSatisfied),
@@ -1464,12 +1508,12 @@ function PlayerContent() {
   // drives the same handler.
   useEffect(() => {
     if (phase !== 'audio' || !hasStarted) return;
-    if (usingPerSectionAudio) return;
+    if (!cueWindowsGovernSection) return;
     if (currentSectionAudioEndMs == null) return;
     if (!allCurrentExtractsCompleted) return;
     void autoAdvanceAfterAudio();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, hasStarted, usingPerSectionAudio, currentSectionAudioEndMs, allCurrentExtractsCompleted]);
+  }, [phase, hasStarted, cueWindowsGovernSection, currentSectionAudioEndMs, allCurrentExtractsCompleted]);
 
   // Zero-length review windows must not trap the candidate. Restore the
   // continuation that advanceToNextSection already guards against: reset
@@ -1608,7 +1652,14 @@ function PlayerContent() {
   const confirmNextFromAudio = async () => {
     if (audioValidityHeld) return;
     if (!currentSection) return;
-    if (!canOpenReviewWindow) return;
+    if (!canOpenReviewWindow) {
+      // Never fail silently: a confirmed boundary that cannot be taken has to
+      // say why, otherwise the candidate sees a dead button.
+      setAudioError(
+        'The audio for this section has not finished yet. The next section opens as soon as it ends.',
+      );
+      return;
+    }
     pauseAudio();
     if (currentSectionReviewSeconds > 0) {
       const reviewState = listeningStateForPosition(currentSection, 'review');
@@ -1813,7 +1864,7 @@ function PlayerContent() {
       />
       {shouldMountAudio ? (
         <audio
-          key={usingPerSectionAudio ? `${audioRetryKey}-${currentSection ?? ''}` : audioRetryKey}
+          key={usingSectionOwnAudio ? `${audioRetryKey}-${currentSection ?? ''}` : audioRetryKey}
           ref={audioRef}
           src={resolvedAudioSrc ?? undefined}
           controlsList="nodownload nofullscreen noremoteplayback"
@@ -2021,9 +2072,10 @@ function PlayerContent() {
           onEnded={() => {
             if (session?.modePolicy.onePlayOnly) hasReachedEndRef.current = true;
             setIsPlaying(false);
-            // Per-section audio: the section's own file finishing IS the
-            // listen-complete signal that opens the review window in exam mode.
-            if (usingPerSectionAudio && currentSection) {
+            // The file finishing IS the listen-complete signal whenever the
+            // section is not governed by cue windows — a section's own upload,
+            // or a shared/combined file whose authored cues do not fit it.
+            if (currentSection) {
               setEndedSections((prev) => {
                 if (prev.has(currentSection)) return prev;
                 const next = new Set(prev);

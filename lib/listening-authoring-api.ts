@@ -1013,3 +1013,52 @@ export const importListeningManifest = (
     method: 'POST',
     body: JSON.stringify({ replaceExisting, manifest }),
   });
+
+// ── Part B/C source-stem recovery ────────────────────────────────────────
+// Restores the printed question above a Part B/C item from the paper's own
+// question-paper text. Needed for papers whose stems were overwritten by the
+// 2026-11-28 migration and then blanked, which the ordinary authoring routes
+// cannot repair because those papers already carry learner attempts.
+
+export interface ListeningPartBCRecoveryItem {
+  number: number;
+  /** `already-usable` | `recovered` | `unrecoverable` */
+  status: string;
+  previousStem: string | null;
+  recoveredStem: string | null;
+  optionsUpdated: number;
+  detail: string | null;
+}
+
+export interface ListeningPartBCRecoveryReport {
+  paperId: string;
+  paperTitle: string;
+  paperSlug: string;
+  status: string;
+  dryRun: boolean;
+  sourceTextAvailable: boolean;
+  partBCQuestionCount: number;
+  alreadyUsable: number;
+  recovered: number;
+  unrecoverable: number;
+  items: ListeningPartBCRecoveryItem[];
+  isClean: boolean;
+}
+
+export interface ListeningPartBCRecoveryResult {
+  recovery: ListeningPartBCRecoveryReport;
+  validation: ListeningValidationReport;
+}
+
+/** Dry-run report: which Part B/C items still have no candidate-facing question. */
+export const auditListeningPartBCSource = (paperId: string) =>
+  api<ListeningPartBCRecoveryReport>(
+    `/v1/admin/papers/${paperId}/listening/part-bc/source-audit`,
+  );
+
+/** Write the recovered stems/options back. Pass `dryRun` to preview only. */
+export const recoverListeningPartBCSource = (paperId: string, dryRun = false) =>
+  api<ListeningPartBCRecoveryResult>(
+    `/v1/admin/papers/${paperId}/listening/part-bc/recover-source?dryRun=${dryRun}`,
+    { method: 'POST' },
+  );

@@ -128,6 +128,36 @@ function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
 
+/**
+ * Decode just enough of an audio file to read its playable length. Returns null
+ * when the browser cannot decode it, so the upload still proceeds and the
+ * publish gate reports the missing duration rather than the upload failing.
+ */
+async function readAudioDurationSeconds(file: File): Promise<number | null> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    return await new Promise<number | null>((resolve) => {
+      const probe = new Audio();
+      const settle = (value: number | null) => {
+        probe.onloadedmetadata = null;
+        probe.onerror = null;
+        probe.src = '';
+        resolve(value);
+      };
+      probe.onloadedmetadata = () => settle(
+        Number.isFinite(probe.duration) && probe.duration > 0
+          ? Math.round(probe.duration)
+          : null,
+      );
+      probe.onerror = () => settle(null);
+      probe.preload = 'metadata';
+      probe.src = objectUrl;
+    });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 export default function ListeningAudioTimersPage() {
   const params = useParams<{ paperId?: string | string[] }>();
   const paperId = Array.isArray(params?.paperId) ? params?.paperId[0] : params?.paperId ?? '';
@@ -205,6 +235,10 @@ export default function ListeningAudioTimersPage() {
     setUploadingCode(code);
     setUploadProgress(0);
     try {
+      // Measure the clip before uploading: the server cannot decode audio, and
+      // the Listening publish gate rejects a primary audio asset with no
+      // duration, so an upload without this leaves the paper unpublishable.
+      const durationSeconds = await readAudioDurationSeconds(file);
       const result = await uploadFileChunked(file, 'Audio', (pct) => setUploadProgress(pct));
       await attachPaperAsset(paperId, {
         role: 'Audio',
@@ -213,6 +247,7 @@ export default function ListeningAudioTimersPage() {
         title: file.name,
         displayOrder: AUDIO_SECTION_CODES.indexOf(code) + 1,
         makePrimary: true,
+        durationSeconds,
       });
       setToast({
         message: result.deduplicated

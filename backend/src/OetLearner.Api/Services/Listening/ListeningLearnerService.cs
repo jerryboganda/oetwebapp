@@ -3290,7 +3290,7 @@ public sealed class ListeningLearnerService(
             .ToList();
     }
 
-    private static bool IsPartBCCode(string? partCode)
+    internal static bool IsPartBCCode(string? partCode)
     {
         var normalized = (partCode ?? string.Empty).Trim().ToUpperInvariant();
         return normalized.StartsWith('B') || normalized.StartsWith('C');
@@ -3402,6 +3402,9 @@ public sealed class ListeningLearnerService(
     // Mirrors the frontend LISTENING_SECTION_SEQUENCE — Part B's six question
     // sub-parts collapse to a single "B" section that plays one shared audio.
     private static readonly string[] LearnerAudioSections = ["A1", "A2", "B", "C1", "C2"];
+
+    private static readonly IReadOnlyDictionary<string, string> EmptyAudioByPart =
+        new Dictionary<string, string>(StringComparer.Ordinal);
 
     // Map an extract part code (A1, A2, B1..B6, legacy "B", C1, C2) to the
     // learner-facing section the exam player navigates. Every Part B sub-part
@@ -5292,11 +5295,29 @@ public sealed class ListeningLearnerService(
                 .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal);
             questionPaperByPart = filteredQp.Count > 0 ? filteredQp : null;
         }
-        // For scoped practice, hide the whole-paper AudioScript PDF and the legacy
-        // combined AudioUrl which would otherwise expose the full transcript / full
-        // audio of non-submitted parts.
+        // For scoped practice, hide the whole-paper AudioScript PDF which would
+        // otherwise expose the full transcript of non-submitted parts.
         var audioScriptUrl = isFullPaper ? source.AudioScriptUrl : null;
-        var audioUrl = isFullPaper ? source.AudioUrl : null;
+        // The combined paper MP3 is normally hidden from a scoped attempt for the
+        // same reason. Papers whose audio was uploaded as ONE combined file have no
+        // per-section asset, though, so hiding it unconditionally left separate
+        // Part practice with no playable audio at all while its extracts still
+        // carried cue windows. The player's section-advance gate waits for those
+        // cue windows to be crossed, so it could never be satisfied and
+        // "Lock & continue" became a dead button — Separate Part C practice never
+        // opened C2. Keep the combined file only when a scoped section has no
+        // per-section audio of its own; playback stays clamped to the scoped
+        // extracts' authored cue windows exactly as it is in the full exam.
+        var scopedSections = questions
+            .Select(question => SectionForPartCode(question.PartCode))
+            .Where(section => !string.IsNullOrWhiteSpace(section))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var scopedSectionLacksOwnAudio = scopedSections.Count > 0
+            && scopedSections.Any(section => string.IsNullOrWhiteSpace(
+                ResolveUploadedAudioForSection(
+                    source.AudioUrlByPart ?? EmptyAudioByPart,
+                    section)));
+        var audioUrl = isFullPaper || scopedSectionLacksOwnAudio ? source.AudioUrl : null;
         return source with
         {
             Questions = questions,

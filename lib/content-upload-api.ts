@@ -111,6 +111,13 @@ export interface ContentPaperAssetAttachDto {
   title?: string | null;
   displayOrder: number;
   makePrimary: boolean;
+  /**
+   * Playable length in seconds, measured in the browser before upload. The
+   * chunked upload pipeline records no duration, and the Listening publish gate
+   * rejects a primary audio asset without one, so an audio replacement that
+   * omits this leaves the paper unpublishable.
+   */
+  durationSeconds?: number | null;
 }
 
 export interface ChunkedUploadStartResponse {

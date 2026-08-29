@@ -81,6 +81,7 @@ export function BCQuestionRenderer({
     }
   };
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const cleanedPrompt = cleanListeningPrompt(prompt);
   const headingId = `listening-bc-q${questionNumber}-heading`;
   const statusId = `listening-bc-q${questionNumber}-status`;
   const struckCount = struckOptions.size;
@@ -176,12 +177,30 @@ export function BCQuestionRenderer({
         </div>
       </div>
 
-      <h3
-        id={headingId}
-        className="mb-6 rounded-xl bg-background-light p-3 text-[1.125em] font-medium leading-relaxed text-navy"
-      >
-        {cleanListeningPrompt(prompt)}
-      </h3>
+      {cleanedPrompt ? (
+        <h3
+          id={headingId}
+          className="mb-6 rounded-xl bg-background-light p-3 text-[1.125em] font-medium leading-relaxed text-navy"
+        >
+          {cleanedPrompt}
+        </h3>
+      ) : (
+        /*
+         * A Part B/C item whose printed question is missing must never render as
+         * a bare box above three options — the candidate cannot tell that
+         * anything is wrong and answers a question they were never shown. Say so
+         * explicitly and keep the heading id so the radiogroup stays labelled.
+         */
+        <h3
+          id={headingId}
+          data-testid="bc-question-prompt-unavailable"
+          className="mb-6 rounded-xl border border-warning/50 bg-warning/10 p-3 text-[1em] font-medium leading-relaxed text-navy"
+        >
+          The printed question for Q{questionNumber} is not available on this
+          paper yet, so this item cannot be answered reliably. Skip it and report
+          it to your tutor.
+        </h3>
+      )}
 
       <div role="radiogroup" aria-labelledby={headingId} aria-describedby={statusId} className="space-y-3">
         {options.map((option, index) => {

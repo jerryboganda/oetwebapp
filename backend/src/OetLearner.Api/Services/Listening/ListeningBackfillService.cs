@@ -466,6 +466,16 @@ public sealed class ListeningBackfillService(LearnerDbContext db) : IListeningBa
                 : NormalizePartCodeRaw(rawPartCode);
             var type = GetString(item, "type") ?? GetString(item, "questionType") ?? "short_answer";
             var stem = GetString(item, "text") ?? GetString(item, "stem") ?? string.Empty;
+            // Migration 20261128000000 wrote one generic heading into the authored
+            // JSON of every Listening paper. Projecting that back onto a Part B/C
+            // row would silently re-poison a paper that has since been repaired,
+            // and the learner projection blanks the heading anyway, so it would
+            // only re-block publish. Drop it here instead of carrying it forward.
+            if (ListeningLearnerService.IsPartBCCode(partCode)
+                && !ListeningLearnerService.IsUsablePartBCStem(stem))
+            {
+                stem = string.Empty;
+            }
             var correct = GetString(item, "correctAnswer") ?? GetString(item, "answer") ?? string.Empty;
             var points = GetInt(item, "points") ?? 1;
 

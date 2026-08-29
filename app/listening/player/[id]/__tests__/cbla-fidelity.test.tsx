@@ -522,6 +522,116 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     expect(screen.queryByText('Standalone Part C source question 31')).not.toBeInTheDocument();
   });
 
+  /**
+   * Separate Part C practice on a paper whose audio exists only as the combined
+   * paper MP3. The scoped session keeps that file plus the C1/C2 cue windows, so
+   * the section boundary is the cue, not the end of the file. Crossing C1's end
+   * cue must open C2 — the reported defect was that nothing happened at all.
+   */
+  it('opens C2 from standalone Part C when the combined paper audio crosses the C1 cue', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'practice';
+        if (key === 'focus') return 'part-c';
+        return null;
+      },
+    });
+    const base = makeStandalonePartSession('c');
+    const { audioUrlByPart: _omitted, ...paperWithoutPerPartAudio } = base.paper as Record<string, unknown>;
+    mockGetListeningSession.mockResolvedValue({ ...base, paper: paperWithoutPerPartAudio });
+
+    const { container } = render(<ListeningPlayer />);
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part C source question 31')).toBeInTheDocument();
+      expect(container.querySelector('audio')).not.toBeNull();
+    });
+
+    const audio = container.querySelector('audio') as HTMLAudioElement;
+    audio.currentTime = 241;
+    await waitFor(() => {
+      fireEvent.timeUpdate(audio);
+      expect(screen.getByText('Standalone Part C source question 37')).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * The production shape that produced the dead "Lock & continue" button: a
+   * scoped Part C session with no resolvable audio for the section, while the
+   * extracts still carry cue windows. The confirmation must complete and open
+   * C2 rather than returning silently.
+   */
+  it('completes Lock & continue in standalone Part C when the section has no resolvable audio', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'practice';
+        if (key === 'focus') return 'part-c';
+        return null;
+      },
+    });
+    const base = makeStandalonePartSession('c');
+    mockGetListeningSession.mockResolvedValue({
+      ...base,
+      paper: {
+        ...base.paper,
+        audioUrl: null,
+        audioUrlByPart: {},
+        audioAvailable: false,
+        audioUnavailableReason: 'no_section_audio',
+      },
+    });
+
+    render(<ListeningPlayer />);
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part C source question 31')).toBeInTheDocument();
+    });
+
+    // Part C shows Q31-Q42 in one workspace, so the section boundary control is
+    // only offered on the last card.
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 42' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Next Section/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Next Section/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Lock & continue$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('Part C — Extract 2')).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * A single parent-level Part C upload backs both C1 and C2. The boundary is
+   * still the authored cue, so C1 must hand over at its end cue instead of
+   * waiting for the whole two-extract file to finish.
+   */
+  it('hands standalone Part C over to C2 at the C1 cue when one parent-part file backs both extracts', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'practice';
+        if (key === 'focus') return 'part-c';
+        return null;
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(makeStandalonePartSession('c'));
+
+    const { container } = render(<ListeningPlayer />);
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part C source question 31')).toBeInTheDocument();
+      expect(container.querySelector('audio')).not.toBeNull();
+    });
+
+    const audio = container.querySelector('audio') as HTMLAudioElement;
+    audio.currentTime = 241;
+    await waitFor(() => {
+      fireEvent.timeUpdate(audio);
+      expect(screen.getByText('Standalone Part C source question 37')).toBeInTheDocument();
+    });
+  });
+
   it('loads all six Full Exam Part B questions in the legacy player and preserves answers across jumps', async () => {
     mockUseSearchParams.mockReturnValue({
       get: (key: string) => {

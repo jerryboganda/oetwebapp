@@ -37,6 +37,7 @@ import {
   type ListeningContentType,
   type ListeningSubSectionCode,
 } from '@/lib/listening-authoring-api';
+import { PartBCSourceRecoveryPanel } from '@/components/admin/listening/part-bc-source-recovery-panel';
 import { ListeningAnswerSheetBuilder, type ListeningBuilderPart } from './ListeningAnswerSheetBuilder';
 import { ListeningPartAiExtraction, type ListeningExtractionPart } from './ListeningPartAiExtraction';
 
@@ -528,6 +529,18 @@ export default function AdminListeningQuestionsPage() {
 
             {activePart === 'A' ? (
               <PartANotice paperId={paperId} />
+            ) : null}
+
+            {/* B/C: restore any printed question the 2026-11 data migrations
+                blanked, from this paper's own question-paper text. Shown before
+                the AI extraction card because it is the non-destructive repair:
+                it fills only unreadable items and cannot touch an answer key. */}
+            {activePart !== 'A' ? (
+              <PartBCSourceRecoveryPanel
+                paperId={paperId}
+                onRecovered={() => { void load(); }}
+                onNotify={(variant, message) => setToast({ variant, message })}
+              />
             ) : null}
 
             {/* B/C: one-click AI extraction (OCR) for the whole part — upload the

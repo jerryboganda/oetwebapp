@@ -94,4 +94,40 @@ describe('BCQuestionRenderer', () => {
     await user.click(screen.getByText('Refer to a specialist'));
     expect(onChange).toHaveBeenCalledWith('C');
   });
+  it('says so plainly when the printed question is missing instead of rendering an empty heading', () => {
+    render(
+      <BCQuestionRenderer
+        questionNumber={28}
+        partLabel="PART B"
+        prompt=""
+        options={OPTIONS}
+        optionKeys={['A', 'B', 'C']}
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    const notice = screen.getByTestId('bc-question-prompt-unavailable');
+    expect(notice.textContent).toContain('Q28');
+    expect(notice.textContent).toMatch(/not available/i);
+    // The radiogroup must stay labelled by the heading element.
+    expect(screen.getByRole('radiogroup').getAttribute('aria-labelledby')).toBe(notice.id);
+  });
+
+  it('renders a sentinel prompt as unavailable rather than showing "See PDF"', () => {
+    render(
+      <BCQuestionRenderer
+        questionNumber={31}
+        partLabel="PART C"
+        prompt="See PDF"
+        options={OPTIONS}
+        optionKeys={['A', 'B', 'C']}
+        value=""
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId('bc-question-prompt-unavailable')).toBeInTheDocument();
+    expect(screen.queryByText('See PDF')).not.toBeInTheDocument();
+  });
 });

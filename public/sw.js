@@ -17,7 +17,7 @@
  * version, so a bump purges all stale `oet-v*` caches on the next SW activation.
  */
 
-const CACHE_VERSION = 'oet-v4';
+const CACHE_VERSION = 'oet-v5';
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const PAGES_CACHE = `${CACHE_VERSION}-pages`;
 const API_CACHE = `${CACHE_VERSION}-api`;
@@ -41,6 +41,17 @@ const API_PATH = /\/v1\//;
 const STREAMING_MEDIA = /\.(m3u8|ts|m4s|mp4|key|vtt)(\?|$)/i;
 const VIDEO_PLAYBACK_API = /\/v1\/video-library\/(attestation|playback-sessions)|\/v1\/video-library\/videos\/[^/]+\/playback-session/i;
 const MEDIA_CDN_HOST = /\.b-cdn\.net$/i;
+
+// Exam media must never be served from Cache Storage either:
+//  - /v1/media/{id}/content is the bearer-authenticated route every Listening
+//    and Reading asset streams through. When a paper's audio is replaced, the
+//    asset id changes but a cached body for the OLD id can still satisfy a
+//    stale page, so a candidate keeps hearing the withdrawn recording.
+//  - /v1/listening/audio/{sha}.wav is anonymous and ships no Cache-Control and
+//    no Vary, so a cached copy would replay indefinitely.
+// Both are large one-play-only bodies; caching them is a quota cost with no
+// offline benefit, because an attempt cannot be scored offline anyway.
+const EXAM_MEDIA_API = /^\/v1\/(media\/[^/]+\/content|listening\/audio\/)/i;
 
 // ---------- Install ----------
 self.addEventListener('install', (event) => {
@@ -85,7 +96,8 @@ self.addEventListener('fetch', (event) => {
   if (
     MEDIA_CDN_HOST.test(url.hostname) ||
     STREAMING_MEDIA.test(url.pathname) ||
-    VIDEO_PLAYBACK_API.test(url.pathname)
+    VIDEO_PLAYBACK_API.test(url.pathname) ||
+    EXAM_MEDIA_API.test(url.pathname)
   ) {
     return;
   }
