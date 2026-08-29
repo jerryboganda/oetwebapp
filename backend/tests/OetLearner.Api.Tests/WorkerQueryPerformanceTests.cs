@@ -587,7 +587,7 @@ public sealed class WorkerQueryPerformanceTests : IAsyncLifetime
     {
         public List<string> PaperIds { get; } = [];
 
-        public Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct)
+        public Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct, bool force = false)
         {
             PaperIds.Add(paperId);
             return Task.FromResult(1);

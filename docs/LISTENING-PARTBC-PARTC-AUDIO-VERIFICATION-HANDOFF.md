@@ -143,47 +143,60 @@ Do **not** use `--dev-auth` against production, and do not attempt the seeded
 
 ---
 
-## 3. REQUIRED manual step — run the Part B/C recovery (admin)
+## 3. REQUIRED — run the Part B/C recovery sweep (admin)
 
-Nothing about Issue 1 is visible to a candidate until this is run per paper.
-
-**Via the admin UI (preferred):**
-
-1. Sign in as admin → **Admin → Content → Listening**.
-2. Open an Atlas or Nova paper → **Questions** tab → **Part B** (or **Part C**).
-3. A warning panel appears: *"N Part B/C items have no printed question"*.
-   - Click **Re-check** to refresh the audit.
-   - Click **Restore N from source** to write the recovered wording.
-4. Repeat for every Atlas and Nova Listening paper, Part B **and** Part C.
-
-**Via the API (for scripting the sweep):**
+Nothing about Issue 1 is visible to a candidate until this is run. **Use the fleet sweep**, not the
+per-paper loop — repairing ~46 Atlas/Nova papers one at a time is exactly the manual loop that
+leaves a gap.
 
 ```bash
-# Dry-run audit — writes nothing
-GET  /v1/admin/papers/{paperId}/listening/part-bc/source-audit
+# 1. Dry run first — writes nothing, shows exactly what would change
+POST /v1/admin/listening/part-bc/recover-source?publishedOnly=true&dryRun=true
 
-# Apply. dryRun=true previews; the response also returns the publish-gate report
-POST /v1/admin/papers/{paperId}/listening/part-bc/recover-source?dryRun=false
+# 2. Apply across every published Listening paper in one pass
+POST /v1/admin/listening/part-bc/recover-source?publishedOnly=true&dryRun=false
+
+# Read-only audit at any time
+GET  /v1/admin/listening/part-bc/source-audit?publishedOnly=true
 ```
 
-List the papers to sweep with `GET /v1/admin/papers?subtest=listening&search=atlas` (and
-`&search=nova`); read the total from the `X-Total-Count` header. Do **not** use
-`/v1/admin/papers/export` — it ignores filters and caps at 2000 rows.
+The sweep returns totals plus a per-paper breakdown:
 
-**Expected outcomes, and what each means:**
+| Field | Meaning |
+|---|---|
+| `papersScanned` | Listening papers examined |
+| `totalRecovered` | Items whose printed question was restored from source |
+| `totalStillUnrecoverable` | Items that must be typed in by hand — **drive this to 0** |
+| `papersWithoutSourceText` | Papers with no usable question-paper text even after re-extraction |
+| `papersFullyClean` | Papers where every Part B/C item now shows a question |
+| `failures[]` | Papers that threw; one bad paper never aborts the sweep |
+
+**Per-paper alternative (admin UI).** Admin → Content → Listening → *paper* → **Questions** tab →
+**Part B** / **Part C**. A warning panel offers **Re-check** and **Restore N from source**, and
+lists the items needing manual entry. Same engine, one paper at a time.
+
+**Per-paper API:** `GET|POST /v1/admin/papers/{paperId}/listening/part-bc/{source-audit,recover-source}`.
+
+### What each per-item outcome means
 
 | Result | Meaning | Action |
 |---|---|---|
 | `recovered` | Stem/options restored verbatim from that paper's own question paper | Spot-check against the source PDF |
 | `already-usable` | The item already showed a real question | Nothing |
-| `unrecoverable` + a reason | The source text cannot attribute it safely | **Type it in by hand** from the printed paper |
-| `sourceTextAvailable: false` | That paper has no extracted question-paper text | Upload/re-extract the question paper on the **PDFs** tab, then re-check |
+| `unrecoverable` + reason | The source text cannot attribute it safely | **Type it in by hand** from the printed paper |
+| `sourceTextAvailable: false` | No usable question-paper text even after a forced re-extraction | Upload the question paper on the **PDFs** tab, then re-run the sweep |
 
 `unrecoverable` is a correct, deliberate outcome — the parser reports rather than guesses. The
-common causes are a `SAMPLE` watermark interleaving two printed items, and option prose containing
-a standalone `A`/`B`/`C`. **Never** invent wording to clear one.
+usual causes are a `SAMPLE` watermark interleaving two printed items, and option prose containing a
+standalone `A`/`B`/`C` ("Hepatitis B", "vitamin C"). **Never** invent wording to clear one.
 
----
+### Why a first attempt might have found nothing
+
+The PDF text cache stores an empty string when extraction fails, and the normal extraction pass
+skips any asset that already has an entry — so a paper ingested before the PDF engine was
+configured would stay blank forever. Recovery now **forces one re-extraction** when it finds no
+usable source text, and retries before giving up. It only rewrites cache entries that are unusable;
+a good extraction is never discarded.
 
 ## 4. Verification — Issue 1, Part B/C headings (learner)
 
