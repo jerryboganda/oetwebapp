@@ -27,6 +27,9 @@ public static class AiOperationsAdminEndpoints
 
         group.MapGet("/operations", ListOperationsAsync);
         group.MapGet("/benchmark-runs", ListBenchmarkRunsAsync);
+        group.MapGet("/ledger-reconciliation", ListLedgerReconciliationAsync);
+        group.MapGet("/vocabulary-duplicates", ListVocabularyDuplicatesAsync);
+        group.MapPost("/speaking-duplicates/mark", MarkSpeakingDuplicatesAsync);
         group.MapGet("/budgets", ListBudgetsAsync);
         group.MapPost("/budgets/override", CreateBudgetOverrideAsync);
         group.MapGet("/circuits", ListCircuitsAsync);
@@ -113,6 +116,21 @@ public static class AiOperationsAdminEndpoints
 
         return Results.Ok(new { rows });
     }
+
+    private static async Task<IResult> ListLedgerReconciliationAsync(
+        IAiLedgerReconciliationService recon,
+        CancellationToken ct)
+        => Results.Ok(await recon.BuildReportAsync(ct));
+
+    private static async Task<IResult> ListVocabularyDuplicatesAsync(
+        OetLearner.Api.Services.Reading.IVocabularyMergeReportService report,
+        CancellationToken ct)
+        => Results.Ok(await report.BuildReportAsync(ct));
+
+    private static async Task<IResult> MarkSpeakingDuplicatesAsync(
+        OetLearner.Api.Services.Speaking.ISpeakingDuplicateMarker marker,
+        CancellationToken ct)
+        => Results.Ok(new { marked = await marker.MarkDuplicatesAsync(ct) });
 
     private static async Task<IResult> ListBudgetsAsync(LearnerDbContext db, CancellationToken ct)
     {

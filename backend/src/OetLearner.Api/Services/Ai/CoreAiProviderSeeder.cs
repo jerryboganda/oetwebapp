@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Ai;
 
@@ -120,7 +121,7 @@ public sealed class CoreAiProviderSeeder(
             Name: "Anthropic (Claude)",
             Category: AiProviderCategory.TextChat,
             Dialect: AiProviderDialect.Anthropic,
-            BaseUrl: "https://api.anthropic.com/v1",
+            BaseUrl: AnthropicProvider.DefaultBaseUrl + "/v1",
             DefaultModel: AnthropicDefaultModel,
             PricePer1kPromptTokens: 0.003m,
             PricePer1kCompletionTokens: 0.015m,

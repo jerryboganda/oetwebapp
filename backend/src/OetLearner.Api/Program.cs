@@ -1619,6 +1619,14 @@ builder.Services.AddSingleton<OetLearner.Api.Services.Ai.IAiExplanationCacheServ
         OetLearner.Api.Services.Ai.AiResultCacheService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiProviderRouteApprovalService,
     OetLearner.Api.Services.Ai.AiProviderRouteApprovalService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiLedgerReconciliationService,
+    OetLearner.Api.Services.Ai.AiLedgerReconciliationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.IAiRawResponseStore,
+    OetLearner.Api.Services.Ai.AiRawResponseStore>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingDuplicateMarker,
+    OetLearner.Api.Services.Speaking.SpeakingDuplicateMarker>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IVocabularyMergeReportService,
+    OetLearner.Api.Services.Reading.VocabularyMergeReportService>();
 builder.Services.Configure<OetLearner.Api.Services.Ai.AiExecutionCoordinationOptions>(
     builder.Configuration.GetSection(OetLearner.Api.Services.Ai.AiExecutionCoordinationOptions.SectionName));
 // Phase 4: admin connectivity probe. Bypasses gateway grounding +

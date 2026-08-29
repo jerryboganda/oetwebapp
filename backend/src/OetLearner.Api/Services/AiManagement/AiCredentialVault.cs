@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.AiManagement;
 
@@ -253,9 +254,9 @@ public sealed class AiCredentialVault(
 
     private static async Task<HttpResponseMessage> AnthropicPing(HttpClient client, string key, CancellationToken ct)
     {
-        using var req = new HttpRequestMessage(HttpMethod.Get, "https://api.anthropic.com/v1/models");
-        req.Headers.Add("x-api-key", key);
-        req.Headers.Add("anthropic-version", "2023-06-01");
+        using var req = new HttpRequestMessage(HttpMethod.Get, AnthropicProvider.DefaultBaseUrl + "/v1/models");
+        req.Headers.Add(AnthropicProvider.ApiKeyHeaderName, key);
+        req.Headers.Add(AnthropicProvider.VersionHeaderName, AnthropicProvider.ApiVersion);
         return await client.SendAsync(req, ct);
     }
 }

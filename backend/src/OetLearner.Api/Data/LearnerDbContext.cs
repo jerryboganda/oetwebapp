@@ -1471,6 +1471,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // W10 — provider benchmark runs that gate route switches.
         OnModelCreatingAiProviderBenchmarks(modelBuilder);
 
+        // W11 — encrypted raw provider payloads with retention.
+        OnModelCreatingAiRawResponses(modelBuilder);
+
         // ── SQLite desktop-backend support ──────────────────────────────────
         // The SQLite EF provider cannot translate DateTimeOffset comparisons or
         // ordering, so every background-worker sweep with a timestamp predicate
@@ -1664,6 +1667,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.AiProviderBenchmarks.cs (partial).
     /// </summary>
     partial void OnModelCreatingAiProviderBenchmarks(ModelBuilder modelBuilder);
+
+    /// <summary>
+    /// Defined in <see cref="LearnerDbContext"/>.AiRawResponses.cs (partial).
+    /// </summary>
+    partial void OnModelCreatingAiRawResponses(ModelBuilder modelBuilder);
 
     /// <summary>
     /// Resolves a candidate audit actor id to a value safe to store in

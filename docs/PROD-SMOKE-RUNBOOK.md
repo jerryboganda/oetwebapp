@@ -39,6 +39,26 @@ docker exec oet-local-web npx playwright show-report
 
 Screenshots of each learner surface will be written to `playwright-report-prod/`.
 
+## AI worker + acceptance journeys
+
+After web/API health is green, confirm:
+
+```powershell
+docker compose --env-file .env.production -f docker-compose.production.yml ps oet-ai-worker
+docker compose --env-file .env.production -f docker-compose.production.yml exec oet-api-blue wget -qO- http://127.0.0.1:8080/health/live
+```
+
+Walk one synthetic flow per class with an internal admin/test account:
+
+| Class | Journey |
+|---|---|
+| Scoring-critical | Reading attempt, Writing grade, Speaking AI assessment, Listening Part A advisory |
+| Interactive learning | Reading/Listening explanation or passage Q&A |
+| Admin batch | One extraction or draft job |
+
+Do not treat a 7-day wait as a deploy blocker; run the scaled-down probes in
+`scripts/ops` (ledger recon, duplicate markers) on the same SHA.
+
 ## What the spec asserts
 
 - Sign-in with the provided credentials succeeds

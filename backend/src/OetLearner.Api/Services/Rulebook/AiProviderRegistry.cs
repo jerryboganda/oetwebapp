@@ -214,6 +214,11 @@ public sealed class AnthropicProvider(
 {
     public string Name => "anthropic";
 
+    public const string DefaultBaseUrl = "https://api.anthropic.com";
+    public const string ApiKeyHeaderName = "x-api-key";
+    public const string VersionHeaderName = "anthropic-version";
+    public const string ApiVersion = "2023-06-01";
+
     /// <summary>
     /// Normalizes an Anthropic base URL so callers can register it either as
     /// the bare host (<c>https://api.anthropic.com</c>) or with the version
@@ -308,10 +313,10 @@ public sealed class AnthropicProvider(
         // Normalize so a bare-host BaseUrl (no /v1) still resolves correctly;
         // we always POST the version-qualified "v1/messages" path below.
         client.BaseAddress = new Uri(NormalizeBaseUrl(baseUrl) + "/");
-        client.DefaultRequestHeaders.Remove("x-api-key");
-        client.DefaultRequestHeaders.Add("x-api-key", apiKey);
-        client.DefaultRequestHeaders.Remove("anthropic-version");
-        client.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+        client.DefaultRequestHeaders.Remove(ApiKeyHeaderName);
+        client.DefaultRequestHeaders.Add(ApiKeyHeaderName, apiKey);
+        client.DefaultRequestHeaders.Remove(VersionHeaderName);
+        client.DefaultRequestHeaders.Add(VersionHeaderName, ApiVersion);
         client.DefaultRequestHeaders.Remove("anthropic-beta");
         client.DefaultRequestHeaders.Add("anthropic-beta", "prompt-caching-2024-07-31");
 

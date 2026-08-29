@@ -12,15 +12,17 @@
 ## 0. Design principles
 
 1. **Grounding is non-negotiable.** Every AI call routes through
-   `AiGatewayService` (.NET) / `buildAiGroundedPrompt()` (TS). The gateway
-   physically refuses ungrounded prompts. No policy below may weaken this.
+   the coordinator (`IAiGatewayService` / `IDirectAiCallRecorder`) and
+   `buildAiGroundedPrompt()` (TS). The gateway physically refuses ungrounded
+   prompts. No policy below may weaken this.
 2. **Scoring integrity over convenience.** Any feature whose output materially
    affects a learner's OET score prediction is treated as *scoring-critical*
    and is protected against credential-source drift by default.
 3. **Every default is overridable by admins**, never by learners. Learners
    can only toggle preferences the admin allows.
-4. **No option breaks the audit trail.** Every AI call is recorded regardless
-   of credential source, provider, outcome, or feature.
+4. **No option breaks the audit trail.** One `AiUsageRecord` is written per
+   **physical** provider call, regardless of credential source, provider,
+   outcome, or feature.
 
 ---
 

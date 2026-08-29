@@ -334,6 +334,11 @@ Scoring rules:
             ClaimOwner = Environment.MachineName,
         };
 
+        var existingCanonical = await db.SpeakingAiAssessments
+            .FirstOrDefaultAsync(a => a.IdentityHash == identityHash, ct);
+        if (existingCanonical is not null)
+            return ProjectAssessment(existingCanonical, RehydrateCriterionScores(existingCanonical));
+
         db.SpeakingAiAssessments.Add(row);
         try
         {

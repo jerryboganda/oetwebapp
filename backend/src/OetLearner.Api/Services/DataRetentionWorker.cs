@@ -117,11 +117,18 @@ public sealed class DataRetentionWorker(
                 .ExecuteDeleteAsync(ct);
         }
 
-        if (analytics + audit + webhooks + deliveries + securityEvents > 0)
+        var rawResponses = 0;
+        {
+            var store = scope.ServiceProvider.GetService<OetLearner.Api.Services.Ai.IAiRawResponseStore>();
+            if (store is not null)
+                rawResponses = await store.PurgeExpiredAsync(batch, ct);
+        }
+
+        if (analytics + audit + webhooks + deliveries + securityEvents + rawResponses > 0)
         {
             logger.LogInformation(
-                "Data-retention swept: analytics={A} audit={U} webhooks={W} deliveries={D} securityEvents={S}",
-                analytics, audit, webhooks, deliveries, securityEvents);
+                "Data-retention swept: analytics={A} audit={U} webhooks={W} deliveries={D} securityEvents={S} rawResponses={R}",
+                analytics, audit, webhooks, deliveries, securityEvents, rawResponses);
         }
     }
 }
