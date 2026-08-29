@@ -198,6 +198,71 @@ public sealed class InvoiceEvidenceSourceTests
         Assert.Equal(1, orphanAuditCountAfterSecondRun);
     }
 
+    [Fact]
+    public async Task ReconcileAsync_MultipleLegacyInvoicesMatchSameSubscription_OnlyOneClaimsCheckoutSessionId()
+    {
+        // Regression for the production crash: a subscription renewed monthly leaves
+        // behind several legacy Invoice rows that all match the same UserId/Amount/
+        // Currency, so InvoiceEvidenceResolver resolves the SAME BillingQuote (and
+        // therefore the SAME CheckoutSessionId) for every one of them. Assigning that
+        // id to more than one row violates IX_Invoices_CheckoutSessionId_Unique
+        // (partial unique index) and used to throw DbUpdateException out of
+        // SaveChangesAsync, taking the whole boot down with it.
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+
+        var userId = "usr-reconcile-renewals";
+        var subscription = NewSubscription(userId, price: 100m, currency: "GBP");
+        subscription.StartedAt = now.AddDays(-90);
+        db.Subscriptions.Add(subscription);
+
+        var quote = NewQuote(userId, subscription.Id, amount: 100m, currency: "GBP");
+        db.BillingQuotes.Add(quote);
+
+        var payment = NewCompletedPayment(userId, quote.Id, amount: 100m, currency: "GBP");
+        db.PaymentTransactions.Add(payment);
+
+        var earlierInvoice = new Invoice
+        {
+            Id = "inv-renewal-1-" + Guid.NewGuid().ToString("N")[..8],
+            UserId = userId,
+            IssuedAt = now.AddDays(-60),
+            Amount = 100m,
+            Currency = "GBP",
+            Status = "Paid",
+            Description = "Legacy renewal invoice #1",
+        };
+        var laterInvoice = new Invoice
+        {
+            Id = "inv-renewal-2-" + Guid.NewGuid().ToString("N")[..8],
+            UserId = userId,
+            IssuedAt = now.AddDays(-30),
+            Amount = 100m,
+            Currency = "GBP",
+            Status = "Paid",
+            Description = "Legacy renewal invoice #2",
+        };
+        db.Invoices.AddRange(earlierInvoice, laterInvoice);
+        await db.SaveChangesAsync();
+
+        var touched = await InvoiceEvidenceReconciliationService.ReconcileAsync(db, CancellationToken.None);
+        Assert.Equal(2, touched);
+
+        var reloadedEarlier = await db.Invoices.AsNoTracking().SingleAsync(x => x.Id == earlierInvoice.Id);
+        var reloadedLater = await db.Invoices.AsNoTracking().SingleAsync(x => x.Id == laterInvoice.Id);
+
+        // Both resolve to the same Gateway-sourced subscription/quote evidence...
+        Assert.Equal(InvoiceSources.Gateway, reloadedEarlier.Source);
+        Assert.Equal(InvoiceSources.Gateway, reloadedLater.Source);
+        Assert.Equal(quote.Id, reloadedEarlier.QuoteId);
+        Assert.Equal(quote.Id, reloadedLater.QuoteId);
+
+        // ...but only the earlier-issued invoice keeps the shared CheckoutSessionId; the
+        // other is left null so the unique index never sees a duplicate.
+        Assert.Equal(quote.CheckoutSessionId, reloadedEarlier.CheckoutSessionId);
+        Assert.Null(reloadedLater.CheckoutSessionId);
+    }
+
     // ── AdminService.GetBillingInvoiceEvidenceAsync ───────────────
 
     [Fact]

@@ -30,8 +30,13 @@ public static class InvoiceEvidenceReconciliationService
     /// </summary>
     public static async Task<int> ReconcileAsync(LearnerDbContext db, CancellationToken ct)
     {
+        // Ordered by IssuedAt so that when several legacy invoices for the same
+        // subscription (renewal periods) collide on the same CheckoutSessionId, the
+        // earliest one -- most plausibly the original checkout-derived invoice -- is
+        // the one that keeps it (see claimedCheckoutSessionIds below).
         var pending = await db.Invoices
             .Where(x => x.ReconciledAt == null)
+            .OrderBy(x => x.IssuedAt)
             .Take(BatchSize)
             .ToListAsync(ct);
 
@@ -42,6 +47,19 @@ public static class InvoiceEvidenceReconciliationService
 
         var now = DateTimeOffset.UtcNow;
         var touched = 0;
+
+        // "Invoices"."IX_Invoices_CheckoutSessionId_Unique" is a partial unique index
+        // (non-null values only). A subscription can have many legacy Invoice rows --
+        // one per renewal period -- that all match the same UserId/Amount/Currency and
+        // therefore resolve to the SAME BillingQuote/CheckoutSessionId via
+        // InvoiceEvidenceResolver (it looks up evidence per-SUBSCRIPTION, not
+        // per-invoice). Only the invoice that was actually produced by that checkout
+        // session may carry its id; every other row reconciling to the same
+        // subscription must leave CheckoutSessionId null or SaveChangesAsync throws a
+        // duplicate-key DbUpdateException and takes the whole boot down with it (as
+        // happened in production). Tracked in-memory across the batch, seeded lazily
+        // against the DB so a value already owned by an untouched row is caught too.
+        var claimedCheckoutSessionIds = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var invoice in pending)
         {
@@ -94,7 +112,12 @@ public static class InvoiceEvidenceReconciliationService
             if (evidence.Quote is not null)
             {
                 invoice.QuoteId = evidence.Quote.Id;
-                invoice.CheckoutSessionId = evidence.Quote.CheckoutSessionId ?? evidence.Payment?.GatewayTransactionId;
+
+                var candidateCheckoutSessionId = evidence.Quote.CheckoutSessionId ?? evidence.Payment?.GatewayTransactionId;
+                invoice.CheckoutSessionId = candidateCheckoutSessionId is not null
+                    && await CanClaimCheckoutSessionIdAsync(db, candidateCheckoutSessionId, invoice.Id, claimedCheckoutSessionIds, ct)
+                        ? candidateCheckoutSessionId
+                        : null;
             }
             else
             {
@@ -111,5 +134,35 @@ public static class InvoiceEvidenceReconciliationService
 
         await db.SaveChangesAsync(ct);
         return touched;
+    }
+
+    /// <summary>
+    /// True if <paramref name="checkoutSessionId"/> is still free to assign to
+    /// <paramref name="invoiceId"/> -- not already claimed by another row earlier in this
+    /// batch (<paramref name="claimed"/>), and not already sitting on a different, already
+    /// -committed Invoice row. Claims the id (adds it to <paramref name="claimed"/>) on success
+    /// so the next invoice in the batch sees it as taken.
+    /// </summary>
+    private static async Task<bool> CanClaimCheckoutSessionIdAsync(
+        LearnerDbContext db,
+        string checkoutSessionId,
+        string invoiceId,
+        HashSet<string> claimed,
+        CancellationToken ct)
+    {
+        if (!claimed.Add(checkoutSessionId))
+        {
+            return false;
+        }
+
+        var ownedByAnotherRow = await db.Invoices
+            .AsNoTracking()
+            .AnyAsync(x => x.CheckoutSessionId == checkoutSessionId && x.Id != invoiceId, ct);
+        if (ownedByAnotherRow)
+        {
+            return false;
+        }
+
+        return true;
     }
 }
