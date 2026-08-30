@@ -209,30 +209,37 @@ public sealed class ListeningPartBCSourceRecoveryService(
         var sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(
             ReadAssetTexts(paper), wanted);
 
-        // A paper ingested before the PDF engine was configured has an empty
-        // cached extraction, and the normal extraction pass skips any asset that
-        // already has an entry — so it would stay blank forever and recovery
-        // would silently find nothing. Force one re-extraction and retry before
-        // giving up. This runs BEFORE any stem edit is staged so the extraction
-        // service's own SaveChanges cannot flush a half-finished repair, and it
-        // only rewrites cache entries that are unusable.
-        if (sourceText is null && wanted.Count > 0 && textExtraction is not null)
+        var parsed = wanted.Count == 0
+            ? ListeningPartBCSourceParseResult.Empty
+            : ListeningPartBCSourceParser.Parse(sourceText, wanted);
+
+        // The cached extraction is not necessarily usable: a paper ingested
+        // before the PDF engine produced real layout has either nothing cached
+        // or a long structureless run, and the normal extraction pass skips any
+        // asset that already has an entry — so it would stay unreadable forever.
+        // Re-extract once whenever the cache cannot supply every wanted number,
+        // and keep whichever pass reads more. This runs BEFORE any stem edit is
+        // staged, so the extraction service's own SaveChanges cannot flush a
+        // half-finished repair.
+        if (wanted.Count > 0 && parsed.Items.Count < wanted.Count && textExtraction is not null)
         {
             try
             {
                 await textExtraction.ExtractForPaperAsync(paper.Id, ct, force: true);
-                sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper), wanted);
+                var refreshedText = ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper), wanted);
+                var refreshed = ListeningPartBCSourceParser.Parse(refreshedText, wanted);
+                if (refreshed.Items.Count > parsed.Items.Count)
+                {
+                    sourceText = refreshedText;
+                    parsed = refreshed;
+                }
             }
             catch (Exception)
             {
-                // Extraction is best-effort; a failure is reported as "no source
-                // text" below rather than failing the whole recovery.
+                // Extraction is best-effort; a failure leaves the cached-text
+                // result in place and is reported per item below.
             }
         }
-
-        var parsed = wanted.Count == 0
-            ? ListeningPartBCSourceParseResult.Empty
-            : ListeningPartBCSourceParser.Parse(sourceText, wanted);
         var recoveredByNumber = parsed.Items.ToDictionary(item => item.Number);
         var skipByNumber = parsed.Skipped.ToDictionary(skip => skip.Number);
 

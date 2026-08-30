@@ -44,11 +44,11 @@ public interface IContentTextExtractionService
     /// into <c>ContentPaper.ExtractedTextJson</c> as asset-id string entries.
     /// Existing structured authoring keys such as <c>listeningQuestions</c>
     /// are preserved.</summary>
-    /// <param name="force">Re-extract assets whose cached entry is missing OR
-    /// empty/too short to be real page text. A failed extraction caches an
-    /// empty string and the normal pass then skips that asset forever, so a
-    /// paper that was ingested before the PDF engine was configured stays
-    /// permanently blank without this.</param>
+    /// <param name="force">Re-extract every PDF asset on the paper, replacing
+    /// whatever is cached. A failed or structureless extraction is cached and
+    /// the normal pass then skips that asset forever, so a paper ingested
+    /// before the PDF engine produced usable text stays permanently unreadable
+    /// without this.</param>
     Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct, bool force = false);
 }
 
@@ -58,10 +58,6 @@ public sealed class ContentTextExtractionService(
     IPdfTextExtractor extractor,
     ILogger<ContentTextExtractionService> logger) : IContentTextExtractionService
 {
-    /// <summary>Below this, a cached entry is page furniture or an extraction
-    /// failure rather than a usable document body.</summary>
-    private const int MinUsableCachedTextLength = 200;
-
     public async Task<int> ExtractForPaperAsync(string paperId, CancellationToken ct, bool force = false)
     {
         var paper = await db.ContentPapers
@@ -77,14 +73,13 @@ public sealed class ContentTextExtractionService(
         {
             if (asset.MediaAsset is null) continue;
             if (!string.Equals(asset.MediaAsset.Format, "pdf", StringComparison.OrdinalIgnoreCase)) continue;
-            if (existing.TryGetValue(asset.Id, out var cached))
-            {
-                if (!force) continue;
-                // Only redo an entry that is actually unusable; never discard a
-                // good extraction just because force was requested.
-                var cachedText = cached.ValueKind == JsonValueKind.String ? cached.GetString() : null;
-                if (!string.IsNullOrWhiteSpace(cachedText) && cachedText!.Length >= MinUsableCachedTextLength) continue;
-            }
+            // `force` re-extracts unconditionally. Its only caller is Part B/C
+            // stem recovery, which asks for it precisely when nothing in the
+            // cache could be parsed — a length check would refuse there, because
+            // the pathological case is a LONG but structureless extraction
+            // (PdfPig's page.Text ran ~25 000 characters together with no word
+            // spacing or line breaks).
+            if (!force && existing.ContainsKey(asset.Id)) continue;
 
             try
             {
