@@ -632,6 +632,53 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     });
   });
 
+  /**
+   * Production shape found on Atlas Sample Test 8: C1 and C2 each carry an
+   * EXPLICIT audioUrlByPart entry (no parent-key fallback involved at all) that
+   * happen to point at the SAME uploaded file, because an admin attached one
+   * "Part C FIXED.mp3" to both extracts. This is invisible to a check that only
+   * asks "is there no exact key for this section" — the exact key exists, it is
+   * just aliased to a sibling's file — so it needs the same cue-governed
+   * handling as the parent-key case above.
+   */
+  it('hands standalone Part C over to C2 at the C1 cue when C1 and C2 explicitly share one uploaded file', async () => {
+    mockUseSearchParams.mockReturnValue({
+      get: (key: string) => {
+        if (key === 'attemptId') return 'attempt-1';
+        if (key === 'mode') return 'practice';
+        if (key === 'focus') return 'part-c';
+        return null;
+      },
+    });
+    const base = makeStandalonePartSession('c');
+    mockGetListeningSession.mockResolvedValue({
+      ...base,
+      paper: {
+        ...base.paper,
+        audioUrlByPart: {
+          C1: 'https://cdn.example/audio-part-c-fixed.mp3',
+          C2: 'https://cdn.example/audio-part-c-fixed.mp3',
+        },
+      },
+    });
+
+    const { container } = render(<ListeningPlayer />);
+    await waitFor(() => {
+      expect(screen.getByText('Standalone Part C source question 31')).toBeInTheDocument();
+      expect(container.querySelector('audio')).not.toBeNull();
+    });
+
+    const audio = container.querySelector('audio') as HTMLAudioElement;
+    audio.currentTime = 241;
+    await waitFor(() => {
+      fireEvent.timeUpdate(audio);
+      expect(screen.getByText('Standalone Part C source question 37')).toBeInTheDocument();
+    });
+    // C2 must not have restarted the shared file from 0:00 — the cue-governed
+    // path never remounts <audio> for a section that isn't section-owned.
+    expect(container.querySelectorAll('audio')).toHaveLength(1);
+  });
+
   it('loads all six Full Exam Part B questions in the legacy player and preserves answers across jumps', async () => {
     mockUseSearchParams.mockReturnValue({
       get: (key: string) => {
