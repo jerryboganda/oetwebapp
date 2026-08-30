@@ -32,6 +32,10 @@ vi.mock('@/contexts/auth-context', () => ({
 vi.mock('@/lib/auth-client', () => ({
   sendDeviceVerificationOtp: mockSendDeviceVerificationOtp,
   selectReplacementDevice: mockSelectReplacementDevice,
+  // Mirrors the module-under-test's storage-backed guard: reads whatever
+  // the test's `mockPendingChallenge` currently holds, same as the real
+  // `getPendingDeviceChallenge()` reads live storage.
+  getPendingDeviceChallenge: () => mockPendingChallenge,
   formatDeviceCountdown: (s: number) => (s > 0 ? `${s}s` : '0s'),
 }));
 
@@ -186,6 +190,55 @@ describe('DeviceChallengeForm', () => {
     expect(screen.getByText(/Window: 7 days/)).toBeInTheDocument();
     expect(screen.getByText(/Limit: 3/)).toBeInTheDocument();
     expect(screen.getByText(/Live countdown/)).toBeInTheDocument();
+  });
+
+  it('selecting a replacement device sends the OTP exactly once (regression: used to double-send)', async () => {
+    const user = userEvent.setup();
+    mockPendingChallenge = {
+      email: 'learner@example.com',
+      challengeToken: 'replacement-token',
+      rememberMe: true,
+      mode: 'replacement_required',
+      registeredDevices: [
+        { id: 'dev-1', maskedDeviceId: 'abcd…1111', deviceName: null, platform: 'web', trustedAt: '2026-04-18T10:00:00Z', lastSeenAt: null },
+        { id: 'dev-2', maskedDeviceId: 'wxyz…2222', deviceName: null, platform: 'web', trustedAt: '2026-04-19T10:00:00Z', lastSeenAt: null },
+      ],
+      activeDeviceCount: 2,
+      maxDevices: 2,
+    };
+
+    renderWithRouter(<DeviceChallengeForm />);
+
+    const radios = await screen.findAllByRole('radio');
+    await user.click(radios[0]);
+
+    await waitFor(() => expect(mockSendDeviceVerificationOtp).toHaveBeenCalled());
+    // Give any stray duplicate auto-send effect a chance to fire before asserting the count.
+    await waitFor(() => expect(screen.getByRole('button', { name: /Verify Device/i })).toBeEnabled());
+    expect(mockSendDeviceVerificationOtp).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not auto-resend on remount when a code was already requested for this challenge (regression: WebView-reload resend loop)', async () => {
+    mockPendingChallenge = {
+      email: 'learner@example.com',
+      challengeToken: 'already-sent-token',
+      rememberMe: true,
+      mode: 'otp_required',
+      registeredDevices: [
+        { id: 'dev-1', maskedDeviceId: 'abcd…1111', deviceName: 'Chrome', platform: 'web', trustedAt: '2026-04-18T10:00:00Z', lastSeenAt: null },
+      ],
+      activeDeviceCount: 1,
+      maxDevices: 2,
+      // Simulates a fresh mount (e.g. Android killed and recreated the
+      // WebView while the learner checked their email) where storage
+      // already recorded that a code went out for this exact token.
+      otpRequestedForToken: 'already-sent-token',
+    };
+
+    renderWithRouter(<DeviceChallengeForm />);
+
+    expect(await screen.findByText(/Approved devices: 1\/2/)).toBeInTheDocument();
+    expect(mockSendDeviceVerificationOtp).not.toHaveBeenCalled();
   });
 
   it('routes free-slot verification exactly as today after correct code', async () => {

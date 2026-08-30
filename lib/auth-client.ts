@@ -818,6 +818,9 @@ export async function selectReplacementDevice(selectedDeviceId: string): Promise
     ...challenge,
     challengeToken: response.challengeToken,
     selectedDeviceId,
+    // New selection-bound token — no OTP has been sent for it yet, even if
+    // one had already gone out for the previous (unbound) token.
+    otpRequestedForToken: null,
   };
   savePendingDeviceChallenge(updated);
   return updated;
@@ -836,10 +839,19 @@ export async function sendDeviceVerificationOtp(
     throw new AuthClientError(400, 'missing_device_challenge', 'No device verification challenge is available.');
   }
 
-  return postJson<OtpChallenge>('/v1/auth/device/send-otp', {
+  const otpChallenge = await postJson<OtpChallenge>('/v1/auth/device/send-otp', {
     challengeToken: challenge.challengeToken,
     recaptchaToken: options?.recaptchaToken || undefined,
   });
+
+  // Record that a code has now actually gone out for this exact challenge
+  // token. This is the durable half of the duplicate-send guard: a
+  // component remount (WebView reload on resume, hot reload, etc.) re-reads
+  // this flag from storage and skips auto-sending another code, instead of
+  // relying solely on an in-memory ref that resets on every fresh mount.
+  savePendingDeviceChallenge({ ...challenge, otpRequestedForToken: challenge.challengeToken });
+
+  return otpChallenge;
 }
 
 export async function completeDeviceVerification(code: string): Promise<AuthSession> {
