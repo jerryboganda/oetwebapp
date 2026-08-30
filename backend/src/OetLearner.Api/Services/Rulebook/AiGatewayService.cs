@@ -401,7 +401,9 @@ public sealed class AiGatewayService(
                             latencyMs: (int)stopwatch.ElapsedMilliseconds,
                             retryCount: 0,
                             policyTrace: quotaDecision.PolicyTrace,
-                            ct: CancellationToken.None);
+                            ct: CancellationToken.None,
+                            operationId: request.OperationId,
+                            attemptNumber: string.IsNullOrWhiteSpace(request.OperationId) ? null : 1);
                     }
                     catch { /* fail-soft */ }
                 }
@@ -440,7 +442,9 @@ public sealed class AiGatewayService(
                         latencyMs: (int)stopwatch.ElapsedMilliseconds,
                         retryCount: 0,
                         policyTrace: quotaDecision?.PolicyTrace,
-                        ct: CancellationToken.None);
+                        ct: CancellationToken.None,
+                        operationId: request.OperationId,
+                        attemptNumber: string.IsNullOrWhiteSpace(request.OperationId) ? null : 1);
                 }
                 catch { /* fail-soft */ }
 
@@ -467,7 +471,9 @@ public sealed class AiGatewayService(
                             latencyMs: (int)stopwatch.ElapsedMilliseconds,
                             retryCount: 0,
                             policyTrace: quotaDecision?.PolicyTrace,
-                            ct: CancellationToken.None);
+                            ct: CancellationToken.None,
+                            operationId: request.OperationId,
+                            attemptNumber: string.IsNullOrWhiteSpace(request.OperationId) ? null : 1);
                     }
                     catch { /* fail-soft */ }
                 }
@@ -520,7 +526,9 @@ public sealed class AiGatewayService(
                             latencyMs: (int)stopwatch.ElapsedMilliseconds,
                             retryCount: 0,
                             policyTrace: quotaDecision?.PolicyTrace,
-                            ct: CancellationToken.None);
+                            ct: CancellationToken.None,
+                            operationId: request.OperationId,
+                            attemptNumber: string.IsNullOrWhiteSpace(request.OperationId) ? null : 1);
                     }
                     catch { /* fail-soft */ }
                 }
@@ -611,6 +619,13 @@ public sealed class AiGatewayService(
                 var turnCost = turnUsage is not null
                     ? await ComputeCostEstimateAsync(selectedProviderCode ?? provider.Name, turnUsage, CancellationToken.None)
                     : 0m;
+                var cacheTokens = turnUsage is null
+                    ? null
+                    : new AiCacheTokenBreakdown(
+                        turnUsage.CacheWriteTokens,
+                        turnUsage.CacheReadTokens,
+                        PricingVersion: null,
+                        CalculatedCostUsd: turnCost);
 
                 if (outcome == AiCallOutcome.Success)
                 {
@@ -630,6 +645,7 @@ public sealed class AiGatewayService(
                         usageRecordId: currentTurnUsageRecordId,
                         operationId: request.OperationId,
                         attemptNumber: attemptNumber,
+                        cacheTokens: cacheTokens,
                         providerInvoked: providerInvoked);
                     if (persisted is not null)
                     {
@@ -1121,7 +1137,9 @@ public sealed class AiGatewayService(
                 latencyMs: (int)stopwatch.ElapsedMilliseconds,
                 retryCount: 0,
                 policyTrace: "gateway.refused",
-                ct: CancellationToken.None);
+                ct: CancellationToken.None,
+                operationId: request.OperationId,
+                attemptNumber: string.IsNullOrWhiteSpace(request.OperationId) ? null : 1);
         }
         catch
         {

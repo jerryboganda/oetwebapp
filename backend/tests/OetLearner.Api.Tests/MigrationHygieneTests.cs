@@ -31,6 +31,7 @@ public class MigrationHygieneTests
     [InlineData(typeof(AddAiProviderBenchmarkRuns), "20261207090000_AddAiProviderBenchmarkRuns")]
     [InlineData(typeof(AddAiRawResponseRetention), "20261208090000_AddAiRawResponseRetention")]
     [InlineData(typeof(AddReadingAttemptPartALockedAt), "20261209090000_AddReadingAttemptPartALockedAt")]
+    [InlineData(typeof(FixZeroPlatformBudgetAndRetireMockFullGrade), "20261210090000_FixZeroPlatformBudgetAndRetireMockFullGrade")]
     public void HandWrittenMigrationsExposeEfDiscoveryAttributes(Type migrationType, string expectedMigrationId)
     {
         var migrationAttribute = migrationType.GetCustomAttribute<MigrationAttribute>();

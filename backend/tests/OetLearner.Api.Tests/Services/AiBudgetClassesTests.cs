@@ -23,6 +23,17 @@ public sealed class AiBudgetClassesTests
         Assert.Equal(0.50m, AiBudgetClasses.DailyLimitUsd(AiOperationClass.AdminBatch));
         Assert.Equal(5.00m, AiBudgetClasses.MonthlyLimitUsd(AiOperationClass.AdminBatch));
         Assert.Equal(5.00m, AiBudgetClasses.PlatformDailyCapUsd);
+        Assert.Equal(50.00m, AiBudgetClasses.PlatformMonthlyCapUsd);
+    }
+
+    [Theory]
+    [InlineData(0, 100, 50.00)]
+    [InlineData(0, 0, 50.00)]
+    [InlineData(50, 100, 50.00)]
+    [InlineData(100, 80, 80.00)]
+    public void ZeroMonthlyBudget_UsesPlatformMonthlyCap(decimal monthly, int hardKillPct, decimal expected)
+    {
+        Assert.Equal(expected, AiBudgetClasses.EffectivePlatformMonthlyLimitUsd(monthly, hardKillPct));
     }
 
     [Fact]

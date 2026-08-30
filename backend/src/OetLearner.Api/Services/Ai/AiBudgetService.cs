@@ -38,13 +38,13 @@ namespace OetLearner.Api.Services.Ai;
 /// </para>
 ///
 /// <para>
-/// <b>Fail-closed on "no budget configured".</b> Before this wave, an unset or
-/// zero <see cref="AiGlobalPolicy.MonthlyBudgetUsd"/> meant "unlimited" — the
-/// opposite of the owner's conservative-by-default launch posture. This
-/// service treats a non-positive effective limit as "budget exhausted": zero
-/// provider calls, not zero enforcement. See
-/// <see cref="AiManagement.AiQuotaService.ConservativeDefaultMonthlyBudgetUsd"/>
-/// for the seeded default that keeps a fresh database out of that state.
+/// <b>Zero monthly budget is the owner-approved $50 UTC month cap.</b>
+/// Legacy <see cref="AiGlobalPolicy.MonthlyBudgetUsd"/> = 0 meant
+/// "unlimited". Treating that as fail-closed denied every platform AI
+/// call on production. <see cref="AiBudgetClasses.EffectivePlatformMonthlyLimitUsd"/>
+/// maps 0/unset onto <see cref="AiBudgetClasses.PlatformMonthlyCapUsd"/>.
+/// A remaining non-positive effective limit (after that mapping) still
+/// refuses the call.
 /// </para>
 ///
 /// <para>
@@ -552,11 +552,9 @@ public sealed class AiBudgetService(
     }
 
     private static decimal ResolveEffectiveLimit(AiGlobalPolicy? global)
-    {
-        if (global is null) return 0m;
-        var pct = Math.Clamp(global.HardKillPct, 0, 150);
-        return Math.Max(0m, global.MonthlyBudgetUsd) * pct / 100m;
-    }
+        => AiBudgetClasses.EffectivePlatformMonthlyLimitUsd(
+            global?.MonthlyBudgetUsd ?? 0m,
+            global?.HardKillPct ?? 100);
 
     private static string MonthKeyUtc() => $"month:{DateTimeOffset.UtcNow:yyyy-MM}";
 

@@ -27,6 +27,20 @@ public static class AiBudgetClasses
     public const decimal AdminDailyLimitUsd = 0.50m;
     public const decimal AdminMonthlyLimitUsd = 5.00m;
     public const decimal PlatformDailyCapUsd = 5.00m;
+    public const decimal PlatformMonthlyCapUsd = 50.00m;
+
+    /// <summary>
+    /// Legacy <c>AiGlobalPolicy.MonthlyBudgetUsd = 0</c> meant "unlimited".
+    /// W3 fail-closes on a non-positive ceiling, which would refuse every
+    /// platform call. Treat 0/unset as the owner-approved $50 UTC month cap
+    /// instead of denying the whole product.
+    /// </summary>
+    public static decimal EffectivePlatformMonthlyLimitUsd(decimal monthlyBudgetUsd, int hardKillPct)
+    {
+        var monthly = monthlyBudgetUsd > 0m ? monthlyBudgetUsd : PlatformMonthlyCapUsd;
+        var pct = hardKillPct <= 0 ? 100 : Math.Clamp(hardKillPct, 0, 150);
+        return monthly * pct / 100m;
+    }
 
     /// <summary>Borrow order when scoring's own class is exhausted. Lower
     /// classes are never donors of scoring, and never borrowers of scoring.</summary>
