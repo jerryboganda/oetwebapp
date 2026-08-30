@@ -80,6 +80,7 @@ const STATUS_FILTERS = [
   { value: 'needs_review', label: 'Pending — needs review' },
   { value: 'approved', label: 'Verified — approved' },
   { value: 'paid', label: 'Verified — paid' },
+  { value: 'processing', label: 'Processing' },
   { value: 'rejected', label: 'Rejected' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
@@ -95,6 +96,10 @@ const STATUS_DISPLAY: Record<string, { label: string; variant: BadgeProps['varia
   needs_review: { label: 'Pending', variant: 'warning', note: 'needs review' },
   approved: { label: 'Verified', variant: 'success' },
   paid: { label: 'Verified', variant: 'success', note: 'gateway paid' },
+  // A transient claim state written while the approve/fulfil action runs. Normally it
+  // resolves within seconds; if a request crashed mid-flight the row stays here — the
+  // note and the row-level Reopen action (allowed by the backend) are the recovery path.
+  processing: { label: 'Processing', variant: 'info', note: 'in progress — stuck? use Reopen' },
   rejected: { label: 'Rejected', variant: 'danger' },
   cancelled: { label: 'Cancelled', variant: 'muted' },
 };
@@ -567,6 +572,25 @@ export default function AdminPaymentProofsPage() {
                 onClick={() => void handleReopen(r)}
                 startIcon={<RotateCcw className="h-4 w-4" />}
                 title="Reopen — move back to pending"
+              >
+                Reopen
+              </Button>
+            </div>
+          );
+        }
+        // "processing" is a transient claim written while an approve/fulfil action runs.
+        // If a request crashed mid-flight the row stays here with no other path out, so
+        // offer the same Reopen the backend allows (processing → pending).
+        if (r.status === 'processing') {
+          return (
+            <div className="flex items-center gap-1">
+              {evidenceActions}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void handleReopen(r)}
+                startIcon={<RotateCcw className="h-4 w-4" />}
+                title="Stuck in processing? Reopen — move back to pending"
               >
                 Reopen
               </Button>

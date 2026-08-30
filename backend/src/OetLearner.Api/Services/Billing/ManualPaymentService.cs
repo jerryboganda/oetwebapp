@@ -240,10 +240,17 @@ public sealed class ManualPaymentService : IManualPaymentService
         ManualPaymentRequest row;
         if (_db.Database.IsRelational())
         {
+            // The claim also takes over a stale "processing" row: a crashed or restarted
+            // request can leave the claim behind with no way out, because "processing" is
+            // a transient anti-double-click guard — never a terminal state. The freshness
+            // cutoff keeps two genuinely concurrent claims from stepping on each other.
+            var staleProcessingCutoff = now - TimeSpan.FromMinutes(2);
             var claimed = await _db.ManualPaymentRequests
                 .Where(request => request.Id == requestId
                     && (request.Status == "pending"
                         || request.Status == "needs_review"
+                        || (request.Status == "processing"
+                            && request.UpdatedAt <= staleProcessingCutoff)
                         || (request.Status == "paid"
                             && request.Kind == PaymentProofKinds.GatewayReceipt
                             && request.PaymentTransactionId != null
@@ -260,9 +267,22 @@ public sealed class ManualPaymentService : IManualPaymentService
                 {
                     return existing;
                 }
+                if (existing.Status == "processing")
+                {
+                    throw new InvalidOperationException(
+                        "This payment is currently being processed by another action. Refresh in a minute and try again — if it stays stuck, use Reopen to return it to pending.");
+                }
                 throw new InvalidOperationException($"Manual payment already {existing.Status}.");
             }
             row = await _db.ManualPaymentRequests.FirstAsync(request => request.Id == requestId, ct);
+            // The claim above is a raw ExecuteUpdateAsync — it bypasses the change tracker
+            // and bumps the row's xmin (optimistic-concurrency token) without refreshing
+            // any already-tracked instance. When this approve runs inside the outer
+            // mark-fulfilled transaction the row IS already tracked with its pre-claim
+            // Status and xmin, so every later SaveChangesAsync would deterministically
+            // fail with DbUpdateConcurrencyException. Reload so the tracked state matches
+            // exactly what the database just accepted.
+            await _db.Entry(row).ReloadAsync(ct);
         }
         else
         {

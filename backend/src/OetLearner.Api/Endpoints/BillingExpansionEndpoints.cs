@@ -19,6 +19,13 @@ namespace OetLearner.Api.Endpoints;
 /// </summary>
 public static class BillingExpansionEndpoints
 {
+    /// <summary>How long a "processing" claim (payment proof or subscription fulfilment)
+    /// may hold before another admin action is allowed to take it over. A claim is a
+    /// transient guard against two admins clicking at once — never a permanent state —
+    /// and this window also self-heals rows stranded by a crashed/restarted request,
+    /// which is how orders end up visibly stuck on "processing".</summary>
+    private static readonly TimeSpan StaleProcessingClaimWindow = TimeSpan.FromMinutes(2);
+
     public static IEndpointRouteBuilder MapBillingExpansionEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/v1");
@@ -265,10 +272,17 @@ public static class BillingExpansionEndpoints
         var paidSubscriptionIds = gatewayPaidSubscriptionIds
             .Union(proofPaidSubscriptionIds);
 
+        // Stale "processing" rows are included on purpose: a crashed/restarted
+        // mark-fulfilled leaves the claim behind, and without this the order would
+        // vanish from the queue (which only lists pending states) and stay stuck
+        // forever. After the staleness window the claim can be taken over again.
+        var staleProcessingCutoff = DateTimeOffset.UtcNow - StaleProcessingClaimWindow;
         var subscriptions = await db.Subscriptions
             .Where(s => s.Status != SubscriptionStatus.Draft
                 && (s.FulfilmentStatus == FulfilmentStatuses.PendingManual
-                    || s.FulfilmentStatus == FulfilmentStatuses.PendingVerification)
+                    || s.FulfilmentStatus == FulfilmentStatuses.PendingVerification
+                    || (s.FulfilmentStatus == FulfilmentStatuses.Processing
+                        && s.ChangedAt <= staleProcessingCutoff))
                 && paidSubscriptionIds.Contains(s.Id))
             .OrderBy(s => s.ChangedAt)
             .Take(200)
@@ -394,6 +408,7 @@ public static class BillingExpansionEndpoints
         LearnerDbContext db,
         IAiPackageCreditService? aiPackageCredits,
         IManualPaymentService manualPayments,
+        LearnerService learnerService,
         CancellationToken ct)
     {
         await using var transaction = db.Database.IsRelational()
@@ -409,10 +424,18 @@ public static class BillingExpansionEndpoints
         {
             return TypedResults.Ok(await BuildPendingFulfilmentResultAsync(subscription, db, webAccessReleased: subscription.Status == SubscriptionStatus.Active, ct));
         }
+        // A "processing" claim left behind by a crashed/restarted request must not make
+        // the order permanently un-fulfillable: after the staleness window this handler
+        // takes the claim over instead of refusing.
+        var staleProcessing = subscription.FulfilmentStatus == FulfilmentStatuses.Processing
+            && subscription.ChangedAt <= DateTimeOffset.UtcNow - StaleProcessingClaimWindow;
         if (subscription.FulfilmentStatus != FulfilmentStatuses.PendingManual
-            && subscription.FulfilmentStatus != FulfilmentStatuses.PendingVerification)
+            && subscription.FulfilmentStatus != FulfilmentStatuses.PendingVerification
+            && !staleProcessing)
         {
-            return TypedResults.BadRequest("Only an order awaiting fulfilment can be marked fulfilled.");
+            return TypedResults.BadRequest(subscription.FulfilmentStatus == FulfilmentStatuses.Processing
+                ? "This order is currently being processed. Wait a minute, refresh, and try again — a stuck order can also be reopened from the payment proofs tab."
+                : "Only an order awaiting fulfilment can be marked fulfilled.");
         }
 
         var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Code == subscription.PlanId, ct);
@@ -428,10 +451,13 @@ public static class BillingExpansionEndpoints
         }
         if (db.Database.IsRelational())
         {
+            var staleClaimCutoff = DateTimeOffset.UtcNow - StaleProcessingClaimWindow;
             var claimed = await db.Subscriptions
                 .Where(row => row.Id == subscription.Id
                     && (row.FulfilmentStatus == FulfilmentStatuses.PendingManual
-                        || row.FulfilmentStatus == FulfilmentStatuses.PendingVerification))
+                        || row.FulfilmentStatus == FulfilmentStatuses.PendingVerification
+                        || (row.FulfilmentStatus == FulfilmentStatuses.Processing
+                            && row.ChangedAt <= staleClaimCutoff)))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.FulfilmentStatus, FulfilmentStatuses.Processing)
                     .SetProperty(row => row.ChangedAt, DateTimeOffset.UtcNow), ct);
@@ -649,6 +675,20 @@ public static class BillingExpansionEndpoints
             await transaction.CommitAsync(ct);
         }
 
+        // Invoices must exist the moment an order is paid/fulfilled — mint one now if
+        // checkout completion never did (e.g. the subscription row was never
+        // price-stamped). Best effort: a failure here must never fail the fulfilment
+        // itself; the deterministic invoice id converges on the next ensure-invoice
+        // call, so the admin's invoice actions retry this automatically.
+        try
+        {
+            await EnsureSubscriptionInvoiceCoreAsync(db, learnerService, subscription, ct);
+        }
+        catch
+        {
+            // ignored — retried lazily by the invoice evidence / download actions.
+        }
+
         return TypedResults.Ok(await BuildPendingFulfilmentResultAsync(subscription, db, !externalOnly, ct));
     }
 
@@ -724,17 +764,10 @@ public static class BillingExpansionEndpoints
     /// Resolve (creating if missing) the <see cref="Invoice"/> for one exact
     /// subscription, so the Payment Proofs / Pending Fulfilment queue can offer the
     /// same "See Evidence" / "Download Invoice PDF" actions Billing Ops' Invoices
-    /// tab already has, without navigating away. Invoices are otherwise only
-    /// lazily created when the learner reads their own billing history
-    /// (<c>LearnerService.EnsureSubscriptionInvoiceAsync</c>, which resolves "the
-    /// user's current subscription" — not usable here since we need one exact
-    /// order) — an order fulfilled today may have no Invoice row yet. Resolves real
-    /// payment evidence via <see cref="InvoiceEvidenceResolver.ResolveAsync"/> before
-    /// minting the invoice, so QuoteId/CheckoutSessionId/SubscriptionId/Source
-    /// genuinely reflect whatever evidence exists instead of being left blank.
-    /// Idempotent: the invoice id is a deterministic hash of
-    /// (subscriptionId, planId, startedAt), so repeat calls for the same order
-    /// always converge on the same row instead of creating duplicates.
+    /// tab already has, without navigating away. Delegates to
+    /// <see cref="EnsureSubscriptionInvoiceCoreAsync"/> — the shared minting logic
+    /// also invoked automatically by <see cref="MarkSubscriptionFulfilled"/>, so a
+    /// fulfilled order carries a downloadable invoice without any further admin step.
     /// </summary>
     private static async Task<Results<Ok<EnsureInvoiceResponse>, NotFound>> EnsureSubscriptionInvoice(
         string id,
@@ -747,11 +780,54 @@ public static class BillingExpansionEndpoints
         {
             return TypedResults.NotFound();
         }
-        if (subscription.PriceAmount <= 0)
+        return TypedResults.Ok(new EnsureInvoiceResponse(
+            await EnsureSubscriptionInvoiceCoreAsync(db, learnerService, subscription, ct)));
+    }
+
+    /// <summary>
+    /// Mint (if missing) the invoice for one exact subscription and return its id, or
+    /// <c>null</c> when the order is genuinely free. Shared by the ensure-invoice
+    /// endpoint and the mark-fulfilled flow. Convergence order:
+    ///   1. an invoice already tied to this subscription wins (checkout completion
+    ///      mints <c>inv-&#123;quoteId&#125;</c> atomically with the payment) — the admin queue and
+    ///      the learner's billing history stay on ONE invoice per order;
+    ///   2. otherwise the deterministic <c>inv-sub-&#123;hash&#125;</c> id is minted, with
+    ///      amount/currency resolved from real payment evidence when the subscription
+    ///      row was never price-stamped (<c>PriceAmount == 0</c>). Without that
+    ///      evidence fallback a paid order used to be reported as "No invoice is
+    ///      available for this order" even though the gateway payment completed.
+    /// Resolves evidence via <see cref="InvoiceEvidenceResolver.ResolveAsync"/> so
+    /// QuoteId/CheckoutSessionId/SubscriptionId/Source genuinely reflect what was
+    /// paid. Idempotent: repeat calls for the same order converge on one row.
+    /// </summary>
+    internal static async Task<string?> EnsureSubscriptionInvoiceCoreAsync(
+        LearnerDbContext db,
+        LearnerService learnerService,
+        Subscription subscription,
+        CancellationToken ct)
+    {
+        var existingForSubscription = await db.Invoices.AsNoTracking()
+            .Where(x => x.SubscriptionId == subscription.Id)
+            .OrderByDescending(x => x.IssuedAt)
+            .FirstOrDefaultAsync(ct);
+        if (existingForSubscription is not null)
         {
-            // Free plan — nothing was charged, so there is no invoice to show.
-            return TypedResults.Ok(new EnsureInvoiceResponse(null));
+            return existingForSubscription.Id;
         }
+
+        var evidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, ct);
+        var amount = subscription.PriceAmount > 0
+            ? subscription.PriceAmount
+            : evidence.Payment?.Amount ?? evidence.Quote?.TotalAmount ?? 0m;
+        if (amount <= 0)
+        {
+            // Free plan with no completed payment evidence — nothing was charged, so
+            // there is no invoice to show.
+            return null;
+        }
+        var currency = !string.IsNullOrWhiteSpace(subscription.Currency)
+            ? subscription.Currency
+            : evidence.Payment?.Currency ?? evidence.Quote?.Currency ?? "AUD";
 
         var compositeKey = $"{subscription.Id}|{subscription.PlanId}|{subscription.StartedAt.UtcTicks}";
         var hash = Convert.ToHexString(
@@ -761,7 +837,7 @@ public static class BillingExpansionEndpoints
 
         if (await db.Invoices.AsNoTracking().AnyAsync(x => x.Id == invoiceId, ct))
         {
-            return TypedResults.Ok(new EnsureInvoiceResponse(invoiceId));
+            return invoiceId;
         }
 
         var plan = await db.BillingPlans.AsNoTracking().FirstOrDefaultAsync(p => p.Code == subscription.PlanId, ct);
@@ -773,16 +849,14 @@ public static class BillingExpansionEndpoints
             ? planName
             : $"{planName} ({subscription.Interval})";
 
-        var evidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, ct);
-
         db.Invoices.Add(new Invoice
         {
             Id = invoiceId,
             UserId = subscription.UserId,
             Number = await learnerService.AllocateInvoiceNumberAsync(subscription.UserId, invoiceId, ct),
             IssuedAt = issuedAt,
-            Amount = subscription.PriceAmount,
-            Currency = subscription.Currency,
+            Amount = amount,
+            Currency = currency,
             Status = "Paid",
             Description = description,
             PlanVersionId = subscription.PlanVersionId,
@@ -796,14 +870,14 @@ public static class BillingExpansionEndpoints
         try
         {
             await db.SaveChangesAsync(ct);
-            return TypedResults.Ok(new EnsureInvoiceResponse(invoiceId));
+            return invoiceId;
         }
         catch (DbUpdateException)
         {
             // Concurrent creation (e.g. the learner opened their own billing page at
             // the same moment) — the row now exists under the same deterministic id.
             var nowExists = await db.Invoices.AsNoTracking().AnyAsync(x => x.Id == invoiceId, ct);
-            return TypedResults.Ok(new EnsureInvoiceResponse(nowExists ? invoiceId : null));
+            return nowExists ? invoiceId : null;
         }
     }
 
