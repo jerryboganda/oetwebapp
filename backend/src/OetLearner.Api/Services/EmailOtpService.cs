@@ -37,6 +37,7 @@ public sealed class EmailOtpService(
     // Server-side anti-flood: one OTP email per account per minute. Client
     // double-clicks and network retries can never beat this.
     private static readonly TimeSpan ResendCooldown = TimeSpan.FromSeconds(60);
+    private static readonly SemaphoreSlim NonPostgresOtpIssuanceGate = new(1, 1);
 
     public async Task<OtpChallengeResponse> RequestEmailVerificationOtpAsync(
         string email,
@@ -64,6 +65,20 @@ public sealed class EmailOtpService(
                 RetryAfterSeconds);
         }
 
+        return await ExecuteWithOtpIssuanceLockAsync(
+            account.Id,
+            EmailVerificationPurpose,
+            () => IssueEmailVerificationOtpLockedAsync(account, forceNew, cancellationToken),
+            cancellationToken);
+    }
+
+    private async Task<OtpChallengeResponse> IssueEmailVerificationOtpLockedAsync(
+        ApplicationUserAccount account,
+        bool forceNew,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var expiresAt = now.Add(_otpLifetime);
         var pendingChallenges = await db.EmailOtpChallenges
             .Where(x => x.ApplicationUserAccountId == account.Id && x.Purpose == EmailVerificationPurpose && x.VerifiedAt == null)
             .ToListAsync(cancellationToken);
@@ -354,10 +369,8 @@ public sealed class EmailOtpService(
             account,
             PasswordResetPurpose,
             recaptchaToken,
-            now,
-            expiresAt,
             emailSubject: "Reset your password",
-            emailText: (otpCode) => BuildPasswordResetTextBody(account.Email, otpCode, expiresAt),
+            emailText: (otpCode, challengeExpiresAt) => BuildPasswordResetTextBody(account.Email, otpCode, challengeExpiresAt),
             emailTemplate: EmailTemplateKeys.PasswordResetOtp,
             cancellationToken);
     }
@@ -425,16 +438,12 @@ public sealed class EmailOtpService(
         CancellationToken cancellationToken = default,
         string? recaptchaToken = null)
     {
-        var now = timeProvider.GetUtcNow();
-        var expiresAt = now.Add(_otpLifetime);
         return await IssueChannelOtpAsync(
             account,
             DeviceTrustPurpose,
             recaptchaToken,
-            now,
-            expiresAt,
             emailSubject: "Approve this new device",
-            emailText: (otpCode) => $"Hello {BuildDisplayName(account.Email)},\n\nA sign-in from a new device needs approval. Your code is {otpCode}.\nIt expires at {expiresAt:O}.\n\nIf this wasn't you, do not share this code and consider changing your password.",
+            emailText: (otpCode, expiresAt) => $"Hello {BuildDisplayName(account.Email)},\n\nA sign-in from a new device needs approval. Your code is {otpCode}.\nIt expires at {expiresAt:O}.\n\nIf this wasn't you, do not share this code and consider changing your password.",
             emailTemplate: EmailTemplateKeys.EmailVerificationOtp,
             cancellationToken);
     }
@@ -485,17 +494,62 @@ public sealed class EmailOtpService(
         ApplicationUserAccount account,
         string purpose,
         string? recaptchaToken,
-        DateTimeOffset now,
-        DateTimeOffset expiresAt,
         string emailSubject,
-        Func<string, string> emailText,
+        Func<string, DateTimeOffset, string> emailText,
         string emailTemplate,
         CancellationToken cancellationToken)
     {
+        return await ExecuteWithOtpIssuanceLockAsync(
+            account.Id,
+            purpose,
+            () => IssueChannelOtpLockedAsync(
+                account,
+                purpose,
+                recaptchaToken,
+                emailSubject,
+                emailText,
+                emailTemplate,
+                cancellationToken),
+            cancellationToken);
+    }
+
+    private async Task<OtpChallengeResponse> IssueChannelOtpLockedAsync(
+        ApplicationUserAccount account,
+        string purpose,
+        string? recaptchaToken,
+        string emailSubject,
+        Func<string, DateTimeOffset, string> emailText,
+        string emailTemplate,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var expiresAt = now.Add(_otpLifetime);
         var challengeId = Guid.NewGuid();
         var pendingChallenges = await db.EmailOtpChallenges
             .Where(x => x.ApplicationUserAccountId == account.Id && x.Purpose == purpose && x.VerifiedAt == null)
             .ToListAsync(cancellationToken);
+
+        var reusable = pendingChallenges
+            .Where(x => x.ExpiresAt > now && x.AttemptCount < MaxOtpAttempts)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+
+        if (reusable is not null)
+        {
+            // Firebase challenges deployed before this fix did not record
+            // SentAt, but they were only persisted after a successful send.
+            var sentAt = reusable.SentAt ?? reusable.CreatedAt;
+            if (now - sentAt < ResendCooldown)
+            {
+                return new OtpChallengeResponse(
+                    reusable.Id.ToString(),
+                    purpose,
+                    reusable.DeliveryChannel ?? "email",
+                    reusable.DestinationHint ?? AuthEmailAddress.Mask(account.Email),
+                    reusable.ExpiresAt,
+                    RetryAfterSeconds);
+            }
+        }
 
         if (pendingChallenges.Count > 0)
         {
@@ -526,7 +580,10 @@ public sealed class EmailOtpService(
                 Provider = EmailOtpProviders.FirebaseSms,
                 DeliveryChannel = "sms",
                 DestinationHint = PhoneNumberNormalizer.Mask(sms.PhoneNumber),
-                ExternalSessionInfoEncrypted = runtimeSettings?.Protect(sms.SessionInfo)
+                ExternalSessionInfoEncrypted = runtimeSettings?.Protect(sms.SessionInfo),
+                SentAt = now,
+                DeliveryStatus = "accepted",
+                DeliveryUpdatedAt = now
             };
             deliveryChannel = "sms";
             destinationHint = challenge.DestinationHint ?? PhoneNumberNormalizer.Mask(sms.PhoneNumber);
@@ -551,7 +608,7 @@ public sealed class EmailOtpService(
             await emailSender.SendAsync(new EmailMessage(
                 account.Email,
                 emailSubject,
-                emailText(otpCode),
+                emailText(otpCode, expiresAt),
                 HtmlBody: BuildHtmlBody(emailSubject, account.Email, otpCode, expiresAt),
                 TemplateKey: emailTemplate,
                 TemplateParameters: new Dictionary<string, object?>
@@ -579,6 +636,53 @@ public sealed class EmailOtpService(
             destinationHint,
             expiresAt,
             RetryAfterSeconds);
+    }
+
+    private async Task<T> ExecuteWithOtpIssuanceLockAsync<T>(
+        string accountId,
+        string purpose,
+        Func<Task<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        var isPostgres = db.Database.IsNpgsql();
+        if (!isPostgres)
+        {
+            // SQLite and the in-memory provider have no cross-process advisory
+            // locks. A process gate keeps desktop/test requests atomic.
+            await NonPostgresOtpIssuanceGate.WaitAsync(cancellationToken);
+        }
+
+        await using var transaction = isPostgres && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(cancellationToken)
+            : null;
+
+        try
+        {
+            if (isPostgres)
+            {
+                // Serialize the account/purpose before reading or contacting a
+                // provider. Transaction scope coordinates blue/green instances.
+                var lockKey = $"otp:{accountId}:{purpose}";
+                await db.Database.ExecuteSqlInterpolatedAsync(
+                    $"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0));",
+                    cancellationToken);
+            }
+
+            var result = await operation();
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken);
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (!isPostgres)
+            {
+                NonPostgresOtpIssuanceGate.Release();
+            }
+        }
     }
 
     private async Task<bool> MatchesChallengeCodeAsync(

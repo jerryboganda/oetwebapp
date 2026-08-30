@@ -1,5 +1,15 @@
 # Agent State (local)
 
+## Current task — Video Library cross-profession leak fix (Pharmacy seeing Medicine English Writing/Speaking) — READY TO SHIP
+- **Root Cause**: `CourseContentMatrix.cs` hardcoded that all English videos (`lang == "en"`) were shared across all professions, causing English Writing/Speaking videos to have `ProfessionIdsJson: []` and pass `VideoAppearsFor` regardless of candidate profession.
+- **Fix**:
+  1. Updated `CourseContentMatrix.cs` so that Writing and Speaking videos require explicit profession targeting in both English and Arabic (`ExpectedVideoTargets`, `TryValidateVideo`, `VideoSourceLabel`). Listening, Reading, and Basic English remain shared across all professions.
+  2. Added EF Core migration `20261213090000_SyncLibraryVideoProfessionTargetsFromScope.cs` to synchronize `ProfessionIdsJson` for all Writing/Speaking videos from their `VisibilityScope` (FULL_MEDICINE/CRASH -> `["medicine", "physiotherapy", "dentistry", "radiography"]`, FULL_NURSING -> `["nursing"]`, FULL_PHARMACY -> `["pharmacy"]`).
+  3. Applied live data patch to production PostgreSQL (updated 21 records).
+  4. Updated unit tests in `CourseContentMatrixTests.cs` and `VideoVisibilityScopeLearnerExclusionTests.cs`.
+- **Validation**: `pnpm run ship:gate` passed cleanly.
+- **Next**: Commit and deploy via Ship-It workflow.
+
 ## Current task — Listening Part B/C headings + Separate Part C + audio pipeline — SHIPPED + LIVE
 - Release `ac499562b` + handoff `2cdf9b86d` are on `origin/main` and **deployed**. `Build & Deploy (web + API)` run `33271190604` succeeded 2026-08-29 19:57 UTC, all seven jobs green incl. `migrate-production` and `deploy`. Verified live: `/health/ready` all-ok (database, migrations, stuck_jobs, storage); served `sw.js` carries `CACHE_VERSION = 'oet-v5'` + `EXAM_MEDIA_API`; the new admin route `.../listening/part-bc/source-audit` returns 401 while a fake sibling route returns 404, proving registration.
 - **Deploy procedure (project rule — follow it):** Actions runs need the repo **public**. Flip public, run, then flip back to private immediately; never leave it public. `gh repo edit jerryboganda/oetwebapp --visibility public|private --accept-visibility-change-consequences`. Repo confirmed **private** after this run. The earlier GitHub billing block is resolved.

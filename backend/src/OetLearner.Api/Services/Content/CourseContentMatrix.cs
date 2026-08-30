@@ -61,12 +61,12 @@ public static class CourseContentMatrix
         subtest = subtest.Trim().ToLowerInvariant();
         sourceProfession = sourceProfession.Trim().ToLowerInvariant();
 
-        if (IsBasicEnglishSubtest(subtest) || language == "en" || subtest is "listening" or "reading") return [];
-        if (language != "ar" || subtest is not ("writing" or "speaking"))
+        if (IsBasicEnglishSubtest(subtest) || subtest is "listening" or "reading") return [];
+        if (subtest is not ("writing" or "speaking"))
             throw new ArgumentException("Unsupported course-video language or subtest.");
 
         if (!IsProfession(sourceProfession))
-            throw new ArgumentException("Unsupported profession for Arabic Writing/Speaking.");
+            throw new ArgumentException("Unsupported profession for Writing/Speaking.");
         return [sourceProfession];
     }
 
@@ -103,14 +103,16 @@ public static class CourseContentMatrix
             return false;
         }
 
-        if (lang == "en" || section is "listening" or "reading")
+        if (section is "listening" or "reading")
         {
-            message = normalized.Length == 0 ? string.Empty : "English and Listening/Reading videos are shared and must target all professions.";
+            message = normalized.Length == 0
+                ? string.Empty
+                : "Listening and Reading videos are shared and must target all professions.";
             return normalized.Length == 0;
         }
 
         var valid = normalized.Length > 0;
-        message = valid ? string.Empty : "Arabic Writing/Speaking must target at least one profession.";
+        message = valid ? string.Empty : "Writing and Speaking videos must target at least one profession.";
         return valid;
     }
 
@@ -125,13 +127,14 @@ public static class CourseContentMatrix
     public static string VideoSourceLabel(string? language, string? subtest, IReadOnlyCollection<string> targets)
     {
         if (IsBasicEnglishSubtest(subtest)) return "Basic English Course";
-        if (string.Equals(language, "en", StringComparison.OrdinalIgnoreCase)) return "Shared English";
-        if (subtest?.Trim().ToLowerInvariant() is "listening" or "reading") return "Shared Arabic";
+        var isEnglish = string.Equals(language, "en", StringComparison.OrdinalIgnoreCase);
+        var langName = isEnglish ? "English" : "Arabic";
+        if (subtest?.Trim().ToLowerInvariant() is "listening" or "reading") return $"Shared {langName}";
         var labels = Professions
             .Where(p => targets.Contains(p.Id, StringComparer.OrdinalIgnoreCase))
             .Select(p => p.Label)
             .ToArray();
-        return labels.Length == 0 ? "Arabic" : $"{string.Join(" + ", labels)} Arabic";
+        return labels.Length == 0 ? langName : $"{string.Join(" + ", labels)} {langName}";
     }
 
     public static string? ResolveCourseFolder(string? subtest, string? courseFolder, string? title)

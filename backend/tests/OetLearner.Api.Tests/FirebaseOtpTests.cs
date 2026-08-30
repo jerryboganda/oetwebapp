@@ -97,6 +97,69 @@ public class FirebaseOtpTests
         Assert.Equal(1, harness.Orchestrator.CallCount);
     }
 
+    [Fact]
+    public async Task PasswordReset_RapidRetry_ReusesChallengeWithoutAnotherDelivery()
+    {
+        await using var harness = CreateHarness();
+        await harness.SeedLearnerWithPhoneAsync();
+
+        var first = await harness.Service.RequestPasswordResetOtpAsync("learner@example.com");
+        var retry = await harness.Service.RequestPasswordResetOtpAsync("learner@example.com");
+
+        Assert.Equal(first.ChallengeId, retry.ChallengeId);
+        Assert.Single(harness.Sender.SentMessages);
+        Assert.Equal(1, harness.Orchestrator.CallCount);
+
+        await using var db = new LearnerDbContext(harness.DbOptions);
+        Assert.Single(await db.EmailOtpChallenges
+            .Where(x => x.Purpose == EmailOtpService.PasswordResetPurpose)
+            .ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeviceTrust_RapidRetry_ReusesChallengeWithoutAnotherDelivery()
+    {
+        await using var harness = CreateHarness();
+        var account = await harness.SeedLearnerWithPhoneAsync();
+
+        var first = await harness.Service.RequestDeviceTrustOtpAsync(account);
+        var retry = await harness.Service.RequestDeviceTrustOtpAsync(account);
+
+        Assert.Equal(first.ChallengeId, retry.ChallengeId);
+        Assert.Single(harness.Sender.SentMessages);
+        Assert.Equal(1, harness.Orchestrator.CallCount);
+
+        await using var db = new LearnerDbContext(harness.DbOptions);
+        Assert.Single(await db.EmailOtpChallenges
+            .Where(x => x.Purpose == EmailOtpService.DeviceTrustPurpose)
+            .ToListAsync());
+    }
+
+    [Fact]
+    public async Task DeviceTrust_ConcurrentRequests_SendOnlyOneOtp()
+    {
+        await using var harness = CreateHarness();
+        var account = await harness.SeedLearnerWithPhoneAsync();
+        harness.Orchestrator.PauseDeliveries = true;
+        var firstService = harness.CreateService();
+        var secondService = harness.CreateService();
+
+        var firstRequest = firstService.RequestDeviceTrustOtpAsync(account);
+        await harness.Orchestrator.DeliveryStarted;
+        var secondRequest = secondService.RequestDeviceTrustOtpAsync(account);
+        harness.Orchestrator.ReleaseDeliveries();
+        var responses = await Task.WhenAll(firstRequest, secondRequest);
+
+        Assert.Equal(responses[0].ChallengeId, responses[1].ChallengeId);
+        Assert.Single(harness.Sender.SentMessages);
+        Assert.Equal(1, harness.Orchestrator.CallCount);
+
+        await using var db = new LearnerDbContext(harness.DbOptions);
+        Assert.Single(await db.EmailOtpChallenges
+            .Where(x => x.Purpose == EmailOtpService.DeviceTrustPurpose)
+            .ToListAsync());
+    }
+
     [Theory]
     [InlineData("+923001234567", "+923001234567")]
     [InlineData("+92 300 1234567", "+923001234567")]
@@ -170,7 +233,7 @@ public class FirebaseOtpTests
                 AuthDomain: "oet-prep-learner.firebaseapp.com",
                 WebApiKey: "web-key")
         });
-        var service = new EmailOtpService(
+        EmailOtpService CreateService() => new(
             new LearnerDbContext(dbOptions),
             authOptions,
             sender,
@@ -178,7 +241,8 @@ public class FirebaseOtpTests
             orchestrator,
             settings,
             firebase);
-        return new FirebaseOtpHarness(dbOptions, sender, now, service, orchestrator, firebase, settings);
+
+        return new FirebaseOtpHarness(dbOptions, sender, now, CreateService(), CreateService, orchestrator, firebase, settings);
     }
 
     private sealed record FirebaseOtpHarness(
@@ -186,6 +250,7 @@ public class FirebaseOtpTests
         RecordingEmailSender Sender,
         MutableTimeProvider TimeProvider,
         EmailOtpService Service,
+        Func<EmailOtpService> CreateService,
         FakeOtpDeliveryOrchestrator Orchestrator,
         FakeFirebaseSmsOtpClient Firebase,
         TestRuntimeSettingsProvider Settings) : IAsyncDisposable
@@ -257,12 +322,20 @@ public class FirebaseOtpTests
 
     private sealed class FakeOtpDeliveryOrchestrator : IOtpDeliveryOrchestrator
     {
+        private int _callCount;
+        private readonly TaskCompletionSource _deliveryStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseDeliveries = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public OtpSmsDeliveryResult Next { get; set; } = new(false, false, null, null);
         public bool ThrowIfCalled { get; set; }
-        public int CallCount { get; private set; }
+        public bool PauseDeliveries { get; set; }
+        public int CallCount => Volatile.Read(ref _callCount);
+        public Task DeliveryStarted => _deliveryStarted.Task;
         public string? LastPurpose { get; private set; }
 
-        public Task<OtpSmsDeliveryResult> TrySendFirebaseSmsAsync(
+        public void ReleaseDeliveries() => _releaseDeliveries.TrySetResult();
+
+        public async Task<OtpSmsDeliveryResult> TrySendFirebaseSmsAsync(
             ApplicationUserAccount account,
             string purpose,
             string? recaptchaToken,
@@ -273,9 +346,15 @@ public class FirebaseOtpTests
                 throw new InvalidOperationException("Firebase SMS must not be attempted.");
             }
 
-            CallCount++;
+            Interlocked.Increment(ref _callCount);
             LastPurpose = purpose;
-            return Task.FromResult(Next);
+            _deliveryStarted.TrySetResult();
+            if (PauseDeliveries)
+            {
+                await _releaseDeliveries.Task.WaitAsync(cancellationToken);
+            }
+
+            return Next;
         }
     }
 
@@ -314,11 +393,24 @@ public class FirebaseOtpTests
 
     private sealed class RecordingEmailSender : IEmailSender
     {
-        public List<EmailMessage> SentMessages { get; } = [];
+        private readonly List<EmailMessage> _sentMessages = [];
+        public IReadOnlyList<EmailMessage> SentMessages
+        {
+            get
+            {
+                lock (_sentMessages)
+                {
+                    return _sentMessages.ToArray();
+                }
+            }
+        }
 
         public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
         {
-            SentMessages.Add(message);
+            lock (_sentMessages)
+            {
+                _sentMessages.Add(message);
+            }
             return Task.CompletedTask;
         }
     }
