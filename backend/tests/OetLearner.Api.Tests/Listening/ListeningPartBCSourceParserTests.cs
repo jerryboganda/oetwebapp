@@ -44,16 +44,19 @@ public class ListeningPartBCSourceParserTests
         C Further research is needed to establish its full range of possible uses.
         """;
 
-    // Two printed items interleaved by the watermark column: Q29's stem sits
-    // under the "30." anchor and Q30's own stem follows its option set.
+    // Verbatim from the production Atlas Sample Test 1 question paper: two
+    // printed items interleaved by the watermark column. Q29's context line
+    // sits above a bare "30." anchor, and BOTH option sets follow it.
     private const string InterleavedText = """
-        29. You hear a hospital pharmacist talking to a patient.
+        29. You hear a trainee doctor telling his supervisor about a problem he had carrying out a procedure.
 
         30.
 
-        SAMPLE The patient's main concern about his medication is whether
-        A he's been prescribed the most effective dose. B he's likely to experience long-term side effects. C he's been taking it at the most appropriate time.
-        You hear a primary-care doctor talking to a patient. The patient is worried that she may have A self-treated her toe in an inappropriate way. B damaged a toe that she'd previously injured. C triggered the resurgence of a health condition.
+        SAMPLE The trainee feels the cause of the problem was
+        A treatment administered previously. B the patient's negative reaction. C inappropriate equipment.
+        You hear a doctor talking to a teenage boy who has a painful wrist. The doctor wants to establish whether A a fracture may be misaligned. B the swelling may be due to a sprain.
+
+        C there may be more than one bone affected.
         """;
 
     [Fact]
@@ -116,19 +119,114 @@ public class ListeningPartBCSourceParserTests
     }
 
     [Fact]
-    public void Reports_interleaved_items_instead_of_guessing_an_attribution()
+    public void Decodes_the_sample_watermark_interleave_to_the_right_items()
     {
+        // The watermark column makes the extractor emit Q29's context line, a
+        // bare "30.", then Q29's question + options followed by Q30's.
+        // Attribution is fixed by order: the FIRST option set belongs to the
+        // LOWER number, because its stem runs into the block.
         var result = ListeningPartBCSourceParser.Parse(InterleavedText, [29, 30]);
 
-        Assert.Empty(result.Items);
-        Assert.Equal(2, result.Skipped.Count);
+        Assert.Empty(result.Skipped);
+        Assert.Equal(2, result.Items.Count);
 
-        var q29 = result.Skipped.Single(skip => skip.Number == 29);
-        Assert.Equal(ListeningPartBCSourceSkipReason.OptionSetIncomplete, q29.Reason);
+        var q29 = result.Items.Single(item => item.Number == 29);
+        Assert.Equal(
+            "You hear a trainee doctor telling his supervisor about a problem he had carrying out a procedure. The trainee feels the cause of the problem was",
+            q29.Stem);
+        Assert.Equal("treatment administered previously.", q29.OptionA);
+        Assert.Equal("the patient's negative reaction.", q29.OptionB);
+        Assert.Equal("inappropriate equipment.", q29.OptionC);
 
-        var q30 = result.Skipped.Single(skip => skip.Number == 30);
-        Assert.Equal(ListeningPartBCSourceSkipReason.AmbiguousInterleavedText, q30.Reason);
-        Assert.Contains("source paper", q30.Detail, StringComparison.OrdinalIgnoreCase);
+        var q30 = result.Items.Single(item => item.Number == 30);
+        Assert.Equal(
+            "You hear a doctor talking to a teenage boy who has a painful wrist. The doctor wants to establish whether",
+            q30.Stem);
+        Assert.Equal("a fracture may be misaligned.", q30.OptionA);
+        Assert.Equal("the swelling may be due to a sprain.", q30.OptionB);
+        Assert.Equal("there may be more than one bone affected.", q30.OptionC);
+    }
+
+    [Fact]
+    public void Reads_the_nova_bullet_layout_with_no_full_stop_and_glued_option_letters()
+    {
+        // Verbatim from a production Nova question paper: the number carries no
+        // full stop and each option letter is glued to its text behind a bullet.
+        const string text = """
+            Practice Test 11 : Part B - Q(25-30) Answersheet
+             25 You hear part of an announcement in a ward. Why is the announcement being given at this time? o AIt is a routine announcement given before every briefing.
+            o BIt is being given because of an accident in the hospital.
+            o CIt is being because of the rise of a certain infectious disease.
+             26 You hear part of a training for nurses on medication errors. What is the overall topic of the training? o ABeing able to explain the causes of most medication errors
+            o BBeing able to acquire knowledge and skill in managing errors
+            o CBeing able to demonstrate how to investigate medication errors
+            """;
+
+        var result = ListeningPartBCSourceParser.Parse(text, [25, 26]);
+
+        Assert.Equal(2, result.Items.Count);
+        var q25 = result.Items.Single(i => i.Number == 25);
+        Assert.Equal(
+            "You hear part of an announcement in a ward. Why is the announcement being given at this time?",
+            q25.Stem);
+        Assert.Equal("It is a routine announcement given before every briefing.", q25.OptionA);
+        Assert.Equal("It is being given because of an accident in the hospital.", q25.OptionB);
+        Assert.Equal("It is being because of the rise of a certain infectious disease.", q25.OptionC);
+    }
+
+    [Fact]
+    public void Reads_the_kaplan_parenthesised_option_layout()
+    {
+        // Verbatim from the production Kaplan question paper.
+        const string text = """
+            PART B: QUESTIONS 25 TO 30
+            25. You hear two doctors discuss the transfer of care for a patient. The patient's CURB-65 score means that he will (A) be transferred from the Emergency Department. (B) receive additional medication and treatment. (C) be treated as an out-patient.
+            26. You hear a speech pathologist talking to the wife of a patient. What does she want to know? (A) how long recovery takes (B) whether communication improves (C) how to speed healing
+            """;
+
+        var result = ListeningPartBCSourceParser.Parse(text, [25]);
+
+        var q25 = Assert.Single(result.Items);
+        Assert.Equal(
+            "You hear two doctors discuss the transfer of care for a patient. The patient's CURB-65 score means that he will",
+            q25.Stem);
+        Assert.Equal("be transferred from the Emergency Department.", q25.OptionA);
+        Assert.Equal("be treated as an out-patient.", q25.OptionC);
+    }
+
+    [Fact]
+    public void Maps_section_relative_numbering_onto_the_canonical_printed_numbers()
+    {
+        // Some papers restart numbering per section instead of printing 25-42.
+        // Part B item 1 is printed Q25; Part C extract 2 item 1 is printed Q37.
+        const string text = """
+            E2 language Listening Part B.3
+            1. You hear a doctor and a nurse reviewing a coma patient. What is the Doctor checking for? A The symptoms the patient is exhibiting B The severity of the patient's coma C The range of mobility of the patient
+            E2 Language Part C.3 Extract 1
+            1. What is the stated purpose of the talk? A To evaluate if the audience are feeling burnout B To inform and stimulate discussion about burnout C To describe new research on treatment of burnout
+            Extract 2
+            1. What does the speaker recommend for new staff? A regular supervision B shorter shifts C peer mentoring
+            """;
+
+        var result = ListeningPartBCSourceParser.Parse(text, [25, 31, 37]);
+
+        Assert.Equal(3, result.Items.Count);
+        Assert.StartsWith("You hear a doctor and a nurse reviewing a coma patient",
+            result.Items.Single(i => i.Number == 25).Stem, StringComparison.Ordinal);
+        Assert.Equal("What is the stated purpose of the talk?",
+            result.Items.Single(i => i.Number == 31).Stem);
+        Assert.Equal("What does the speaker recommend for new staff?",
+            result.Items.Single(i => i.Number == 37).Stem);
+    }
+
+    [Fact]
+    public void Leaves_a_canonically_numbered_paper_alone_when_renumbering()
+    {
+        // A paper that already prints 25-42 must never be renumbered.
+        var result = ListeningPartBCSourceParser.Parse(CleanPartBText, [27, 28]);
+
+        Assert.Equal(2, result.Items.Count);
+        Assert.Contains("paediatric ward", result.Items.Single(i => i.Number == 27).Stem, StringComparison.Ordinal);
     }
 
     [Fact]

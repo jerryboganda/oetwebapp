@@ -52,7 +52,15 @@ public sealed record ListeningPartBCRecoveryReport(
     int AlreadyUsable,
     int Recovered,
     int Unrecoverable,
-    IReadOnlyList<ListeningPartBCRecoveryItem> Items)
+    IReadOnlyList<ListeningPartBCRecoveryItem> Items,
+    /// <summary>Diagnostics for an operator working out WHY a paper did not
+    /// recover: how much cached text the paper has at all, how long the text the
+    /// parser actually chose is, and a short excerpt of it. Without these, a
+    /// paper that fails is indistinguishable from one with no source.</summary>
+    int CachedTextEntries = 0,
+    int LargestCachedTextChars = 0,
+    int SelectedSourceChars = 0,
+    string? SelectedSourceExcerpt = null)
 {
     /// <summary>True when no Part B/C item is left without a printed question.</summary>
     public bool IsClean => Unrecoverable == 0 && PartBCQuestionCount > 0;
@@ -199,7 +207,7 @@ public sealed class ListeningPartBCSourceRecoveryService(
         var wanted = needsStem.Union(needsOptions).ToHashSet();
 
         var sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(
-            ReadAssetTexts(paper));
+            ReadAssetTexts(paper), wanted);
 
         // A paper ingested before the PDF engine was configured has an empty
         // cached extraction, and the normal extraction pass skips any asset that
@@ -213,7 +221,7 @@ public sealed class ListeningPartBCSourceRecoveryService(
             try
             {
                 await textExtraction.ExtractForPaperAsync(paper.Id, ct, force: true);
-                sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper));
+                sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper), wanted);
             }
             catch (Exception)
             {
@@ -279,6 +287,7 @@ public sealed class ListeningPartBCSourceRecoveryService(
                 null));
         }
 
+        var cachedTexts = ReadAssetTexts(paper).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
         var report = new ListeningPartBCRecoveryReport(
             PaperId: paper.Id,
             PaperTitle: paper.Title,
@@ -290,7 +299,13 @@ public sealed class ListeningPartBCSourceRecoveryService(
             AlreadyUsable: alreadyUsableCount,
             Recovered: recoveredCount,
             Unrecoverable: unrecoverableCount,
-            Items: items);
+            Items: items,
+            CachedTextEntries: cachedTexts.Count,
+            LargestCachedTextChars: cachedTexts.Count == 0 ? 0 : cachedTexts.Max(t => t!.Length),
+            SelectedSourceChars: sourceText?.Length ?? 0,
+            SelectedSourceExcerpt: sourceText is null
+                ? null
+                : sourceText[..Math.Min(1500, sourceText.Length)]);
 
         if (dryRun || changedNumbers.Count == 0)
         {
