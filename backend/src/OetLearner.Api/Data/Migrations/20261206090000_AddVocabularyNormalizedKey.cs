@@ -171,19 +171,19 @@ public partial class AddVocabularyNormalizedKey : Migration
 
         // Unique promotion is W11, after duplicate merge. W9 still indexes
         // NormalizedWord for lookup and reports collisions.
+        // Idempotent `dotnet ef migrations script` wraps SQL in PL/pgSQL DO
+        // blocks. CONCURRENTLY cannot run inside a function, so production
+        // apply uses a regular CREATE INDEX.
         migrationBuilder.Sql(
             $"""
-            CREATE INDEX CONCURRENTLY IF NOT EXISTS "{LookupIndex}"
+            CREATE INDEX IF NOT EXISTS "{LookupIndex}"
             ON "VocabularyWords" ("NormalizedWord")
             WHERE "NormalizedWord" <> '';
-            """,
-            suppressTransaction: true);
+            """);
     }
 
     private static void DropConcurrentIndex(MigrationBuilder migrationBuilder, string indexName)
     {
-        migrationBuilder.Sql(
-            $"""DROP INDEX CONCURRENTLY IF EXISTS "{indexName}";""",
-            suppressTransaction: true);
+        migrationBuilder.Sql($"""DROP INDEX IF EXISTS "{indexName}";""");
     }
 }
