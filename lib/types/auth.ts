@@ -75,6 +75,12 @@ export interface PendingDeviceChallenge {
   changeMaxPerWindow?: number | null;
   countdown?: string | null;
   selectedDeviceId?: string | null;
+  /** Set to `challengeToken` once an OTP has actually been requested for this
+   * exact (challenge, selection) pair. Persisted alongside the challenge so
+   * the "already sent" guard survives a component remount — e.g. Android
+   * backgrounding/killing the WebView while the learner checks their email —
+   * instead of living only in a `useRef` that resets on every fresh mount. */
+  otpRequestedForToken?: string | null;
 }
 
 export interface SignupExamType {

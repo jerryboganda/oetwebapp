@@ -22,6 +22,14 @@ import {
 
 type LanguageChoice = VideoLanguage | 'unset';
 
+/** Writing/Speaking videos must target exactly one isolated scope (spec §6b). SHARED is not offered. */
+const WS_SCOPE_OPTIONS = [
+  { value: 'FULL_MEDICINE', label: 'Medicine — Full Course', description: 'Writing/Speaking visible to Medicine Full Course only.' },
+  { value: 'FULL_NURSING', label: 'Nursing — Full Course', description: 'Visible to Nursing Full Course only.' },
+  { value: 'FULL_PHARMACY', label: 'Pharmacy — Full Course', description: 'Visible to Pharmacy Full Course only.' },
+  { value: 'CRASH', label: 'Crash / Fast-Track', description: 'Visible to Crash / Fast-Track packages only.' },
+];
+
 /** ISO string → value for a `datetime-local` input (local time, minute precision). */
 function toDatetimeLocal(iso: string | null): string {
   if (!iso) return '';
@@ -46,8 +54,13 @@ export function StepAccess() {
   const [error, setError] = useState<string | null>(null);
 
   const isArabicProfessionSpecific = language === 'ar' && (video.subtestCode === 'writing' || video.subtestCode === 'speaking');
+  const isWritingSpeaking = video.subtestCode === 'writing' || video.subtestCode === 'speaking';
+  const [visibilityScope, setVisibilityScope] = useState<string>(
+    isWritingSpeaking ? (video.visibilityScope ?? '') : 'SHARED',
+  );
   const canAdvance = (accessTier === 'free' || accessTier === 'premium') && language !== 'unset' && Boolean(video.subtestCode)
-    && (!isArabicProfessionSpecific || arabicTargets.length > 0);
+    && (!isArabicProfessionSpecific || arabicTargets.length > 0)
+    && (!isWritingSpeaking || WS_SCOPE_OPTIONS.some((o) => o.value === visibilityScope));
 
   const submit = useCallback(async () => {
     let publishAtIso: string | null = null;
@@ -72,6 +85,10 @@ export function StepAccess() {
       setError('Select at least one profession for this Arabic Writing/Speaking video.');
       throw new Error('invalid');
     }
+    if (isWritingSpeaking && !WS_SCOPE_OPTIONS.some((o) => o.value === visibilityScope)) {
+      setError('Choose a visibility target (Medicine, Nursing, Pharmacy, or Crash) for this Writing/Speaking video.');
+      throw new Error('invalid');
+    }
     const targetProfessionIds = isArabicProfessionSpecific ? arabicTargets : [];
     await adminPatchVideo(video.videoId, {
       accessTier,
@@ -80,9 +97,10 @@ export function StepAccess() {
       isFeatured,
       sortOrder: Number(sortOrder) || 0,
       publishAt: publishAtIso,
+      visibilityScope: isWritingSpeaking ? visibilityScope : 'SHARED',
     });
     await wizard.refresh();
-  }, [video.videoId, video.subtestCode, accessTier, language, isArabicProfessionSpecific, arabicTargets, isFeatured, sortOrder, publishAt, wizard]);
+  }, [video.videoId, video.subtestCode, accessTier, language, isArabicProfessionSpecific, arabicTargets, isFeatured, sortOrder, publishAt, visibilityScope, isWritingSpeaking, wizard]);
 
   useStepRegistration('access', { canAdvance, submit });
 
@@ -128,6 +146,21 @@ export function StepAccess() {
         />
       ) : (
         <InlineAlert variant="info">This language and subtest are shared automatically. Profession targets cannot drift.</InlineAlert>
+      )}
+
+      {isWritingSpeaking ? (
+        <RadioGroup
+          name="visibility-scope"
+          label="Video access scope"
+          value={visibilityScope}
+          onChange={setVisibilityScope}
+          options={WS_SCOPE_OPTIONS}
+          error={WS_SCOPE_OPTIONS.some((o) => o.value === visibilityScope) ? undefined : 'Choose exactly one target.'}
+        />
+      ) : (
+        <InlineAlert variant="info">
+          Listening &amp; Reading are shared automatically (SHARED) — visible to every Full Course and Crash learner across all professions.
+        </InlineAlert>
       )}
 
       <div className="grid gap-4 md:grid-cols-2">

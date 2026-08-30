@@ -65,6 +65,7 @@ public sealed record VideoEntitlementResult(
                           // | "no_active_subscription" | "subscription_frozen" | "subscription_expired" | "plan_does_not_grant"
                           // | "plan_does_not_grant_subtest" | "profession_mismatch" | "plan_excludes_video"
                           // | "plan_excludes_course_family" | "not_in_user_allocation"
+                          // | "visibility_scope_mismatch"
     string? CurrentTier); // null | "free" | "premium" | "trial" | "frozen" | "expired" | "admin"
 
 /// <summary>Resolved-once grant context for evaluating many videos.</summary>
@@ -112,7 +113,14 @@ public sealed record VideoAccessContext(
     bool BasicEnglishEntitled = false,
     bool ExclusivelyBasicEnglish = false,
     // Package-level Full/Crash isolation. Null = do not apply (unit tests / unrestricted).
-    CourseFamilyAccess? CourseFamilies = null);
+    CourseFamilyAccess? CourseFamilies = null,
+    // Package-derived Video Library visibility scopes (set-union across effective packages,
+    // OQ-1). Holds only FULL_*/CRASH scopes; SHARED is implicit and never stored. Null = do
+    // not apply (unit tests / anonymous / admin contexts), mirroring null CourseFamilies -
+    // downstream tier gates still deny anonymous users. Every authenticated learner context
+    // receives a non-null set from the resolver. Empty = entitled learner whose packages
+    // grant no isolated scope (shared Listening/Reading only).
+    IReadOnlySet<string>? PackageScopes = null);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
 public sealed record VideoLibraryBundle(bool HasNode, string Tier, IReadOnlyList<string> Subtests)
@@ -162,6 +170,7 @@ public sealed class VideoEntitlementService(
             case "plan_excludes_course_family":
             case "plan_excludes_video":
             case "plan_excludes_video_tag":
+            case "visibility_scope_mismatch":
                 throw ApiException.NotFound("video_not_found", "Video not found.");
             default:
                 throw ApiException.PaymentRequired("content_locked",
@@ -206,7 +215,8 @@ public sealed class VideoEntitlementService(
                 CurrentTier: frozen ? "frozen" : expired ? "expired" : "free",
                 ProfessionId: entitlement.ProfessionId,
                 UserVideoAccess: userVideoAccess,
-                CourseFamilies: entitlement.CourseFamilies);
+                CourseFamilies: entitlement.CourseFamilies,
+                PackageScopes: entitlement.PackageScopes);
         }
 
         var planJson = await ResolvePlanEntitlementsJsonAsync(entitlement, ct);
@@ -265,7 +275,8 @@ public sealed class VideoEntitlementService(
             UserVideoAccess: userVideoAccess,
             BasicEnglishEntitled: basicEnglish.Entitled,
             ExclusivelyBasicEnglish: basicEnglish.ExclusivelyBasicEnglish,
-            CourseFamilies: entitlement.CourseFamilies);
+            CourseFamilies: entitlement.CourseFamilies,
+            PackageScopes: entitlement.PackageScopes);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
@@ -321,19 +332,35 @@ public sealed class VideoEntitlementService(
             }
         }
 
-        // Course-family isolation (mutual Full ↔ Crash). Family is resolved from
-        // explicit batch tags, then title/collection labels, and finally Shared.
-        // Neutral content stays visible, while out-of-family videos are hidden
-        // regardless of access tier unless the plan intentionally includes that
-        // exact video.
-        var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
-        if (!explicitlyIncluded
-            && (family == CourseFamily.None
-                || (context.CourseFamilies is { } families
-                    && families.IsRestricted
-                    && !families.Allows(family))))
+        // Video visibility scope (spec §2/§6 — the single access rule). The explicit
+        // VisibilityScope column is the sole authority once set: SHARED is visible to every
+        // package scope; any other scope is visible only when it is one of the candidate's
+        // granted package scopes (set-union across all held packages). A per-plan explicit
+        // include still overrides, exactly as it overrides excludes/course-family. Rows with a
+        // null/empty scope predate the backfill — fall back to the legacy tag/label engine.
+        var scope = video.VisibilityScope?.Trim();
+        if (string.IsNullOrEmpty(scope))
         {
-            return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
+            // Course-family isolation (mutual Full ↔ Crash). Family is resolved from
+            // explicit batch tags, then title/collection labels, and finally Shared.
+            // Neutral content stays visible, while out-of-family videos are hidden
+            // regardless of access tier unless the plan intentionally includes that
+            // exact video.
+            var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
+            if (!explicitlyIncluded
+                && (family == CourseFamily.None
+                    || (context.CourseFamilies is { } families
+                        && families.IsRestricted
+                        && !families.Allows(family))))
+            {
+                return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
+            }
+        }
+        else if (!explicitlyIncluded
+            && !string.Equals(scope, VideoVisibilityScopes.Shared, StringComparison.OrdinalIgnoreCase)
+            && (context.PackageScopes is not null && !context.PackageScopes.Contains(scope)))
+        {
+            return new VideoEntitlementResult(false, "visibility_scope_mismatch", context.CurrentTier);
         }
 
         if (string.Equals(video.AccessTier, "free", StringComparison.OrdinalIgnoreCase))

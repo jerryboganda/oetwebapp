@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Clock, Laptop, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { formatDeviceCountdown, selectReplacementDevice, sendDeviceVerificationOtp } from '@/lib/auth-client';
+import { formatDeviceCountdown, getPendingDeviceChallenge, selectReplacementDevice, sendDeviceVerificationOtp } from '@/lib/auth-client';
 import { obtainFirebaseOtpRecaptchaToken } from '@/lib/auth/firebase-otp-recaptcha';
 import { describeOtpDelivery } from '@/lib/auth/otp-delivery';
 import { appendAuthNextParam, AUTH_ROUTES } from '@/lib/auth/routes';
@@ -41,6 +41,12 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
   const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(pendingDeviceChallenge?.selectedDeviceId ?? null);
   const [countdown, setCountdown] = useState<string | null>(pendingDeviceChallenge?.countdown ?? null);
   const [secondsRemaining, setSecondsRemaining] = useState<number | null>(pendingDeviceChallenge?.secondsRemaining ?? null);
+  // Mirrors the live (possibly selection-bound) challenge token from storage.
+  // `pendingDeviceChallenge.challengeToken` from context is a snapshot taken
+  // when the challenge started and never updates when selectReplacementDevice
+  // exchanges it for a selection-bound token, so it can't drive the auto-send
+  // effect below on its own.
+  const [activeChallengeToken, setActiveChallengeToken] = useState<string | null>(pendingDeviceChallenge?.challengeToken ?? null);
   const sentForToken = useRef<string | null>(null);
 
   const isReplacementRequired = pendingDeviceChallenge?.mode === 'replacement_required';
@@ -71,6 +77,14 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     setSelectedDeviceId(pendingDeviceChallenge?.selectedDeviceId ?? null);
   }, [pendingDeviceChallenge?.selectedDeviceId]);
 
+  // Re-sync when context hands us a genuinely new challenge (e.g. a fresh
+  // sign-in attempt). Selection binding updates `activeChallengeToken`
+  // itself (see handleSelectDevice), so this intentionally does not run on
+  // every render.
+  useEffect(() => {
+    setActiveChallengeToken(pendingDeviceChallenge?.challengeToken ?? null);
+  }, [pendingDeviceChallenge?.challengeToken]);
+
   const applyChallengeNotice = (destinationHint?: string, channel?: string) => {
     const nextChannel = channel || 'email';
     setDeliveryChannel(nextChannel);
@@ -88,31 +102,49 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     setError(null);
     setIsSelecting(true);
     try {
-      await selectReplacementDevice(deviceId);
+      const updated = await selectReplacementDevice(deviceId);
       setNotice(null);
-      // After binding, send the OTP for the new selection
-      setIsSending(true);
-      const challenge = await sendOtp();
-      applyChallengeNotice(challenge.destinationHint, challenge.deliveryChannel);
+      // Binding a selection exchanges the challenge for a fresh,
+      // selection-bound token. Surface it so the auto-send effect below
+      // (keyed on activeChallengeToken/selectedDeviceId) sends the OTP —
+      // sending it again here too used to fire two OTPs for one selection.
+      setActiveChallengeToken(updated.challengeToken);
     } catch (selectError) {
       setError(readErrorMessage(selectError, 'Unable to select that device.'));
     } finally {
       setIsSelecting(false);
-      setIsSending(false);
     }
   };
 
   useEffect(() => {
-    const challengeToken = pendingDeviceChallenge?.challengeToken;
-    if (!challengeToken || sentForToken.current === challengeToken) {
+    if (!activeChallengeToken) {
+      return;
+    }
+    // In-flight/same-mount lock: avoids a duplicate request if this effect
+    // re-runs (e.g. React StrictMode double-invoke) before the send below
+    // has resolved and persisted the durable flag checked next.
+    if (sentForToken.current === activeChallengeToken) {
+      return;
+    }
+    // Durable guard, re-read from storage (not the `pendingDeviceChallenge`
+    // prop, which never updates after a selection binds a new token): if a
+    // code was already requested for this exact token — including in a
+    // previous mount, e.g. the WebView reloaded while the learner briefly
+    // left the app to check their email — do not silently request another
+    // one and invalidate the code already in their inbox.
+    const stored = getPendingDeviceChallenge();
+    if (!stored || stored.challengeToken !== activeChallengeToken) {
+      return;
+    }
+    if (stored.otpRequestedForToken === activeChallengeToken) {
       return;
     }
     // For replacement_required without a selection, do not auto-send OTP — user must pick a slot first
-    if (isReplacementRequired && !selectedDeviceId) {
+    if (isReplacementRequired && !stored.selectedDeviceId) {
       return;
     }
-    // Already selection-bound? allow auto-send
-    sentForToken.current = challengeToken;
+
+    sentForToken.current = activeChallengeToken;
     let cancelled = false;
     setIsSending(true);
 
@@ -124,6 +156,7 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
         }
       } catch (sendError) {
         if (!cancelled) {
+          sentForToken.current = null; // allow a retry on transient failure
           const msg = readErrorMessage(sendError, 'Unable to send the device verification code.');
           // Show replacement selection required as a distinct message
           if (msg.toLowerCase().includes('select which device')) {
@@ -143,9 +176,7 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingDeviceChallenge?.challengeToken, pendingDeviceChallenge?.email, isReplacementRequired, selectedDeviceId]);
-
-  // When selection is made after initial mount, the challengeToken changes (bound token); the effect above handles the send.
+  }, [activeChallengeToken, isReplacementRequired, selectedDeviceId]);
 
   const handleResend = async () => {
     if (isReplacementRequired && !selectedDeviceId) {
