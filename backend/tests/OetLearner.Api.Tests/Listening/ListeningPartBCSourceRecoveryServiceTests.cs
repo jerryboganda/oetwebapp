@@ -466,6 +466,160 @@ public class ListeningPartBCSourceRecoveryServiceTests
         Assert.Equal(string.Empty, (await db.ListeningQuestions.SingleAsync(q => q.Id == "nova-q-27")).Stem);
     }
 
+    // ── Papers whose Part B/C content is JSON-only (no relational rows) ─────
+
+    [Fact]
+    public async Task Recovers_a_paper_with_no_relational_rows_by_patching_the_authored_json()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        var extracted = new Dictionary<string, object?>
+        {
+            [QuestionPaperAssetId] = QuestionPaperText,
+            ["listeningQuestions"] = new object[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["number"] = 27, ["partCode"] = "B", ["type"] = "multiple_choice_3",
+                    ["stem"] = "What does the speaker identify as the main clinical priority?",
+                    ["options"] = new[]
+                    {
+                        "comparing equipment used with patients of different ages",
+                        "gaining an awareness of how some equipment is used",
+                        "learning how best to organise some equipment",
+                    },
+                    ["correctAnswer"] = "B",
+                },
+                new Dictionary<string, object?>
+                {
+                    ["number"] = 28, ["partCode"] = "B", ["type"] = "multiple_choice_3",
+                    ["stem"] = "A real authored Part B question that already reads fine?",
+                    ["options"] = new[] { "keeps its own wording", "second", "third" },
+                    ["correctAnswer"] = "A",
+                },
+            },
+        };
+
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "paper-json-only",
+            SubtestCode = "listening",
+            Title = "Nova Practice Series — Listening Test JSON-only",
+            Slug = "nova-practice-series-listening-test-json-only",
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 42,
+            Status = ContentStatus.Published,
+            ExtractedTextJson = JsonSerializer.Serialize(extracted),
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = QuestionPaperAssetId,
+            PaperId = "paper-json-only",
+            Role = PaperAssetRole.QuestionPaper,
+            MediaAssetId = "media-qp-json-only",
+            IsPrimary = true,
+            CreatedAt = now,
+        });
+        // Deliberately NO db.ListeningQuestions rows — this is the bulk-import
+        // shape where Part B/C content lives only in the JSON projection, which
+        // the relational recovery path above cannot see at all.
+        await db.SaveChangesAsync();
+
+        var report = await new ListeningPartBCSourceRecoveryService(db)
+            .RecoverPaperAsync("paper-json-only", dryRun: false, adminId: "admin-1", CancellationToken.None);
+
+        Assert.Equal(2, report.PartBCQuestionCount);
+        Assert.Equal(1, report.Recovered);
+        Assert.Equal(1, report.AlreadyUsable);
+        Assert.Equal(0, report.Unrecoverable);
+
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == "paper-json-only");
+        using var document = JsonDocument.Parse(paper.ExtractedTextJson);
+        var authored = document.RootElement.GetProperty("listeningQuestions");
+        var q27 = authored.EnumerateArray().Single(item => item.GetProperty("number").GetInt32() == 27);
+        var q28 = authored.EnumerateArray().Single(item => item.GetProperty("number").GetInt32() == 28);
+
+        Assert.StartsWith(
+            "You hear the beginning of a training session",
+            q27.GetProperty("stem").GetString(),
+            StringComparison.Ordinal);
+        Assert.DoesNotContain(
+            "main clinical priority", q27.GetProperty("stem").GetString(), StringComparison.OrdinalIgnoreCase);
+        // Already-usable wording is left exactly as authored.
+        Assert.Equal(
+            "A real authored Part B question that already reads fine?", q28.GetProperty("stem").GetString());
+
+        var audit = Assert.Single(await db.AuditEvents.ToListAsync());
+        Assert.Equal("ListeningPartBCSourceStemsRecovered", audit.Action);
+        Assert.Equal("paper-json-only", audit.ResourceId);
+    }
+
+    [Fact]
+    public async Task A_json_only_paper_dry_run_reports_and_writes_nothing()
+    {
+        await using var db = NewDb();
+        var now = DateTimeOffset.UtcNow;
+        var extracted = new Dictionary<string, object?>
+        {
+            [QuestionPaperAssetId] = QuestionPaperText,
+            ["listeningQuestions"] = new object[]
+            {
+                new Dictionary<string, object?>
+                {
+                    ["number"] = 27, ["partCode"] = "B", ["type"] = "multiple_choice_3",
+                    ["stem"] = "What does the speaker identify as the main clinical priority?",
+                    ["options"] = new[]
+                    {
+                        "comparing equipment used with patients of different ages",
+                        "gaining an awareness of how some equipment is used",
+                        "learning how best to organise some equipment",
+                    },
+                    ["correctAnswer"] = "B",
+                },
+            },
+        };
+
+        db.ContentPapers.Add(new ContentPaper
+        {
+            Id = "paper-json-only-2",
+            SubtestCode = "listening",
+            Title = "Nova Practice Series — Listening Test JSON-only 2",
+            Slug = "nova-practice-series-listening-test-json-only-2",
+            Difficulty = "standard",
+            EstimatedDurationMinutes = 42,
+            Status = ContentStatus.Published,
+            ExtractedTextJson = JsonSerializer.Serialize(extracted),
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ContentPaperAssets.Add(new ContentPaperAsset
+        {
+            Id = QuestionPaperAssetId,
+            PaperId = "paper-json-only-2",
+            Role = PaperAssetRole.QuestionPaper,
+            MediaAssetId = "media-qp-json-only-2",
+            IsPrimary = true,
+            CreatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var report = await new ListeningPartBCSourceRecoveryService(db)
+            .RecoverPaperAsync("paper-json-only-2", dryRun: true, adminId: "admin-1", CancellationToken.None);
+
+        Assert.True(report.DryRun);
+        Assert.Equal(1, report.Recovered);
+
+        var paper = await db.ContentPapers.AsNoTracking().SingleAsync(p => p.Id == "paper-json-only-2");
+        using var document = JsonDocument.Parse(paper.ExtractedTextJson);
+        var q27 = document.RootElement.GetProperty("listeningQuestions").EnumerateArray().Single();
+        Assert.Equal(
+            "What does the speaker identify as the main clinical priority?",
+            q27.GetProperty("stem").GetString());
+        Assert.Empty(await db.AuditEvents.ToListAsync());
+    }
+
     [Fact]
     public async Task Sweep_ignores_non_listening_papers()
     {

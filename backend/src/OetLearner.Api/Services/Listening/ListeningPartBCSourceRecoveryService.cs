@@ -188,6 +188,18 @@ public sealed class ListeningPartBCSourceRecoveryService(
             .OrderBy(q => q.QuestionNumber)
             .ToListAsync(ct);
 
+        // A paper whose Part B/C content lives only in the authored JSON
+        // projection — no relational rows at all, the shape some bulk imports
+        // took — is invisible to the relational recovery below (there is
+        // nothing in ListeningQuestions to iterate). Recover its stems/options
+        // directly in ExtractedTextJson.listeningQuestions instead: same
+        // parser, same cached source text, same precision-first guards: only
+        // the write target differs.
+        if (questions.Count == 0)
+        {
+            return await RecoverFromAuthoredJsonAsync(paper, dryRun, adminId, ct);
+        }
+
         var questionIds = questions.Select(q => q.Id).ToList();
         var optionsByQuestion = (await db.ListeningQuestionOptions
                 .Where(option => questionIds.Contains(option.ListeningQuestionId))
@@ -206,40 +218,7 @@ public sealed class ListeningPartBCSourceRecoveryService(
             .ToHashSet();
         var wanted = needsStem.Union(needsOptions).ToHashSet();
 
-        var sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(
-            ReadAssetTexts(paper), wanted);
-
-        var parsed = wanted.Count == 0
-            ? ListeningPartBCSourceParseResult.Empty
-            : ListeningPartBCSourceParser.Parse(sourceText, wanted);
-
-        // The cached extraction is not necessarily usable: a paper ingested
-        // before the PDF engine produced real layout has either nothing cached
-        // or a long structureless run, and the normal extraction pass skips any
-        // asset that already has an entry — so it would stay unreadable forever.
-        // Re-extract once whenever the cache cannot supply every wanted number,
-        // and keep whichever pass reads more. This runs BEFORE any stem edit is
-        // staged, so the extraction service's own SaveChanges cannot flush a
-        // half-finished repair.
-        if (wanted.Count > 0 && parsed.Items.Count < wanted.Count && textExtraction is not null)
-        {
-            try
-            {
-                await textExtraction.ExtractForPaperAsync(paper.Id, ct, force: true);
-                var refreshedText = ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper), wanted);
-                var refreshed = ListeningPartBCSourceParser.Parse(refreshedText, wanted);
-                if (refreshed.Items.Count > parsed.Items.Count)
-                {
-                    sourceText = refreshedText;
-                    parsed = refreshed;
-                }
-            }
-            catch (Exception)
-            {
-                // Extraction is best-effort; a failure leaves the cached-text
-                // result in place and is reported per item below.
-            }
-        }
+        var (sourceText, parsed) = await ResolveSourceTextAsync(paper, wanted, ct);
         var recoveredByNumber = parsed.Items.ToDictionary(item => item.Number);
         var skipByNumber = parsed.Skipped.ToDictionary(skip => skip.Number);
 
@@ -347,6 +326,256 @@ public sealed class ListeningPartBCSourceRecoveryService(
 
         await db.SaveChangesAsync(ct);
         return report;
+    }
+
+    /// <summary>
+    /// Resolve the question-paper text to parse Part B/C stems/options from, and
+    /// parse it. The cached extraction is not necessarily usable: a paper
+    /// ingested before the PDF engine produced real layout has either nothing
+    /// cached or a long structureless run, and the normal extraction pass skips
+    /// any asset that already has an entry — so it would stay unreadable
+    /// forever. Re-extract once whenever the cache cannot supply every wanted
+    /// number, and keep whichever pass reads more. This must run BEFORE any
+    /// edit is staged on <paramref name="paper"/>, so the extraction service's
+    /// own SaveChanges cannot flush a half-finished repair.
+    /// </summary>
+    private async Task<(string? SourceText, ListeningPartBCSourceParseResult Parsed)> ResolveSourceTextAsync(
+        ContentPaper paper, HashSet<int> wanted, CancellationToken ct)
+    {
+        var sourceText = ListeningPartBCSourceParser.SelectQuestionPaperText(
+            ReadAssetTexts(paper), wanted);
+
+        var parsed = wanted.Count == 0
+            ? ListeningPartBCSourceParseResult.Empty
+            : ListeningPartBCSourceParser.Parse(sourceText, wanted);
+
+        if (wanted.Count > 0 && parsed.Items.Count < wanted.Count && textExtraction is not null)
+        {
+            try
+            {
+                await textExtraction.ExtractForPaperAsync(paper.Id, ct, force: true);
+                var refreshedText = ListeningPartBCSourceParser.SelectQuestionPaperText(ReadAssetTexts(paper), wanted);
+                var refreshed = ListeningPartBCSourceParser.Parse(refreshedText, wanted);
+                if (refreshed.Items.Count > parsed.Items.Count)
+                {
+                    sourceText = refreshedText;
+                    parsed = refreshed;
+                }
+            }
+            catch (Exception)
+            {
+                // Extraction is best-effort; a failure leaves the cached-text
+                // result in place and is reported per item below.
+            }
+        }
+
+        return (sourceText, parsed);
+    }
+
+    /// <summary>
+    /// Recovery path for a paper whose Part B/C content has no relational
+    /// <c>ListeningQuestions</c> rows at all — only an authored JSON projection
+    /// on <c>ExtractedTextJson.listeningQuestions</c>, the shape some bulk
+    /// imports took. <see cref="RecoverPaperAsync"/> reads/writes stems and
+    /// options against that array directly instead of the relational table.
+    /// Every guard is identical to the relational path: only an unusable
+    /// stem/option is ever replaced, and only with text the paper's own
+    /// question-paper source unambiguously supports.
+    /// </summary>
+    private async Task<ListeningPartBCRecoveryReport> RecoverFromAuthoredJsonAsync(
+        ContentPaper paper, bool dryRun, string adminId, CancellationToken ct)
+    {
+        JsonNode? root;
+        try
+        {
+            root = string.IsNullOrWhiteSpace(paper.ExtractedTextJson)
+                ? null
+                : JsonNode.Parse(paper.ExtractedTextJson);
+        }
+        catch (JsonException)
+        {
+            root = null;
+        }
+
+        var authored = (root as JsonObject)?[QuestionsKey] as JsonArray;
+        var bcEntries = new List<(int Number, JsonObject Item)>();
+        if (authored is not null)
+        {
+            foreach (var entry in authored)
+            {
+                if (entry is not JsonObject item) continue;
+                if (!TryReadNumber(item, out var number)) continue;
+                if (number is < ListeningPartBCSourceParser.FirstNumber or > ListeningPartBCSourceParser.LastNumber) continue;
+                bcEntries.Add((number, item));
+            }
+        }
+
+        if (bcEntries.Count == 0)
+        {
+            // No JSON-authored Part B/C content either — nothing this path can
+            // do. Matches the relational path's shape for a paper with no
+            // Part B/C items at all.
+            return new ListeningPartBCRecoveryReport(
+                PaperId: paper.Id,
+                PaperTitle: paper.Title,
+                PaperSlug: paper.Slug,
+                Status: paper.Status.ToString(),
+                DryRun: dryRun,
+                SourceTextAvailable: false,
+                PartBCQuestionCount: 0,
+                AlreadyUsable: 0,
+                Recovered: 0,
+                Unrecoverable: 0,
+                Items: []);
+        }
+
+        static string? CurrentStem(JsonObject item) =>
+            item["stem"]?.GetValueKind() == JsonValueKind.String ? item["stem"]!.GetValue<string>()
+            : item["text"]?.GetValueKind() == JsonValueKind.String ? item["text"]!.GetValue<string>()
+            : null;
+
+        var needsStem = bcEntries
+            .Where(entry => !ListeningLearnerService.IsUsablePartBCStem(CurrentStem(entry.Item)))
+            .Select(entry => entry.Number)
+            .ToHashSet();
+        var needsOptions = bcEntries
+            .Where(entry => !HasUsableOptionsJson(entry.Item["options"] as JsonArray))
+            .Select(entry => entry.Number)
+            .ToHashSet();
+        var wanted = needsStem.Union(needsOptions).ToHashSet();
+
+        var (sourceText, parsed) = await ResolveSourceTextAsync(paper, wanted, ct);
+        var recoveredByNumber = parsed.Items.ToDictionary(item => item.Number);
+        var skipByNumber = parsed.Skipped.ToDictionary(skip => skip.Number);
+
+        var items = new List<ListeningPartBCRecoveryItem>(bcEntries.Count);
+        var recoveredCount = 0;
+        var alreadyUsableCount = 0;
+        var unrecoverableCount = 0;
+        var mutated = false;
+
+        foreach (var (number, item) in bcEntries.OrderBy(entry => entry.Number))
+        {
+            var stemUsable = !needsStem.Contains(number);
+            var optionsUsable = !needsOptions.Contains(number);
+            var previousStem = CurrentStem(item);
+
+            if (stemUsable && optionsUsable)
+            {
+                alreadyUsableCount++;
+                items.Add(new(number, "already-usable", previousStem, null, 0, null));
+                continue;
+            }
+
+            if (!recoveredByNumber.TryGetValue(number, out var source))
+            {
+                unrecoverableCount++;
+                var detail = skipByNumber.TryGetValue(number, out var skip)
+                    ? skip.Detail
+                    : sourceText is null
+                        ? "This paper has no extracted question-paper text to recover from. Re-run PDF text extraction for the paper, or enter the item from the source paper."
+                        : $"Q{number} could not be recovered from the question-paper text.";
+                items.Add(new(number, "unrecoverable", previousStem, null, 0, detail));
+                continue;
+            }
+
+            var optionsUpdated = 0;
+            if (!dryRun)
+            {
+                if (!stemUsable)
+                {
+                    item["stem"] = source.Stem;
+                    // `text` is the legacy alias the learner projection also reads.
+                    if (item.ContainsKey("text")) item["text"] = source.Stem;
+                    mutated = true;
+                }
+
+                if (!optionsUsable && item["options"] is JsonArray optionArray && optionArray.Count >= 3)
+                {
+                    for (var index = 0; index < 3; index++)
+                    {
+                        var existing = optionArray[index]?.GetValueKind() == JsonValueKind.String
+                            ? optionArray[index]!.GetValue<string>()
+                            : null;
+                        if (!string.IsNullOrWhiteSpace(ListeningLearnerService.SanitizeOptionText(existing))) continue;
+                        optionArray[index] = source.Options[index];
+                        optionsUpdated++;
+                        mutated = true;
+                    }
+                }
+            }
+
+            recoveredCount++;
+            items.Add(new(
+                number,
+                "recovered",
+                previousStem,
+                stemUsable ? null : source.Stem,
+                optionsUpdated,
+                null));
+        }
+
+        var cachedTexts = ReadAssetTexts(paper).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+        var report = new ListeningPartBCRecoveryReport(
+            PaperId: paper.Id,
+            PaperTitle: paper.Title,
+            PaperSlug: paper.Slug,
+            Status: paper.Status.ToString(),
+            DryRun: dryRun,
+            SourceTextAvailable: sourceText is not null,
+            PartBCQuestionCount: bcEntries.Count,
+            AlreadyUsable: alreadyUsableCount,
+            Recovered: recoveredCount,
+            Unrecoverable: unrecoverableCount,
+            Items: items,
+            CachedTextEntries: cachedTexts.Count,
+            LargestCachedTextChars: cachedTexts.Count == 0 ? 0 : cachedTexts.Max(t => t!.Length),
+            SelectedSourceChars: sourceText?.Length ?? 0,
+            SelectedSourceExcerpt: sourceText is null
+                ? null
+                : sourceText[..Math.Min(1500, sourceText.Length)]);
+
+        if (!dryRun && mutated && root is JsonObject rootObject)
+        {
+            paper.ExtractedTextJson = rootObject.ToJsonString();
+            paper.UpdatedAt = DateTimeOffset.UtcNow;
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"audit_{Guid.NewGuid():N}",
+                OccurredAt = DateTimeOffset.UtcNow,
+                ActorId = adminId,
+                ActorAuthAccountId = await db.ResolveActorAuthAccountIdAsync(adminId, ct),
+                ActorName = adminId,
+                Action = "ListeningPartBCSourceStemsRecovered",
+                ResourceType = "ContentPaper",
+                ResourceId = paper.Id,
+                Details = JsonSerializer.Serialize(new
+                {
+                    recovered = recoveredCount,
+                    unrecoverable = unrecoverableCount,
+                    alreadyUsable = alreadyUsableCount,
+                    source = "authored-json",
+                    summary = ListeningPartBCSourceParser.Describe(parsed),
+                }),
+            });
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        return report;
+    }
+
+    private static bool HasUsableOptionsJson(JsonArray? options)
+    {
+        if (options is null || options.Count < 3) return false;
+        for (var index = 0; index < 3; index++)
+        {
+            var text = options[index]?.GetValueKind() == JsonValueKind.String
+                ? options[index]!.GetValue<string>()
+                : null;
+            if (string.IsNullOrWhiteSpace(ListeningLearnerService.SanitizeOptionText(text))) return false;
+        }
+        return true;
     }
 
     /// <summary>
