@@ -111,6 +111,16 @@ public class LibraryVideo
     [MaxLength(32)]
     public string? CourseFolder { get; set; }
 
+    /// <summary>
+    /// Final video access scope (spec §2/§6): SHARED | FULL_MEDICINE | FULL_NURSING |
+    /// FULL_PHARMACY | CRASH. Null/empty = legacy row created before the backfill — the
+    /// entitlement engine falls back to the tag/label course-family classifier for those.
+    /// Listening/Reading/basic-english are forced SHARED; Writing/Speaking must carry one
+    /// of the four isolated targets before publish. Nullable ON PURPOSE (see plan OQ notes).
+    /// </summary>
+    [MaxLength(32)]
+    public string? VisibilityScope { get; set; }
+
     public bool IsFeatured { get; set; }
     public int SortOrder { get; set; }
     public long ViewCount { get; set; }

@@ -74,7 +74,8 @@ public sealed record AdminVideoDetailDto(
     long ViewCount,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    string? Language = null);
+    string? Language = null,
+    string? VisibilityScope = null);
 
 public sealed record VideoPublishGateResult(bool CanPublish, string[] Errors, string[] Warnings);
 
@@ -189,6 +190,32 @@ public sealed class VideoLibraryAdminService(
             if (!string.IsNullOrWhiteSpace(video.Language) && !string.IsNullOrWhiteSpace(video.SubtestCode)
                 && !CourseContentMatrix.TryValidateVideo(video.Language, video.SubtestCode, targets, out var matrixError))
                 throw ApiException.Validation("invalid_course_video_scope", matrixError);
+        }
+        if (patch.VisibilityScope is not null || patch.SubtestCode is not null)
+        {
+            if (VideoVisibilityScopes.IsForcedSharedSubtest(video.SubtestCode))
+            {
+                // Listening/Reading/basic-english (and unset) are always SHARED (read-only in UI).
+                video.VisibilityScope = VideoVisibilityScopes.Shared;
+            }
+            else if (patch.VisibilityScope is not null)
+            {
+                var requested = patch.VisibilityScope.Trim().ToUpperInvariant();
+                if (requested.Length == 0)
+                {
+                    video.VisibilityScope = null; // cleared — publish gate will require a target
+                }
+                else if (!VideoVisibilityScopes.WritingSpeakingTargets.Contains(requested))
+                {
+                    throw ApiException.Validation("invalid_visibility_scope",
+                        "Writing/Speaking videos must target Medicine, Nursing, Pharmacy, or Crash (Shared is not allowed).");
+                }
+                else
+                {
+                    video.VisibilityScope = requested;
+                }
+            }
+            // else: W/S with no scope in this patch → leave unchanged; publish gate enforces it.
         }
         if (patch.IsFeatured is not null) video.IsFeatured = patch.IsFeatured.Value;
         if (patch.SortOrder is not null) video.SortOrder = patch.SortOrder.Value;
@@ -353,6 +380,18 @@ public sealed class VideoLibraryAdminService(
             errors.Add("Access tier must be 'free' or 'premium'.");
         if (!CourseContentMatrix.TryValidateVideo(video.Language, video.SubtestCode, ParseProfessionIds(video.ProfessionIdsJson), out var matrixError))
             errors.Add(matrixError);
+
+        var scope = video.VisibilityScope?.Trim().ToUpperInvariant();
+        var subtest = video.SubtestCode?.Trim().ToLowerInvariant();
+        if (subtest is "writing" or "speaking")
+        {
+            if (string.IsNullOrEmpty(scope) || !VideoVisibilityScopes.WritingSpeakingTargets.Contains(scope))
+                errors.Add("Choose a visibility target (Medicine, Nursing, Pharmacy, or Crash) for this Writing/Speaking video before publishing.");
+        }
+        else if (!string.IsNullOrEmpty(scope) && !string.Equals(scope, VideoVisibilityScopes.Shared, StringComparison.Ordinal))
+        {
+            errors.Add("Listening/Reading videos must be Shared.");
+        }
 
         var settings = (await settingsProvider.GetAsync(ct)).BunnyStream;
         if (!settings.IsConfigured)
@@ -569,7 +608,8 @@ public sealed class VideoLibraryAdminService(
             ViewCount: video.ViewCount,
             CreatedAt: video.CreatedAt,
             UpdatedAt: video.UpdatedAt,
-            Language: video.Language);
+            Language: video.Language,
+            VisibilityScope: video.VisibilityScope);
     }
 
     public static string EncodeStatusLabel(VideoEncodeStatus status) => status switch
@@ -691,4 +731,9 @@ public sealed class AdminVideoPatchRequest
     public string? BunnyCollectionId { get; set; }
     /// <summary>Writing/Speaking operational folder: "sessions" | "workshops".</summary>
     public string? CourseFolder { get; set; }
+
+    /// <summary>Visibility scope. Omitted = unchanged. For Listening/Reading/basic-english
+    /// the server forces SHARED regardless of value; for Writing/Speaking it must be one of
+    /// FULL_MEDICINE|FULL_NURSING|FULL_PHARMACY|CRASH (SHARED is rejected). "" = clear.</summary>
+    public string? VisibilityScope { get; set; }
 }

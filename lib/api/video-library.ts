@@ -107,6 +107,8 @@ export interface AdminVideoDetail {
   accessTier: VideoAccessTier;
   targetProfessionIds: string[];
   language: VideoLanguage | null;
+  /** Visibility scope: SHARED | FULL_MEDICINE | FULL_NURSING | FULL_PHARMACY | CRASH; null/undefined = legacy pre-backfill row. */
+  visibilityScope?: string | null;
   bunnyVideoId: string | null;
   bunnyCollectionId: string | null;
   courseFolder: 'sessions' | 'workshops' | null;
@@ -152,6 +154,8 @@ export interface AdminVideoPatch {
   bunnyCollectionId?: string | null;
   /** Writing/Speaking operational folder. */
   courseFolder?: 'sessions' | 'workshops' | '' | null;
+  /** Visibility scope. Omitted = unchanged; for W/S must be FULL_MEDICINE|FULL_NURSING|FULL_PHARMACY|CRASH ('' = clear). */
+  visibilityScope?: string;
 }
 
 export interface VideoCourseMapItem {

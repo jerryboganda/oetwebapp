@@ -102,6 +102,14 @@ public sealed record EffectiveEntitlementSnapshot(
     /// </summary>
     public CourseFamilyAccess CourseFamilies { get; init; } = CourseFamilyAccess.Unrestricted;
 
+    /// <summary>
+    /// Package-derived Video Library visibility scopes (set-union across all effective
+    /// packages, OQ-1). Holds only the specific FULL_*/CRASH scopes the learner's packages
+    /// grant — SHARED is never stored (it is universally visible). Empty = no isolated scope
+    /// (shared-only packages, foundation, non-subscribers). Consumed only by VideoEntitlementService.
+    /// </summary>
+    public IReadOnlySet<string> PackageScopes { get; init; } = EmptyStringSet;
+
     // ── Subtest × profession content model (access & payment spec §3) ────────
 
     /// <summary>The learner's registered profession (<see cref="Domain.ApplicationUser.ActiveProfessionId"/>),
@@ -431,6 +439,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 ExpiresAt = subscription.ExpiresAt,
                 ProductCategory = string.IsNullOrEmpty(plan.ProductCategory) ? null : plan.ProductCategory,
                 CourseFamilies = CourseFamilyPolicy.Resolve(plan.ProductCategory, plan.Code),
+                PackageScopes = PackageScopePolicy.ResolveSet(plan.ProductCategory, plan.Code, plan.Profession),
             };
         }
 
@@ -597,6 +606,8 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                     : primaryPkg.Plan.ProductCategory,
                 CourseFamilies = CourseFamilyPolicy.Union(
                     aggPlans.Select(p => CourseFamilyPolicy.Resolve(p.ProductCategory, p.Code))),
+                PackageScopes = PackageScopePolicy.UnionScopes(
+                    aggPlans.Select(p => PackageScopePolicy.Resolve(p.ProductCategory, p.Code, p.Profession))),
             };
         }
 
