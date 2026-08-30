@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   CheckCircle2,
   FileKey,
@@ -146,6 +146,7 @@ export default function UsersPage() {
   const [quickGrantUser, setQuickGrantUser] = useState<AdminUserRow | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const hasLoadedOnceRef = useRef(false);
   const { options: professionOptions } = useProfessions();
 
   const selectedStatus = filters.status?.[0];
@@ -169,7 +170,12 @@ export default function UsersPage() {
     let cancelled = false;
 
     async function loadUsers() {
-      setPageStatus('loading');
+      // Only show the full-page skeleton on the very first load. Refetches
+      // (search, filters, paging) keep the previous rows mounted so the
+      // focused search input is never unmounted mid-typing.
+      if (!hasLoadedOnceRef.current) {
+        setPageStatus('loading');
+      }
       try {
         const result = await getAdminUsersPageData({
           role: tabRole,
@@ -181,6 +187,7 @@ export default function UsersPage() {
 
         if (cancelled) return;
 
+        hasLoadedOnceRef.current = true;
         setUsers(result.items);
         setTotal(result.total);
         setPage(result.page);
@@ -498,56 +505,58 @@ export default function UsersPage() {
             <AdminsAndPermissionsTab onToast={setToast} />
           </div>
         ) : (
-          <AsyncStateWrapper
-            status={pageStatus}
-            onRetry={() => setRetryNonce((current) => current + 1)}
-            emptyContent={
-              <div className="p-6">
+          <div className="space-y-4 p-4 sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-base font-semibold text-admin-fg-strong">Directory</p>
+                <p className="text-sm text-admin-fg-muted">
+                  Showing {users.length} of {total.toLocaleString()} accounts (page {page} of {totalPages}).
+                </p>
+              </div>
+              <div className="w-full max-w-sm">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
+                  <Input placeholder="Search by name, email, or ID" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
+                </div>
+              </div>
+            </div>
+            <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setPage(1); setFilters({ status: [] }); setSearchQuery(''); }} />
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="user"
+              itemLabelPlural="users"
+            />
+            <AsyncStateWrapper
+              status={pageStatus}
+              onRetry={() => setRetryNonce((current) => current + 1)}
+              emptyContent={
                 <EmptyState
                   illustration={<Users />}
-                  title={tab === 'all' ? 'No users found' : `No ${tab} found`}
-                  description="Invite the first account to start operating the platform."
-                  primaryAction={{ label: 'Invite User', onClick: () => setIsInviteOpen(true) }}
+                  title={searchQuery || selectedStatus ? 'No matching users' : tab === 'all' ? 'No users found' : `No ${tab} found`}
+                  description={searchQuery || selectedStatus ? 'Try a different name, email, or ID, or clear the filters.' : 'Invite the first account to start operating the platform.'}
+                  primaryAction={searchQuery || selectedStatus
+                    ? { label: 'Clear search', onClick: () => { setPage(1); setSearchQuery(''); setFilters({ status: [] }); } }
+                    : { label: 'Invite User', onClick: () => setIsInviteOpen(true) }}
+                />
+              }
+            >
+              <div className="space-y-4">
+                <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
+                <BulkActionBar
+                  selectedCount={selectedKeys.size}
+                  onClearSelection={() => setSelectedKeys(new Set())}
+                  actions={[
+                    { key: 'suspend', label: 'Suspend selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk suspend coming soon.' }) },
+                    { key: 'export', label: 'Export selected', onClick: () => setToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
+                  ]}
                 />
               </div>
-            }
-          >
-            <div className="space-y-4 p-4 sm:p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-base font-semibold text-admin-fg-strong">Directory</p>
-                  <p className="text-sm text-admin-fg-muted">
-                    Showing {users.length} of {total.toLocaleString()} accounts (page {page} of {totalPages}).
-                  </p>
-                </div>
-                <div className="w-full max-w-sm">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-admin-fg-muted" />
-                    <Input placeholder="Search by name, email, or ID" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
-                  </div>
-                </div>
-              </div>
-              <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setPage(1); setFilters({ status: [] }); setSearchQuery(''); }} />
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                itemLabel="user"
-                itemLabelPlural="users"
-              />
-              <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} selectable selectedKeys={selectedKeys} onSelectionChange={setSelectedKeys} />
-              <BulkActionBar
-                selectedCount={selectedKeys.size}
-                onClearSelection={() => setSelectedKeys(new Set())}
-                actions={[
-                  { key: 'suspend', label: 'Suspend selected', variant: 'danger', onClick: () => setToast({ variant: 'error', message: 'Bulk suspend coming soon.' }) },
-                  { key: 'export', label: 'Export selected', onClick: () => setToast({ variant: 'error', message: 'Bulk export coming soon.' }) },
-                ]}
-              />
-            </div>
-          </AsyncStateWrapper>
+            </AsyncStateWrapper>
+          </div>
         )}
       </AdminTableLayout>
 
