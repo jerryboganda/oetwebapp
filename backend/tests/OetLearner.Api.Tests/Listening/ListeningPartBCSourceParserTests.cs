@@ -318,4 +318,92 @@ public class ListeningPartBCSourceParserTests
         Assert.Empty(ListeningPartBCSourceParser.Parse("   ").Items);
         Assert.Empty(ListeningPartBCSourceParser.Parse("   ").Skipped);
     }
+
+    [Fact]
+    public void Reads_a_bulleted_option_whose_own_text_is_the_indefinite_article()
+    {
+        // Verbatim from production Nova papers. The bullet glyph is the
+        // option-boundary signal here, so it must not require an
+        // uppercase-then-lowercase lookahead after the marker — an option can
+        // legitimately start "A blended course...", "A variety of...", etc.,
+        // which glues to "BA blended", "CA variety" with no separating space.
+        const string text = """
+            30 You hear part of a training for GPs. What kind of course is being described? o AA blended course for GPs interested in dermatology
+            o BA traditional face-to-face general education course for GPs
+            o CA blended, general education course for GPs
+            33 You hear a lecture. Which is a common symptom of the disease? o AA feeling that the world is rotating quickly around you.
+            o BA feeling that you are going to fall to the ground.
+            o CA feeling that something is blocking you from hearing.
+            34 What type of hearing loss is not associated with the disease? o ANerve damage related to abnormalities
+            o BA blockage of the transfer of sound waves
+            o CNerve damage related to an injury
+            """;
+
+        var result = ListeningPartBCSourceParser.Parse(text, [30, 33, 34]);
+
+        Assert.Equal(3, result.Items.Count);
+        var q30 = result.Items.Single(i => i.Number == 30);
+        Assert.Equal("A blended course for GPs interested in dermatology", q30.OptionA);
+        Assert.Equal("A traditional face-to-face general education course for GPs", q30.OptionB);
+        Assert.Equal("A blended, general education course for GPs", q30.OptionC);
+
+        var q34 = result.Items.Single(i => i.Number == 34);
+        Assert.Equal("Nerve damage related to abnormalities", q34.OptionA);
+        Assert.Equal("A blockage of the transfer of sound waves", q34.OptionB);
+        Assert.Equal("Nerve damage related to an injury", q34.OptionC);
+    }
+
+    [Fact]
+    public void Reads_a_canonical_option_whose_own_text_is_the_indefinite_article()
+    {
+        // Verbatim from the production Atlas Sample Test 1 question paper.
+        // Option A's own printed text is "interruptions while calculating
+        // dosages." — reached via the article "A", so the marker's own
+        // OptionMarkerPattern match ends EXACTLY where the option's leading "A"
+        // begins with zero characters between them, and that "A" independently
+        // satisfies the same marker shape. The same zero-gap fix that handles
+        // the bulleted layout applies here identically.
+        const string text = """
+            26. He says that errors in dispensing medication usually result from A interruptions while calculating dosages. B a failure to check for patients' allergies. C administering drugs late in the day.
+            """;
+
+        var result = ListeningPartBCSourceParser.Parse(text, [26]);
+
+        var q26 = Assert.Single(result.Items);
+        Assert.Equal(
+            "He says that errors in dispensing medication usually result from",
+            q26.Stem);
+        Assert.Equal("interruptions while calculating dosages.", q26.OptionA);
+        Assert.Equal("a failure to check for patients' allergies.", q26.OptionB);
+        Assert.Equal("administering drugs late in the day.", q26.OptionC);
+    }
+
+    [Fact]
+    public void A_trailing_number_outside_the_wanted_range_still_bounds_the_last_items_slice()
+    {
+        // Verbatim shape from a production third-party paper: after Part C's
+        // final canonical item, a 7th, non-OET item continues the same 1-6
+        // numbering the paper uses internally. Without a boundary there, the
+        // last real item's slice absorbs a second, unrelated A/B/C run and gets
+        // reported as an ambiguous interleave — even though the item itself is
+        // perfectly clean.
+        const string text = """
+            E2 Language Listening Part B.3
+            1. You hear a doctor and a nurse reviewing a coma patient. What is the Doctor checking for? A The symptoms the patient is exhibiting B The severity of the patient's coma C The range of mobility of the patient
+            E2 Language Part C.3 Extract 1
+            1. What is the stated purpose of the talk? A To evaluate if the audience are feeling burnout B To inform and stimulate discussion about burnout C To describe new research on treatment of burnout
+            E2 Language Part C.3 Extract 2
+            6. The article suggests that the tobacco and food industries share which tactic? A Funding their own research to confuse people. B Using the motto "doubt is our product". C Denying evidence that their products are bad.
+            7. What do the healthiest and longest living communities in the world have in common? A they eat a lot of legumes. B they are religious communities. C they have a 97% plant-based diet.
+            """;
+
+        var result = ListeningPartBCSourceParser.Parse(text, [42]);
+
+        var q42 = Assert.Single(result.Items);
+        Assert.Equal(
+            "The article suggests that the tobacco and food industries share which tactic?",
+            q42.Stem);
+        Assert.Equal("Funding their own research to confuse people.", q42.OptionA);
+        Assert.Equal("Denying evidence that their products are bad.", q42.OptionC);
+    }
 }

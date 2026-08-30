@@ -119,9 +119,20 @@ public static class ListeningPartBCSourceParser
     private static readonly Regex ParenMarkerPattern = new(@"(^|[\s>\]])\(\s*([ABC])\s*\)\s*", Multi);
 
     /// <summary>Nova papers glue a Word bullet to the letter and run straight into
-    /// the text: "o AIt is a routine announcement...". The uppercase+lowercase
-    /// lookahead leaves ordinary prose ("result from A interruptions") alone.</summary>
-    private static readonly Regex BulletMarkerPattern = new(@"(^|[\s>\]])[o○◦]?\s*([ABC])(?=[A-Z][a-z])", Multi);
+    /// the text: "o AIt is a routine announcement...". The bullet glyph itself is
+    /// the option-boundary signal here, so ANY non-whitespace may follow the
+    /// marker — including an option that is itself the indefinite article
+    /// ("o AA blended course...", "o CA variety of painkillers...", where the
+    /// option's own printed text starts with "A "). A [A-Z][a-z] lookahead
+    /// would reject exactly those, because the character right after the glued
+    /// "A" is a space, not a lowercase letter.</summary>
+    private static readonly Regex BulletedMarkerPattern = new(@"(^|[\s>\]])[o○◦]\s*([ABC])(?=\S)", Multi);
+
+    /// <summary>The same glued layout without a preceding bullet glyph:
+    /// "AIt is a routine announcement...". With no bullet to anchor on, the
+    /// stricter uppercase+lowercase lookahead is kept so ordinary prose
+    /// ("result from A interruptions") is never mistaken for a marker.</summary>
+    private static readonly Regex GluedMarkerPattern = new(@"(^|[\s>\]])([ABC])(?=[A-Z][a-z])", Multi);
 
     /// <summary>Nova also prints the number with no full stop: " 25 You hear...".</summary>
     private static readonly Regex BareNumberPattern = new(@"(^|[\s>\]])(\d{1,2})\s+(?=[A-Z])", Multi);
@@ -203,20 +214,27 @@ public static class ListeningPartBCSourceParser
 
     private static List<(int Number, string Slice)> BuildSlices(string text)
     {
-        var anchors = QuestionAnchorPattern.Matches(text)
+        // Every printed number acts as a slice BOUNDARY, not only the ones in
+        // 25-42. A third-party paper with a 7th item in an extract that OET
+        // only prints 6 questions for (or any other stray numbered line) would
+        // otherwise be invisible to the boundary computation, so the LAST real
+        // item's slice ran on into that trailing content and picked up a second,
+        // spurious A/B/C run — reported as an ambiguous interleave when the item
+        // itself was perfectly clean.
+        var allAnchors = QuestionAnchorPattern.Matches(text)
             .Select(match => (
                 Number: int.TryParse(match.Groups["number"].Value, out var n) ? n : -1,
                 Start: match.Index,
                 End: match.Index + match.Length))
-            .Where(a => a.Number is >= FirstNumber and <= LastNumber)
             .OrderBy(a => a.Start)
             .ToList();
 
-        var slices = new List<(int, string)>(anchors.Count);
-        for (var i = 0; i < anchors.Count; i++)
+        var slices = new List<(int, string)>();
+        for (var i = 0; i < allAnchors.Count; i++)
         {
-            var end = i + 1 < anchors.Count ? anchors[i + 1].Start : text.Length;
-            if (end > anchors[i].End) slices.Add((anchors[i].Number, text[anchors[i].End..end]));
+            if (allAnchors[i].Number is < FirstNumber or > LastNumber) continue;
+            var end = i + 1 < allAnchors.Count ? allAnchors[i + 1].Start : text.Length;
+            if (end > allAnchors[i].End) slices.Add((allAnchors[i].Number, text[allAnchors[i].End..end]));
         }
         return slices;
     }
@@ -225,9 +243,25 @@ public static class ListeningPartBCSourceParser
 
     private static (List<Marker> Marks, List<(int A, int B, int C)> Runs) OptionRuns(string slice)
     {
-        var marks = OptionMarkerPattern.Matches(slice)
+        var rawMarks = OptionMarkerPattern.Matches(slice)
             .Select(m => new Marker(m.Groups["key"].Value, m.Index, m.Index + m.Length))
             .ToList();
+
+        // A marker match whose START lands EXACTLY at the previous match's END
+        // is not a genuine second marker — it is the option's own printed text
+        // starting with a bare capital letter, almost always the indefinite
+        // article: "A blended course...", "A variety of...". The normalization
+        // step for bulleted/glued markers inserts a marker immediately before
+        // that word, so the two candidates sit back to back with nothing
+        // between them. A real option always has SOME text before the next
+        // marker, so a zero-gap pair can only be this false positive; keep the
+        // first (true) marker and drop the rest of the zero-gap run.
+        var marks = new List<Marker>();
+        foreach (var mark in rawMarks)
+        {
+            if (marks.Count > 0 && mark.Start == marks[^1].End) continue;
+            marks.Add(mark);
+        }
 
         var runs = new List<(int, int, int)>();
         for (var i = 0; i < marks.Count; i++)
@@ -371,7 +405,8 @@ public static class ListeningPartBCSourceParser
         foreach (var pattern in NoisePhrasePatterns) text = pattern.Replace(text, " ");
 
         text = ParenMarkerPattern.Replace(text, m => $"{m.Groups[1].Value}{m.Groups[2].Value} ");
-        text = BulletMarkerPattern.Replace(text, m => $"{m.Groups[1].Value}{m.Groups[2].Value} ");
+        text = BulletedMarkerPattern.Replace(text, m => $"{m.Groups[1].Value}{m.Groups[2].Value} ");
+        text = GluedMarkerPattern.Replace(text, m => $"{m.Groups[1].Value}{m.Groups[2].Value} ");
         text = BareNumberPattern.Replace(text, m =>
             int.TryParse(m.Groups[2].Value, out var n) && n is >= FirstNumber and <= LastNumber
                 ? $"{m.Groups[1].Value}{n}. "
