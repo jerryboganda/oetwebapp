@@ -1155,23 +1155,34 @@ function PlayerContent() {
   const currentSectionParentCode = currentSectionCode && currentSectionCode.length > 1
     ? currentSectionCode.slice(0, 1)
     : currentSectionCode;
-  const perSectionAudioUrl = currentSectionCode
-    ? session?.paper.audioUrlByPart?.[currentSectionCode]
-      ?? (currentSectionParentCode
-        ? session?.paper.audioUrlByPart?.[currentSectionParentCode]
-        : null)
-      ?? null
-    : null;
+  // Resolve a section's own audio the same way regardless of which section is
+  // asking, so it can be compared against every OTHER section below.
+  const resolveSectionAudioUrl = (code: string): string | null => {
+    const parent = code.length > 1 ? code.slice(0, 1) : code;
+    return session?.paper.audioUrlByPart?.[code]
+      ?? (parent ? session?.paper.audioUrlByPart?.[parent] : null)
+      ?? null;
+  };
+  const perSectionAudioUrl = currentSectionCode ? resolveSectionAudioUrl(currentSectionCode) : null;
   const usingPerSectionAudio = perSectionAudioUrl != null;
-  // A file resolved through the PARENT key ('C' backing both C1 and C2, 'A'
-  // backing A1 and A2) spans more than the current section, so the section
-  // boundary lives in the authored cue points rather than at the end of the
-  // file. Treating it as the section's own file made Part C wait for both
-  // extracts before "Lock & continue" did anything and then restarted the file
-  // from 0:00 in C2. Only an exact section-code hit is genuinely section-owned.
+  // A file that ALSO serves a sibling section spans more than the current
+  // section, so the section boundary lives in the authored cue points rather
+  // than at the end of the file. Two ways this happens in production data:
+  //  - a PARENT-key upload ('C' backing both C1 and C2, 'A' backing A1/A2) —
+  //    caught by falling through to the parent key when there is no exact
+  //    section-code entry;
+  //  - C1 and C2 (or A1/A2) EACH have an explicit entry, but an admin attached
+  //    the SAME underlying file to both — no fallback is involved, so the
+  //    only way to detect it is to compare the resolved URL against every
+  //    OTHER section in the sequence.
+  // Treating either as the section's own file made Part C wait for both
+  // extracts before "Lock & continue" did anything, and then either did
+  // nothing at all or replayed the whole file from 0:00 in C2.
   const sectionAudioSpansSiblingSections = usingPerSectionAudio
     && currentSectionCode != null
-    && session?.paper.audioUrlByPart?.[currentSectionCode] == null;
+    && LISTENING_SECTION_SEQUENCE.some((code) => (
+      code !== currentSectionCode && resolveSectionAudioUrl(code) === perSectionAudioUrl
+    ));
   const usingSectionOwnAudio = usingPerSectionAudio && !sectionAudioSpansSiblingSections;
   const currentSectionAudioUrl = perSectionAudioUrl ?? session?.paper.audioUrl ?? null;
   const currentSectionAudioEnded = currentSection ? endedSections.has(currentSection) : false;
