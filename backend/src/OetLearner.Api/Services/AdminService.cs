@@ -2786,7 +2786,7 @@ public partial class AdminService(
     public async Task<object> GetUserListAsync(string? role, string? status, string? search,
         int page, int pageSize, CancellationToken ct)
     {
-        var clampedPageSize = Math.Clamp(pageSize, 1, 100);
+        var clampedPageSize = Math.Clamp(pageSize, 1, 500);
 
         var rows = new List<AdminUserListRow>();
 
