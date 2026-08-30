@@ -1,3 +1,5 @@
+import { compareExamSeriesPapers } from './exam-series-order';
+
 export type ListeningExamCategoryId = 'atlas-practice-series' | 'nova-practice-series' | 'other';
 
 export interface ListeningExamCategory {
@@ -73,10 +75,13 @@ export function groupListeningExamPapers<T extends ListeningExamCategoryPaper>(
     grouped.get(categoryId)!.push(paper);
   }
 
+  // Each folder is sorted independently, ascending by the exam number already
+  // written into the title. Safe to sort in place: these arrays were built by
+  // this function, never handed in by the caller.
   return LISTENING_EXAM_CATEGORIES.map((category) => ({
     id: category.id,
     title: category.title,
     description: category.description,
-    papers: grouped.get(category.id) ?? [],
+    papers: (grouped.get(category.id) ?? []).sort(compareExamSeriesPapers(category.matchers)),
   }));
 }

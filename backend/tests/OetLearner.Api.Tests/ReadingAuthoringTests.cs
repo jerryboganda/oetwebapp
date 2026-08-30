@@ -2758,6 +2758,207 @@ public class ReadingAuthoringTests
         await db.DisposeAsync();
     }
 
+    // -- Early "Submit Part A" (owner request 2026-08-29) ------------------
+    // A candidate who finishes Part A before the 15-minute window expires can
+    // end it themselves. The unused Part A time is forfeited; Parts B and C
+    // still get their full shared window once the break is resumed.
+
+    [Fact]
+    public async Task Early_part_a_lock_closes_part_a_and_opens_the_optional_break()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var locked = await attemptSvc.LockPartAAsync("u1", started.AttemptId, default);
+
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        Assert.NotNull(attempt.PartALockedAt);
+        Assert.Equal(attempt.PartALockedAt!.Value, attempt.PartBCTimerPausedAt!.Value, TimeSpan.FromSeconds(1));
+        Assert.Equal(attempt.PartALockedAt!.Value, locked.PartADeadlineAt, TimeSpan.FromSeconds(1));
+        Assert.False(locked.PartABreakResumed);
+        Assert.True(locked.PartABreakAvailable);
+        Assert.Equal(600, locked.PartABreakMaxSeconds);
+
+        var partAQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+        var partALocked = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partAQuestion.Id, partAQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_a_locked", partALocked.Code);
+
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+        var breakPending = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_bc_break_not_resumed", breakPending.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Early_part_a_lock_gives_parts_b_and_c_the_full_bc_window()
+    {
+        // The requirement the owner signed off: submitting Part A early must
+        // not lengthen (or shorten) Parts B and C. The saved Part A minutes are
+        // forfeited, so B/C is measured from the lock instant, not from start.
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var locked = await attemptSvc.LockPartAAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(
+            locked.PartADeadlineAt.AddMinutes(45),
+            locked.PartBCDeadlineAt,
+            TimeSpan.FromSeconds(2));
+
+        // Resume 5 minutes into the break: B/C still runs 45 minutes from when
+        // it actually begins.
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        var lockInstant = attempt.PartALockedAt!.Value;
+        attempt.PartALockedAt = lockInstant.AddMinutes(-5);
+        attempt.PartBCTimerPausedAt = attempt.PartALockedAt;
+        await db.SaveChangesAsync();
+
+        var resumed = await attemptSvc.ResumePartABreakAsync("u1", started.AttemptId, default);
+        Assert.InRange(resumed.PartBCPausedSeconds, 299, 301);
+        Assert.Equal(
+            resumed.PartADeadlineAt.AddMinutes(45).AddSeconds(resumed.PartBCPausedSeconds),
+            resumed.PartBCDeadlineAt,
+            TimeSpan.FromSeconds(2));
+        // i.e. 45 minutes from "now", the moment Parts B and C actually open.
+        Assert.Equal(
+            DateTimeOffset.UtcNow.AddMinutes(45),
+            resumed.PartBCDeadlineAt,
+            TimeSpan.FromSeconds(3));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Early_part_a_lock_is_idempotent()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attemptBefore = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == started.AttemptId);
+        var versionBefore = attemptBefore.RowVersion;
+
+        var first = await attemptSvc.LockPartAAsync("u1", started.AttemptId, default);
+        var second = await attemptSvc.LockPartAAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(first.PartADeadlineAt, second.PartADeadlineAt, TimeSpan.FromMilliseconds(1));
+        Assert.Equal(first.PartBCDeadlineAt, second.PartBCDeadlineAt, TimeSpan.FromMilliseconds(1));
+
+        var attemptAfter = await db.ReadingAttempts.AsNoTracking().FirstAsync(a => a.Id == started.AttemptId);
+        Assert.Equal(versionBefore + 1, attemptAfter.RowVersion);
+        Assert.Equal(1, await db.AuditEvents.CountAsync(e =>
+            e.Action == "ReadingPartALockedEarly" && e.ResourceId == started.AttemptId));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Part_a_lock_is_a_noop_after_the_natural_fifteen_minute_deadline()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.PartBCTimerPausedAt = attempt.StartedAt.AddMinutes(15);
+        await db.SaveChangesAsync();
+        var startedAt = attempt.StartedAt;
+
+        var state = await attemptSvc.LockPartAAsync("u1", started.AttemptId, default);
+
+        Assert.Null(attempt.PartALockedAt);
+        Assert.Equal(startedAt.AddMinutes(15), state.PartADeadlineAt, TimeSpan.FromSeconds(1));
+        Assert.False(await db.AuditEvents.AnyAsync(e => e.Action == "ReadingPartALockedEarly"));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Part_a_lock_rejects_non_exam_modes_and_finished_attempts()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var learning = await attemptSvc.StartInModeAsync("u1", "p1", ReadingAttemptMode.Learning, null, default);
+        var modeRejected = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.LockPartAAsync("u1", learning.AttemptId, default));
+        Assert.Equal("part_a_lock_unavailable", modeRejected.Code);
+
+        var exam = await attemptSvc.StartAsync("u2", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == exam.AttemptId);
+        attempt.Status = ReadingAttemptStatus.Submitted;
+        attempt.SubmittedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+
+        var statusRejected = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.LockPartAAsync("u2", exam.AttemptId, default));
+        Assert.Equal("attempt_not_in_progress", statusRejected.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Part_a_lock_never_extends_the_overall_deadline()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        var deadlineBefore = attempt.DeadlineAt;
+
+        await attemptSvc.LockPartAAsync("u1", started.AttemptId, default);
+
+        Assert.NotNull(deadlineBefore);
+        Assert.NotNull(attempt.DeadlineAt);
+        Assert.True(attempt.DeadlineAt <= deadlineBefore);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Early_lock_then_break_expiry_without_resume_still_allows_bc_answers()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        await attemptSvc.LockPartAAsync("u1", started.AttemptId, default);
+
+        // Rewind so the 10-minute break has elapsed with no Resume Test press.
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.PartALockedAt = DateTimeOffset.UtcNow.AddMinutes(-11);
+        attempt.PartBCTimerPausedAt = attempt.PartALockedAt;
+        await db.SaveChangesAsync();
+
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
+
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        Assert.Equal(1, result.RawScore);
+        await db.DisposeAsync();
+    }
+
     [Fact]
     public async Task Answer_window_rejects_BC_save_before_grace_deadline()
     {

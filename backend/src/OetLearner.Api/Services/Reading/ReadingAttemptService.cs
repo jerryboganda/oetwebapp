@@ -98,6 +98,25 @@ public interface IReadingAttemptService
     Task<ReadingAttemptBreakState> ResumePartABreakAsync(string userId, string attemptId, CancellationToken ct);
 
     /// <summary>
+    /// Ends Part A early at the candidate's request ("Submit Part A" in the
+    /// Full Reading Exam), locking Part A immediately and opening the existing
+    /// optional break.
+    ///
+    /// Returns the same <see cref="ReadingAttemptBreakState"/> shape as
+    /// <see cref="ResumePartABreakAsync"/> because an early lock lands the
+    /// attempt in exactly the pre-break state:
+    /// <c>PartABreakResumed: false</c>, <c>PartBCTimerPausedAt</c> = the lock
+    /// instant, <c>PartBCPausedSeconds: 0</c>.
+    ///
+    /// Idempotent: calling it twice, or after Part A's scheduled deadline has
+    /// already passed, is a no-op that returns the current state without
+    /// writing. Parts B and C still get their full
+    /// <c>PartBCTimerMinutes</c> once the candidate resumes -- the unused
+    /// Part A time is forfeited, not carried over.
+    /// </summary>
+    Task<ReadingAttemptBreakState> LockPartAAsync(string userId, string attemptId, CancellationToken ct);
+
+    /// <summary>
     /// Submit an attempt for grading. Idempotent: concurrent or replayed
     /// requests for the same (userId, attemptId) return the same
     /// <see cref="ReadingGradingResult"/> and never re-grade or
@@ -1061,9 +1080,10 @@ public sealed class ReadingAttemptService(
     {
         if (attempt.Mode == ReadingAttemptMode.Exam)
         {
-            return attempt.StartedAt
-                .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
-                .AddSeconds(ResolveEffectivePartBCPausedSeconds(attempt, policy, now));
+            return ResolvePartBCDeadline(
+                attempt,
+                policy,
+                ResolveEffectivePartBCPausedSeconds(attempt, policy, now));
         }
 
         if (attempt.DeadlineAt is DateTimeOffset deadline)
@@ -1176,9 +1196,7 @@ public sealed class ReadingAttemptService(
         }
 
         var pausedSeconds = Math.Clamp((int)Math.Floor((now - partADeadline).TotalSeconds), 0, PartABreakMaxSeconds);
-        var partBCDeadline = attempt.StartedAt
-            .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
-            .AddSeconds(pausedSeconds);
+        var partBCDeadline = ResolvePartBCDeadline(attempt, policy, pausedSeconds);
         var deadline = partBCDeadline.AddSeconds(Math.Max(0, policy.GracePeriodSeconds));
         if (now >= deadline)
         {
@@ -1222,6 +1240,122 @@ public sealed class ReadingAttemptService(
             PartBCPausedSeconds: pausedSeconds,
             PartABreakMaxSeconds: PartABreakMaxSeconds,
             ServerNow: DateTimeOffset.UtcNow);
+    }
+
+    public async Task<ReadingAttemptBreakState> LockPartAAsync(string userId, string attemptId, CancellationToken ct)
+    {
+        var attempt = await db.ReadingAttempts
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+            ?? throw new InvalidOperationException("Attempt not found.");
+
+        if (attempt.Status != ReadingAttemptStatus.InProgress)
+        {
+            throw new ReadingAttemptException(
+                "attempt_not_in_progress",
+                $"Cannot submit Part A for an attempt that is {attempt.Status}.");
+        }
+
+        if (attempt.Mode != ReadingAttemptMode.Exam)
+        {
+            throw new ReadingAttemptException(
+                "part_a_lock_unavailable",
+                "Submitting Part A early is only available in Exam mode.");
+        }
+
+        var policy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
+        var now = DateTimeOffset.UtcNow;
+        var scheduledPartADeadline = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
+
+        // Idempotent no-op. A double-click, a retried request, or a click that
+        // races the natural 15-minute expiry all land here: return the current
+        // state without writing, bumping RowVersion, or logging a second audit
+        // event. The caller cannot tell the difference, which is the point.
+        if (attempt.PartALockedAt is not null || now >= scheduledPartADeadline)
+        {
+            return BuildBreakState(attempt, policy, now);
+        }
+
+        attempt.PartALockedAt = now;
+        // Anchor the optional-break countdown at the lock instant, mirroring
+        // what StartAsync does with the scheduled Part A deadline.
+        attempt.PartBCTimerPausedAt = now;
+        attempt.LastActivityAt = now;
+
+        // Never extend the overall window: assign only when the recomputed
+        // deadline is strictly earlier than the one already on the row.
+        var tightenedDeadline = ResolvePartBCDeadline(attempt, policy, pausedSeconds: 0)
+            .AddSeconds(PartABreakMaxSeconds + Math.Max(0, policy.GracePeriodSeconds));
+        if (attempt.DeadlineAt is null || tightenedDeadline < attempt.DeadlineAt)
+        {
+            attempt.DeadlineAt = tightenedDeadline;
+        }
+
+        attempt.RowVersion++;
+
+        var remainingPartASeconds = Math.Max(0, (int)Math.Floor((scheduledPartADeadline - now).TotalSeconds));
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            OccurredAt = now,
+            ActorId = userId,
+            ActorName = userId,
+            Action = "ReadingPartALockedEarly",
+            ResourceType = "ReadingAttempt",
+            ResourceId = attempt.Id,
+            Details = $"lockedAt={now:O}; forfeitedPartASeconds={remainingPartASeconds}",
+        });
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Another writer (a second tab, or the expiry sweep) touched the
+            // row first. Re-read: if Part A is locked either way the candidate
+            // got what they asked for, so report success.
+            db.ChangeTracker.Clear();
+            var current = await db.ReadingAttempts.AsNoTracking()
+                .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId, ct)
+                ?? throw new InvalidOperationException("Attempt not found.");
+            if (current.PartALockedAt is not null)
+            {
+                return BuildBreakState(current, policy, DateTimeOffset.UtcNow);
+            }
+
+            throw new ReadingAttemptException(
+                "part_a_lock_conflict",
+                "Could not submit Part A because the attempt changed. Please try again.");
+        }
+
+        return BuildBreakState(attempt, policy, now);
+    }
+
+    /// <summary>
+    /// Projects an attempt into the break-state contract the Reading player
+    /// patches its timers from. <c>PartBCTimerPausedAt</c> is read straight off
+    /// the row rather than re-derived, because at the lock instant
+    /// <c>now &gt;= partADeadline</c> is a knife-edge comparison.
+    /// </summary>
+    private static ReadingAttemptBreakState BuildBreakState(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy,
+        DateTimeOffset now)
+    {
+        var pausedSeconds = ResolveEffectivePartBCPausedSeconds(attempt, policy, now);
+        var partBCDeadline = ResolvePartBCDeadline(attempt, policy, pausedSeconds);
+        return new ReadingAttemptBreakState(
+            AttemptId: attempt.Id,
+            DeadlineAt: attempt.DeadlineAt
+                ?? partBCDeadline.AddSeconds(Math.Max(0, policy.GracePeriodSeconds)),
+            PartADeadlineAt: ResolvePartADeadline(attempt, policy),
+            PartBCDeadlineAt: partBCDeadline,
+            PartABreakAvailable: attempt.Mode == ReadingAttemptMode.Exam,
+            PartABreakResumed: attempt.Mode != ReadingAttemptMode.Exam || attempt.PartABreakUsed,
+            PartBCTimerPausedAt: attempt.PartBCTimerPausedAt,
+            PartBCPausedSeconds: pausedSeconds,
+            PartABreakMaxSeconds: attempt.Mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0,
+            ServerNow: now);
     }
 
     public async Task<int> SweepExpiredAsync(CancellationToken ct)
@@ -1340,8 +1474,36 @@ public sealed class ReadingAttemptService(
             AllowPaperReadingMode: false);
     }
 
-    private static DateTimeOffset ResolvePartADeadline(ReadingAttempt attempt, ReadingResolvedPolicy policy)
-        => attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
+    /// <summary>
+    /// The effective end of Part A: the scheduled boundary
+    /// (<c>StartedAt + PartATimerMinutes</c>), or the moment the candidate
+    /// ended Part A early via "Submit Part A" -- whichever comes FIRST.
+    /// Taking the minimum keeps the operation monotonic: an early lock can
+    /// only shorten Part A, never extend it, and a NULL
+    /// <see cref="ReadingAttempt.PartALockedAt"/> reproduces the pre-feature
+    /// behaviour exactly.
+    /// </summary>
+    internal static DateTimeOffset ResolvePartADeadline(ReadingAttempt attempt, ReadingResolvedPolicy policy)
+    {
+        var scheduled = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
+        return attempt.PartALockedAt is DateTimeOffset lockedAt && lockedAt < scheduled
+            ? lockedAt
+            : scheduled;
+    }
+
+    /// <summary>
+    /// The end of the shared Parts B/C window, anchored to the EFFECTIVE Part A
+    /// deadline rather than to <c>StartedAt</c>. Identical arithmetic whenever
+    /// Part A ran its full window, and the reason an early Part A submission
+    /// still leaves Parts B and C exactly <c>PartBCTimerMinutes</c> to run.
+    /// </summary>
+    internal static DateTimeOffset ResolvePartBCDeadline(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy,
+        int pausedSeconds)
+        => ResolvePartADeadline(attempt, policy)
+            .AddMinutes(policy.PartBCTimerMinutes)
+            .AddSeconds(pausedSeconds);
 
     private static bool IsPartABreakPending(
         ReadingAttempt attempt,
@@ -1363,7 +1525,12 @@ public sealed class ReadingAttemptService(
         return now >= partADeadline && now < breakWindowEndsAt;
     }
 
-    private static int ResolveEffectivePartBCPausedSeconds(
+    /// <summary>
+    /// Seconds the Parts B/C clock has been paused for the optional break.
+    /// Shared with <c>ReadingLearnerEndpoints</c> and <c>LearnerEndpoints</c>
+    /// so all four former copies of this arithmetic stay in lockstep.
+    /// </summary>
+    internal static int ResolveEffectivePartBCPausedSeconds(
         ReadingAttempt attempt,
         ReadingResolvedPolicy policy,
         DateTimeOffset now)

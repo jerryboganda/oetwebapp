@@ -17,6 +17,7 @@ import {
   getReadingAttempt,
   getReadingPaperAnnotations,
   getReadingStructureLearner,
+  lockReadingPartA,
   resumeReadingBreak,
   saveReadingAnswer,
   startReadingAttempt,
@@ -60,6 +61,23 @@ type PendingReadingAnswer = {
 function isNetworkInterruption(error: unknown): boolean {
   return (error instanceof ApiError && error.status === 0)
     || (typeof navigator !== 'undefined' && !navigator.onLine);
+}
+
+/**
+ * Server rejections that mean "that section had already closed", not "the save
+ * failed". They are expected whenever a debounced or keepalive autosave lands
+ * just after a section boundary — most visibly right after the candidate
+ * presses Submit Part A. Treat them as settled so the learner never sees a red
+ * "Autosave failed." banner at the exact moment the break screen opens.
+ */
+const BENIGN_SAVE_REJECTIONS = new Set([
+  'part_a_locked',
+  'part_bc_not_open',
+  'part_bc_break_not_resumed',
+]);
+
+function isBenignLockedSave(error: unknown): boolean {
+  return error instanceof ApiError && BENIGN_SAVE_REJECTIONS.has(error.code ?? '');
 }
 
 type ReadingSectionCode = 'B1' | 'B2' | 'B3' | 'B4' | 'B5' | 'B6' | 'C1' | 'C2';
@@ -162,6 +180,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showSubmitPartAConfirm, setShowSubmitPartAConfirm] = useState(false);
+  const [lockingPartA, setLockingPartA] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [timingNotice, setTimingNotice] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(100);
@@ -217,6 +237,15 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   // Latest debounced answer values awaiting the server. This is an in-flight
   // queue only; the attempt row remains the durable source of truth.
   const pendingAnswersRef = useRef<Record<string, PendingReadingAnswer>>({});
+  // Handles for saves already on the wire. `pendingAnswersRef` only records a
+  // boolean, which cannot be awaited — this lets an early Part A submission
+  // wait for in-flight autosaves to settle before it locks the section.
+  const inFlightSaves = useRef<Set<Promise<unknown>>>(new Set());
+  // Synchronous re-entrancy guard for "Submit Part A". Two clicks in the
+  // same tick both observe the pre-render `lockingPartA` state, so only a
+  // ref actually stops the second request; the state drives the button's
+  // loading/disabled rendering.
+  const lockPartAInFlight = useRef(false);
   const serverAnswers = useRef<Record<string, string | null>>({});
   const autoSubmitTriggered = useRef(false);
   const warnedMiniTest2min = useRef(false);
@@ -253,7 +282,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         : Math.min(now - focusedAt, 14_400_000);
       pending.inFlight = true;
       setSaveState('saving');
-      void saveReadingAnswer(pending.attemptId, questionId, pending.valueJson, elapsedMs, { keepalive })
+      const request = saveReadingAnswer(pending.attemptId, questionId, pending.valueJson, elapsedMs, { keepalive })
         .then(() => {
           const current = pendingAnswersRef.current[questionId];
           if (
@@ -271,6 +300,14 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         })
         .catch((err) => {
           const current = pendingAnswersRef.current[questionId];
+          if (isBenignLockedSave(err)) {
+            // The section closed under us — the answer is either already
+            // persisted or no longer accepted. Settle quietly.
+            delete pendingAnswersRef.current[questionId];
+            dirtyQuestionIds.current.delete(questionId);
+            setSaveState('saved');
+            return;
+          }
           if (current?.attemptId === pending.attemptId && current.valueJson === pending.valueJson) {
             current.inFlight = false;
             if (isNetworkInterruption(err)) {
@@ -289,6 +326,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             }
           }
         });
+      inFlightSaves.current.add(request);
+      void request.finally(() => inFlightSaves.current.delete(request));
     });
   }, []);
 
@@ -412,6 +451,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           status: saved.status,
           mode: saved.mode,
           scopeQuestionIds: saved.scopeQuestionIds,
+          // Pre-existing omission: `serverNow` is required on ActiveAttempt
+          // and every other setAttempt call supplies it, so a resumed attempt
+          // was the one path that left it undefined.
+          serverNow: saved.serverNow,
         });
         setAnswers(restoredAnswers);
         serverAnswers.current = Object.fromEntries(
@@ -588,6 +631,23 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const partBCWindowEnded = Boolean(attempt && !breakPending && nowMs >= partBCDeadlineMs);
   const paperExpired = Boolean(attempt && nowMs >= overallDeadlineMs);
   const attemptInputsLocked = breakPending || partBCWindowEnded || paperExpired;
+  /**
+   * Owner request 2026-08-29 — a candidate who finishes Part A early may end
+   * it themselves instead of waiting out the rest of the 15-minute window.
+   * Exam mode only, and only while Part A is genuinely open: a reopened
+   * submitted attempt still computes `activePart`, so the InProgress check is
+   * what stops the action appearing on a read-only review.
+   */
+  const canSubmitPartAEarly = Boolean(
+    attempt
+    && attempt.mode === 'Exam'
+    && attempt.status === 'InProgress'
+    && activePart === 'A'
+    && !partALocked
+    && !breakPending
+    && !partBCWindowEnded
+    && !paperExpired,
+  );
 
   /**
    * Part A → Parts B/C transition gate. Shown once, only in real exam mode,
@@ -699,8 +759,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     if (pending && pending.attemptId === attempt.attemptId && pending.valueJson === valueJson) {
       pending.inFlight = true;
     }
+    const request = saveReadingAnswer(attempt.attemptId, questionId, valueJson, elapsedMs);
+    inFlightSaves.current.add(request);
+    void request.catch(() => {}).finally(() => inFlightSaves.current.delete(request));
     try {
-      await saveReadingAnswer(attempt.attemptId, questionId, valueJson, elapsedMs);
+      await request;
       // Reset the focus timestamp so the next save only counts the delta
       // since this save (no double-counting). If the learner switches tabs,
       // the visibilitychange handler also resets this entry.
@@ -717,6 +780,15 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         setSaveState('saving');
       }
     } catch (err) {
+      if (isBenignLockedSave(err)) {
+        // The section closed under us (most often right after the candidate
+        // pressed Submit Part A). Settle quietly rather than surfacing a
+        // spurious "Autosave failed." banner.
+        delete pendingAnswersRef.current[questionId];
+        dirtyQuestionIds.current.delete(questionId);
+        setSaveState('saved');
+        return;
+      }
       if (
         pendingAnswersRef.current[questionId]?.attemptId === attempt.attemptId
         && pendingAnswersRef.current[questionId]?.valueJson === valueJson
@@ -934,6 +1006,91 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     }
   }, [answers, attempt, breakPending, mockAttemptId, mockSectionId, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router, submitting]);
 
+  /**
+   * Ends Part A at the candidate's request. Everything downstream — the locked
+   * Part A tab, the break screen, the 10-minute countdown — is derived from
+   * `partADeadlineAt`, so the only jobs here are to land the candidate's
+   * Part A work first and then patch the server's new deadlines into state.
+   *
+   * Deliberately does NOT touch `partATimerMinutes`, `partBCTimerMinutes`,
+   * `activePart` or `partTransitionAcknowledged`: `resumeBreak` leaves them
+   * alone too, and rewriting `partBCTimerMinutes` would shift the
+   * `fullUnresumedBreakPartBCDeadlineMs` fallback above.
+   */
+  const lockPartA = useCallback(async () => {
+    if (!attempt || lockPartAInFlight.current) return;
+    // The 1s tick may have locked Part A between opening the dialog and
+    // confirming it; the server would no-op, but skip the round trip.
+    if (partALocked || breakPending || partBCWindowEnded || paperExpired) return;
+
+    lockPartAInFlight.current = true;
+    setLockingPartA(true);
+    setError(null);
+    try {
+      // Land every Part A answer before the section closes: cancel the
+      // debounce, flush what is dirty, then wait for anything already on the
+      // wire. Saves that still lose the race are absorbed by the
+      // `part_a_locked` benign-rejection guard.
+      Object.values(saveTimers.current).forEach(clearTimeout);
+      const partAAnswersToFlush = Object.entries(answers).filter(([questionId]) =>
+        dirtyQuestionIds.current.has(questionId) && questionPartById.get(questionId) === 'A');
+      const flushNow = Date.now();
+      const flushResults = await Promise.allSettled(partAAnswersToFlush.map(([questionId, valueJson]) => {
+        const focusedAt = questionFocusStartedAt.current[questionId];
+        const elapsedMs = focusedAt != null && flushNow > focusedAt
+          ? Math.min(flushNow - focusedAt, 14_400_000)
+          : null;
+        return saveReadingAnswer(attempt.attemptId, questionId, valueJson, elapsedMs);
+      }));
+      // A real failure here (offline, 500) must abort: locking would discard
+      // that answer for good. A `part_a_locked` race is different — the
+      // section is already closed server-side, so carry on to the break.
+      const flushFailure = flushResults.find(
+        (result) => result.status === 'rejected' && !isBenignLockedSave(result.reason),
+      );
+      if (flushFailure?.status === 'rejected') throw flushFailure.reason;
+      partAAnswersToFlush.forEach(([questionId]) => {
+        questionFocusStartedAt.current[questionId] = Date.now();
+        dirtyQuestionIds.current.delete(questionId);
+        delete pendingAnswersRef.current[questionId];
+      });
+      await Promise.allSettled([...inFlightSaves.current]);
+      // R08 — land any debounced rule-out / highlight edits too.
+      await annotations.flush();
+
+      const locked = await lockReadingPartA(attempt.attemptId);
+      syncServerClock(locked.serverNow);
+      setAttempt((current) => current ? {
+        ...current,
+        deadlineAt: locked.deadlineAt,
+        partADeadlineAt: locked.partADeadlineAt,
+        partBCDeadlineAt: locked.partBCDeadlineAt,
+        partABreakAvailable: locked.partABreakAvailable,
+        partABreakResumed: locked.partABreakResumed,
+        partBCTimerPausedAt: locked.partBCTimerPausedAt,
+        partBCPausedSeconds: locked.partBCPausedSeconds,
+        partABreakMaxSeconds: locked.partABreakMaxSeconds,
+        serverNow: locked.serverNow,
+      } : current);
+      setSaveState('saved');
+    } catch (err) {
+      setError(readErrorMessage(err, 'Could not submit Part A. Please try again.'));
+    } finally {
+      lockPartAInFlight.current = false;
+      setLockingPartA(false);
+    }
+  }, [
+    annotations,
+    answers,
+    attempt,
+    breakPending,
+    paperExpired,
+    partALocked,
+    partBCWindowEnded,
+    questionPartById,
+    syncServerClock,
+  ]);
+
   const resumeBreak = useCallback(async () => {
     if (!attempt) return;
     setError(null);
@@ -1087,8 +1244,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               zoomLevel={zoomLevel}
               displayWarnings={displayWarnings}
               submitting={submitting}
+              showSubmitPartA={canSubmitPartAEarly}
+              lockingPartA={lockingPartA}
               onZoomChange={setZoomLevel}
               onSubmit={() => setShowConfirm(true)}
+              onSubmitPartA={() => setShowSubmitPartAConfirm(true)}
               a11yPolicy={structure.paper.policy ?? null}
               fontScale={fontScale}
               highContrast={highContrast}
@@ -1175,6 +1335,37 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             </Button>
           </div>
         </Modal>
+
+        {/* Early Part A submission. Kept separate from the whole-attempt
+            confirm above so the two dialogs can never both be open, and so
+            the copy talks about Part A rather than the 42-question total.
+            Cancel, the close button, the backdrop and Escape all leave the
+            candidate in Part A — Modal handles those. */}
+        <Modal
+          open={showSubmitPartAConfirm}
+          onClose={() => setShowSubmitPartAConfirm(false)}
+          title="Submit Part A?"
+        >
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-muted">Are you sure you want to submit Part A?</p>
+            <InlineAlert variant="warning">
+              Part A locks straight away and cannot be reopened. Your Part A answers are saved.
+              You&rsquo;ll go to the break screen next &mdash; press Resume Test whenever you&rsquo;re
+              ready to start Parts B &amp; C.
+            </InlineAlert>
+          </div>
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" onClick={() => setShowSubmitPartAConfirm(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              onClick={() => { setShowSubmitPartAConfirm(false); void lockPartA(); }}
+              loading={lockingPartA}
+              data-testid="reading-confirm-submit-part-a"
+            >
+              Yes, submit Part A
+            </Button>
+          </div>
+        </Modal>
       </main>
     </LearnerDashboardShell>
   );
@@ -1193,8 +1384,11 @@ function AttemptToolbar({
   zoomLevel,
   displayWarnings,
   submitting,
+  showSubmitPartA,
+  lockingPartA,
   onZoomChange,
   onSubmit,
+  onSubmitPartA,
   a11yPolicy,
   fontScale,
   highContrast,
@@ -1215,8 +1409,12 @@ function AttemptToolbar({
   zoomLevel: number;
   displayWarnings: string[];
   submitting: boolean;
+  /** Owner request 2026-08-29 — early "Submit Part A" affordance. */
+  showSubmitPartA: boolean;
+  lockingPartA: boolean;
   onZoomChange: (next: number) => void;
   onSubmit: () => void;
+  onSubmitPartA: () => void;
   /**
    * Phase 5 closure — resolved a11y policy. When null or every flag is
    * false the settings dropdown is hidden so we don't tease a learner
@@ -1288,6 +1486,19 @@ function AttemptToolbar({
             onScreenReaderHintsChange={onScreenReaderHintsChange}
           />
           <SaveStatus state={saveState} />
+          {showSubmitPartA ? (
+            <Button
+              variant="secondary"
+              onClick={onSubmitPartA}
+              loading={lockingPartA}
+              disabled={lockingPartA || submitting}
+              aria-label="Submit Part A and start the break"
+              data-testid="reading-submit-part-a"
+            >
+              <Send className="h-4 w-4" aria-hidden="true" />
+              Submit Part A
+            </Button>
+          ) : null}
           <Button variant="primary" onClick={onSubmit} loading={submitting} disabled={breakPending || paperExpired} aria-label="Submit attempt for grading">
             <Send className="h-4 w-4" aria-hidden="true" />
             Submit

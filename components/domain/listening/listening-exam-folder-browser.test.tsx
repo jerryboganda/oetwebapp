@@ -52,4 +52,39 @@ describe('ListeningExamFolderBrowser', () => {
     expect(screen.getByRole('button', { name: /nova practice series/i })).toBeInTheDocument();
     expect(screen.queryByText('Atlas Sample Test 9')).not.toBeInTheDocument();
   });
+
+  it('lists an opened folder in ascending exam-number order', async () => {
+    const user = userEvent.setup();
+    render(
+      <ListeningExamFolderBrowser
+        papers={[
+          {
+            id: 'st10',
+            slug: 'atlas-practice-series-listening-sample-test-10',
+            title: 'Atlas Practice Series — Listening Sample Test 10',
+          },
+          {
+            id: 'st2',
+            slug: 'atlas-practice-series-listening-sample-test-02',
+            title: 'Atlas Practice Series — Listening Sample Test 2',
+          },
+          {
+            id: 'st9',
+            slug: 'atlas-practice-series-listening-sample-test-09',
+            title: 'Atlas Practice Series — Listening Sample Test 9',
+          },
+        ]}
+        emptyMessage="No papers in this series yet."
+        renderPaper={(paper) => <p>{paper.title}</p>}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /atlas practice series/i }));
+
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'Atlas Practice Series — Listening Sample Test 2',
+      'Atlas Practice Series — Listening Sample Test 9',
+      'Atlas Practice Series — Listening Sample Test 10',
+    ]);
+  });
 });

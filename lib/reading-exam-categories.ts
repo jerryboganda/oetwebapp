@@ -1,3 +1,5 @@
+import { compareExamSeriesPapers } from './exam-series-order';
+
 export type ReadingExamCategoryId =
   | 'anna-hartford'
   | 'atlas-practice-series'
@@ -97,11 +99,14 @@ export function groupReadingExamPapers<T extends ReadingExamCategoryPaper>(
     grouped.get(resolveReadingExamCategoryId(paper))!.push(paper);
   }
 
+  // Each folder is sorted independently, ascending by the exam number already
+  // written into the title. Safe to sort in place: these arrays were built by
+  // this function, never handed in by the caller.
   const sections: ReadingExamCategorySection<T>[] = READING_EXAM_CATEGORIES.map((category) => ({
     id: category.id,
     title: category.title,
     description: category.description,
-    papers: grouped.get(category.id) ?? [],
+    papers: (grouped.get(category.id) ?? []).sort(compareExamSeriesPapers(category.matchers)),
   }));
 
   return sections;

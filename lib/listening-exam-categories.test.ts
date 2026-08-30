@@ -54,4 +54,45 @@ describe('listening exam categories', () => {
       'Nova 20',
     ]);
   });
+
+  it('sorts each folder ascending by the exam number that follows the dash', () => {
+    const sections = groupListeningExamPapers([
+      {
+        slug: 'atlas-practice-series-listening-sample-test-09',
+        title: 'Atlas Practice Series — Listening Sample Test 9',
+      },
+      {
+        slug: 'atlas-practice-series-listening-sample-test-10',
+        title: 'Atlas Practice Series — Listening Sample Test 10',
+      },
+      {
+        slug: 'atlas-practice-series-listening-sample-test-02',
+        title: 'Atlas Practice Series — Listening Sample Test 2',
+      },
+    ]);
+
+    expect(
+      sections.find((section) => section.id === 'atlas-practice-series')?.papers.map((p) => p.title),
+    ).toEqual([
+      'Atlas Practice Series — Listening Sample Test 2',
+      'Atlas Practice Series — Listening Sample Test 9',
+      'Atlas Practice Series — Listening Sample Test 10',
+    ]);
+  });
+
+  it('sorts Atlas and Nova independently', () => {
+    const sections = groupListeningExamPapers([
+      { slug: 'nova-practice-series-listening-20', title: 'Nova Practice Series 20' },
+      { slug: 'atlas-practice-series-listening-11', title: 'Atlas Practice Series 11' },
+      { slug: 'nova-practice-series-listening-03', title: 'Nova Practice Series 3' },
+      { slug: 'atlas-practice-series-listening-02', title: 'Atlas Practice Series 2' },
+    ]);
+
+    expect(
+      sections.find((section) => section.id === 'atlas-practice-series')?.papers.map((p) => p.title),
+    ).toEqual(['Atlas Practice Series 2', 'Atlas Practice Series 11']);
+    expect(
+      sections.find((section) => section.id === 'nova-practice-series')?.papers.map((p) => p.title),
+    ).toEqual(['Nova Practice Series 3', 'Nova Practice Series 20']);
+  });
 });

@@ -1155,6 +1155,18 @@ export const resumeReadingBreak = (attemptId: string) =>
   api<ReadingAttemptBreakState>(`/v1/reading-papers/attempts/${attemptId}/break/resume`, { method: 'POST' });
 
 /**
+ * Ends Part A early at the candidate's request ("Submit Part A"), locking
+ * Part A immediately and opening the existing optional break.
+ *
+ * Returns the same shape as `resumeReadingBreak` because an early lock lands
+ * the attempt in exactly the pre-break state — the player patches its timers
+ * from the response identically in both cases. Idempotent server-side, so a
+ * double-click or a retry is safe.
+ */
+export const lockReadingPartA = (attemptId: string) =>
+  api<ReadingAttemptBreakState>(`/v1/reading-papers/attempts/${attemptId}/part-a/lock`, { method: 'POST' });
+
+/**
  * Phase 1 closure — submit a Reading attempt for grading.
  *
  * The deterministic `Idempotency-Key` header lets a retried POST (network

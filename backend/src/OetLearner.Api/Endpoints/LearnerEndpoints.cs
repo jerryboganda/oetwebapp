@@ -820,7 +820,7 @@ public static class LearnerEndpoints
                     partBCTimerPausedAt = breakWindowActive
                         ? partADeadlineAt
                         : (DateTimeOffset?)null,
-                    partBCPausedSeconds = ResolveEffectiveReadingPartBCPausedSeconds(a, snapshot, now),
+                    partBCPausedSeconds = ReadingAttemptService.ResolveEffectivePartBCPausedSeconds(a, snapshot, now),
                     partABreakMaxSeconds = a.Mode == ReadingAttemptMode.Exam
                         ? ReadingAttemptService.PartABreakMaxSeconds
                         : 0,
@@ -1147,32 +1147,14 @@ public static class LearnerEndpoints
     {
         if (attempt.Mode == ReadingAttemptMode.Exam)
         {
-            var partADeadline = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
+            var pausedSeconds = ReadingAttemptService.ResolveEffectivePartBCPausedSeconds(attempt, policy, now);
             return (
-                partADeadline,
-                attempt.StartedAt
-                    .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
-                    .AddSeconds(ResolveEffectiveReadingPartBCPausedSeconds(attempt, policy, now)));
+                ReadingAttemptService.ResolvePartADeadline(attempt, policy),
+                ReadingAttemptService.ResolvePartBCDeadline(attempt, policy, pausedSeconds));
         }
 
         var answerDeadline = ResolveReadingPracticeAnswerDeadline(attempt, policy);
         return (answerDeadline, answerDeadline);
-    }
-
-    private static int ResolveEffectiveReadingPartBCPausedSeconds(
-        ReadingAttempt attempt,
-        ReadingResolvedPolicy policy,
-        DateTimeOffset now)
-    {
-        var persisted = Math.Clamp(attempt.PartBCPausedSeconds, 0, ReadingAttemptService.PartABreakMaxSeconds);
-        if (attempt.Mode != ReadingAttemptMode.Exam || attempt.PartABreakUsed)
-        {
-            return persisted;
-        }
-
-        var partADeadline = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
-        var elapsedBreakSeconds = (int)Math.Floor((now - partADeadline).TotalSeconds);
-        return Math.Clamp(Math.Max(persisted, elapsedBreakSeconds), 0, ReadingAttemptService.PartABreakMaxSeconds);
     }
 
     private static DateTimeOffset ResolveReadingPracticeAnswerDeadline(

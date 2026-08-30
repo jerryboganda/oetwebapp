@@ -392,6 +392,35 @@ public static class ReadingLearnerEndpoints
             }
         }).RequireRateLimiting("PerUserWrite");
 
+        // ── End Part A early ───────────────────────────────────────────────
+        // The candidate finished Part A before its 15-minute window expired
+        // and pressed "Submit Part A". Locks Part A at once and opens the
+        // existing optional break; "Resume Test" on that screen then starts
+        // Parts B and C with their full shared window. Idempotent server-side,
+        // so a double-click or a retry is harmless.
+        group.MapPost("/attempts/{attemptId}/part-a/lock", async (
+            string attemptId,
+            IReadingAttemptService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            try
+            {
+                var locked = await svc.LockPartAAsync(userId, attemptId, ct);
+                return Results.Ok(locked);
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_part_a_lock_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
         // ── Autosave one answer ────────────────────────────────────────────
         group.MapPut("/attempts/{attemptId}/answers/{questionId}", async (
             string attemptId, string questionId,
@@ -564,7 +593,7 @@ public static class ReadingLearnerEndpoints
                 partBCTimerPausedAt = breakWindowActive
                     ? partADeadline
                     : (DateTimeOffset?)null,
-                partBCPausedSeconds = ResolveEffectivePartBCPausedSeconds(attempt, policy, now),
+                partBCPausedSeconds = ReadingAttemptService.ResolveEffectivePartBCPausedSeconds(attempt, policy, now),
                 partABreakMaxSeconds = attempt.Mode == ReadingAttemptMode.Exam
                     ? ReadingAttemptService.PartABreakMaxSeconds
                     : 0,
@@ -899,7 +928,7 @@ public static class ReadingLearnerEndpoints
                     partBCTimerPausedAt = breakWindowActive
                         ? partADeadline
                         : (DateTimeOffset?)null,
-                    partBCPausedSeconds = ResolveEffectivePartBCPausedSeconds(attempt, policy, now),
+                    partBCPausedSeconds = ReadingAttemptService.ResolveEffectivePartBCPausedSeconds(attempt, policy, now),
                     partABreakMaxSeconds = attempt.Mode == ReadingAttemptMode.Exam
                         ? ReadingAttemptService.PartABreakMaxSeconds
                         : 0,
@@ -1438,32 +1467,14 @@ public static class ReadingLearnerEndpoints
     {
         if (attempt.Mode == ReadingAttemptMode.Exam)
         {
-            var partADeadline = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
+            var pausedSeconds = ReadingAttemptService.ResolveEffectivePartBCPausedSeconds(attempt, policy, now);
             return (
-                partADeadline,
-                attempt.StartedAt
-                    .AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes)
-                    .AddSeconds(ResolveEffectivePartBCPausedSeconds(attempt, policy, now)));
+                ReadingAttemptService.ResolvePartADeadline(attempt, policy),
+                ReadingAttemptService.ResolvePartBCDeadline(attempt, policy, pausedSeconds));
         }
 
         var answerDeadline = ResolvePracticeAnswerDeadline(attempt, policy);
         return (answerDeadline, answerDeadline);
-    }
-
-    private static int ResolveEffectivePartBCPausedSeconds(
-        ReadingAttempt attempt,
-        ReadingResolvedPolicy policy,
-        DateTimeOffset now)
-    {
-        var persisted = Math.Clamp(attempt.PartBCPausedSeconds, 0, ReadingAttemptService.PartABreakMaxSeconds);
-        if (attempt.Mode != ReadingAttemptMode.Exam || attempt.PartABreakUsed)
-        {
-            return persisted;
-        }
-
-        var partADeadline = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
-        var elapsedBreakSeconds = (int)Math.Floor((now - partADeadline).TotalSeconds);
-        return Math.Clamp(Math.Max(persisted, elapsedBreakSeconds), 0, ReadingAttemptService.PartABreakMaxSeconds);
     }
 
     private static DateTimeOffset ResolvePracticeAnswerDeadline(

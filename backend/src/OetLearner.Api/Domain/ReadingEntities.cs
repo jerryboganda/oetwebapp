@@ -490,6 +490,20 @@ public class ReadingAttempt
     public DateTimeOffset? PartBCTimerPausedAt { get; set; }
     public int PartBCPausedSeconds { get; set; }
     public bool PartABreakUsed { get; set; }
+
+    /// <summary>
+    /// Set when the candidate ends Part A early via the "Submit Part A"
+    /// action in the Full Reading Exam. NULL on every attempt that ran the
+    /// full Part A window and on every row predating this column.
+    ///
+    /// The effective Part A boundary is the MINIMUM of this value and
+    /// <c>StartedAt + PartATimerMinutes</c> (see
+    /// <c>ReadingAttemptService.ResolvePartADeadline</c>), so an early lock
+    /// can only ever move the boundary EARLIER, never later. That monotonicity
+    /// is what makes the change safe for in-flight attempts.
+    /// </summary>
+    public DateTimeOffset? PartALockedAt { get; set; }
+
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset LastActivityAt { get; set; }
 

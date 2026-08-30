@@ -10,6 +10,7 @@ const {
   mockGetReadingAttempt,
   mockGetReadingPaperAnnotations,
   mockGetReadingStructureLearner,
+  mockLockReadingPartA,
   mockPush,
   mockResumeReadingBreak,
   mockSaveReadingAnswer,
@@ -25,6 +26,7 @@ const {
   mockGetReadingAttempt: vi.fn(),
   mockGetReadingPaperAnnotations: vi.fn(),
   mockGetReadingStructureLearner: vi.fn(),
+  mockLockReadingPartA: vi.fn(),
   mockPush: vi.fn(),
   mockResumeReadingBreak: vi.fn(),
   mockSaveReadingAnswer: vi.fn(),
@@ -44,10 +46,16 @@ vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div data-testid="learner-dashboard-shell">{children}</div>,
 }));
 
-vi.mock('@/lib/api', () => ({
-  completeMockSection: mockCompleteMockSection,
-  fetchAuthorizedObjectUrl: mockFetchAuthorizedObjectUrl,
-}));
+vi.mock('@/lib/api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/api')>('@/lib/api');
+  return {
+    // The player narrows save failures with `err instanceof ApiError`, so the
+    // real class has to survive the mock or that check throws.
+    ApiError: actual.ApiError,
+    completeMockSection: mockCompleteMockSection,
+    fetchAuthorizedObjectUrl: mockFetchAuthorizedObjectUrl,
+  };
+});
 
 vi.mock('@/lib/reading-authoring-api', async () => {
   const actual = await vi.importActual<typeof import('@/lib/reading-authoring-api')>('@/lib/reading-authoring-api');
@@ -57,6 +65,7 @@ vi.mock('@/lib/reading-authoring-api', async () => {
     getReadingAttempt: mockGetReadingAttempt,
     getReadingPaperAnnotations: mockGetReadingPaperAnnotations,
     getReadingStructureLearner: mockGetReadingStructureLearner,
+    lockReadingPartA: mockLockReadingPartA,
     resumeReadingBreak: mockResumeReadingBreak,
     saveReadingAnswer: mockSaveReadingAnswer,
     saveReadingAnnotations: mockSaveReadingAnnotations,
@@ -122,6 +131,8 @@ describe('Reading paper player page', () => {
     });
     mockGetReadingAttempt.mockResolvedValue(buildAttempt());
     mockSaveReadingAnswer.mockResolvedValue(undefined);
+    mockLockReadingPartA.mockResolvedValue(buildEarlyLockState());
+    mockResumeReadingBreak.mockResolvedValue(buildResumedBreakState());
     mockSaveReadingAnnotations.mockResolvedValue(undefined);
     mockGetReadingAnnotations.mockResolvedValue({ annotationsJson: null });
     mockSubmitReadingAttempt.mockResolvedValue({
@@ -341,6 +352,170 @@ describe('Reading paper player page', () => {
     // Hydration must not trigger a write-back.
     expect(mockSaveReadingAnnotations).not.toHaveBeenCalled();
   });
+  // -- Early "Submit Part A" (owner request 2026-08-29) ------------------
+
+  it('offers Submit Part A during Part A of an exam attempt', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+
+    expect(await screen.findByTestId('reading-submit-part-a')).toBeInTheDocument();
+  });
+
+  it('hides Submit Part A in practice modes', async () => {
+    mockSearchParams.current = new URLSearchParams('attemptId=attempt-1');
+    mockGetReadingAttempt.mockResolvedValue(buildAttempt({ mode: 'Drill' }));
+
+    await renderPlayer();
+
+    await waitFor(() => expect(mockGetReadingAttempt).toHaveBeenCalled());
+    expect(screen.queryByTestId('reading-submit-part-a')).not.toBeInTheDocument();
+  });
+
+  it('cancelling the Submit Part A dialog keeps the candidate in Part A', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+    await user.click(await screen.findByTestId('reading-submit-part-a'));
+
+    expect(await screen.findByRole('dialog', { name: /submit part a/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /submit part a/i })).not.toBeInTheDocument());
+    expect(mockLockReadingPartA).not.toHaveBeenCalled();
+    expect(screen.getByPlaceholderText(/type your answer/i)).toBeEnabled();
+    expect(screen.getByTestId('reading-submit-part-a')).toBeInTheDocument();
+  });
+
+  it('flushes dirty Part A answers before locking the section', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+    await user.type(screen.getByPlaceholderText(/type your answer/i), 'aspirin');
+
+    await user.click(await screen.findByTestId('reading-submit-part-a'));
+    fireEvent.click(await screen.findByTestId('reading-confirm-submit-part-a'));
+
+    await waitFor(() => expect(mockLockReadingPartA).toHaveBeenCalledWith('attempt-1'));
+    expect(mockSaveReadingAnswer).toHaveBeenCalledWith('attempt-1', 'q-a-1', '"aspirin"', expect.any(Number));
+    // The answer must land before the section closes, or the server rejects it.
+    expect(mockSaveReadingAnswer.mock.invocationCallOrder[0])
+      .toBeLessThan(mockLockReadingPartA.mock.invocationCallOrder[0]);
+  });
+
+  it('opens the break screen with Resume Test after an early Part A submit', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+    await user.click(await screen.findByTestId('reading-submit-part-a'));
+    fireEvent.click(await screen.findByTestId('reading-confirm-submit-part-a'));
+
+    // Advance past the lock instant so the derived timers agree with the
+    // server's new Part A deadline.
+    await act(async () => {
+      vi.setSystemTime(baseNow + 5 * 60_000 + 1_000);
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(await screen.findByRole('button', { name: /resume reading test/i })).toBeInTheDocument();
+    expect(screen.getByText(/part a collected/i)).toBeInTheDocument();
+    expect(screen.getByText(/part a locked/i)).toBeInTheDocument();
+  });
+
+  it('Resume Test after an early Part A submit starts Parts B and C', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+    await user.click(await screen.findByTestId('reading-submit-part-a'));
+    fireEvent.click(await screen.findByTestId('reading-confirm-submit-part-a'));
+
+    await act(async () => {
+      vi.setSystemTime(baseNow + 5 * 60_000 + 1_000);
+      vi.advanceTimersByTime(1_000);
+    });
+
+    fireEvent.click(await screen.findByRole('button', { name: /resume reading test/i }));
+
+    await waitFor(() => expect(mockResumeReadingBreak).toHaveBeenCalledWith('attempt-1'));
+    expect(await screen.findByRole('timer', { name: /b\/c shared window/i })).toBeInTheDocument();
+  });
+
+  it('does not surface an autosave error when a Part A save loses the race to the lock', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { ApiError } = await import('@/lib/api');
+    mockSaveReadingAnswer.mockRejectedValue(
+      new ApiError(400, 'part_a_locked', 'Part A is locked because the 15-minute window has ended.', false),
+    );
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+    await user.type(screen.getByPlaceholderText(/type your answer/i), 'aspirin');
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_500);
+    });
+
+    await waitFor(() => expect(mockSaveReadingAnswer).toHaveBeenCalled());
+    expect(screen.queryByText(/autosave failed/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/save failed/i)).not.toBeInTheDocument();
+  });
+
+  it('aborts the early submit when a Part A answer genuinely fails to save', async () => {
+    // Locking would discard the unsaved answer for good, so a real failure has
+    // to keep the candidate in Part A with the error visible.
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const { ApiError } = await import('@/lib/api');
+    mockSaveReadingAnswer.mockRejectedValue(
+      new ApiError(503, 'server_error', 'Could not reach the server.', true),
+    );
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+    await user.type(screen.getByPlaceholderText(/type your answer/i), 'aspirin');
+
+    await user.click(await screen.findByTestId('reading-submit-part-a'));
+    fireEvent.click(await screen.findByTestId('reading-confirm-submit-part-a'));
+
+    await waitFor(() => expect(screen.getByText(/could not reach the server/i)).toBeInTheDocument());
+    expect(mockLockReadingPartA).not.toHaveBeenCalled();
+    expect(screen.getByTestId('reading-submit-part-a')).toBeInTheDocument();
+  });
+
+  it('locks Part A exactly once and blocks re-entry while the request is in flight', async () => {
+    // Two things keep a single confirmation from producing two POSTs: the
+    // dialog unmounts on confirm, and the toolbar action is disabled until the
+    // request settles. (`lockPartAInFlight` guards the handler itself as
+    // defence-in-depth for future refactors, and the server is idempotent.)
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let releaseLock: (() => void) | undefined;
+    mockLockReadingPartA.mockImplementation(() => new Promise((resolve) => {
+      releaseLock = () => resolve(buildEarlyLockState());
+    }));
+
+    await renderPlayer();
+    await user.click(await screen.findByRole('button', { name: /start attempt/i }));
+
+    await user.click(await screen.findByTestId('reading-submit-part-a'));
+    fireEvent.click(await screen.findByTestId('reading-confirm-submit-part-a'));
+    await waitFor(() => expect(mockLockReadingPartA).toHaveBeenCalledTimes(1));
+
+    // Dialog gone, action disabled: the candidate cannot fire a second lock.
+    expect(screen.queryByTestId('reading-confirm-submit-part-a')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('reading-submit-part-a')).toBeDisabled());
+    await user.click(screen.getByTestId('reading-submit-part-a'));
+    expect(screen.queryByTestId('reading-confirm-submit-part-a')).not.toBeInTheDocument();
+
+    await act(async () => {
+      releaseLock?.();
+      await Promise.resolve();
+    });
+    expect(mockLockReadingPartA).toHaveBeenCalledTimes(1);
+  });
 });
 
 function buildAttempt(overrides?: { status?: string; annotationsJson?: string | null; mode?: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank' }) {
@@ -369,6 +544,39 @@ function buildAttempt(overrides?: { status?: string; annotationsJson?: string | 
     answers: [],
     showExplanations: false,
     annotationsJson: overrides?.annotationsJson ?? null,
+  };
+}
+
+/**
+ * What the server returns from POST /attempts/{id}/part-a/lock when the
+ * candidate presses "Submit Part A" 5 minutes into the 15-minute window:
+ * Part A closes now, the optional break opens, and Parts B/C are re-anchored
+ * to 45 minutes from the lock instant (the unused Part A time is forfeited).
+ */
+function buildEarlyLockState() {
+  const lockedAt = new Date(baseNow + 5 * 60_000).toISOString();
+  return {
+    attemptId: 'attempt-1',
+    deadlineAt: new Date(baseNow + 5 * 60_000 + 45 * 60_000 + 300_000).toISOString(),
+    partADeadlineAt: lockedAt,
+    partBCDeadlineAt: new Date(baseNow + 5 * 60_000 + 45 * 60_000).toISOString(),
+    partABreakAvailable: true,
+    partABreakResumed: false,
+    partBCTimerPausedAt: lockedAt,
+    partBCPausedSeconds: 0,
+    partABreakMaxSeconds: 300,
+    serverNow: lockedAt,
+  };
+}
+
+/** Pressing Resume Test straight after an early lock. */
+function buildResumedBreakState() {
+  const resumedAt = new Date(baseNow + 5 * 60_000).toISOString();
+  return {
+    ...buildEarlyLockState(),
+    partABreakResumed: true,
+    partBCTimerPausedAt: null,
+    serverNow: resumedAt,
   };
 }
 

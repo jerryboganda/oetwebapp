@@ -48,4 +48,29 @@ describe('ReadingExamFolderBrowser', () => {
     expect(screen.getByRole('button', { name: /jayden book/i })).toBeInTheDocument();
     expect(screen.queryByText('Anna Hartford 1')).not.toBeInTheDocument();
   });
+
+  it('lists an opened folder in ascending exam-number order', async () => {
+    const user = userEvent.setup();
+    render(
+      <ReadingExamFolderBrowser
+        papers={[
+          { id: 'a10', slug: 'atlas-practice-series-10', title: 'Atlas Practice Series 10 — Sedation' },
+          { id: 'a2', slug: 'atlas-practice-series-02', title: 'Atlas Practice Series 2 — Burns' },
+          { id: 'a22', slug: 'atlas-practice-series-22', title: 'Atlas Practice Series 22 — Hernia' },
+          { id: 'a9', slug: 'atlas-practice-series-09', title: 'Atlas Practice Series 9 — Head injuries' },
+        ]}
+        emptyMessage="No papers in this series yet."
+        renderPaper={(paper) => <p>{paper.title}</p>}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', { name: /atlas practice series/i }));
+
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'Atlas Practice Series 2 — Burns',
+      'Atlas Practice Series 9 — Head injuries',
+      'Atlas Practice Series 10 — Sedation',
+      'Atlas Practice Series 22 — Hernia',
+    ]);
+  });
 });
