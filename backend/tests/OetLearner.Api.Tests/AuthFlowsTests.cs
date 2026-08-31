@@ -1257,6 +1257,7 @@ public class AuthFlowsTests
         await harness.SeedAccountAsync();
 
         var firstResponse = await harness.Service.RequestEmailVerificationOtpAsync("learner@example.com");
+        harness.Advance(TimeSpan.FromMinutes(1));
         var failingService = harness.CreateService(new ThrowingEmailSender());
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>

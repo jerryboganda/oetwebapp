@@ -160,6 +160,40 @@ public class FirebaseOtpTests
             .ToListAsync());
     }
 
+    [Fact]
+    public async Task EmailVerification_ConcurrentRequests_SendOnlyOneOtp()
+    {
+        await using var harness = CreateHarness();
+        await harness.SeedLearnerWithPhoneAsync();
+        harness.Sender.PauseDeliveries = true;
+        var firstService = harness.CreateService();
+        var secondService = harness.CreateService();
+
+        var firstRequest = firstService.RequestEmailVerificationOtpAsync("learner@example.com");
+        await harness.Sender.DeliveryStarted;
+        var secondRequest = secondService.RequestEmailVerificationOtpAsync("learner@example.com");
+        harness.Sender.ReleaseDeliveries();
+        var responses = await Task.WhenAll(firstRequest, secondRequest);
+
+        Assert.Equal(responses[0].ChallengeId, responses[1].ChallengeId);
+        Assert.Single(harness.Sender.SentMessages);
+    }
+
+    [Fact]
+    public async Task PasswordReset_AfterCooldown_IssuesOneReplacementOtp()
+    {
+        await using var harness = CreateHarness();
+        await harness.SeedLearnerWithPhoneAsync();
+
+        var first = await harness.Service.RequestPasswordResetOtpAsync("learner@example.com");
+        harness.TimeProvider.Advance(TimeSpan.FromSeconds(61));
+        var replacement = await harness.Service.RequestPasswordResetOtpAsync("learner@example.com");
+
+        Assert.NotEqual(first.ChallengeId, replacement.ChallengeId);
+        Assert.Equal(2, harness.Sender.SentMessages.Count);
+        Assert.Equal(2, harness.Orchestrator.CallCount);
+    }
+
     [Theory]
     [InlineData("+923001234567", "+923001234567")]
     [InlineData("+92 300 1234567", "+923001234567")]
@@ -394,6 +428,13 @@ public class FirebaseOtpTests
     private sealed class RecordingEmailSender : IEmailSender
     {
         private readonly List<EmailMessage> _sentMessages = [];
+        private readonly TaskCompletionSource _deliveryStarted = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _releaseDeliveries = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public bool PauseDeliveries { get; set; }
+        public Task DeliveryStarted => _deliveryStarted.Task;
+
+        public void ReleaseDeliveries() => _releaseDeliveries.TrySetResult();
+
         public IReadOnlyList<EmailMessage> SentMessages
         {
             get
@@ -405,13 +446,18 @@ public class FirebaseOtpTests
             }
         }
 
-        public Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
+        public async Task SendAsync(EmailMessage message, CancellationToken cancellationToken = default)
         {
             lock (_sentMessages)
             {
                 _sentMessages.Add(message);
             }
-            return Task.CompletedTask;
+
+            _deliveryStarted.TrySetResult();
+            if (PauseDeliveries)
+            {
+                await _releaseDeliveries.Task.WaitAsync(cancellationToken);
+            }
         }
     }
 }

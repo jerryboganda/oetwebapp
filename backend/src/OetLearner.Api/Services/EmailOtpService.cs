@@ -129,14 +129,7 @@ public sealed class EmailOtpService(
             }
         }
 
-        // Cooldown: one email per minute per account, enforced server-side so
-        // double-clicks and client retries can never flood the inbox.
-        if (latest?.SentAt is { } sentAt && now - sentAt < ResendCooldown)
-        {
-            throw ApiException.Validation(
-                "otp_send_cooldown",
-                $"A verification code was just sent. Please wait {(int)Math.Ceiling((ResendCooldown - (now - sentAt)).TotalSeconds)} seconds before requesting another.");
-        }
+        EnforceResendCooldownOrThrow(pendingChallenges, now);
 
         var challengeId = Guid.NewGuid();
 
@@ -167,11 +160,36 @@ public sealed class EmailOtpService(
         db.EmailOtpChallenges.Add(challenge);
         await db.SaveChangesAsync(cancellationToken);
 
-        await SendVerificationEmailAsync(challengeId, account.Email, cancellationToken);
-        challenge.SentAt = timeProvider.GetUtcNow();
-        challenge.DeliveryStatus = "accepted";
-        challenge.DeliveryUpdatedAt = challenge.SentAt;
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await SendVerificationEmailAsync(challengeId, account.Email, cancellationToken);
+            challenge.SentAt = timeProvider.GetUtcNow();
+            challenge.DeliveryStatus = "accepted";
+            challenge.DeliveryUpdatedAt = challenge.SentAt;
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // PostgreSQL rolls the replacement back with the surrounding
+            // advisory-lock transaction. Test/desktop providers do not have
+            // that transaction, so restore the prior challenge explicitly.
+            if (db.Database.CurrentTransaction is null)
+            {
+                db.ChangeTracker.Clear();
+                var failedReplacements = await db.EmailOtpChallenges
+                    .Where(x => x.ApplicationUserAccountId == account.Id
+                        && x.Purpose == EmailVerificationPurpose
+                        && x.VerifiedAt == null)
+                    .ToListAsync(CancellationToken.None);
+                db.EmailOtpChallenges.RemoveRange(failedReplacements);
+                account.EmailOtpChallenges.Clear();
+                db.Entry(account).State = EntityState.Unchanged;
+                db.EmailOtpChallenges.AddRange(pendingChallenges);
+                await db.SaveChangesAsync(CancellationToken.None);
+            }
+
+            throw;
+        }
 
         return new OtpChallengeResponse(
             challengeId.ToString(),
@@ -551,6 +569,10 @@ public sealed class EmailOtpService(
             }
         }
 
+        // Attempt exhaustion or expiry must not bypass the same 60-second
+        // resend wall used by a still-reusable challenge.
+        EnforceResendCooldownOrThrow(pendingChallenges, now);
+
         if (pendingChallenges.Count > 0)
         {
             db.EmailOtpChallenges.RemoveRange(pendingChallenges);
@@ -636,6 +658,22 @@ public sealed class EmailOtpService(
             destinationHint,
             expiresAt,
             RetryAfterSeconds);
+    }
+
+    private static void EnforceResendCooldownOrThrow(
+        IReadOnlyCollection<EmailOtpChallenge> pendingChallenges,
+        DateTimeOffset now)
+    {
+        var lastSentAt = pendingChallenges
+            .Where(x => x.SentAt is not null)
+            .Max(x => x.SentAt);
+
+        if (lastSentAt is { } sentAt && now - sentAt < ResendCooldown)
+        {
+            throw ApiException.Validation(
+                "otp_send_cooldown",
+                $"A verification code was just sent. Please wait {(int)Math.Ceiling((ResendCooldown - (now - sentAt)).TotalSeconds)} seconds before requesting another.");
+        }
     }
 
     private async Task<T> ExecuteWithOtpIssuanceLockAsync<T>(
