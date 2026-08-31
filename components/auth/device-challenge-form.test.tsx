@@ -5,11 +5,13 @@ import { renderWithRouter } from '@/tests/test-utils';
 
 const {
   mockCancelDeviceVerification,
+  mockClaimDeviceVerificationOtpSend,
   mockCompleteDeviceVerification,
   mockSendDeviceVerificationOtp,
   mockSelectReplacementDevice,
 } = vi.hoisted(() => ({
   mockCancelDeviceVerification: vi.fn(),
+  mockClaimDeviceVerificationOtpSend: vi.fn(),
   mockCompleteDeviceVerification: vi.fn(),
   mockSendDeviceVerificationOtp: vi.fn(),
   mockSelectReplacementDevice: vi.fn(),
@@ -30,6 +32,7 @@ vi.mock('@/contexts/auth-context', () => ({
 }));
 
 vi.mock('@/lib/auth-client', () => ({
+  claimDeviceVerificationOtpSend: mockClaimDeviceVerificationOtpSend,
   sendDeviceVerificationOtp: mockSendDeviceVerificationOtp,
   selectReplacementDevice: mockSelectReplacementDevice,
   // Mirrors the module-under-test's storage-backed guard: reads whatever
@@ -46,10 +49,19 @@ vi.mock('@/lib/auth/firebase-otp-recaptcha', () => ({
 describe('DeviceChallengeForm', () => {
   beforeEach(() => {
     mockCancelDeviceVerification.mockReset();
+    mockClaimDeviceVerificationOtpSend.mockReset();
     mockCompleteDeviceVerification.mockReset();
     mockSendDeviceVerificationOtp.mockReset();
     mockSelectReplacementDevice.mockReset();
     mockSendDeviceVerificationOtp.mockResolvedValue({ destinationHint: 'w***@example.com', deliveryChannel: 'email' });
+    mockClaimDeviceVerificationOtpSend.mockImplementation(async (challengeToken: string) => {
+      if (mockPendingChallenge?.challengeToken !== challengeToken
+        || mockPendingChallenge?.otpRequestedForToken === challengeToken) {
+        return false;
+      }
+      mockPendingChallenge = { ...mockPendingChallenge, otpRequestedForToken: challengeToken };
+      return true;
+    });
     mockSelectReplacementDevice.mockImplementation(async (id: string) => {
       mockPendingChallenge = { ...mockPendingChallenge, selectedDeviceId: id, challengeToken: 'bound-token' };
       return mockPendingChallenge;
@@ -239,6 +251,28 @@ describe('DeviceChallengeForm', () => {
 
     expect(await screen.findByText(/Approved devices: 1\/2/)).toBeInTheDocument();
     expect(mockSendDeviceVerificationOtp).not.toHaveBeenCalled();
+  });
+
+  it('claims an automatic OTP request atomically across concurrent mounts', async () => {
+    mockPendingChallenge = {
+      email: 'learner@example.com',
+      challengeToken: 'concurrent-token',
+      rememberMe: true,
+      mode: 'otp_required',
+      registeredDevices: [],
+      activeDeviceCount: 0,
+      maxDevices: 2,
+    };
+
+    renderWithRouter(
+      <>
+        <DeviceChallengeForm />
+        <DeviceChallengeForm />
+      </>,
+    );
+
+    await waitFor(() => expect(mockSendDeviceVerificationOtp).toHaveBeenCalled());
+    expect(mockSendDeviceVerificationOtp).toHaveBeenCalledTimes(1);
   });
 
   it('routes free-slot verification exactly as today after correct code', async () => {

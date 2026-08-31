@@ -849,9 +849,27 @@ export async function sendDeviceVerificationOtp(
   // component remount (WebView reload on resume, hot reload, etc.) re-reads
   // this flag from storage and skips auto-sending another code, instead of
   // relying solely on an in-memory ref that resets on every fresh mount.
-  savePendingDeviceChallenge({ ...challenge, otpRequestedForToken: challenge.challengeToken });
+  await savePendingDeviceChallenge({ ...challenge, otpRequestedForToken: challenge.challengeToken });
 
   return otpChallenge;
+}
+
+/** Atomically records an automatic send before its side-effecting request.
+ * The synchronous web-storage mirror makes concurrent React mounts observe
+ * the claim immediately; awaiting the queued native write makes it survive
+ * an Android WebView recreation before the email request is started. */
+export async function claimDeviceVerificationOtpSend(challengeToken: string): Promise<boolean> {
+  const challenge = loadPendingDeviceChallenge();
+  if (!challenge
+    || challenge.challengeToken !== challengeToken
+    || challenge.otpRequestedForToken === challengeToken) {
+    return false;
+  }
+
+  return savePendingDeviceChallenge({
+    ...challenge,
+    otpRequestedForToken: challengeToken,
+  });
 }
 
 export async function completeDeviceVerification(code: string): Promise<AuthSession> {

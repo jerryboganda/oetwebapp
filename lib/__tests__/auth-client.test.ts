@@ -189,6 +189,23 @@ describe('auth-client', () => {
     });
   });
 
+  it('atomically claims an automatic device OTP send only once per challenge token', async () => {
+    const { savePendingDeviceChallenge, loadPendingDeviceChallenge } = await import('@/lib/auth-storage');
+    await savePendingDeviceChallenge({
+      email: 'learner@oet-prep.dev',
+      challengeToken: 'device-challenge-1',
+      rememberMe: true,
+      mode: 'otp_required',
+    });
+    const { claimDeviceVerificationOtpSend } = await import('@/lib/auth-client');
+
+    await expect(Promise.all([
+      claimDeviceVerificationOtpSend('device-challenge-1'),
+      claimDeviceVerificationOtpSend('device-challenge-1'),
+    ])).resolves.toEqual([true, false]);
+    expect(loadPendingDeviceChallenge()?.otpRequestedForToken).toBe('device-challenge-1');
+  });
+
   it('can register a learner without persisting the returned session', async () => {
     const session = createSession();
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify(session), {

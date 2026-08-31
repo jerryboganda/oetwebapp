@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Capacitor } from '@capacitor/core';
+import { getSecureItem, setSecureItem } from '@/lib/mobile/secure-storage';
 
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
@@ -19,6 +21,9 @@ describe('device-id', () => {
   beforeEach(() => {
     window.localStorage.clear();
     clearDeviceCookie();
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(false);
+    vi.mocked(getSecureItem).mockResolvedValue(null);
+    vi.mocked(setSecureItem).mockResolvedValue(true);
     vi.resetModules();
   });
 
@@ -38,5 +43,15 @@ describe('device-id', () => {
     expect(id).toBeTruthy();
     expect(window.localStorage.getItem('oet_device_id')).toBe(id);
     expect(document.cookie).toContain(`oet_device_id=${encodeURIComponent(id ?? '')}`);
+  });
+
+  it('fails closed when a generated native identity cannot be persisted', async () => {
+    vi.mocked(Capacitor.isNativePlatform).mockReturnValue(true);
+    vi.mocked(setSecureItem).mockResolvedValue(false);
+
+    const { getDeviceIdForRequest } = await import('./device-id');
+
+    await expect(getDeviceIdForRequest()).resolves.toBeNull();
+    expect(setSecureItem).toHaveBeenCalledOnce();
   });
 });

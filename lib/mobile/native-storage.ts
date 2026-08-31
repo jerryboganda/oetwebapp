@@ -5,6 +5,7 @@ import { Capacitor } from '@capacitor/core';
 type PreferencesModule = typeof import('@capacitor/preferences');
 
 let preferencesModulePromise: Promise<PreferencesModule> | null = null;
+const nativeMutationQueues = new Map<string, Promise<unknown>>();
 
 function isBrowser() {
   return typeof window !== 'undefined';
@@ -40,30 +41,51 @@ export async function getNativePreference(key: string): Promise<string | null> {
   }
 }
 
-export async function setNativePreference(key: string, value: string): Promise<void> {
+export async function setNativePreference(key: string, value: string): Promise<boolean> {
   try {
     const preferencesApi = await loadPreferencesModule();
     if (!preferencesApi) {
-      return;
+      return false;
     }
 
     await preferencesApi.Preferences.set({ key, value });
+    return true;
   } catch {
-    return;
+    return false;
   }
 }
 
-export async function removeNativePreference(key: string): Promise<void> {
+export async function removeNativePreference(key: string): Promise<boolean> {
   try {
     const preferencesApi = await loadPreferencesModule();
     if (!preferencesApi) {
-      return;
+      return false;
     }
 
     await preferencesApi.Preferences.remove({ key });
+    return true;
   } catch {
-    return;
+    return false;
   }
+}
+
+function enqueueNativeMutation<T>(key: string, mutation: () => Promise<T>): Promise<T> {
+  const previous = nativeMutationQueues.get(key) ?? Promise.resolve();
+  const current = previous.catch(() => undefined).then(mutation);
+  nativeMutationQueues.set(key, current);
+  void current.then(
+    () => {
+      if (nativeMutationQueues.get(key) === current) {
+        nativeMutationQueues.delete(key);
+      }
+    },
+    () => {
+      if (nativeMutationQueues.get(key) === current) {
+        nativeMutationQueues.delete(key);
+      }
+    },
+  );
+  return current;
 }
 
 export async function hydrateWebStorageKey(key: string): Promise<boolean> {
@@ -97,9 +119,9 @@ export async function hydrateWebStorageKeys(keys: string[]): Promise<void> {
   }));
 }
 
-export function persistWebStorageKey(key: string, value: string | null, persistence: 'local' | 'session' = 'local'): void {
+export function persistWebStorageKey(key: string, value: string | null, persistence: 'local' | 'session' = 'local'): Promise<boolean> {
   if (!isBrowser()) {
-    return;
+    return Promise.resolve(false);
   }
 
   const storage = persistence === 'local' ? window.localStorage : window.sessionStorage;
@@ -109,25 +131,32 @@ export function persistWebStorageKey(key: string, value: string | null, persiste
     storage.setItem(key, value);
   }
 
-  void (async () => {
+  if (!isNativePlatform()) {
+    return Promise.resolve(true);
+  }
+
+  return enqueueNativeMutation(key, async () => {
     if (value === null) {
-      await removeNativePreference(key);
-      return;
+      return removeNativePreference(key);
     }
 
-    await setNativePreference(key, value);
-  })().catch(() => undefined);
+    return setNativePreference(key, value);
+  });
 }
 
-export function removeWebStorageKey(key: string): void {
+export function removeWebStorageKey(key: string): Promise<boolean> {
   if (!isBrowser()) {
-    return;
+    return Promise.resolve(false);
   }
 
   window.localStorage.removeItem(key);
   window.sessionStorage.removeItem(key);
 
-  void removeNativePreference(key).catch(() => undefined);
+  if (!isNativePlatform()) {
+    return Promise.resolve(true);
+  }
+
+  return enqueueNativeMutation(key, () => removeNativePreference(key));
 }
 
 export function isNativeMobilePlatform(): boolean {

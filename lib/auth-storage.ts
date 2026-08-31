@@ -194,8 +194,8 @@ export function clearPendingMfaChallenge(): void {
   removeWebStorageKey(MFA_CHALLENGE_KEY);
 }
 
-export function savePendingDeviceChallenge(challenge: PendingDeviceChallenge): void {
-  persistWebStorageKey(DEVICE_CHALLENGE_KEY, JSON.stringify(challenge), 'session');
+export function savePendingDeviceChallenge(challenge: PendingDeviceChallenge): Promise<boolean> {
+  return persistWebStorageKey(DEVICE_CHALLENGE_KEY, JSON.stringify(challenge), 'session');
 }
 
 export function loadPendingDeviceChallenge(): PendingDeviceChallenge | null {

@@ -43,7 +43,10 @@ async function initNativeDeviceId(): Promise<void> {
     let id = await getSecureItem('device_id');
     if (!id) {
       id = generateId();
-      await setSecureItem('device_id', id);
+      const persisted = await setSecureItem('device_id', id);
+      if (!persisted) {
+        return;
+      }
     }
     cachedDeviceId = id;
   } catch {

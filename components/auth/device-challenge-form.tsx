@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowRight, Clock, Laptop, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { formatDeviceCountdown, getPendingDeviceChallenge, selectReplacementDevice, sendDeviceVerificationOtp } from '@/lib/auth-client';
+import { claimDeviceVerificationOtpSend, formatDeviceCountdown, getPendingDeviceChallenge, selectReplacementDevice, sendDeviceVerificationOtp } from '@/lib/auth-client';
 import { obtainFirebaseOtpRecaptchaToken } from '@/lib/auth/firebase-otp-recaptcha';
 import { describeOtpDelivery } from '@/lib/auth/otp-delivery';
 import { appendAuthNextParam, AUTH_ROUTES } from '@/lib/auth/routes';
@@ -150,6 +150,12 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
 
     (async () => {
       try {
+        // Claim before the side-effecting HTTP request. This closes the gap
+        // where two mounts (or an Android WebView recreation) could both see
+        // an unmarked challenge while the first request was still in flight.
+        if (!await claimDeviceVerificationOtpSend(activeChallengeToken)) {
+          return;
+        }
         const challenge = await sendOtp();
         if (!cancelled) {
           applyChallengeNotice(challenge.destinationHint, challenge.deliveryChannel);
