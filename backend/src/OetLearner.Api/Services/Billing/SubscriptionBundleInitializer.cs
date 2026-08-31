@@ -195,14 +195,25 @@ public static class SubscriptionBundleInitializer
         // tutor_book is intentionally not auto-revoked on refund — leave that to admin action.
     }
 
+    /// <summary>Hard ceiling on the automatic web access granted through the billing/
+    /// fulfilment pipeline (checkout completion, manual-payment approval feeding into
+    /// admin "Mark Fulfilled", and admin package grants) — 6 months, with NO exception
+    /// for any profession or any package. A plan configured with a longer
+    /// <c>AccessDurationDays</c> (including the legacy 0/negative "no expiry" and
+    /// &gt;=9999 "permanent" sentinels — there is no permanent automatic grant any
+    /// more) is silently clamped down to this ceiling rather than honoured.
+    /// Owner directive, 2026-08-31: "Automatic Access on website after clicking Mark
+    /// Fulfilled must be only for 6 months not more than that ... for any profession
+    /// or for any package."</summary>
+    internal const int MaxAccessDurationDays = 180;
+
     private static int ResolveAccessDurationDays(int accessDurationDays)
-        => accessDurationDays <= 0 || accessDurationDays >= 9999 ? 180 : accessDurationDays;
+        => accessDurationDays <= 0 ? MaxAccessDurationDays : Math.Min(accessDurationDays, MaxAccessDurationDays);
 
     private static DateTimeOffset? ResolveExpiry(Subscription subscription, DateTimeOffset now, int accessDurationDays)
     {
-        if (accessDurationDays <= 0) return null;
-        if (accessDurationDays >= 9999) return null; // permanent entitlement (Tutor Book)
+        var cappedDays = ResolveAccessDurationDays(accessDurationDays);
         var anchor = subscription.ExpiresAt is { } current && current > now ? current : now;
-        return anchor.AddDays(accessDurationDays);
+        return anchor.AddDays(cappedDays);
     }
 }

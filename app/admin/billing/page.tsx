@@ -3398,7 +3398,7 @@ export default function BillingPage() {
             </p>
             <div className="mt-3 grid gap-4 md:grid-cols-3">
               <Input label="Original price £ (was)" type="number" min={0} step="0.01" value={planForm.originalPriceGbp} onChange={(event) => setPlanForm((current) => ({ ...current, originalPriceGbp: event.target.value }))} hint="Strikethrough price. Blank = none." />
-              <Input label="Access duration (days)" type="number" min={0} value={planForm.accessDurationDays} onChange={(event) => setPlanForm((current) => ({ ...current, accessDurationDays: event.target.value }))} hint="180 = 6 months. 9999 = permanent." />
+              <Input label="Access duration (days)" type="number" min={0} value={planForm.accessDurationDays} onChange={(event) => setPlanForm((current) => ({ ...current, accessDurationDays: event.target.value }))} hint="180 = 6 months. No package can grant more than 180 days — any higher value (including the old 9999 'permanent' sentinel) is silently capped to 180 at grant time." />
               <Select label="Profession" value={planForm.profession} onChange={(event) => setPlanForm((current) => ({ ...current, profession: event.target.value }))}
                 options={professionOptions}
                 hint="From the canonical signup catalog — a buyer must be registered as this profession to check out."

@@ -202,7 +202,9 @@ public class EffectiveEntitlementResolverTests
                 ChangedAt = now.AddDays(-2),
                 ExpiresAt = now.AddDays(-1),
             },
-            // Separate permanent Tutor Book (accessDays 9999 => ExpiresAt null).
+            // Separate legacy pre-cap Tutor Book grant (ExpiresAt null — a real
+            // purchase can no longer produce this since the 6-month cap landed,
+            // but an already-null row keeps working until backfilled).
             new Subscription
             {
                 Id = "sub-tutor-book",
@@ -231,14 +233,14 @@ public class EffectiveEntitlementResolverTests
     }
 
     [Fact]
-    public async Task ResolveAsync_AddOnTutorBookOnExpiredCourse_TutorBookSurvives()
+    public async Task ResolveAsync_AddOnTutorBookOnExpiredCourse_TutorBookAlsoLocks()
     {
-        // Spec rule #8: the Tutor Book is a Permanent entitlement however it was
-        // acquired — the £32 `tutor-book-addon` (a "Permanent entitlement") flips
-        // TutorBookUnlocked on the parent COURSE sub, which carries the course's
-        // real ExpiresAt. When the course expires the course content locks, but
-        // the Tutor Book must remain (matching the TutorBookEndpoints gate that
-        // serves the PDF on TutorBookUnlocked && Active, with no expiry check).
+        // Former spec rule #8 gave the Tutor Book unlimited access however it was
+        // acquired. That exception is retired (owner directive, 2026-08-31):
+        // automatic web access is capped at 6 months for any package, no
+        // exceptions, so a Tutor Book grant with a real (non-null) ExpiresAt now
+        // locks exactly like the course it rides on — matching the expiry-aware
+        // TutorBookEndpoints gate (TutorBookUnlocked && Active && not expired).
         await using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
         db.BillingPlans.Add(new BillingPlan
@@ -256,7 +258,7 @@ public class EffectiveEntitlementResolverTests
             Status = SubscriptionStatus.Active,
             StartedAt = now.AddMonths(-4),
             ChangedAt = now.AddDays(-2),
-            ExpiresAt = now.AddDays(-1), // course expired
+            ExpiresAt = now.AddDays(-1), // course (and its Tutor Book grant) expired
             TutorBookUnlocked = true,    // £32 add-on grant on the course sub
         });
         await db.SaveChangesAsync();
@@ -267,12 +269,10 @@ public class EffectiveEntitlementResolverTests
         Assert.False(snapshot.HasEligibleSubscription);
         Assert.Contains("subscription.expired", snapshot.Trace);
         Assert.DoesNotContain("Reading", snapshot.EnabledModules);
-        // ... but the permanent Tutor Book survives.
-        Assert.True(snapshot.TutorBookUnlocked);
-        Assert.Contains("tutorbook.permanent", snapshot.Trace);
-        Assert.Contains("TutorBook", snapshot.EnabledModules);
-        Assert.Contains("AudioScripts", snapshot.EnabledModules);
-        Assert.Contains("Updates", snapshot.EnabledModules);
+        // ... and the Tutor Book locks with it — no more permanent exception.
+        Assert.False(snapshot.TutorBookUnlocked);
+        Assert.DoesNotContain("tutorbook.permanent", snapshot.Trace);
+        Assert.DoesNotContain("TutorBook", snapshot.EnabledModules);
     }
 
     [Fact]

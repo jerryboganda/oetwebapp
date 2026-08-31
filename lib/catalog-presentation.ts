@@ -301,10 +301,13 @@ export function categoryLabel(config: CatalogStorefrontConfig, key: string): str
 }
 
 export function formatAccessDuration(days: number): string {
-  if (days >= 9000) return 'Permanent access';
-  if (days >= 365) return `${Math.round(days / 365)} year${days >= 730 ? 's' : ''} access`;
-  if (days >= 30) return `${Math.round(days / 30)} months access`;
-  return `${days} days access`;
+  // No package grants automatic access beyond 6 months (owner directive,
+  // 2026-08-31) — clamp display the same way the backend clamps the grant, so
+  // a stale/misconfigured catalog value can never advertise more than what is
+  // actually released.
+  const capped = Math.min(days, 180);
+  if (capped >= 30) return `${Math.round(capped / 30)} months access`;
+  return `${capped} days access`;
 }
 
 export function formatPrice(amount: number, currency = 'GBP'): string {

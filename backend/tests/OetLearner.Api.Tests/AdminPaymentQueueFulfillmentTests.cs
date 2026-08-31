@@ -7,6 +7,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Domain.Billing;
 using OetLearner.Api.Endpoints;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 
@@ -484,6 +485,95 @@ public class AdminPaymentQueueFulfillmentTests
         Assert.Single(items);
         Assert.Equal("sub_pending_1", items[0].SubscriptionId);
     }
+
+    /// <summary>Strict rule (owner directive, 2026-08-31): "Automatic Access on website
+    /// after clicking Mark Fulfilled must be only for 6 months not more than that ... for
+    /// any profession or for any package." A manual-delivery plan misconfigured with more
+    /// than 180 days of access must still land in the Pending Fulfilment queue already
+    /// capped, and clicking Mark Fulfilled must never grant more than the cap.</summary>
+    [Fact]
+    public async Task TestI_ManualFulfillment_CapsExcessiveAccessDurationAtSixMonths_ForAnyPackage()
+    {
+        await using var db = NewContext(nameof(TestI_ManualFulfillment_CapsExcessiveAccessDurationAtSixMonths_ForAnyPackage));
+        var userId = "cand_test_i";
+        var planCode = "plan_oet_annual_nursing";
+        SeedUser(db, userId, "candidate_i@example.com", "Ivy Chan");
+
+        var now = DateTimeOffset.UtcNow;
+        // A misconfigured/legacy plan requiring manual (WhatsApp/Telegram) hand-over,
+        // set up for a full year of access — the exact loophole the cap must close,
+        // regardless of profession or package.
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = planCode,
+            Code = planCode,
+            Name = "Annual Nursing Premium (legacy)",
+            Price = 150m,
+            Currency = "GBP",
+            Interval = "one_time",
+            DurationMonths = 12,
+            AccessDurationDays = 365,
+            DeliveryMethod = DeliveryMethods.ManualWeb,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+
+        var proof = new ManualPaymentRequest
+        {
+            Id = "mpr_test_i",
+            UserId = userId,
+            Kind = PaymentProofKinds.LearnerUpload,
+            Method = "bank_transfer",
+            Reference = "txn_i_001",
+            AmountAmount = 150m,
+            Currency = "GBP",
+            Status = "pending",
+            CandidateFullName = "Ivy Chan",
+            CandidateEmail = "candidate_i@example.com",
+            CourseName = "Annual Nursing Premium (legacy)",
+            CourseId = planCode,
+            SubmittedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.ManualPaymentRequests.Add(proof);
+        await db.SaveChangesAsync();
+
+        var manualSvc = new ManualPaymentService(db, new MemoryFileStorage());
+        var approved = await manualSvc.ApproveAsync(proof.Id, "admin_999", "Proof verified.", CancellationToken.None);
+        var subscriptionId = approved.AccessGrantedSubscriptionId;
+        Assert.NotNull(subscriptionId);
+
+        // The cap already applies the moment the order is approved into the queue —
+        // long before an admin ever clicks Mark Fulfilled.
+        var queuedSub = await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId);
+        Assert.Equal(SubscriptionStatus.Pending, queuedSub.Status);
+        Assert.Equal(FulfilmentStatuses.PendingManual, queuedSub.FulfilmentStatus);
+        Assert.NotNull(queuedSub.ExpiresAt);
+        Assert.InRange(queuedSub.ExpiresAt!.Value, now.AddDays(179), now.AddDays(181));
+        Assert.NotEqual(now.AddDays(365), queuedSub.ExpiresAt);
+
+        var httpContext = CreateAdminHttpContext("admin_999", "Super Admin");
+        var aiCreditService = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var result = await BillingExpansionEndpointsAccessor.InvokeMarkSubscriptionFulfilled(
+            subscriptionId!,
+            httpContext,
+            new ApproveRejectRequest(Notes: "Handed over via WhatsApp."),
+            db,
+            aiCreditService,
+            CancellationToken.None);
+
+        Assert.True(result.Result is Ok<PendingFulfilmentDto>);
+
+        // Automatic web access is now released — but still capped at 6 months, never
+        // the plan's misconfigured 365 days.
+        var fulfilledSub = await db.Subscriptions.SingleAsync(s => s.Id == subscriptionId);
+        Assert.Equal(SubscriptionStatus.Active, fulfilledSub.Status);
+        Assert.Equal(FulfilmentStatuses.Fulfilled, fulfilledSub.FulfilmentStatus);
+        Assert.NotNull(fulfilledSub.ExpiresAt);
+        Assert.InRange(fulfilledSub.ExpiresAt!.Value, now.AddDays(179), now.AddDays(181));
+        Assert.NotEqual(now.AddDays(365), fulfilledSub.ExpiresAt);
+    }
 }
 
 /// <summary>
@@ -506,12 +596,18 @@ public static class BillingExpansionEndpointsAccessor
         ApproveRejectRequest request,
         LearnerDbContext db,
         IAiPackageCreditService? aiPackageCredits,
-        CancellationToken ct)
+        CancellationToken ct,
+        IManualPaymentService? manualPayments = null,
+        LearnerService? learnerService = null)
     {
         var method = typeof(BillingExpansionEndpoints).GetMethod(
             "MarkSubscriptionFulfilled",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
         Assert.NotNull(method);
-        return (Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>)await (Task<Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>>)method!.Invoke(null, new object[] { id, http, request, db, aiPackageCredits!, ct })!;
+        manualPayments ??= new ManualPaymentService(db, new MemoryFileStorage());
+        // learnerService is only touched by the best-effort invoice-minting call at the
+        // tail of MarkSubscriptionFulfilled, which is wrapped in a try/catch that must
+        // never fail the fulfilment itself — null is safe here and gets swallowed.
+        return (Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>)await (Task<Results<Ok<PendingFulfilmentDto>, NotFound, BadRequest<string>>>)method!.Invoke(null, new object?[] { id, http, request, db, aiPackageCredits, manualPayments, learnerService, ct })!;
     }
 }

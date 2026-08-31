@@ -148,7 +148,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
     }
 
     [Fact]
-    public async Task PlanPurchase_PermanentTutorBookSku_UnlocksTutorBook_AndLeavesExpiryNull()
+    public async Task PlanPurchase_TutorBookSku_UnlocksTutorBook_ButCapsAccessAtSixMonths()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var ctx = new FulfillmentContext(suffix);
@@ -168,7 +168,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
                 bundledAiCredits: 0,
                 bundledTutorBook: true,
                 bundledBasicEnglish: true,
-                accessDurationDays: 9999, // permanent
+                accessDurationDays: 9999, // legacy "permanent" sentinel — now clamped to 180 days
                 now: now);
             SeedQuote(db, ctx, addOnItems: Array.Empty<BillingQuoteLineItem>(), now: now);
             SeedSubscriptionPaymentTransaction(db, ctx, now);
@@ -186,7 +186,10 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
 
             Assert.True(subscription.TutorBookUnlocked);
             Assert.True(subscription.BasicEnglishUnlocked);
-            Assert.Null(subscription.ExpiresAt); // AccessDurationDays >= 9999 => permanent
+            // Strict 6-month cap, no exceptions — the legacy AccessDurationDays >= 9999
+            // "permanent" sentinel no longer bypasses it.
+            Assert.NotNull(subscription.ExpiresAt);
+            Assert.InRange(subscription.ExpiresAt!.Value, now.AddDays(179), now.AddDays(181));
         }
     }
 

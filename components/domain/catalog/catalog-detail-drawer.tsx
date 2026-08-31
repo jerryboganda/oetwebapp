@@ -162,7 +162,7 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
             )}
             <p className="mt-2 text-center text-xs text-muted">
               <Clock className="mr-1 inline h-3 w-3" />
-              {plan.code === 'tutor-book' ? 'Permanent access' : 'Secure checkout'} · {formatAccessDuration(plan.accessDurationDays)}
+              Secure checkout · {formatAccessDuration(plan.accessDurationDays)}
             </p>
           </div>
         </div>

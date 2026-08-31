@@ -40,8 +40,10 @@ public class SubscriptionBundleInitializerTests
     }
 
     [Fact]
-    public void ApplyBundle_TutorBookSku_SetsPermanentEntitlement()
+    public void ApplyBundle_TutorBookSku_UnlocksButStillCapsAccessAtSixMonths()
     {
+        // No package is exempt from the strict 6-month automatic-access ceiling,
+        // including the legacy "9999 = permanent" Tutor Book sentinel.
         var now = DateTimeOffset.UtcNow;
         var plan = new BillingPlan
         {
@@ -54,7 +56,7 @@ public class SubscriptionBundleInitializerTests
         SubscriptionBundleInitializer.ApplyBundle(sub, plan, now);
 
         Assert.True(sub.TutorBookUnlocked);
-        Assert.Null(sub.ExpiresAt); // 9999 days = permanent
+        Assert.Equal(now.AddDays(180), sub.ExpiresAt);
     }
 
     [Fact]
@@ -158,8 +160,10 @@ public class SubscriptionBundleInitializerTests
     }
 
     [Fact]
-    public void ApplyPlanEntitlements_FromVersion_PermanentTutorBook_SetsNullExpiryAndUnlock_WithoutAiCredits()
+    public void ApplyPlanEntitlements_FromVersion_TutorBook_UnlocksButStillCapsAccessAtSixMonths_WithoutAiCredits()
     {
+        // No package is exempt from the strict 6-month automatic-access ceiling,
+        // including the legacy "9999 = permanent" Tutor Book sentinel.
         var now = DateTimeOffset.UtcNow;
         var version = new BillingPlanVersion
         {
@@ -168,19 +172,19 @@ public class SubscriptionBundleInitializerTests
             Code = "tutor-book",
             BundledTutorBook = true,
             BundledAiCredits = 3, // must be ignored
-            AccessDurationDays = 9999, // permanent → no expiry
+            AccessDurationDays = 9999, // no longer permanent — clamped to the 6-month cap
         };
         var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "tutor-book", AiCreditsRemaining = 5 };
 
         SubscriptionBundleInitializer.ApplyPlanEntitlements(sub, version, now);
 
         Assert.True(sub.TutorBookUnlocked);
-        Assert.Null(sub.ExpiresAt); // 9999 = permanent entitlement
+        Assert.Equal(now.AddDays(180), sub.ExpiresAt);
         Assert.Equal(5, sub.AiCreditsRemaining); // untouched
     }
 
     [Fact]
-    public void ApplyPlanEntitlements_FromVersion_NonPositiveDuration_SetsNullExpiry()
+    public void ApplyPlanEntitlements_FromVersion_NonPositiveDuration_FallsBackToSixMonthCap()
     {
         var now = DateTimeOffset.UtcNow;
         var version = new BillingPlanVersion
@@ -188,13 +192,35 @@ public class SubscriptionBundleInitializerTests
             Id = "plan-version-free",
             PlanId = "free-tier",
             Code = "free-tier",
-            AccessDurationDays = 0, // <= 0 → permanent / no expiry
+            AccessDurationDays = 0, // <= 0 no longer means "no expiry" — falls back to the 6-month cap
         };
         var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = "free-tier" };
 
         SubscriptionBundleInitializer.ApplyPlanEntitlements(sub, version, now);
 
-        Assert.Null(sub.ExpiresAt);
+        Assert.Equal(now.AddDays(180), sub.ExpiresAt);
+    }
+
+    [Fact]
+    public void ApplyPlanEntitlements_FromPlan_DurationBeyondSixMonths_IsClampedToSixMonths()
+    {
+        // Strict rule: for any profession or any package, automatic web access
+        // granted through the fulfilment pipeline never exceeds 6 months (180
+        // days) even when the plan is configured with a longer window.
+        var now = new DateTimeOffset(2026, 5, 23, 0, 0, 0, TimeSpan.Zero);
+        var plan = new BillingPlan
+        {
+            Code = "annual-nursing",
+            Name = "Annual Nursing Package",
+            AccessDurationDays = 365,
+        };
+        var sub = new Subscription { Id = "s1", UserId = "u1", PlanId = plan.Code };
+
+        SubscriptionBundleInitializer.ApplyPlanEntitlements(sub, plan, now);
+
+        Assert.Equal(180, sub.AccessDurationDays);
+        Assert.Equal(now.AddDays(180), sub.ExpiresAt);
+        Assert.NotEqual(now.AddDays(365), sub.ExpiresAt);
     }
 
     [Fact]

@@ -123,8 +123,9 @@ function FlagDot({ enabled }: { enabled: boolean }) {
 }
 
 function formatAccess(days: number): string {
-  if (days >= 9000) return 'Permanent';
-  if (days >= 365) return `${Math.round(days / 365)} year${days >= 730 ? 's' : ''}`;
-  if (days >= 30) return `${Math.round(days / 30)} months`;
-  return `${days} days`;
+  // No package grants automatic access beyond 6 months (owner directive,
+  // 2026-08-31) — clamp display the same way the backend clamps the grant.
+  const capped = Math.min(days, 180);
+  if (capped >= 30) return `${Math.round(capped / 30)} months`;
+  return `${capped} days`;
 }

@@ -15,7 +15,10 @@ namespace OetLearner.Api.Endpoints;
 ///
 /// <para>Learner auth: a buyer must have an active Subscription with
 /// <c>TutorBookUnlocked=true</c> (set on purchase of <c>tutor-book</c>,
-/// <c>tutor-book-addon</c>, or <c>full-condensed-medicine-tbook</c>).</para>
+/// <c>tutor-book-addon</c>, or <c>full-condensed-medicine-tbook</c>) whose
+/// <c>ExpiresAt</c> has not passed. No package — Tutor Book included — grants
+/// automatic web access for longer than 6 months (owner directive,
+/// 2026-08-31); a null <c>ExpiresAt</c> is only a pre-cap legacy grant.</para>
 ///
 /// <para>Admin auth: <c>AdminBillingCatalogWrite</c> for write endpoints,
 /// <c>AdminBillingRead</c> for read-only audit endpoints.</para>
@@ -59,10 +62,15 @@ public static class TutorBookEndpoints
         var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return TypedResults.Forbid();
 
+        var now = DateTimeOffset.UtcNow;
         var subscription = await db.Subscriptions.AsNoTracking()
             .Where(s => s.UserId == userId
                 && s.TutorBookUnlocked
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
+                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+                // Strict 6-month automatic-access cap — no permanent exception for any
+                // package (owner directive, 2026-08-31). Null ExpiresAt is only ever a
+                // pre-cap legacy grant; every grant since carries a real expiry.
+                && (s.ExpiresAt == null || s.ExpiresAt > now))
             .OrderByDescending(s => s.StartedAt)
             .FirstOrDefaultAsync(ct);
         if (subscription is null) return TypedResults.Forbid();
@@ -105,10 +113,12 @@ public static class TutorBookEndpoints
         var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrWhiteSpace(userId)) return TypedResults.Forbid();
 
+        var now = DateTimeOffset.UtcNow;
         var subscription = await db.Subscriptions.AsNoTracking()
             .Where(s => s.UserId == userId
                 && s.TutorBookUnlocked
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
+                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+                && (s.ExpiresAt == null || s.ExpiresAt > now))
             .Join(db.BillingPlans.AsNoTracking(), s => s.PlanId, p => p.Code, (s, p) => new { p.Profession })
             .FirstOrDefaultAsync(ct);
         if (subscription is null) return TypedResults.Forbid();
@@ -284,8 +294,12 @@ public static class TutorBookEndpoints
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private static Task<bool> UserHasTutorBookAsync(LearnerDbContext db, string userId, CancellationToken ct) =>
-        db.Subscriptions.AsNoTracking().AnyAsync(s => s.UserId == userId
+    private static Task<bool> UserHasTutorBookAsync(LearnerDbContext db, string userId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return db.Subscriptions.AsNoTracking().AnyAsync(s => s.UserId == userId
             && s.TutorBookUnlocked
-            && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial), ct);
+            && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
+            && (s.ExpiresAt == null || s.ExpiresAt > now), ct);
+    }
 }

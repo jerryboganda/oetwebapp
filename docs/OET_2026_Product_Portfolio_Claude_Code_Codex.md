@@ -48,7 +48,7 @@ Before making any product, checkout, entitlement, dashboard, add-on, or course-a
 5. Server-side eligibility checks are mandatory before opening checkout for any add-on.
 6. After successful payment webhook verification, create exactly one enrolment for the purchased SKU and apply the SKU entitlement template.
 7. Only the purchased product dashboard unlocks. Other products remain locked behind product detail CTAs.
-8. Permanent entitlements, especially Tutor Book, ignore expiry. Course products expire based on configured `access_duration_days`.
+8. **[Retired 2026-08-31 — owner directive]** Tutor Book web access is no longer a permanent/ignore-expiry entitlement. Automatic access released through the fulfilment pipeline (checkout, manual-payment approval, Mark Fulfilled) is hard-capped at 6 months (180 days) for any profession or any package — no exceptions, Tutor Book included. Course products expire based on configured `access_duration_days`, itself clamped to the same 180-day ceiling regardless of what is configured.
 9. Pharmacy course is `DRAFT`; do not expose it publicly until price and launch approval are confirmed.
 10. Do not implement demo/fake entitlements or placeholder SKUs in production.
 
@@ -150,7 +150,7 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 | `product_id` | full-condensed-medicine-tbook |
 | `category_slug / category` | BUNDLE |
 | `price_gbp` | £135 |
-| `access_duration` | 180 days for course + permanent Tutor Book entitlement |
+| `access_duration` | 180 days / 6 months from purchase (course and bundled Tutor Book access alike — capped, no permanent exception) |
 | `profession` | Medicine |
 | `duration` | 40+ hours + book |
 | `format` | Recorded video + materials + watermarked PDF book |
@@ -465,7 +465,7 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 | Double Special Package — Writing + Speaking | COMBO | 180 days | ✓ | ✓ | ✓ | £55 (was £70) |
 | Mega Special Package | COMBO | 180 days | ✓ | ✓ | ✓ | £80 (was £120) |
 | The Tutor Book — First Edition 2026 | BOOK | Permanent | — | — | — | £45 (was £60) |
-| The Tutor Book — Add-on Price (Enrolled Students) | BOOK ADD-ON | Permanent | — | — | — | £32 (was £60) |
+| The Tutor Book — Add-on Price (Enrolled Students) | BOOK ADD-ON | 180 days | — | — | — | £32 (was £60) |
 
 
 W = Writing letter assessment add-ons. S = Extra private Speaking session add-ons. TB£32 = eligible for discounted Tutor Book add-on.
@@ -998,7 +998,7 @@ W = Writing letter assessment add-ons. S = Extra private Speaking session add-on
 | `product_id` | tutor-book-addon |
 | `category_slug / category` | BOOK ADD-ON |
 | `price_gbp` | £32 (was £60) |
-| `access_duration` | Permanent entitlement |
+| `access_duration` | 180 days / 6 months from purchase (capped — no permanent exception, owner directive 2026-08-31) |
 | `profession` | All disciplines |
 | `duration` | — |
 | `format` | Watermarked PDF |
@@ -1089,7 +1089,7 @@ Rules:
 - Compare `now()` to `expiry_date` on every dashboard load.
 - Past expiry: lock content and show `Extend Access` CTA where extension is allowed.
 - Successful extension updates `expiry_date`.
-- Permanent entitlements ignore expiry.
+- No entitlement is permanent/ignore-expiry any more (retired 2026-08-31) — every `expiry_date`, including Tutor Book, is capped at 6 months (180 days) from grant, for any profession or any package.
 
 ---
 
@@ -1235,7 +1235,7 @@ Must include:
 - Dashboard modules must be driven from entitlement/product configuration.
 - Locked modules must not expose protected content.
 - Add-ons section must only show eligible add-ons.
-- Expired course must lock course content but keep permanent Tutor Book access available.
+- Expired course locks course content; a Tutor Book grant living on the same subscription row locks with it once that row's own (capped) `expiry_date` passes — Tutor Book is no longer exempt from expiry.
 
 ### Admin dashboard
 
@@ -1258,7 +1258,7 @@ On verified successful payment:
 1. Find product by `product_id`.
 2. Create enrolment or apply add-on to eligible parent enrolment.
 3. Write entitlement template.
-4. Compute `expiry_date` from `access_duration_days` unless permanent entitlement.
+4. Compute `expiry_date` from `access_duration_days`, clamped to a 180-day (6-month) ceiling regardless of the configured value — no permanent-entitlement exception any more.
 5. Lock all unrelated products.
 6. Send confirmation email/notification.
 
@@ -1334,7 +1334,7 @@ When implementing this spec, follow these phases:
 - Test every add-on type.
 - Test ineligible add-on blocks.
 - Test expired access.
-- Test permanent Tutor Book access.
+- Test Tutor Book access expires at the 6-month cap like every other package (no permanent exception).
 - Test draft Pharmacy visibility is hidden.
 
 ---
@@ -1357,7 +1357,7 @@ Implementation is complete only when all of these pass:
 - Tutor Book add-on flips `tutor_book=true`.
 - Payment webhook creates enrolment and entitlement records reliably.
 - Expired courses lock content.
-- Permanent Tutor Book entitlement remains available after course expiry.
+- No package — Tutor Book included — grants automatic web access beyond 6 months (180 days), for any profession or any package.
 - Admin can inspect and correct entitlements.
 - Tests cover eligible/ineligible add-ons, bundles, expiry, and double-purchase prevention.
 

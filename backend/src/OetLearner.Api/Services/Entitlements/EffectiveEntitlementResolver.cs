@@ -484,19 +484,28 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
             };
         }
 
-        // ── Permanent Tutor Book (resolved ACROSS all subscriptions) ────────
-        // Per spec rule #8 ("Permanent entitlements, especially Tutor Book,
-        // ignore expiry") the Tutor Book is permanent however it was acquired —
-        // both the standalone `tutor-book` plan AND the £32 `tutor-book-addon`
-        // (listed as a "Permanent entitlement") flip TutorBookUnlocked, the
-        // latter on a parent COURSE sub that carries a real ExpiresAt. So this
-        // grant must survive course expiry regardless of the row's ExpiresAt.
+        // ── Tutor Book (resolved ACROSS all subscriptions) ───────────────────
+        // Formerly spec rule #8 ("Permanent entitlements, especially Tutor Book,
+        // ignore expiry") gave the Tutor Book unlimited access however it was
+        // acquired. That exception is retired (owner directive, 2026-08-31:
+        // automatic web access is capped at 6 months for any profession or any
+        // package, with no exceptions) — a Tutor Book grant now expires exactly
+        // like every other package. Both the standalone `tutor-book` plan AND
+        // the £32 `tutor-book-addon` flip TutorBookUnlocked, the latter on a
+        // parent COURSE sub whose ExpiresAt is the course's own (possibly
+        // earlier) expiry — that still gates this block correctly, since the
+        // Tutor Book itself is never entitled to outlive its owning row's
+        // capped ExpiresAt. A null ExpiresAt only ever means a pre-cap legacy
+        // grant (every grant since carries a real, capped date) and keeps
+        // surviving course expiry exactly as before, unless/until backfilled.
         // NARROW + additive: it never elevates the course, only re-enables the
-        // Tutor Book modules the holder paid for. This mirrors the direct gate
-        // in TutorBookEndpoints (TutorBookUnlocked && Active/Trial, no expiry).
+        // Tutor Book modules the holder paid for. This mirrors the expiry-aware
+        // gate in TutorBookEndpoints (TutorBookUnlocked && Active/Trial &&
+        // not expired).
         var permanentTutorBook = subscriptions.Any(s =>
             (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial)
             && s.StartedAt <= now
+            && (s.ExpiresAt is null || s.ExpiresAt > now)
             && s.TutorBookUnlocked);
         if (permanentTutorBook)
         {
