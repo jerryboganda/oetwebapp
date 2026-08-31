@@ -87,4 +87,67 @@ describe('video library modules', () => {
     );
     expect(modules.map((module) => module.meta.key)).toEqual(['listening']);
   });
+
+  // "VIDEO ACCESS HIERARCHY & ISOLATION RULES" (31 Aug 2026) §1 "hide means hide" + §6.8:
+  // the API returns only entitlement-filtered shelves, so a subtest the learner's package
+  // excludes must produce NO card at all — not a disabled one, not a 0-video one — and the
+  // "X collections · Y videos" line must count only what survived filtering.
+  describe('package isolation (31 Aug 2026 spec)', () => {
+    it('renders only the Writing card for a Writing Crash learner', () => {
+      const modules = groupVideoCategoriesByModule(
+        [
+          category('w1', 'Writing / Arabic / New Medicine Crash Course / Sessions / Day 1', 4),
+          category('w2', 'Writing / Medicine / Arabic / Fast-Track Crash Course', 7),
+          category('w3', 'Writing / Medicine / English / Sessions', 11),
+          category('w4', 'Writing / Medicine / English / Workshops / Sessions', 3),
+        ],
+        (item) => item.videos,
+      );
+
+      expect(modules.map((module) => module.meta.key)).toEqual(['writing']);
+      expect(modules[0].categories.length).toBe(4);
+      expect(modules[0].videoCount).toBe(25);
+    });
+
+    it('renders only the Speaking card for a Speaking Crash learner', () => {
+      const modules = groupVideoCategoriesByModule(
+        [category('s1', 'Speaking / Medicine / Arabic / Sessions', 3)],
+        (item) => item.videos,
+      );
+      expect(modules.map((module) => module.meta.key)).toEqual(['speaking']);
+    });
+
+    it('renders Writing + Speaking only for a Mega/Double Special learner', () => {
+      const modules = groupVideoCategoriesByModule(
+        [
+          category('w1', 'Writing / Medicine / English / Sessions', 11),
+          category('s1', 'Speaking / English / Sessions', 5),
+        ],
+        (item) => item.videos,
+      );
+      expect(modules.map((module) => module.meta.key)).toEqual(['writing', 'speaking']);
+    });
+
+    it('never renders an empty subtest card when filtering removed every video', () => {
+      const modules = groupVideoCategoriesByModule(
+        [
+          category('l1', 'Listening / Arabic / Workshops', 0),
+          category('r1', 'Reading / Sessions / Arabic', 0),
+          category('w1', 'Writing / Medicine / Arabic / Fast-Track Crash Course', 2),
+        ],
+        (item) => item.videos,
+      );
+      expect(modules.map((module) => module.meta.key)).toEqual(['writing']);
+      expect(modules[0].videoCount).toBe(2);
+    });
+
+    it('counts only the language-scoped videos the caller passes through', () => {
+      const modules = groupVideoCategoriesByModule(
+        [category('w1', 'Writing / Medicine / English / Sessions', 11)],
+        (item) => item.videos.slice(0, 4),
+      );
+      expect(modules[0].videoCount).toBe(4);
+      expect(modules[0].categories[0].videos.length).toBe(4);
+    });
+  });
 });

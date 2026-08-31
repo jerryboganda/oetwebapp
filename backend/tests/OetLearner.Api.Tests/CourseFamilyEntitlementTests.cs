@@ -209,7 +209,7 @@ public class CourseFamilyEntitlementTests
 
         var crash = await service.AllowAccessAsync(
             "learner-1",
-            Video("vid-crash", tagsCsv: "batch:crash-course-arabic-writing"),
+            Video("vid-crash", title: "Writing / Medicine / Arabic / Fast-Track Crash Course / Session 1", tagsCsv: "batch:crash-course-arabic-writing"),
             default);
         var fullOnly = await service.AllowAccessAsync(
             "learner-1",
@@ -217,8 +217,11 @@ public class CourseFamilyEntitlementTests
             default);
 
         Assert.True(crash.Allowed);
+        // The 31 Aug 2026 isolation spec is the source of truth for the crash families:
+        // full-course Writing is outside the §4 whitelist, so it is excluded by collection
+        // rather than by the legacy course-family classifier.
         Assert.False(fullOnly.Allowed);
-        Assert.Equal("plan_excludes_course_family", fullOnly.Reason);
+        Assert.Equal("package_excludes_collection", fullOnly.Reason);
     }
 
     [Fact]
@@ -228,7 +231,10 @@ public class CourseFamilyEntitlementTests
         SeedPlan(db, "learner-1", "full-condensed-medicine", "full_course");
         await db.SaveChangesAsync();
         var service = CreateService(db);
-        var crashVideo = Video("vid-crash", tagsCsv: CourseFamilyPolicy.CrashCourseOnlyTags.First());
+        var crashVideo = Video(
+            "vid-crash",
+            title: "Writing / Medicine / Arabic / Fast-Track Crash Course / Session 1",
+            tagsCsv: CourseFamilyPolicy.CrashCourseOnlyTags.First());
         var fullVideo = Video("vid-full", tagsCsv: CourseFamilyPolicy.FullCourseOnlyTag);
 
         Assert.False((await service.AllowAccessAsync("learner-1", crashVideo, default)).Allowed);
@@ -259,7 +265,9 @@ public class CourseFamilyEntitlementTests
         Assert.True((await service.AllowAccessAsync("learner-1", crashVideo, default)).Allowed);
         var after = await service.AllowAccessAsync("learner-1", fullVideo, default);
         Assert.False(after.Allowed);
-        Assert.Equal("plan_excludes_course_family", after.Reason);
+        // Crash packages are governed by the 31 Aug 2026 isolation spec: full-course Writing
+        // falls outside its §4 collection whitelist.
+        Assert.Equal("package_excludes_collection", after.Reason);
     }
 
     [Fact]
@@ -269,7 +277,10 @@ public class CourseFamilyEntitlementTests
         SeedPlan(db, "learner-1", "crash-course", "crash_course");
         await db.SaveChangesAsync();
         var service = CreateService(db);
-        var crashVideo = Video("vid-crash", tagsCsv: CourseFamilyPolicy.CrashCourseOnlyTags.First());
+        var crashVideo = Video(
+            "vid-crash",
+            title: "Writing / Medicine / Arabic / Fast-Track Crash Course / Session 1",
+            tagsCsv: CourseFamilyPolicy.CrashCourseOnlyTags.First());
         var fullVideo = Video("vid-full", tagsCsv: CourseFamilyPolicy.FullCourseOnlyTag);
 
         Assert.True((await service.AllowAccessAsync("learner-1", crashVideo, default)).Allowed);

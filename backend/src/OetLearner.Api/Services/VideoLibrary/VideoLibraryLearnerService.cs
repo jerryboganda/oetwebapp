@@ -104,10 +104,13 @@ public sealed class VideoLibraryLearnerService(
         var progressByVideo = await LoadProgressAsync(userId, videoIds, ct);
         var bookmarked = await LoadBookmarksAsync(userId, videoIds, ct);
         var bunny = (await settingsProvider.GetAsync(ct)).BunnyStream;
+        // The collection breadcrumbs are part of the entitlement input (the Medicine crash
+        // whitelist matches on them), so the per-card IsAccessible flag must see them too.
+        var collectionTitles = await LoadCollectionTitlesAsync(videoIds, ct);
 
         var summariesById = videos.ToDictionary(
             v => v.Id,
-            v => ToSummary(v, context, progressByVideo, bookmarked, membershipsByVideo, bunny),
+            v => ToSummary(v, context, progressByVideo, bookmarked, membershipsByVideo, bunny, collectionTitles),
             StringComparer.Ordinal);
 
         var featured = videos
@@ -133,7 +136,13 @@ public sealed class VideoLibraryLearnerService(
         var shelves = new List<VideoCategoryShelfDto>();
         foreach (var category in categories)
         {
-            if (!CourseFamilyPolicy.Allows(
+            // Shelf-level Full/Crash isolation, a defence-in-depth layer over the per-video
+            // gate. It is skipped for the Medicine crash/special families: their specification
+            // is the source of truth for which collections appear, and its Writing whitelist
+            // deliberately mixes Crash/Fast-Track folders with the two Medicine English
+            // collections — a distinction ClassifyLabel cannot make.
+            if (context.MedicinePackageAccess is not { Applies: true }
+                && !CourseFamilyPolicy.Allows(
                     context.CourseFamilies,
                     CourseFamilyPolicy.ClassifyLabel(category.Title)))
             {
@@ -180,7 +189,8 @@ public sealed class VideoLibraryLearnerService(
         var progress = await LoadProgressAsync(userId, [videoId], ct);
         var bookmarks = await LoadBookmarksAsync(userId, [videoId], ct);
         var bunny = (await settingsProvider.GetAsync(ct)).BunnyStream;
-        var summary = ToSummary(video, context, progress, bookmarks, membershipsByVideo, bunny);
+        var collectionTitles = await LoadCollectionTitlesAsync([videoId], ct);
+        var summary = ToSummary(video, context, progress, bookmarks, membershipsByVideo, bunny, collectionTitles);
 
         var captions = await db.VideoCaptionTracks.AsNoTracking()
             .Where(c => c.VideoId == videoId)
@@ -277,8 +287,11 @@ public sealed class VideoLibraryLearnerService(
     public async Task<bool> RecordEventAsync(
         string userId, string videoId, string? sessionId, string eventType, int positionSeconds, CancellationToken ct)
     {
-        var exists = await db.LibraryVideos.AsNoTracking().AnyAsync(v => v.Id == videoId, ct);
-        if (!exists) return false;
+        // Telemetry follows the same entitlement as every other learner path: a video the
+        // learner may not see must 404 here too, never accept an event row (spec §6 test 9,
+        // §7.5 "the same entitlement server-side ... and API responses").
+        var video = await FindVisibleVideoAsync(userId, videoId, DateTimeOffset.UtcNow, ct);
+        if (video is null) return false;
 
         db.VideoPlaybackEvents.Add(new VideoPlaybackEvent
         {
@@ -474,9 +487,11 @@ public sealed class VideoLibraryLearnerService(
         IReadOnlyDictionary<string, LearnerVideoLibraryProgress> progressByVideo,
         IReadOnlySet<string> bookmarked,
         IReadOnlyDictionary<string, List<VideoCategoryItem>> membershipsByVideo,
-        BunnyStreamSettings bunny)
+        BunnyStreamSettings bunny,
+        IReadOnlyDictionary<string, List<string>> collectionTitles)
     {
-        var entitlement = entitlements.Evaluate(context, video);
+        collectionTitles.TryGetValue(video.Id, out var labels);
+        var entitlement = entitlements.Evaluate(context, video, labels);
         var progress = progressByVideo.TryGetValue(video.Id, out var p)
             ? new VideoProgressDto(p.PositionSeconds, PercentComplete(p.WatchedSeconds, video.DurationSeconds), p.Completed)
             : null;
@@ -529,21 +544,29 @@ public sealed class VideoLibraryLearnerService(
             .OrderBy(i => i.SortOrder)
             .ToListAsync(ct);
 
+        // Previous/Next are deep links, so they carry the SAME entitlement as the listing
+        // (spec §7.5): profession + per-user allocation + Basic English scope + the full
+        // package gate. Anything the learner may not open is skipped, never linked.
         var siblingIds = siblingItems.Select(i => i.VideoId).ToList();
         var visibleSiblings = await db.LibraryVideos.AsNoTracking()
             .Where(v => siblingIds.Contains(v.Id)
                 && v.Status == ContentStatus.Published
                 && (v.PublishAt == null || v.PublishAt <= now))
-            .Select(v => new { v.Id, v.ProfessionIdsJson, v.SubtestCode, v.Language })
             .ToListAsync(ct);
         var profession = await ResolveProfessionAsync(userId, ct);
+        var siblingContext = await entitlements.ResolveContextAsync(userId, isAdmin: false, ct);
+        var siblingAccess = await UserVideoAccessScope.LoadAsync(db, userId, ct);
+        var siblingLabels = await LoadCollectionTitlesAsync(siblingIds, ct);
         var visibleIds = visibleSiblings
-            .Where(v => CourseContentMatrix.IsProfession(profession)
-                && !string.IsNullOrWhiteSpace(v.Language)
-                && !string.IsNullOrWhiteSpace(v.SubtestCode)
-                    ? CourseContentMatrix.VideoAppearsFor(profession!, v.Language, v.SubtestCode,
-                        VideoLibraryAdminService.ParseProfessionIds(v.ProfessionIdsJson))
-                    : IsProfessionVisible(v.ProfessionIdsJson, profession))
+            .Where(v => IsCourseProfessionVisible(v, profession))
+            .Where(siblingAccess.Allows)
+            .Where(v => CourseContentMatrix.IsVisibleInBasicEnglishScope(
+                v, siblingContext.BasicEnglishEntitled, siblingContext.ExclusivelyBasicEnglish))
+            .Where(v =>
+            {
+                siblingLabels.TryGetValue(v.Id, out var labels);
+                return entitlements.Evaluate(siblingContext, v, labels).Allowed;
+            })
             .Select(v => v.Id)
             .ToHashSet(StringComparer.Ordinal);
 

@@ -65,7 +65,8 @@ public sealed record VideoEntitlementResult(
                           // | "no_active_subscription" | "subscription_frozen" | "subscription_expired" | "plan_does_not_grant"
                           // | "plan_does_not_grant_subtest" | "profession_mismatch" | "plan_excludes_video"
                           // | "plan_excludes_course_family" | "not_in_user_allocation"
-                          // | "visibility_scope_mismatch"
+                          // | "visibility_scope_mismatch" | "package_hides_subtest"
+                          // | "package_excludes_collection" | "package_profession_mismatch"
     string? CurrentTier); // null | "free" | "premium" | "trial" | "frozen" | "expired" | "admin"
 
 /// <summary>Resolved-once grant context for evaluating many videos.</summary>
@@ -120,7 +121,12 @@ public sealed record VideoAccessContext(
     // downstream tier gates still deny anonymous users. Every authenticated learner context
     // receives a non-null set from the resolver. Empty = entitled learner whose packages
     // grant no isolated scope (shared Listening/Reading only).
-    IReadOnlySet<string>? PackageScopes = null);
+    IReadOnlySet<string>? PackageScopes = null,
+    // Medicine crash/special package visibility ("VIDEO ACCESS HIERARCHY & ISOLATION RULES",
+    // 31 Aug 2026), unioned across the learner's effective packages. When it Applies it is
+    // AUTHORITATIVE for the four families it covers and REPLACES the VisibilityScope /
+    // CourseFamily engine; otherwise (the default) nothing changes for any other package.
+    MedicineVideoAccess? MedicinePackageAccess = null);
 
 /// <summary>Strongly-typed projection of the plan EntitlementsJson video_library node.</summary>
 public sealed record VideoLibraryBundle(bool HasNode, string Tier, IReadOnlyList<string> Subtests)
@@ -171,6 +177,12 @@ public sealed class VideoEntitlementService(
             case "plan_excludes_video":
             case "plan_excludes_video_tag":
             case "visibility_scope_mismatch":
+            // Content outside the learner's package is ABSENT, not upsellable (§CORE
+            // "not locked, not greyed out"), so it must 404 rather than 402 — a
+            // payment-required answer would confirm the video exists.
+            case "package_hides_subtest":
+            case "package_excludes_collection":
+            case "package_profession_mismatch":
                 throw ApiException.NotFound("video_not_found", "Video not found.");
             default:
                 throw ApiException.PaymentRequired("content_locked",
@@ -216,7 +228,8 @@ public sealed class VideoEntitlementService(
                 ProfessionId: entitlement.ProfessionId,
                 UserVideoAccess: userVideoAccess,
                 CourseFamilies: entitlement.CourseFamilies,
-                PackageScopes: entitlement.PackageScopes);
+                PackageScopes: entitlement.PackageScopes,
+                MedicinePackageAccess: entitlement.MedicineVideoAccess);
         }
 
         var planJson = await ResolvePlanEntitlementsJsonAsync(entitlement, ct);
@@ -276,7 +289,8 @@ public sealed class VideoEntitlementService(
             BasicEnglishEntitled: basicEnglish.Entitled,
             ExclusivelyBasicEnglish: basicEnglish.ExclusivelyBasicEnglish,
             CourseFamilies: entitlement.CourseFamilies,
-            PackageScopes: entitlement.PackageScopes);
+            PackageScopes: entitlement.PackageScopes,
+            MedicinePackageAccess: entitlement.MedicineVideoAccess);
     }
 
     public VideoEntitlementResult Evaluate(VideoAccessContext context, LibraryVideo video)
@@ -332,35 +346,52 @@ public sealed class VideoEntitlementService(
             }
         }
 
-        // Video visibility scope (spec §2/§6 — the single access rule). The explicit
-        // VisibilityScope column is the sole authority once set: SHARED is visible to every
-        // package scope; any other scope is visible only when it is one of the candidate's
-        // granted package scopes (set-union across all held packages). A per-plan explicit
-        // include still overrides, exactly as it overrides excludes/course-family. Rows with a
-        // null/empty scope predate the backfill — fall back to the legacy tag/label engine.
-        var scope = video.VisibilityScope?.Trim();
-        if (string.IsNullOrEmpty(scope))
+        // Medicine crash/special package isolation ("VIDEO ACCESS HIERARCHY & ISOLATION RULES",
+        // 31 Aug 2026). For the four families that document covers it is the SOURCE OF TRUTH and
+        // replaces the VisibilityScope / CourseFamily engine below (§"SOURCE OF TRUTH"): subtest
+        // isolation first (§1.2), then the collection whitelist inside each allowed subtest
+        // (§1.3/§4). A per-plan explicit include still overrides, exactly as it overrides every
+        // other content rule. Every other package leaves MedicinePackageAccess unset and keeps
+        // the legacy behaviour untouched.
+        if (!explicitlyIncluded
+            && context.MedicinePackageAccess is { Applies: true } medicine
+            && !CourseContentMatrix.IsBasicEnglishVideo(video))
         {
-            // Course-family isolation (mutual Full ↔ Crash). Family is resolved from
-            // explicit batch tags, then title/collection labels, and finally Shared.
-            // Neutral content stays visible, while out-of-family videos are hidden
-            // regardless of access tier unless the plan intentionally includes that
-            // exact video.
-            var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
-            if (!explicitlyIncluded
-                && (family == CourseFamily.None
-                    || (context.CourseFamilies is { } families
-                        && families.IsRestricted
-                        && !families.Allows(family))))
-            {
-                return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
-            }
+            var denial = EvaluateMedicinePackage(context, medicine, video, extraLabels);
+            if (denial is not null) return denial;
         }
-        else if (!explicitlyIncluded
-            && !string.Equals(scope, VideoVisibilityScopes.Shared, StringComparison.OrdinalIgnoreCase)
-            && (context.PackageScopes is not null && !context.PackageScopes.Contains(scope)))
+        else
         {
-            return new VideoEntitlementResult(false, "visibility_scope_mismatch", context.CurrentTier);
+            // Video visibility scope (spec §2/§6 — the single access rule). The explicit
+            // VisibilityScope column is the sole authority once set: SHARED is visible to every
+            // package scope; any other scope is visible only when it is one of the candidate's
+            // granted package scopes (set-union across all held packages). A per-plan explicit
+            // include still overrides, exactly as it overrides excludes/course-family. Rows with a
+            // null/empty scope predate the backfill — fall back to the legacy tag/label engine.
+            var scope = video.VisibilityScope?.Trim();
+            if (string.IsNullOrEmpty(scope))
+            {
+                // Course-family isolation (mutual Full ↔ Crash). Family is resolved from
+                // explicit batch tags, then title/collection labels, and finally Shared.
+                // Neutral content stays visible, while out-of-family videos are hidden
+                // regardless of access tier unless the plan intentionally includes that
+                // exact video.
+                var family = CourseFamilyPolicy.ClassifyVideo(video, extraLabels);
+                if (!explicitlyIncluded
+                    && (family == CourseFamily.None
+                        || (context.CourseFamilies is { } families
+                            && families.IsRestricted
+                            && !families.Allows(family))))
+                {
+                    return new VideoEntitlementResult(false, "plan_excludes_course_family", context.CurrentTier);
+                }
+            }
+            else if (!explicitlyIncluded
+                && !string.Equals(scope, VideoVisibilityScopes.Shared, StringComparison.OrdinalIgnoreCase)
+                && (context.PackageScopes is not null && !context.PackageScopes.Contains(scope)))
+            {
+                return new VideoEntitlementResult(false, "visibility_scope_mismatch", context.CurrentTier);
+            }
         }
 
         if (string.Equals(video.AccessTier, "free", StringComparison.OrdinalIgnoreCase))
@@ -410,6 +441,67 @@ public sealed class VideoEntitlementService(
         }
 
         return new VideoEntitlementResult(false, "plan_does_not_grant", context.CurrentTier);
+    }
+
+    /// <summary>
+    /// The Medicine crash/special gate (§§1–5). Returns a denial result, or null when the video
+    /// clears every rule the learner's package families impose. Order mirrors §7: subtest
+    /// isolation first, profession second, collection whitelist last.
+    /// </summary>
+    private static VideoEntitlementResult? EvaluateMedicinePackage(
+        VideoAccessContext context,
+        MedicineVideoAccess access,
+        LibraryVideo video,
+        IReadOnlyList<string>? extraLabels)
+    {
+        var labels = CollectLabels(video, extraLabels);
+        var subtest = MedicinePackageVideoPolicy.ResolveSubtest(video, labels);
+
+        // §CORE "hide means hide": content whose subtest cannot be determined is not
+        // demonstrably part of the package, so it must be completely absent rather than shown.
+        if (subtest is null)
+        {
+            return new VideoEntitlementResult(false, "package_hides_subtest", context.CurrentTier);
+        }
+
+        // §1.2 subtest isolation first — a writing-only package never surfaces Listening,
+        // Reading or Speaking content, not even as a locked card.
+        var grant = access.For(subtest);
+        if (grant == VideoSubtestGrant.Hidden)
+        {
+            return new VideoEntitlementResult(false, "package_hides_subtest", context.CurrentTier);
+        }
+
+        // §1.1 / §5 — these families are Medicine-only and must never surface
+        // Nursing / Pharmacy / other-profession Writing or Speaking folders.
+        if (!MedicinePackageVideoPolicy.IsMedicineScoped(
+                subtest, VideoLibraryAdminService.ParseProfessionIds(video.ProfessionIdsJson)))
+        {
+            return new VideoEntitlementResult(false, "package_profession_mismatch", context.CurrentTier);
+        }
+
+        // §1.3 / §4 collection whitelist second — inside an allowed subtest, only the
+        // collections this document lists may be listed.
+        if (grant == VideoSubtestGrant.Whitelisted)
+        {
+            var allowed = subtest == "writing"
+                ? MedicinePackageVideoPolicy.IsWritingAllowed(labels)
+                : MedicinePackageVideoPolicy.IsSpecialSpeakingAllowed(labels);
+            if (!allowed)
+            {
+                return new VideoEntitlementResult(false, "package_excludes_collection", context.CurrentTier);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Title + every collection breadcrumb the video belongs to, the label set §4 matches on.</summary>
+    private static List<string?> CollectLabels(LibraryVideo video, IReadOnlyList<string>? extraLabels)
+    {
+        var labels = new List<string?>((extraLabels?.Count ?? 0) + 1) { video.Title };
+        if (extraLabels is not null) labels.AddRange(extraLabels);
+        return labels;
     }
 
     private async Task<List<string>> LoadCollectionTitlesAsync(string videoId, CancellationToken ct)

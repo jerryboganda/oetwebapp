@@ -110,6 +110,15 @@ public sealed record EffectiveEntitlementSnapshot(
     /// </summary>
     public IReadOnlySet<string> PackageScopes { get; init; } = EmptyStringSet;
 
+    /// <summary>
+    /// Video Library visibility under the Medicine crash/special specification
+    /// ("VIDEO ACCESS HIERARCHY &amp; ISOLATION RULES", 31 Aug 2026), unioned across every
+    /// effective package. <see cref="MedicineVideoAccess.Unrestricted"/> (the default) means
+    /// no package of this learner's is covered by that document, so the generic Full/Crash
+    /// engine stays authoritative. Consumed only by VideoEntitlementService.
+    /// </summary>
+    public MedicineVideoAccess MedicineVideoAccess { get; init; } = MedicineVideoAccess.Unrestricted;
+
     // ── Subtest × profession content model (access & payment spec §3) ────────
 
     /// <summary>The learner's registered profession (<see cref="Domain.ApplicationUser.ActiveProfessionId"/>),
@@ -440,6 +449,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                 ProductCategory = string.IsNullOrEmpty(plan.ProductCategory) ? null : plan.ProductCategory,
                 CourseFamilies = CourseFamilyPolicy.Resolve(plan.ProductCategory, plan.Code),
                 PackageScopes = PackageScopePolicy.ResolveSet(plan.ProductCategory, plan.Code, plan.Profession),
+                MedicineVideoAccess = MedicinePackageVideoPolicy.Resolve(plan.ProductCategory, plan.Code),
             };
         }
 
@@ -608,6 +618,8 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
                     aggPlans.Select(p => CourseFamilyPolicy.Resolve(p.ProductCategory, p.Code))),
                 PackageScopes = PackageScopePolicy.UnionScopes(
                     aggPlans.Select(p => PackageScopePolicy.Resolve(p.ProductCategory, p.Code, p.Profession))),
+                MedicineVideoAccess = MedicineVideoAccess.Union(
+                    aggPlans.Select(p => MedicinePackageVideoPolicy.ResolveOrNeutral(p.ProductCategory, p.Code))),
             };
         }
 
