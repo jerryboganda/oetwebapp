@@ -1095,9 +1095,23 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         return await ProjectSnapshotAsync(userId, 50, ct);
     }
 
+    /// <summary>
+    /// Get-or-create is safe to call more than once per unit of work. Callers such as
+    /// <see cref="ReverseGrantsAsync"/> (invoked twice back-to-back by
+    /// UserAccessAllocationService.RemovePackageAsync, once per source reference) may each
+    /// take the "no matching purchase, nothing to reverse" early-return path inside
+    /// <see cref="ReverseOneGrantAsync"/> — which never calls SaveChangesAsync. A second
+    /// <c>FirstOrDefaultAsync</c> against the database would not see the first call's
+    /// still-pending Added entity and would track a SECOND account row for the same user;
+    /// flushing both at the next SaveChangesAsync (e.g. RemovePackageAsync's own, after both
+    /// reversal calls return) then violates the unique IX_AiPackageCreditAccounts_UserId
+    /// index. Check the change tracker's local set FIRST — it includes not-yet-saved Added
+    /// entities — before ever issuing a query or creating a new row.
+    /// </summary>
     private async Task<AiPackageCreditAccount> GetOrCreateAccountAsync(string userId, CancellationToken ct)
     {
-        var account = await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
+        var account = db.AiPackageCreditAccounts.Local.FirstOrDefault(row => row.UserId == userId)
+            ?? await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
         if (account is not null)
         {
             await EnsureLotsLoadedAsync(account, ct);

@@ -1414,4 +1414,90 @@ public class UserAccessAllocationServiceTests
         Assert.Equal(customExpiry, sub.ExpiresAt);
         Assert.Equal(customExpiry, sub.NextRenewalAt);
     }
+
+    // ── Production incident 2026-08-31: RemovePackageAsync 500s on a learner whose
+    // AiPackageCreditAccounts row does not exist yet (Postgres 23505 duplicate key on
+    // IX_AiPackageCreditAccounts_UserId). Root cause: RemovePackageAsync calls
+    // ReverseGrantsAsync twice back-to-back (AdminPackage source, then Plan source) before
+    // its own SaveChangesAsync. Each call's ReverseOneGrantAsync opens+rolls-back its own
+    // transaction and, finding no matching purchase to reverse, returns without saving —
+    // but GetOrCreateAccountAsync had already tracked a new Added AiPackageCreditAccount
+    // entity. A second, unsaved-blind DB query in the second call didn't see the first
+    // call's pending entity and tracked ANOTHER one for the same user; RemovePackageAsync's
+    // own SaveChangesAsync then tried to INSERT both. Reproduces only with a REAL
+    // IAiPackageCreditService (not the null used elsewhere in this file) and a plan that
+    // grants no bundled AI credits at grant time (so no account row exists yet to be found).
+
+    [Fact]
+    public async Task RemovePackage_LearnerWithNoAiPackageCreditAccountYet_DoesNotDuplicateInsert()
+    {
+        await using var db = CreateDb();
+        const string userId = "learner-remove-no-ai-account";
+        await SeedLearnerAsync(db, userId);
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "writing-crash-10",
+            Code = "writing-crash-10",
+            Name = "Writing Crash Course + 10 Letter Assessments",
+            ProductCategory = "writing_crash_bundle",
+            DurationMonths = 6,
+            AccessDurationDays = 180,
+            // No BundledAiCredits: GrantPackageAsync never creates an AiPackageCreditAccounts
+            // row for this plan, exactly like the production writing-crash-10 / speaking-crash
+            // catalog entries.
+        });
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = CreateService(db, credits);
+        var granted = await svc.GrantPackageAsync("admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("writing-crash-10", null, null, true, false, false), default);
+        Assert.Empty(await db.AiPackageCreditAccounts.Where(a => a.UserId == userId).ToListAsync());
+
+        // This is the exact call that 500'd in production.
+        var removed = await svc.RemovePackageAsync(
+            "admin", "Admin", userId, granted.Subscriptions.Single().Id, default);
+
+        Assert.Equal(SubscriptionStatus.Cancelled,
+            (await db.Subscriptions.SingleAsync(s => s.Id == granted.Subscriptions.Single().Id)).Status);
+        // Exactly one account row — never the duplicate that violated
+        // IX_AiPackageCreditAccounts_UserId on production.
+        Assert.Single(await db.AiPackageCreditAccounts.Where(a => a.UserId == userId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task RemovePackage_TwoPackagesOnOneLearner_BothRemovableInSequence()
+    {
+        // The exact production repro: two active crash-family packages on one learner,
+        // neither carrying bundled AI credits, removed one after the other.
+        await using var db = CreateDb();
+        const string userId = "learner-remove-two-packages";
+        await SeedLearnerAsync(db, userId);
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "writing-crash-10", Code = "writing-crash-10", Name = "Writing Crash Course + 10 Letter Assessments",
+            ProductCategory = "writing_crash_bundle", DurationMonths = 6, AccessDurationDays = 180,
+        });
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "speaking-crash", Code = "speaking-crash", Name = "Recorded Speaking Crash Course",
+            ProductCategory = "speaking_crash", DurationMonths = 6, AccessDurationDays = 180,
+        });
+        await db.SaveChangesAsync();
+        var credits = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var svc = CreateService(db, credits);
+
+        await svc.GrantPackageAsync("admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("writing-crash-10", null, null, true, false, false), default);
+        var afterGrant2 = await svc.GrantPackageAsync("admin", "Admin", userId,
+            new AdminUserAccessPackageRequest("speaking-crash", null, null, true, false, false), default);
+        Assert.Equal(2, afterGrant2.Subscriptions.Count);
+        var speakingSubId = afterGrant2.Subscriptions.Single(s => s.PlanCode == "speaking-crash").Id;
+        var writingSubId = afterGrant2.Subscriptions.Single(s => s.PlanCode == "writing-crash-10").Id;
+
+        await svc.RemovePackageAsync("admin", "Admin", userId, speakingSubId, default);
+        await svc.RemovePackageAsync("admin", "Admin", userId, writingSubId, default);
+
+        Assert.Equal(SubscriptionStatus.Cancelled, (await db.Subscriptions.SingleAsync(s => s.Id == speakingSubId)).Status);
+        Assert.Equal(SubscriptionStatus.Cancelled, (await db.Subscriptions.SingleAsync(s => s.Id == writingSubId)).Status);
+    }
 }
