@@ -66,12 +66,14 @@ public sealed class MedicinePackageVideoWhitelistTests
     [InlineData("Speaking / Medicine / English / Sessions")]
     [InlineData("Speaking / Medicine / Arabic / Fast-Track Crash Course")]
     [InlineData("Speaking / Arabic / New Medicine Crash Course / Sessions")]
+    [InlineData("Speaking / Medicine / Arabic / Sessions")]
+    [InlineData("Speaking / Medicine / Arabic / Workshops")]
     public void SpecialSpeakingFilter_Allows(string collection)
         => Assert.True(MedicinePackageVideoPolicy.IsSpecialSpeakingAllowed([collection]));
 
     [Theory]
-    [InlineData("Speaking / Medicine / Arabic / Sessions")]
-    [InlineData("Speaking / Medicine / Arabic / Workshops")]
+    [InlineData("Speaking / Medicine / Arabic / Batch 1 / Sessions")]
+    [InlineData("Speaking / Medicine / Arabic / New Batch / Workshops")]
     [InlineData("Speaking / Nursing / Sessions")]
     [InlineData("Speaking / Pharmacy / Sessions")]
     public void SpecialSpeakingFilter_HidesUnrelatedFullCourseCollections(string collection)

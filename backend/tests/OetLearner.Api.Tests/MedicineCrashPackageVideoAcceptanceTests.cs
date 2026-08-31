@@ -139,11 +139,12 @@ public sealed class MedicineCrashPackageVideoAcceptanceTests
         Assert.DoesNotContain(WritingBatch1, visible);
         Assert.DoesNotContain(WritingNewBatch, visible);
 
-        // Speaking uses the special-package filter: the applicable Medicine English speaking
-        // sessions/workshops, but NOT unrelated full-course Speaking collections.
+        // Speaking uses the special-package filter: the applicable Medicine English AND Arabic
+        // speaking sessions/workshops (owner directive 1 Sep 2026), but NOT unrelated
+        // full-course Speaking collections (Batch/New Batch folders, other professions).
         Assert.Contains(SpeakingEnglishSessions, visible);
         Assert.Contains(SpeakingEnglishWorkshops, visible);
-        Assert.DoesNotContain(SpeakingMedicineArabic, visible);
+        Assert.Contains(SpeakingMedicineArabic, visible);
     }
 
     [Fact]
@@ -173,7 +174,7 @@ public sealed class MedicineCrashPackageVideoAcceptanceTests
 
         await using var special = await CreateAsync("mega-special", "combo_mega");
         Assert.Equal((4, 4), await special.CountsForAsync("writing"));
-        Assert.Equal((2, 2), await special.CountsForAsync("speaking"));
+        Assert.Equal((3, 3), await special.CountsForAsync("speaking"));
 
         await using var fullCrash = await CreateAsync("crash-3letters", "crash_course_bundle");
         Assert.Equal((4, 4), await fullCrash.CountsForAsync("writing"));

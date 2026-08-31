@@ -251,11 +251,13 @@ public static class MedicinePackageVideoPolicy
 
     /// <summary>
     /// §3D Speaking whitelist for the Mega/Double Special packages: crash-course / fast-track
-    /// Speaking content, plus the applicable Medicine English Speaking sessions/workshops.
-    /// Unrelated full-course Speaking collections stay hidden. The Medicine constraint on the
-    /// English collections comes from the profession gate (<see cref="IsMedicineScoped"/>),
-    /// because the live English Speaking folders are named "English / Sessions" without a
-    /// Medicine path segment.
+    /// Speaking content, the applicable Medicine English Speaking sessions/workshops, and the
+    /// Medicine Arabic Speaking sessions/workshops (owner directive 1 Sep 2026 — Special
+    /// packages must surface both the English and Arabic Medicine Speaking folders, not English
+    /// only). Unrelated full-course Speaking collections (Batch/New Batch folders, other
+    /// professions) stay hidden. The Medicine constraint on the English collections comes from
+    /// the profession gate (<see cref="IsMedicineScoped"/>), because the live English Speaking
+    /// folders are named "English / Sessions" without a Medicine path segment.
     /// </summary>
     public static bool IsSpecialSpeakingAllowed(IEnumerable<string?> labels)
     {
@@ -266,6 +268,8 @@ public static class MedicinePackageVideoPolicy
             if (IsCrashOrFastTrack(normalized)) return true;
             if (normalized.Contains("english / sessions", StringComparison.Ordinal)) return true;
             if (normalized.Contains("english / workshops", StringComparison.Ordinal)) return true;
+            if (normalized.Contains("medicine / arabic / sessions", StringComparison.Ordinal)) return true;
+            if (normalized.Contains("medicine / arabic / workshops", StringComparison.Ordinal)) return true;
         }
 
         return false;
