@@ -129,14 +129,12 @@ public sealed class EmailOtpService(
             }
         }
 
-        // Cooldown: one email per minute per account, enforced server-side so
-        // double-clicks and client retries can never flood the inbox.
-        if (latest?.SentAt is { } sentAt && now - sentAt < ResendCooldown)
-        {
-            throw ApiException.Validation(
-                "otp_send_cooldown",
-                $"A verification code was just sent. Please wait {(int)Math.Ceiling((ResendCooldown - (now - sentAt)).TotalSeconds)} seconds before requesting another.");
-        }
+        // Hard, unconditional resend wall — the single enforcement point for
+        // the "no OTP send within 60s of the last one" rule, shared by every
+        // purpose via EnforceResendCooldownOrThrow below. Independent of the
+        // forceNew/reusable shortcut above: forceNew only skips handing back
+        // a still-valid code, it can never skip this check.
+        EnforceResendCooldownOrThrow(pendingChallenges, now);
 
         var challengeId = Guid.NewGuid();
 
@@ -551,6 +549,18 @@ public sealed class EmailOtpService(
             }
         }
 
+        // Hard, unconditional resend wall. The `reusable` branch above only
+        // covers the case where a still-valid, not-max-attempted challenge
+        // exists to hand back without sending anything new. Without this
+        // second check, exhausting MaxOtpAttempts on the current challenge
+        // (wrong-code guesses) made `reusable` null and fell straight
+        // through to minting + sending a brand new code with NO cooldown
+        // check at all — an unintended way to force an immediate resend on
+        // this exact purpose set (reset_password, trust_device). This is the
+        // same enforcement point verify_email uses, so the 60s rule cannot
+        // drift out of sync between purposes.
+        EnforceResendCooldownOrThrow(pendingChallenges, now);
+
         if (pendingChallenges.Count > 0)
         {
             db.EmailOtpChallenges.RemoveRange(pendingChallenges);
@@ -636,6 +646,37 @@ public sealed class EmailOtpService(
             destinationHint,
             expiresAt,
             RetryAfterSeconds);
+    }
+
+    /// <summary>
+    /// The single enforcement point for "no OTP send within
+    /// <see cref="ResendCooldown"/> of the last one, for anything" — every
+    /// OTP-issuing code path (verify_email, reset_password, trust_device;
+    /// email or Firebase SMS) calls this before it is allowed to mint and
+    /// dispatch a new code, so the rule has exactly one implementation to
+    /// audit instead of one hand-copy per purpose that could silently drift.
+    /// Looks at the MOST RECENT actual send across every pending challenge
+    /// for this account+purpose — not just the newest-created one — so an
+    /// attempt-exhausted or expired challenge can never be used to dodge the
+    /// wall by making it look like nothing was "reusable".
+    /// </summary>
+    private static void EnforceResendCooldownOrThrow(IReadOnlyCollection<EmailOtpChallenge> pendingChallenges, DateTimeOffset now)
+    {
+        DateTimeOffset? lastSentAt = null;
+        foreach (var challenge in pendingChallenges)
+        {
+            if (challenge.SentAt is { } sentAt && (lastSentAt is null || sentAt > lastSentAt))
+            {
+                lastSentAt = sentAt;
+            }
+        }
+
+        if (lastSentAt is { } latestSentAt && now - latestSentAt < ResendCooldown)
+        {
+            throw ApiException.Validation(
+                "otp_send_cooldown",
+                $"A verification code was just sent. Please wait {(int)Math.Ceiling((ResendCooldown - (now - latestSentAt)).TotalSeconds)} seconds before requesting another.");
+        }
     }
 
     private async Task<T> ExecuteWithOtpIssuanceLockAsync<T>(
