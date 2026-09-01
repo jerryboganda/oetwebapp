@@ -15,7 +15,7 @@ if (!configuredAppUrl) {
 }
 
 const config: CapacitorConfig = {
-  appId: 'com.oetprep.learner',
+  appId: 'com.oetwithdrhesham.app',
   appName: 'OET with Dr. Hesham',
   webDir: 'capacitor-web',
   server: {

@@ -189,14 +189,14 @@ jobs:
             set -eu
             mkdir -p "$GITHUB_WORKSPACE/output/native/android"
             adb install -r "$GITHUB_WORKSPACE/output/native/android/app-debug.apk"
-            adb shell am force-stop com.oetprep.learner
-            adb shell am start -W -n com.oetprep.learner/.MainActivity
-            attempt=1; while [ "$attempt" -le 20 ]; do if adb shell pidof com.oetprep.learner | grep -q '[0-9]'; then break; fi; [ "$attempt" -eq 20 ] && { echo 'Android app did not stay alive after launch.' >&2; exit 1; }; attempt=$((attempt + 1)); sleep 1; done
-            adb shell pidof com.oetprep.learner
+            adb shell am force-stop com.oetwithdrhesham.app
+            adb shell am start -W -n com.oetwithdrhesham.app/.MainActivity
+            attempt=1; while [ "$attempt" -le 20 ]; do if adb shell pidof com.oetwithdrhesham.app | grep -q '[0-9]'; then break; fi; [ "$attempt" -eq 20 ] && { echo 'Android app did not stay alive after launch.' >&2; exit 1; }; attempt=$((attempt + 1)); sleep 1; done
+            adb shell pidof com.oetwithdrhesham.app
             adb shell dumpsys activity activities > "$GITHUB_WORKSPACE/output/native/android/activity.txt"
-            grep -q 'com.oetprep.learner/.MainActivity' "$GITHUB_WORKSPACE/output/native/android/activity.txt"
+            grep -q 'com.oetwithdrhesham.app/.MainActivity' "$GITHUB_WORKSPACE/output/native/android/activity.txt"
             adb logcat -d -t 1000 -s AndroidRuntime:E > "$GITHUB_WORKSPACE/output/native/android/logcat.txt" || true
-            if grep -Eq 'FATAL EXCEPTION|Process: com.oetprep.learner' "$GITHUB_WORKSPACE/output/native/android/logcat.txt"; then echo 'Android app crash signature detected.' >&2; exit 1; fi
+            if grep -Eq 'FATAL EXCEPTION|Process: com.oetwithdrhesham.app' "$GITHUB_WORKSPACE/output/native/android/logcat.txt"; then echo 'Android app crash signature detected.' >&2; exit 1; fi
 
       - name: Upload Android runtime smoke evidence
         if: always()

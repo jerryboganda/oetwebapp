@@ -614,7 +614,7 @@ Deep linking requires a two-way association between the domain (`app.oetwithdrhe
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.oetprep.learner",
+      "package_name": "com.oetwithdrhesham.app",
       "sha256_cert_fingerprints": ["<SHA256_FINGERPRINT>"]
     }
   }

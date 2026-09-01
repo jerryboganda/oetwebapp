@@ -173,7 +173,7 @@ test.describe('Mobile viewport smoke @mobile', () => {
 
     const text = await response!.text();
     expect(text).toContain('android_app');
-    expect(text).toContain('com.oetprep.learner');
+    expect(text).toContain('com.oetwithdrhesham.app');
   });
 });
 

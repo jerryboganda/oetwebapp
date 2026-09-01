@@ -1,10 +1,10 @@
-package com.oetprep.learner;
+package com.oetwithdrhesham.app;
 
 import android.os.Bundle;
 
 import com.getcapacitor.BridgeActivity;
-import com.oetprep.learner.plugins.PlaybackAttestationPlugin;
-import com.oetprep.learner.plugins.SpeakingRecorderPlugin;
+import com.oetwithdrhesham.app.plugins.PlaybackAttestationPlugin;
+import com.oetwithdrhesham.app.plugins.SpeakingRecorderPlugin;
 
 public class MainActivity extends BridgeActivity {
 	@Override

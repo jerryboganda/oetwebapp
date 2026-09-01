@@ -22,7 +22,7 @@ public sealed class AdminLaunchReadinessSettingsTests
             mobileLatestVersion = "1.3.0",
             mobileForceUpdate = true,
             iosAppStoreUrl = "https://apps.apple.com/app/oet-prep/id1234567890",
-            androidPlayStoreUrl = "https://play.google.com/store/apps/details?id=com.oetprep.learner",
+            androidPlayStoreUrl = "https://play.google.com/store/apps/details?id=com.oetwithdrhesham.app",
             desktopMinSupportedVersion = "2.0.0",
             desktopLatestVersion = "2.1.0",
             desktopForceUpdate = false,
