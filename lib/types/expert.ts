@@ -658,6 +658,8 @@ export interface ListeningExpertAnswerItem {
   isCorrect: boolean;
   transcriptEvidence: string | null;
   existingComment?: string;
+  /** True when automated correctness is not authoritative for this item and it is held for admin review. */
+  isInvalid?: boolean;
   // WORK-STREAM 7a — distractor taxonomy + Part C speaker-attitude.
   selectedDistractorCategory?: string | null; // the category of the distractor the learner chose (MCQ misses only)
   speakerAttitude?: string | null; // Part C only: concerned | optimistic | doubtful | critical | neutral | other

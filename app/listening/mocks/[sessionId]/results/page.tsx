@@ -188,7 +188,7 @@ export default function ListeningMockResultsPage() {
         rawScore={result.rawScore}
         maxRawScore={maxRawScore}
         scaledScore={hasConversion ? scaledScore : null}
-        passed={hasConversion ? result.scoreConversionPassed : null}
+        passed={hasConversion ? (result.scoreConversionPassed ?? null) : null}
         grade={hasConversion ? result.gradeLabel : null}
         tableVersion={hasConversion ? result.scoreConversionTableVersionKey : null}
       />

@@ -170,7 +170,7 @@ export default function AdminReadingGlobalPolicyPage() {
                   label="Short answer normalisation"
                   value={formData.shortAnswerNormalisation}
                   onChange={(e) => setField('shortAnswerNormalisation', e.target.value)}
-                  description="exact | trim_only | trim_collapse | trim_collapse_case_insensitive; fuzzy profiles are rejected"
+                  hint="exact | trim_only | trim_collapse | trim_collapse_case_insensitive; fuzzy profiles are rejected"
                 />
                 <Input
                   label="Sentence completion strictness"

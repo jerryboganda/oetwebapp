@@ -44,7 +44,7 @@ export function WhopEmbeddedCheckout({
 
     const callbackName = `__oetWhopComplete_${containerId.replace(/-/g, '_')}`;
     const errorName = `__oetWhopError_${containerId.replace(/-/g, '_')}`;
-    const scopedWindow = window as Window & Record<string, unknown>;
+    const scopedWindow = window as unknown as Window & Record<string, unknown>;
     scopedWindow[callbackName] = () => onCompleteRef.current();
     scopedWindow[errorName] = () => onUnavailableRef.current();
 

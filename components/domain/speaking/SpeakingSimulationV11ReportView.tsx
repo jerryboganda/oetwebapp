@@ -75,6 +75,7 @@ function EvidenceAudioButton({
     || !evidence.sourceRecordingId) return null;
 
   const play = async () => {
+    if (!evidence.sourceRecordingId) return;
     setError(null);
     setLoading(true);
     try {

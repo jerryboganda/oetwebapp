@@ -17,7 +17,7 @@ const alertConfig: Record<AlertVariant, { icon: typeof Info; bgClass: string; te
   error: { icon: AlertCircle, bgClass: 'bg-red-50 dark:bg-red-950', textClass: 'text-red-800 dark:text-red-200', borderClass: 'border-red-200 dark:border-red-800' },
 };
 
-interface InlineAlertProps extends React.HTMLAttributes<HTMLDivElement> {
+interface InlineAlertProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd'> {
   variant?: AlertVariant;
   title?: string;
   children: ReactNode;

@@ -88,13 +88,13 @@ describe('reading-manifest-contract', () => {
 
   it('accepts the Sample 5 1-8 matching layout and the swapped 8-14 complete layout', () => {
     const sample5 = validateReadingManifest(buildCanonicalReadingManifest({
-      partALayout: { matchingEnd: 8, middleType: 'ShortAnswer', lastType: 'SentenceCompletion' },
+      partALayout: { matchingEnd: 8, lastStart: 15, middleType: 'ShortAnswer', lastType: 'SentenceCompletion' },
     }));
     expect(sample5.isPublishReady).toBe(true);
     expect(sample5.detected.partALayout).toContain('Questions 1-8 matching');
 
     const swapped = validateReadingManifest(buildCanonicalReadingManifest({
-      partALayout: { matchingEnd: 7, middleType: 'SentenceCompletion', lastType: 'ShortAnswer' },
+      partALayout: { matchingEnd: 7, lastStart: 15, middleType: 'SentenceCompletion', lastType: 'ShortAnswer' },
     }));
     expect(swapped.isPublishReady).toBe(true);
     expect(swapped.detected.partALayout).toContain('8–14 complete the sentences');

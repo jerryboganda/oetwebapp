@@ -153,7 +153,7 @@ export function detectPartALayoutFromQuestions(
     if (byOrder.get(order) !== 'MatchingTextReference') break;
     matchingEnd = order;
   }
-  if (!PART_A_MATCHING_ENDS.includes(matchingEnd as PartAMatchingEnd)) {
+  if (matchingEnd !== 5 && matchingEnd !== 6 && matchingEnd !== 7 && matchingEnd !== 8) {
     return fail('Part A matching A–D block must be questions 1-5, 1-6, 1-7, or 1-8.');
   }
 
