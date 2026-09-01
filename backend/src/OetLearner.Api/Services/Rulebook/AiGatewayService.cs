@@ -729,6 +729,8 @@ public sealed class AiGatewayService(
                         Messages = messages,
                         Tools = tools.Count == 0 ? null : tools,
                         ToolChoice = tools.Count == 0 ? null : "auto",
+                        EnableExtendedThinking = request.EnableExtendedThinking,
+                        ThinkingBudgetTokens = request.ThinkingBudgetTokens,
                     },
                     circuitProviderKey,
                     circuitCredentialKey,
@@ -1952,6 +1954,21 @@ public sealed record AiGatewayRequest
     public int? MaxTokens { get; init; }
     public IReadOnlyList<AiProviderAudioAttachment>? AudioAttachments { get; init; }
 
+    /// <summary>
+    /// Opt-in Anthropic extended thinking for calls where answer quality is
+    /// worth the extra latency/cost (e.g. one-time exemplar content
+    /// generation, never per-candidate live grading). Ignored by providers/
+    /// dialects that don't support it. Caller must also set
+    /// <see cref="MaxTokens"/> comfortably above <see cref="ThinkingBudgetTokens"/>
+    /// (Anthropic requires max_tokens &gt; thinking.budget_tokens).
+    /// </summary>
+    public bool EnableExtendedThinking { get; init; }
+
+    /// <summary>Thinking token budget when <see cref="EnableExtendedThinking"/>
+    /// is true. Anthropic requires &gt;= 1024. Null defers to the provider's
+    /// own default.</summary>
+    public int? ThinkingBudgetTokens { get; init; }
+
     // --- Slice 1 additions: usage accounting context ---
     // These are optional for backward compatibility. Call sites are expected
     // to fill them in so admin explorer / cost dashboards can attribute the
@@ -2154,6 +2171,14 @@ public sealed class AiProviderRequest
     /// request parts. Text-only providers ignore this. Current production
     /// use is Gemini native-audio pronunciation scoring.</summary>
     public IReadOnlyList<AiProviderAudioAttachment>? AudioAttachments { get; init; }
+
+    /// <summary>See <see cref="AiGatewayRequest.EnableExtendedThinking"/>.
+    /// Only the native <see cref="AnthropicProvider"/> honours this; other
+    /// dialects ignore it.</summary>
+    public bool EnableExtendedThinking { get; init; }
+
+    /// <summary>See <see cref="AiGatewayRequest.ThinkingBudgetTokens"/>.</summary>
+    public int? ThinkingBudgetTokens { get; init; }
 }
 
 public sealed class AiProviderAudioAttachment

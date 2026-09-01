@@ -322,8 +322,10 @@ public sealed class AnthropicProvider(
 
         // Claude 5-family models reject `temperature` with an HTTP 400
         // ("`temperature` is deprecated for this model."). Omit it for them and
-        // keep sending it to older models that still honour it.
-        var supportsTemperature = !ModelRejectsTemperature(request.Model);
+        // keep sending it to older models that still honour it. Extended
+        // thinking additionally requires temperature to stay at the API
+        // default (1) for every model, so omit it whenever thinking is on.
+        var supportsTemperature = !ModelRejectsTemperature(request.Model) && !request.EnableExtendedThinking;
         var payload = new Dictionary<string, object?>
         {
             ["model"] = request.Model,
@@ -333,6 +335,21 @@ public sealed class AnthropicProvider(
         if (supportsTemperature)
         {
             payload["temperature"] = request.Temperature;
+        }
+        if (request.EnableExtendedThinking)
+        {
+            // Anthropic requires budget_tokens >= 1024 and max_tokens strictly
+            // greater than budget_tokens; callers opting into this must size
+            // MaxTokens accordingly. Extended thinking also requires
+            // temperature left at the API default (1) — already satisfied
+            // above since supportsTemperature is false for every model this
+            // is used with today (claude-sonnet-5 rejects `temperature`).
+            var budget = Math.Max(1024, request.ThinkingBudgetTokens ?? 16000);
+            payload["thinking"] = new Dictionary<string, object?>
+            {
+                ["type"] = "enabled",
+                ["budget_tokens"] = budget,
+            };
         }
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
         {
