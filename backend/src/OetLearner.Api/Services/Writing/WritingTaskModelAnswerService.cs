@@ -46,7 +46,11 @@ public sealed class WritingTaskModelAnswerService(
     TimeProvider clock,
     ILogger<WritingTaskModelAnswerService> logger) : IWritingTaskModelAnswerService
 {
-    private const string PromptVersion = "writing.model-answer-pregenerate.v1";
+    // Must fit AiOperation.PromptVersion, which is [MaxLength(32)] - confirmed
+    // via production Npgsql exception (22001: value too long for type
+    // character varying(32)) after the longer "writing.model-answer-pregenerate.v1"
+    // (35 chars) broke every single pilot generation call.
+    private const string PromptVersion = "writing.model-answer-pregen.v1";
     // Pinned per owner instruction: Model Answers are candidate-facing exemplar
     // content, generated once per task, so quality is prioritised over the
     // platform's default (cheaper) provider. Provider/Model set explicitly on
