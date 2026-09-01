@@ -173,22 +173,22 @@ describe('writing linter — R07.6 urgent intro must contain "urgent"', () => {
   });
 });
 
-describe('writing linter — R08.7 forbidden "next visit"', () => {
-  it('flags the phrase "next visit"', () => {
+describe('writing linter — R08.7 "next visit" no longer forbidden', () => {
+  it('does not flag the phrase "next visit" (rulebook update 31 Aug 2026)', () => {
     const findings = lintWritingLetter(base({
       letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nOn the next visit, she reported improvement.\n\nYours sincerely,\nDoctor',
     }));
-    expect(findings.find((f) => f.ruleId === 'R08.7' || f.ruleId === 'R10.14')).toBeDefined();
+    expect(findings.find((f) => f.ruleId === 'R08.7' || f.ruleId === 'R10.14')).toBeUndefined();
   });
 });
 
-describe('writing linter — R08.14 forbidden "the patient"', () => {
-  it('flags "the patient" in the body', () => {
+describe('writing linter — R08.14 "the patient" no longer forbidden', () => {
+  it('does not flag "the patient" in the body (rulebook update 31 Aug 2026, G-W-112)', () => {
     const findings = lintWritingLetter(base({
       letterText: 'Dear Dr Smith,\nRe: Ms Miller\n\nIntro.\n\nThe patient presented with nausea.\n\nYours sincerely,\nDoctor',
     }));
     const hits = findings.filter((f) => f.ruleId === 'R08.14' || f.ruleId === 'R12.2');
-    expect(hits.length).toBeGreaterThan(0);
+    expect(hits.length).toBe(0);
   });
 });
 
@@ -232,6 +232,19 @@ describe('writing linter — R11.1 Latin abbreviations', () => {
     }));
     expect(findings.find((f) => f.ruleId === 'R11.1')).toBeUndefined();
   });
+
+  // Rulebook G-W-105 (FINAL MASTER 2026-08-31): translate "unless the
+  // task/recipient convention clearly supports" keeping it — the engine cannot
+  // evaluate that deterministically, so this stays advisory (minor), not
+  // blocking.
+  it('is advisory (minor severity), not blocking', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was prescribed amoxicillin 500 mg bd.\n\nYours sincerely,\nDoctor',
+    }));
+    const finding = findings.find((f) => f.ruleId === 'R11.1');
+    expect(finding).toBeDefined();
+    expect(finding?.severity).toBe('minor');
+  });
 });
 
 describe('writing linter — R12.1 no contractions', () => {
@@ -241,6 +254,18 @@ describe('writing linter — R12.1 no contractions', () => {
     }));
     expect(findings.find((f) => f.ruleId === 'R12.1')).toBeDefined();
   });
+
+  // Rulebook DH-W-044 / G-W-117 (FINAL MASTER 2026-08-31): an isolated
+  // contraction is a Genre/Style issue, not a catastrophic grammar failure —
+  // still flagged, but never blocking.
+  it('is advisory (minor severity), not blocking', () => {
+    const findings = lintWritingLetter(base({
+      letterText: "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe doesn't take any regular medication.\n\nYours sincerely,\nDoctor",
+    }));
+    const finding = findings.find((f) => f.ruleId === 'R12.1');
+    expect(finding).toBeDefined();
+    expect(finding?.severity).toBe('minor');
+  });
 });
 
 describe('writing linter — R12.5 conditions lowercase', () => {
@@ -249,6 +274,82 @@ describe('writing linter — R12.5 conditions lowercase', () => {
       letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has Hypertension since 2015.\n\nYours sincerely,\nDoctor',
     }));
     expect(findings.find((f) => f.ruleId === 'R12.5')).toBeDefined();
+  });
+});
+
+describe('writing linter — R12.9 "however" punctuation', () => {
+  it('flags a genuine run-on: no semicolon and no sentence boundary before "however"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nThe patient was stable however she later deteriorated.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.9')).toBeDefined();
+  });
+
+  it('passes when "however" is preceded by a semicolon', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nThe patient was stable; however, she later deteriorated.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.9')).toBeUndefined();
+  });
+
+  it('passes when "However" starts a new sentence after a full stop', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nThe patient was stable. However, she later deteriorated.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.9')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R12.10 "therefore"/"thus" punctuation', () => {
+  it('flags a genuine run-on: no semicolon and no sentence boundary before "therefore"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was unwell, therefore she rested.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.10')).toBeDefined();
+  });
+
+  it('passes when "therefore" is preceded by a semicolon', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was unwell; therefore, she rested.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.10')).toBeUndefined();
+  });
+
+  it('passes when "Therefore" starts a new sentence after a full stop', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was unwell. Therefore, she rested for the remainder of the week.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.10')).toBeUndefined();
+  });
+});
+
+describe('writing linter — R12.11 "in addition" punctuation', () => {
+  it('flags a genuine run-on: no semicolon and no sentence boundary before "in addition"', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe takes amoxicillin, in addition she uses an inhaler.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.11')).toBeDefined();
+  });
+
+  it('passes on "in addition to" (not a clause joiner)', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe takes amoxicillin in addition to her usual inhaler.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.11')).toBeUndefined();
+  });
+
+  it('passes on "in addition with" (not a clause joiner)', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe takes amoxicillin daily in addition with an inhaler as needed.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.11')).toBeUndefined();
+  });
+
+  it('passes when "In addition" starts a new sentence after a full stop', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe takes amoxicillin daily. In addition, she uses an inhaler as needed.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R12.11')).toBeUndefined();
   });
 });
 
@@ -288,6 +389,35 @@ describe('writing linter — R15.2 non-medical no jargon', () => {
       recipientSpecialty: 'Occupational Therapist',
     }));
     expect(findings.find((f) => f.ruleId === 'R15.2')).toBeDefined();
+  });
+});
+
+describe('writing linter — R10.8 surgery present perfect + finished time', () => {
+  // Rulebook G-W-021 (FINAL MASTER 2026-08-31): present perfect + a stated
+  // finished time (a year, here) is the genuine error.
+  it('flags present perfect for surgery when a finished-time marker is present', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has had a cholecystectomy in 2018.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R10.8')).toBeDefined();
+  });
+
+  // Rulebook G-W-021: present perfect IS valid for a completed procedure when
+  // no finished time is stated and the result has current/ongoing relevance
+  // (worked example: "He has undergone cataract surgery and is recovering
+  // well.").
+  it('does not flag present perfect for surgery with no finished-time marker', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has had an appendectomy and is recovering well.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R10.8')).toBeUndefined();
+  });
+
+  it('does not flag past simple for surgery', () => {
+    const findings = lintWritingLetter(base({
+      letterText: 'Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe had a cholecystectomy in 2018.\n\nYours sincerely,\nDoctor',
+    }));
+    expect(findings.find((f) => f.ruleId === 'R10.8')).toBeUndefined();
   });
 });
 

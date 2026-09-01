@@ -232,7 +232,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "intro_contains_purpose" => DetectIntroPurpose,
         "urgent_intro_contains_urgent" => DetectUrgentIntro,
         "discharge_intro_no_identity" => DetectDischargeNoIdentity,
-        "body_forbidden_phrase_next_visit" => DetectForbidden(@"\bnext visit\b", "Never write 'next visit'. Use 'on the following visit'."),
+        "body_forbidden_phrase_next_visit" => DetectNoOp,
         "body_forbidden_phrase_yesterday" => DetectForbidden(@"\byesterday\b", "'Yesterday' is never used in medical letters."),
         "body_no_todays_date" => DetectTodaysDateInBody,
         "urgent_closure_phrase" => DetectUrgentClosure,
@@ -430,13 +430,15 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         }
     }
 
+    // Rulebook update (31 Aug 2026, G-W-112): "'Patient' is not a forbidden word ... this
+    // explicitly overrides the legacy blanket prohibition." The new PDF's own "correct"
+    // example letter itself uses "The patient was discharged with community follow-up".
+    // Intentionally inert no-op — kept (rather than removed) because it is still wired
+    // from the registry above for both "body_forbidden_phrase_the_patient" and
+    // "body_uses_last_name_only".
     private static IEnumerable<LintFinding> DetectThePatient(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var m = Regex.Match(s.Body, @"\bthe patient\b", RegexOptions.IgnoreCase);
-        if (m.Success)
-            yield return new LintFinding(rule.Id, rule.Severity,
-                "Do not use 'the patient' in the body. Use title + last name or a pronoun.",
-                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        yield break;
     }
 
     private static IEnumerable<LintFinding> DetectMinorNaming(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -506,6 +508,14 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         };
     };
 
+    // Rulebook update (31 Aug 2026): "next visit" is standard English and is no longer
+    // forbidden (the old requirement to write "on the following visit" instead is dropped).
+    // Intentionally inert no-op, wired for "body_forbidden_phrase_next_visit" above.
+    private static IEnumerable<LintFinding> DetectNoOp(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        yield break;
+    }
+
     private static IEnumerable<LintFinding> DetectTodaysDateInBody(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var m = Regex.Match(s.Body, @"\b\d{1,2}[\/\-\s](\d{1,2}|[A-Za-z]+)[\/\-\s]\d{2,4}\b");
@@ -559,6 +569,12 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 "Results/imaging marked as enclosed — include 'Please find enclosed a copy of the pathology results.'");
     }
 
+    // R11.1 — translating Latin abbreviations is still recommended (rulebook
+    // G-W-105, FINAL MASTER 2026-08-31), "unless the task/recipient convention
+    // clearly supports [keeping it]" — a condition the engine cannot evaluate
+    // deterministically. So this stays advisory-only: downgraded to
+    // RuleSeverity.Minor regardless of rule.Severity, matching the established
+    // DetectBodyLength advisory pattern above.
     private static IEnumerable<LintFinding> DetectLatinAbbreviations(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!rule.Params.HasValue || !rule.Params.Value.TryGetProperty("map", out var mapEl)) yield break;
@@ -567,13 +583,18 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
             var re = new Regex($@"\b{Regex.Escape(prop.Name)}\b", RegexOptions.IgnoreCase);
             var m = re.Match(s.Body);
             if (m.Success)
-                yield return new LintFinding(rule.Id, rule.Severity,
-                    $"Translate Latin abbreviation \"{prop.Name}\" to plain English (\"{prop.Value.GetString()}\").",
+                yield return new LintFinding(rule.Id, RuleSeverity.Minor,
+                    $"Consider translating Latin abbreviation \"{prop.Name}\" to plain English (\"{prop.Value.GetString()}\") unless you are confident the recipient's convention supports it.",
                     Quote: m.Value, Start: m.Index, End: m.Index + m.Length,
                     FixSuggestion: prop.Value.GetString());
         }
     }
 
+    // R12.1 — an isolated contraction is a Genre/Style note, not a catastrophic
+    // grammar failure (rulebook DH-W-044 / G-W-117, FINAL MASTER 2026-08-31).
+    // Still worth flagging, but downgraded to RuleSeverity.Minor regardless of
+    // rule.Severity, matching the established DetectBodyLength advisory pattern
+    // above — non-blocking. Cap of 5 findings unchanged.
     private static IEnumerable<LintFinding> DetectContractions(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var re = new Regex(@"\b(?:don't|can't|won't|isn't|aren't|doesn't|didn't|wasn't|weren't|hasn't|haven't|hadn't|I'm|I've|I'll|she's|he's|it's|we're|they're|you're|you'd|we'd|they'd|I'd|we've|they've|you've|couldn't|wouldn't|shouldn't)\b",
@@ -581,8 +602,8 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         var count = 0;
         foreach (Match m in re.Matches(s.Body))
         {
-            yield return new LintFinding(rule.Id, rule.Severity,
-                $"Contraction \"{m.Value}\" is not allowed in OET letters. Expand it.",
+            yield return new LintFinding(rule.Id, RuleSeverity.Minor,
+                $"Contraction \"{m.Value}\" is a Genre/Style note — OET letters conventionally avoid it, but an isolated instance is not an automatic failure.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
             if (++count >= 5) yield break;
         }
@@ -603,14 +624,26 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         }
     }
 
+    // Conjunctive adverbs (however / therefore / thus / in addition) are correct either
+    // preceded by a semicolon within one sentence, or starting a brand-new sentence after
+    // a full stop (e.g. "... clause. However, ..."). Only a genuine run-on — the linker
+    // mid-clause with neither a semicolon nor a preceding sentence boundary — is an error.
+    private static bool PrecededBySemicolonOrSentenceBoundary(string clauseBeforeLinker)
+    {
+        var trimmed = clauseBeforeLinker.TrimEnd();
+        if (trimmed.Length == 0) return true;
+        var lastChar = trimmed[^1];
+        return lastChar == ';' || lastChar == '.' || lastChar == '!' || lastChar == '?';
+    }
+
     private static IEnumerable<LintFinding> DetectHoweverPunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var re = new Regex(@"([^\n;]{5,})\bhowever\b", RegexOptions.IgnoreCase);
         foreach (Match m in re.Matches(s.Body))
         {
-            if (!m.Groups[1].Value.TrimEnd().EndsWith(';'))
+            if (!PrecededBySemicolonOrSentenceBoundary(m.Groups[1].Value))
                 yield return new LintFinding(rule.Id, rule.Severity,
-                    "Precede 'however' with a semicolon: '[clause]; however, [clause].'",
+                    "Precede 'however' with either a semicolon, or start a new sentence: '...clause; however, ...' or '...clause. However, ...'.",
                     Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
         }
     }
@@ -835,17 +868,36 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         }
     }
 
-    // R10.8 — surgery uses past simple, not present perfect
+    // R10.8 — present perfect for surgery is valid when no finished-time marker is
+    // stated (rulebook G-W-021, FINAL MASTER 2026-08-31): "He has undergone cataract
+    // surgery and is recovering well" is correct present-perfect usage when the
+    // result still has current/ongoing relevance. Past simple is required only when
+    // a specific finished-time expression accompanies the mention (a year, "ago",
+    // "in <Month>", "on <date>", "last <year/month/week>") — pairing present
+    // perfect with a stated finished time is the actual error, not present-perfect
+    // phrasing on its own.
+    private static readonly Regex SurgeryFinishedTimeRegex = new(
+        @"\b((19|20)\d{2}|ago|in\s+(January|February|March|April|May|June|July|August|September|October|November|December)|on\s+(the\s+)?\d{1,2}(st|nd|rd|th)?|last\s+(year|month|week))\b",
+        RegexOptions.IgnoreCase);
+
     private static IEnumerable<LintFinding> DetectSurgeryPastSimple(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var re = new Regex(
             @"\bhas\s+had\s+(a\s+|an\s+)?([a-z]+(?:ectomy|otomy|ostomy|plasty)|surgery|operation)\b",
             RegexOptions.IgnoreCase);
         var m = re.Match(s.Body);
-        if (m.Success)
-            yield return new LintFinding(rule.Id, rule.Severity,
-                "Surgery uses past simple: 'had a cholecystectomy in 2018'. Do not use present perfect for surgery.",
-                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        if (!m.Success) yield break;
+
+        // Only flag when a finished-time marker appears in a short window right
+        // after the matched phrase — that combination is the genuine error.
+        var windowStart = m.Index + m.Length;
+        var windowEnd = Math.Min(s.Body.Length, windowStart + 40);
+        var window = s.Body[windowStart..windowEnd];
+        if (!SurgeryFinishedTimeRegex.IsMatch(window)) yield break;
+
+        yield return new LintFinding(rule.Id, rule.Severity,
+            "Present perfect combined with a finished-time marker (a year, 'ago', a specific date) is inconsistent: use past simple, e.g. 'had a cholecystectomy in 2018'. Present perfect alone ('has had surgery') is fine when no finished time is stated.",
+            Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
     // R10.10 — "X ago" requires past simple
@@ -861,28 +913,28 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
-    // R12.10 — 'therefore' / 'thus' must be preceded by ';'
+    // R12.10 — 'therefore' / 'thus' must be preceded by ';' OR start a new sentence after a full stop
     private static IEnumerable<LintFinding> DetectThereforePunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var re = new Regex(@"([^\n;]{5,})\b(therefore|thus)\b", RegexOptions.IgnoreCase);
         foreach (Match m in re.Matches(s.Body))
         {
-            if (!m.Groups[1].Value.TrimEnd().EndsWith(';'))
+            if (!PrecededBySemicolonOrSentenceBoundary(m.Groups[1].Value))
                 yield return new LintFinding(rule.Id, rule.Severity,
-                    "Precede 'therefore'/'thus' with a semicolon: '[clause]; therefore, [clause].'",
+                    "Precede 'therefore'/'thus' with either a semicolon, or start a new sentence: '...clause; therefore, ...' or '...clause. Therefore, ...'.",
                     Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
         }
     }
 
-    // R12.11 — 'in addition' (clause joiner; not 'in addition to/with') must be preceded by ';'
+    // R12.11 — 'in addition' (clause joiner; not 'in addition to/with') must be preceded by ';' OR start a new sentence after a full stop
     private static IEnumerable<LintFinding> DetectInAdditionPunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var re = new Regex(@"([^\n;]{5,})\bin addition\b(?!\s+(to|with)\b)", RegexOptions.IgnoreCase);
         foreach (Match m in re.Matches(s.Body))
         {
-            if (!m.Groups[1].Value.TrimEnd().EndsWith(';'))
+            if (!PrecededBySemicolonOrSentenceBoundary(m.Groups[1].Value))
                 yield return new LintFinding(rule.Id, rule.Severity,
-                    "Precede 'in addition' (as a clause joiner) with a semicolon.",
+                    "Precede 'in addition' (as a clause joiner) with either a semicolon, or start a new sentence: '...clause; in addition, ...' or '...clause. In addition, ...'.",
                     Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
         }
     }
@@ -1005,10 +1057,25 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectMarkerDependentNoop(OetRule rule, WritingLintInput input, LetterStructure s)
         => [];
 
+    // Rulebook update (31 Aug 2026): the rulebook JSON's forbiddenPatterns arrays for
+    // "next visit" (R08.7/R10.14) and "the patient" (R08.14/R12.2/G-W-112) still contain
+    // the legacy regexes (rulebook JSON is out of scope for this change). Those two
+    // checkIds' own Detector functions above are already inert no-ops for the same
+    // rulebook update, so this generic JSON-driven pattern runner is told to skip the
+    // same checkIds — otherwise it would independently re-flag the identical phrase.
+    private static readonly HashSet<string> ForbiddenPatternCheckIdsNoLongerEnforced = new(StringComparer.Ordinal)
+    {
+        "body_forbidden_phrase_next_visit",
+        "body_forbidden_phrase_the_patient",
+        "body_uses_last_name_only",
+    };
+
     // Forbidden patterns baked into the JSON (not tied to a specific checkId)
     private static IEnumerable<LintFinding> RunForbiddenPatterns(OetRule rule, string text)
     {
         if (rule.ForbiddenPatterns is null) yield break;
+        if (!string.IsNullOrWhiteSpace(rule.CheckId) && ForbiddenPatternCheckIdsNoLongerEnforced.Contains(rule.CheckId))
+            yield break;
         foreach (var pat in rule.ForbiddenPatterns)
         {
             Regex re;
