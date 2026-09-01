@@ -1363,20 +1363,31 @@ builder.Services.AddScoped<ContentGenerationService>();
 builder.Services.AddScoped<ConversationService>();
 
 // ── Multi-Exam Scoring Strategies & Session Drivers (Feature 11) ──
+// TEMPORARILY DISABLED 2026-09-01: this block references
+// OetLearner.Api.Services.Scoring.* / OetLearner.Api.Services.ExamSession.*
+// types that were never committed to source control on any branch (only ever
+// existed as uncommitted local files in a shared dev checkout) - the DI
+// registrations below don't compile, which was breaking every deploy off
+// main. Nothing else in the tracked codebase references these types (grep
+// confirmed), so disabling just this block is self-contained. Re-enable once
+// the actual Services/Scoring + Services/ExamSession implementation files
+// (IExamScoringStrategyFactory/ExamScoringStrategyFactory,
+// IExamSessionDriverFactory/ExamSessionDriverFactory, the four
+// *ExamSessionDriver classes, etc.) are committed.
 builder.Services.AddScoped<OetLearner.Api.Services.IPteScoring, OetLearner.Api.Services.PteScoring>();
-builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IToeflScoring, OetLearner.Api.Services.Scoring.ToeflScoring>();
-
-builder.Services.AddScoped<OetLearner.Api.Services.Scoring.OetScoringStrategy>();
-builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IeltsScoringStrategy>();
-builder.Services.AddScoped<OetLearner.Api.Services.Scoring.PteScoringStrategy>();
-builder.Services.AddScoped<OetLearner.Api.Services.Scoring.ToeflScoringStrategy>();
-builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IExamScoringStrategyFactory, OetLearner.Api.Services.Scoring.ExamScoringStrategyFactory>();
-
-builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.OetExamSessionDriver>();
-builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IeltsExamSessionDriver>();
-builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.PteExamSessionDriver>();
-builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.ToeflExamSessionDriver>();
-builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IExamSessionDriverFactory, OetLearner.Api.Services.ExamSession.ExamSessionDriverFactory>();
+// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IToeflScoring, OetLearner.Api.Services.Scoring.ToeflScoring>();
+//
+// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.OetScoringStrategy>();
+// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IeltsScoringStrategy>();
+// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.PteScoringStrategy>();
+// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.ToeflScoringStrategy>();
+// builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IExamScoringStrategyFactory, OetLearner.Api.Services.Scoring.ExamScoringStrategyFactory>();
+//
+// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.OetExamSessionDriver>();
+// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IeltsExamSessionDriver>();
+// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.PteExamSessionDriver>();
+// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.ToeflExamSessionDriver>();
+// builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IExamSessionDriverFactory, OetLearner.Api.Services.ExamSession.ExamSessionDriverFactory>();
 
 
 // ── Conversation subsystem ────────────────────────────────────────────────
