@@ -244,6 +244,88 @@ public class AuthFlowsTests
         Assert.Equal("refresh_token_required", await ReadErrorCodeAsync(missingRefreshResponse));
     }
 
+    /// <summary>Regression coverage for the E2E "device_id_required" bootstrap
+    /// failure investigated alongside tests/e2e/fixtures/auth-bootstrap.ts:
+    /// once RuntimeSettings.Security.TrustedDeviceRequired is enforced (the
+    /// mandatory production profile — see the 20260825090000_
+    /// EnforceCoursePlatformSecurityProfile migration and
+    /// docs/SECURITY-CONTENT-PROTECTION-MATRIX.md §6), EVERY sign-in — web,
+    /// desktop, or native, there is no platform carve-out in AuthService — must
+    /// present an X-OET-Device-Id header or it is rejected. This proves the
+    /// requirement is a client-contract gap (a caller must send the header),
+    /// not a platform bug that incorrectly targets browsers.</summary>
+    [Fact]
+    public async Task AuthEndpoints_SignIn_RejectsMissingDeviceIdWhenTrustedDeviceEnforced()
+    {
+        // includeDeviceIdHeader: false — this is the one test in the file that
+        // deliberately exercises a caller who never presents an identity, so it
+        // opts out of the harness's usual default header (see
+        // CreateAuthApiHarness's XML doc).
+        await using var harness = CreateAuthApiHarness(includeDeviceIdHeader: false);
+        // Registration itself opens a session (CreateSessionAsync). Pin
+        // enforcement off first (independent of whatever this harness's
+        // ambient default happens to be) so registration is never the thing
+        // that trips the assertion below, then flip it on afterward — exactly
+        // mirroring production, where the activation migration flips the flag
+        // for already-existing accounts rather than gating registration.
+        await SetTrustedDeviceRequiredAsync(harness, false);
+        await RegisterLearnerAsync(harness.Client);
+        await SetTrustedDeviceRequiredAsync(harness, true);
+
+        var signInResponse = await harness.Client.PostAsJsonAsync("/v1/auth/sign-in",
+            new PasswordSignInRequest("learner@example.com", "Password123!", true));
+
+        Assert.Equal(HttpStatusCode.Forbidden, signInResponse.StatusCode);
+        Assert.Equal("device_id_required", await ReadErrorCodeAsync(signInResponse));
+    }
+
+    /// <summary>The companion positive case: a caller that DOES send
+    /// X-OET-Device-Id — exactly what the real frontend
+    /// (lib/device-id.ts + lib/auth-client.ts) sends on every browser sign-in,
+    /// and what tests/e2e/fixtures/auth-bootstrap.ts now sends too — is
+    /// silently bootstrapped as the account's trusted device and is never
+    /// blocked. Confirms real web users were never locked out by this
+    /// enforcement; only a caller that omits the header is.</summary>
+    [Fact]
+    public async Task AuthEndpoints_SignIn_BootstrapsDeviceAndSucceedsWithDeviceIdHeaderWhenTrustedDeviceEnforced()
+    {
+        // Uses the harness's default X-OET-Device-Id header (present on every
+        // request from harness.Client), so both the registration and the
+        // sign-in below present the SAME identity — the second call resolves
+        // to whichever of Bootstrap/Trusted actually applies instead of a
+        // hardcoded assumption about the harness's ambient enforcement default.
+        await using var harness = CreateAuthApiHarness();
+        await RegisterLearnerAsync(harness.Client);
+        await SetTrustedDeviceRequiredAsync(harness, true);
+
+        var signInResponse = await harness.Client.PostAsJsonAsync("/v1/auth/sign-in",
+            new PasswordSignInRequest("learner@example.com", "Password123!", true));
+
+        Assert.True(signInResponse.IsSuccessStatusCode, await signInResponse.Content.ReadAsStringAsync());
+        var session = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
+        Assert.NotNull(session);
+
+        await using var readDb = new LearnerDbContext(harness.DbOptions);
+        var account = await readDb.ApplicationUserAccounts.SingleAsync(x => x.Email == "learner@example.com");
+        var trustedDevice = await readDb.TrustedDevices.SingleAsync(d => d.ApplicationUserAccountId == account.Id);
+        Assert.Equal("auth-flow-tests-harness-device", trustedDevice.DeviceId);
+    }
+
+    private static async Task SetTrustedDeviceRequiredAsync(AuthApiHarness harness, bool required)
+    {
+        await using var scope = harness.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var row = await db.RuntimeSettings.SingleOrDefaultAsync(x => x.Id == "default");
+        if (row is null)
+        {
+            row = new RuntimeSettingsRow { Id = "default" };
+            db.RuntimeSettings.Add(row);
+        }
+        row.SecurityTrustedDeviceRequired = required;
+        await db.SaveChangesAsync();
+        scope.ServiceProvider.GetRequiredService<IRuntimeSettingsProvider>().Invalidate();
+    }
+
     [Fact]
     public async Task AuthService_LearnerDeviceCooldown_UsesOtpRecoveryInsteadOfSupportDeadEnd()
     {
@@ -1721,7 +1803,20 @@ public class AuthFlowsTests
             now));
     }
 
-    private static AuthApiHarness CreateAuthApiHarness()
+    /// <summary>Default client-generated identity for every test that talks to
+    /// this harness's HttpClient. Security spec §3.2 / the
+    /// 20260825090000_EnforceCoursePlatformSecurityProfile migration made
+    /// SecurityTrustedDeviceRequired the mandatory production default (see
+    /// RuntimeSettingsProvider's `?? true` fallback), and AuthService applies
+    /// that fallback here too since this harness never seeds a RuntimeSettings
+    /// row. A raw HttpClient has no localStorage/keychain of its own — unlike
+    /// the real frontend (lib/device-id.ts) or a Capacitor/desktop shell — so
+    /// without this default header every test that signs in or registers
+    /// through this harness is rejected with device_id_required before it ever
+    /// reaches the behavior under test. Individual tests that specifically
+    /// exercise the "no device id presented" contract opt out via
+    /// <paramref name="includeDeviceIdHeader"/>.</summary>
+    private static AuthApiHarness CreateAuthApiHarness(bool includeDeviceIdHeader = true)
     {
         var sender = new RecordingEmailSender();
         var timeProvider = new MutableTimeProvider(TimeProvider.System.GetUtcNow());
@@ -1730,6 +1825,10 @@ public class AuthFlowsTests
         {
             BaseAddress = new Uri("https://localhost")
         });
+        if (includeDeviceIdHeader)
+        {
+            client.DefaultRequestHeaders.Add("X-OET-Device-Id", "auth-flow-tests-harness-device");
+        }
         return new AuthApiHarness(factory, client, sender, timeProvider);
     }
 

@@ -12,6 +12,30 @@ const localSessionKey = 'oet.auth.session.local';
 const sessionSessionKey = 'oet.auth.session.session';
 const mfaChallengeKey = 'oet.auth.challenge.mfa';
 const authIndicatorCookieName = 'oet_auth';
+// Course Platform Security Requirements §3.2 (docs/SECURITY-DEVICE-POLICY.md,
+// docs/SECURITY-CONTENT-PROTECTION-MATRIX.md §6): every sign-in — web,
+// desktop, or native — must present the client-generated X-OET-Device-Id
+// header once SecurityTrustedDeviceRequired is enforced (the production
+// default). The real browser sends this via `lib/device-id.ts`, but this
+// harness talks to the API directly with Playwright's APIRequestContext,
+// which has no localStorage/cookie jar of its own, so it must supply a
+// synthetic identity explicitly. One fixed value is intentionally reused for
+// every seeded role/project: the account's first sign-in with it silently
+// bootstraps it as that account's trusted device (TrustedDeviceService
+// §Bootstrap), and every later call presents the SAME id, so it always
+// resolves as already-trusted instead of tripping the OTP-approval or
+// device-change-cooldown paths meant for a genuinely different client.
+// Mirrors the identical pattern already used by tests/performance/auth.setup.ts
+// (PERF_DEVICE_ID) and tests/load/lib/auth-helper.js (OET_TEST_DEVICE_ID).
+const e2eDeviceId = process.env.E2E_DEVICE_ID ?? 'e2e-playwright-harness';
+const deviceIdHeaderName = 'X-OET-Device-Id';
+// The localStorage key `lib/device-id.ts` reads/writes on web
+// (WEB_STORAGE_KEY). Seeding it into the persisted storage state and into any
+// live page recovery keeps a real browser loading that state from generating
+// a *different* random device id — which would mismatch the id bound to the
+// session at sign-in and make the very first `/v1/auth/refresh` call fail
+// closed (Security spec §3.2 refresh device-mismatch check).
+const webDeviceIdStorageKey = 'oet_device_id';
 const desktopComposeFilePath = join(process.cwd(), 'docker-compose.desktop.yml');
 const execFileAsync = promisify(execFile);
 let dockerPrivilegedAuthResetPromise: Promise<void> | null = null;
@@ -402,7 +426,7 @@ async function resetDockerBackedPrivilegedAuthState(
 async function signInRaw(request: APIRequestContext, role: SeededRole, apiBaseURL?: string) {
   const account = seededAccounts[role];
   return postJsonWithRetry(request, '/v1/auth/sign-in', {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
     data: {
       email: account.email,
       password: account.password,
@@ -467,7 +491,7 @@ async function completeMfaChallenge(
 ) {
   const account = seededAccounts[role];
   const response = await postJsonWithRetry(request, '/v1/auth/mfa/challenge', {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
     data: {
       email: account.email,
       code,
@@ -656,9 +680,14 @@ export async function bootstrapSessionForRole(
 
 export async function hydrateSessionStorage(page: Page, session: AuthSessionResponse) {
   await page.evaluate(
-    ({ sessionRecord, localKey, sessionKey, challengeKey }) => {
+    ({ sessionRecord, localKey, sessionKey, challengeKey, deviceIdKey, deviceId }) => {
       window.localStorage.setItem(localKey, JSON.stringify(sessionRecord));
       window.localStorage.setItem('oet.e2e.keep-tokens', '1');
+      // Match the device id the harness presented when it captured/minted
+      // this session (see e2eDeviceId above) so the page's own follow-up
+      // calls (refresh, protected API calls) don't present a different,
+      // untrusted identity and get device-mismatch-rejected.
+      window.localStorage.setItem(deviceIdKey, deviceId);
       window.sessionStorage.removeItem(sessionKey);
       window.sessionStorage.removeItem(challengeKey);
     },
@@ -667,6 +696,8 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
       localKey: localSessionKey,
       sessionKey: sessionSessionKey,
       challengeKey: mfaChallengeKey,
+      deviceIdKey: webDeviceIdStorageKey,
+      deviceId: e2eDeviceId,
     },
   );
 }
@@ -754,6 +785,16 @@ function buildStorageState(session: AuthSessionResponse) {
             name: 'oet.e2e.keep-tokens',
             value: '1',
           },
+          {
+            // Pre-seed the same identity the harness bound to this session at
+            // sign-in (see e2eDeviceId above). Without this, `lib/device-id.ts`
+            // would mint a fresh random id the first time a real browser page
+            // loads this storage state, and that id would mismatch the one on
+            // the refresh-token record — failing the very first
+            // `/v1/auth/refresh` closed instead of merely being untrusted.
+            name: webDeviceIdStorageKey,
+            value: e2eDeviceId,
+          },
         ],
       },
     ],
@@ -811,7 +852,7 @@ async function captureFrontendAuthCookies(
 
   try {
     const signInResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/sign-in`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
       data: {
         email: account.email,
         password: account.password,
@@ -851,7 +892,7 @@ async function captureFrontendAuthCookies(
     let lastError: unknown = null;
     for (const code of generateTotpCandidates(bootstrapState.secretKey)) {
       const challengeResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/mfa/challenge`, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
         data: {
           email: account.email,
           code,
