@@ -57,6 +57,12 @@ public sealed class WritingTaskModelAnswerService(
     // the request bypass feature-route resolution (AiGatewayService.cs).
     private const string PinnedProvider = "anthropic";
     private const string PinnedModel = "claude-sonnet-5";
+    // Owner instruction: this is one-time content-authoring, not per-candidate
+    // grading, so pay for max reasoning quality. budget_tokens must stay below
+    // MaxTokens (Anthropic requires max_tokens > thinking.budget_tokens); the
+    // ~4k gap leaves generous room for the ~200-word letter + JSON wrapper.
+    private const int ThinkingBudgetTokens = 24000;
+    private const int MaxCompletionTokens = 28000;
 
     public async Task<WritingTaskModelAnswerDto?> GetAsync(Guid scenarioId, CancellationToken ct = default)
     {
@@ -140,7 +146,9 @@ public sealed class WritingTaskModelAnswerService(
                 Provider = PinnedProvider,
                 Model = PinnedModel,
                 Temperature = 0.1,
-                MaxTokens = 1800,
+                MaxTokens = MaxCompletionTokens,
+                EnableExtendedThinking = true,
+                ThinkingBudgetTokens = ThinkingBudgetTokens,
                 FeatureCode = AiFeatureCodes.WritingModelAnswerPregenerate,
                 PromptTemplateId = PromptVersion,
                 UserId = adminUserId,
