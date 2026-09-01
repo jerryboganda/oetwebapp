@@ -147,6 +147,62 @@ public class WritingScenarioStructuredSentence
     public DateTimeOffset CreatedAt { get; set; }
 }
 
+/// <summary>
+/// One pre-generated, reusable Model Answer per Writing task (1:1 with
+/// <see cref="WritingScenario"/> via <see cref="ScenarioId"/>). Generated once
+/// ahead of time by an admin action, never regenerated on a normal candidate
+/// submission — <see cref="WritingSubmissionEvaluationPipeline"/> reuses this
+/// row for every candidate grading the same task instead of calling the AI
+/// gateway again. Mirrors the HeldForReview/Ready/Rejected +
+/// IsCandidateVisible gate already used by the per-submission
+/// <c>WritingAssessmentModelAnswer</c>, so the same admin review mental model
+/// applies here.
+/// </summary>
+public class WritingTaskModelAnswer
+{
+    public Guid Id { get; set; }
+
+    public Guid ScenarioId { get; set; }
+
+    public WritingAssessmentModelAnswerStatus Status { get; set; } = WritingAssessmentModelAnswerStatus.HeldForReview;
+
+    /// <summary>Only candidate-visible once an admin has approved a Ready answer.</summary>
+    public bool IsCandidateVisible { get; set; }
+
+    public string? ModelAnswerText { get; set; }
+
+    public string GroundedFactReferencesJson { get; set; } = "[]";
+
+    [MaxLength(64)]
+    public string? HoldReason { get; set; }
+
+    /// <summary>Hash of the task prompt + case-note sentences used at generation
+    /// time, so a later edit to either can be detected as "answer may be stale"
+    /// without forcing an automatic (costly) regeneration.</summary>
+    [MaxLength(64)]
+    public string? SourceContentHash { get; set; }
+
+    [MaxLength(32)]
+    public string? RulebookVersion { get; set; }
+
+    [MaxLength(64)]
+    public string? PromptVersion { get; set; }
+
+    [MaxLength(128)]
+    public string? ModelUsed { get; set; }
+
+    public DateTimeOffset? GeneratedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? ApprovedByUserId { get; set; }
+
+    public DateTimeOffset? ApprovedAt { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
 public class WritingScenarioEmbedding
 {
     public Guid Id { get; set; }

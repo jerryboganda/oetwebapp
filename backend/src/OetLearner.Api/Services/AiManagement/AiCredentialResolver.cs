@@ -62,6 +62,7 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.AdminListeningSkillTag,
         AiFeatureCodes.AdminListeningTranscriptSegment,
         AiFeatureCodes.AdminWritingDraft,
+        AiFeatureCodes.WritingModelAnswerPregenerate,
         AiFeatureCodes.PronunciationScore,
         AiFeatureCodes.PronunciationLinguisticScore,
         AiFeatureCodes.PronunciationFeedback,

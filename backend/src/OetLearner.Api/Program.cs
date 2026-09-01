@@ -2012,6 +2012,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskAuthoring
     OetLearner.Api.Services.Writing.WritingTaskAuthoringService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskCaseNotesService,
     OetLearner.Api.Services.Writing.WritingTaskCaseNotesService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskModelAnswerService,
+    OetLearner.Api.Services.Writing.WritingTaskModelAnswerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskProjectionService,
     OetLearner.Api.Services.Writing.WritingTaskProjectionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAttemptEventService,

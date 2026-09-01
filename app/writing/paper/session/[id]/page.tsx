@@ -14,6 +14,7 @@ import type { Highlight } from '@/components/domain/writing/WritingStimulusViewe
 import {
   beginWritingMockWriting,
   checkWritingScenarioEligibility,
+  createSubmitIdempotencyKey,
   createWritingSubmission,
   getWritingHighlights,
   getWritingMockSession,
@@ -389,6 +390,7 @@ export default function WritingPaperSessionPage() {
             timeSpentSeconds: elapsed,
             inputSource: 'editor',
             caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
+            idempotencyKey: createSubmitIdempotencyKey(),
           });
           setSubmissionId(result.id ?? null);
         }

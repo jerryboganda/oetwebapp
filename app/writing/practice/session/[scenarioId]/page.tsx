@@ -23,6 +23,7 @@ import {
 } from '@/components/domain/InsufficientCreditsModal';
 import {
   checkWritingScenarioEligibility,
+  createSubmitIdempotencyKey,
   createWritingSubmission,
   getWritingDraftV2,
   getWritingHighlights,
@@ -226,6 +227,7 @@ export default function WritingPracticeSessionPage() {
           timeSpentSeconds: elapsed,
           inputSource: 'editor',
           caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
+          idempotencyKey: createSubmitIdempotencyKey(),
         });
         // Clear the clock so a future retake of this scenario starts fresh.
         if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);

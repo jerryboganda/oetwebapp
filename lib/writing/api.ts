@@ -313,6 +313,28 @@ export interface WritingSubmissionCreatePayload {
    * currently-saved highlights for the scenario.
    */
   caseNoteHighlightsJson?: string;
+  /**
+   * Client-generated key identifying this logical submit attempt. The backend
+   * already derives a fallback key from (user, scenario, letter hash, mode),
+   * which dedupes an exact-content double-submit — this explicit key additionally
+   * covers a retry/resend of the SAME attempt whose payload construction isn't
+   * guaranteed byte-identical (e.g. a network retry racing a state update).
+   * Generate once per submit action and reuse it across automatic retries of
+   * that same action; a new user-initiated submit should get a new key.
+   */
+  idempotencyKey?: string;
+}
+
+/**
+ * A stable, unique key for one logical submit action — call once per submit
+ * click/timer-expiry and pass the SAME value into every retry of that one
+ * attempt; a fresh user-initiated submit should call this again for a new key.
+ */
+export function createSubmitIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `submit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export const createWritingSubmission = (payload: WritingSubmissionCreatePayload) =>
