@@ -283,6 +283,8 @@ export interface ListeningSessionDto {
     integrityLockRequired?: boolean;
     /** Non-blocking device/focus/fullscreen guidance telemetry is enabled. */
     technicalGuidanceTelemetryEnabled?: boolean;
+    /** Owner policy hint: a printable answer booklet is offered for this attempt. Always false today. */
+    printableBooklet?: boolean;
     /** R07/R06 policy hint: learning/diagnostic modes may navigate across sections. */
     freeNavigation?: boolean;
     /** R06.11 policy hint: show exact unanswered numbers before lock/submit. */

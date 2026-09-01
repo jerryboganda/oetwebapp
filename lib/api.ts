@@ -2709,7 +2709,7 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
     score: rawScore,
     total: maxRawScore,
     questions,
-    invalidCount: Number(evaluation.invalidCount ?? questions.filter((question) => question.isInvalid === true).length),
+    invalidCount: Number(evaluation.invalidCount ?? questions.filter((question: ListeningResult['questions'][number]) => question.isInvalid === true).length),
     recommendedDrill: hasRecommendedDrill
       ? {
           id: (evaluation.recommendedNextDrill as ApiRecord).drillId ?? (evaluation.recommendedNextDrill as ApiRecord).id ?? 'listening-drill-detail_capture',

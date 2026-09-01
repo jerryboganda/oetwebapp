@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileSearch, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/admin/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from '@/components/admin/ui/skeleton';
 import {
   auditListeningPartBCSource,
   recoverListeningPartBCSource,

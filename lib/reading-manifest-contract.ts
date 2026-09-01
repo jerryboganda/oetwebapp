@@ -221,8 +221,9 @@ export function validateQuestionPayload(
       if (typeof correct.value !== 'string') {
         errors.push('MCQ CorrectAnswerJson must be a single string letter.');
       } else {
+        const correctValue = correct.value;
         const valid = MCQ_LETTERS.slice(0, optionCount);
-        if (!valid.some((letter) => letter.toLowerCase() === correct.value.toLowerCase())) {
+        if (!valid.some((letter) => letter.toLowerCase() === correctValue.toLowerCase())) {
           errors.push(`MCQ answer must be one of ${valid.join(',')}.`);
         }
       }

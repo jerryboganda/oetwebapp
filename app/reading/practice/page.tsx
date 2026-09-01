@@ -177,8 +177,8 @@ export default function ReadingPracticePage() {
       setBusyKey(key);
       setErrorMsg(null);
       try {
-        showCreditFeedback(started.feedbackMessage);
         const started = await startReadingDrill(paperId, drillCode);
+        showCreditFeedback(started.feedbackMessage);
         router.push(started.playerRoute);
       } catch (err) {
         if (isInsufficientCreditsError(err)) {
@@ -199,8 +199,8 @@ export default function ReadingPracticePage() {
       setBusyKey(key);
       setErrorMsg(null);
       try {
-        showCreditFeedback(started.feedbackMessage);
         const started = await startReadingMiniTest(paperId, minutes);
+        showCreditFeedback(started.feedbackMessage);
         router.push(started.playerRoute);
       } catch (err) {
         if (isInsufficientCreditsError(err)) {
