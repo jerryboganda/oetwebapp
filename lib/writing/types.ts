@@ -59,7 +59,8 @@ export type WritingLetterType =
   | 'LT-DG'
   | 'LT-TR'
   | 'LT-NM'
-  | 'LT-RP';
+  | 'LT-RP'
+  | 'LT-OT';
 export type WritingSubSkill = 'W1' | 'W2' | 'W3' | 'W4' | 'W5' | 'W6' | 'W7' | 'W8';
 export type WritingCriterionCode = 'c1' | 'c2' | 'c3' | 'c4' | 'c5' | 'c6';
 export type WritingStage =

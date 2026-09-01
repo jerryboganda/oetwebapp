@@ -54,6 +54,7 @@ const LETTER_TYPE_LABELS: Record<WritingLetterType, string> = {
   'LT-TR': 'Transfer',
   'LT-NM': 'New management',
   'LT-RP': 'Response',
+  'LT-OT': 'Other Letters',
 };
 
 const LETTER_TYPE_OPTIONS: Array<{ value: WritingLetterType | ''; label: string }> = [

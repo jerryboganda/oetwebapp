@@ -9,7 +9,7 @@
 import { z } from 'zod';
 
 const writingProfessionEnum = z.enum(['medicine', 'pharmacy', 'nursing', 'other']);
-const writingLetterTypeEnum = z.enum(['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM', 'LT-RP']);
+const writingLetterTypeEnum = z.enum(['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM', 'LT-RP', 'LT-OT']);
 const writingEditorModeEnum = z.enum([
   'practice',
   'coached',

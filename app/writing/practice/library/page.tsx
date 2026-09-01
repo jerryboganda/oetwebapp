@@ -18,7 +18,7 @@ import type {
   WritingScenarioDto,
 } from '@/lib/writing/types';
 
-const LETTER_TYPES: WritingLetterType[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-RP', 'LT-NM'];
+const LETTER_TYPES: WritingLetterType[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-RP', 'LT-NM', 'LT-OT'];
 const DIFFICULTIES = [1, 2, 3, 4, 5] as const;
 const PAGE_SIZE = 50;
 

@@ -245,6 +245,7 @@
   "writing.practice.library.letterType.LT-TR": "Transfer",
   "writing.practice.library.letterType.LT-RP": "Response",
   "writing.practice.library.letterType.LT-NM": "Non-medical",
+  "writing.practice.library.letterType.LT-OT": "Other Letters",
   "writing.practice.library.topics.label": "Topics in results:",
   "writing.practice.library.topics.more": "+{count} more",
   "writing.practice.library.list.label": "Writing scenarios",
