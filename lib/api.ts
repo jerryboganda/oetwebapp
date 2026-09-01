@@ -84,6 +84,10 @@ import type {
   AiPackageCreditSnapshot,
   AiPackagesResponse,
 } from './billing-types';
+// Re-exported so callers can `import { type AiPackageCreditSnapshot } from '@/lib/api'`
+// alongside the fetch/adjust functions below that return it, without reaching into
+// './billing-types' directly.
+export type { AiPackageCreditSnapshot } from './billing-types';
 import { mapAiPackageCreditSnapshot } from './map-ai-package-credit-snapshot';
 import type { FreezePolicy } from './types/freeze';
 import type { BulkActionResultDto } from './types/admin';
