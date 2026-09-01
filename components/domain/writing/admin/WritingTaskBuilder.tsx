@@ -59,14 +59,6 @@ interface DisplayIssue {
   message: string;
 }
 
-const DIFFICULTY_OPTIONS = [
-  { value: '1', label: '1 — Foundation' },
-  { value: '2', label: '2 — Easy' },
-  { value: '3', label: '3 — Standard' },
-  { value: '4', label: '4 — Challenging' },
-  { value: '5', label: '5 — Hard' },
-];
-
 const PROFESSION_OPTIONS = WRITING_PROFESSIONS.map((p) => ({
   value: p,
   label: WRITING_PROFESSION_LABELS[p],
@@ -768,15 +760,6 @@ export function WritingTaskBuilder({ taskId, mode }: WritingTaskBuilderProps) {
             />
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Select
-              label="Difficulty"
-              value={String(form.difficulty)}
-              onChange={(e) => patch({ difficulty: Number(e.target.value) })}
-              options={DIFFICULTY_OPTIONS}
-            />
-            <div />
-          </div>
         </div>
       </SettingsSection>
 

@@ -50,6 +50,7 @@ public static class WritingRouteBuilderExtensions
         //  • learner gated feedback + rewrite comparison + result-visibility (spec §15)
         //  • admin analytics + marking quality control (spec §16)
         app.MapWritingTaskAdminEndpoints();
+        app.MapWritingTaskModelAnswerAdminEndpoints();
         app.MapWritingAttemptEventEndpoints();
         app.MapWritingMarkingEndpoints();
         app.MapWritingResultVisibilityEndpoints();

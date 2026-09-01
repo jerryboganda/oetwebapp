@@ -351,7 +351,6 @@ export function TutorMarkingWorkspace({
             </div>
             <div className="mt-2 flex flex-wrap gap-1.5 text-xs">
               <Badge variant="default" size="sm">{task.profession}</Badge>
-              <Badge variant="default" size="sm">Difficulty {task.difficulty}</Badge>
               <Badge variant="default" size="sm">{wordGuide}</Badge>
             </div>
             {task.writerRole ? (

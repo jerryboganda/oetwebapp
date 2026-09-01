@@ -121,6 +121,17 @@ function ruleFinding(
   };
 }
 
+// Conjunctive adverbs (however / therefore / thus / in addition) are correct either
+// preceded by a semicolon within one sentence, or starting a brand-new sentence after
+// a full stop (e.g. "... clause. However, ..."). Only a genuine run-on — the linker
+// mid-clause with neither a semicolon nor a preceding sentence boundary — is an error.
+function precededBySemicolonOrSentenceBoundary(clauseBeforeLinker: string): boolean {
+  const trimmed = clauseBeforeLinker.trimEnd();
+  if (trimmed.length === 0) return true;
+  const lastChar = trimmed[trimmed.length - 1];
+  return lastChar === ';' || lastChar === '.' || lastChar === '!' || lastChar === '?';
+}
+
 // ---------------------------------------------------------------------------
 // Detector registry — pure functions keyed by checkId in the rulebook
 // ---------------------------------------------------------------------------
@@ -323,11 +334,12 @@ const DETECTORS: Record<string, Detector> = {
     return [];
   },
 
-  // R06.7 / R12.2 / R08.14 — body must not say "the patient"
-  body_forbidden_phrase_the_patient(rule, _input, structure) {
-    const re = /\bthe patient\b/gi;
-    const m = re.exec(structure.body);
-    if (m) return [ruleFinding(rule, "Do not use 'the patient' in the body. Use title + last name (e.g. 'Ms Miller') or a pronoun.", { quote: m[0], start: m.index, end: m.index + m[0].length })];
+  // R06.7 / R12.2 / R08.14 — Rulebook update (31 Aug 2026, G-W-112): "'Patient' is not a
+  // forbidden word ... this explicitly overrides the legacy blanket prohibition." The new
+  // PDF's own "correct" example letter itself uses "The patient was discharged with
+  // community follow-up". Intentionally inert no-op — kept (rather than removed) because
+  // body_uses_last_name_only below still piggy-backs on this detector.
+  body_forbidden_phrase_the_patient(_rule, _input, _structure) {
     return [];
   },
 
@@ -436,11 +448,10 @@ const DETECTORS: Record<string, Detector> = {
     return [];
   },
 
-  // R08.7 / R10.14 — forbidden 'next visit'
-  body_forbidden_phrase_next_visit(rule, _input, structure) {
-    const re = /\bnext visit\b/gi;
-    const m = re.exec(structure.body);
-    if (m) return [ruleFinding(rule, "Never write 'next visit'. Use 'on the following visit' / 'later on' / 'later that month'.", { quote: m[0], start: m.index, end: m.index + m[0].length, fixSuggestion: 'on the following visit' })];
+  // R08.7 / R10.14 — Rulebook update (31 Aug 2026): "next visit" is standard English and
+  // is no longer forbidden (the old requirement to write "on the following visit" instead
+  // is dropped). Intentionally inert no-op.
+  body_forbidden_phrase_next_visit(_rule, _input, _structure) {
     return [];
   },
 
@@ -563,12 +574,31 @@ const DETECTORS: Record<string, Detector> = {
     return findings;
   },
 
-  // R10.8 — surgery past simple, never present perfect
+  // R10.8 — present perfect for surgery is valid when no finished-time marker is
+  // stated (rulebook G-W-021, FINAL MASTER 2026-08-31): "He has undergone cataract
+  // surgery and is recovering well" is correct present-perfect usage when the
+  // result still has current/ongoing relevance. Past simple is required only when
+  // a specific finished-time expression accompanies the mention (a year, "ago",
+  // "in <Month>", "on <date>", "last <year/month/week>") — pairing present perfect
+  // with a stated finished time is the actual error, not present-perfect phrasing
+  // on its own.
   surgery_past_simple(rule, _input, structure) {
     const re = /\bhas\s+had\s+(a\s+|an\s+)?([a-z]+(?:ectomy|otomy|ostomy|plasty)|surgery|operation)\b/gi;
     const m = re.exec(structure.body);
-    if (m) return [ruleFinding(rule, 'Surgery uses past simple: "had a cholecystectomy in 2018". Do not use present perfect for surgery.', { quote: m[0], start: m.index, end: m.index + m[0].length })];
-    return [];
+    if (!m) return [];
+
+    const windowStart = m.index + m[0].length;
+    const window = structure.body.slice(windowStart, windowStart + 40);
+    const finishedTime = /\b((19|20)\d{2}|ago|in\s+(January|February|March|April|May|June|July|August|September|October|November|December)|on\s+(the\s+)?\d{1,2}(st|nd|rd|th)?|last\s+(year|month|week))\b/i;
+    if (!finishedTime.test(window)) return [];
+
+    return [
+      ruleFinding(
+        rule,
+        "Present perfect combined with a finished-time marker (a year, 'ago', a specific date) is inconsistent: use past simple, e.g. 'had a cholecystectomy in 2018'. Present perfect alone ('has had surgery') is fine when no finished time is stated.",
+        { quote: m[0], start: m.index, end: m.index + m[0].length },
+      ),
+    ];
   },
 
   // R10.10 — "X ago" requires past simple
@@ -579,7 +609,12 @@ const DETECTORS: Record<string, Detector> = {
     return [];
   },
 
-  // R11.1 — Latin abbreviations translated
+  // R11.1 — translating Latin abbreviations is still recommended (rulebook
+  // G-W-105, FINAL MASTER 2026-08-31), "unless the task/recipient convention
+  // clearly supports [keeping it]" — a condition the engine cannot evaluate
+  // deterministically. So this stays advisory-only: emitted at severity 'minor'
+  // regardless of rule.severity, matching the established letter_body_length
+  // advisory pattern above.
   latin_abbreviations_translated(rule, _input, structure) {
     const map = (rule.params as { map?: Record<string, string> } | undefined)?.map ?? {};
     const findings: LintFinding[] = [];
@@ -588,26 +623,36 @@ const DETECTORS: Record<string, Detector> = {
       const m = re.exec(structure.body);
       if (m) {
         findings.push(
-          ruleFinding(rule, `Translate Latin abbreviation "${abbr}" to plain English ("${map[abbr]}").`, {
-            quote: m[0],
-            start: m.index,
-            end: m.index + m[0].length,
-            fixSuggestion: map[abbr],
-          }),
+          ruleFinding(
+            rule,
+            `Consider translating Latin abbreviation "${abbr}" to plain English ("${map[abbr]}") unless you are confident the recipient's convention supports it.`,
+            {
+              severity: 'minor',
+              quote: m[0],
+              start: m.index,
+              end: m.index + m[0].length,
+              fixSuggestion: map[abbr],
+            },
+          ),
         );
       }
     }
     return findings;
   },
 
-  // R12.1 — no contractions
+  // R12.1 — an isolated contraction is a Genre/Style note, not a catastrophic
+  // grammar failure (rulebook DH-W-044 / G-W-117, FINAL MASTER 2026-08-31).
+  // Still worth flagging, but emitted at severity 'minor' regardless of
+  // rule.severity, matching the established letter_body_length advisory pattern
+  // above — non-blocking. Cap of 5 findings unchanged.
   no_contractions(rule, _input, structure) {
     const re = /\b(?:don't|can't|won't|isn't|aren't|doesn't|didn't|wasn't|weren't|hasn't|haven't|hadn't|I'm|I've|I'll|she's|he's|it's|we're|they're|you're|you'd|we'd|they'd|I'd|we've|they've|you've|couldn't|wouldn't|shouldn't)\b/gi;
     const findings: LintFinding[] = [];
     let m: RegExpExecArray | null;
     while ((m = re.exec(structure.body))) {
       findings.push(
-        ruleFinding(rule, `Contraction "${m[0]}" is not allowed in OET letters. Expand it.`, {
+        ruleFinding(rule, `Contraction "${m[0]}" is a Genre/Style note — OET letters conventionally avoid it, but an isolated instance is not an automatic failure.`, {
+          severity: 'minor',
           quote: m[0],
           start: m.index,
           end: m.index + m[0].length,
@@ -658,13 +703,17 @@ const DETECTORS: Record<string, Detector> = {
     const findings: LintFinding[] = [];
     let m: RegExpExecArray | null;
     while ((m = re.exec(structure.body))) {
-      if (!m[1].trimEnd().endsWith(';')) {
+      if (!precededBySemicolonOrSentenceBoundary(m[1])) {
         findings.push(
-          ruleFinding(rule, "Precede 'however' with a semicolon: '[clause]; however, [clause].'", {
-            quote: m[0].trim(),
-            start: m.index,
-            end: m.index + m[0].length,
-          }),
+          ruleFinding(
+            rule,
+            "Precede 'however' with either a semicolon, or start a new sentence: '...clause; however, ...' or '...clause. However, ...'.",
+            {
+              quote: m[0].trim(),
+              start: m.index,
+              end: m.index + m[0].length,
+            },
+          ),
         );
       }
     }
@@ -677,32 +726,40 @@ const DETECTORS: Record<string, Detector> = {
     const findings: LintFinding[] = [];
     let m: RegExpExecArray | null;
     while ((m = re.exec(structure.body))) {
-      if (!m[1].trimEnd().endsWith(';')) {
+      if (!precededBySemicolonOrSentenceBoundary(m[1])) {
         findings.push(
-          ruleFinding(rule, "Precede 'therefore'/'thus' with a semicolon: '[clause]; therefore, [clause].'", {
-            quote: m[0].trim(),
-            start: m.index,
-            end: m.index + m[0].length,
-          }),
+          ruleFinding(
+            rule,
+            "Precede 'therefore'/'thus' with either a semicolon, or start a new sentence: '...clause; therefore, ...' or '...clause. Therefore, ...'.",
+            {
+              quote: m[0].trim(),
+              start: m.index,
+              end: m.index + m[0].length,
+            },
+          ),
         );
       }
     }
     return findings;
   },
 
-  // R12.11 — 'in addition' (as clause joiner)
+  // R12.11 — 'in addition' (as clause joiner; not 'in addition to/with')
   linker_in_addition_punctuation(rule, _input, structure) {
-    const re = /([^\n;]{5,})\bin addition\b(?!\s+to\b)/gi;
+    const re = /([^\n;]{5,})\bin addition\b(?!\s+(to|with)\b)/gi;
     const findings: LintFinding[] = [];
     let m: RegExpExecArray | null;
     while ((m = re.exec(structure.body))) {
-      if (!m[1].trimEnd().endsWith(';')) {
+      if (!precededBySemicolonOrSentenceBoundary(m[1])) {
         findings.push(
-          ruleFinding(rule, "Precede 'in addition' (as a clause joiner) with a semicolon.", {
-            quote: m[0].trim(),
-            start: m.index,
-            end: m.index + m[0].length,
-          }),
+          ruleFinding(
+            rule,
+            "Precede 'in addition' (as a clause joiner) with either a semicolon, or start a new sentence: '...clause; in addition, ...' or '...clause. In addition, ...'.",
+            {
+              quote: m[0].trim(),
+              start: m.index,
+              end: m.index + m[0].length,
+            },
+          ),
         );
       }
     }
@@ -996,9 +1053,22 @@ export const SUPPORTED_WRITING_CHECK_IDS = Object.freeze(Object.keys(DETECTORS).
 // Generic detectors: forbidden patterns baked into rule JSON
 // ---------------------------------------------------------------------------
 
+// Rulebook update (31 Aug 2026): the rulebook JSON's forbiddenPatterns arrays for
+// "next visit" (R08.7/R10.14) and "the patient" (R08.14/R12.2/G-W-112) still contain the
+// legacy regexes (rulebook JSON is out of scope for this change). Those two checkIds' own
+// DETECTORS entries above are already inert no-ops for the same rulebook update, so this
+// generic JSON-driven pattern runner is told to skip the same checkIds — otherwise it
+// would independently re-flag the identical phrase.
+const FORBIDDEN_PATTERN_CHECK_IDS_NO_LONGER_ENFORCED = new Set([
+  'body_forbidden_phrase_next_visit',
+  'body_forbidden_phrase_the_patient',
+  'body_uses_last_name_only',
+]);
+
 function runForbiddenPatternChecks(rule: Rule, input: WritingLintInput): LintFinding[] {
   const findings: LintFinding[] = [];
   if (!rule.forbiddenPatterns?.length) return findings;
+  if (rule.checkId && FORBIDDEN_PATTERN_CHECK_IDS_NO_LONGER_ENFORCED.has(rule.checkId)) return findings;
   for (const pat of rule.forbiddenPatterns) {
     const re = new RegExp(pat, 'gi');
     const hit = findQuote(input.letterText, re);

@@ -33,7 +33,6 @@ export const WRITING_LETTER_TYPES: WritingLetterType[] = [
   'LT-DG',
   'LT-TR',
   'LT-NM',
-  'LT-RP',
   'LT-OT',
 ];
 
@@ -43,7 +42,6 @@ export const WRITING_LETTER_TYPE_LABELS: Record<WritingLetterType, string> = {
   'LT-DG': 'Discharge',
   'LT-TR': 'Transfer',
   'LT-NM': 'Non-medical referral',
-  'LT-RP': 'Reply / response',
   'LT-OT': 'Other Letters',
 };
 

@@ -170,19 +170,17 @@ export default function AdminWritingDrillsPage() {
                 <th className="py-2 text-left">Type</th>
                 <th className="text-left">Skill</th>
                 <th className="text-left">Input</th>
-                <th className="text-left">Difficulty</th>
                 <th className="text-left">Status</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {items.length === 0 ? <tr><td colSpan={6} className="py-4 text-center text-xs text-muted">No drills yet.</td></tr> : null}
+              {items.length === 0 ? <tr><td colSpan={5} className="py-4 text-center text-xs text-muted">No drills yet.</td></tr> : null}
               {items.map((drill) => (
                 <tr key={drill.id} className="border-b border-border/60">
                   <td className="py-2 font-bold text-navy">{drill.drillType}</td>
                   <td>{drill.targetSubSkill}</td>
                   <td>{drill.inputVariant}</td>
-                  <td>{drill.difficulty}</td>
                   <td><Badge variant={statusTone(drill.status)} size="sm">{drill.status}</Badge></td>
                   <td className="text-right">
                     {canWriteContent && (drill.status !== 'published' || canPublishContent) ? (
@@ -212,7 +210,6 @@ export default function AdminWritingDrillsPage() {
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Input variant<select value={editing.inputVariant} onChange={(event) => setEditing({ ...editing, inputVariant: event.target.value })} className="min-h-9 rounded border border-border bg-background px-2 text-sm"><option value="mcq">MCQ</option><option value="fill">Fill</option><option value="open">Open</option><option value="drag-drop">Drag/drop</option></select></label>
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Target skill<select value={editing.targetSubSkill} onChange={(event) => setEditing({ ...editing, targetSubSkill: event.target.value })} className="min-h-9 rounded border border-border bg-background px-2 text-sm">{['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8'].map((skill) => <option key={skill} value={skill}>{skill}</option>)}</select></label>
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Canon rule<input value={editing.targetCanonRuleId} onChange={(event) => setEditing({ ...editing, targetCanonRuleId: event.target.value })} placeholder="SC-012" className="min-h-9 rounded border border-border bg-background px-2 text-sm" /></label>
-              <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Difficulty<input type="number" min={1} max={5} value={editing.difficulty} onChange={(event) => setEditing({ ...editing, difficulty: Number(event.target.value) })} className="min-h-9 rounded border border-border bg-background px-2 text-sm" /></label>
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">Grading method<select value={editing.gradingMethod} onChange={(event) => setEditing({ ...editing, gradingMethod: event.target.value })} className="min-h-9 rounded border border-border bg-background px-2 text-sm"><option value="exact">Exact</option><option value="regex">Regex</option><option value="llm">LLM</option><option value="multiple-choice">Multiple choice</option></select></label>
             </div>
 

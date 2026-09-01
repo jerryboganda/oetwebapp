@@ -170,21 +170,19 @@ export default function AdminWritingScenariosPage() {
                 <th scope="col" className="py-2 text-left">Title</th>
                 <th scope="col" className="text-left">Profession</th>
                 <th scope="col" className="text-left">Letter</th>
-                <th scope="col" className="text-left">Difficulty</th>
                 <th scope="col" className="text-left">Status</th>
                 <th scope="col" className="text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {items.length === 0 ? (
-                <tr><td colSpan={6} className="py-4 text-center text-xs text-muted">No scenarios yet.</td></tr>
+                <tr><td colSpan={5} className="py-4 text-center text-xs text-muted">No scenarios yet.</td></tr>
               ) : null}
               {items.map((s) => (
                 <tr key={s.id} className="border-b border-border/60">
                   <td className="py-2 font-bold text-navy">{s.title}</td>
                   <td className="capitalize">{s.profession}</td>
                   <td>{s.letterType}</td>
-                  <td>{s.difficulty}</td>
                   <td><Badge variant={s.status === 'published' ? 'success' : s.status === 'archived' ? 'muted' : 'warning'} size="sm">{s.status}</Badge></td>
                   <td className="text-right">
                     <Button size="sm" variant="outline" onClick={() => setEditing({ id: s.id, title: s.title, letterType: s.letterType, profession: s.profession, subDiscipline: s.subDiscipline ?? '', topics: s.topics.join(', '), difficulty: s.difficulty, caseNotesMarkdown: '', isDiagnostic: s.isDiagnostic, status: s.status })}>Edit</Button>
@@ -220,7 +218,7 @@ export default function AdminWritingScenariosPage() {
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
                 Letter type
                 <select value={editing.letterType} onChange={(e) => setEditing({ ...editing, letterType: e.target.value })} className="min-h-9 rounded border border-border bg-background px-2 text-sm">
-                  {['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-RP', 'LT-NM'].map((lt) => <option key={lt} value={lt}>{lt}</option>)}
+                  {['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM', 'LT-OT'].map((lt) => <option key={lt} value={lt}>{lt}</option>)}
                 </select>
               </label>
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
@@ -232,10 +230,6 @@ export default function AdminWritingScenariosPage() {
               <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
                 Sub-discipline
                 <input type="text" value={editing.subDiscipline} onChange={(e) => setEditing({ ...editing, subDiscipline: e.target.value })} className="min-h-9 rounded border border-border bg-background px-2 text-sm" />
-              </label>
-              <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
-                Difficulty
-                <input type="number" min={1} max={5} value={editing.difficulty} onChange={(e) => setEditing({ ...editing, difficulty: Number(e.target.value) })} className="min-h-9 rounded border border-border bg-background px-2 text-sm" />
               </label>
             </div>
 

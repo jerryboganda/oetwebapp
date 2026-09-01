@@ -65,7 +65,6 @@ export default function WritingDrillsPage() {
               <div key={drill.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
                 <div className="flex flex-wrap gap-2">
                   <Badge variant="info" size="sm">{drill.targetSubSkill}</Badge>
-                  <Badge variant="warning" size="sm">difficulty {drill.difficulty}</Badge>
                   {drill.attemptCount ? <Badge variant="success" size="sm">{drill.attemptCount} attempts</Badge> : null}
                 </div>
                 <h2 className="mt-3 text-base font-bold text-navy">{drill.title}</h2>

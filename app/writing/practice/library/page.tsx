@@ -18,8 +18,7 @@ import type {
   WritingScenarioDto,
 } from '@/lib/writing/types';
 
-const LETTER_TYPES: WritingLetterType[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-RP', 'LT-NM', 'LT-OT'];
-const DIFFICULTIES = [1, 2, 3, 4, 5] as const;
+const LETTER_TYPES: WritingLetterType[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM', 'LT-OT'];
 const PAGE_SIZE = 50;
 
 export default function WritingPracticeLibraryPage() {
@@ -32,7 +31,6 @@ export default function WritingPracticeLibraryPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [profession, setProfession] = useState<WritingProfession | null>(null);
   const [letterType, setLetterType] = useState<WritingLetterType | null>(null);
-  const [difficulty, setDifficulty] = useState<number | null>(null);
   const [search, setSearch] = useState('');
 
   // Load page 1 (replacing the list) whenever a filter changes.
@@ -43,7 +41,6 @@ export default function WritingPracticeLibraryPage() {
     listWritingScenarios({
       profession: profession ?? undefined,
       letterType: letterType ?? undefined,
-      difficulty: difficulty ?? undefined,
       search: search.trim() || undefined,
       page: 1,
       pageSize: PAGE_SIZE,
@@ -65,7 +62,7 @@ export default function WritingPracticeLibraryPage() {
     return () => {
       cancelled = true;
     };
-  }, [profession, letterType, difficulty, search, t]);
+  }, [profession, letterType, search, t]);
 
   const loadMore = () => {
     const nextPage = page + 1;
@@ -73,7 +70,6 @@ export default function WritingPracticeLibraryPage() {
     listWritingScenarios({
       profession: profession ?? undefined,
       letterType: letterType ?? undefined,
-      difficulty: difficulty ?? undefined,
       search: search.trim() || undefined,
       page: nextPage,
       pageSize: PAGE_SIZE,
@@ -113,7 +109,7 @@ export default function WritingPracticeLibraryPage() {
           description={t('writing.practice.library.description')}
           highlights={[
             { icon: Layers, label: t('writing.practice.library.highlights.total'), value: `${scenarios.length} / ${total}` },
-            { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[profession, letterType, difficulty, search].filter(Boolean).length}` },
+            { icon: FilterIcon, label: t('writing.practice.library.highlights.activeFilters'), value: `${[profession, letterType, search].filter(Boolean).length}` },
           ]}
         />
 
@@ -152,20 +148,6 @@ export default function WritingPracticeLibraryPage() {
               <option value="">{t('writing.practice.library.filters.all')}</option>
               {LETTER_TYPES.map((lt) => (
                 <option key={lt} value={lt}>{t(`writing.practice.library.letterType.${lt}`)} ({lt})</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-bold uppercase tracking-wider text-muted">
-            {t('writing.practice.library.filters.difficulty')}
-            <select
-              value={difficulty ?? ''}
-              onChange={(e) => setDifficulty(e.target.value ? Number(e.target.value) : null)}
-              className="min-h-11 rounded-lg border border-border bg-background px-3 text-sm font-semibold text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            >
-              <option value="">{t('writing.practice.library.filters.all')}</option>
-              {DIFFICULTIES.map((d) => (
-                <option key={d} value={d}>{t('writing.practice.library.filters.level', { n: d })}</option>
               ))}
             </select>
           </label>
@@ -214,9 +196,6 @@ export default function WritingPracticeLibraryPage() {
                     <div className="flex flex-wrap items-center gap-1">
                       <Badge variant="muted" size="sm">{scenario.letterType}</Badge>
                       <Badge variant="info" size="sm" className="capitalize">{scenario.profession}</Badge>
-                      <Badge variant={scenario.difficulty >= 4 ? 'danger' : scenario.difficulty >= 3 ? 'warning' : 'success'} size="sm">
-                        {t('writing.practice.library.list.levelBadge', { n: scenario.difficulty })}
-                      </Badge>
                     </div>
                   </header>
                   {/* Scenario title and topics are OET-authored English content. */}

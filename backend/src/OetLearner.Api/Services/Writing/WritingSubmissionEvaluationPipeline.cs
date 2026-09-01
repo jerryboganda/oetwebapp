@@ -254,12 +254,37 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     grade.ModelUsed,
                     "unreleased",
                     ct);
-                var modelAnswerReady = modelAnswerService is not null
-                    && (await modelAnswerService.PopulateAsync(
-                        assessmentReport.Report,
-                        assessmentReport.ModelAnswer,
-                        submission.UserId,
-                        ct)).IsReady;
+                // Reuse the task's pre-generated Model Answer when one exists AND an
+                // admin has approved it for candidates (spec: generate once per task,
+                // never regenerate per candidate). A Ready-but-not-yet-approved
+                // pregenerated answer is intentionally NOT picked up here — that is
+                // the "hold for admin review before publishing" gate — so those
+                // submissions fall back to the existing live per-submission path
+                // below rather than exposing an unreviewed exemplar.
+                var pregenerated = await db.WritingTaskModelAnswers.AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.ScenarioId == submission.ScenarioId
+                        && a.Status == WritingAssessmentModelAnswerStatus.Ready
+                        && a.IsCandidateVisible, ct);
+                bool modelAnswerReady;
+                if (pregenerated is not null)
+                {
+                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.Ready;
+                    assessmentReport.ModelAnswer.ModelAnswerText = pregenerated.ModelAnswerText;
+                    assessmentReport.ModelAnswer.GroundedFactReferencesJson = pregenerated.GroundedFactReferencesJson;
+                    assessmentReport.ModelAnswer.HoldReason = null;
+                    assessmentReport.ModelAnswer.IsCandidateVisible = pregenerated.IsCandidateVisible;
+                    assessmentReport.ModelAnswer.UpdatedAt = clock.GetUtcNow();
+                    modelAnswerReady = true;
+                }
+                else
+                {
+                    modelAnswerReady = modelAnswerService is not null
+                        && (await modelAnswerService.PopulateAsync(
+                            assessmentReport.Report,
+                            assessmentReport.ModelAnswer,
+                            submission.UserId,
+                            ct)).IsReady;
+                }
                 if (release.CandidateNumericScoreEnabled && modelAnswerReady)
                 {
                     assessmentReport.Report.Status = WritingAssessmentV11Status.CandidateReady;

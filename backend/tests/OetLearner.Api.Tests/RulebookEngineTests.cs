@@ -346,19 +346,21 @@ Doctor";
     }
 
     [Fact]
-    public void R08_7_Flags_Next_Visit()
+    public void R08_7_Does_Not_Flag_Next_Visit()
     {
+        // Rulebook update (31 Aug 2026): "next visit" is standard English, no longer forbidden.
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nOn the next visit, she reported improvement.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R08.7" || f.RuleId == "R10.14");
+        Assert.DoesNotContain(findings, f => f.RuleId == "R08.7" || f.RuleId == "R10.14");
     }
 
     [Fact]
-    public void R08_14_Flags_The_Patient()
+    public void R08_14_Does_Not_Flag_The_Patient()
     {
+        // Rulebook update (31 Aug 2026, G-W-112): "the patient" is not a forbidden phrase.
         var text = "Dear Dr Smith,\nRe: Ms Miller\n\nIntro.\n\nThe patient presented with nausea.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R08.14" || f.RuleId == "R12.2");
+        Assert.DoesNotContain(findings, f => f.RuleId == "R08.14" || f.RuleId == "R12.2");
     }
 
     [Fact]
@@ -378,11 +380,37 @@ Doctor";
     }
 
     [Fact]
+    public void R11_1_Latin_Abbreviation_Is_Advisory_Minor_Not_Blocking()
+    {
+        // Rulebook G-W-105 (FINAL MASTER 2026-08-31): translate "unless the
+        // task/recipient convention clearly supports" keeping it — the engine
+        // cannot evaluate that deterministically, so this stays advisory.
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was prescribed amoxicillin 500 mg bd.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        var finding = findings.FirstOrDefault(f => f.RuleId == "R11.1");
+        Assert.NotNull(finding);
+        Assert.Equal(RuleSeverity.Minor, finding!.Severity);
+    }
+
+    [Fact]
     public void R12_1_Flags_Contractions()
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe doesn't take any regular medication.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
         Assert.Contains(findings, f => f.RuleId == "R12.1");
+    }
+
+    [Fact]
+    public void R12_1_Contraction_Is_Advisory_Minor_Not_Blocking()
+    {
+        // Rulebook DH-W-044 / G-W-117 (FINAL MASTER 2026-08-31): an isolated
+        // contraction is a Genre/Style issue, not a catastrophic grammar
+        // failure — still flagged, but never blocking.
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe doesn't take any regular medication.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        var finding = findings.FirstOrDefault(f => f.RuleId == "R12.1");
+        Assert.NotNull(finding);
+        Assert.Equal(RuleSeverity.Minor, finding!.Severity);
     }
 
     [Fact]
@@ -621,11 +649,25 @@ Doctor";
     }
 
     [Fact]
-    public void R10_8_Fires_On_Present_Perfect_For_Surgery()
+    public void R10_8_Fires_On_Present_Perfect_For_Surgery_With_Finished_Time_Marker()
     {
+        // Present perfect + a stated finished time (a year, here) is the genuine
+        // error per rulebook G-W-021 (FINAL MASTER 2026-08-31).
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has had a cholecystectomy in 2018.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
         Assert.Contains(findings, f => f.RuleId == "R10.8");
+    }
+
+    [Fact]
+    public void R10_8_Passes_On_Present_Perfect_For_Surgery_Without_Finished_Time_Marker()
+    {
+        // Rulebook G-W-021 (FINAL MASTER 2026-08-31): present perfect IS valid for
+        // a completed procedure when no finished time is stated and the result has
+        // current/ongoing relevance (worked example: "He has undergone cataract
+        // surgery and is recovering well.").
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has had an appendectomy and is recovering well.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R10.8");
     }
 
     [Fact]
@@ -645,6 +687,30 @@ Doctor";
     }
 
     [Fact]
+    public void R12_9_Fires_On_However_Without_Semicolon_Or_Sentence_Boundary()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nThe patient was stable however she later deteriorated.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "R12.9");
+    }
+
+    [Fact]
+    public void R12_9_Passes_On_However_With_Semicolon()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nThe patient was stable; however, she later deteriorated.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R12.9");
+    }
+
+    [Fact]
+    public void R12_9_Passes_On_However_Starting_New_Sentence()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nThe patient was stable. However, she later deteriorated.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R12.9");
+    }
+
+    [Fact]
     public void R12_10_Fires_On_Therefore_Without_Semicolon()
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe was unwell, therefore she rested.\n\nYours sincerely,\nDoctor";
@@ -661,6 +727,14 @@ Doctor";
     }
 
     [Fact]
+    public void R12_10_Passes_On_Therefore_Starting_New_Sentence()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe was unwell. Therefore, she rested for the remainder of the week.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R12.10");
+    }
+
+    [Fact]
     public void R12_11_Fires_On_In_Addition_Without_Semicolon()
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin, in addition she uses an inhaler.\n\nYours sincerely,\nDoctor";
@@ -672,6 +746,22 @@ Doctor";
     public void R12_11_Passes_On_In_Addition_To()
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin in addition to her usual inhaler.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R12.11");
+    }
+
+    [Fact]
+    public void R12_11_Passes_On_In_Addition_With()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin daily in addition with an inhaler as needed.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "R12.11");
+    }
+
+    [Fact]
+    public void R12_11_Passes_On_In_Addition_Starting_New_Sentence()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin daily. In addition, she uses an inhaler as needed.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
         Assert.DoesNotContain(findings, f => f.RuleId == "R12.11");
     }

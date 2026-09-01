@@ -54,13 +54,8 @@
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his chest pain.\n\nThe patient is a non-smoker and consumes alcohol occasionally. On the next visit, he reported worsening symptoms. Yesterday he experienced palpitations at rest. His blood pressure was 150 over 95.\n\nPlease see him ASAP. I would appreciate your specialist review.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
         "R04.1",
-        "R06.7",
-        "R08.14",
-        "R08.7",
         "R08.9",
-        "R10.14",
         "R11.8",
-        "R12.2",
         "R12.3",
         "R13.10"
       ]

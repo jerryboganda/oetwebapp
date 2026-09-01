@@ -347,11 +347,6 @@ export default function WritingTasksPage() {
         render: (task) => WRITING_LETTER_TYPE_LABELS[task.letterType],
       },
       {
-        key: 'difficulty',
-        header: 'Diff.',
-        render: (task) => <span className="tabular-nums">{task.difficulty}</span>,
-      },
-      {
         key: 'mode',
         header: 'Mode',
         render: (task) => WRITING_SIMULATION_MODE_LABELS[task.simulationModes],

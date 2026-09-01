@@ -301,6 +301,10 @@ public static class AiFeatureCodes
     // Scoring-critical (platform-only by default)
     public const string WritingGrade = "writing.grade";
     public const string WritingSampleScore = "writing.sample_score";
+    /// <summary>One-time, per-task pre-generation of the reusable Writing Model
+    /// Answer (admin-triggered, never called from the candidate submit path).
+    /// Scoring-adjacent but not itself a score — see AiCredentialResolver.</summary>
+    public const string WritingModelAnswerPregenerate = "writing.model_answer_pregenerate";
     public const string SpeakingGrade = "speaking.grade";
     public const string MockFullGrade = "mock.full_grade";
 

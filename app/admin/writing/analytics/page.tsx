@@ -53,7 +53,6 @@ const LETTER_TYPE_LABELS: Record<WritingLetterType, string> = {
   'LT-DG': 'Discharge',
   'LT-TR': 'Transfer',
   'LT-NM': 'New management',
-  'LT-RP': 'Response',
   'LT-OT': 'Other Letters',
 };
 

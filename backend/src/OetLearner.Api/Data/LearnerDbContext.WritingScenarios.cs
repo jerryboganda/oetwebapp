@@ -8,6 +8,7 @@ public partial class LearnerDbContext
     public DbSet<WritingScenario> WritingScenarios => Set<WritingScenario>();
     public DbSet<WritingScenarioStructuredSentence> WritingScenarioStructuredSentences => Set<WritingScenarioStructuredSentence>();
     public DbSet<WritingScenarioEmbedding> WritingScenarioEmbeddings => Set<WritingScenarioEmbedding>();
+    public DbSet<WritingTaskModelAnswer> WritingTaskModelAnswers => Set<WritingTaskModelAnswer>();
 
     partial void OnModelCreatingWritingScenarios(ModelBuilder modelBuilder)
     {
@@ -40,6 +41,13 @@ public partial class LearnerDbContext
             {
                 e.Ignore(x => x.Embedding);
             }
+        });
+
+        modelBuilder.Entity<WritingTaskModelAnswer>(e =>
+        {
+            e.HasKey(x => x.Id);
+            e.HasIndex(x => x.ScenarioId).IsUnique();
+            e.Property(x => x.GroundedFactReferencesJson).HasColumnType("jsonb").HasDefaultValue("[]");
         });
     }
 }
