@@ -868,6 +868,31 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             return Task.FromResult(new AiProviderCompletion { Text = text, Usage = new AiUsage() });
         }
     }
+
+    /// <summary>
+    /// First-party-auth clients sign in for real via POST /v1/auth/sign-in
+    /// (dev-auth mode never reaches this endpoint at all — it authenticates
+    /// via DevelopmentAuthHandler instead, so this default is scoped to
+    /// _useFirstPartyAuth only). Every such client's fresh InMemory DB has no
+    /// RuntimeSettings row, and RuntimeSettingsProvider's fallback for a
+    /// missing row is SecurityTrustedDeviceRequired ?? true — the mandatory
+    /// production default since the 20260825090000_
+    /// EnforceCoursePlatformSecurityProfile migration (see tests/e2e/fixtures/
+    /// auth-bootstrap.ts's identical X-OET-Device-Id default and
+    /// AuthFlowsTests.CreateAuthApiHarness, which independently hit and fixed
+    /// the same gap). Without this, every sign-in through a first-party
+    /// client 403s device_id_required before the test under test ever runs.
+    /// Test authors that specifically want to exercise the enforcement can
+    /// still remove/override the header on their own HttpClient instance.
+    /// </summary>
+    protected override void ConfigureClient(HttpClient client)
+    {
+        base.ConfigureClient(client);
+        if (_useFirstPartyAuth)
+        {
+            client.DefaultRequestHeaders.Add("X-OET-Device-Id", "test-web-application-factory-device");
+        }
+    }
 }
 
 public sealed class FirstPartyAuthTestWebApplicationFactory : TestWebApplicationFactory

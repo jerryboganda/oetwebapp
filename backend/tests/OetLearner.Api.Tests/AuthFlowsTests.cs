@@ -1829,7 +1829,40 @@ public class AuthFlowsTests
         {
             client.DefaultRequestHeaders.Add("X-OET-Device-Id", "auth-flow-tests-harness-device");
         }
+        SeedInertEmailVerificationGate(factory);
         return new AuthApiHarness(factory, client, sender, timeProvider);
+    }
+
+    /// <summary>
+    /// This harness's fresh InMemory DB carries no RuntimeSettings row, and
+    /// RuntimeSettingsProvider's fallback for a missing row is
+    /// SecurityRequireVerifiedEmailForLearners ?? true (the mandatory
+    /// production default since the same 20260825090000_
+    /// EnforceCoursePlatformSecurityProfile migration that made
+    /// SecurityTrustedDeviceRequired mandatory — see the X-OET-Device-Id
+    /// default header above). Every test in this file registers a learner
+    /// without completing OTP email verification, so without this the
+    /// EmailVerifiedRequirement on the LearnerOnly policy 403s
+    /// email_verification_required on the FIRST protected learner action
+    /// after sign-in — unrelated to whatever the test actually exercises.
+    /// Seed the row explicitly inert (false) up front so tests opt IN to the
+    /// enforcement the same way AuthEndpoints_SignIn_*TrustedDeviceEnforced
+    /// tests opt in to device-id enforcement, rather than every test tripping
+    /// over it by accident. Does not affect Expert/Admin sign-in — those
+    /// roles carry their own static RequireClaim(email_verified), not this
+    /// toggle (Program.cs "LearnerOnly" policy comment).
+    /// </summary>
+    private static void SeedInertEmailVerificationGate(WebApplicationFactory<Program> factory)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        db.RuntimeSettings.Add(new RuntimeSettingsRow
+        {
+            Id = "default",
+            SecurityRequireVerifiedEmailForLearners = false,
+        });
+        db.SaveChanges();
+        scope.ServiceProvider.GetRequiredService<IRuntimeSettingsProvider>().Invalidate();
     }
 
     private static AuthServiceHarness CreateAuthServiceHarness(
