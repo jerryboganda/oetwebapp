@@ -338,18 +338,20 @@ public sealed class AnthropicProvider(
         }
         if (request.EnableExtendedThinking)
         {
-            // Anthropic requires budget_tokens >= 1024 and max_tokens strictly
-            // greater than budget_tokens; callers opting into this must size
-            // MaxTokens accordingly. Extended thinking also requires
-            // temperature left at the API default (1) — already satisfied
-            // above since supportsTemperature is false for every model this
-            // is used with today (claude-sonnet-5 rejects `temperature`).
-            var budget = Math.Max(1024, request.ThinkingBudgetTokens ?? 16000);
-            payload["thinking"] = new Dictionary<string, object?>
-            {
-                ["type"] = "enabled",
-                ["budget_tokens"] = budget,
-            };
+            // Claude 5-family models use adaptive thinking, not the older
+            // manual token-budget scheme (confirmed live against the
+            // Anthropic API: `{"type":"enabled","budget_tokens":N}` is
+            // rejected with "not supported for this model" on
+            // claude-sonnet-5 — it wants `{"type":"adaptive"}` plus a
+            // top-level `output_config.effort`). Extended thinking also
+            // requires temperature left at the API default (1) — already
+            // satisfied above since supportsTemperature is false whenever
+            // EnableExtendedThinking is set.
+            payload["thinking"] = new Dictionary<string, object?> { ["type"] = "adaptive" };
+            var effort = string.IsNullOrWhiteSpace(request.ThinkingEffort)
+                ? "high"
+                : request.ThinkingEffort!.Trim().ToLowerInvariant();
+            payload["output_config"] = new Dictionary<string, object?> { ["effort"] = effort };
         }
         if (!string.IsNullOrWhiteSpace(request.SystemPrompt))
         {

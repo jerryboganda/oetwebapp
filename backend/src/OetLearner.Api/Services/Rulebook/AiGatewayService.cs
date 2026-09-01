@@ -730,7 +730,7 @@ public sealed class AiGatewayService(
                         Tools = tools.Count == 0 ? null : tools,
                         ToolChoice = tools.Count == 0 ? null : "auto",
                         EnableExtendedThinking = request.EnableExtendedThinking,
-                        ThinkingBudgetTokens = request.ThinkingBudgetTokens,
+                        ThinkingEffort = request.ThinkingEffort,
                     },
                     circuitProviderKey,
                     circuitCredentialKey,
@@ -1958,16 +1958,19 @@ public sealed record AiGatewayRequest
     /// Opt-in Anthropic extended thinking for calls where answer quality is
     /// worth the extra latency/cost (e.g. one-time exemplar content
     /// generation, never per-candidate live grading). Ignored by providers/
-    /// dialects that don't support it. Caller must also set
-    /// <see cref="MaxTokens"/> comfortably above <see cref="ThinkingBudgetTokens"/>
-    /// (Anthropic requires max_tokens &gt; thinking.budget_tokens).
+    /// dialects that don't support it. Claude 5-family models use adaptive
+    /// thinking (<c>thinking.type=adaptive</c> + <c>output_config.effort</c>)
+    /// rather than a manual token budget — confirmed against the live
+    /// Anthropic API 2026-09-01 (the older <c>type=enabled</c>/
+    /// <c>budget_tokens</c> shape is rejected with "not supported for this
+    /// model" on claude-sonnet-5).
     /// </summary>
     public bool EnableExtendedThinking { get; init; }
 
-    /// <summary>Thinking token budget when <see cref="EnableExtendedThinking"/>
-    /// is true. Anthropic requires &gt;= 1024. Null defers to the provider's
-    /// own default.</summary>
-    public int? ThinkingBudgetTokens { get; init; }
+    /// <summary>Reasoning effort when <see cref="EnableExtendedThinking"/> is
+    /// true: "low" | "medium" | "high" | "max". Null defers to the
+    /// provider's own default.</summary>
+    public string? ThinkingEffort { get; init; }
 
     // --- Slice 1 additions: usage accounting context ---
     // These are optional for backward compatibility. Call sites are expected
@@ -2177,8 +2180,8 @@ public sealed class AiProviderRequest
     /// dialects ignore it.</summary>
     public bool EnableExtendedThinking { get; init; }
 
-    /// <summary>See <see cref="AiGatewayRequest.ThinkingBudgetTokens"/>.</summary>
-    public int? ThinkingBudgetTokens { get; init; }
+    /// <summary>See <see cref="AiGatewayRequest.ThinkingEffort"/>.</summary>
+    public string? ThinkingEffort { get; init; }
 }
 
 public sealed class AiProviderAudioAttachment

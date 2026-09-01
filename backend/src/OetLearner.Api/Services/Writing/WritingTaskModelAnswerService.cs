@@ -58,11 +58,13 @@ public sealed class WritingTaskModelAnswerService(
     private const string PinnedProvider = "anthropic";
     private const string PinnedModel = "claude-sonnet-5";
     // Owner instruction: this is one-time content-authoring, not per-candidate
-    // grading, so pay for max reasoning quality. budget_tokens must stay below
-    // MaxTokens (Anthropic requires max_tokens > thinking.budget_tokens); the
-    // ~4k gap leaves generous room for the ~200-word letter + JSON wrapper.
-    private const int ThinkingBudgetTokens = 24000;
-    private const int MaxCompletionTokens = 28000;
+    // grading, so pay for max reasoning quality/effort. claude-sonnet-5 uses
+    // adaptive thinking (no manual token budget) - "max" is a valid
+    // output_config.effort value, confirmed live against the Anthropic API.
+    // MaxTokens just needs generous headroom for thinking + the ~200-word
+    // letter + JSON wrapper; 32000 verified accepted for this model.
+    private const string ThinkingEffort = "max";
+    private const int MaxCompletionTokens = 32000;
 
     public async Task<WritingTaskModelAnswerDto?> GetAsync(Guid scenarioId, CancellationToken ct = default)
     {
@@ -148,7 +150,7 @@ public sealed class WritingTaskModelAnswerService(
                 Temperature = 0.1,
                 MaxTokens = MaxCompletionTokens,
                 EnableExtendedThinking = true,
-                ThinkingBudgetTokens = ThinkingBudgetTokens,
+                ThinkingEffort = ThinkingEffort,
                 FeatureCode = AiFeatureCodes.WritingModelAnswerPregenerate,
                 PromptTemplateId = PromptVersion,
                 UserId = adminUserId,
