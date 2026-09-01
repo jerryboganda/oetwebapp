@@ -36,6 +36,12 @@ public static class WritingTaskAdminEndpoints
 
         group.MapPost("/{id:guid}/publish", PublishTask).WithAdminWrite("AdminContentPublish");
 
+        // Case-note backfill (spec §22 / grading preflight): replaces this task's
+        // structured, relevance-labeled case-note sentences without touching any
+        // other authored field. See WritingTaskCaseNotesService for why this is a
+        // separate narrow write path rather than reusing the scenario upsert.
+        group.MapPut("/{id:guid}/case-notes", ReplaceCaseNotes).WithAdminWrite("AdminContentWrite");
+
         // Bulk workflow actions (parity with POST /v1/admin/papers/bulk). Permission
         // is split per action inside the handler because a single route can't carry
         // two RequireAuthorization policies: delete/force-delete need system_admin,
@@ -166,6 +172,30 @@ public static class WritingTaskAdminEndpoints
             : Results.Ok(export);
     }
 
+    private static async Task<IResult> ReplaceCaseNotes(
+        IWritingTaskCaseNotesService service,
+        Guid id,
+        [FromBody] WritingTaskCaseNotesRequest request)
+    {
+        if (request.Sentences is null || request.Sentences.Count == 0)
+        {
+            return Results.BadRequest(new { error = "At least one case-note sentence is required." });
+        }
+
+        var dtos = request.Sentences
+            .Select((s, i) => new WritingScenarioStructuredSentenceDto(
+                s.Ordinal ?? i + 1,
+                s.Text ?? string.Empty,
+                s.Relevance ?? "relevant",
+                s.Notes))
+            .ToList();
+
+        var saved = await service.ReplaceAsync(id, dtos);
+        return saved is null
+            ? Results.NotFound(new { error = "Writing task not found" })
+            : Results.Ok(new { scenarioId = id, sentences = saved });
+    }
+
     private static async Task<IResult> BulkTasks(
         IWritingTaskAuthoringService service,
         HttpContext http,
@@ -213,3 +243,9 @@ public static class WritingTaskAdminEndpoints
 /// one of: publish, archive, delete, force-delete.
 /// </summary>
 public sealed record WritingTaskBulkRequest(string Action, string[] Ids, string? Reason = null);
+
+/// <summary>Request body for <c>PUT /v1/admin/writing/tasks/{id}/case-notes</c>.</summary>
+public sealed record WritingTaskCaseNotesRequest(List<WritingTaskCaseNoteSentence> Sentences);
+
+/// <summary><c>Relevance</c> must be one of relevant | maybe | irrelevant.</summary>
+public sealed record WritingTaskCaseNoteSentence(int? Ordinal, string? Text, string? Relevance, string? Notes);

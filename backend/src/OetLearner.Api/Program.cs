@@ -1362,6 +1362,23 @@ builder.Services.AddScoped<ScoringService>();
 builder.Services.AddScoped<ContentGenerationService>();
 builder.Services.AddScoped<ConversationService>();
 
+// ── Multi-Exam Scoring Strategies & Session Drivers (Feature 11) ──
+builder.Services.AddScoped<OetLearner.Api.Services.IPteScoring, OetLearner.Api.Services.PteScoring>();
+builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IToeflScoring, OetLearner.Api.Services.Scoring.ToeflScoring>();
+
+builder.Services.AddScoped<OetLearner.Api.Services.Scoring.OetScoringStrategy>();
+builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IeltsScoringStrategy>();
+builder.Services.AddScoped<OetLearner.Api.Services.Scoring.PteScoringStrategy>();
+builder.Services.AddScoped<OetLearner.Api.Services.Scoring.ToeflScoringStrategy>();
+builder.Services.AddScoped<OetLearner.Api.Services.Scoring.IExamScoringStrategyFactory, OetLearner.Api.Services.Scoring.ExamScoringStrategyFactory>();
+
+builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.OetExamSessionDriver>();
+builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IeltsExamSessionDriver>();
+builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.PteExamSessionDriver>();
+builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.ToeflExamSessionDriver>();
+builder.Services.AddScoped<OetLearner.Api.Services.ExamSession.IExamSessionDriverFactory, OetLearner.Api.Services.ExamSession.ExamSessionDriverFactory>();
+
+
 // ── Conversation subsystem ────────────────────────────────────────────────
 builder.Services.Configure<OetLearner.Api.Configuration.ConversationOptions>(
     builder.Configuration.GetSection(OetLearner.Api.Configuration.ConversationOptions.SectionName));
@@ -1993,6 +2010,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAdminAnalytic
 // the ContentPaper→Scenario publish bridge, and learner attempt-event ingestion.
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskAuthoringService,
     OetLearner.Api.Services.Writing.WritingTaskAuthoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskCaseNotesService,
+    OetLearner.Api.Services.Writing.WritingTaskCaseNotesService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskProjectionService,
     OetLearner.Api.Services.Writing.WritingTaskProjectionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAttemptEventService,

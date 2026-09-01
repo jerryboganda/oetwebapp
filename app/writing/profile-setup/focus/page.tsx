@@ -18,7 +18,6 @@ const LETTER_TYPES: Array<{ code: WritingLetterType; label: string; description:
   { code: 'LT-UR', label: 'Urgent referral', description: 'Time-critical: same-day or next-day handover.' },
   { code: 'LT-DG', label: 'Discharge to GP', description: 'Hospital to primary care after admission.' },
   { code: 'LT-TR', label: 'Transfer', description: 'Patient moves between care settings.' },
-  { code: 'LT-RP', label: 'Response', description: 'Reply to another health professional.' },
   { code: 'LT-NM', label: 'Non-medical referral', description: 'To social worker, OT, dietitian, etc.' },
 ];
 
