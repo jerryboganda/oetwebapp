@@ -409,10 +409,34 @@ public sealed class RefundService
                 subscriptionIds.Add(quote.SubscriptionId);
             }
 
-            var subscriptions = await _db.Subscriptions
-                .Where(subscription => subscription.UserId == transaction.LearnerUserId
-                    && subscriptionIds.Contains(subscription.Id))
-                .ToListAsync(ct);
+            List<Subscription> subscriptions;
+            if (subscriptionIds.Count > 0)
+            {
+                subscriptions = await _db.Subscriptions
+                    .Where(subscription => subscription.UserId == transaction.LearnerUserId
+                        && subscriptionIds.Contains(subscription.Id))
+                    .ToListAsync(ct);
+            }
+            else if (!string.IsNullOrWhiteSpace(transaction.ProductId))
+            {
+                // No SubscriptionItems and no BillingQuote to correlate from (e.g. a
+                // manually-recorded payment — ManualPaymentService sets QuoteId only when an
+                // online checkout quote actually exists — or any other plan-only payment that
+                // never went through the add-on/quote pipeline). Fall back to the exact plan
+                // this transaction paid for, matched by PlanId, so the refund still downgrades
+                // the subscription it funded without touching any of the learner's other
+                // packages the way a blanket "any active subscription for this user" match
+                // would.
+                subscriptions = await _db.Subscriptions
+                    .Where(subscription => subscription.UserId == transaction.LearnerUserId
+                        && subscription.PlanId == transaction.ProductId)
+                    .ToListAsync(ct);
+            }
+            else
+            {
+                subscriptions = [];
+            }
+
             foreach (var subscription in subscriptions.Where(row => row.Status == SubscriptionStatus.Active))
             {
                 SubscriptionStateMachine.Transition(subscription, SubscriptionStatus.Cancelled, "payment_refund_full");
@@ -427,35 +451,62 @@ public sealed class RefundService
     {
         if (string.IsNullOrWhiteSpace(transaction.QuoteId)) return false;
 
+        // The BillingQuote row is optional enrichment here (it supplies PlanCode for the
+        // authoritative AiPackageCreditService source reference, and a SubscriptionId
+        // fallback). It must not gate the whole method: manually-recorded payments
+        // (ManualPaymentService sets PaymentTransaction.QuoteId from the admin request even
+        // when no online checkout quote — and therefore no BillingQuotes row — ever existed)
+        // and other legacy flows can carry a QuoteId with no matching quote. The legacy
+        // AiCreditLedger reversal below keys purely off transaction.QuoteId and the
+        // SubscriptionItems it activated, both independent of this row.
         var quote = await _db.BillingQuotes.AsNoTracking()
             .FirstOrDefaultAsync(row => row.Id == transaction.QuoteId, ct);
-        if (quote is null) return false;
 
         var items = await _db.SubscriptionItems.AsNoTracking()
             .Where(item => item.CheckoutSessionId == transaction.GatewayTransactionId
                 || item.QuoteId == transaction.QuoteId)
             .ToListAsync(ct);
         var subscriptionIds = items.Select(item => item.SubscriptionId)
-            .Append(quote.SubscriptionId)
+            .Append(quote?.SubscriptionId)
             .Where(id => !string.IsNullOrWhiteSpace(id))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .Cast<string>()
             .ToList();
-        if (subscriptionIds.Count == 0) return false;
 
-        var subscriptions = await _db.Subscriptions
-            .Where(subscription => subscription.UserId == transaction.LearnerUserId
-                && subscriptionIds.Contains(subscription.Id))
-            .ToListAsync(ct);
+        List<Subscription> subscriptions;
+        if (subscriptionIds.Count > 0)
+        {
+            subscriptions = await _db.Subscriptions
+                .Where(subscription => subscription.UserId == transaction.LearnerUserId
+                    && subscriptionIds.Contains(subscription.Id))
+                .ToListAsync(ct);
+        }
+        else if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(transaction.ProductId))
+        {
+            // Same legacy/manual-payment fallback as ReverseEntitlementsAsync: no items and
+            // no quote row to correlate from, but the transaction still names the exact plan
+            // it paid for.
+            subscriptions = await _db.Subscriptions
+                .Where(subscription => subscription.UserId == transaction.LearnerUserId
+                    && subscription.PlanId == transaction.ProductId)
+                .ToListAsync(ct);
+        }
+        else
+        {
+            subscriptions = [];
+        }
         if (subscriptions.Count == 0) return false;
 
+        var planCode = quote?.PlanCode
+            ?? (string.Equals(transaction.ProductType, "plan", StringComparison.OrdinalIgnoreCase) ? transaction.ProductId : null);
         var sourceReferences = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var subscription in subscriptions)
         {
             if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrWhiteSpace(quote.PlanCode))
+                && !string.IsNullOrWhiteSpace(planCode))
             {
-                sourceReferences.Add(AiPackageCreditSources.Plan(subscription.Id, quote.PlanCode));
+                sourceReferences.Add(AiPackageCreditSources.Plan(subscription.Id, planCode));
             }
         }
 
@@ -536,7 +587,7 @@ public sealed class RefundService
             {
                 Id = $"bill-evt-ai-refund-{Guid.NewGuid():N}",
                 UserId = transaction.LearnerUserId,
-                SubscriptionId = quote.SubscriptionId
+                SubscriptionId = quote?.SubscriptionId
                     ?? subscriptions.Select(row => row.Id).FirstOrDefault(),
                 QuoteId = transaction.QuoteId,
                 EventType = "ai_package_credits_refunded",
