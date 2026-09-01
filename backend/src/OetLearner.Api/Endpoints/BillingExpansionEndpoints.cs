@@ -806,6 +806,11 @@ public static class BillingExpansionEndpoints
         Subscription subscription,
         CancellationToken ct)
     {
+        if (subscription.Status == SubscriptionStatus.Draft)
+        {
+            return null;
+        }
+
         var existingForSubscription = await db.Invoices.AsNoTracking()
             .Where(x => x.SubscriptionId == subscription.Id)
             .OrderByDescending(x => x.IssuedAt)

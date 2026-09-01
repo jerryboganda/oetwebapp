@@ -314,6 +314,23 @@ public sealed class InvoiceEvidenceSourceTests
         Assert.Contains("paid_status_without_gateway_evidence", evidence.IntegrityFlags);
     }
 
+    [Fact]
+    public async Task EnsureSubscriptionInvoiceCoreAsync_DraftSubscription_DoesNotCreateInvoice()
+    {
+        await using var db = NewDb();
+        var userId = "usr-draft-sub";
+        var subscription = NewSubscription(userId, price: 100m, currency: "GBP");
+        subscription.Status = SubscriptionStatus.Draft;
+        db.Subscriptions.Add(subscription);
+        await db.SaveChangesAsync();
+
+        var invoiceId = await OetLearner.Api.Endpoints.BillingExpansionEndpoints.EnsureSubscriptionInvoiceCoreAsync(
+            db, learnerService: null!, subscription, CancellationToken.None);
+
+        Assert.Null(invoiceId);
+        Assert.False(await db.Invoices.AnyAsync(i => i.UserId == userId));
+    }
+
     // ── Helpers ─────────────────────────────────────────────────
 
     private static LearnerDbContext NewDb()

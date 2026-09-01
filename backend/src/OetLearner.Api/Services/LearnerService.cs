@@ -5373,7 +5373,12 @@ public partial class LearnerService(
     /// </summary>
     private async Task<bool> EnsureSubscriptionInvoiceAsync(string userId, CancellationToken cancellationToken)
     {
-        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        var subscription = await db.Subscriptions
+            .Where(x => x.UserId == userId && x.Status != SubscriptionStatus.Draft && x.PriceAmount > 0)
+            .OrderByDescending(x => x.Status == SubscriptionStatus.Active)
+            .ThenByDescending(x => x.ChangedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
         if (subscription is null || subscription.PriceAmount <= 0)
         {
             return false;
@@ -5456,7 +5461,7 @@ public partial class LearnerService(
     {
         var userIds = await db.Subscriptions
             .AsNoTracking()
-            .Where(x => x.PriceAmount > 0)
+            .Where(x => x.PriceAmount > 0 && x.Status != SubscriptionStatus.Draft)
             .Select(x => x.UserId)
             .Distinct()
             .ToListAsync(cancellationToken);
