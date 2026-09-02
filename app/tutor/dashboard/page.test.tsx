@@ -18,31 +18,34 @@ describe('TutorDashboardPage', () => {
     vi.mocked(fetchTutorClasses).mockResolvedValue([
       {
         id: 'cls-1',
+        slug: 'oet-speaking-masterclass',
         title: 'OET Speaking Masterclass',
         titleAr: null,
         description: 'Comprehensive speaking strategies',
         descriptionAr: null,
+        creditCost: 10,
         type: 'Webinar',
         level: 'AllLevels',
         professionTrack: 'Medicine',
         status: 'Published',
         coverImageUrl: null,
-        tags: ['speaking'],
         sessions: [
           {
             id: 'sess-1',
             scheduledStartAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-            durationMinutes: 60,
+            scheduledEndAt: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
             capacity: 20,
             enrolledCount: 8,
             status: 'Scheduled',
+            isEnrolled: false,
+            isJoinAvailable: false,
+            creditCost: 10,
           },
         ],
       },
     ]);
 
     vi.mocked(fetchTutorEarnings).mockResolvedValue({
-      tutorProfileId: 'tut-1',
       from: '2026-01-01T00:00:00Z',
       to: '2026-06-01T00:00:00Z',
       grossUsd: 1500,
