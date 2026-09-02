@@ -56,11 +56,11 @@ function TutorLayoutContent({ children }: { children: React.ReactNode }) {
     () => [
       {
         label: 'Teach',
-        items: [tutorNavItems[0], tutorNavItems[1], tutorNavItems[2]],
+        items: [tutorNavItems[0], tutorNavItems[1], tutorNavItems[2], tutorNavItems[3]],
       },
       {
         label: 'Account',
-        items: [tutorNavItems[3], tutorNavItems[4]],
+        items: [tutorNavItems[4], tutorNavItems[5], tutorNavItems[6]],
       },
     ],
     [],

@@ -26,7 +26,7 @@ describe('Tutor queue page', () => {
     });
     mockFetchReviewQueue.mockResolvedValue({
       items: [{ id: 'rev-1', learnerId: 'learner-1', learnerName: 'Dr Amina Khan', profession: 'medicine', subTest: 'writing', type: 'writing', aiConfidence: 'high', priority: 'high', slaDue: '2026-04-01T10:00:00.000Z', status: 'queued', createdAt: '2026-04-01T06:00:00.000Z', isOverdue: false, assignedTo: null }],
-      total: 1, lastUpdatedAt: '2026-04-01T08:00:00.000Z',
+      totalCount: 1, total: 1, lastUpdatedAt: '2026-04-01T08:00:00.000Z',
     });
   });
 

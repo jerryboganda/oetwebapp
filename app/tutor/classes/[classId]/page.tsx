@@ -209,7 +209,7 @@ export default function TutorClassDetailPage() {
               setNewCapacity(v === '' ? null : Number(v));
             }}
           />
-          <Button type="submit" variant="primary" size="sm" loading={addingSession}>
+          <Button type="submit" variant="primary" className="h-10 w-full sm:w-auto" loading={addingSession}>
             <CalendarPlus className="h-4 w-4" /> Add session
           </Button>
         </form>
@@ -221,7 +221,7 @@ export default function TutorClassDetailPage() {
             <p className="mt-1 text-sm text-muted">Add a session using the form above.</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+          <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
             <table className="min-w-full divide-y divide-border text-sm">
               <thead className="bg-background-light text-left">
                 <tr>

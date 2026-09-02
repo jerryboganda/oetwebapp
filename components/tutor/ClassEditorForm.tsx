@@ -185,7 +185,7 @@ export function ClassEditorForm({ onSubmit, onCancel, submitting = false, apiErr
       <section className="space-y-4 rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <h2 className="text-base font-semibold text-navy">Schedule</h2>
         <p className="text-xs text-muted">
-          Wave B1 only supports one-off sessions; recurrence will land in a future wave.
+          Classes are scheduled as single sessions. Multi-session recurrence can be added from the class manager.
         </p>
         <Input
           type="datetime-local"

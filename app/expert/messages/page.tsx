@@ -8,6 +8,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/empty-error';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { Badge } from '@/components/ui/badge';
+import { Input, Textarea } from '@/components/ui/form-controls';
 import { MessageSquare, Plus } from 'lucide-react';
 
 export default function MessagesPage() {
@@ -59,10 +61,10 @@ export default function MessagesPage() {
       </div>
 
       {threads.length === 0 ? (
-        <div className="text-center py-12 rounded-2xl border border-dashed">
-          <MessageSquare className="w-8 h-8 mx-auto text-muted mb-2" />
-          <p className="text-muted">No messages yet.</p>
-          <p className="text-xs text-muted mt-1">Start a new thread to contact the admin team.</p>
+        <div className="rounded-2xl border border-dashed border-border bg-surface py-12 text-center">
+          <MessageSquare className="mx-auto mb-2 h-8 w-8 text-muted" />
+          <p className="font-medium text-navy dark:text-foreground">No messages yet.</p>
+          <p className="mt-1 text-xs text-muted">Start a new thread to contact the admin team.</p>
         </div>
       ) : (
         <div className="space-y-2">
@@ -70,15 +72,15 @@ export default function MessagesPage() {
             <button
               key={thread.id}
               onClick={() => router.push(`/expert/messages/${thread.id}`)}
-              className="w-full text-left rounded-2xl border border-border p-4 hover:bg-accent transition-colors"
+              className="w-full rounded-2xl border border-border bg-surface p-4 text-left shadow-sm transition-all hover:border-primary/40 hover:shadow-md"
             >
-              <div className="flex items-center justify-between">
-                <p className="font-medium">{thread.title}</p>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${thread.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-background-light text-muted'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold text-navy dark:text-foreground">{thread.title}</p>
+                <Badge variant={thread.status === 'open' ? 'success' : 'muted'} size="sm">
                   {thread.status}
-                </span>
+                </Badge>
               </div>
-              <p className="text-xs text-muted mt-1">{thread.replyCount} replies · {new Date(thread.updatedAt).toLocaleDateString()}</p>
+              <p className="mt-1 text-xs text-muted">{thread.replyCount} replies · {new Date(thread.updatedAt).toLocaleDateString()}</p>
             </button>
           ))}
         </div>
@@ -87,30 +89,26 @@ export default function MessagesPage() {
       {showNew && (
         <Modal open onClose={() => setShowNew(false)} title="New Message">
           <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">Title</label>
-              <input
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                className="w-full mt-1 rounded-md border px-3 py-2 text-sm"
-                placeholder="Brief subject"
-                maxLength={200}
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium">Message</label>
-              <textarea
-                value={body}
-                onChange={e => setBody(e.target.value)}
-                className="w-full mt-1 rounded-md border px-3 py-2 text-sm min-h-[120px]"
-                placeholder="Describe your issue..."
-                maxLength={4000}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
+            <Input
+              label="Title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Brief subject"
+              maxLength={200}
+              required
+            />
+            <Textarea
+              label="Message"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="Describe your issue..."
+              maxLength={4000}
+              required
+            />
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowNew(false)} disabled={saving}>Cancel</Button>
-              <Button onClick={handleCreate} disabled={saving || !title.trim() || !body.trim()}>
-                {saving ? 'Sending...' : 'Send'}
+              <Button onClick={handleCreate} disabled={saving || !title.trim() || !body.trim()} loading={saving}>
+                Send
               </Button>
             </div>
           </div>

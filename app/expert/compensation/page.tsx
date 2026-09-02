@@ -4,6 +4,8 @@ import { useExpertCompensation } from '@/lib/hooks/use-expert-compensation';
 import { ExpertRouteWorkspace, ExpertRouteHero, ExpertRouteSectionHeader, ExpertRouteSummaryCard } from '@/components/domain/expert-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/empty-error';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 
 function formatCurrency(minorUnits: number, currency: string): string {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(minorUnits / 100);
@@ -72,50 +74,55 @@ export default function CompensationPage() {
 
       <ExpertRouteSectionHeader title="Recent Earnings" />
       {earnings.length === 0 ? (
-        <p className="text-muted text-sm">No earnings recorded yet.</p>
+        <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center text-sm text-muted">
+          No earnings recorded yet.
+        </div>
       ) : (
         <div className="space-y-2">
           {earnings.map((item) => (
-            <div key={item.id} className="flex items-center justify-between rounded-2xl border p-3">
+            <div key={item.id} className="flex items-center justify-between rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:border-border-hover">
               <div>
-                <p className="font-bold text-sm">{item.subtestCode} Review</p>
+                <p className="text-sm font-bold text-navy dark:text-foreground">{item.subtestCode} Review</p>
                 <p className="text-xs text-muted">{new Date(item.earnedAt).toLocaleDateString()}</p>
               </div>
-              <div className="text-right">
-                <p className="font-semibold">{formatCurrency(item.amountMinorUnits, item.currency)}</p>
-                <p className={`text-xs ${item.status === 'paid' ? 'text-green-600' : 'text-amber-600'}`}>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-navy dark:text-foreground">{formatCurrency(item.amountMinorUnits, item.currency)}</span>
+                <Badge variant={item.status === 'paid' ? 'success' : 'warning'} size="sm">
                   {item.status}
-                </p>
+                </Badge>
               </div>
             </div>
           ))}
           {earnings.length >= 25 && (
-            <button
+            <Button
+              variant="outline"
               onClick={() => setPage(page + 1)}
-              className="w-full text-sm text-primary hover:underline py-2"
+              className="mt-2 w-full"
             >
-              Load More
-            </button>
+              Load more earnings
+            </Button>
           )}
         </div>
       )}
 
       <ExpertRouteSectionHeader title="Payout History" />
       {payouts.length === 0 ? (
-        <p className="text-muted text-sm">No payouts yet.</p>
+        <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-center text-sm text-muted">
+          No payouts yet.
+        </div>
       ) : (
         <div className="space-y-2">
           {payouts.map((payout) => (
-            <div key={payout.id} className="flex items-center justify-between rounded-2xl border p-3">
+            <div key={payout.id} className="flex items-center justify-between rounded-2xl border border-border bg-surface p-4 shadow-sm transition-colors hover:border-border-hover">
               <div>
-                <p className="font-bold text-sm">Payout</p>
+                <p className="text-sm font-bold text-navy dark:text-foreground">Payout</p>
                 <p className="text-xs text-muted">{new Date(payout.createdAt).toLocaleDateString()}</p>
               </div>
-              <div className="text-right">
-                <p className="font-semibold">{formatCurrency(payout.totalAmountMinorUnits, payout.currency)}</p>
-                <p className={`text-xs ${payout.status === 'approved' ? 'text-green-600' : 'text-amber-600'}`}>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-navy dark:text-foreground">{formatCurrency(payout.totalAmountMinorUnits, payout.currency)}</span>
+                <Badge variant={payout.status === 'approved' ? 'success' : 'warning'} size="sm">
                   {payout.status}
-                </p>
+                </Badge>
               </div>
             </div>
           ))}

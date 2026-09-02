@@ -175,7 +175,8 @@ export default function ReviewQueuePage() {
       setErrorMsg(null);
       const response = await fetchReviewQueue(requestParams);
       setData(response.items);
-      setTotalCount(response.totalCount);
+      const count = response.totalCount ?? (response as any).total ?? 0;
+      setTotalCount(Number.isFinite(count) ? count : 0);
       setStatus(response.items.length === 0 ? 'empty' : 'success');
       setLastUpdatedAt(response.lastUpdatedAt);
       setLastRefreshed(new Date(response.lastUpdatedAt).toLocaleTimeString());
@@ -437,7 +438,7 @@ export default function ReviewQueuePage() {
                       setSearchQuery(event.target.value);
                       setPage(1);
                     }}
-                    className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-3 text-sm text-navy placeholder:text-muted transition-colors focus:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-foreground"
                     aria-label="Search reviews"
                   />
                 </div>

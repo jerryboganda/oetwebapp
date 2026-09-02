@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarPlus, LayoutDashboard, PlayCircle, Users, Video, DollarSign } from 'lucide-react';
+import { CalendarClock, CalendarPlus, LayoutDashboard, Users, Video, DollarSign } from 'lucide-react';
 
 import { TutorRouteHero, TutorRouteSectionHeader, TutorRouteWorkspace } from '@/components/domain/tutor-route-surface';
 import { InlineAlert } from '@/components/ui/alert';
@@ -107,7 +107,8 @@ export default function TutorDashboardPage() {
       ) : null}
 
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Skeleton className="h-28 rounded-2xl" />
           <Skeleton className="h-28 rounded-2xl" />
           <Skeleton className="h-28 rounded-2xl" />
           <Skeleton className="h-28 rounded-2xl" />
@@ -127,9 +128,9 @@ export default function TutorDashboardPage() {
         <TutorRouteSectionHeader
           eyebrow="Quick actions"
           title="What would you like to do?"
-          description="Schedule a new class, manage availability, or jump into past recordings."
+          description="Schedule a new class, manage existing sessions, update availability, or review earnings."
         />
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Link
             href="/tutor/classes/new"
             className={buttonClassName({ variant: 'primary' }) + ' justify-start gap-3'}
@@ -138,11 +139,18 @@ export default function TutorDashboardPage() {
             Schedule class
           </Link>
           <Link
-            href="/me/classes/past"
+            href="/tutor/classes"
             className={buttonClassName({ variant: 'secondary' }) + ' justify-start gap-3'}
           >
-            <PlayCircle className="h-4 w-4" />
-            View past recordings
+            <Video className="h-4 w-4" />
+            Manage classes
+          </Link>
+          <Link
+            href="/tutor/availability"
+            className={buttonClassName({ variant: 'outline' }) + ' justify-start gap-3'}
+          >
+            <CalendarClock className="h-4 w-4" />
+            Set availability
           </Link>
           <Link
             href="/tutor/earnings"

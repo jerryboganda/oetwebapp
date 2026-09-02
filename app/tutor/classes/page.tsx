@@ -82,7 +82,7 @@ export default function TutorClassesPage() {
             options={STATUS_OPTIONS}
           />
         </div>
-        <Link href="/tutor/classes/new" className={buttonClassName({ variant: 'primary', size: 'sm' })}>
+        <Link href="/tutor/classes/new" className={buttonClassName({ variant: 'primary', size: 'sm' }) + ' inline-flex items-center justify-center gap-2 w-full sm:w-auto'}>
           <CalendarPlus className="h-4 w-4" /> New class
         </Link>
       </div>
@@ -109,7 +109,7 @@ export default function TutorClassesPage() {
           ) : null}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+        <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
           <table className="min-w-full divide-y divide-border text-sm">
             <thead className="bg-background-light text-left">
               <tr>

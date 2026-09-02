@@ -119,7 +119,7 @@ export function AvailabilityGrid({ slots, timeZone, saving, onSave }: Availabili
       ) : (
         <div className="space-y-3">
           {drafts.map((slot, idx) => (
-            <div key={slot.id} className="grid gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:grid-cols-[1.5fr_1fr_1fr_1fr_auto] sm:items-end">
+            <div key={slot.id} className="grid gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm sm:grid-cols-[1.5fr_1fr_1fr_auto_auto] sm:items-end">
               <Select
                 label="Day"
                 value={slot.dayOfWeek}
@@ -138,17 +138,37 @@ export function AvailabilityGrid({ slots, timeZone, saving, onSave }: Availabili
                 value={slot.endTime}
                 onChange={(e) => update(idx, { endTime: e.target.value })}
               />
-              <label className="flex items-center gap-2 self-end pb-3 text-sm text-navy">
-                <input
-                  type="checkbox"
-                  checked={slot.isActive}
-                  onChange={(e) => update(idx, { isActive: e.target.checked })}
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                />
-                Active
-              </label>
-              <Button type="button" variant="ghost" size="sm" onClick={() => remove(idx)}>
-                <Trash2 className="h-3.5 w-3.5" />
+              <div className="flex items-center justify-between gap-4 pt-1 sm:justify-start sm:pb-2.5 sm:pt-0">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-navy">
+                  <input
+                    type="checkbox"
+                    checked={slot.isActive}
+                    onChange={(e) => update(idx, { isActive: e.target.checked })}
+                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                    aria-label={`Slot ${idx + 1} active`}
+                  />
+                  Active
+                </label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => remove(idx)}
+                  className="text-muted hover:bg-danger/10 hover:text-danger sm:hidden"
+                  aria-label={`Remove slot ${idx + 1}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => remove(idx)}
+                className="hidden text-muted hover:bg-danger/10 hover:text-danger sm:mb-1.5 sm:inline-flex"
+                aria-label={`Remove slot ${idx + 1}`}
+              >
+                <Trash2 className="h-4 w-4" />
               </Button>
             </div>
           ))}

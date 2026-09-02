@@ -264,20 +264,20 @@ export default function TutorProfilePage() {
             </div>
           </section>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
             {profile ? (
               <a
                 href={`/tutors/${profile.id}`}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                className="inline-flex items-center justify-center gap-1.5 text-sm font-medium text-primary hover:underline"
               >
                 <ExternalLink className="h-4 w-4" /> Public preview
               </a>
             ) : (
-              <span className="text-sm text-muted">Save first to enable public preview.</span>
+              <span className="text-center text-sm text-muted sm:text-left">Save first to enable public preview.</span>
             )}
-            <Button type="submit" variant="primary" loading={saving}>
+            <Button type="submit" variant="primary" className="w-full sm:w-auto" loading={saving}>
               {profile ? 'Save changes' : 'Create profile'}
             </Button>
           </div>

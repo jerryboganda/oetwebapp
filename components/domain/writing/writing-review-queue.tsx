@@ -106,42 +106,58 @@ export function WritingReviewQueue({
       <TutorRouteSectionHeader eyebrow="Queue" title={`${items.length} submission${items.length === 1 ? '' : 's'}`} description="Claim a submission to lock it to you, then open it to mark." className="mt-4 mb-3" />
 
       <Card>
-        <CardContent>
-          <table className="w-full text-sm" aria-label="Writing tutor review queue">
-            <thead>
-              <tr className="border-b border-border text-xs uppercase tracking-wider text-muted">
-                <th className="py-2 text-left">Submission</th>
-                <th className="text-left">Profession</th>
-                <th className="text-left">Letter</th>
-                <th className="text-right">Words</th>
-                <th className="text-left">Requested</th>
-                <th className="text-left">Status</th>
-                <th className="text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.length === 0 ? <tr><td colSpan={7} className="py-4 text-center text-xs text-muted">Queue is empty.</td></tr> : null}
-              {items.map((row) => (
-                <tr key={row.submissionId} className="border-b border-border/60">
-                  <td className="py-2 font-bold text-xs">{row.submissionId.slice(0, 8)}…</td>
-                  <td className="capitalize">{row.profession}</td>
-                  <td>{row.letterType}</td>
-                  <td className="text-right">{row.wordCount}</td>
-                  <td className="text-xs text-muted">{new Date(row.requestedAt).toLocaleString()}</td>
-                  <td><Badge variant={row.status === 'pending' ? 'warning' : row.status === 'submitted' ? 'success' : 'info'} size="sm">{row.status}</Badge></td>
-                  <td className="text-right">
-                    {row.status === 'pending' ? (
-                      <Button size="sm" onClick={() => void claim(row.submissionId)} loading={busy === `claim-${row.submissionId}`}>Claim</Button>
-                    ) : (
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`${base}/${encodeURIComponent(row.submissionId)}`}>Open review</Link>
-                      </Button>
-                    )}
-                  </td>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm" aria-label="Writing tutor review queue">
+              <thead>
+                <tr className="border-b border-border bg-background-light/50 text-xs font-semibold uppercase tracking-wider text-muted">
+                  <th className="px-4 py-3 text-left">Submission</th>
+                  <th className="px-4 py-3 text-left">Profession</th>
+                  <th className="px-4 py-3 text-left">Letter</th>
+                  <th className="px-4 py-3 text-right">Words</th>
+                  <th className="px-4 py-3 text-left">Requested</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {items.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-muted">
+                      Queue is empty.
+                    </td>
+                  </tr>
+                ) : null}
+                {items.map((row) => (
+                  <tr key={row.submissionId} className="transition-colors hover:bg-background-light/40">
+                    <td className="px-4 py-3 font-mono text-xs font-bold text-navy dark:text-foreground">
+                      {row.submissionId.slice(0, 8)}…
+                    </td>
+                    <td className="px-4 py-3 capitalize text-muted">{row.profession}</td>
+                    <td className="px-4 py-3 text-navy dark:text-foreground">{row.letterType}</td>
+                    <td className="px-4 py-3 text-right text-muted">{row.wordCount}</td>
+                    <td className="px-4 py-3 text-xs text-muted">{new Date(row.requestedAt).toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <Badge variant={row.status === 'pending' ? 'warning' : row.status === 'submitted' ? 'success' : 'info'} size="sm">
+                        {row.status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {row.status === 'pending' ? (
+                        <Button size="sm" onClick={() => void claim(row.submissionId)} loading={busy === `claim-${row.submissionId}`}>
+                          Claim
+                        </Button>
+                      ) : (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`${base}/${encodeURIComponent(row.submissionId)}`}>Open review</Link>
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </CardContent>
       </Card>
     </>

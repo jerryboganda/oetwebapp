@@ -271,7 +271,7 @@ export default function SchedulePage() {
                           />
                         </div>
                       </div>
-                      {error ? <p className="ml-36 mt-1 text-xs text-red-500">{error}</p> : null}
+                      {error ? <p className="mt-1 text-xs text-danger md:ml-36">{error}</p> : null}
                     </div>
                   );
                 }) : null}
@@ -316,7 +316,7 @@ export default function SchedulePage() {
                         <label className="mb-1 block text-sm font-medium text-navy">Date</label>
                         <input
                           type="date"
-                          className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                          className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-foreground"
                           value={newException.date}
                           onChange={(e) => setNewException({ ...newException, date: e.target.value })}
                           aria-label="Exception date"
@@ -356,7 +356,7 @@ export default function SchedulePage() {
                       <label className="mb-1 block text-sm font-medium text-navy">Reason (optional)</label>
                       <input
                         type="text"
-                        className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-primary/20 dark:text-foreground"
                         placeholder="e.g. Public holiday, Personal leave"
                         maxLength={500}
                         value={newException.reason}

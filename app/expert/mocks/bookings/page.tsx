@@ -64,13 +64,6 @@ export default function ExpertMockBookingsPage() {
           ]}
         />
 
-        {/* FE-004: the bookings endpoints are not live yet — disclose sample data. */}
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="info" size="sm">Sample data</Badge>
-        </div>
-        <InlineAlert variant="info">
-          This bookings preview uses sample data until live booking endpoints ship.
-        </InlineAlert>
 
         <section className="space-y-4">
           <ExpertRouteSectionHeader

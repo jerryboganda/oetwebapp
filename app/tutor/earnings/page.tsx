@@ -131,7 +131,7 @@ export default function TutorEarningsPage() {
                 No completed sessions in this window.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+              <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
                 <table className="min-w-full divide-y divide-border text-sm">
                   <thead className="bg-background-light text-left">
                     <tr>
@@ -167,7 +167,7 @@ export default function TutorEarningsPage() {
                 No sessions in this window.
               </div>
             ) : (
-              <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+              <div className="overflow-x-auto rounded-2xl border border-border bg-surface shadow-sm">
                 <table className="min-w-full divide-y divide-border text-sm">
                   <thead className="bg-background-light text-left">
                     <tr>

@@ -197,27 +197,49 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   }, [showOnboarding]);
 
   const mobileMenuSections: MobileMenuSection[] = useMemo(() => {
-    const sections: MobileMenuSection[] = [
+    const reviewItems = [
+      expertNavItems[0], // Dashboard
+      expertNavItems[1], // Review Queue
+      expertNavItems[2], // Writing Reviews
+      expertNavItems[13], // Speaking Reviews
+      expertNavItems[3], // Listening Reviews
+      expertNavItems[12], // Reading Queue
+      expertNavItems[14], // Moderation
+    ];
+
+    if (showOnboarding) {
+      reviewItems.splice(1, 0, onboardingNavItem);
+    }
+
+    return [
       {
         label: 'Review',
-        items: [expertNavItems[0], expertNavItems[1], expertNavItems[2], expertNavItems[3], expertNavItems[12], expertNavItems[13], expertNavItems[14]],
+        items: reviewItems,
       },
       {
-        label: 'Performance',
-        items: [expertNavItems[4], expertNavItems[5], expertNavItems[6], expertNavItems[7], expertNavItems[15]],
+        label: 'Teaching & Learners',
+        items: [
+          expertNavItems[7], // Live Classes
+          expertNavItems[9], // Private Speaking
+          expertNavItems[8], // Learners
+          expertNavItems[6], // Schedule
+        ],
+      },
+      {
+        label: 'Performance & Finance',
+        items: [
+          expertNavItems[4], // Calibration
+          expertNavItems[5], // Metrics
+          expertNavItems[15], // Scoring Quality
+          expertNavItems[11], // Compensation
+          expertNavItems[10], // Messages
+        ],
       },
       {
         label: 'Tools',
         items: expertToolsNavItems,
       },
     ];
-    if (showOnboarding) {
-      sections[0] = {
-        label: 'Review',
-        items: [expertNavItems[0], onboardingNavItem, expertNavItems[1], expertNavItems[2], expertNavItems[3], expertNavItems[12], expertNavItems[13], expertNavItems[14]],
-      };
-    }
-    return sections;
   }, [showOnboarding]);
 
   // Hide nav for specific review workspaces

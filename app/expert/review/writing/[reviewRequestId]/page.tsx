@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { UserRoundCheck } from 'lucide-react';
 import { ExpertRouteHero, ExpertRouteWorkspace } from '@/components/domain/expert-route-surface';
 import { TutorMarkingWorkspace } from '@/components/domain/writing/marking/TutorMarkingWorkspace';
+import { TutorCaseNotesPanel } from '@/components/domain/writing/marking/TutorCaseNotesPanel';
 
 /**
  * Expert writing review screen (spec §12/§13/§14, WS-F5).
@@ -31,11 +32,12 @@ export default function ExpertWritingReviewPage() {
         description="Annotate the response, score the six OET criteria, mark the content checklist, and add feedback. Acting as a senior marker, you can also moderate divergent double-markings."
       />
 
-      <div className="mt-4">
+      <div className="mt-4 space-y-4">
+        <TutorCaseNotesPanel submissionId={submissionId} />
         <TutorMarkingWorkspace
           submissionId={submissionId}
           variant="expert"
-          onComplete={() => router.push('/expert/queue')}
+          onComplete={() => router.push('/expert/queue/assigned')}
         />
       </div>
     </ExpertRouteWorkspace>

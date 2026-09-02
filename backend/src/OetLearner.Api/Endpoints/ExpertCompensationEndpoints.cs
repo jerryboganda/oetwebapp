@@ -12,7 +12,7 @@ public static class ExpertCompensationEndpoints
             .RequireAuthorization("ExpertOnly")
             .RequireRateLimiting("PerUser");
 
-        comp.MapGet("/", async (HttpContext http, ExpertCompensationService service, CancellationToken ct)
+        comp.MapGet("", async (HttpContext http, ExpertCompensationService service, CancellationToken ct)
             => Results.Ok(await service.GetCompensationSummaryAsync(http.ExpertId(), ct)));
 
         comp.MapGet("/earnings", async (HttpContext http, ExpertCompensationService service, CancellationToken ct,

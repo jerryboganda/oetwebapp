@@ -83,7 +83,7 @@ export default function TutorWritingCalibrationPage() {
             </Button>
             {data?.requiresRecalibration ? (
               <Button asChild>
-                <Link href="/tutor/calibration"><Award className="h-4 w-4" aria-hidden="true" /> Take calibration test</Link>
+                <Link href="/expert/calibration"><Award className="h-4 w-4" aria-hidden="true" /> Take calibration test</Link>
               </Button>
             ) : null}
           </div>

@@ -13,10 +13,10 @@ public static class ExpertMessagingEndpoints
             .RequireAuthorization("ExpertOnly")
             .RequireRateLimiting("PerUser");
 
-        messaging.MapGet("/", async (HttpContext http, ExpertMessagingService service, CancellationToken ct)
+        messaging.MapGet("", async (HttpContext http, ExpertMessagingService service, CancellationToken ct)
             => Results.Ok(await service.GetThreadsAsync(http.ExpertId(), ct)));
 
-        messaging.MapPost("/", async (HttpContext http, ExpertMessagingService service, CancellationToken ct,
+        messaging.MapPost("", async (HttpContext http, ExpertMessagingService service, CancellationToken ct,
             [FromBody] CreateMessageThreadRequest request)
             => Results.Ok(await service.CreateThreadAsync(http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
