@@ -145,7 +145,7 @@ OET has four sub-tests. The platform models each one canonically — these shape
 | Surface | Technology | Status |
 |---|---|---|
 | **Web app** | Next.js 16 App Router, React 19, Tailwind v4 | 🟢 Primary surface |
-| **Android** | Capacitor 7 remote shell (`com.oetprep.learner`) | 🟢 Shipped, Play listing live |
+| **Android** | Capacitor 7 remote shell (`com.oetwithdrhesham.app`) | 🟢 Shipped, Play listing live |
 | **Windows / macOS desktop** | Tauri 2 remote-only thin client (`com.oetprep.desktop`) with OS-level screen-capture blocking during video playback | 🟢 Shipped via GitHub Releases + auto-updater |
 | **iOS** | Capacitor config exists; Xcode project not committed | 🔵 Planned |
 

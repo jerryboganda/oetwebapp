@@ -960,7 +960,7 @@ The strategic sequence should be:
 | `package.json` | Complete dependency inventory — frontend stack, versions, capabilities |
 | `global.json` | .NET SDK version (10.0.300) |
 | `docker-compose.production.yml` | Production deployment architecture (3 services: postgres, API, web) |
-| `capacitor.config.ts` | Mobile wrapper config — appId: `com.oetprep.learner`, Zoom + Capacitor plugins |
+| `capacitor.config.ts` | Mobile wrapper config — appId: `com.oetwithdrhesham.app`, Zoom + Capacitor plugins |
 | `electron-builder.config.cjs` | Desktop wrapper config — auto-updater, standalone Next.js bundling |
 | `backend/src/OetLearner.Api/Domain/Entities.cs` | Core domain entities — Attempt, Evaluation, ContentItem, StudyPlan, ReadinessSnapshot |
 | `backend/src/OetLearner.Api/Domain/BillingEntities.cs` | Billing domain — Plans, AddOns, Coupons, Quotes, Events, Wallets |

@@ -1,4 +1,4 @@
-package com.oetprep.learner.plugins;
+package com.oetwithdrhesham.app.plugins;
 
 import android.os.Build;
 import android.os.Debug;
@@ -12,7 +12,7 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import com.oetprep.learner.BuildConfig;
+import com.oetwithdrhesham.app.BuildConfig;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
