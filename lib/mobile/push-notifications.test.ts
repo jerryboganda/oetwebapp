@@ -66,18 +66,22 @@ describe('push-notifications', () => {
   });
 
   describe('registerPushNotifications', () => {
-    it('registers for push and returns a cleanup function', async () => {
+    // FCM_REGISTRATION_ENABLED is false (see push-notifications.ts) --
+    // google-services.json was removed when the Android applicationId
+    // changed, so FirebaseApp is never initialized and register() would
+    // crash. These tests cover the current (disabled) behavior; when the
+    // flag is re-enabled they should be restored to assert registration
+    // actually happens.
+    it('requests permission but skips FCM registration while disabled', async () => {
       mockPushNotifications.requestPermissions.mockResolvedValue({ receive: 'granted' });
-      mockPushNotifications.register.mockResolvedValue(undefined);
-      mockPushNotifications.addListener.mockResolvedValue({ remove: vi.fn() });
 
       const cleanup = await registerPushNotifications({
         onRegistration: vi.fn(),
       });
 
       expect(mockPushNotifications.requestPermissions).toHaveBeenCalled();
-      expect(mockPushNotifications.register).toHaveBeenCalled();
-      expect(mockPushNotifications.addListener).toHaveBeenCalledTimes(4);
+      expect(mockPushNotifications.register).not.toHaveBeenCalled();
+      expect(mockPushNotifications.addListener).not.toHaveBeenCalled();
       expect(typeof cleanup).toBe('function');
     });
 
@@ -88,24 +92,14 @@ describe('push-notifications', () => {
       expect(typeof cleanup).toBe('function');
     });
 
-    it('invokes onRegistration handler when token arrives', async () => {
+    it('does not invoke onRegistration handler while FCM registration is disabled', async () => {
       const onRegistration = vi.fn();
-      let registrationCallback: ((token: { value: string }) => void) | undefined;
-
       mockPushNotifications.requestPermissions.mockResolvedValue({ receive: 'granted' });
-      mockPushNotifications.register.mockResolvedValue(undefined);
-      mockPushNotifications.addListener.mockImplementation(async (event: string, cb: unknown) => {
-        if (event === 'registration') {
-          registrationCallback = cb as typeof registrationCallback;
-        }
-        return { remove: vi.fn() };
-      });
 
       await registerPushNotifications({ onRegistration });
 
-      expect(registrationCallback).toBeDefined();
-      registrationCallback!({ value: 'test-token-123' });
-      expect(onRegistration).toHaveBeenCalledWith({ value: 'test-token-123' });
+      expect(mockPushNotifications.addListener).not.toHaveBeenCalled();
+      expect(onRegistration).not.toHaveBeenCalled();
     });
   });
 
