@@ -32,14 +32,16 @@ function loadPushModule(): Promise<PushModule> {
   return pushModulePromise;
 }
 
-// Firebase/FCM is provisioned: backend service account configured, and
-// google-services.json is baked into the Android build starting with v1.3.3
-// (2026-07-18). Owner decision: enabled despite v1.3.0-v1.3.2 installs (built
-// before google-services.json existed) still being able to hit the native
-// FirebaseApp-not-initialized crash on register() until those users update —
-// no forced-update gate was turned on for this rollout. If that crash
-// resurfaces in the field, flip this back to false rather than re-diagnosing.
-const FCM_REGISTRATION_ENABLED = true;
+// Disabled 2026-09-02: google-services.json was removed from the Android
+// build when the applicationId changed to com.oetwithdrhesham.app (Firebase
+// was reported unused, and no Firebase app is registered under the new
+// package). Without it, FirebaseApp is never initialized, so
+// PushNotifications.register() below throws immediately after the user
+// grants notification permission -- a hard crash on every fresh install,
+// confirmed via Play Console internal testing. Re-enable only after a new
+// Firebase Android app is registered for com.oetwithdrhesham.app and a
+// matching google-services.json is added back to android/app/.
+const FCM_REGISTRATION_ENABLED = false;
 
 // ── Permission Check ────────────────────────────────────────────
 
