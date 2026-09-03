@@ -60,12 +60,21 @@ const EXAM_FAMILY_COPY: Record<ExamFamilyCode, { label: string; scoreHint: strin
     studyLabel: 'Hours per week for PTE prep',
     helperText: 'PTE foundations are beta-gated until a dedicated simulation and remediation engine is ready.',
   },
+  toefl: {
+    label: 'TOEFL iBT',
+    scoreHint: 'TOEFL target scores use the 0 to 120 total scale (0 to 30 per section).',
+    scorePlaceholder: 'e.g. 80',
+    attemptsLabel: 'Previous TOEFL Attempts',
+    studyLabel: 'Hours per week for TOEFL prep',
+    helperText: 'TOEFL iBT foundations are beta-gated until dedicated multi-section simulation workflows are active.',
+  },
 };
 
 const SCORE_RANGES: Record<ExamFamilyCode, { min: number; max: number; label: string }> = {
   oet: { min: 0, max: 500, label: '0-500' },
   ielts: { min: 0, max: 9, label: '0-9' },
   pte: { min: 10, max: 90, label: '10-90' },
+  toefl: { min: 0, max: 120, label: '0-120' },
 };
 
 const scoreField = z.union([z.coerce.number(), z.literal('')]).optional();
@@ -76,7 +85,7 @@ const IELTS_PATHWAY_OPTIONS = [
 ] as const;
 
 const goalSchema = z.object({
-  examFamilyCode: z.enum(['oet', 'ielts', 'pte']),
+  examFamilyCode: z.enum(['oet', 'ielts', 'pte', 'toefl']),
   ieltsPathway: z.enum(['academic', 'general']).optional(),
   profession: z.string().min(1, 'Please select your profession'),
   examDate: z
@@ -442,7 +451,7 @@ export default function GoalSetupPage() {
               title="Which sub-tests feel hardest?"
               description="This helps surface practice recommendations before enough scored evidence exists."
             />
-            <div className="grid gap-2 grid-cols-2">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
               {SUB_TESTS.map((subTest) => (
                 <Checkbox
                   key={subTest}

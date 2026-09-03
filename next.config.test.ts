@@ -44,4 +44,12 @@ describe('nextConfig redirects', () => {
     expect(bySource.get('/vocabulary/quiz')).toMatchObject({ destination: '/recalls/words', permanent: true });
     expect(bySource.get('/review')).toMatchObject({ destination: '/recalls/words', permanent: true });
   });
+
+  it('redirects shorthand /goal and /boost routes', async () => {
+    const redirects = await nextConfig.redirects?.();
+    const bySource = new Map(redirects?.map((r) => [r.source, r]));
+
+    expect(bySource.get('/goal')).toMatchObject({ destination: '/goals', permanent: true });
+    expect(bySource.get('/boost')).toMatchObject({ destination: '/#boost', permanent: false });
+  });
 });

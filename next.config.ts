@@ -79,6 +79,9 @@ const nextConfig: NextConfig = {
       { source: '/vocabulary/flashcards', destination: '/recalls/words', permanent: true },
       { source: '/vocabulary/quiz', destination: '/recalls/words', permanent: true },
       { source: '/review', destination: '/recalls/words', permanent: true },
+      // Convenience redirects for common shorthand URLs
+      { source: '/goal', destination: '/goals', permanent: true },
+      { source: '/boost', destination: '/#boost', permanent: false },
     ]);
   },
   async headers() {

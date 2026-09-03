@@ -83,17 +83,30 @@ const badgeBaseClassName = 'inline-flex w-full items-center justify-center round
 export function PlatformDownloadBadge({ platform, href, compact = false, className }: PlatformDownloadBadgeProps) {
   const directIosDownload = platform === 'ios' && isIosDirectDownload(href);
   const label = directIosDownload ? 'Download iOS App' : PLATFORM_LABELS[platform];
-  const ariaLabel = directIosDownload
-    ? 'Download the OET app for iPhone and iPad (direct IPA)'
-    : PLATFORM_ARIA_LABELS[platform];
+  const ariaLabel = PLATFORM_ARIA_LABELS[platform];
   return (
     <a
       href={href}
       aria-label={ariaLabel}
-      className={cn(badgeBaseClassName, compact ? 'h-16 gap-3 px-5' : 'h-20 gap-4 px-7', className)}
+      className={cn(
+        badgeBaseClassName,
+        compact ? 'h-16 gap-3 px-5' : 'h-20 gap-3 sm:gap-4 px-4 sm:px-6',
+        className
+      )}
     >
-      <PlatformGlyph platform={platform} className={compact ? 'h-7 w-7' : 'h-9 w-9'} />
-      <span className={cn('font-semibold leading-none', compact ? 'text-sm' : 'text-base')}>{label}</span>
+      <PlatformGlyph
+        platform={platform}
+        className={cn(compact ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9', 'shrink-0')}
+      />
+      <span
+        className={cn(
+          'font-semibold leading-tight text-center sm:leading-none whitespace-nowrap',
+          compact ? 'text-sm' : 'text-xs min-[400px]:text-sm sm:text-base',
+          directIosDownload && 'text-xs min-[400px]:text-xs sm:text-sm font-bold'
+        )}
+      >
+        {label}
+      </span>
     </a>
   );
 }

@@ -61,7 +61,7 @@ export function DashboardAddonsWidget({
 
   return (
     <>
-      <section className="rounded-2xl border border-gold/40 bg-gold/[0.06] p-5 shadow-sm sm:p-6 dark:border-gold/30 dark:bg-gold/[0.08]">
+      <section id="boost" className="rounded-2xl border border-gold/40 bg-gold/[0.06] p-5 shadow-sm sm:p-6 dark:border-gold/30 dark:bg-gold/[0.08]">
         <header className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold/15 text-gold-fg ring-1 ring-inset ring-gold/30">
             <Sparkles className="h-4 w-4" aria-hidden="true" />
@@ -84,7 +84,7 @@ export function DashboardAddonsWidget({
                 key={addon.code}
                 className="group flex h-full flex-col rounded-xl border border-gold/25 bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 ease-[var(--ease-spring)] hover:border-gold/50 hover:shadow-clinical hoverable:-translate-y-0.5 focus-within:border-gold/50"
               >
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex min-h-[38px] items-start justify-between gap-3">
                   <h4 className="text-sm font-bold leading-snug text-navy">{addon.name}</h4>
                   <div className="shrink-0 text-right">
                     <div className="rounded-lg bg-gold/12 px-2.5 py-1 text-base font-extrabold leading-none text-gold-fg">
@@ -110,9 +110,11 @@ export function DashboardAddonsWidget({
                   )}
                 </div>
 
-                {addon.description && (
-                  <p className="mt-2.5 text-xs leading-relaxed text-muted line-clamp-2">{addon.description}</p>
-                )}
+                <div className="flex-1 min-h-[36px] mb-4">
+                  {addon.description && (
+                    <p className="mt-2.5 text-xs leading-relaxed text-muted line-clamp-2">{addon.description}</p>
+                  )}
+                </div>
 
                 <button
                   type="button"
@@ -121,7 +123,7 @@ export function DashboardAddonsWidget({
                     setModalLabel(addon.name);
                     setModalPrice(addon.price);
                   }}
-                  className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-oet-navy px-3 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-oet-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1"
+                  className="mt-auto inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-oet-navy px-3 py-2.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-oet-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold/50 focus-visible:ring-offset-1"
                 >
                   <ShoppingBag className="h-3.5 w-3.5" aria-hidden="true" /> Add to my course
                 </button>

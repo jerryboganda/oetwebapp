@@ -1,6 +1,25 @@
 # Agent State (local)
 
-## Current task — Video Library cross-profession leak fix (Pharmacy seeing Medicine English Writing/Speaking) — READY TO SHIP
+## Current task — Layout Alignment across /get-app, Boost widget, and /goals — READY TO SHIP
+- **User Request**: Layout alignment across all screen sizes (laptops, desktops, mobiles, tablets) per uploaded photo of `/get-app` with misaligned button baselines and mismatched columns, along with `/boost` and `/goal` alignments.
+- **Root Causes**:
+  1. `/get-app` cards had mismatched subtitle line counts (macOS 3 lines vs Windows 1 line) with insufficient minimum height, and `store-badges.tsx` badge had fixed `px-7` padding causing "Download iOS App" to wrap and collide with `leading-none`.
+  2. Bottom features section used an asymmetric 2-column subgrid that did not line up with the 4-column download cards row.
+  3. Dashboard Addons Boost widget had asymmetric button padding (`pt-4` overrode `py-2.5`) and differing card title heights.
+  4. `/goals` weak sub-tests grid was stuck in 2 columns while target scores used 4 columns (`sm:grid-cols-4`).
+  5. Shorthand `/goal` and `/boost` routes returned 404.
+- **Fixes**:
+  1. `app/get-app/page.tsx`: Set text container `min-h-[64px] sm:min-h-[76px]` so card text heights stay consistent across desktop, tablet, and mobile, locking all 4 buttons to the exact same baseline. Restructured features into a matching 4-column grid (`sm:grid-cols-2 lg:grid-cols-4`) aligning with the download cards row. Redesigned the companion QR code section into a responsive banner.
+  2. `components/marketing/store-badges.tsx`: Added responsive padding (`px-4 sm:px-6`), glyph scaling, and `whitespace-nowrap` with single-line font scaling (`text-xs min-[400px]:text-sm sm:text-base`) for badges.
+  3. `components/learner/dashboard-addons-widget.tsx`: Added `id="boost"`, title container `min-h-[38px]`, description container `min-h-[36px] mb-4`, and symmetrical `mt-auto` button positioning.
+  4. `app/goals/page.tsx`: Aligned weak sub-tests grid to `grid-cols-2 sm:grid-cols-4`.
+  5. `next.config.ts`: Added redirects for `/goal` -> `/goals` and `/boost` -> `/#boost`.
+  6. `next.config.test.ts`: Added test cases for the new redirects.
+- **Validation**:
+  - `pnpm exec vitest run --exclude "**/pdf-policy-release*/**" app/get-app/page.test.tsx components/marketing/app-download-promo.test.tsx next.config.test.ts components/layout/__tests__/learner-dashboard-shell.test.tsx components/auth/__tests__/auth-screen-shell.test.tsx` passed (5 files, 12 tests).
+  - `pnpm run ship:gate` passed (`ship-gate files=86 typescript=yes`).
+  - `git diff --check` clean with 0 whitespace errors.
+- **Next**: Ship via AGENTS.md Ship-It workflow (commit, public, push, watch, private, live health check).
 - **Root Cause**: `CourseContentMatrix.cs` hardcoded that all English videos (`lang == "en"`) were shared across all professions, causing English Writing/Speaking videos to have `ProfessionIdsJson: []` and pass `VideoAppearsFor` regardless of candidate profession.
 - **Fix**:
   1. Updated `CourseContentMatrix.cs` so that Writing and Speaking videos require explicit profession targeting in both English and Arabic (`ExpectedVideoTargets`, `TryValidateVideo`, `VideoSourceLabel`). Listening, Reading, and Basic English remain shared across all professions.

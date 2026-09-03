@@ -8,6 +8,7 @@ import {
   BellRing,
   PlayCircle,
   ShieldCheck,
+  Smartphone,
   Video,
 } from 'lucide-react';
 import {
@@ -93,72 +94,91 @@ export default function GetAppPage() {
           )}
         </section>
 
-        <section className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div
-            className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
-          >
-            <PlatformGlyph platform="windows" className="h-8 w-8 text-primary" />
-            <div>
-              <h2 className="text-sm font-bold text-navy">Windows</h2>
-              <p className="mt-1 text-xs text-muted">Installer (.exe) — auto-updates</p>
+        <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-5">
+          <div className="group flex h-full flex-col items-center rounded-2xl border border-border bg-surface p-5 sm:p-6 text-center shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary hover:shadow-md hoverable:-translate-y-0.5">
+            <PlatformGlyph platform="windows" className="h-8 w-8 text-primary shrink-0 transition-transform duration-200 group-hover:scale-105" />
+            <div className="my-3 flex flex-1 flex-col items-center justify-start w-full min-h-[64px] sm:min-h-[76px]">
+              <h2 className="text-sm sm:text-base font-bold text-navy">Windows</h2>
+              <p className="mt-1 text-xs text-muted leading-relaxed">Installer (.exe) — auto-updates</p>
             </div>
-            <PlatformDownloadBadge platform="windows" href={WINDOWS_DOWNLOAD_URL} className="max-w-[220px]" />
+            <PlatformDownloadBadge platform="windows" href={WINDOWS_DOWNLOAD_URL} className="w-full max-w-[220px] mt-auto justify-center" />
           </div>
 
-          <div
-            className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary"
-          >
-            <PlatformGlyph platform="mac" className="h-8 w-8 text-primary" />
-            <div>
-              <h2 className="text-sm font-bold text-navy">macOS</h2>
-              <p className="mt-1 text-xs text-muted">Universal .dmg — Intel & Apple Silicon (M1/M2/M3/M4) — auto-updates</p>
+          <div className="group flex h-full flex-col items-center rounded-2xl border border-border bg-surface p-5 sm:p-6 text-center shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary hover:shadow-md hoverable:-translate-y-0.5">
+            <PlatformGlyph platform="mac" className="h-8 w-8 text-primary shrink-0 transition-transform duration-200 group-hover:scale-105" />
+            <div className="my-3 flex flex-1 flex-col items-center justify-start w-full min-h-[64px] sm:min-h-[76px]">
+              <h2 className="text-sm sm:text-base font-bold text-navy">macOS</h2>
+              <p className="mt-1 text-xs text-muted leading-relaxed">Universal .dmg — Intel & Apple Silicon (M1/M2/M3/M4) — auto-updates</p>
             </div>
-            <PlatformDownloadBadge platform="mac" href={MAC_DOWNLOAD_URL} className="max-w-[220px]" />
+            <PlatformDownloadBadge platform="mac" href={MAC_DOWNLOAD_URL} className="w-full max-w-[220px] mt-auto justify-center" />
           </div>
 
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm transition-colors hover:border-primary">
-            <PlatformGlyph platform="android" className="h-8 w-8 text-primary" />
-            <div>
-              <h2 className="text-sm font-bold text-navy">Android</h2>
-              <p className="mt-1 text-xs text-muted">Signed APK (.apk) — latest release</p>
+          <div className="group flex h-full flex-col items-center rounded-2xl border border-border bg-surface p-5 sm:p-6 text-center shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary hover:shadow-md hoverable:-translate-y-0.5">
+            <PlatformGlyph platform="android" className="h-8 w-8 text-primary shrink-0 transition-transform duration-200 group-hover:scale-105" />
+            <div className="my-3 flex flex-1 flex-col items-center justify-start w-full min-h-[64px] sm:min-h-[76px]">
+              <h2 className="text-sm sm:text-base font-bold text-navy">Android</h2>
+              <p className="mt-1 text-xs text-muted leading-relaxed">Signed APK (.apk) — latest release</p>
             </div>
-            <PlatformDownloadBadge platform="android" href={ANDROID_INSTALL_URL} className="max-w-[220px]" />
+            <PlatformDownloadBadge platform="android" href={ANDROID_INSTALL_URL} className="w-full max-w-[220px] mt-auto justify-center" />
           </div>
 
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
-            <PlatformGlyph platform="ios" className="h-8 w-8 text-primary" />
-            <div>
-              <h2 className="text-sm font-bold text-navy">iPhone & iPad</h2>
-              <p className="mt-1 text-xs text-muted">
+          <div className="group flex h-full flex-col items-center rounded-2xl border border-border bg-surface p-5 sm:p-6 text-center shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary hover:shadow-md hoverable:-translate-y-0.5">
+            <PlatformGlyph platform="ios" className="h-8 w-8 text-primary shrink-0 transition-transform duration-200 group-hover:scale-105" />
+            <div className="my-3 flex flex-1 flex-col items-center justify-start w-full min-h-[64px] sm:min-h-[76px]">
+              <h2 className="text-sm sm:text-base font-bold text-navy">iPhone & iPad</h2>
+              <p className="mt-1 text-xs text-muted leading-relaxed">
                 {IOS_STORE_URL ? 'Official App Store download' : 'Temporary direct IPA download'}
               </p>
             </div>
-            <PlatformDownloadBadge platform="ios" href={IOS_DOWNLOAD_URL} className="max-w-[220px]" />
+            <PlatformDownloadBadge platform="ios" href={IOS_DOWNLOAD_URL} className="w-full max-w-[220px] mt-auto justify-center" />
           </div>
         </section>
 
-        <section className="mt-8 grid gap-6 md:grid-cols-[280px_minmax(0,1fr)]">
-          <div className="flex flex-col items-center gap-3 rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
+        <section className="mt-8 sm:mt-10">
+          <div className="mb-4 text-center sm:text-left">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-muted">
+              Included across all devices & platforms
+            </h2>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 sm:gap-5">
+            {FEATURES.map((feature) => (
+              <div
+                key={feature.title}
+                className="group flex h-full flex-col rounded-2xl border border-border bg-surface p-5 sm:p-6 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary hover:shadow-md hoverable:-translate-y-0.5"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-white">
+                  <feature.icon className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <h3 className="mt-3.5 text-sm font-bold text-navy sm:text-base">{feature.title}</h3>
+                <p className="mt-1.5 flex-1 text-xs leading-relaxed text-muted">{feature.text}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-8 sm:mt-10 rounded-2xl border border-border bg-surface p-6 sm:p-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row items-center gap-5 sm:gap-6 text-center sm:text-left">
             {qrDataUrl ? (
-              <Image src={qrDataUrl} alt="QR code linking to this download page" width={200} height={200} unoptimized className="rounded-lg" />
+              <div className="shrink-0 rounded-xl bg-white p-2.5 shadow-xs border border-border">
+                <Image src={qrDataUrl} alt="QR code linking to this download page" width={130} height={130} unoptimized className="rounded-lg" />
+              </div>
             ) : (
-              <div className="flex h-[200px] w-[200px] items-center justify-center rounded-lg bg-background-light text-xs text-muted">
+              <div className="flex h-[130px] w-[130px] shrink-0 items-center justify-center rounded-xl border border-border bg-background-light text-xs text-muted">
                 QR code
               </div>
             )}
-            <p className="text-xs leading-5 text-muted">
-              On your phone? Scan to open this page and grab the mobile app.
-            </p>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            {FEATURES.map((feature) => (
-              <div key={feature.title} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                <feature.icon className="h-6 w-6 text-primary" aria-hidden="true" />
-                <h3 className="mt-3 text-sm font-bold text-navy">{feature.title}</h3>
-                <p className="mt-1.5 text-xs leading-5 text-muted">{feature.text}</p>
+            <div className="max-w-xl flex-1">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                <Smartphone className="h-3.5 w-3.5" aria-hidden="true" />
+                Mobile & Tablet Companion
               </div>
-            ))}
+              <h3 className="mt-2 text-base sm:text-lg font-bold text-navy">
+                Practise on your smartphone or tablet
+              </h3>
+              <p className="mt-1 text-xs sm:text-sm text-muted leading-relaxed">
+                On your desktop or laptop? Scan this QR code with your mobile camera to open this page and get the app directly on your phone or tablet.
+              </p>
+            </div>
           </div>
         </section>
 
