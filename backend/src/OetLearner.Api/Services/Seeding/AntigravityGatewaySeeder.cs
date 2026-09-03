@@ -86,7 +86,7 @@ public static class AntigravityGatewaySeeder
         var providerReady = provider is not null && !string.IsNullOrWhiteSpace(provider.EncryptedApiKey);
         if (provider is null)
         {
-            db.AiProviders.Add(new AiProvider
+            provider = new AiProvider
             {
                 Id = Guid.NewGuid().ToString("N"),
                 Code = AntigravityGatewayRouteDefaults.ProviderCode,
@@ -104,7 +104,8 @@ public static class AntigravityGatewaySeeder
                 PricePer1kCompletionTokens = 0m,
                 FailoverPriority = 60,
                 IsActive = false,
-            });
+            };
+            db.AiProviders.Add(provider);
             providerReady = !string.IsNullOrWhiteSpace(gatewayToken);
             inserted++;
         }

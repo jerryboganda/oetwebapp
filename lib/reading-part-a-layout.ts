@@ -201,8 +201,8 @@ export function detectPartALayoutFromQuestions(
   }
 
   return ok({
-    matchingEnd,
-    lastStart,
+    matchingEnd: matchingEnd as PartAMatchingEnd,
+    lastStart: lastStart as PartALastStart,
     middleType: firstGap,
     lastType,
   }, 'questions');

@@ -166,6 +166,13 @@ public static class AiFeaturePolicyDefaults
         // Admin AI-draft tool for role-play cards — an authoring tool despite
         // not carrying the "admin." prefix.
         [SpeakingAiFeatureCodes.CardDraftV1] = AiOperationClass.AdminBatch,
+        // One-time-per-task Writing Model Answer pregeneration (admin-only,
+        // never per-candidate — see WritingTaskModelAnswerService). Carries
+        // the "writing." prefix so it fell through to the InteractiveLearning
+        // default (meant for cheap learner-facing chat/coach calls) and hit
+        // that class's $1/day cap after a single generation. This is content
+        // authoring, not learner interaction.
+        [AiFeatureCodes.WritingModelAnswerPregenerate] = AiOperationClass.AdminBatch,
     };
 
     private static readonly Dictionary<string, string> ModuleOverrides = new(StringComparer.OrdinalIgnoreCase)

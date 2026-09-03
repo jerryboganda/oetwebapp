@@ -1,10 +1,11 @@
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Scoring;
 
 namespace OetLearner.Api.Services;
 
 /// <summary>
 /// Resolves score display formats and scale information by exam family.
-/// OET: 0–500 grade scale (A–E).  IELTS: 0–9 band score.  PTE: 10–90.
+/// OET: 0–500 grade scale (A–E).  IELTS: 0–9 band score.  PTE: 10–90.  TOEFL: 0–120.
 ///
 /// NOTE: OET-specific canonical scoring rules (raw↔scaled conversion,
 /// Listening/Reading pass threshold, country-aware Writing pass threshold,
@@ -12,19 +13,26 @@ namespace OetLearner.Api.Services;
 /// All OET pass/fail determinations MUST route through that type — do NOT
 /// re-implement thresholds at call sites.
 /// </summary>
-public class ScoringService
+public class ScoringService(IExamScoringStrategyFactory? strategyFactory = null)
 {
     /// <summary>
     /// Format a raw numeric score for display in the context of a specific exam family.
     /// </summary>
     public string FormatScoreDisplay(string examFamilyCode, double rawScore)
     {
+        if (strategyFactory != null)
+        {
+            var strategy = strategyFactory.GetStrategy(examFamilyCode);
+            return strategy.FormatScoreDisplay("overall", (int)Math.Round(rawScore));
+        }
+
         var code = (examFamilyCode ?? "oet").Trim().ToLowerInvariant();
         return code switch
         {
             "oet" => $"{Math.Round(rawScore)} / {OetGrade(rawScore)}",
             "ielts" => $"{IeltsBand(rawScore)} Band Score",
             "pte" => $"{Math.Round(rawScore)} / 90",
+            "toefl" => rawScore > 30 ? $"{Math.Round(rawScore)} / 120" : $"{Math.Round(rawScore)} / 30",
             _ => $"{Math.Round(rawScore)}"
         };
     }
@@ -90,6 +98,22 @@ public class ScoringService
                     new { grade = "10–35", minScore = 10, maxScore = 35, label = "Beginner" }
                 }
             },
+            "toefl" => new
+            {
+                examFamily = "TOEFL",
+                minScore = 0,
+                maxScore = 120,
+                gradeScale = "0–120 Scale",
+                passingScore = 80,
+                passingGrade = "80+",
+                grades = new[]
+                {
+                    new { grade = "95–120", minScore = 95, maxScore = 120, label = "Advanced (C1+)" },
+                    new { grade = "80–94", minScore = 80, maxScore = 94, label = "High-Intermediate (B2 - Pass)" },
+                    new { grade = "60–79", minScore = 60, maxScore = 79, label = "Low-Intermediate (B1)" },
+                    new { grade = "0–59", minScore = 0, maxScore = 59, label = "Below Low-Intermediate" }
+                }
+            },
             _ => new
             {
                 examFamily = examFamilyCode?.ToUpperInvariant() ?? "UNKNOWN",
@@ -136,6 +160,7 @@ public class ScoringService
             "oet" => OetGrade(scaledScore),
             "ielts" => $"Band {IeltsBand(scaledScore)}",
             "pte" => $"{Math.Round(scaledScore)} / 90",
+            "toefl" => $"Score {Math.Round(scaledScore)}",
             _ => $"{Math.Round(scaledScore)}"
         };
     }
@@ -151,6 +176,7 @@ public class ScoringService
             "oet" => 350,
             "ielts" => 7.0,
             "pte" => 65,
+            "toefl" => 80,
             _ => 60
         };
     }
@@ -166,6 +192,7 @@ public class ScoringService
             "oet" => 500,
             "ielts" => 9,
             "pte" => 90,
+            "toefl" => 120,
             _ => 100
         };
     }
@@ -193,6 +220,14 @@ public class ScoringService
                 < 50 => "developing",
                 < 65 => "borderline",
                 < 80 => "exam_ready",
+                _ => "strong"
+            },
+            "toefl" => scaledScore switch
+            {
+                < 60 => "not_ready",
+                < 70 => "developing",
+                < 80 => "borderline",
+                < 95 => "exam_ready",
                 _ => "strong"
             },
             _ => scaledScore switch

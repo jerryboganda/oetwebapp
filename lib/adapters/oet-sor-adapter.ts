@@ -61,11 +61,11 @@ function isGovernedSubtest(subtest: MockReport['subTests'][number]): boolean {
 function hasApprovedConversion(subtest: MockReport['subTests'][number] | undefined): boolean {
   if (!subtest || subtest.scaledScore == null) return false;
   if (!isGovernedSubtest(subtest)) return true;
-  const rawMaximum = subtest.rawScore.match(/\/\s*(\d+)\s*$/)?.[1];
+  const rawMaximum = typeof subtest.rawScore === 'string' ? subtest.rawScore.match(/\/\s*(\d+)\s*$/)?.[1] : undefined;
   return rawMaximum === String(OET_LR_RAW_MAX)
     && typeof subtest.scoreConversionTableVersionKey === 'string'
     && subtest.scoreConversionTableVersionKey.trim().length > 0
-    && typeof subtest.scoreConversionPassed === 'boolean';
+    && subtest.scoreConversionPassed === true;
 }
 
 export function isMockReportStatementOfResultsReady(report: MockReport): boolean {

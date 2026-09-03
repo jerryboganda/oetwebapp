@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Mic, Volume2 } from 'lucide-react
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { prebufferAudioChunks } from '@/lib/listening/audio-prebuffer';
 
 /**
  * Listening V2 R10 — pre-attempt audio sound check. It verifies the
@@ -142,8 +143,10 @@ export function TechReadinessCheck({ audioProbeUrl, audioUrls = [], onReady }: T
 }
 
 async function verifyScoredAudioAssets(audioUrls: string[]) {
-  const uniqueUrls = [...new Set(audioUrls.map((url) => url.trim()).filter(Boolean))];
-  await Promise.all(uniqueUrls.map((url) => verifyAudioAsset(url)));
+  const result = await prebufferAudioChunks(audioUrls);
+  if (!result.success && result.warnings.length > 0) {
+    throw new Error(result.warnings[0]);
+  }
 }
 
 async function verifyAudioAsset(url: string) {

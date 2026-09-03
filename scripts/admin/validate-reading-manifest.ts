@@ -9,7 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   validateReadingImportBundle,
   type ReadingValidationIssue,
-} from '../../lib/reading-manifest-contract.ts';
+} from '../../lib/reading-manifest-contract';
 
 const workspaceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 

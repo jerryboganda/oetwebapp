@@ -26,6 +26,7 @@
     "ship:watch": "powershell -ExecutionPolicy Bypass -File ./scripts/ship/watch-deploy.ps1",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e:tiers": "vitest run -c vitest.e2e.config.ts",
     "test:e2e:install": "playwright install chromium firefox webkit",
     "test:e2e:auth": "node ./scripts/qa/assert-local-stack.mjs && playwright test tests/e2e/setup/auth.setup.ts",
     "test:e2e": "node ./scripts/qa/run-playwright-matrix.mjs full",
@@ -81,7 +82,6 @@
     "@capacitor/splash-screen": "^7.0.0",
     "@capacitor/status-bar": "^7.0.0",
     "@capawesome/capacitor-app-update": "^7.2.0",
-    "@google/genai": "^1.17.0",
     "@hookform/resolvers": "^5.2.1",
     "@microsoft/signalr": "^10.0.0",
     "@next/env": "^16.2.6",
@@ -147,7 +147,6 @@
   },
   "pnpm": {
     "onlyBuiltDependencies": [
-      "@google/genai",
       "@parcel/watcher",
       "@sentry/cli",
       "@tailwindcss/oxide",

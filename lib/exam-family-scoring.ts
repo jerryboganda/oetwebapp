@@ -1,81 +1,286 @@
 // ============================================================================
-// Exam-Family Scoring Dispatcher — Shared-Core Abstraction
+// Exam-Family Scoring Strategy Pattern & Dispatcher — Shared-Core Microkernel
 // ============================================================================
 //
-// This module provides exam-family-aware scoring entry points that dispatch
-// to the correct exam-specific scoring module (OET, IELTS, PTE). Shared-core
-// workflows MUST use these helpers instead of hardcoding OET assumptions.
+// This module implements the Extensible Strategy Pattern for multi-exam scoring
+// (OET, IELTS, PTE, TOEFL). Shared-core workflows MUST use these strategy
+// abstractions instead of hardcoding OET assumptions.
 //
 // OET-specific code should still import from `lib/scoring.ts` directly when
 // the context is known to be OET-only.
 // ============================================================================
 
 import type { ExamFamilyCode } from './mock-data';
-import { oetGradeFromScaled, oetGradeLabel, formatScaledScore, OET_SCALED_MAX } from './scoring';
-import { ieltsBandDisplay, ieltsRoundBand, IELTS_BAND_MAX, IELTS_DEFAULT_TARGET_BAND } from './ielts-scoring';
-import { clampPteScore, pteReadinessBand, pteReadinessBandLabel, PTE_SCORE_MAX } from './pte-scoring';
+import { oetGradeFromScaled, oetGradeLabel, OET_SCALED_MIN, OET_SCALED_MAX } from './scoring';
+import {
+  ieltsBandDisplay,
+  ieltsRoundBand,
+  IELTS_BAND_MIN,
+  IELTS_BAND_MAX,
+  IELTS_DEFAULT_TARGET_BAND,
+} from './ielts-scoring';
+import {
+  clampPteScore,
+  pteReadinessBand,
+  pteReadinessBandLabel,
+  PTE_SCORE_MIN,
+  PTE_SCORE_MAX,
+  PTE_DEFAULT_TARGET_SCORE,
+} from './pte-scoring';
+import {
+  clampToeflScore,
+  toeflReadinessBand,
+  toeflReadinessBandLabel,
+  formatToeflScoreDisplay,
+  formatToeflGradeDisplay,
+  TOEFL_SCORE_MIN,
+  TOEFL_SCORE_MAX,
+  TOEFL_DEFAULT_TARGET_SCORE,
+} from './toefl-scoring';
 
 // ---------------------------------------------------------------------------
-// Exam-family score display
+// Shared Types & Strategy Interface
+// ---------------------------------------------------------------------------
+
+/** Readiness band for any exam family, normalized to a shared vocabulary. */
+export type SharedReadinessBand = 'not_ready' | 'developing' | 'borderline' | 'exam_ready' | 'strong';
+
+/**
+ * Strategy interface for exam-family-specific scoring, normalization, and presentation behavior.
+ */
+export interface IExamScoringStrategy {
+  readonly examFamily: ExamFamilyCode;
+  readonly label: string;
+  readonly scoreHint: { hint: string; placeholder: string };
+  readonly minScore: number;
+  readonly maxScore: number;
+  readonly defaultTarget: number;
+  formatScore(score: number, subtest?: string): string;
+  formatGrade(score: number, subtest?: string): string;
+  normalizeTargetScore(value: string | number | null | undefined): number | null;
+  getReadinessBand(score: number): SharedReadinessBand;
+  isPass(score: number, countryCode?: string | null): boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Concrete Strategy Implementations
+// ---------------------------------------------------------------------------
+
+/** OET Canonical Scoring Strategy */
+export class OetScoringStrategy implements IExamScoringStrategy {
+  readonly examFamily: ExamFamilyCode = 'oet';
+  readonly label = 'OET';
+  readonly scoreHint = { hint: 'OET scores use the 0 to 500 scale.', placeholder: 'e.g. 350' };
+  readonly minScore = OET_SCALED_MIN;
+  readonly maxScore = OET_SCALED_MAX;
+  readonly defaultTarget = 350;
+
+  formatScore(score: number): string {
+    return `${Math.round(score)}/${OET_SCALED_MAX}`;
+  }
+
+  formatGrade(score: number): string {
+    const grade = oetGradeFromScaled(Math.round(score));
+    return oetGradeLabel(grade);
+  }
+
+  normalizeTargetScore(value: string | number | null | undefined): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!Number.isFinite(num)) return null;
+    const rounded = Math.round(num);
+    if (rounded < OET_SCALED_MIN || rounded > OET_SCALED_MAX) return null;
+    return rounded;
+  }
+
+  getReadinessBand(score: number): SharedReadinessBand {
+    const s = Math.round(score);
+    if (s < 250) return 'not_ready';
+    if (s < 300) return 'developing';
+    if (s < 350) return 'borderline';
+    if (s < 420) return 'exam_ready';
+    return 'strong';
+  }
+
+  isPass(score: number, countryCode?: string | null): boolean {
+    const s = Math.round(score);
+    const cc = countryCode?.trim().toUpperCase();
+    if (cc === 'US' || cc === 'QA') {
+      return s >= 300;
+    }
+    return s >= 350;
+  }
+}
+
+/** IELTS Canonical Scoring Strategy */
+export class IeltsScoringStrategy implements IExamScoringStrategy {
+  readonly examFamily: ExamFamilyCode = 'ielts';
+  readonly label = 'IELTS';
+  readonly scoreHint = { hint: 'IELTS scores use the 0 to 9 band scale (0.5 increments).', placeholder: 'e.g. 7.0' };
+  readonly minScore = IELTS_BAND_MIN;
+  readonly maxScore = IELTS_BAND_MAX;
+  readonly defaultTarget = IELTS_DEFAULT_TARGET_BAND;
+
+  formatScore(score: number): string {
+    return ieltsBandDisplay(score);
+  }
+
+  formatGrade(score: number): string {
+    return `Band ${ieltsBandDisplay(score)}`;
+  }
+
+  normalizeTargetScore(value: string | number | null | undefined): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!Number.isFinite(num)) return null;
+    if (num < IELTS_BAND_MIN || num > IELTS_BAND_MAX) return null;
+    return ieltsRoundBand(num);
+  }
+
+  getReadinessBand(score: number): SharedReadinessBand {
+    const b = ieltsRoundBand(score);
+    if (b < 5.0) return 'not_ready';
+    if (b < 5.5) return 'developing';
+    if (b < IELTS_DEFAULT_TARGET_BAND) return 'borderline';
+    if (b < 7.5) return 'exam_ready';
+    return 'strong';
+  }
+
+  isPass(score: number): boolean {
+    return ieltsRoundBand(score) >= IELTS_DEFAULT_TARGET_BAND;
+  }
+}
+
+/** PTE Academic Scoring Strategy */
+export class PteScoringStrategy implements IExamScoringStrategy {
+  readonly examFamily: ExamFamilyCode = 'pte';
+  readonly label = 'PTE';
+  readonly scoreHint = { hint: 'PTE scores use the 10 to 90 scale.', placeholder: 'e.g. 65' };
+  readonly minScore = PTE_SCORE_MIN;
+  readonly maxScore = PTE_SCORE_MAX;
+  readonly defaultTarget = PTE_DEFAULT_TARGET_SCORE;
+
+  formatScore(score: number): string {
+    return String(clampPteScore(score));
+  }
+
+  formatGrade(score: number): string {
+    return `Score ${clampPteScore(score)}`;
+  }
+
+  normalizeTargetScore(value: string | number | null | undefined): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!Number.isFinite(num)) return null;
+    const clamped = Math.round(num);
+    if (clamped < PTE_SCORE_MIN || clamped > PTE_SCORE_MAX) return null;
+    return clamped;
+  }
+
+  getReadinessBand(score: number): SharedReadinessBand {
+    return pteReadinessBand(score);
+  }
+
+  isPass(score: number): boolean {
+    return clampPteScore(score) >= PTE_DEFAULT_TARGET_SCORE;
+  }
+}
+
+/** TOEFL iBT Scoring Strategy */
+export class ToeflScoringStrategy implements IExamScoringStrategy {
+  readonly examFamily: ExamFamilyCode = 'toefl';
+  readonly label = 'TOEFL';
+  readonly scoreHint = { hint: 'TOEFL scores use the 0 to 120 scale (4 sub-tests 0–30).', placeholder: 'e.g. 80' };
+  readonly minScore = TOEFL_SCORE_MIN;
+  readonly maxScore = TOEFL_SCORE_MAX;
+  readonly defaultTarget = TOEFL_DEFAULT_TARGET_SCORE;
+
+  formatScore(score: number): string {
+    return formatToeflScoreDisplay(score);
+  }
+
+  formatGrade(score: number): string {
+    return formatToeflGradeDisplay(score);
+  }
+
+  normalizeTargetScore(value: string | number | null | undefined): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!Number.isFinite(num)) return null;
+    const clamped = Math.round(num);
+    if (clamped < TOEFL_SCORE_MIN || clamped > TOEFL_SCORE_MAX) return null;
+    return clamped;
+  }
+
+  getReadinessBand(score: number): SharedReadinessBand {
+    return toeflReadinessBand(score);
+  }
+
+  isPass(score: number): boolean {
+    return clampToeflScore(score) >= TOEFL_DEFAULT_TARGET_SCORE;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Strategy Registry
+// ---------------------------------------------------------------------------
+
+const registry: Record<string, IExamScoringStrategy> = {
+  oet: new OetScoringStrategy(),
+  ielts: new IeltsScoringStrategy(),
+  pte: new PteScoringStrategy(),
+  toefl: new ToeflScoringStrategy(),
+};
+
+/**
+ * Register or override a strategy for an exam family.
+ */
+export function registerExamScoringStrategy(strategy: IExamScoringStrategy): void {
+  registry[strategy.examFamily.toLowerCase()] = strategy;
+}
+
+/**
+ * Resolve an IExamScoringStrategy instance for the given exam family code.
+ * Defaults to OET if unknown or omitted.
+ */
+export function getExamScoringStrategy(examFamily: ExamFamilyCode | string | null | undefined): IExamScoringStrategy {
+  const key = (examFamily || 'oet').toLowerCase().trim();
+  return registry[key] || registry['oet'];
+}
+
+// ---------------------------------------------------------------------------
+// Backward-Compatible Exported Wrappers
 // ---------------------------------------------------------------------------
 
 /**
  * Format a score for display according to the exam family's conventions.
  *
- *   OET   → "380/500" (scaled score)
- *   IELTS → "7.0"     (band score)
- *   PTE   → "65"      (10–90 score)
+ *   OET   -> "380/500" (scaled score)
+ *   IELTS -> "7.0"     (band score)
+ *   PTE   -> "65"      (10–90 score)
+ *   TOEFL -> "90/120"  (0–120 score)
  */
 export function formatScoreDisplay(
   examFamily: ExamFamilyCode,
   score: number,
 ): string {
-  switch (examFamily) {
-    case 'oet':
-      return `${Math.round(score)}/${OET_SCALED_MAX}`;
-    case 'ielts':
-      return ieltsBandDisplay(score);
-    case 'pte':
-      return String(clampPteScore(score));
-    default:
-      return String(score);
-  }
+  return getExamScoringStrategy(examFamily).formatScore(score);
 }
-
-// ---------------------------------------------------------------------------
-// Exam-family grade / band display
-// ---------------------------------------------------------------------------
 
 /**
  * Format a grade label for display according to the exam family.
  *
- *   OET   → "Grade B"
- *   IELTS → "Band 7.0"
- *   PTE   → "Score 65"
+ *   OET   -> "Grade B"
+ *   IELTS -> "Band 7.0"
+ *   PTE   -> "Score 65"
+ *   TOEFL -> "Score 90"
  */
 export function formatGradeDisplay(
   examFamily: ExamFamilyCode,
   score: number,
 ): string {
-  switch (examFamily) {
-    case 'oet': {
-      const grade = oetGradeFromScaled(Math.round(score));
-      return oetGradeLabel(grade);
-    }
-    case 'ielts': {
-      return `Band ${ieltsBandDisplay(score)}`;
-    }
-    case 'pte': {
-      return `Score ${clampPteScore(score)}`;
-    }
-    default:
-      return String(score);
-  }
+  return getExamScoringStrategy(examFamily).formatGrade(score);
 }
-
-// ---------------------------------------------------------------------------
-// Exam-family target validation
-// ---------------------------------------------------------------------------
 
 /**
  * Validate that a goal/target score string is valid for the given exam family.
@@ -85,71 +290,17 @@ export function normalizeTargetScore(
   examFamily: ExamFamilyCode,
   value: string | number | null | undefined,
 ): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (!Number.isFinite(num)) return null;
-
-  switch (examFamily) {
-    case 'oet': {
-      const rounded = Math.round(num);
-      if (rounded < 0 || rounded > OET_SCALED_MAX) return null;
-      return rounded;
-    }
-    case 'ielts': {
-      const band = ieltsRoundBand(num);
-      if (band < 0 || band > IELTS_BAND_MAX) return null;
-      return band;
-    }
-    case 'pte': {
-      const clamped = Math.round(num);
-      if (clamped < 10 || clamped > PTE_SCORE_MAX) return null;
-      return clamped;
-    }
-    default:
-      return null;
-  }
+  return getExamScoringStrategy(examFamily).normalizeTargetScore(value);
 }
-
-// ---------------------------------------------------------------------------
-// Exam-family readiness band
-// ---------------------------------------------------------------------------
-
-/** Readiness band for any exam family, normalized to a shared vocabulary. */
-export type SharedReadinessBand = 'not_ready' | 'developing' | 'borderline' | 'exam_ready' | 'strong';
 
 /**
  * Map a score to a shared readiness band, using exam-family-specific thresholds.
- *
- *   OET:  <250 not_ready, <300 developing, <350 borderline, <420 exam_ready, ≥420 strong
- *   IELTS: <5.0 not_ready, <5.5 developing, <6.5 borderline, <7.5 exam_ready, ≥7.5 strong
- *   PTE:   <50 not_ready, <58 developing, <65 borderline, <79 exam_ready, ≥79 strong
  */
 export function sharedReadinessBand(
   examFamily: ExamFamilyCode,
   score: number,
 ): SharedReadinessBand {
-  switch (examFamily) {
-    case 'oet': {
-      const s = Math.round(score);
-      if (s < 250) return 'not_ready';
-      if (s < 300) return 'developing';
-      if (s < 350) return 'borderline';
-      if (s < 420) return 'exam_ready';
-      return 'strong';
-    }
-    case 'ielts': {
-      const b = ieltsRoundBand(score);
-      if (b < 5.0) return 'not_ready';
-      if (b < 5.5) return 'developing';
-      if (b < IELTS_DEFAULT_TARGET_BAND) return 'borderline';
-      if (b < 7.5) return 'exam_ready';
-      return 'strong';
-    }
-    case 'pte':
-      return pteReadinessBand(score);
-    default:
-      return 'not_ready';
-  }
+  return getExamScoringStrategy(examFamily).getReadinessBand(score);
 }
 
 /** Human-readable label for a shared readiness band. */
@@ -163,37 +314,16 @@ export function sharedReadinessBandLabel(band: SharedReadinessBand): string {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Exam-family copy helpers
-// ---------------------------------------------------------------------------
-
 /**
  * Human-friendly label for an exam family code.
  */
 export function examFamilyLabel(code: ExamFamilyCode): string {
-  switch (code) {
-    case 'oet': return 'OET';
-    case 'ielts': return 'IELTS';
-    case 'pte': return 'PTE';
-    default:
-      // Exhaustiveness check
-      const _exhaustive: never = code;
-      return String(_exhaustive);
-  }
+  return getExamScoringStrategy(code).label;
 }
 
 /**
  * Score hint / placeholder text for an exam family.
  */
 export function examFamilyScoreHint(code: ExamFamilyCode): { hint: string; placeholder: string } {
-  switch (code) {
-    case 'oet':
-      return { hint: 'OET scores use the 0 to 500 scale.', placeholder: 'e.g. 350' };
-    case 'ielts':
-      return { hint: 'IELTS scores use the 0 to 9 band scale (0.5 increments).', placeholder: 'e.g. 7.0' };
-    case 'pte':
-      return { hint: 'PTE scores use the 10 to 90 scale.', placeholder: 'e.g. 65' };
-    default:
-      return { hint: 'Enter your target score.', placeholder: '' };
-  }
+  return getExamScoringStrategy(code).scoreHint;
 }

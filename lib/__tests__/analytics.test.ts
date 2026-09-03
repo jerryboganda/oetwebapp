@@ -1,3 +1,5 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 const authClientMock = vi.hoisted(() => ({
   ensureFreshAccessToken: vi.fn(),
 }));

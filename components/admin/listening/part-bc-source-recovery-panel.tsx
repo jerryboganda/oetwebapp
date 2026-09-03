@@ -77,7 +77,7 @@ export function PartBCSourceRecoveryPanel({
     }
   }
 
-  if (loading) return <Skeleton variant="card" />;
+  if (loading) return <Skeleton variant="bare" className="h-24 w-full" />;
   if (error && !report) return <InlineAlert variant="error">{error}</InlineAlert>;
   if (!report) return null;
 
@@ -117,8 +117,8 @@ export function PartBCSourceRecoveryPanel({
             variant="outline"
             size="sm"
             onClick={() => void load()}
-            startIcon={<FileSearch className="h-4 w-4" />}
           >
+            <FileSearch className="mr-1.5 h-4 w-4 inline" />
             Re-check
           </Button>
           <Button
@@ -126,11 +126,10 @@ export function PartBCSourceRecoveryPanel({
             size="sm"
             onClick={() => void handleRecover()}
             loading={running}
-            loadingText="Restoring…"
             disabled={report.recovered === 0 || !report.sourceTextAvailable}
-            startIcon={<RefreshCw className="h-4 w-4" />}
           >
-            Restore {report.recovered} from source
+            <RefreshCw className="mr-1.5 h-4 w-4 inline" />
+            {running ? 'Restoring…' : `Restore ${report.recovered} from source`}
           </Button>
         </div>
       </div>

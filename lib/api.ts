@@ -84,10 +84,17 @@ import type {
   AiPackageCreditSnapshot,
   AiPackagesResponse,
 } from './billing-types';
-// Re-exported so callers can `import { type AiPackageCreditSnapshot } from '@/lib/api'`
-// alongside the fetch/adjust functions below that return it, without reaching into
-// './billing-types' directly.
-export type { AiPackageCreditSnapshot } from './billing-types';
+export type {
+  BillingData,
+  BillingChangePreview,
+  BillingQuote,
+  BillingProductType,
+  BillingPaymentStatus,
+  Invoice,
+  AiPackage,
+  AiPackageCreditSnapshot,
+  AiPackagesResponse,
+};
 import { mapAiPackageCreditSnapshot } from './map-ai-package-credit-snapshot';
 import type { FreezePolicy } from './types/freeze';
 import type { BulkActionResultDto } from './types/admin';
@@ -2713,7 +2720,7 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
     score: rawScore,
     total: maxRawScore,
     questions,
-    invalidCount: Number(evaluation.invalidCount ?? questions.filter((question: ListeningResult['questions'][number]) => question.isInvalid === true).length),
+    invalidCount: Number(evaluation.invalidCount ?? questions.filter((question: { isInvalid?: boolean }) => question.isInvalid === true).length),
     recommendedDrill: hasRecommendedDrill
       ? {
           id: (evaluation.recommendedNextDrill as ApiRecord).drillId ?? (evaluation.recommendedNextDrill as ApiRecord).id ?? 'listening-drill-detail_capture',

@@ -233,6 +233,9 @@ public sealed class LocalFileStorage(IWebHostEnvironment environment, IOptions<S
         if (string.IsNullOrWhiteSpace(key))
             throw new InvalidOperationException("Storage key is required.");
 
+        if (Path.IsPathRooted(key) || key.StartsWith('/') || key.StartsWith('\\'))
+            throw new InvalidOperationException("Storage key cannot be an absolute, rooted, or UNC path.");
+
         var rootPath = Path.GetFullPath(
             Path.IsPathRooted(_options.LocalRootPath)
                 ? _options.LocalRootPath

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Sliders } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';

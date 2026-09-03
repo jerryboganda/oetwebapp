@@ -64,7 +64,6 @@ export const listeningSessionFixture: ListeningSessionDto = {
     presentationStyle: 'exam_standard',
     integrityLockRequired: false,
     technicalGuidanceTelemetryEnabled: true,
-    printableBooklet: false,
   },
   scoring: {
     maxRawScore: 42,

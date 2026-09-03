@@ -386,7 +386,7 @@ function MockReportContent() {
             stats={report.subTests.map((test) => {
               const Icon = SUBTEST_META[test.id]?.icon ?? Headphones;
               const governedScore = test.id === 'reading' || test.id === 'listening';
-              return { label: test.name, value: test.score, tone: scoreTone(test.score, test.grade, governedScore), icon: <Icon /> };
+              return { label: test.name, value: test.score, tone: scoreTone(String(test.score), test.grade, governedScore), icon: <Icon /> };
             })}
             aside={(
               <div className="rounded-2xl border border-border bg-background-light p-4">
@@ -453,7 +453,7 @@ function MockReportContent() {
         </MotionSection>
 
         {/* 2. Prior Comparison */}
-        {comp.exists && (
+        {comp && comp.exists && (
           <MotionSection
             delayIndex={1}
             className="bg-background-light rounded-2xl border border-border p-6"
@@ -511,9 +511,9 @@ function MockReportContent() {
                       value={typeof test.scaledScore === 'number' ? (test.scaledScore / 500) * 100 : 0}
                       size={56}
                       stroke={6}
-                      color={scoreGaugeColor(test.score, test.grade, governedScore)}
+                      color={scoreGaugeColor(String(test.score), test.grade, governedScore)}
                     >
-                      <span className={`text-sm font-black ${scoreColor(test.score, test.grade, governedScore)}`}>{test.grade ?? test.score}</span>
+                      <span className={`text-sm font-black ${scoreColor(String(test.score), test.grade, governedScore)}`}>{test.grade ?? test.score}</span>
                     </ResultGauge>
                   </div>
                   {canDownload ? (
@@ -554,11 +554,11 @@ function MockReportContent() {
             headline={reportV1.weaknessNarrative?.headline}
             body={reportV1.weaknessNarrative?.body}
             tags={reportV1.weaknessNarrative?.tags}
-            fallback={{
+            fallback={report.weakestCriterion ? {
               subtest: report.weakestCriterion.subtest,
               criterion: report.weakestCriterion.criterion,
               description: report.weakestCriterion.description,
-            }}
+            } : undefined}
           />
         </MotionSection>
 
@@ -574,12 +574,14 @@ function MockReportContent() {
         </MotionSection>
 
         {/* 5. Words to Review — surfaces OET vocabulary tied to the weakest criterion */}
-        <MockVocabularyReview
-          mockId={report.id}
-          weakSubtest={report.weakestCriterion.subtest}
-          weakCriterion={report.weakestCriterion.criterion}
-          weakDescription={report.weakestCriterion.description}
-        />
+        {report.weakestCriterion && (
+          <MockVocabularyReview
+            mockId={report.id}
+            weakSubtest={report.weakestCriterion.subtest}
+            weakCriterion={report.weakestCriterion.criterion}
+            weakDescription={report.weakestCriterion.description}
+          />
+        )}
 
         {/* 6. Remediation Plan — spec requirement: every mock report ends with a concrete next 7-day plan.
             When server-side W5 RemediationTask plan exists we render it (with completion controls);
@@ -654,9 +656,15 @@ function MockReportContent() {
                 <RefreshCw className="w-8 h-8 text-white" />
               </div>
               <h2 className="text-xl font-black mb-2">Update Your Study Plan</h2>
-              <p className="text-sm text-white/70 max-w-md mx-auto mb-6">
-                Based on this report, we recommend focusing on <strong>{report.weakestCriterion.criterion}</strong> in {report.weakestCriterion.subtest}.
-              </p>
+              {report.weakestCriterion ? (
+                <p className="text-sm text-white/70 max-w-md mx-auto mb-6">
+                  Based on this report, we recommend focusing on <strong>{report.weakestCriterion.criterion}</strong> in {report.weakestCriterion.subtest}.
+                </p>
+              ) : (
+                <p className="text-sm text-white/70 max-w-md mx-auto mb-6">
+                  Based on this report, review your detailed sub-test breakdown to update your focus areas.
+                </p>
+              )}
               <Link
                 href="/study-plan"
                 className="bg-white text-navy px-8 py-4 rounded-xl font-black hover:bg-background-light transition-colors inline-flex items-center justify-center gap-2"

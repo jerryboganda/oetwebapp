@@ -31,6 +31,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchAuthorizedObjectUrl } from '@/lib/api';
+import { DualTrackRecorder } from '@/lib/speaking/dual-track-recorder';
 
 export type ConversationConnection = 'connecting' | 'connected' | 'error';
 export type ConversationPhase = 'idle' | 'listening' | 'thinking' | 'speaking';
@@ -279,6 +280,7 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
   // Set when a confirmed onset stopped the patient's playback (barge-in) —
   // attached to the next SENT turn so the grader sees the interruption.
   const interruptedPatientRef = useRef(false);
+  const dualTrackRecorderRef = useRef<DualTrackRecorder | null>(null);
 
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioUrlRef = useRef<string | null>(null);
@@ -674,6 +676,10 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
     discardStopRef.current = true; // never submit a partial turn on teardown
     finishCapture();
     recorderRef.current = null;
+    if (dualTrackRecorderRef.current) {
+      void dualTrackRecorderRef.current.stop();
+      dualTrackRecorderRef.current = null;
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -703,6 +709,12 @@ export function useSpeakingConversation(sessionId: string): UseSpeakingConversat
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
       streamRef.current = stream;
+      try {
+        dualTrackRecorderRef.current = new DualTrackRecorder(sessionIdRef.current);
+        dualTrackRecorderRef.current.start(stream);
+      } catch (recErr) {
+        console.warn('[Speaking] Dual-track safety recorder failed to start:', recErr);
+      }
       const AudioCtor =
         window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new AudioCtor();

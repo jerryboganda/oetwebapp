@@ -157,10 +157,16 @@ export default function MockWritingSectionPage() {
               Start writing phase now
             </Button>
           ) : null}
-          <Button variant="primary" disabled={phase !== 'editing' || submitting} loading={submitting} onClick={() => void submit('manual')}>
-            <Send className="h-4 w-4" />
-            Submit writing section
-          </Button>
+          {phase === 'submitted' && mockAttemptId ? (
+            <Button variant="primary" onClick={() => router.push(`/mocks/player/${mockAttemptId}`)}>
+              Continue to Next Sub-Test
+            </Button>
+          ) : (
+            <Button variant="primary" disabled={phase !== 'editing' || submitting} loading={submitting} onClick={() => void submit('manual')}>
+              <Send className="h-4 w-4" />
+              Submit writing section
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setSaveStatus('offline-saved')}>
             <Save className="h-4 w-4" />
             Confirm local save

@@ -444,3 +444,12 @@ export async function clearOfflineData(): Promise<void> {
     request.onerror = () => reject(request.error);
   });
 }
+
+export function setStorageEncryptionKey(_key?: string | null): void {
+  // Key derivation is automated via per-device salt and session
+}
+
+export function initOfflineDatabase(): Promise<IDBDatabase | null> {
+  if (!isBrowser()) return Promise.resolve(null);
+  return openDb();
+}

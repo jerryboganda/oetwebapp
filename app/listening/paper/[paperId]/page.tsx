@@ -38,6 +38,7 @@ import { TechReadinessCheck } from '@/components/domain/listening/TechReadinessC
 import { QuestionPaperPdfViewer, type ReadingPdfAsset } from '@/components/domain/reading-pdf-viewer';
 import { completeMockSection } from '@/lib/api';
 import { buildTechReadinessProbe } from '@/lib/listening/tech-readiness-probe';
+import { getCachedAudioUrl } from '@/lib/listening/audio-prebuffer';
 import { listeningV2Api } from '@/lib/listening/v2-api';
 import { submitAudioCheck } from '@/lib/listening-pathway-api';
 import {
@@ -1427,6 +1428,14 @@ function SubSectionAudio({
     setBuffering(true);
     (async () => {
       try {
+        const cached = getCachedAudioUrl(subSection.audioUrl as string);
+        if (cached) {
+          if (!cancelled) {
+            setResolvedSrc(cached);
+            setBuffering(false);
+          }
+          return;
+        }
         const url = await fetchAuthorizedObjectUrl(subSection.audioUrl as string);
         objectUrl = url;
         if (cancelled) {

@@ -22,7 +22,7 @@ export interface WeaknessNarrativeProps {
   headline?: string | null;
   body?: string | null;
   tags?: WeaknessNarrativeTag[];
-  fallback: WeaknessNarrativeFallback;
+  fallback?: WeaknessNarrativeFallback | null;
   className?: string;
 }
 
@@ -54,6 +54,29 @@ export function WeaknessNarrative({
 
   // Fallback path — V1 narrative not yet aggregated.
   if (!hasNarrative && !hasTags) {
+    if (!fallback) {
+      return (
+        <div
+          className={
+            'bg-danger/10 rounded-2xl border border-danger/30 p-6 sm:p-8 ' +
+            (className ?? '')
+          }
+        >
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-6 h-6 text-danger" />
+            </div>
+            <div>
+              <h3 className="text-lg font-black text-danger mb-2">Area for Improvement</h3>
+              <p className="text-sm text-danger/80 leading-relaxed">
+                Review your sub-test breakdown to identify priority focus areas.
+              </p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div
         className={

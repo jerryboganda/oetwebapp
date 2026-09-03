@@ -43,6 +43,8 @@
     "node_modules",
     "OET Web App Login only screens take from here",
     "copilot-worktrees",
+    "pdf-policy-release/**/*",
+    "pdf-policy-release2/**/*",
     ".storybook/**/*",
     "**/__stories__/**/*",
     "**/*.stories.ts",

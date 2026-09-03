@@ -91,7 +91,7 @@ import ListeningResults from './page';
 import type { ListeningReviewDto } from '@/lib/listening-api';
 
 const mockResultData: ListeningReviewDto = {
-  evaluationId: null,
+  evaluationId: 'eval-listening-1',
   attemptId: 'attempt-listening-1',
   paper: {
     id: 'paper-101',
@@ -150,11 +150,7 @@ const mockResultData: ListeningReviewDto = {
       missReason: null,
       errorType: null,
       options: [],
-      transcript: {
-        allowed: true,
-        excerpt: 'I started feeling this chest tightness about two days ago.',
-        distractorExplanation: null,
-      },
+      transcript: { allowed: true, excerpt: 'I started feeling this chest tightness about two days ago.', distractorExplanation: null },
       distractorExplanation: null,
     },
     {
@@ -173,11 +169,7 @@ const mockResultData: ListeningReviewDto = {
       missReason: 'WrongNumber',
       errorType: 'wrong_number',
       options: [],
-      transcript: {
-        allowed: true,
-        excerpt: 'We will keep you on twenty milligrams as the maintenance dose.',
-        distractorExplanation: '10mg was the starting initial dose, not the maintenance dose.',
-      },
+      transcript: { allowed: true, excerpt: 'We will keep you on twenty milligrams as the maintenance dose.', distractorExplanation: '10mg was the starting initial dose, not the maintenance dose.' },
       distractorExplanation: '10mg was the starting initial dose, not the maintenance dose.',
     },
   ],

@@ -351,9 +351,9 @@ export function getMockReadinessTrend(reports: MockReport[]): MockReadinessTrend
 }
 
 export function buildMockRemediationPlan(report: MockReport): MockRemediationAction[] {
-  const weakSubtest = report.weakestCriterion.subtest.toLowerCase();
-  const weakCriterion = report.weakestCriterion.criterion;
-  const weakDescription = report.weakestCriterion.description;
+  const weakSubtest = report.weakestCriterion?.subtest?.toLowerCase() ?? '';
+  const weakCriterion = report.weakestCriterion?.criterion ?? 'Focus Area';
+  const weakDescription = report.weakestCriterion?.description ?? 'Review and practice target skills.';
   const route = routeForWeakness(weakSubtest);
 
   return [
@@ -408,8 +408,10 @@ function isMockSectionComplete(section: MockSessionSection): boolean {
   return state === 'completed' || state === 'submitted' || state === 'evaluating' || Boolean(section.completedAt || section.submittedAt);
 }
 
-function parseScoreValue(value: string): number | null {
-  const trimmed = value.trim();
+function parseScoreValue(value: string | number | null | undefined): number | null {
+  if (value == null) return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const trimmed = String(value).trim();
   if (!trimmed || /pending|n\/a/i.test(trimmed)) return null;
   const numeric = Number(trimmed.replace(/[^0-9.]/g, ''));
   if (!Number.isFinite(numeric)) return null;

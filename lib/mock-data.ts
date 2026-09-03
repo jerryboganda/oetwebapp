@@ -9,7 +9,7 @@
 // ═══════════════════ SHARED TYPES ═══════════════════
 
 export type SubTest = 'Writing' | 'Speaking' | 'Reading' | 'Listening';
-export type ExamFamilyCode = 'oet' | 'ielts' | 'pte';
+export type ExamFamilyCode = 'oet' | 'ielts' | 'pte' | 'toefl';
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
 export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'failed';
 export type ReviewStatus = 'reviewed' | 'pending' | 'not_requested';
@@ -488,6 +488,8 @@ export interface MockConfig {
   strictness?: MockStrictness;
 }
 
+export type MockSectionState = 'not_started' | 'in_progress' | 'completed' | 'locked' | 'expired' | string;
+
 export interface MockSessionSection {
   id: string;
   sectionAttemptId?: string;
@@ -496,6 +498,7 @@ export interface MockSessionSection {
   subtest?: string;
   partGroup?: 'a' | 'bc' | 'full' | string;
   state: string;
+  status?: string;
   reviewAvailable: boolean;
   reviewSelected: boolean;
   launchRoute: string;
@@ -541,10 +544,11 @@ export interface MockSession {
 export interface SubTestScore {
   id: string;
   name: SubTest;
-  score: string;
-  rawScore: string;
-  color: string;
-  bg: string;
+  score: string | number;
+  rawScore?: string;
+  color?: string;
+  bg?: string;
+  passed?: boolean;
   scaledScore?: number | null;
   grade?: string | null;
   state?: string;
@@ -559,18 +563,19 @@ export interface MockReport {
   reportId?: string;
   mockAttemptId?: string;
   state?: string;
-  title: string;
+  title?: string;
   date: string;
   profession?: string | null;
   targetCountry?: string | null;
   deliveryMode?: string | null;
   strictness?: string | null;
-  overallScore: string;
+  overallScore: string | number;
   overallGrade?: string | null;
-  summary: string;
+  summary?: string;
+  passed?: boolean;
   subTests: SubTestScore[];
-  weakestCriterion: { subtest: string; criterion: string; description: string };
-  priorComparison: { exists: boolean; priorMockName: string; overallTrend: 'up' | 'down' | 'flat'; details: string };
+  weakestCriterion?: { subtest: string; criterion: string; description: string };
+  priorComparison?: { exists: boolean; priorMockName: string; overallTrend: 'up' | 'down' | 'flat'; details: string };
   reviewSummary?: { queued: number; inReview: number; completed: number; pending: number };
   perModuleReadiness?: Array<{
     subtest: string;
