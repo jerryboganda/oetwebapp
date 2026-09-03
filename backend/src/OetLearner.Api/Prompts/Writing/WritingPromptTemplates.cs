@@ -67,6 +67,13 @@ public static class WritingPromptTemplates
         scenario (case notes) for [PROFESSION], letter type [LETTER_TYPE], complexity
         [DIFFICULTY 1-5], topic [TOPIC].
 
+        Allowed "letter_type" values (use exactly one):
+        LT-RR (Routine referral), LT-UR (Urgent referral), LT-DG (Discharge),
+        LT-TR (Transfer), LT-NM (Non-medical), LT-OT (Other Letters).
+        LT-RP / Response is RETIRED and must never be emitted. If the brief does
+        not clearly match a known type, use LT-OT (Other Letters) — do not guess
+        the closest known category.
+
         Output strict JSON:
         {
           "title": "string",

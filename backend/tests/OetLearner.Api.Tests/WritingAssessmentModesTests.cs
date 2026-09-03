@@ -201,6 +201,9 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
     [Fact]
     public async Task SubmitPaperWritingAttempt_WithIncompleteOcr_IsRejected()
     {
+        // The legacy AI-graded attempt-submit route is retired: it refuses
+        // with the governed-flow signal before OCR validation runs. (The
+        // instructor path above still validates OCR payloads normally.)
         await SeedWritingPaperAttemptAsync("ocr-incomplete", paperMimeType: "image/png", extractionState: "processing", extractedText: "");
         using var learner = _factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");
 
@@ -216,8 +219,8 @@ public class WritingAssessmentModesTests : IClassFixture<FirstPartyAuthTestWebAp
             learnerNotes = (string?)null
         });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("paper_ocr_incomplete", await response.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Contains("writing_v11_required", await response.Content.ReadAsStringAsync());
     }
 
     [Fact]

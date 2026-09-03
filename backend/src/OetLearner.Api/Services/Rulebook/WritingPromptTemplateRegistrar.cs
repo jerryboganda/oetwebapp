@@ -257,7 +257,7 @@ public static class WritingPromptTemplateRegistrar
             MaxOutputTokens = 2_000,
             CacheStrategy = "none",
             OutputSchema = """
-                { "title", "letter_type", "profession", "sub_discipline?",
+                { "title", "letter_type": "LT-RR|LT-UR|LT-DG|LT-TR|LT-NM|LT-OT (LT-RP retired, never emit; unclear cases use LT-OT)", "profession", "sub_discipline?",
                   "topics": [], "difficulty": int,
                   "case_notes_markdown": string,
                   "case_notes_structured": [

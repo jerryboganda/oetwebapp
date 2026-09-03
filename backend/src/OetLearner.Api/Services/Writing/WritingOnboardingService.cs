@@ -238,7 +238,11 @@ public sealed class WritingOnboardingService(
 
     private static List<string> NormalizeLetterTypes(IReadOnlyList<string>? focus)
     {
-        var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "LT-RR", "LT-UR", "LT-DG", "LT-TR", "LT-RP", "LT-NM" };
+        // Catalogue taxonomy gate (see WritingLetterTypeTaxonomy): retired
+        // Response (LT-RP) is rejected; Other Letters (LT-OT) is accepted.
+        var allowed = new HashSet<string>(
+            WritingLetterTypeTaxonomy.ValidCatalogueLetterTypes,
+            StringComparer.OrdinalIgnoreCase);
         return (focus ?? Array.Empty<string>())
             .Select(v => v.Trim().ToUpperInvariant())
             .Where(allowed.Contains)

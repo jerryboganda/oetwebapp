@@ -19,6 +19,7 @@ const LETTER_TYPES: Array<{ code: WritingLetterType; label: string; description:
   { code: 'LT-DG', label: 'Discharge to GP', description: 'Hospital to primary care after admission.' },
   { code: 'LT-TR', label: 'Transfer', description: 'Patient moves between care settings.' },
   { code: 'LT-NM', label: 'Non-medical referral', description: 'To social worker, OT, dietitian, etc.' },
+  { code: 'LT-OT', label: 'Other Letters', description: 'Uncategorised or mixed letters that do not fit a standard type.' },
 ];
 
 export default function ProfileSetupFocusPage() {

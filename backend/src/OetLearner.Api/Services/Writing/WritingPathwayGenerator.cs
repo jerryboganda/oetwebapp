@@ -233,7 +233,7 @@ public sealed class WritingPathwayGenerator : IWritingPathwayGenerator
         if (focus is { Count: > 0 }) return focus;
         return profession switch
         {
-            "pharmacy" => new[] { "LT-RR", "LT-RP", "LT-NM" },
+            "pharmacy" => new[] { "LT-RR", "LT-OT", "LT-NM" },
             "nursing" => new[] { "LT-DG", "LT-TR", "LT-NM" },
             _ => new[] { "LT-RR", "LT-DG", "LT-UR" },
         };

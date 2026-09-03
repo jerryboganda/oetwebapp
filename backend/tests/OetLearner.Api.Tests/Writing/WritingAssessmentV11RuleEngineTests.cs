@@ -51,7 +51,7 @@ public sealed class WritingAssessmentV11RuleEngineTests
     {
         var engine = new WritingAssessmentV11RuleEngine(new WritingRuleEngine(new RulebookLoader()));
         var findings = engine.Evaluate(
-            new WritingLintInput("Re: Master John Smith\n\nThe patient has asthma.", "routine_referral"),
+            new WritingLintInput("Re: Master John Smith\n\nThe patient has asthma.", "routine_referral", PatientAge: 17),
             "Patient: John Smith\nAge: 17\nDiagnosis: asthma.");
 
         Assert.Contains(findings, x => x.RuleId == "R06.10");
@@ -62,7 +62,7 @@ public sealed class WritingAssessmentV11RuleEngineTests
     {
         var engine = new WritingAssessmentV11RuleEngine(new WritingRuleEngine(new RulebookLoader()));
         var findings = engine.Evaluate(
-            new WritingLintInput("Re: John Smith\n\nJohn Smith is stable.", "routine_referral"),
+            new WritingLintInput("Re: John Smith\n\nJohn Smith is stable.", "routine_referral", PatientAge: 18),
             "Patient: John Smith\nAge: 18\nDiagnosis: asthma.");
 
         Assert.Contains(findings, x => x.RuleId == "R06.11");

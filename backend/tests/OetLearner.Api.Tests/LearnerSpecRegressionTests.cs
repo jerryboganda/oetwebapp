@@ -146,7 +146,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         // the paperId query parameter.
         Assert.Contains("/mocks/writing/", sections[2].GetProperty("launchRoute").GetString());
         Assert.Contains("paperId=mock-writing-regression", sections[2].GetProperty("launchRoute").GetString());
-        Assert.Contains("/speaking/task/mock-speaking-regression", sections[3].GetProperty("launchRoute").GetString());
+        // Speaking sections likewise use the dedicated mock-speaking player
+        // route (/mocks/speaking/...) rather than the legacy /speaking/task/
+        // format. The content paper ID is carried in the route.
+        Assert.Contains("/mocks/speaking/mock-speaking-regression", sections[3].GetProperty("launchRoute").GetString());
         Assert.All(sections, section =>
         {
             var launchRoute = section.GetProperty("launchRoute").GetString();
@@ -285,8 +288,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     }
 
     [Fact]
-    public async Task WritingExamSubmit_RejectsContentDuringReadingWindow()
+    public async Task LegacyWritingExamSubmit_ReturnsGovernedFlowConflictDuringReadingWindow()
     {
+        // The legacy attempt-submit route is retired: it refuses with the
+        // governed-flow signal before any reading-window logic runs.
         using var client = await CreateClientForUserAsync("writing-reading-window-submit");
         var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
 
@@ -298,7 +303,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.Equal("writing_reading_window_active", json.RootElement.GetProperty("code").GetString());
+        Assert.Equal("writing_v11_required", json.RootElement.GetProperty("code").GetString());
     }
 
     [Fact]
@@ -334,8 +339,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     }
 
     [Fact]
-    public async Task WritingExamSubmit_AllowsContentAfterReadingWindow()
+    public async Task LegacyWritingExamSubmit_ReturnsGovernedFlowConflictAfterReadingWindow()
     {
+        // Same retired route after the reading window: still refused with the
+        // governed-flow signal; grading now happens via /v1/writing/submissions/.
         using var client = await CreateClientForUserAsync("writing-reading-window-submit-allowed");
         var attemptId = await CreateWritingAttemptAsync(client, "practice", mode: "exam");
         await MoveAttemptStartBackAsync(attemptId, TimeSpan.FromMinutes(6));
@@ -346,11 +353,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             idempotencyKey = Guid.NewGuid().ToString("N")
         });
 
-        var body = await response.Content.ReadAsStringAsync();
-        Assert.True(response.IsSuccessStatusCode, body);
-        using var json = JsonDocument.Parse(body);
-        Assert.Equal(attemptId, json.RootElement.GetProperty("attemptId").GetString());
-        Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("evaluationId").GetString()));
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_v11_required", json.RootElement.GetProperty("code").GetString());
+        Assert.False(await HasEvaluationAsync(attemptId, "writing"));
     }
 
     [Theory]
@@ -475,8 +481,11 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     }
 
     [Fact]
-    public async Task WritingSubmit_DoesNotReplayIdempotentResponseAcrossAttempts()
+    public async Task LegacyWritingSubmit_ReturnsGovernedFlowConflictWithoutSideEffects()
     {
+        // The retired route cannot queue evaluations at all, so there is
+        // nothing to replay across attempts: both calls refuse identically
+        // and neither attempt gains an evaluation.
         using var client = await CreateClientForUserAsync("writing-idempotency-cross-attempt");
         var writingAttemptId = await CreateWritingAttemptAsync(client, "practice");
         var listeningAttemptId = await CreateObjectiveAttemptAsync(client, "listening", "lt-001", "practice");
@@ -488,7 +497,9 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             content = "Dear Dr Smith, this first Writing attempt creates the idempotency record.",
             idempotencyKey
         });
-        writingSubmit.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.Conflict, writingSubmit.StatusCode);
+        using var writingJson = JsonDocument.Parse(await writingSubmit.Content.ReadAsStringAsync());
+        Assert.Equal("writing_v11_required", writingJson.RootElement.GetProperty("code").GetString());
 
         var replayAgainstListening = await client.PostAsJsonAsync($"/v1/writing/attempts/{listeningAttemptId}/submit", new
         {
@@ -501,6 +512,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         Assert.Equal("writing_attempt_not_found", json.RootElement.GetProperty("code").GetString());
         Assert.Equal(listeningBefore, await ReadAttemptSnapshotAsync(listeningAttemptId));
         Assert.False(await HasEvaluationAsync(listeningAttemptId, "writing"));
+        Assert.False(await HasEvaluationAsync(writingAttemptId, "writing"));
     }
 
     [Fact]
@@ -583,14 +595,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     {
         using var client = await CreateClientForUserAsync("listening-evaluation-cross-subtest");
         var writingAttemptId = await CreateWritingAttemptAsync(client, "practice");
-        var submit = await client.PostAsJsonAsync($"/v1/writing/attempts/{writingAttemptId}/submit", new
-        {
-            content = "Dear Dr Smith, this Writing evaluation must not be readable through Listening.",
-            idempotencyKey = Guid.NewGuid().ToString("N")
-        });
-        submit.EnsureSuccessStatusCode();
-        using var submitJson = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
-        var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString();
+        // Seed the Writing evaluation directly: the legacy attempt-submit
+        // grading route is retired, but cross-subtest isolation of stored
+        // evaluations is still enforced on the read path.
+        var evaluationId = await SeedCompletedEvaluationAsync(writingAttemptId, "writing");
 
         var response = await client.GetAsync($"/v1/listening/evaluations/{evaluationId}");
 
@@ -693,24 +701,14 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         var initialVersion = initialPlanJson.RootElement.GetProperty("version").GetInt32();
         var initialGeneratedAt = initialPlanJson.RootElement.GetProperty("generatedAt").GetDateTimeOffset();
 
+        // A completed evaluation exists for the learner (seeded directly: the
+        // legacy attempt-submit grading route is retired). Regeneration itself
+        // runs through the supported regenerate endpoint + background drain.
         var attemptId = await CreateWritingAttemptAsync(client, "practice");
-        var submitResponse = await client.PostAsJsonAsync($"/v1/writing/attempts/{attemptId}/submit", new
-        {
-            content = "Dear Dr Patterson, I am writing to update you regarding Mrs Vance after her knee replacement. She recovered well and requires staple removal in 14 days.",
-            idempotencyKey = Guid.NewGuid().ToString("N")
-        });
-        submitResponse.EnsureSuccessStatusCode();
-        using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
-        var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString();
+        await SeedCompletedEvaluationAsync(attemptId, "writing");
 
-        await WaitForAsync(
-            async () =>
-            {
-                var response = await client.GetAsync($"/v1/writing/evaluations/{evaluationId}/summary");
-                using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                return json.RootElement.GetProperty("state").GetString() == "completed";
-            },
-            "writing evaluation to complete");
+        var regenerateResponse = await client.PostAsync("/v1/study-plan/regenerate", content: null);
+        regenerateResponse.EnsureSuccessStatusCode();
 
         await WaitForAsync(
             async () =>
@@ -1162,6 +1160,30 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         return await db.Evaluations.AnyAsync(x => x.AttemptId == attemptId && x.SubtestCode == subtest);
+    }
+
+    private async Task<string> SeedCompletedEvaluationAsync(string attemptId, string subtest)
+    {
+        // Direct seed: the legacy attempt-submit grading route is retired, so
+        // tests needing a stored evaluation insert it instead of driving it.
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var evaluationId = $"we-{Guid.NewGuid():N}";
+        db.Evaluations.Add(new Evaluation
+        {
+            Id = evaluationId,
+            AttemptId = attemptId,
+            SubtestCode = subtest,
+            State = AsyncState.Completed,
+            ScoreRange = "350-380",
+            GradeRange = "B",
+            LearnerDisclaimer = "Practice estimate only.",
+            ModelExplanationSafe = "Seeded evaluation.",
+            CreatedAt = DateTimeOffset.UtcNow,
+            GeneratedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        return evaluationId;
     }
 
     private static async Task<string> CreateSpeakingAttemptAsync(HttpClient client, string context)

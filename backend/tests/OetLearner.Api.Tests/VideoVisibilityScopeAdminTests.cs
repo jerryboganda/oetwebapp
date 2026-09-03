@@ -12,8 +12,9 @@ namespace OetLearner.Api.Tests;
 
 /// <summary>
 /// Spec §7.4 / OQ-2: admin-side visibility scope rules — forced SHARED on
-/// Listening/Reading/basic-english, target-only allow-list for Writing/Speaking, and
-/// the publish gate that blocks target-less Writing/Speaking videos.
+/// Listening/Reading/basic-english, profession isolation + target-only
+/// allow-list for Writing/Speaking, and the publish gate that blocks
+/// scope-less Writing/Speaking videos.
 /// </summary>
 public class VideoVisibilityScopeAdminTests(BunnyMockedWebApplicationFactory factory)
     : IClassFixture<BunnyMockedWebApplicationFactory>
@@ -102,8 +103,8 @@ public class VideoVisibilityScopeAdminTests(BunnyMockedWebApplicationFactory fac
         var videoId = await SeedReadyVideoAsync();
         using var admin = CreateAdminClient();
 
-        // English Writing videos are course-shared per the content matrix (empty
-        // profession targets), but still carry an isolated visibility scope.
+        // English Writing videos are isolated per profession (non-empty
+        // profession targets) and carry an isolated visibility scope.
         var patch = await admin.PatchAsJsonAsync(
             $"/v1/admin/video-library/videos/{videoId}",
             new
@@ -111,7 +112,7 @@ public class VideoVisibilityScopeAdminTests(BunnyMockedWebApplicationFactory fac
                 subtestCode = "writing",
                 language = "en",
                 courseFolder = "sessions",
-                targetProfessionIds = Array.Empty<string>(),
+                targetProfessionIds = new[] { "medicine" },
                 visibilityScope = "FULL_MEDICINE",
             });
 
@@ -121,17 +122,40 @@ public class VideoVisibilityScopeAdminTests(BunnyMockedWebApplicationFactory fac
     }
 
     [Fact]
+    public async Task Patch_WritingVideo_WithoutProfessionTargets_IsRejected()
+    {
+        await ConfigureBunnyAsync();
+        var videoId = await SeedReadyVideoAsync();
+        using var admin = CreateAdminClient();
+
+        // Writing videos must target at least one profession (profession
+        // isolation); empty targets fail the content-matrix check.
+        var patch = await admin.PatchAsJsonAsync(
+            $"/v1/admin/video-library/videos/{videoId}",
+            new
+            {
+                subtestCode = "writing",
+                language = "en",
+                targetProfessionIds = Array.Empty<string>(),
+            });
+
+        Assert.Equal(HttpStatusCode.BadRequest, patch.StatusCode);
+        Assert.Contains("at least one profession", await patch.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task PublishGate_WritingVideoWithoutTarget_BlockedUntilScopeSet()
     {
         await ConfigureBunnyAsync();
         var videoId = await SeedReadyVideoAsync();
         using var admin = CreateAdminClient();
 
-        // Ready Writing video with a valid matrix scope (en + no targets) but no
-        // visibility target yet — the publish gate must block it.
+        // Ready Writing video with valid profession targets but no visibility
+        // scope yet — the publish gate must block it on the scope, not on
+        // the (valid) matrix targets.
         var patch = await admin.PatchAsJsonAsync(
             $"/v1/admin/video-library/videos/{videoId}",
-            new { subtestCode = "writing", language = "en", targetProfessionIds = Array.Empty<string>() });
+            new { subtestCode = "writing", language = "en", targetProfessionIds = new[] { "medicine" } });
         Assert.Equal(HttpStatusCode.OK, patch.StatusCode);
 
         var gateResponse = await admin.GetAsync($"/v1/admin/video-library/videos/{videoId}/publish-gate");

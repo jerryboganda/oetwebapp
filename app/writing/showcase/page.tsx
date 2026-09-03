@@ -16,7 +16,7 @@ import type {
 } from '@/lib/writing/types';
 
 const PROFESSIONS: WritingProfession[] = ['medicine', 'pharmacy', 'nursing', 'other'];
-const LETTER_TYPES: WritingLetterType[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM'];
+const LETTER_TYPES: WritingLetterType[] = ['LT-RR', 'LT-UR', 'LT-DG', 'LT-TR', 'LT-NM', 'LT-OT'];
 
 export default function WritingShowcasePage() {
   const t = useTranslations();

@@ -582,31 +582,14 @@ public sealed class WritingLearnerPathwayService(LearnerDbContext db, TimeProvid
     }
 
     private static string NormalizeLetterType(string value)
-        => value.Trim().ToUpperInvariant() switch
-        {
-            "ROUTINE_REFERRAL" or "REFERRAL" or "LT-RR" => "LT-RR",
-            "URGENT_REFERRAL" or "LT-UR" => "LT-UR",
-            "DISCHARGE" or "UPDATE_DISCHARGE" or "LT-DG" => "LT-DG",
-            "TRANSFER" or "TRANSFER_LETTER" or "LT-TR" => "LT-TR",
-            "RESPONSE" or "UPDATE" or "LT-RP" => "LT-RP",
-            "NON_MEDICAL_REFERRAL" or "NON-MEDICAL" or "LT-NM" => "LT-NM",
-            _ => "LT-RR",
-        };
+        => WritingLetterTypeTaxonomy.NormalizeCatalogueLetterType(value);
 
-    private static string ToLegacyLetterType(string value) => NormalizeLetterType(value) switch
-    {
-        "LT-RR" => "routine_referral",
-        "LT-UR" => "urgent_referral",
-        "LT-DG" => "discharge",
-        "LT-TR" => "transfer_letter",
-        "LT-RP" => "update",
-        "LT-NM" => "non_medical_referral",
-        _ => "routine_referral",
-    };
+    private static string ToLegacyLetterType(string value)
+        => WritingLetterTypeTaxonomy.ToLegacyLetterType(value);
 
     private static List<string> DefaultLetterTypes(string profession) => NormalizeProfession(profession) switch
     {
-        "pharmacy" => ["LT-RR", "LT-RP", "LT-NM"],
+        "pharmacy" => ["LT-RR", "LT-OT", "LT-NM"],
         "nursing" => ["LT-DG", "LT-TR", "LT-NM"],
         _ => ["LT-RR", "LT-DG", "LT-UR"],
     };

@@ -121,11 +121,10 @@ public class WritingWave5ServiceTests
     }
 
     [Fact]
-    public async Task SubmitMockAsync_RoutesToHumanReview_WithoutAiGrade()
+    public async Task SubmitMockAsync_GradesViaAi_AndStillRoutesToHumanReview()
     {
-        // Rule: mock Writing is graded by a HUMAN examiner — NEVER by AI.
-        // SubmitMockAsync must not produce a WritingGrade; it parks the submission
-        // as "awaiting_review" and routes it to the tutor marking queue.
+        // W8 Mock policy: mock Writing IS AI-graded (instant band feedback)
+        // and STILL routed to a human examiner for marking.
         var db = BuildDb();
         var clock = new FixedClock();
         var mockId = await SeedPublishedMockAsync(db, clock);
@@ -140,9 +139,9 @@ public class WritingWave5ServiceTests
         var results = await service.GetMockResultsAsync(UserId, started.Id, CancellationToken.None);
 
         Assert.NotNull(results);
-        Assert.Equal("awaiting_review", results!.Status);
-        Assert.Null(results.Grade);
-        Assert.False(await db.WritingGrades.AnyAsync());                 // no AI grade row
+        Assert.NotNull(results!.Grade);
+        Assert.Equal(32, results.Grade.RawTotal);
+        Assert.True(await db.WritingGrades.AnyAsync());                  // AI grade row
         Assert.True(await db.WritingTutorReviewAssignments.AnyAsync());  // routed to a human examiner
 
         await db.DisposeAsync();

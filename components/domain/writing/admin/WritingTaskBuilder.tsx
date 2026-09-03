@@ -39,8 +39,8 @@ import {
   formStateFromDto,
   formStateToUpsert,
   formStateToImportJson,
-  WRITING_LETTER_TYPES,
   WRITING_LETTER_TYPE_LABELS,
+  writingLetterTypesForProfession,
   type WritingTaskFormState,
 } from './builder-state';
 
@@ -65,14 +65,11 @@ const PROFESSION_OPTIONS = WRITING_PROFESSIONS.map((p) => ({
 }));
 
 /**
- * Letter types available for a given profession. Veterinary disallows the
- * non-medical referral (LT-NM) per the OET content rules, so we filter it out
- * of the dropdown when the profession is veterinary.
+ * Letter types available for a given profession (single source of truth lives
+ * in builder-state so unit tests can cover the per-profession contract).
  */
 function letterTypeOptionsFor(profession: WritingProfession) {
-  const allowed = WRITING_LETTER_TYPES.filter(
-    (lt) => !(profession === 'veterinary' && lt === 'LT-NM'),
-  );
+  const allowed = writingLetterTypesForProfession(profession);
   return allowed.map((lt) => ({ value: lt, label: WRITING_LETTER_TYPE_LABELS[lt] }));
 }
 

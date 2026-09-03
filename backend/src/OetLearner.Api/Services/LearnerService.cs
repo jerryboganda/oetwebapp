@@ -14081,19 +14081,24 @@ public partial class LearnerService(
         var sessionItems = new List<object>();
         var allocatedMinutes = 0;
 
-        // Get user's weakest areas to weight task selection
-        var recentEvals = await db.Evaluations
-            .AsNoTracking()
-            .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && a.UserId == userId)
-                && e.GeneratedAt >= DateTimeOffset.UtcNow.AddDays(-30))
-            .Select(e => new
-            {
-                e.SubtestCode,
-                e.ScoreRange,
-                e.ScaledScore,
-                e.ScoreConversionTableVersionKey,
-                e.ScoreConversionPassed
-            })
+        // Get user's weakest areas to weight task selection. Written as an
+        // explicit join with a hoisted cutoff (not a correlated Any subquery
+        // with an inline DateTimeOffset call) so every provider, including
+        // SQLite, can translate it.
+        var recencyCutoff = DateTimeOffset.UtcNow.AddDays(-30);
+        var recentEvals = await (
+                from e in db.Evaluations.AsNoTracking()
+                join a in db.Attempts.AsNoTracking() on e.AttemptId equals a.Id
+                where a.UserId == userId
+                    && e.GeneratedAt >= recencyCutoff
+                select new
+                {
+                    e.SubtestCode,
+                    e.ScoreRange,
+                    e.ScaledScore,
+                    e.ScoreConversionTableVersionKey,
+                    e.ScoreConversionPassed
+                })
             .ToListAsync(ct);
 
         var subtestScores = recentEvals

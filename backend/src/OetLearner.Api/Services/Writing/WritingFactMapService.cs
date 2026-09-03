@@ -116,7 +116,10 @@ public static class WritingFactMapService
             return candidate.Contains("allerg", StringComparison.OrdinalIgnoreCase);
         var words = Regex.Matches(normalizedFact, @"[a-z]{4,}")
             .Select(match => match.Value)
-            .Where(word => word is not ("status" or "negative" or "positive" or "patient" or "history" or "present"))
+            // Case-note label words carry no clinical content: a fact whose
+            // only remaining keyword is e.g. "asthma" must match a candidate
+            // that mentions asthma even without repeating the label.
+            .Where(word => word is not ("status" or "negative" or "positive" or "patient" or "history" or "present" or "diagnosis" or "diagnosed"))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (words.Length == 0) return candidate.Contains(fact, StringComparison.OrdinalIgnoreCase);

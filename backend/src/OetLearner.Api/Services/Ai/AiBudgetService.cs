@@ -458,6 +458,15 @@ public sealed class AiBudgetService(
     {
         if (limitUsd <= 0m) return AiBudgetReservation.Denied(exhaustedReason);
 
+        // The InMemory test provider cannot execute the raw Postgres ledger
+        // SQL below; reserve through EF instead. Same headroom semantics,
+        // minus cross-process atomicity (single-process test hosts have no
+        // concurrent reservers). The relational path is untouched.
+        if (db.Database.IsInMemory())
+        {
+            return await TryReservePeriodInMemoryAsync(db, scope, periodKey, amount, limitUsd, exhaustedReason, ct);
+        }
+
         var periodId = $"{scope}:{periodKey}";
 
         // Two attempts: the first caller creates the period row with
@@ -502,9 +511,72 @@ public sealed class AiBudgetService(
         return AiBudgetReservation.Denied(exhaustedReason);
     }
 
+    private async Task<AiBudgetReservation> TryReservePeriodInMemoryAsync(
+        LearnerDbContext db,
+        string scope,
+        string periodKey,
+        decimal amount,
+        decimal limitUsd,
+        string exhaustedReason,
+        CancellationToken ct)
+    {
+        var periodId = $"{scope}:{periodKey}";
+        var now = DateTimeOffset.UtcNow;
+        var row = await db.AiBudgetPeriods.FirstOrDefaultAsync(p => p.Id == periodId, ct);
+        if (row is null)
+        {
+            row = new AiBudgetPeriod
+            {
+                Id = periodId,
+                Scope = scope,
+                PeriodKey = periodKey,
+                LimitUsd = limitUsd,
+                ReservedUsd = 0m,
+                CommittedUsd = 0m,
+                CreatedAt = now,
+                UpdatedAt = now,
+            };
+            db.AiBudgetPeriods.Add(row);
+        }
+
+        if (row.ReservedUsd + row.CommittedUsd + amount > limitUsd)
+        {
+            logger.LogWarning(
+                "AI platform budget exhausted for scope {Scope} period {PeriodId} (limit {Limit}); refusing the call, zero provider calls made.",
+                scope, periodId, limitUsd);
+            return AiBudgetReservation.Denied(exhaustedReason);
+        }
+
+        // Re-synced on every reserve so a raised budget takes effect
+        // immediately, mirroring the relational path.
+        row.LimitUsd = limitUsd;
+        row.ReservedUsd += amount;
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        return new AiBudgetReservation(true, null, periodId, scope, amount)
+        {
+            GrantedPeriodIds = [periodId],
+        };
+    }
+
     private static async Task ReleaseHoldsAsync(
         LearnerDbContext db, IReadOnlyList<string> periodIds, decimal reserved, CancellationToken _)
     {
+        if (db.Database.IsInMemory())
+        {
+            var rows = await db.AiBudgetPeriods
+                .Where(p => periodIds.Contains(p.Id))
+                .ToListAsync();
+            foreach (var row in rows)
+            {
+                row.ReservedUsd = Math.Max(0m, row.ReservedUsd - reserved);
+                row.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+
+            await db.SaveChangesAsync();
+            return;
+        }
+
         foreach (var periodId in periodIds)
         {
             await db.Database.ExecuteSqlRawAsync(

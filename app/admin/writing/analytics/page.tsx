@@ -48,11 +48,11 @@ const BREADCRUMBS = [
 const WINDOW_OPTIONS = [7, 30, 90] as const;
 
 const LETTER_TYPE_LABELS: Record<WritingLetterType, string> = {
-  'LT-RR': 'Referral',
+  'LT-RR': 'Routine referral',
   'LT-UR': 'Urgent referral',
   'LT-DG': 'Discharge',
   'LT-TR': 'Transfer',
-  'LT-NM': 'New management',
+  'LT-NM': 'Non-medical referral',
   'LT-OT': 'Other Letters',
 };
 

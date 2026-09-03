@@ -45,6 +45,19 @@ export const WRITING_LETTER_TYPE_LABELS: Record<WritingLetterType, string> = {
   'LT-OT': 'Other Letters',
 };
 
+/**
+ * Letter types available for a given profession. Veterinary disallows the
+ * non-medical referral (LT-NM) per the OET content rules; every other
+ * profession exposes the full catalogue set — including Other Letters
+ * (LT-OT), which is the universal fallback and valid under every profession.
+ * Response (LT-RP) is retired and never listed.
+ */
+export function writingLetterTypesForProfession(profession: WritingProfession): WritingLetterType[] {
+  return WRITING_LETTER_TYPES.filter(
+    (lt) => !(profession === 'veterinary' && lt === 'LT-NM'),
+  );
+}
+
 export const WRITING_SIMULATION_MODES: WritingSimulationMode[] = [
   'paper',
   'computer',

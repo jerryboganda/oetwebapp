@@ -532,11 +532,12 @@ public sealed record WritingMockSubmitRequest(
 
 public sealed record WritingMockResultsResponse(
     WritingMockSessionResponse Session,
-    // Null while a mock submission is awaiting human examiner marking — mock
-    // Writing is never AI-graded. Populated once a tutor submits the mark.
+    // Null while a mock submission has no AI grade yet (e.g. grading failed
+    // and awaits retry). Under the W8 Mock policy mock Writing IS AI-graded
+    // for instant band feedback, alongside human examiner marking.
     WritingGradeResponseV2? Grade,
-    // "graded" once a result exists; "awaiting_review" while a human examiner
-    // has not yet marked the mock submission.
+    // "graded" once a result exists; "awaiting_review" while neither an AI
+    // grade nor a human mark is available yet.
     string Status = "graded");
 
 // ─────────────────────────────────────────────────────────────────────────────

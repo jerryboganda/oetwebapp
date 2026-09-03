@@ -57,13 +57,19 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
         AssertPropertyNames(cards,
             "readiness", "examDate", "todaysTasks", "latestEvaluatedSubmission",
             "weakCriteria", "momentum", "nextMockRecommendation", "pendingExpertReviews");
-        Assert.Equal("evaluation-000", cards.GetProperty("latestEvaluatedSubmission").GetProperty("evaluationId").GetString());
+        // Historical writing evaluations are excluded from dashboard evidence
+        // (no v1.1 report link), so with writing-only history there is no
+        // latest evaluated submission and the card reports partial data.
+        Assert.Equal(JsonValueKind.Null, cards.GetProperty("latestEvaluatedSubmission").ValueKind);
         Assert.Equal(47, cards.GetProperty("pendingExpertReviews").GetProperty("count").GetInt32());
-        Assert.False(json.GetProperty("partialData").GetBoolean());
+        Assert.True(json.GetProperty("partialData").GetBoolean());
         Assert.True(_sql.Commands.Count <= 7, DumpCommands());
-        Assert.DoesNotContain(_sql.Commands, command =>
-            command.Contains("IN (", StringComparison.OrdinalIgnoreCase)
-            && command.Length > 2_000);
+        // No unbounded client-side ID lists: `IN (SELECT …)` subqueries and
+        // short enum lists like `IN (1, 3, 4)` are fine (bounded,
+        // server-side); only a literal/parameter list grown from history size
+        // is forbidden.
+        Assert.False(_sql.Commands.Any(command =>
+            System.Text.RegularExpressions.Regex.IsMatch(command, @"IN\s*\(\s*(?!SELECT)[^)]{2000,}", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline)), DumpCommands());
     }
 
     [Fact]
@@ -80,7 +86,7 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
 
         AssertPropertyNames(me,
             "userId", "role", "displayName", "email", "timezone", "locale", "createdAt",
-            "lastActiveAt", "currentPlanId", "activeProfessionId", "freeze", "goals");
+            "lastActiveAt", "currentPlanId", "activeProfessionId", "avatarUrl", "freeze", "goals");
         Assert.Equal("bootstrap-user", me.GetProperty("userId").GetString());
         Assert.True(_sql.Commands.Count <= 3, DumpCommands());
 
@@ -190,9 +196,10 @@ public sealed class LearnerServicePerformanceTests : IAsyncLifetime
         Assert.Equal(
             new[] { "attempt-000", "attempt-001", "attempt-002", "attempt-003" },
             submissions.Select(item => item.GetProperty("attemptId").GetString()).ToArray());
-        Assert.Equal(
-            "evaluation-000",
-            json.GetProperty("latestEvaluation").GetProperty("evaluationId").GetString());
+        // The historical attempt/evaluation surface has no v1.1 report link,
+        // so learner home deliberately exposes no raw-total/band evaluation
+        // summary (see GetWritingHomeAsync): latestEvaluation is null by design.
+        Assert.Equal(JsonValueKind.Null, json.GetProperty("latestEvaluation").ValueKind);
         Assert.True(_sql.Commands.Count <= 5, DumpCommands());
         Assert.Single(_sql.Commands.Where(command =>
             command.Contains("Evaluations", StringComparison.OrdinalIgnoreCase)));
