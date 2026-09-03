@@ -2,6 +2,12 @@
 
 Package `com.oetwithdrhesham.app`. Keep the SAME application record for testing → production. Do NOT create a second app.
 
+> **Read `docs/play-store-automation.md` first.** Play Console access is automated via a
+> service-account toolkit — most of section A/B below (listing text, icon, feature
+> graphic, screenshots) is already live and toolkit-managed, not a manual TODO. Two items
+> below were wrong as originally written and are corrected inline: the iOS bundle claim
+> in section E, and the "manual-only" list in section G.
+
 ## A. Store listing (Play Console > Grow users > Store presence > Main store listing)
 - [ ] App name = `OET with Dr Ahmed Hesham` (exact capitalization, no dot).
 - [ ] Language = English (United Kingdom) or existing English default. No extra locales unless professionally translated.
@@ -34,7 +40,7 @@ Package `com.oetwithdrhesham.app`. Keep the SAME application record for testing 
 ## E. Technical release (September 2026 rules)
 - [ ] Target API 36+ (repo: `compileSdk 36 / targetSdk 36` in `android/variables.gradle`).
 - [ ] Signed AAB + Play App Signing via `Mobile Release` workflow (same app). `versionCode` incremented every release, clear `versionName`.
-- [ ] Package stays `com.oetwithdrhesham.app` (Android + assetlinks + `validate-mobile-release-inputs.mjs` + CI + tests aligned; iOS bundle also `com.oetwithdrhesham.app`).
+- [ ] Package stays `com.oetwithdrhesham.app` (Android + assetlinks + `validate-mobile-release-inputs.mjs` + CI + tests aligned). **Correction:** iOS bundle ID is deliberately unchanged at `com.oetprep.learner` — the Android rename was Android-only by owner decision; do not touch iOS bundle ID as part of Play Store work (see `docs/play-store-automation.md`).
 - [ ] Firebase: `google-services.json` was removed during the rename (FCM registration disabled via `FCM_REGISTRATION_ENABLED=false` to stop fresh-install crash). Before re-enabling push: create the Firebase Android app for `com.oetwithdrhesham.app`, download the new `google-services.json`, re-enable registration, re-declare in Data Safety.
 - [ ] `apple-app-site-association` still contains `TEAM_ID` placeholder — replace with the real Apple Team ID at release (preflight `validate-mobile-release-inputs.mjs` blocks while placeholders remain).
 - [ ] Large-phone top-bar/icon alignment fixed (edge-to-edge `WindowInsetsCompat` bridge in `MainActivity`, safe-area split in `top-nav.tsx`, `globals.css` vars — see `docs/mobile-performance/`). Verified on S24 Ultra-class device before production.
@@ -50,4 +56,11 @@ Package `com.oetwithdrhesham.app`. Keep the SAME application record for testing 
 ## G. Verification performed in this change
 - `pnpm exec tsc --noEmit` + `pnpm run lint` + targeted unit tests for touched areas (share, auth-guard public paths, sitemap/robots) + `node scripts/qa/validate-mobile-release-inputs.mjs --platform=android` structure checks (requires release secrets for full pass — CI `Mobile Release` is the gate).
 - Asset checks: Play icon 512×512 RGBA <1024 KB; feature graphic 1024×500 RGB no-alpha; mipmap densities regenerated; PWA icons refreshed.
-- Manual Console steps that code CANNOT do (require a human in Play Console): upload Store icon / feature graphic / screenshots, paste listing copy, set category/language/audience/rating, complete Data safety + App access + deletion URL, create/verify reviewer account, promote testing → production.
+- **Correction:** icon/feature graphic/screenshot upload and listing-copy edits are
+  *not* manual-only — the Play Developer API (`edits.images`, `edits.listings`) does
+  these, and the `automation/` toolkit already wires them up (see
+  `docs/play-store-automation.md`). What genuinely has no API and stays human-only:
+  set category/language/audience/rating in Store settings, complete Data safety + App
+  access + deletion-URL declarations, create/verify the reviewer account, and click
+  "Review release" / "Start rollout" to actually submit a track for review or promote
+  testing → production.
