@@ -2,6 +2,12 @@
 Source of truth for Google Play Main store listing. Developer Action Brief dated 03 September 2026.
 Package: `com.oetwithdrhesham.app`. Same application record is used for testing and production — do NOT create a second app.
 
+> **Read `docs/play-store-automation.md` first.** The listing text, icon, feature
+> graphic, and screenshots documented below are applied and kept live via a
+> service-account Python toolkit, not by hand in Play Console — check live state with
+> the toolkit before assuming anything here is still pending or before re-editing it
+> independently.
+
 ## 0. Listing identity (Play Console > Grow users > Store presence > Main store listing + Store settings)
 
 | Field | Exact value / action |
