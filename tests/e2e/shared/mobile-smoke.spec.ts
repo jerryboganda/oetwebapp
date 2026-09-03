@@ -163,7 +163,7 @@ test.describe('Mobile viewport smoke @mobile', () => {
 
     const text = await response!.text();
     expect(text).toContain('applinks');
-    expect(text).toContain('com.oetwithdrhesham.app');
+    expect(text).toContain('com.oetprep.learner');
   });
 
   test('assetlinks.json is served correctly', async ({ page }) => {
