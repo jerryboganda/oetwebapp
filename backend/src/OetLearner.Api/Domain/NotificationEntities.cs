@@ -34,6 +34,7 @@ public enum NotificationEventKey
     AdminReviewOpsAction,
     AdminUserLifecycleAction,
     AdminBillingFailureAlert,
+    AdminAiBudgetAlert,
     AdminFeatureFlagChanged,
     AdminAiConfigChanged,
     AdminStuckJobAlert,

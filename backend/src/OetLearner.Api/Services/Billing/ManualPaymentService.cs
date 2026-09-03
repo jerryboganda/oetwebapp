@@ -543,6 +543,20 @@ public sealed class ManualPaymentService : IManualPaymentService
         row.UpdatedAt = now;
         row.AccessGrantedSubscriptionId = subscription.Id;
 
+        // Paid-only invoice gate: promoting the order to paid/Active releases the
+        // candidate invoice exactly once. Pending checkout rows stay Pending until
+        // this approval; failed/rejected paths never reach here.
+        if (subscription.Status == SubscriptionStatus.Active)
+        {
+            var pendingInvoices = await _db.Invoices
+                .Where(i => i.SubscriptionId == subscription.Id && i.Status == "Pending")
+                .ToListAsync(ct);
+            foreach (var pending in pendingInvoices)
+            {
+                pending.Status = "Paid";
+            }
+        }
+
         await _db.SaveChangesAsync(ct);
         if (transaction is not null)
         {

@@ -915,6 +915,16 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<NotificationDeliveryAttempt>().HasIndex(x => new { x.Status, x.AttemptedAt });
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.SubscriptionId, x.Status });
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.ItemCode, x.SubscriptionId });
+        // Idempotency guard: one logical add-on grant (same subscription + same
+        // code + same quote) must exist at most once. Concurrent webhook replays
+        // converge on the same row instead of inserting duplicates. QuoteId IS
+        // NULL rows (legacy/admin grants without a quote) are excluded via the
+        // partial filter so they never collide. A legitimate second purchase
+        // uses a new QuoteId and is NOT suppressed.
+        modelBuilder.Entity<SubscriptionItem>()
+            .HasIndex(x => new { x.SubscriptionId, x.ItemCode, x.QuoteId })
+            .IsUnique()
+            .HasFilter("\"QuoteId\" IS NOT NULL");
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => x.AddOnVersionId);
         modelBuilder.Entity<BillingPlan>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<BillingPlan>().HasIndex(x => new { x.Status, x.DisplayOrder });

@@ -379,9 +379,9 @@ public class AdminPaymentQueueFulfillmentTests
     }
 
     [Fact]
-    public async Task TestG_DuplicateAdminFulfillment_IsRejectedAndDoesNotDoubleGrantCredits()
+    public async Task TestG_DuplicateAdminFulfillment_IsIdempotentAndDoesNotDoubleGrantCredits()
     {
-        await using var db = NewContext(nameof(TestG_DuplicateAdminFulfillment_IsRejectedAndDoesNotDoubleGrantCredits));
+        await using var db = NewContext(nameof(TestG_DuplicateAdminFulfillment_IsIdempotentAndDoesNotDoubleGrantCredits));
         var userId = "cand_test_g";
         var planCode = "plan_oet_premium";
         SeedUser(db, userId, "candidate_g@example.com", "Grace Hopper");
@@ -418,7 +418,9 @@ public class AdminPaymentQueueFulfillmentTests
             CancellationToken.None);
         Assert.True(firstResult.Result is Ok<PendingFulfilmentDto>);
 
-        // 2nd fulfillment attempt (duplicate)
+        // 2nd fulfillment attempt (duplicate/retry/concurrency): idempotent
+        // success reusing the same entitlement — never a second grant and never
+        // a second subscription row. BILL-08.
         var secondResult = await BillingExpansionEndpointsAccessor.InvokeMarkSubscriptionFulfilled(
             subscription.Id,
             httpContext,
@@ -426,8 +428,12 @@ public class AdminPaymentQueueFulfillmentTests
             db,
             aiCreditService,
             CancellationToken.None);
-        Assert.True(secondResult.Result is BadRequest<string>);
-        Assert.Equal("This order has already been marked fulfilled.", ((BadRequest<string>)secondResult.Result).Value);
+        Assert.True(secondResult.Result is Ok<PendingFulfilmentDto>);
+        var secondDto = ((Ok<PendingFulfilmentDto>)secondResult.Result).Value!;
+        Assert.Equal(FulfilmentStatuses.Fulfilled, secondDto.FulfilmentStatus);
+
+        // Still exactly one subscription row for this order.
+        Assert.Equal(1, await db.Subscriptions.CountAsync(s => s.Id == subscription.Id));
 
         // Assert wallet was NOT double credited
         var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
@@ -452,7 +458,8 @@ public class AdminPaymentQueueFulfillmentTests
         SeedPlan(db, "plan_2");
 
         var now = DateTimeOffset.UtcNow;
-        // Sub 1: Pending verification
+        // Sub 1: Pending verification WITH completed gateway payment evidence —
+        // the queue lists paid-but-awaiting-fulfilment orders only.
         db.Subscriptions.Add(new Subscription
         {
             Id = "sub_pending_1",
@@ -462,6 +469,32 @@ public class AdminPaymentQueueFulfillmentTests
             FulfilmentStatus = FulfilmentStatuses.PendingVerification,
             StartedAt = now,
             ChangedAt = now,
+        });
+        db.BillingQuotes.Add(new BillingQuote
+        {
+            Id = "quote_pending_1",
+            UserId = user1,
+            SubscriptionId = "sub_pending_1",
+            PlanCode = "plan_1",
+            Status = BillingQuoteStatus.Completed,
+            TotalAmount = 100m,
+            Currency = "GBP",
+            CreatedAt = now,
+            ExpiresAt = now.AddHours(1),
+        });
+        db.PaymentTransactions.Add(new PaymentTransaction
+        {
+            Id = Guid.NewGuid(),
+            LearnerUserId = user1,
+            QuoteId = "quote_pending_1",
+            Gateway = "stripe",
+            GatewayTransactionId = "ch_pending_1",
+            Status = "completed",
+            Amount = 100m,
+            Currency = "GBP",
+            TransactionType = "subscription_payment",
+            CreatedAt = now,
+            UpdatedAt = now,
         });
 
         // Sub 2: Fulfilled

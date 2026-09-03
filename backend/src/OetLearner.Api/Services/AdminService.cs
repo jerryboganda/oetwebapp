@@ -6338,6 +6338,17 @@ public partial class AdminService(
             Currency = plan.Currency,
             Interval = plan.Interval,
         };
+        // Canonical six-month rule: stamp bundled counters + ExpiresAt from the
+        // plan's AccessDurationDays clamped to the 180-day ceiling. Previously
+        // ExpiresAt was left null here, leaving expiry to fall back on
+        // NextRenewalAt / AccessDurationDays defaults downstream.
+        SubscriptionBundleInitializer.ApplyBundle(subscription, plan, now);
+        // One-time packages have no billing renewal: mirror the real access end
+        // into NextRenewalAt so lifecycle surfaces never contradict expiry.
+        if (!plan.IsRenewable || plan.DurationMonths <= 0)
+        {
+            subscription.NextRenewalAt = subscription.ExpiresAt ?? subscription.NextRenewalAt;
+        }
         db.Subscriptions.Add(subscription);
         learner.CurrentPlanId = plan.Code;
 

@@ -5291,8 +5291,11 @@ public partial class LearnerService(
         await EnsureUserAsync(userId, cancellationToken);
         await EnsureSubscriptionInvoiceAsync(userId, cancellationToken);
         var pageSize = CursorPagination.NormalizeLimit(limit);
+        // Paid-only candidate gate: internal Pending rows (awaiting admin
+        // verification/hand-over) and Failed rows are never candidate-visible.
+        // Case-insensitive because legacy rows use "Paid" capitalisation.
         var invoices = (await db.Invoices
-            .Where(x => x.UserId == userId)
+            .Where(x => x.UserId == userId && x.Status.ToLower() == "paid")
             .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.IssuedAt)
             .ThenByDescending(x => x.Id, StringComparer.Ordinal)
@@ -5340,6 +5343,12 @@ public partial class LearnerService(
         var user = await EnsureUserAsync(userId, cancellationToken);
         var invoice = await db.Invoices.FirstOrDefaultAsync(x => x.UserId == userId && x.Id == invoiceId, cancellationToken)
             ?? throw ApiException.NotFound("invoice_not_found", "Invoice not found.");
+        // Paid-only download gate: a Pending/Failed invoice must not be
+        // downloadable via a direct URL even if its id is known.
+        if (!string.Equals(invoice.Status, "Paid", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.NotFound("invoice_not_found", "Invoice not found.");
+        }
 
         var pdf = (invoicePdfService ?? new InvoicePdfService()).Generate(new InvoicePdfModel(
             InvoiceId: invoice.Id,
@@ -5384,6 +5393,26 @@ public partial class LearnerService(
             return false;
         }
 
+        // Paid-only backfill gate: never mint a candidate-visible Paid invoice
+        // without real payment evidence. Pending/unpaid orders (no completed
+        // gateway payment and no approved manual proof) and pure admin grants
+        // must not gain an invoice from a mere billing-page read. Failed,
+        // pending, processing, cancelled or abandoned payments therefore expose
+        // nothing here; the webhook/approval paths mint the Paid row on final
+        // verified success instead.
+        var gateEvidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, cancellationToken);
+        if (string.Equals(gateEvidence.Source, InvoiceSources.AdminGrant, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        // Verification flow: a Pending order (awaiting admin approval/hand-over)
+        // is paid at the gateway but not yet verified — do not release the
+        // candidate invoice until Approve/MarkFulfilled flips it Active.
+        if (subscription.Status != SubscriptionStatus.Active)
+        {
+            return false;
+        }
+
         var alreadyCovered = await db.Invoices.AnyAsync(
             x => x.UserId == userId
                  && (x.Amount == subscription.PriceAmount
@@ -5417,7 +5446,7 @@ public partial class LearnerService(
             ? planName
             : $"{planName} ({subscription.Interval})";
 
-        var evidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, cancellationToken);
+        var evidence = gateEvidence;
 
         db.Invoices.Add(new Invoice
         {
@@ -11676,8 +11705,19 @@ public partial class LearnerService(
                 // in Admin > Billing > Orders & Payments for Approve/Accept.
                 // Only plans explicitly configured for Telegram/manual delivery
                 // take the older pending_manual hand-over path instead.
+                // EXCEPTION — standalone Listening Recalls (code
+                // "listening-recalls" ONLY): verified successful payment grants
+                // immediately with no admin step. Bound to the stable plan code,
+                // never price/label, and never triggered by bundles that merely
+                // contain recalls content (their plan code differs).
+                var isStandaloneListeningRecalls = ListeningRecallsPolicy.IsStandaloneListeningRecalls(quote.PlanCode)
+                    || ListeningRecallsPolicy.IsStandaloneListeningRecalls(targetPlan.Code);
                 var deliveryMethod = await ResolvePlanDeliveryMethodAsync(quote.PlanVersionId, quote.PlanCode, ct);
-                if (DeliveryMethods.RequiresManualFulfilment(deliveryMethod))
+                if (isStandaloneListeningRecalls)
+                {
+                    subscription.FulfilmentStatus = FulfilmentStatuses.Auto;
+                }
+                else if (DeliveryMethods.RequiresManualFulfilment(deliveryMethod))
                 {
                     // WhatsApp / manual-web / manual-material: the learner has paid, but an
                     // admin still has to hand the package over. Park it at pending_manual and
@@ -12056,6 +12096,13 @@ public partial class LearnerService(
         }
 
         var invoiceId = TruncateIdentifier($"inv-{quote.Id}");
+        // Paid-only invoice gate: a candidate-visible Paid invoice requires final
+        // successful fulfilment (subscription Active). Orders parked at Pending /
+        // PendingVerification / PendingManual (awaiting admin verification or
+        // hand-over) mint a Pending invoice row for internal tracking only — the
+        // learner surface filters to Paid, so failed/pending payments never expose
+        // a downloadable invoice or trigger invoice notifications.
+        var invoiceStatus = subscription.Status == SubscriptionStatus.Active ? "Paid" : "Pending";
         var existingInvoice = await db.Invoices.FirstOrDefaultAsync(x => x.Id == invoiceId, ct);
         if (existingInvoice is null)
         {
@@ -12067,7 +12114,7 @@ public partial class LearnerService(
                 IssuedAt = now,
                 Amount = quote.TotalAmount,
                 Currency = quote.Currency,
-                Status = "Paid",
+                Status = invoiceStatus,
                 Description = quoteResponse.Summary,
                 PlanVersionId = quote.PlanVersionId,
                 AddOnVersionIdsJson = quote.AddOnVersionIdsJson,
@@ -12090,6 +12137,14 @@ public partial class LearnerService(
             existingInvoice.QuoteId ??= quote.Id;
             existingInvoice.CheckoutSessionId ??= transaction.GatewayTransactionId;
             existingInvoice.Number ??= await AllocateInvoiceNumberAsync(transaction.LearnerUserId, invoiceId, ct);
+            // Replay convergence: if this completion now leaves the order Active
+            // (e.g. listening-recalls auto grant), promote a previously-Pending
+            // row to Paid exactly once. Never downgrade Paid → Pending.
+            if (string.Equals(existingInvoice.Status, "Pending", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(invoiceStatus, "Paid", StringComparison.OrdinalIgnoreCase))
+            {
+                existingInvoice.Status = "Paid";
+            }
         }
 
         quote.Status = BillingQuoteStatus.Completed;

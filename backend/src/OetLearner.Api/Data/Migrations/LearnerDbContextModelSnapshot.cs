@@ -24821,6 +24821,10 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ItemCode", "SubscriptionId");
 
+                    b.HasIndex("SubscriptionId", "ItemCode", "QuoteId")
+                        .IsUnique()
+                        .HasFilter("\"QuoteId\" IS NOT NULL");
+
                     b.HasIndex("SubscriptionId", "Status");
 
                     b.ToTable("SubscriptionItems");

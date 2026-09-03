@@ -212,8 +212,19 @@ public static class SubscriptionBundleInitializer
 
     private static DateTimeOffset? ResolveExpiry(Subscription subscription, DateTimeOffset now, int accessDurationDays)
     {
+        // Idempotent initial-grant expiry: anchor on StartedAt (the purchase
+        // instant), NOT on the current ExpiresAt. The previous anchor-on-future
+        // implementation was additive — calling ApplyBundle/ApplyPlanEntitlements
+        // twice (checkout completion + manual approval, or a webhook replay that
+        // re-entered the grant) pushed ExpiresAt out by 2× capped days
+        // (≈360 days observed 02/09/2026 → 28/08/2027). Anchoring on StartedAt
+        // makes repeats converge on the same cutoff. Genuine extensions must use
+        // the explicit ExtendSubscription path, never re-applying the bundle.
         var cappedDays = ResolveAccessDurationDays(accessDurationDays);
-        var anchor = subscription.ExpiresAt is { } current && current > now ? current : now;
+        var anchor = subscription.StartedAt == default ? now : subscription.StartedAt;
+        // If StartedAt lies in the future (pre-provisioned), anchor on now so
+        // access still starts when the grant runs rather than in the future.
+        if (anchor > now) anchor = now;
         return anchor.AddDays(cappedDays);
     }
 }

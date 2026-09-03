@@ -21,6 +21,7 @@
     "desktop:dist": "node ./scripts/tauri-dist.cjs build",
     "lint": "eslint app components contexts hooks lib next.config.ts postcss.config.mjs vitest.config.ts vitest.setup.ts eslint.config.mjs",
     "check:encoding": "node ./scripts/check-mojibake.mjs",
+    "writing:qa-export": "node ./scripts/writing-qa-export.mjs --out artifacts/developer-action-brief/02-writing-qa-export.csv",
     "ship:gate": "node ./scripts/ship/pre-push-gate.mjs",
     "ship:gate:self-test": "node ./scripts/ship/pre-push-gate.mjs --self-test",
     "ship:watch": "powershell -ExecutionPolicy Bypass -File ./scripts/ship/watch-deploy.ps1",

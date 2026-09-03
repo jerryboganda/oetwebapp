@@ -56,8 +56,13 @@ public sealed class AiBudgetAlertService(
                     var notifications = dbScope.ServiceProvider.GetService<OetLearner.Api.Services.NotificationService>();
                     if (notifications is not null)
                     {
+                        // Separate AI-budget signal from billing/invoice failures:
+                        // previously this reused AdminBillingFailureAlert
+                        // ("Billing failures need attention"), so an AI-budget
+                        // threshold fired the billing-failure alarm even when
+                        // Failed Invoices = 0 in Billing Ops.
                         await notifications.CreateForAdminsAsync(
-                            NotificationEventKey.AdminBillingFailureAlert,
+                            NotificationEventKey.AdminAiBudgetAlert,
                             "ai_budget",
                             scope,
                             periodKey,

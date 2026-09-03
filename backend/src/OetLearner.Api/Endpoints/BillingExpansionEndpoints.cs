@@ -649,6 +649,20 @@ public static class BillingExpansionEndpoints
                 : $"Marked {subscription.PlanId} fulfilled for {subscription.UserId}; access released.")
                       + (string.IsNullOrWhiteSpace(request.Notes) ? string.Empty : $" Notes: {request.Notes}"),
         });
+        // Paid-only invoice gate: releasing web access promotes any Pending
+        // invoice for this order to Paid exactly once. External-only hand-overs
+        // (no platform access) leave invoices untouched. Failed/pending orders
+        // never reach here (guarded by the fulfilment-state checks above).
+        if (!externalOnly && subscription.Status == SubscriptionStatus.Active)
+        {
+            var pendingInvoices = await db.Invoices
+                .Where(i => i.SubscriptionId == subscription.Id && i.Status == "Pending")
+                .ToListAsync(ct);
+            foreach (var pending in pendingInvoices)
+            {
+                pending.Status = "Paid";
+            }
+        }
         try
         {
             await db.SaveChangesAsync(ct);
@@ -821,6 +835,12 @@ public static class BillingExpansionEndpoints
         }
 
         var evidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, ct);
+        // Paid-only gate: a pure admin grant (no gateway payment, no approved
+        // manual proof) must never mint a candidate-visible Paid invoice.
+        if (string.Equals(evidence.Source, InvoiceSources.AdminGrant, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
         var amount = subscription.PriceAmount > 0
             ? subscription.PriceAmount
             : evidence.Payment?.Amount ?? evidence.Quote?.TotalAmount ?? 0m;
