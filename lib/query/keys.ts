@@ -62,4 +62,9 @@ export const queryKeys = {
     lessons: ['listening', 'lessons'] as const,
     strategies: (category: string) => ['listening', 'strategies', category] as const,
   },
+  gamification: {
+    _def: ['gamification'] as const,
+    streak: (userId: string) => ['gamification', userId, 'streak'] as const,
+    xp: (userId: string) => ['gamification', userId, 'xp'] as const,
+  },
 } as const;

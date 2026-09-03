@@ -237,28 +237,39 @@ export default function Dashboard() {
   const supplementalQueriesEnabled = authContext
     ? !authContext.loading && authContext.isAuthenticated
     : true;
+  // Longer staleTimes below (vs. the 30-60s these used to carry) are safe
+  // specifically because every mutation that actually changes this data
+  // already invalidates its query key explicitly — see the purchase-success
+  // effect a few lines down (entitlement/subscription/aiPackageCredits) —
+  // and scoring policy is admin-configured, not learner-mutable. That
+  // invalidation, not a short staleTime, is what keeps them correct; the
+  // longer staleTime only stops an *unnecessary* background refetch of
+  // still-valid data on every passive "leave and return to Dashboard".
+  // studyPlan/readiness/dashboardHome (use-dashboard-home.ts) intentionally
+  // keep their short staleTimes — those reflect the learner's own just-
+  // completed practice and have no equivalent invalidation hook yet.
   const scoringPolicyQuery = useQuery({
     queryKey: queryKeys.dashboard.scoringPolicy(queryUserId),
     queryFn: learnerGetScoringPolicy,
-    staleTime: 60_000,
+    staleTime: 5 * 60_000,
     enabled: supplementalQueriesEnabled,
   });
   const entitlementQuery = useQuery({
     queryKey: queryKeys.dashboard.entitlement(queryUserId),
     queryFn: fetchMyEntitlementSnapshot,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
     enabled: supplementalQueriesEnabled,
   });
   const subscriptionQuery = useQuery({
     queryKey: queryKeys.dashboard.subscription(queryUserId),
     queryFn: fetchSubscriptionMe,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
     enabled: supplementalQueriesEnabled,
   });
   const aiPackageCreditsQuery = useQuery({
     queryKey: queryKeys.dashboard.aiPackageCredits(queryUserId),
     queryFn: fetchMyAiPackageCredits,
-    staleTime: 30_000,
+    staleTime: 2 * 60_000,
     enabled: supplementalQueriesEnabled,
   });
   const scoringPolicy = scoringPolicyQuery.data ?? null;

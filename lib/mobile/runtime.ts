@@ -99,7 +99,12 @@ async function syncNativeChrome() {
   document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
 
   await Promise.allSettled([
-    StatusBar.setOverlaysWebView({ overlay: false }),
+    // Keep this in sync with capacitor.config.ts's StatusBar.overlaysWebView —
+    // both must request the same edge-to-edge overlay state, otherwise this
+    // runtime call (fired on every resume/color-scheme change) would flip
+    // MainActivity's WindowCompat.setDecorFitsSystemWindows(window, false) back
+    // to fits-system-windows and silently break the safe-area inset bridge.
+    StatusBar.setOverlaysWebView({ overlay: true }),
     StatusBar.setStyle({ style: isDark ? Style.Light : Style.Dark }),
     StatusBar.setBackgroundColor({ color: isDark ? '#07111d' : '#f7f5ef' }),
   ]);

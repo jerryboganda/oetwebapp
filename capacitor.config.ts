@@ -45,7 +45,14 @@ const config: CapacitorConfig = {
       backgroundColor: '#f7f5ef',
     },
     StatusBar: {
-      overlaysWebView: false,
+      // Android 15+ (targetSdk 36, our compile target) force-enables edge-to-edge
+      // regardless of this flag, so `false` was already a fiction on Android —
+      // the WebView draws under the status bar either way. `true` makes the
+      // config match reality on both platforms; MainActivity installs a
+      // WindowInsetsCompat bridge (see MainActivity#installEdgeToEdgeInsetsBridge)
+      // that feeds the live inset values into CSS so content still clears the
+      // status bar/cutout correctly instead of drawing underneath it.
+      overlaysWebView: true,
       style: 'DARK',
       backgroundColor: '#f7f5ef',
     },

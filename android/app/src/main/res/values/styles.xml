@@ -7,22 +7,25 @@
         <item name="colorPrimary">@color/colorPrimary</item>
         <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
         <item name="colorAccent">@color/colorAccent</item>
-        <!-- Android 15 (API 35) force-enables edge-to-edge and reads this opt-out from the
-             resolved THEME, not from an AndroidManifest.xml activity attribute (Capacitor's own
-             CapacitorWebView#edgeToEdgeHandler calls Theme.resolveAttribute on it) — must live here. -->
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
+        <!-- Intentionally NOT opting out of Android 15's enforced edge-to-edge (see the removed
+             android:windowOptOutEdgeToEdgeEnforcement item this file used to carry). Opting out
+             fought the platform instead of fixing the actual gap: on API 35+ the WebView draws
+             under the status/gesture bars regardless of this flag's setting, and
+             env(safe-area-inset-*) doesn't reliably populate in every OEM WebView build to
+             compensate. MainActivity now installs a WindowInsetsCompat listener
+             (installEdgeToEdgeInsetsBridge) that reads the live system-bar/cutout insets and
+             pushes them into the WebView as CSS custom properties, so every device gets a
+             correct, dynamic safe area without any per-model workaround. -->
     </style>
 
     <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
     </style>
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
-        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>
     </style>
 </resources>

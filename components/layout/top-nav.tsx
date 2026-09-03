@@ -308,114 +308,131 @@ export function TopNav({
     <>
       <motion.header
         className={cn(
-          'sticky top-0 z-30 flex shrink-0 items-center gap-3 border-b border-border bg-surface px-3 safe-area-inset-top lg:px-5',
-          showBrand ? 'h-14 lg:h-24' : 'glass-panel h-11 justify-between border-border/60 lg:h-12 lg:px-6',
+          // Safe-area padding lives ONLY on this outer element, which has no
+          // fixed height — it grows to fit (inset + content row) instead of a
+          // fixed height that the inset would eat into. That's what previously
+          // squeezed/misaligned the icon row whenever the inset was non-zero:
+          // a fixed h-14/h-11 combined with padding-top from the same box.
+          // The surface/border/background stay here so the header's color
+          // still extends up behind the status bar on edge-to-edge devices.
+          'sticky top-0 z-30 shrink-0 border-b bg-surface safe-area-inset-top',
+          showBrand ? 'border-border' : 'glass-panel border-border/60',
           className,
         )}
         layout={!reducedMotion}
         transition={reducedMotion ? { duration: 0 } : { type: 'spring', stiffness: 380, damping: 32, mass: 0.9 }}
       >
-        <div className={cn('flex items-center gap-2.5', showBrand && 'shrink-0')}>
-          <button
-            className={cn('pressable -ml-1 inline-flex items-center justify-center lg:hidden', ICON_BUTTON_CLASS)}
-            onClick={() => {
-              void triggerImpactHaptic('LIGHT');
-              setMobileMenuOpen((current) => !current);
-            }}
-            aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-menu"
-          >
-            {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
-          </button>
-
-          {onToggleSidebar ? (
+        {/* Content row: fixed height, always fully available for centering the
+            hamburger/logo/actions/avatar on the same vertical centerline,
+            regardless of how tall the safe-area padding above it is. */}
+        <div
+          className={cn(
+            'flex items-center gap-3 px-3 lg:px-5',
+            showBrand ? 'h-14 lg:h-24' : 'h-11 justify-between lg:h-12 lg:px-6',
+          )}
+        >
+          <div className={cn('flex items-center gap-2.5', showBrand && 'shrink-0')}>
             <button
-              type="button"
-              className="pressable -ml-1 hidden rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy lg:inline-flex"
+              className={cn('pressable -ml-1 inline-flex items-center justify-center lg:hidden', ICON_BUTTON_CLASS)}
               onClick={() => {
                 void triggerImpactHaptic('LIGHT');
-                onToggleSidebar();
+                setMobileMenuOpen((current) => !current);
               }}
-              aria-label={sidebarCollapsed ? 'Show navigation' : 'Hide navigation'}
-              aria-expanded={!sidebarCollapsed}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
+              aria-controls="mobile-menu"
             >
-              <Menu className="h-6 w-6" aria-hidden="true" />
+              {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
             </button>
-          ) : null}
 
-          {showBrand ? (
-            <Link
-              href="/"
-              prefetch={false}
-              className="pressable flex items-center transition-opacity hover:opacity-90"
-              aria-label="OET with Dr Ahmed Hesham home"
-              onClick={() => { void triggerImpactHaptic('LIGHT'); }}
-            >
-              <Image
-                src="/brand/oet-with-dr-hesham-logo.png"
-                alt="OET with Dr Ahmed Hesham"
-                width={400}
-                height={200}
-                priority
-                className="h-[3.25rem] w-auto object-contain lg:h-[5.5rem]"
-              />
-            </Link>
-          ) : null}
-
-          <AnimatePresence mode="wait" initial={false}>
-            {pageTitle && !showBrand && (
-              <motion.div
-                key={pageTitle}
-                className="hidden items-center gap-2 sm:flex"
-                {...getSurfaceMotion('state', reducedMotion)}
+            {onToggleSidebar ? (
+              <button
+                type="button"
+                className="pressable -ml-1 hidden rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy lg:inline-flex"
+                onClick={() => {
+                  void triggerImpactHaptic('LIGHT');
+                  onToggleSidebar();
+                }}
+                aria-label={sidebarCollapsed ? 'Show navigation' : 'Hide navigation'}
+                aria-expanded={!sidebarCollapsed}
               >
-                <span className="text-muted/40">/</span>
-                <span className="text-sm font-semibold text-navy">{pageTitle}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                <Menu className="h-6 w-6" aria-hidden="true" />
+              </button>
+            ) : null}
 
-        {showBrand ? (
-          <div className="hidden min-w-0 flex-1 justify-center px-4 md:flex lg:px-8">
-            <GlobalSearch className="max-w-2xl" />
+            {showBrand ? (
+              <Link
+                href="/"
+                prefetch={false}
+                className="pressable flex items-center transition-opacity hover:opacity-90"
+                aria-label="OET with Dr Ahmed Hesham home"
+                onClick={() => { void triggerImpactHaptic('LIGHT'); }}
+              >
+                <Image
+                  src="/brand/oet-with-dr-hesham-logo.png"
+                  alt="OET with Dr Ahmed Hesham"
+                  width={400}
+                  height={200}
+                  priority
+                  className="h-[3.25rem] w-auto object-contain lg:h-[5.5rem]"
+                />
+              </Link>
+            ) : null}
+
+            <AnimatePresence mode="wait" initial={false}>
+              {pageTitle && !showBrand && (
+                <motion.div
+                  key={pageTitle}
+                  className="hidden items-center gap-2 sm:flex"
+                  {...getSurfaceMotion('state', reducedMotion)}
+                >
+                  <span className="text-muted/40">/</span>
+                  <span className="text-sm font-semibold text-navy">{pageTitle}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        ) : null}
 
-        <motion.div
-          className={cn('ml-auto flex items-center justify-end gap-1.5 sm:gap-2', showBrand ? 'shrink-0' : 'flex-wrap gap-1')}
-          layout={!reducedMotion}
-        >
-          {actions}
-          {showStreakBadges && <LearnerStreakBadges className="hidden sm:flex" />}
           {showBrand ? (
-            <>
-              {/* Bell then theme, matching the reference header order. The tour
-                  launcher moves into the account menu to keep the bar clean. */}
-              <NotificationCenter triggerClassName={ICON_BUTTON_CLASS} />
-              <ThemeToggle className={ICON_BUTTON_CLASS} />
-              <ProfileMenu
-                displayName={displayName}
-                avatarUrl={authContext?.user?.avatarUrl}
-                email={userSummary?.email ?? ''}
-                roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
-                settingsHref={getWorkspaceSettingsHref(workspaceRole)}
-                onSignOut={signOut ? () => { void handleSignOut(); } : undefined}
-                workspaceRole={workspaceRole}
-              />
-            </>
-          ) : (
-            <>
-              <TourLauncher workspaceRole={workspaceRole} />
-              <ThemeToggle />
-              <NotificationCenter />
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
-                {initials}
-              </div>
-            </>
-          )}
-        </motion.div>
+            <div className="hidden min-w-0 flex-1 justify-center px-4 md:flex lg:px-8">
+              <GlobalSearch className="max-w-2xl" />
+            </div>
+          ) : null}
+
+          <motion.div
+            className={cn('ml-auto flex items-center justify-end gap-1.5 sm:gap-2', showBrand ? 'shrink-0' : 'flex-wrap gap-1')}
+            layout={!reducedMotion}
+          >
+            {actions}
+            {showStreakBadges && <LearnerStreakBadges className="hidden sm:flex" />}
+            {showBrand ? (
+              <>
+                {/* Bell then theme, matching the reference header order. The tour
+                    launcher moves into the account menu to keep the bar clean. */}
+                <NotificationCenter triggerClassName={ICON_BUTTON_CLASS} />
+                <ThemeToggle className={ICON_BUTTON_CLASS} />
+                <ProfileMenu
+                  displayName={displayName}
+                  avatarUrl={authContext?.user?.avatarUrl}
+                  email={userSummary?.email ?? ''}
+                  roleLabel={ROLE_LABEL[workspaceRole ?? 'learner'] ?? 'Learner'}
+                  settingsHref={getWorkspaceSettingsHref(workspaceRole)}
+                  onSignOut={signOut ? () => { void handleSignOut(); } : undefined}
+                  workspaceRole={workspaceRole}
+                />
+              </>
+            ) : (
+              <>
+                <TourLauncher workspaceRole={workspaceRole} />
+                <ThemeToggle />
+                <NotificationCenter />
+                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary ring-1 ring-primary/10 lg:h-9 lg:w-9 lg:text-sm">
+                  {initials}
+                </div>
+              </>
+            )}
+          </motion.div>
+        </div>
       </motion.header>
 
       <AnimatePresence mode={presenceMode}>
@@ -434,7 +451,7 @@ export function TopNav({
             <motion.nav
               id="mobile-menu"
               aria-label="Mobile menu"
-              className="glass-panel absolute left-3 right-3 top-[calc(3.25rem+env(safe-area-inset-top))] max-h-[calc(100dvh-3.25rem-var(--bottom-nav-height)-env(safe-area-inset-top)-env(safe-area-inset-bottom)-0.5rem)] overflow-hidden rounded-[1.75rem] border-border/60 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+              className="glass-panel absolute left-3 right-3 top-[calc(3.25rem+var(--safe-area-inset-top))] max-h-[calc(100dvh-3.25rem-var(--bottom-nav-height)-var(--safe-area-inset-top)-var(--safe-area-inset-bottom)-0.5rem)] overflow-hidden rounded-[1.75rem] border-border/60 shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
               {...menuMotionProps}
             >
               <div className="flex max-h-[inherit] flex-col">

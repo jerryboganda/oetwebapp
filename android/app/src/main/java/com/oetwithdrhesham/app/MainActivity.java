@@ -1,6 +1,12 @@
 package com.oetwithdrhesham.app;
 
 import android.os.Bundle;
+import android.webkit.WebView;
+
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
 import com.oetwithdrhesham.app.plugins.PlaybackAttestationPlugin;
@@ -18,5 +24,82 @@ public class MainActivity extends BridgeActivity {
 		registerPlugin(SpeakingRecorderPlugin.class);
 		registerPlugin(PlaybackAttestationPlugin.class);
 		super.onCreate(savedInstanceState);
+
+		// Android 15+ (API 35+; API 36 is our current compile/target SDK) force-enables edge-to-edge —
+		// the WebView draws under the status bar, display cutout, and gesture/nav
+		// bar. We used to opt back out of that via
+		// android:windowOptOutEdgeToEdgeEnforcement, which (a) fights a platform
+		// default that Google is removing in a future release and (b) was reported
+		// to still let the header collide with the system status bar on some
+		// large-screen/tall devices — the opt-out attribute is honored
+		// inconsistently across OEM WebView/skin combinations. Instead we embrace
+		// edge-to-edge everywhere and bridge the *real* live inset values into the
+		// WebView ourselves, so app/globals.css's safe-area padding is always
+		// correct regardless of device, status-bar height, or cutout shape.
+		WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+		installEdgeToEdgeInsetsBridge();
+	}
+
+	/**
+	 * Reads the live system-bar + display-cutout insets and pushes them into the
+	 * WebView as CSS custom properties (--safe-area-inset-top/right/bottom/left),
+	 * which app/globals.css consumes with an env(safe-area-inset-*) fallback. This
+	 * re-runs automatically on every inset change the platform reports (rotation,
+	 * multi-window resize, cutout mode change) — there is no device-specific
+	 * value anywhere in this method.
+	 */
+	private void installEdgeToEdgeInsetsBridge() {
+		WebView webView = getBridge() != null ? getBridge().getWebView() : null;
+		if (webView == null) {
+			return;
+		}
+
+		ViewCompat.setOnApplyWindowInsetsListener(webView, (view, windowInsets) -> {
+			Insets bars = windowInsets.getInsets(
+				WindowInsetsCompat.Type.statusBars()
+					| WindowInsetsCompat.Type.navigationBars()
+					| WindowInsetsCompat.Type.displayCutout()
+			);
+			// The listener callback's `view` parameter is typed as the generic
+			// android.view.View (OnApplyWindowInsetsListener's signature), not
+			// WebView — reuse the already-typed `webView` this listener was
+			// attached to instead of casting.
+			applySafeAreaInsets(webView, bars);
+			// Let the WebView's own content continue to receive the insets too
+			// (e.g. for any native scroll-adjustment behavior) rather than
+			// consuming them here.
+			return windowInsets;
+		});
+
+		ViewCompat.requestApplyInsets(webView);
+	}
+
+	private void applySafeAreaInsets(WebView webView, Insets bars) {
+		float density = getResources().getDisplayMetrics().density;
+		if (density <= 0f) {
+			density = 1f;
+		}
+
+		// Android insets are raw pixels; CSS px in the WebView (viewport
+		// width=device-width, initial-scale=1) map 1:1 to Android dp, so divide
+		// by density to convert.
+		double top = bars.top / density;
+		double right = bars.right / density;
+		double bottom = bars.bottom / density;
+		double left = bars.left / density;
+
+		String script = String.format(
+			java.util.Locale.US,
+			"document.documentElement.style.setProperty('--safe-area-inset-top','%.2fpx');"
+				+ "document.documentElement.style.setProperty('--safe-area-inset-right','%.2fpx');"
+				+ "document.documentElement.style.setProperty('--safe-area-inset-bottom','%.2fpx');"
+				+ "document.documentElement.style.setProperty('--safe-area-inset-left','%.2fpx');",
+			top,
+			right,
+			bottom,
+			left
+		);
+
+		webView.evaluateJavascript(script, null);
 	}
 }

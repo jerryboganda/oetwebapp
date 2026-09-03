@@ -1,9 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
 import { Flame, Zap } from 'lucide-react';
-import { fetchStreak, fetchXP } from '@/lib/api';
+import { useAuth } from '@/contexts/auth-context';
+import { useStreak, useXp } from '@/lib/query/hooks';
 import { cn } from '@/lib/utils';
 import { HEADER_CHIP, HEADER_CHIP_HOVER } from './header-chrome';
 
@@ -29,26 +29,20 @@ function tierForLevel(level: number): string {
 /**
  * Streak + level cards in the learner top bar. Both link to /achievements.
  * Hidden until at least one value resolves so the header does not jump.
+ *
+ * Backed by the shared QueryClient (see lib/query/hooks.ts useStreak/useXp)
+ * instead of a raw fetch-on-mount: TopNav remounts on every learner
+ * navigation today (no persistent shell layout — see the global-nav
+ * findings), so an uncached fetch here used to refire on every single tap.
  */
 export function LearnerStreakBadges({ className }: LearnerStreakBadgesProps) {
-  const [streak, setStreak] = useState<number | null>(null);
-  const [xp, setXp] = useState<XpSummary | null>(null);
+  const { user } = useAuth();
+  const userId = user?.userId ?? '';
+  const { data: streakData } = useStreak(userId, { enabled: Boolean(userId) });
+  const { data: xpData } = useXp(userId, { enabled: Boolean(userId) });
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.allSettled([fetchStreak(), fetchXP()]).then(([streakR, xpR]) => {
-      if (cancelled) return;
-      if (streakR.status === 'fulfilled') {
-        setStreak((streakR.value as { currentStreak: number }).currentStreak);
-      }
-      if (xpR.status === 'fulfilled') {
-        setXp(xpR.value as XpSummary);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const streak = (streakData as { currentStreak: number } | undefined)?.currentStreak ?? null;
+  const xp = (xpData as XpSummary | undefined) ?? null;
 
   if (streak === null && xp === null) return null;
 

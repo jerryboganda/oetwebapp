@@ -223,37 +223,37 @@
   }
 
   .safe-area-inset-top {
-    padding-top: env(safe-area-inset-top);
+    padding-top: var(--safe-area-inset-top);
   }
 
   .safe-area-inset-bottom {
-    padding-bottom: env(safe-area-inset-bottom);
+    padding-bottom: var(--safe-area-inset-bottom);
   }
 
   .safe-area-inset-left {
-    padding-left: env(safe-area-inset-left);
+    padding-left: var(--safe-area-inset-left);
   }
 
   .safe-area-inset-right {
-    padding-right: env(safe-area-inset-right);
+    padding-right: var(--safe-area-inset-right);
   }
 
   /* Full-screen overlay backdrop padding that keeps a centered/edge panel clear
      of the notch, Android status bar, and gesture nav bar (edge-to-edge). Use in
      place of a plain `p-4` on the overlay's fixed inset-0 flex container. */
   .overlay-safe-area {
-    padding-top: max(1rem, env(safe-area-inset-top));
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
+    padding-top: max(1rem, var(--safe-area-inset-top));
+    padding-bottom: max(1rem, var(--safe-area-inset-bottom));
+    padding-left: max(1rem, var(--safe-area-inset-left));
+    padding-right: max(1rem, var(--safe-area-inset-right));
   }
 
   .keyboard-safe-bottom {
-    bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset, 0px));
+    bottom: calc(var(--safe-area-inset-bottom) + var(--app-keyboard-offset, 0px));
   }
 
   .keyboard-safe-floating-bottom {
-    bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset, 0px) + 0.75rem);
+    bottom: calc(var(--safe-area-inset-bottom) + var(--app-keyboard-offset, 0px) + 0.75rem);
   }
 
   /* Hide bottom nav when virtual keyboard is open on mobile */
@@ -385,6 +385,18 @@
     --app-viewport-height: 100dvh;
     --app-keyboard-offset: 0px;
     --bottom-nav-height: 4.75rem;
+    /* Default to the standard CSS env() safe-area values (iOS WKWebView and
+       desktop/mobile browsers resolve these correctly on their own). On
+       Android, MainActivity's WindowInsetsCompat bridge overrides these same
+       custom property names with the live, device-accurate inset in pixels
+       via an inline style on <html> — inline styles win the cascade over this
+       rule regardless of specificity, so Android gets the bridged value and
+       every other platform keeps the env() default. Nothing here is ever
+       hardcoded per device. */
+    --safe-area-inset-top: env(safe-area-inset-top);
+    --safe-area-inset-right: env(safe-area-inset-right);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom);
+    --safe-area-inset-left: env(safe-area-inset-left);
     color-scheme: light;
   }
 
