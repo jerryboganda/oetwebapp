@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     'How OET with Dr Ahmed Hesham collects, uses, retains, and protects your personal data, written under UK GDPR.',
 };
 
-const LAST_UPDATED = '26 April 2026';
+const LAST_UPDATED = '03 September 2026';
 const EFFECTIVE_FROM = '26 April 2026';
 
 interface LegalSection {
@@ -133,9 +133,10 @@ const sections: LegalSection[] = [
     ],
     callout: (
       <>
-        Most rights can be exercised from <strong>Settings → Privacy</strong>{' '}
+        Most rights can be exercised from <strong>Settings → Privacy</strong>,
+        our public <Link className={shellStyles.link} href="/account-deletion">account-deletion page</Link>{' '}
         or by emailing dpo@oetwithdrhesham.co.uk. We aim to respond within
-        30 days.
+        30 days. Deletion requests are acknowledged within 7 days after verification.
       </>
     ),
   },

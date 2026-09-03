@@ -55,6 +55,9 @@ export default function SupportPage() {
             <Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy hover:bg-surface" href="/privacy">
               Read privacy policy
             </Link>
+            <Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy hover:bg-surface" href="/account-deletion">
+              Delete my account
+            </Link>
             <Link className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy hover:bg-surface" href="/sign-in">
               Sign in
             </Link>

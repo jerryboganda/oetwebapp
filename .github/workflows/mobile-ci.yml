@@ -270,9 +270,9 @@ jobs:
           xcrun simctl boot "$device_udid" 2>/dev/null || true
           xcrun simctl bootstatus "$device_udid" -b
           xcrun simctl install "$device_udid" "$RUNNER_TEMP/AppDerivedData/Build/Products/Debug-iphonesimulator/App.app"
-          xcrun simctl launch "$device_udid" com.oetprep.learner
+          xcrun simctl launch "$device_udid" com.oetwithdrhesham.app
           sleep 10
-          xcrun simctl listapps "$device_udid" | grep -q 'com.oetprep.learner'
+          xcrun simctl listapps "$device_udid" | grep -q 'com.oetwithdrhesham.app'
           xcrun simctl io "$device_udid" screenshot "$RUNNER_TEMP/oet-ios-simulator.png"
 
       - name: Upload iOS simulator smoke evidence

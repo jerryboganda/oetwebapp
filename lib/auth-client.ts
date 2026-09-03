@@ -259,6 +259,8 @@ const PUBLIC_PATHS_NO_REDIRECT = new Set<string>([
   '/register/success',
   '/terms',
   '/privacy',
+  '/account-deletion',
+  '/support',
   '/forgot-password',
   '/forgot-password/verify',
   '/reset-password',

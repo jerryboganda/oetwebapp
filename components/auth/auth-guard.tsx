@@ -115,6 +115,8 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     nextPath === '/register/success' ||
     nextPath === '/terms' ||
     nextPath === '/privacy' ||
+    nextPath === '/account-deletion' ||
+    nextPath === '/support' ||
     nextPath === '/forgot-password' ||
     nextPath === '/forgot-password/verify' ||
     nextPath === '/reset-password' ||

@@ -1,0 +1,16 @@
+{
+  "app_name": "OET with Dr Ahmed Hesham",
+  "package_name": "com.oetwithdrhesham.app",
+  "default_language": "en-GB",
+  "app_type": "App",
+  "category": "Education",
+  "website": "https://www.oetwithdrhesham.co.uk",
+  "support_email": "support@oetwithdrhesham.co.uk",
+  "developer_name_preference": "OET with Dr Ahmed Hesham",
+  "privacy_policy_url": "https://app.oetwithdrhesham.co.uk/privacy",
+  "account_deletion_url": "https://app.oetwithdrhesham.co.uk/account-deletion",
+  "support_url": "https://app.oetwithdrhesham.co.uk/support",
+  "target_api": "36 (Android 16+)",
+  "release_format": "Signed Android App Bundle (AAB) + Play App Signing, same application record",
+  "notes": "Copy source of truth is docs/mobile-store-listings.md. Final pass against live build required before submission: remove any claim not live (AI Writing/Speaking, payments, specific professions, recalls)."
+}

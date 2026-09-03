@@ -18,6 +18,7 @@ export default function robots(): MetadataRoute.Robots {
           '/reset-password/success',
           '/privacy',
           '/terms',
+          '/account-deletion',
           '/support',
           '/get-app',
           '/exam-guide',

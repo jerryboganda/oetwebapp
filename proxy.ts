@@ -189,6 +189,7 @@ const PUBLIC_PATHS = new Set([
   '/register/success',
   '/terms',
   '/privacy',
+  '/account-deletion',
   '/support',
   '/forgot-password',
   '/forgot-password/verify',

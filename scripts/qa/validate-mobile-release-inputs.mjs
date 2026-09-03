@@ -11,7 +11,7 @@ function argValue(name) {
 const platform = argValue('--platform') ?? 'both';
 const version = argValue('--version');
 const versionCode = argValue('--version-code');
-const iosBundleId = 'com.oetprep.learner';
+const iosBundleId = 'com.oetwithdrhesham.app';
 const androidPackageName = 'com.oetwithdrhesham.app';
 
 function fail(message) {

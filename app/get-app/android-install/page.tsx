@@ -15,7 +15,7 @@ const STEPS = [
   'Tap "Download the update" below. Your phone starts downloading a file named OET-with-Dr-Hesham-*.apk.',
   'When the download finishes, swipe down to open your notifications (or open your Downloads app) and tap that file.',
   'If Android shows "Install blocked" or asks to allow installs from this app, tap Settings, turn on "Allow from this source", then go back and tap the file again.',
-  'Tap Install, wait for it to finish, then open OET with Dr. Hesham again.',
+  'Tap Install, wait for it to finish, then open OET with Dr Ahmed Hesham again.',
 ];
 
 export default function AndroidInstallPage() {

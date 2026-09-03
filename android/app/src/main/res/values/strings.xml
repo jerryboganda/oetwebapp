@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">OET with Dr. Hesham</string>
-    <string name="title_activity_main">OET with Dr. Hesham</string>
+    <string name="app_name">OET with Dr Ahmed Hesham</string>
+    <string name="title_activity_main">OET with Dr Ahmed Hesham</string>
     <string name="package_name">com.oetwithdrhesham.app</string>
     <string name="custom_url_scheme">com.oetwithdrhesham.app</string>
 </resources>

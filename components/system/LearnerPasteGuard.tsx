@@ -44,6 +44,9 @@ const EXCLUDED_PREFIXES = [
   '/mfa',
   '/auth',
   '/privacy',
+  '/account-deletion',
+  '/support',
+  '/terms',
 ] as const;
 
 function isExcludedPath(pathname: string | null): boolean {

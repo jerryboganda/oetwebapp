@@ -102,8 +102,8 @@ const apiWebSocketOrigins = apiOrigins.map((origin) =>
 );
 
 export const metadata: Metadata = {
-  title: 'OET Prep: Learner Platform',
-  description: 'Prepare for the Occupational English Test with personalised practice, AI feedback, and tutor review.',
+  title: 'OET with Dr Ahmed Hesham',
+  description: 'OET preparation for healthcare professionals with courses, practice and AI tools.',
   manifest: '/manifest.json',
   icons: {
     icon: [
@@ -115,11 +115,11 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: 'OET Prep',
+    title: 'OET with Dr Ahmed Hesham',
   },
   openGraph: {
-    title: 'OET Prep: Learner Platform',
-    description: 'Prepare for the OET with personalised practice, AI feedback, and tutor review.',
+    title: 'OET with Dr Ahmed Hesham',
+    description: 'OET preparation for healthcare professionals with courses, practice and AI tools.',
     type: 'website',
   },
   robots: { index: true, follow: true },
