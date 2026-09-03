@@ -57,7 +57,7 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>com.oetwithdrhesham.app</string>
+			<string>com.oetprep.learner</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>oet-prep</string>
