@@ -45,6 +45,22 @@ public static class WritingSubmissionEndpoints
         })
         .WithName("GetWritingSubmissionGrade");
 
+        // Controlled resume after a transient provider/rate-limit failure:
+        // re-grades the SAME persisted submission without retyping and without
+        // a duplicate paid workflow (reservation + grade-reuse are idempotent
+        // on the submission). Rate-limited like the initial submit.
+        group.MapPost("/{id:guid}/retry-grade", async (
+            Guid id,
+            HttpContext http,
+            IWritingSubmissionService service,
+            CancellationToken ct) =>
+        {
+            var outcome = await service.RetryGradeAsync(http.WritingV2UserId(), id, ct);
+            return Results.Ok(outcome);
+        })
+        .RequireRateLimiting("AiScoring")
+        .WithName("RetryWritingSubmissionGrade");
+
         group.MapGet("/{id:guid}/assessment-v11", async (
             Guid id,
             HttpContext http,

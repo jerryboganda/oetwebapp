@@ -128,13 +128,9 @@ public static class WritingTaskUnderstandingService
             : string.Empty;
     }
 
+    // Canonical pack vocabulary shared with grading preflight: LT-* catalogue
+    // codes (e.g. LT-DG) resolve to the same tokens the signal matchers use
+    // (e.g. discharge) instead of falling through to the routine default.
     private static string NormalizeLetterType(string? value)
-        => (value ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_') switch
-        {
-            "routine" => "routine_referral",
-            "urgent" => "urgent_referral",
-            "non_medical" => "non_medical_referral",
-            "referral_gp" or "gp" => "referral_to_gp",
-            var normalized => normalized,
-        };
+        => WritingLetterTypeTaxonomy.ToPackLetterType(value);
 }

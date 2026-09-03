@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
-import { getWritingSubmission, getWritingSubmissionGrade } from '@/lib/writing/api';
+import { getWritingSubmission, getWritingSubmissionGrade, retryWritingGrade } from '@/lib/writing/api';
 import { connectWritingSubmissionStream } from '@/lib/writing/realtime';
 import type { WritingSubmissionDto } from '@/lib/writing/types';
 
@@ -46,6 +46,7 @@ export default function WritingSubmissionGradingPage() {
   const submissionId = String(params?.id ?? '');
   const [submission, setSubmission] = useState<WritingSubmissionDto | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const [statusMessage, setStatusMessage] = useState(() => t('writing.submissions.grading.connecting'));
 
   useEffect(() => {
@@ -67,6 +68,30 @@ export default function WritingSubmissionGradingPage() {
       cancelled = true;
     };
   }, [submissionId, router, t]);
+
+  // A transient provider/rate-limit failure leaves the submission in `failed`
+  // with the letter preserved server-side. Offer a controlled resume that
+  // re-grades the SAME submission — no retyping, no duplicate paid workflow.
+  const failed = submission?.status === 'failed';
+  const handleRetry = () => {
+    if (retrying || !submissionId) return;
+    setRetrying(true);
+    setError(null);
+    void retryWritingGrade(submissionId)
+      .then(() => getWritingSubmission(submissionId))
+      .then((s) => {
+        setSubmission(s);
+        if (s.status === 'graded') {
+          router.replace(`/writing/submissions/${encodeURIComponent(submissionId)}/results`);
+        }
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : t('writing.submissions.grading.error.load'));
+      })
+      .finally(() => {
+        setRetrying(false);
+      });
+  };
 
   useEffect(() => {
     if (!submissionId) return;
@@ -115,6 +140,27 @@ export default function WritingSubmissionGradingPage() {
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        {failed ? (
+          <Card padding="lg" aria-live="polite" role="alert">
+            <CardContent>
+              <p className="text-sm font-bold text-navy">{t('writing.submissions.grading.failedTitle')}</p>
+              <p className="mt-1 text-sm text-muted">{t('writing.submissions.grading.failedDescription')}</p>
+              <div className="mt-4 flex flex-wrap justify-end gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/writing/practice/library">
+                    {t('writing.submissions.grading.backToLibrary')}
+                  </Link>
+                </Button>
+                <Button size="sm" onClick={handleRetry} disabled={retrying}>
+                  {retrying
+                    ? t('writing.submissions.grading.retrying')
+                    : t('writing.submissions.grading.retry')}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <Card padding="lg" aria-live="polite" role="status">
           <CardContent>

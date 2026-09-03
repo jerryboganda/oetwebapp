@@ -14,8 +14,12 @@ function base(overrides: Partial<WritingLintInput> = {}): WritingLintInput {
   };
 }
 
-describe('writing linter — R03.4 smoking/drinking inclusion', () => {
-  const letterWithBoth = `Dr A B
+describe('writing linter — R03.4 smoking/drinking relevance (FINAL MASTER v1.0 correction)', () => {
+  // R03.4 is OVERRIDDEN_OR_CORRECTED: "Smoking/alcohol are not universal
+  // always-include facts; relevance and reader needs control content." The
+  // deterministic detector is inert — relevance is judged by the AI assessor
+  // from the case notes, never by a blanket inclusion check.
+  const letterWithoutEither = `Dr A B
 Cardiology Clinic
 Main Street
 City
@@ -27,7 +31,7 @@ Re: Mr John Jones D.O.B: 01/01/1980
 
 I am writing to refer Mr Jones, a 45-year-old teacher, for your assessment.
 
-Mr Jones smokes 10 cigarettes per day and drinks alcohol occasionally. He presented with chest pain today. His blood pressure was 150/90 mmHg. Examination revealed mild discomfort on palpation. He was advised lifestyle changes.
+Mr Jones presented with chest pain today. His blood pressure was 150/90 mmHg. Examination revealed mild discomfort on palpation. He was advised lifestyle changes.
 
 Please do not hesitate to contact me.
 
@@ -35,20 +39,14 @@ Yours sincerely,
 
 Doctor`;
 
-  it('passes when both smoking and drinking are mentioned', () => {
-    const findings = lintWritingLetter(base({ letterText: letterWithBoth, letterType: 'routine_referral' }));
+  it('does NOT deduct R03.4 when smoking/drinking are omitted (relevance-driven)', () => {
+    const findings = lintWritingLetter(base({ letterText: letterWithoutEither, letterType: 'routine_referral' }));
     expect(findings.find((f) => f.ruleId === 'R03.4')).toBeUndefined();
-  });
-
-  it('flags when smoking is missing', () => {
-    const findings = lintWritingLetter(base({ letterText: letterWithBoth.replace(/smokes[^.]+\./, '') }));
-    const smokingFinding = findings.filter((f) => f.ruleId === 'R03.4');
-    expect(smokingFinding.length).toBeGreaterThan(0);
   });
 
   it('does NOT fire R03.4 when writing to an occupational therapist', () => {
     const findings = lintWritingLetter(base({
-      letterText: letterWithBoth.replace(/smokes[^.]+\./, '').replace(/drinks[^.]+\./, ''),
+      letterText: letterWithoutEither,
       recipientSpecialty: 'Occupational Therapist',
       letterType: 'non_medical_referral',
     }));
@@ -56,13 +54,16 @@ Doctor`;
   });
 });
 
-describe('writing linter — R03.6 atopic allergy rule', () => {
-  it('fires when atopic flag is set and allergy not mentioned', () => {
+describe('writing linter — R03.6 atopic allergy heuristic (FINAL MASTER v1.0 correction)', () => {
+  // R03.6 is OVERRIDDEN_OR_CORRECTED: "Allergy inclusion is relevance/safety
+  // driven; the atopic-condition rule is a heuristic, not an official
+  // absolute." The deterministic detector is inert.
+  it('does NOT deduct R03.6 when atopic flag is set and allergy not mentioned', () => {
     const findings = lintWritingLetter(base({
       letterText: 'Dear Dr Smith,\nRe: Ms A B\n\nIntro\n\nBody\n\nYours sincerely,\nDoctor',
       caseNotesMarkers: { atopicCondition: true },
     }));
-    expect(findings.find((f) => f.ruleId === 'R03.6')).toBeDefined();
+    expect(findings.find((f) => f.ruleId === 'R03.6')).toBeUndefined();
   });
 
   it('does not fire when allergy is mentioned', () => {
@@ -381,14 +382,18 @@ describe('writing linter — R14.12 treatment FOR not FROM', () => {
   });
 });
 
-describe('writing linter — R15.2 non-medical no jargon', () => {
-  it('flags "hypertension" in a non-medical referral', () => {
+describe('writing linter — R15.2 recipient-matched register (FINAL MASTER v1.0 correction)', () => {
+  // R15.2 is OVERRIDDEN_OR_CORRECTED: "Technicality should match the
+  // recipient. Allied-health professionals may understand clinical
+  // terminology." A fixed word list cannot judge the actual reader, so the
+  // deterministic detector is inert; register is judged by the AI assessor.
+  it('does NOT deduct R15.2 for clinical terms to an allied-health reader', () => {
     const findings = lintWritingLetter(base({
       letterText: 'Dear Sir/Madam,\nRe: Ms A\n\nMs A has hypertension and diabetes.\n\nYours faithfully,\nDoctor',
       letterType: 'non_medical_referral',
       recipientSpecialty: 'Occupational Therapist',
     }));
-    expect(findings.find((f) => f.ruleId === 'R15.2')).toBeDefined();
+    expect(findings.find((f) => f.ruleId === 'R15.2')).toBeUndefined();
   });
 });
 
@@ -492,7 +497,11 @@ describe('writing coverage summary', () => {
 // 2026-05-27 audit fixes — direct unit tests for the 6 new detectors
 // ===========================================================================
 
-describe('writing linter — R01.5 suspected cancer must trigger urgent referral', () => {
+describe('writing linter — R01.5 urgency from task, not cancer wording (FINAL MASTER v1.0 correction)', () => {
+  // R01.5 is OVERRIDDEN_OR_CORRECTED: "Suspected cancer does not automatically
+  // define task type independently of the task/context; preserve urgency
+  // exactly as supported." Urgency follows the writing task, which a
+  // letter-only detector cannot see — the detector is inert.
   const letterRoutineWithCancer = `Dr A B
 Oncology Clinic
 Main Street
@@ -510,9 +519,9 @@ Yours sincerely,
 
 Doctor`;
 
-  it('fires R01.5 when suspected cancer is in a routine referral', () => {
+  it('does NOT fire R01.5 when suspected cancer is in a routine referral', () => {
     const findings = lintWritingLetter(base({ letterText: letterRoutineWithCancer, letterType: 'routine_referral' }));
-    expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(true);
+    expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(false);
   });
 
   it('does NOT fire R01.5 when the same cancer wording is in an urgent referral', () => {
@@ -520,7 +529,7 @@ Doctor`;
     expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(false);
   });
 
-  it('also fires when caseNotesMarkers.cancerSuspected is set without explicit wording', () => {
+  it('does NOT fire when caseNotesMarkers.cancerSuspected is set without explicit wording', () => {
     const clean = letterRoutineWithCancer.replace('suspected cancer in his left lung', 'a chest abnormality');
     const findings = lintWritingLetter(
       base({
@@ -529,7 +538,7 @@ Doctor`;
         caseNotesMarkers: { cancerSuspected: true },
       }),
     );
-    expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(true);
+    expect(findings.some((f) => f.ruleId === 'R01.5')).toBe(false);
   });
 });
 
@@ -669,7 +678,7 @@ Yours sincerely,
 
 Doctor`;
 
-  it('fires R14.9 when an investigation in case notes is not mentioned in the letter', () => {
+  it('does NOT fire R14.9 for unmentioned investigations (FINAL MASTER v1.0: select what the reader needs)', () => {
     const findings = lintWritingLetter(
       base({
         letterText: dischargeLetter,
@@ -684,9 +693,7 @@ Doctor`;
       }),
     );
     const r14_9 = findings.filter((f) => f.ruleId === 'R14.9');
-    expect(r14_9.length).toBeGreaterThan(0);
-    // CRP and Ultrasound are missing from the letter body.
-    expect(r14_9[0].message).toMatch(/CRP|Ultrasound abdomen/i);
+    expect(r14_9).toHaveLength(0);
   });
 
   it('does NOT fire R14.9 on a routine referral letter regardless of caseNotesMarkers', () => {

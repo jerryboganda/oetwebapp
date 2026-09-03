@@ -85,6 +85,84 @@ public sealed class WritingAssessmentPreflightTests
         Assert.Equal("medicine-core-v11", result.RulePackVersion);
     }
 
+    [Fact]
+    public async Task Catalogue_letter_type_code_matches_legacy_pack_token()
+    {
+        // Regression: tasks store modern LT-* catalogue codes while packs are
+        // keyed by legacy tokens. Preflight must bridge the vocabularies so an
+        // LT-RR task matches a routine_referral pack instead of
+        // release-blocking.
+        await using var db = NewDb();
+        var scenario = Scenario(letterType: "LT-RR");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Asthma; allergy status negative."));
+        db.WritingAssessmentPackVersions.Add(new WritingAssessmentPackVersion
+        {
+            Id = Guid.NewGuid(),
+            Profession = "medicine",
+            LetterType = "routine_referral",
+            VersionKey = "medicine-core-v11",
+            Status = WritingAssessmentReleaseStatus.Approved,
+            CandidateFacing = true,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.Equal("routine_referral", result.LetterType);
+    }
+
+    [Fact]
+    public async Task Empty_candidate_letter_is_valid_input_not_missing()
+    {
+        // Submit-for-grading is always available: a blank response proceeds
+        // to the deterministic zero assessment — never a pre-submission block.
+        await using var db = NewDb();
+        var scenario = Scenario();
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Asthma; allergy status negative."));
+        db.WritingAssessmentPackVersions.Add(new WritingAssessmentPackVersion
+        {
+            Id = Guid.NewGuid(),
+            Profession = "medicine",
+            LetterType = "routine_referral",
+            VersionKey = "medicine-core-v11",
+            Status = WritingAssessmentReleaseStatus.Approved,
+            CandidateFacing = true,
+        });
+        await db.SaveChangesAsync();
+
+        var submission = Submission(scenario.Id);
+        submission.LetterContent = "   ";
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(submission, CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.DoesNotContain("candidate_letter", result.MissingInputCodes);
+    }
+
+    [Fact]
+    public async Task Missing_case_notes_still_fail_closed_with_unreadable_code()
+    {
+        // Fail-closed is preserved for unprepared tasks: a published task
+        // whose canonical case-note text was never prepared keeps the
+        // admin-actionable code (the publish gate now prevents new ones).
+        await using var db = NewDb();
+        var scenario = Scenario();
+        scenario.StimulusPdfMediaAssetId = "media-1";
+        db.WritingScenarios.Add(scenario);
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.False(result.CanScore);
+        Assert.Contains("case_note_pages_unreadable", result.MissingInputCodes);
+    }
+
     private static WritingScenario Scenario(
         string? taskPrompt = "Write to Dr Green requesting a review.",
         string profession = "medicine",
@@ -97,6 +175,7 @@ public sealed class WritingAssessmentPreflightTests
         LetterType = letterType,
         TaskPromptMarkdown = taskPrompt,
         Status = "published",
+        AuthorId = "admin-1",
         CreatedAt = DateTimeOffset.UtcNow,
         UpdatedAt = DateTimeOffset.UtcNow,
     };

@@ -27,7 +27,9 @@ public interface IWritingAssessmentPreflightService
 /// deliberately does not infer missing task or case-note content from the
 /// candidate letter.
 /// </summary>
-public sealed class WritingAssessmentPreflightService(LearnerDbContext db) : IWritingAssessmentPreflightService
+public sealed class WritingAssessmentPreflightService(
+    LearnerDbContext db,
+    ILogger<WritingAssessmentPreflightService>? logger = null) : IWritingAssessmentPreflightService
 {
     private static readonly HashSet<string> SupportedProfessions = new(StringComparer.Ordinal)
     {
@@ -40,7 +42,6 @@ public sealed class WritingAssessmentPreflightService(LearnerDbContext db) : IWr
     {
         "transfer",
         "referral_to_gp",
-        "gp_referral",
     };
 
     public async Task<WritingAssessmentPreflightResult> ValidateAsync(WritingSubmission submission, CancellationToken ct)
@@ -66,11 +67,19 @@ public sealed class WritingAssessmentPreflightService(LearnerDbContext db) : IWr
             .ToListAsync(ct);
         var caseNotesSnapshot = string.Join("\n", facts.Select(x => x.SentenceText.Trim()).Where(x => x.Length > 0));
         var profession = Normalize(scenario.Profession);
-        var letterType = NormalizeLetterType(scenario.LetterType);
+        // Single vocabulary bridge (WritingLetterTypeTaxonomy.ToPackLetterType):
+        // modern LT-* catalogue codes resolve to the same legacy pack/rule
+        // tokens as their legacy-token equivalents, so an LT-RR task matches a
+        // routine_referral pack instead of release-blocking on "lt_rr".
+        var letterType = WritingLetterTypeTaxonomy.ToPackLetterType(scenario.LetterType);
         var missing = new List<string>();
-        if (string.IsNullOrWhiteSpace(scenario.InternalCode)) missing.Add("test_id");
+        // NOTE: InternalCode (test_id) is provenance metadata, not a grading
+        // input — it is intentionally NOT a scoring gate. Tasks published
+        // without it must still grade from canonical case notes + task.
         if (string.IsNullOrWhiteSpace(taskSnapshot)) missing.Add("written_task");
-        if (string.IsNullOrWhiteSpace(submission.LetterContent)) missing.Add("candidate_letter");
+        // NOTE: an empty candidate letter is a valid (unscorable-content)
+        // submission, not missing input. It proceeds to grading and receives
+        // a deterministic zero assessment — never a pre-submission block.
         if (string.IsNullOrWhiteSpace(profession)) missing.Add("profession");
         if (string.IsNullOrWhiteSpace(letterType)) missing.Add("letter_type");
         if (!string.IsNullOrWhiteSpace(profession) && !SupportedProfessions.Contains(profession))
@@ -84,6 +93,9 @@ public sealed class WritingAssessmentPreflightService(LearnerDbContext db) : IWr
 
         if (missing.Count > 0)
         {
+            logger?.LogWarning(
+                "Writing preflight blocked submission {SubmissionId} scenario {ScenarioId}: {Missing}",
+                submission.Id, submission.ScenarioId, string.Join(",", missing));
             return BlockedMissing(profession, letterType, missing, taskSnapshot, caseNotesSnapshot);
         }
 
@@ -142,6 +154,9 @@ public sealed class WritingAssessmentPreflightService(LearnerDbContext db) : IWr
 
         if (releaseBlocks.Count > 0)
         {
+            logger?.LogWarning(
+                "Writing preflight release-blocked submission {SubmissionId} scenario {ScenarioId} profession {Profession} letterType {LetterType}: {Blocks}",
+                submission.Id, submission.ScenarioId, profession, letterType, string.Join(",", releaseBlocks));
             return new WritingAssessmentPreflightResult(
                 false,
                 WritingAssessmentV11Status.BlockedReleaseGate,
@@ -191,18 +206,4 @@ public sealed class WritingAssessmentPreflightService(LearnerDbContext db) : IWr
 
     private static string Normalize(string? value)
         => (value ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
-
-    private static string NormalizeLetterType(string? value)
-    {
-        var normalized = Normalize(value);
-        return normalized switch
-        {
-            "routine" => "routine_referral",
-            "urgent" => "urgent_referral",
-            "non_medical" => "non_medical_referral",
-            "referral_gp" => "referral_to_gp",
-            "gp" => "referral_to_gp",
-            _ => normalized,
-        };
-    }
 }

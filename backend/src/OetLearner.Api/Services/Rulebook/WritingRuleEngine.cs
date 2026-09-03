@@ -280,29 +280,25 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     // Detectors
     // ---------------------------------------------------------------------
 
+    // FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance audit:
+    // R03.4 is OVERRIDDEN_OR_CORRECTED — "Smoking/alcohol are not universal
+    // always-include facts; relevance and reader needs control content."
+    // A deterministic detector cannot judge relevance, so it must not
+    // deduct. Intentionally inert no-op; the corrected rule body (now in the
+    // rulebook JSON) guides the AI assessor, which sees the case notes.
     private static IEnumerable<LintFinding> DetectSmokingDrinking(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var recipient = (input.RecipientSpecialty ?? "").ToLowerInvariant();
-        string[] excluded = { "occupational therapist", "ot" };
-        if (excluded.Any(e => recipient.Contains(e))) yield break;
-
-        var body = input.LetterText.ToLowerInvariant();
-        var hasSmoking = Regex.IsMatch(body, @"\b(smok|tobacco|cigarett)");
-        var hasDrinking = Regex.IsMatch(body, @"\b(alcohol|drink(s|ing)?|units? per week)\b");
-        if (!hasSmoking)
-            yield return new LintFinding(rule.Id, rule.Severity,
-                "Smoking status must be mentioned (positive or negative) unless writing to an occupational therapist.");
-        if (!hasDrinking)
-            yield return new LintFinding(rule.Id, rule.Severity,
-                "Drinking status must be mentioned (positive or negative) unless writing to an occupational therapist.");
+        yield break;
     }
 
+    // FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance audit:
+    // R03.6 is OVERRIDDEN_OR_CORRECTED — "Allergy inclusion is
+    // relevance/safety driven; the atopic-condition rule is a heuristic, not
+    // an official absolute." Intentionally inert no-op; relevance is judged
+    // by the AI assessor from the case notes, never by a blanket detector.
     private static IEnumerable<LintFinding> DetectAllergyForAtopic(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        if (input.CaseNotesMarkers?.AtopicCondition != true) yield break;
-        if (!Regex.IsMatch(input.LetterText, @"\ballerg", RegexOptions.IgnoreCase))
-            yield return new LintFinding(rule.Id, rule.Severity,
-                "Allergy status (positive or negative) must be included for atopic conditions.");
+        yield break;
     }
 
     // Mirrors lib/rulebook/writing-rules.ts letter_body_length.
@@ -657,18 +653,14 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 "Discharge intro must start 'I am writing to update you regarding...' — do not use routine-referral phrasing.");
     }
 
+    // FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance audit:
+    // R14.4 is OVERRIDDEN_OR_CORRECTED — "Social/family/past history can be
+    // relevant to discharge if it changed or affects ongoing care; do not
+    // exclude categorically." A deterministic detector cannot judge
+    // relevance, so it must not deduct. Intentionally inert no-op.
     private static IEnumerable<LintFinding> DetectDischargeOmits(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        if (!string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)) yield break;
-        var text = input.LetterText;
-        if (Regex.IsMatch(text, @"\bfamily history\b", RegexOptions.IgnoreCase))
-            yield return new LintFinding(rule.Id, rule.Severity, "Discharge must not include family history.");
-        if (Regex.IsMatch(text, @"\bsocial history\b", RegexOptions.IgnoreCase))
-            yield return new LintFinding(rule.Id, rule.Severity, "Discharge must not include social history.");
-        if (Regex.IsMatch(text, @"\bpast medical history\b", RegexOptions.IgnoreCase))
-            yield return new LintFinding(rule.Id, rule.Severity, "Discharge must not include past medical history.");
-        if (Regex.IsMatch(text, @"\bsmok(ing|es|er)\b", RegexOptions.IgnoreCase))
-            yield return new LintFinding(rule.Id, rule.Severity, "Discharge must not include smoking status.");
+        yield break;
     }
 
     private static IEnumerable<LintFinding> DetectDischargeAdmittedWith(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -691,19 +683,16 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 "Discharge plan paragraph must contain medications with doses AND post-discharge instructions.");
     }
 
+    // FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance audit:
+    // R15.2 is OVERRIDDEN_OR_CORRECTED — "Technicality should match the
+    // recipient. Allied-health professionals may understand clinical
+    // terminology; explain/simplify for the actual reader." A fixed word
+    // list cannot judge the actual reader, so it must not deduct.
+    // Intentionally inert no-op; register is judged by the AI assessor,
+    // which sees the task recipient.
     private static IEnumerable<LintFinding> DetectNonMedicalJargon(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        if (!string.Equals(input.LetterType, "non_medical_referral", StringComparison.OrdinalIgnoreCase)) yield break;
-        var re = new Regex(@"\b(hypertension|hypoglycaemia|hyperglycaemia|myocardial infarction|tachycardia|bradycardia|BP|ECG|MRI|CT scan|paediatric|gynaecologic|endocrine)\b",
-            RegexOptions.IgnoreCase);
-        var c = 0;
-        foreach (Match m in re.Matches(input.LetterText))
-        {
-            yield return new LintFinding(rule.Id, rule.Severity,
-                $"Non-medical referral must avoid jargon '{m.Value}'. Use plain English.",
-                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
-            if (++c >= 3) yield break;
-        }
+        yield break;
     }
 
     private static IEnumerable<LintFinding> DetectSentenceLength(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -971,32 +960,15 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
+    // FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance audit:
+    // R01.5 is OVERRIDDEN_OR_CORRECTED — "Suspected cancer does not
+    // automatically define task type independently of the task/context;
+    // preserve urgency exactly as supported." Urgency follows the writing
+    // task, which a letter-only detector cannot see. Intentionally inert
+    // no-op; urgency is judged by the AI assessor from task + case notes.
     private static IEnumerable<LintFinding> DetectCancerSuspectedUrgent(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        if (string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(input.LetterType, "non_medical_referral", StringComparison.OrdinalIgnoreCase))
-        {
-            yield break;
-        }
-
-        var markers = new[]
-        {
-            "suspected cancer",
-            "suspicious lesion",
-            "?malignancy",
-            "query malignancy",
-            "rule out malignancy",
-            "abnormal mass",
-            "biopsy suspicious"
-        };
-        var flagged = markers.Any(marker => input.LetterText.Contains(marker, StringComparison.OrdinalIgnoreCase));
-        if (!flagged || string.Equals(input.LetterType, "urgent_referral", StringComparison.OrdinalIgnoreCase))
-        {
-            yield break;
-        }
-
-        yield return new LintFinding(rule.Id, rule.Severity,
-            "Suspected cancer in the case notes MUST be treated as an urgent referral.");
+        yield break;
     }
 
     private static IEnumerable<LintFinding> DetectVisitContentTense(OetRule rule, WritingLintInput input, LetterStructure s)

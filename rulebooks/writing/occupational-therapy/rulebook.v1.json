@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "kind": "writing",
   "profession": "occupational-therapy",
   "publishedAt": "2026-04-18T00:00:00Z",
@@ -136,7 +136,7 @@
       "section": "01",
       "severity": "critical",
       "title": "Suspected cancer = urgent",
-      "body": "Suspected cancer ALWAYS applies Urgent Referral rules, even if the word 'urgent' is absent.",
+      "body": "Suspected cancer does not automatically define task type independently of the task/context; preserve urgency exactly as supported.",
       "appliesTo": "all",
       "params": {
         "cancerMarkers": [
@@ -281,7 +281,7 @@
       "section": "03",
       "severity": "critical",
       "title": "Smoking and drinking always included (except OT)",
-      "body": "Smoking and drinking: ALWAYS include (positive or negative), EXCEPT when writing to an occupational therapist.",
+      "body": "Smoking/alcohol are not universal always-include facts; relevance and reader needs control content.",
       "appliesTo": "all",
       "checkId": "content_requires_smoking_drinking",
       "params": {
@@ -305,7 +305,7 @@
       "section": "03",
       "severity": "critical",
       "title": "Allergy always included for atopic conditions",
-      "body": "Allergy: ALWAYS include (positive or negative) for atopic conditions (asthma, eczema, hay fever). For non-atopic conditions, include allergy only if relevant to the condition or its medication.",
+      "body": "Allergy inclusion is relevance/safety driven; the atopic-condition rule is a heuristic, not an official absolute.",
       "appliesTo": "all",
       "checkId": "content_requires_allergy_for_atopic",
       "params": {
@@ -674,7 +674,7 @@
       "section": "07",
       "severity": "minor",
       "title": "Appositive uses gentleman/lady",
-      "body": "Appositive clause: 'Ms Miller, a 25-year-old teacher, presented with...' — use 'gentleman' for males, 'lady' for females (not man/woman).",
+      "body": "Gentleman/lady is unnecessary and may be dated; use patient/person or an appropriate identifier.",
       "appliesTo": "all"
     },
     {
@@ -739,7 +739,7 @@
       "section": "08",
       "severity": "critical",
       "title": "Never 'next visit'",
-      "body": "Next visit reference: 'on the following visit' / 'later on' / 'later that month'. NEVER 'next visit'.",
+      "body": "Next visit is standard English; following visit may be stylistically preferable in some narratives but is not mandatory.",
       "appliesTo": "all",
       "checkId": "body_forbidden_phrase_next_visit",
       "forbiddenPatterns": [
@@ -976,7 +976,7 @@
       "section": "10",
       "severity": "critical",
       "title": "Surgery = past simple",
-      "body": "Resolved conditions and surgery → PAST SIMPLE. 'She had a cholecystectomy in 2018.' Never use present perfect for surgery.",
+      "body": "Present perfect is valid with procedures when current relevance/no finished time supports it (has undergone).",
       "appliesTo": "all",
       "checkId": "surgery_past_simple"
     },
@@ -1010,7 +1010,7 @@
       "section": "10",
       "severity": "major",
       "title": "Avoid past perfect",
-      "body": "Past perfect (had + past participle): AVOID in OET. Alternative: ING form or noun.",
+      "body": "Past perfect is valid when needed to establish earlier-past chronology; do not ban it.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },
@@ -1019,7 +1019,7 @@
       "section": "10",
       "severity": "major",
       "title": "Reported speech uses ING or noun",
-      "body": "After reported/mentioned/stated/described: use ING or noun. 'She reported having headaches.' NOT '...that she had had headaches.'",
+      "body": "That-clauses are grammatically valid after report/state/mention; gerund/noun forms are alternatives, not the only forms.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },
@@ -1111,7 +1111,7 @@
       "section": "11",
       "severity": "critical",
       "title": "Include numerical values with units",
-      "body": "Always include numerical values with units when given. Example: 'glucose of 7.8 mmol/L.' Never write the reference range.",
+      "body": "Do not always include every numerical value; include values that are relevant to purpose/reader and preserve units accurately.",
       "appliesTo": "all",
       "checkId": "numerical_values_have_units"
     },
@@ -1136,7 +1136,7 @@
       "section": "11",
       "severity": "minor",
       "title": "Clinic scheduling fractions",
-      "body": "Clinic scheduling fractions: 1/4 = once a week; 1/12 = once a year; 3/52 = three times a year; 3/7 = three times a week; 8/24 = eight-hourly; 12/24 = twice a day.",
+      "body": "Legacy fraction conversions are unsafe/incorrect as a universal rule; interpret source notation from context and never guess.",
       "appliesTo": "all"
     },
     {
@@ -1153,7 +1153,7 @@
       "section": "12",
       "severity": "critical",
       "title": "Never 'patient' in body",
-      "body": "Never use the word 'patient' in the body. Use last name + title, or a pronoun.",
+      "body": "The word patient is not grammatically or officially forbidden; use names/pronouns/patient according to clarity and style.",
       "appliesTo": "all",
       "checkId": "body_forbidden_phrase_the_patient"
     },
@@ -1173,7 +1173,7 @@
       "section": "12",
       "severity": "minor",
       "title": "Replace colloquial terms",
-      "body": "Replace 'tired' with 'fatigue.' Replace 'bad' with 'poor' or 'inadequate.' No colloquial language.",
+      "body": "Do not replace tired with fatigue automatically; they can differ in meaning and register.",
       "appliesTo": "all"
     },
     {
@@ -1214,7 +1214,7 @@
       "section": "12",
       "severity": "critical",
       "title": "'However' punctuation",
-      "body": "'However': always preceded by semicolon; comma follows. Pattern: '[clause]; however, [clause].'",
+      "body": "However can start a sentence or follow a semicolon; no single punctuation pattern is mandatory.",
       "appliesTo": "all",
       "checkId": "linker_however_punctuation"
     },
@@ -1223,7 +1223,7 @@
       "section": "12",
       "severity": "major",
       "title": "'Therefore' / 'Thus' punctuation",
-      "body": "'Therefore' / 'Thus': preceded by semicolon; comma follows. Pattern: '[clause]; therefore, [clause].'",
+      "body": "Therefore/thus have more than one correct punctuation pattern; apply standard punctuation by sentence structure.",
       "appliesTo": "all",
       "checkId": "linker_therefore_punctuation"
     },
@@ -1232,7 +1232,7 @@
       "section": "12",
       "severity": "major",
       "title": "'In addition' punctuation",
-      "body": "'In addition' (joining two complete clauses): semicolon before + comma after.",
+      "body": "In addition can be sentence-initial or clause-linked; do not require a semicolon in every case.",
       "appliesTo": "all",
       "checkId": "linker_in_addition_punctuation"
     },
@@ -1273,7 +1273,7 @@
       "section": "12",
       "severity": "minor",
       "title": "'As' (because) comma",
-      "body": "'As' (meaning because) in mid-sentence: comma before.",
+      "body": "A comma before causal as is context-dependent, not universal.",
       "appliesTo": "all"
     },
     {
@@ -1281,7 +1281,7 @@
       "section": "12",
       "severity": "minor",
       "title": "'For which' comma",
-      "body": "'For which': comma before.",
+      "body": "Comma before for which depends on whether the relative clause is non-restrictive; not every occurrence needs one.",
       "appliesTo": "all"
     },
     {
@@ -1322,7 +1322,7 @@
       "section": "12",
       "severity": "minor",
       "title": "Appositive commas",
-      "body": "Appositive: between two commas. Use 'gentleman' / 'lady' (not man/woman).",
+      "body": "Gentleman/lady is not required; use neutral professional identifiers.",
       "appliesTo": "all"
     },
     {
@@ -1395,7 +1395,7 @@
       "section": "13",
       "severity": "critical",
       "title": "Ongoing conditions on active meds must be mentioned",
-      "body": "Any ongoing medical condition with active medications MUST be mentioned, even if unrelated to the urgent issue.",
+      "body": "Do not include every active condition/medicine automatically; relevance and continuity/safety govern inclusion.",
       "appliesTo": [
         "urgent_referral"
       ],
@@ -1490,7 +1490,7 @@
       "section": "14",
       "severity": "critical",
       "title": "Discharge omits FH/SH/smoking/PMH/occupation",
-      "body": "Do NOT include: family history, social history, smoking/drinking, previous medical history, occupation. GP knows all of this.",
+      "body": "Social/family/past history can be relevant to discharge if it changed or affects ongoing care; do not exclude categorically.",
       "appliesTo": [
         "discharge"
       ],
@@ -1547,7 +1547,7 @@
       "section": "14",
       "severity": "critical",
       "title": "List all admission investigations (incl. normal)",
-      "body": "All investigations performed during admission (including normal results) MUST be listed with values.",
+      "body": "Do not list all investigations including all normal results; select what the reader needs.",
       "appliesTo": [
         "discharge"
       ],
@@ -1592,7 +1592,7 @@
       "section": "14",
       "severity": "major",
       "title": "Discharge past tense throughout",
-      "body": "Past tense throughout (all events occurred during admission).",
+      "body": "Discharge letters use tense according to time: past for admission events, present for current status, future/modal for plan.",
       "appliesTo": [
         "discharge"
       ],
@@ -1624,7 +1624,7 @@
       "section": "15",
       "severity": "critical",
       "title": "Translate all jargon",
-      "body": "Do NOT use medical jargon. Translate: 'hypertension' → 'high blood pressure'; avoid abbreviations like 'BP' unless previously spelled out.",
+      "body": "Technicality should match the recipient. Allied-health professionals may understand clinical terminology; explain/simplify for the actual reader.",
       "appliesTo": [
         "non_medical_referral"
       ],
@@ -1714,7 +1714,7 @@
       "section": "16",
       "severity": "critical",
       "title": "Content + Conciseness dominate pass/fail",
-      "body": "Most heavily weighted for pass/fail: Content and Conciseness & Clarity.",
+      "body": "OET does not publish a simple pass/fail weighting formula that makes two criteria universally decisive.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },
@@ -1741,7 +1741,7 @@
       "section": "16",
       "severity": "info",
       "title": "Target Band 6+",
-      "body": "Required score: approximately Band 6+ in most criteria; at least Band 2 out of 3 in Purpose.",
+      "body": "Do not convert descriptors into a universal regulator pass threshold; regulator requirements vary.",
       "appliesTo": "all"
     },
     {
@@ -1749,7 +1749,7 @@
       "section": "16",
       "severity": "critical",
       "title": "Real-clinic test",
-      "body": "Examiner standard: 'Could this letter be sent in a real clinical setting?' Yes = pass. No = fail.",
+      "body": "Could this be sent clinically is a useful heuristic, not the official pass/fail formula.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },

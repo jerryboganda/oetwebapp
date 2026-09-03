@@ -23,7 +23,6 @@ import {
 } from '@/components/domain/InsufficientCreditsModal';
 import {
   checkWritingScenarioEligibility,
-  createSubmitIdempotencyKey,
   createWritingSubmission,
   getWritingDraftV2,
   getWritingHighlights,
@@ -31,6 +30,7 @@ import {
   putWritingDraftV2,
   putWritingHighlights,
 } from '@/lib/writing/api';
+import { keyForSubmitAction } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
@@ -211,15 +211,24 @@ export default function WritingPracticeSessionPage() {
 
   const helperText = t('writing.practice.session.helper.ready');
 
+  // Set once a 429/409 single-retry has been spent for this mount, so an
+  // already-in-flight grading attempt is waited on rather than hammered.
+  const retriedAfterThrottleRef = useRef(false);
+
   // Shared submit path. `auto` = true when fired by the writing-timer expiry.
+  // The idempotency key is stable per (scenario, content): a double-tap, a
+  // network resend, or the single 429/409 retry below all carry the SAME key
+  // for unchanged content, so one logical Submit can never open two paid
+  // grading workflows. Edited content mints a fresh key.
   const finalizeSubmit = useCallback(
     async (auto: boolean) => {
       if (submitting || !scenario) return;
       setSubmitting(true);
       setError(null);
-      try {
+
+      const attemptOnce = async () => {
         const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
-        const submission = await createWritingSubmission({
+        return createWritingSubmission({
           scenarioId: scenario.id,
           mode,
           letterContent: contentRef.current,
@@ -227,15 +236,14 @@ export default function WritingPracticeSessionPage() {
           timeSpentSeconds: elapsed,
           inputSource: 'editor',
           caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
-          idempotencyKey: createSubmitIdempotencyKey(),
+          idempotencyKey: keyForSubmitAction(scenario.id, contentRef.current),
         });
-        // Clear the clock so a future retake of this scenario starts fresh.
-        if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
-        router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
-      } catch (err) {
-        // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
-        // a dedicated modal with a direct path to the AI Credits storefront rather
-        // than a generic inline error. The draft autosaves, so nothing is lost.
+      };
+
+      // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
+      // a dedicated modal with a direct path to the AI Credits storefront rather
+      // than a generic inline error. The draft autosaves, so nothing is lost.
+      const handleFailure = (err: unknown) => {
         const code = (err as { code?: string }).code;
         const status = (err as { status?: number }).status;
         if (code === 'ai_credits_insufficient' || status === 402) {
@@ -244,6 +252,42 @@ export default function WritingPracticeSessionPage() {
           setError(err instanceof Error ? err.message : t('writing.practice.session.error.submit'));
         }
         setSubmitting(false);
+      };
+
+      try {
+        const submission = await attemptOnce();
+        // Clear the clock so a future retake of this scenario starts fresh.
+        if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
+        router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
+      } catch (err) {
+        // One Submit must never surface "Too many requests" as its normal
+        // outcome: a 429 (rate limiter tripped by a double-tap race) or a 409
+        // (grading already in flight for this attempt) waits briefly and
+        // retries ONCE with the same idempotency key, which the server
+        // collapses onto the single in-flight submission. Anything else, or a
+        // second failure, surfaces normally — the draft autosaves, so no work
+        // is lost.
+        const code = (err as { code?: string }).code;
+        const status = (err as { status?: number }).status;
+        const throttleRetryable =
+          code === 'rate_limited' ||
+          status === 429 ||
+          code === 'writing_rubric_already_in_progress' ||
+          status === 409;
+        if (throttleRetryable && !auto && !retriedAfterThrottleRef.current) {
+          retriedAfterThrottleRef.current = true;
+          await new Promise((resolve) => setTimeout(resolve, 2500));
+          try {
+            const submission = await attemptOnce();
+            if (typeof window !== 'undefined') sessionStorage.removeItem(clockKey);
+            router.push(`/writing/submissions/${encodeURIComponent(submission.id)}/grading`);
+            return;
+          } catch (retryErr) {
+            handleFailure(retryErr);
+            return;
+          }
+        }
+        handleFailure(err);
       }
     },
     [submitting, scenario, wordCount, mode, router, clockKey, t],

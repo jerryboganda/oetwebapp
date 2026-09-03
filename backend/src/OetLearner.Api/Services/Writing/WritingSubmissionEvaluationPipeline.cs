@@ -45,7 +45,12 @@ public interface IWritingSubmissionEvaluationPipeline
 ///   1. Pre-flight (word count / verbatim-copy / format quick check)
 ///   2. AI rubric — <see cref="WritingEvaluationPipeline"/> via "writing.score.v1"
 ///   3. Canon engine — <see cref="IWritingCanonEngine"/> persists violations
-///   4. Aggregation — top priorities + exemplar match + revision invite
+///   4. Aggregation — top priorities + saved-model-answer reuse for display
+///      + revision invite.
+///
+/// The saved Model Answer is a DISPLAY-ONLY reference exemplar. It is never
+/// an input to scoring: no similarity, phrase-match, embedding or lexical
+/// comparison against it takes place anywhere in this pipeline.
 ///
 /// Idempotency by <c>LetterContentHash</c> with 24h TTL — if a grade for this
 /// hash already exists within the TTL window, the cached grade is reused and
@@ -66,18 +71,28 @@ public sealed class WritingSubmissionEvaluationPipeline(
     WritingModelAnswerService? modelAnswerService = null,
     IAiCreditReservationService? creditReservations = null) : IWritingSubmissionEvaluationPipeline
 {
+    /// <summary>
+    /// Window in which an identical-content (learner, task, mode) submission
+    /// is treated as the same logical grading attempt. Collapses double-taps,
+    /// browser retries and network resends into ONE submission row — and
+    /// therefore ONE paid grading workflow — without blocking legitimate
+    /// future re-submissions (which the service-layer submission lock governs
+    /// once an attempt reaches a terminal state).
+    /// </summary>
+    private static readonly TimeSpan DuplicateContentWindow = TimeSpan.FromMinutes(10);
+
     public async Task<Guid> CreateSubmissionAsync(WritingSubmissionGradeContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
+        // Submit-for-grading is always available regardless of response
+        // length: empty/short/blank letters are valid submissions that receive
+        // a (poor) assessment downstream — never a pre-submission block.
         var letter = context.LetterContent ?? string.Empty;
-        if (letter.Trim().Length == 0)
-        {
-            throw ApiException.Validation("writing_submission_empty", "Letter content is required.");
-        }
 
         var now = clock.GetUtcNow();
         var hash = ComputeHash(letter);
         var wordCount = CountWords(letter);
+        var mode = string.IsNullOrWhiteSpace(context.Mode) ? "practice" : context.Mode.Trim().ToLowerInvariant();
         var idempotencyKey = NormalizeIdempotencyKey(context.IdempotencyKey)
             ?? BuildDerivedIdempotencyKey(context, hash);
 
@@ -85,7 +100,41 @@ public sealed class WritingSubmissionEvaluationPipeline(
             .FirstOrDefaultAsync(s => s.UserId == context.UserId && s.IdempotencyKey == idempotencyKey, ct);
         if (existing is not null)
         {
+            logger.LogInformation(
+                "Writing submit deduped by idempotency key for user {UserId} scenario {ScenarioId} submission {SubmissionId}.",
+                context.UserId, context.ScenarioId, existing.Id);
             return existing.Id;
+        }
+
+        // Double-tap / retry guard: the client mints a random key per submit
+        // action, so two rapid taps for the SAME logical attempt carry
+        // different keys and would otherwise create two submissions (and two
+        // paid grading workflows). A recent identical-content submission for
+        // the same learner + task + mode is the same logical attempt — reuse
+        // it. The service-layer submission lock already prevents legitimate
+        // re-submits after grading; this guard only collapses in-flight races
+        // and immediate retries. Revisions are excluded (they intentionally
+        // create new rows linked to the original).
+        if (!context.IsRevision)
+        {
+            var recentCutoff = now - DuplicateContentWindow;
+            var contentDuplicate = await db.WritingSubmissions.AsNoTracking()
+                .Where(s => s.UserId == context.UserId
+                    && s.ScenarioId == context.ScenarioId
+                    && !s.IsRevision
+                    && s.Mode == mode
+                    && s.LetterContentHash == hash
+                    && s.CreatedAt >= recentCutoff)
+                .OrderByDescending(s => s.CreatedAt)
+                .Select(s => s.Id)
+                .FirstOrDefaultAsync(ct);
+            if (contentDuplicate != Guid.Empty)
+            {
+                logger.LogInformation(
+                    "Writing submit deduped by content hash for user {UserId} scenario {ScenarioId} submission {SubmissionId}.",
+                    context.UserId, context.ScenarioId, contentDuplicate);
+                return contentDuplicate;
+            }
         }
 
         var submission = new WritingSubmission
@@ -165,7 +214,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct);
         submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, await settingsProvider.GetAsync(ct));
         var reused = await TryReuseExistingGradeAsync(submission, ct);
-        if (reused is not null) return reused;
+        if (reused is not null)
+        {
+            logger.LogInformation(
+                "Writing grade reused for submission {SubmissionId} scenario {ScenarioId} user {UserId}: no provider call.",
+                submission.Id, submission.ScenarioId, submission.UserId);
+            return reused;
+        }
 
         if (assessmentPreflight is null)
         {
@@ -209,11 +264,21 @@ public sealed class WritingSubmissionEvaluationPipeline(
             throw ApiException.Validation(quickChecks.Reason!, quickChecks.Message!);
         }
 
+        // Blank / near-blank letters are valid submissions with no assessable
+        // content. They receive a deterministic zero assessment WITHOUT any
+        // provider call: no grading charge, no latency, no invented feedback.
+        // The saved pre-generated Model Answer is still attached for display
+        // so the candidate can study the exemplar.
+        if (string.IsNullOrWhiteSpace(submission.LetterContent))
+        {
+            return await GradeBlankSubmissionAsync(submission, scenario, assessmentPreflightResult, ct);
+        }
+
         var (rubric, reservationId) = await GradeWithReservationAsync(submission, scenario, assessmentPreflightResult.CaseNotesSnapshot, ct);
 
         var canon = await canonEngine.DetectViolationsAsync(
             new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
-                scenario?.LetterType ?? "routine_referral",
+                WritingLetterTypeTaxonomy.ToPackLetterType(scenario?.LetterType),
                 scenario?.Profession ?? "medicine"), ct);
 
         var bandLabel = OetBandLabel(rubric.EstimatedBand);
@@ -305,6 +370,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
         {
             await creditReservations.CommitAsync(reservationId, ct);
         }
+
+        logger.LogInformation(
+            "Writing graded submission {SubmissionId} scenario {ScenarioId} user {UserId} grade {GradeId} rawTotal {RawTotal}.",
+            submission.Id, submission.ScenarioId, submission.UserId, grade.Id, grade.RawTotal);
 
         try
         {
@@ -429,15 +498,37 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var owner = $"{Environment.MachineName}:{Environment.ProcessId}:{Guid.NewGuid():N}";
         if (owner.Length > 128) owner = owner[..128];
         var now = clock.GetUtcNow();
-        var rows = await db.WritingSubmissions
-            .Where(s => s.Id == submission.Id
-                        && (s.Status == WritingSubmissionStatuses.Queued
-                            || s.Status == WritingSubmissionStatuses.Preflight))
-            .ExecuteUpdateAsync(set => set
-                .SetProperty(s => s.Status, WritingSubmissionStatuses.Grading)
-                .SetProperty(s => s.ClaimedAt, now)
-                .SetProperty(s => s.ClaimOwner, owner), ct);
-        if (rows == 0) return false;
+        if (!db.Database.IsInMemory())
+        {
+            // Atomic compare-and-swap on relational providers (Postgres/SQLite):
+            // exactly one grader instance wins the claim.
+            var rows = await db.WritingSubmissions
+                .Where(s => s.Id == submission.Id
+                            && (s.Status == WritingSubmissionStatuses.Queued
+                                || s.Status == WritingSubmissionStatuses.Preflight))
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(s => s.Status, WritingSubmissionStatuses.Grading)
+                    .SetProperty(s => s.ClaimedAt, now)
+                    .SetProperty(s => s.ClaimOwner, owner), ct);
+            if (rows == 0) return false;
+        }
+        else
+        {
+            // The InMemory test provider cannot translate ExecuteUpdate, so
+            // claim via load + conditional save instead. Single-process test
+            // hosts have no concurrent claimants, so no atomicity is lost.
+            var row = await db.WritingSubmissions.FirstOrDefaultAsync(s => s.Id == submission.Id, ct);
+            if (row is null
+                || row.Status is not (WritingSubmissionStatuses.Queued or WritingSubmissionStatuses.Preflight))
+            {
+                return false;
+            }
+
+            row.Status = WritingSubmissionStatuses.Grading;
+            row.ClaimedAt = now;
+            row.ClaimOwner = owner;
+            await db.SaveChangesAsync(ct);
+        }
 
         submission.Status = WritingSubmissionStatuses.Grading;
         submission.ClaimedAt = now;
@@ -632,8 +723,129 @@ public sealed class WritingSubmissionEvaluationPipeline(
     private static (bool Passed, string? Reason, string? Message) PreflightChecks(WritingSubmission submission)
     {
         if (submission.WordCount > 400) return (false, "writing_submission_too_long", "Letter exceeds the 400-word ceiling for OET writing.");
-        if (string.IsNullOrWhiteSpace(submission.LetterContent)) return (false, "writing_submission_empty", "Letter content is required.");
+        // No minimum: empty/short/blank letters proceed to the deterministic
+        // zero-grade path in EvaluateAsync.
         return (true, null, null);
+    }
+
+    /// <summary>
+    /// Deterministic assessment for blank / whitespace-only submissions.
+    /// Zero on every OET criterion with honest "no assessable content"
+    /// feedback. Runs ZERO provider calls and holds ZERO credits: the
+    /// candidate initiated one logical grading action that consumed no AI
+    /// resources. The persisted shape (grade + deterministic assessment
+    /// report + reused pre-generated Model Answer) matches a normal grading
+    /// so candidate surfaces render unchanged.
+    /// </summary>
+    private async Task<WritingSubmissionGradeOutcome> GradeBlankSubmissionAsync(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        WritingAssessmentPreflightResult preflight,
+        CancellationToken ct)
+    {
+        logger.LogInformation(
+            "Writing blank submission {SubmissionId} scenario {ScenarioId}: deterministic zero grade, no provider call.",
+            submission.Id, submission.ScenarioId);
+
+        var now = clock.GetUtcNow();
+        var grade = new WritingGrade
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submission.Id,
+            C1Purpose = 0,
+            C2Content = 0,
+            C3Conciseness = 0,
+            C4Genre = 0,
+            C5Organisation = 0,
+            C6Language = 0,
+            RawTotal = 0,
+            EstimatedBand = 0,
+            BandLabel = OetBandLabel(0),
+            PerCriterionFeedbackJson = BuildBlankPerCriterionFeedbackJson(),
+            TopThreePrioritiesJson = JsonSerializer.Serialize(new[]
+            {
+                "Submit a complete letter: an empty response cannot be assessed on any criterion.",
+                "Address the writing task directly — state the purpose of the letter in the opening lines.",
+                "Select relevant information from the case notes and organise it for the stated recipient.",
+            }),
+            ConfidenceFlag = "high",
+            ModelUsed = "deterministic-empty-v1",
+            CanonVersion = await ResolveCanonVersionAsync(ct),
+            GradedAt = now,
+            CreatedAt = now,
+        };
+        db.WritingGrades.Add(grade);
+
+        if (assessmentRuleEngine is not null)
+        {
+            var assessmentReport = BuildAssessmentReport(
+                submission,
+                preflight,
+                grade,
+                assessmentRuleEngine,
+                OetScoring.ScaledMin);
+            if (calibrationReleaseService is not null)
+            {
+                var release = await calibrationReleaseService.ResolveAsync(
+                    grade.ModelUsed,
+                    "unreleased",
+                    ct);
+                var pregenerated = await db.WritingTaskModelAnswers.AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.ScenarioId == submission.ScenarioId
+                        && a.Status == WritingAssessmentModelAnswerStatus.Ready
+                        && a.IsCandidateVisible, ct);
+                bool modelAnswerReady;
+                if (pregenerated is not null)
+                {
+                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.Ready;
+                    assessmentReport.ModelAnswer.ModelAnswerText = pregenerated.ModelAnswerText;
+                    assessmentReport.ModelAnswer.GroundedFactReferencesJson = pregenerated.GroundedFactReferencesJson;
+                    assessmentReport.ModelAnswer.HoldReason = null;
+                    assessmentReport.ModelAnswer.IsCandidateVisible = pregenerated.IsCandidateVisible;
+                    assessmentReport.ModelAnswer.UpdatedAt = now;
+                    modelAnswerReady = true;
+                }
+                else
+                {
+                    modelAnswerReady = false;
+                }
+                if (release.CandidateNumericScoreEnabled && modelAnswerReady)
+                {
+                    assessmentReport.Report.Status = WritingAssessmentV11Status.CandidateReady;
+                    assessmentReport.Report.CandidateNumericScoreEnabled = true;
+                    assessmentReport.Report.CandidateReportVisible = true;
+                    assessmentReport.ModelAnswer.IsCandidateVisible = true;
+                    assessmentReport.Report.ConfidenceLabel = "medium";
+                    assessmentReport.Report.ConfidenceRange = "calibration-approved range";
+                }
+            }
+            db.WritingAssessmentReportsV11.Add(assessmentReport.Report);
+            db.WritingAssessmentModelAnswers.Add(assessmentReport.ModelAnswer);
+        }
+
+        submission.Status = "graded";
+        await db.SaveChangesAsync(ct);
+
+        await events.PublishAsync(new WritingGradeReady(
+            submission.UserId, submission.Id, grade.Id, grade.RawTotal, grade.EstimatedBand, grade.BandLabel, now), ct);
+
+        return new WritingSubmissionGradeOutcome(submission.Id, grade.Id, grade.RawTotal, grade.BandLabel, false);
+    }
+
+    private static string BuildBlankPerCriterionFeedbackJson()
+    {
+        const string feedback =
+            "No assessable content was submitted for this criterion. Submit a complete letter responding to the writing task to receive criterion feedback.";
+        var dict = new Dictionary<string, object>
+        {
+            ["c1"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
+            ["c2"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
+            ["c3"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
+            ["c4"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
+            ["c5"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
+            ["c6"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
+        };
+        return JsonSerializer.Serialize(dict);
     }
 
     private async Task<RubricResult> CallRubricAsync(
@@ -1092,16 +1304,20 @@ public sealed class WritingSubmissionEvaluationPipeline(
     private static ExamProfession ParseProfession(string raw)
         => RulebookProfessionParser.TryParse(raw, out var p) ? p : ExamProfession.Medicine;
 
-    private static string NormaliseLetterTypeForRulebook(string v)
-        => v.ToUpperInvariant() switch
+    /// <summary>
+    /// Maps any stored letter-type token to the rulebook genre token consumed
+    /// by the grounded grading prompt. Routes through the canonical pack
+    /// vocabulary first so legacy ids (<c>transfer_letter</c>,
+    /// <c>update_discharge</c>, …) resolve exactly like their LT-* catalogue
+    /// equivalents. Response (LT-RP) is retired: no arm maps to the old
+    /// <c>advice_to_patient</c> genre. Other Letters uses the neutral genre
+    /// token so only generic rules apply — never a guessed type.
+    /// </summary>
+    private static string NormaliseLetterTypeForRulebook(string? v)
+        => WritingLetterTypeTaxonomy.ToPackLetterType(v) switch
         {
-            "LT-RR" => "routine_referral",
-            "LT-UR" => "urgent_referral",
-            "LT-DG" => "discharge",
-            "LT-TR" => "transfer",
-            "LT-RP" => "advice_to_patient",
-            "LT-NM" => "non_medical",
-            _ => v.ToLowerInvariant(),
+            "non_medical_referral" => "non_medical",
+            var pack => pack,
         };
 
     private sealed record RubricResult(int C1, int C2, int C3, int C4, int C5, int C6, int EstimatedBand,

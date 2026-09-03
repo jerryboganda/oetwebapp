@@ -253,15 +253,11 @@ public static class WritingAssessmentGovernanceEndpoints
     private static string Normalize(string? value) =>
         (value ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
 
-    private static string NormalizeLetterType(string? value) => Normalize(value) switch
-    {
-        "routine" => "routine_referral",
-        "urgent" => "urgent_referral",
-        "non_medical" => "non_medical_referral",
-        "referral_gp" => "referral_to_gp",
-        "gp" => "referral_to_gp",
-        _ => Normalize(value),
-    };
+    // Pack identity uses the same canonical vocabulary as grading preflight
+    // (WritingLetterTypeTaxonomy.ToPackLetterType) so packs created with LT-*
+    // codes match the tasks that reference them, and vice versa.
+    private static string NormalizeLetterType(string? value) =>
+        WritingLetterTypeTaxonomy.ToPackLetterType(value);
 
     private static bool IsJsonObject(string? value)
     {

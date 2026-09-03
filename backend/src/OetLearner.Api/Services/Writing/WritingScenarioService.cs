@@ -155,11 +155,16 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
     {
         var list = ids.ToList();
         if (list.Count == 0) return new Dictionary<Guid, List<WritingScenarioStructuredSentence>>();
-        return await db.WritingScenarioStructuredSentences.AsNoTracking()
+        // Single round-trip, grouped client-side: server-side GroupBy into a
+        // dictionary is not translatable by all EF providers (notably the
+        // InMemory test provider), while this shape works everywhere.
+        var rows = await db.WritingScenarioStructuredSentences.AsNoTracking()
             .Where(s => list.Contains(s.ScenarioId))
             .OrderBy(s => s.Ordinal)
+            .ToListAsync(ct);
+        return rows
             .GroupBy(s => s.ScenarioId)
-            .ToDictionaryAsync(g => g.Key, g => g.OrderBy(s => s.Ordinal).ToList(), ct);
+            .ToDictionary(g => g.Key, g => g.OrderBy(s => s.Ordinal).ToList());
     }
 
     private async Task PersistSentencesAsync(Guid scenarioId, IReadOnlyList<WritingScenarioStructuredSentenceDto> sentences, CancellationToken ct)
@@ -326,7 +331,10 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         => new(
             Id: id,
             Title: req.Title,
-            LetterType: req.LetterType,
+            // Catalogue taxonomy gate (see WritingLetterTypeTaxonomy): retired
+            // Response (LT-RP) can never be persisted via this path; legacy or
+            // unknown values fall back to Other Letters (LT-OT).
+            LetterType: WritingLetterTypeTaxonomy.NormalizeCatalogueLetterTypeOrEmpty(req.LetterType),
             Profession: req.Profession,
             SubDiscipline: req.SubDiscipline,
             Topics: req.Topics ?? Array.Empty<string>(),

@@ -15,7 +15,7 @@ public class RulebookLoaderTests
         var book = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
         Assert.Equal(RuleKind.Writing, book.Kind);
         Assert.Equal(ExamProfession.Medicine, book.Profession);
-        Assert.Equal("1.0.0", book.Version);
+        Assert.Equal("1.0.1", book.Version);
         Assert.Equal(16, book.Sections.Count);
         Assert.True(book.Rules.Count >= 90);
     }
@@ -1057,7 +1057,7 @@ public class AiGatewayAndPromptTests
         });
         var result = await gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt });
         Assert.False(string.IsNullOrWhiteSpace(result.Completion));
-        Assert.Equal("1.0.0", result.RulebookVersion);
+        Assert.Equal("1.0.1", result.RulebookVersion);
         Assert.NotEmpty(result.AppliedRuleIds);
     }
 

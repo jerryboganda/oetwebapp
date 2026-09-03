@@ -31,6 +31,19 @@ public sealed record WritingTaskModelAnswerDto(
 /// check the existing per-submission model-answer generator uses — so both
 /// paths refuse to publish a sentence that cannot be traced to the case notes.
 /// </summary>
+public sealed record WritingModelAnswerBatchItemResult(
+    Guid ScenarioId,
+    string Title,
+    string Outcome,
+    string? HoldReason);
+
+public sealed record WritingModelAnswerBatchResult(
+    int Requested,
+    int Generated,
+    int Held,
+    int Skipped,
+    IReadOnlyList<WritingModelAnswerBatchItemResult> Items);
+
 public interface IWritingTaskModelAnswerService
 {
     Task<WritingTaskModelAnswerDto?> GetAsync(Guid scenarioId, CancellationToken ct = default);
@@ -38,6 +51,21 @@ public interface IWritingTaskModelAnswerService
     Task<WritingTaskModelAnswerDto> GenerateAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
     Task<WritingTaskModelAnswerDto?> ApproveAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
     Task<WritingTaskModelAnswerDto?> RejectAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Preparation-time backfill across published tasks: generates the ONE
+    /// reusable Model Answer for every task that lacks a fresh approved one.
+    /// Resumable (re-run to continue), idempotent (Ready + fresh answers are
+    /// skipped, never regenerated), concurrency-safe (one row per task,
+    /// processed strictly sequentially), and rate-limit aware (sequential
+    /// provider calls, small bounded batch). Never called from the candidate
+    /// submit path.
+    /// </summary>
+    Task<WritingModelAnswerBatchResult> GenerateMissingAsync(
+        string adminUserId,
+        int limit,
+        bool includeStale,
+        CancellationToken ct = default);
 }
 
 public sealed class WritingTaskModelAnswerService(
@@ -115,11 +143,9 @@ public sealed class WritingTaskModelAnswerService(
         }
 
         var taskSnapshot = scenario.TaskPromptMarkdown ?? string.Empty;
-        var caseNotesText = string.Join("\n", sentences
-            .Where(s => s.RelevanceLabel is "relevant" or "maybe")
-            .Select(s => $"- {s.SentenceText}"));
+        var caseNotesText = BuildCaseNotesText(sentences.Select(s => (s.SentenceText, s.RelevanceLabel)));
         var allFacts = sentences.Select(s => s.SentenceText).ToArray();
-        row.SourceContentHash = ComputeHash($"{taskSnapshot}\n---\n{caseNotesText}");
+        row.SourceContentHash = ComputeSourceContentHash(taskSnapshot, caseNotesText);
         row.UpdatedAt = now;
 
         if (sentences.Count == 0)
@@ -219,6 +245,112 @@ public sealed class WritingTaskModelAnswerService(
         }
     }
 
+    public async Task<WritingModelAnswerBatchResult> GenerateMissingAsync(
+        string adminUserId,
+        int limit,
+        bool includeStale,
+        CancellationToken ct = default)
+    {
+        limit = Math.Clamp(limit, 1, 25);
+        var candidateIds = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Status == "published")
+            .OrderBy(s => s.UpdatedAt)
+            .Select(s => s.Id)
+            .Take(200)
+            .ToListAsync(ct);
+
+        var answers = await db.WritingTaskModelAnswers.AsNoTracking()
+            .Where(a => candidateIds.Contains(a.ScenarioId))
+            .ToDictionaryAsync(a => a.ScenarioId, ct);
+
+        var items = new List<WritingModelAnswerBatchItemResult>();
+        var generated = 0;
+        var held = 0;
+        var skipped = 0;
+
+        foreach (var scenarioId in candidateIds)
+        {
+            if (items.Count >= limit) break;
+            ct.ThrowIfCancellationRequested();
+
+            var scenario = await db.WritingScenarios.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
+            if (scenario is null)
+            {
+                skipped++;
+                continue;
+            }
+
+            answers.TryGetValue(scenarioId, out var existing);
+            if (existing is not null
+                && existing.Status == WritingAssessmentModelAnswerStatus.Ready)
+            {
+                // Ready answers are never regenerated blindly: a visible +
+                // fresh one is reused forever; a visible + stale one is
+                // refreshed only on explicit request; an invisible one is
+                // awaiting admin approval — regenerating would discard the
+                // pending review and burn another provider call.
+                if (!existing.IsCandidateVisible)
+                {
+                    skipped++;
+                    items.Add(new WritingModelAnswerBatchItemResult(scenarioId, scenario.Title, "skipped", "awaiting_approval"));
+                    continue;
+                }
+                var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing.SourceContentHash, ct);
+                if (fresh || !includeStale)
+                {
+                    skipped++;
+                    items.Add(new WritingModelAnswerBatchItemResult(
+                        scenarioId, scenario.Title, "skipped", fresh ? "already_ready" : "stale_refresh_not_requested"));
+                    continue;
+                }
+            }
+
+            WritingTaskModelAnswerDto outcome;
+            try
+            {
+                outcome = await GenerateAsync(scenarioId, adminUserId, ct);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Model-answer batch generation threw for scenario {ScenarioId}; continuing batch.", scenarioId);
+                held++;
+                items.Add(new WritingModelAnswerBatchItemResult(scenarioId, scenario.Title, "held", "model_answer_generation_failed"));
+                continue;
+            }
+
+            if (string.Equals(outcome.Status, WritingAssessmentModelAnswerStatus.Ready.ToString(), StringComparison.OrdinalIgnoreCase))
+            {
+                generated++;
+                items.Add(new WritingModelAnswerBatchItemResult(scenarioId, scenario.Title, "generated", null));
+            }
+            else
+            {
+                held++;
+                items.Add(new WritingModelAnswerBatchItemResult(scenarioId, scenario.Title, "held", outcome.HoldReason));
+            }
+        }
+
+        return new WritingModelAnswerBatchResult(items.Count, generated, held, skipped, items);
+    }
+
+    private async Task<bool> IsFreshAsync(
+        Guid scenarioId,
+        string taskPrompt,
+        string? sourceContentHash,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(sourceContentHash)) return false;
+        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .Where(s => s.ScenarioId == scenarioId)
+            .OrderBy(s => s.Ordinal)
+            .ToListAsync(ct);
+        var current = ComputeSourceContentHash(
+            taskPrompt,
+            sentences.Select(s => (s.SentenceText, s.RelevanceLabel)));
+        return string.Equals(sourceContentHash, current, StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<WritingTaskModelAnswerDto?> ApproveAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default)
     {
         var row = await db.WritingTaskModelAnswers.FirstOrDefaultAsync(x => x.ScenarioId == scenarioId, ct);
@@ -296,6 +428,28 @@ public sealed class WritingTaskModelAnswerService(
 
     private static string ComputeHash(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value ?? string.Empty))).ToLowerInvariant();
+
+    /// <summary>
+    /// Canonical case-note rendering shared by generation and staleness
+    /// checks: only <c>relevant</c>/<c>maybe</c> sentences, in order.
+    /// </summary>
+    internal static string BuildCaseNotesText(IEnumerable<(string Text, string? Relevance)> sentences)
+        => string.Join("\n", sentences
+            .Where(s => s.Relevance is "relevant" or "maybe")
+            .Select(s => $"- {s.Text}"));
+
+    /// <summary>
+    /// Hash of the exact source content a Model Answer was (or would be)
+    /// generated from. Regeneration is justified only when this drifts —
+    /// never during normal candidate submissions.
+    /// </summary>
+    internal static string ComputeSourceContentHash(
+        string taskSnapshot,
+        IEnumerable<(string Text, string? Relevance)> sentences)
+        => ComputeHash($"{taskSnapshot ?? string.Empty}\n---\n{BuildCaseNotesText(sentences)}");
+
+    internal static string ComputeSourceContentHash(string taskSnapshot, string caseNotesText)
+        => ComputeHash($"{taskSnapshot ?? string.Empty}\n---\n{caseNotesText ?? string.Empty}");
 
     private static Draft? Parse(string? completion)
     {

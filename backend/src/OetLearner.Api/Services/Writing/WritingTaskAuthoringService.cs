@@ -5,6 +5,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -41,6 +42,19 @@ public interface IWritingTaskAuthoringService
     Task<WritingTaskDto> ImportAsync(WritingTaskImportJson import, ClaimsPrincipal user, CancellationToken ct = default);
 
     Task<WritingTaskImportJson?> ExportAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Paginated preparation-status audit across tasks: canonical inputs,
+    /// rulebook resolvability, Model Answer state/staleness, and the exact
+    /// publish-gate blocking codes per task. Backs the admin backfill
+    /// workflow; read-only.
+    /// </summary>
+    Task<(IReadOnlyList<WritingTaskPreparationStatusDto> Items, int Total)> GetPreparationStatusAsync(
+        string? status,
+        string? profession,
+        int page,
+        int pageSize,
+        CancellationToken ct = default);
 
     /// <summary>
     /// Applies a bulk workflow action (<c>publish</c> | <c>archive</c> |
@@ -152,7 +166,7 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     public async Task<WritingTaskValidationResult?> ValidateAsync(Guid id, CancellationToken ct = default)
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
-        return scenario is null ? null : Validate(scenario);
+        return scenario is null ? null : await ValidateAsync(scenario, ct);
     }
 
     public async Task<(WritingTaskDto? Task, WritingTaskValidationResult? Validation)> PublishAsync(Guid id, CancellationToken ct = default)
@@ -163,7 +177,15 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             return (null, null);
         }
 
-        var validation = Validate(scenario);
+        // Heal legacy letter-type tokens at publish time: legacy ids resolve
+        // to their modern catalogue code and unclear values to Other Letters,
+        // so no task is ever published with an unclassifiable letter type.
+        if (!string.IsNullOrWhiteSpace(scenario.LetterType))
+        {
+            scenario.LetterType = WritingLetterTypeTaxonomy.NormalizeCatalogueLetterType(scenario.LetterType);
+        }
+
+        var validation = await ValidateAsync(scenario, ct);
         if (!validation.IsPublishReady)
         {
             return (null, validation);
@@ -246,6 +268,94 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, ct);
         return scenario is null ? null : MapToExportJson(scenario);
+    }
+
+    public async Task<(IReadOnlyList<WritingTaskPreparationStatusDto> Items, int Total)> GetPreparationStatusAsync(
+        string? status,
+        string? profession,
+        int page,
+        int pageSize,
+        CancellationToken ct = default)
+    {
+        if (page < 1) page = 1;
+        pageSize = Math.Clamp(pageSize, 1, 100);
+
+        var query = db.WritingScenarios.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(s => s.Status == status);
+        if (!string.IsNullOrWhiteSpace(profession)) query = query.Where(s => s.Profession == profession);
+
+        var total = await query.CountAsync(ct);
+        var rows = await query
+            .OrderBy(s => s.Title)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var ids = rows.Select(r => r.Id).ToList();
+        // Grouped client-side: server-side GroupBy into a dictionary is not
+        // translatable by all EF providers (notably the InMemory test
+        // provider); this single-query shape works everywhere.
+        var sentenceRows = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .Where(x => ids.Contains(x.ScenarioId))
+            .OrderBy(x => x.Ordinal)
+            .ToListAsync(ct);
+        var sentenceGroups = sentenceRows
+            .GroupBy(x => x.ScenarioId)
+            .ToDictionary(g => g.Key, g => g.OrderBy(x => x.Ordinal).ToList());
+        var answers = await db.WritingTaskModelAnswers.AsNoTracking()
+            .Where(a => ids.Contains(a.ScenarioId))
+            .ToDictionaryAsync(a => a.ScenarioId, ct);
+
+        var items = rows.Select(s =>
+        {
+            sentenceGroups.TryGetValue(s.Id, out var sentences);
+            sentences ??= new List<WritingScenarioStructuredSentence>();
+            var hasPrompt = !string.IsNullOrWhiteSpace(s.TaskPromptMarkdown);
+            var rulebookResolvable = !string.IsNullOrWhiteSpace(s.Profession)
+                && RulebookProfessionParser.TryParse(s.Profession, out _);
+            answers.TryGetValue(s.Id, out var answer);
+            var answerApproved = answer is not null
+                && answer.Status == WritingAssessmentModelAnswerStatus.Ready
+                && answer.IsCandidateVisible;
+            bool? stale = null;
+            if (answer is not null && !string.IsNullOrWhiteSpace(answer.SourceContentHash))
+            {
+                var current = WritingTaskModelAnswerService.ComputeSourceContentHash(
+                    s.TaskPromptMarkdown ?? string.Empty,
+                    sentences.Select(x => (x.SentenceText, x.RelevanceLabel)));
+                stale = !string.Equals(answer.SourceContentHash, current, StringComparison.OrdinalIgnoreCase);
+            }
+
+            var blocking = BuildBlockingCodes(
+                s.Title,
+                s.Profession,
+                s.LetterType,
+                hasPrompt,
+                sentences.Count > 0,
+                rulebookResolvable,
+                answerApproved,
+                s.WordGuideMin,
+                s.WordGuideMax);
+
+            return new WritingTaskPreparationStatusDto
+            {
+                ScenarioId = s.Id,
+                Title = s.Title,
+                Profession = s.Profession,
+                LetterType = s.LetterType,
+                Status = s.Status,
+                HasTaskPrompt = hasPrompt,
+                CaseNoteSentenceCount = sentences.Count,
+                RulebookResolvable = rulebookResolvable,
+                ModelAnswerStatus = answer?.Status.ToString(),
+                ModelAnswerApproved = answerApproved,
+                ModelAnswerStale = stale,
+                PublishReady = blocking.Count == 0,
+                BlockingCodes = blocking.ToList(),
+            };
+        }).ToList();
+
+        return (items, total);
     }
 
     // ----- bulk workflow actions (parity with ContentPaperService.BulkAsync) -----
@@ -404,7 +514,11 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     {
         scenario.Title = request.Title?.Trim() ?? string.Empty;
         scenario.Profession = request.Profession?.Trim() ?? string.Empty;
-        scenario.LetterType = request.LetterType?.Trim() ?? string.Empty;
+        // Catalogue taxonomy gate: stored letter types are always valid modern
+        // codes by construction. Retired Response (LT-RP) and anything
+        // unrecognised normalise to Other Letters (LT-OT); empty is preserved
+        // so required-field validation still fires for truly missing values.
+        scenario.LetterType = WritingLetterTypeTaxonomy.NormalizeCatalogueLetterTypeOrEmpty(request.LetterType);
         if (request.Difficulty is { } difficulty) scenario.Difficulty = Math.Clamp(difficulty, 1, 5);
         scenario.InternalCode = string.IsNullOrWhiteSpace(request.InternalCode) ? null : request.InternalCode.Trim();
         scenario.WriterRole = request.WriterRole;
@@ -483,42 +597,119 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         };
     }
 
-    // ----- validation (spec §3/§19.2/§22) -----
+    // ----- validation (spec §3/§19.2/§22 + canonical-input publishing gate) -----
 
-    private static WritingTaskValidationResult Validate(WritingScenario scenario)
+    /// <summary>
+    /// Production-readiness gate for candidate publication. A task is
+    /// publish-ready only when the runtime grading path can serve it WITHOUT
+    /// live OCR/PDF extraction: complete canonical case-note text, the exact
+    /// Writing Task, a valid catalogue letter type, a resolvable
+    /// profession rulebook, and an approved pre-generated Model Answer.
+    /// Anything incomplete stays in draft/admin review — broken tasks are
+    /// never exposed for candidates to discover.
+    /// </summary>
+    private async Task<WritingTaskValidationResult> ValidateAsync(WritingScenario scenario, CancellationToken ct)
     {
-        var issues = new List<WritingTaskValidationIssue>();
+        var hasCaseNotes = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .AnyAsync(x => x.ScenarioId == scenario.Id, ct);
+        var rulebookResolvable = !string.IsNullOrWhiteSpace(scenario.Profession)
+            && RulebookProfessionParser.TryParse(scenario.Profession, out _);
+        var hasApprovedModelAnswer = await db.WritingTaskModelAnswers.AsNoTracking()
+            .AnyAsync(a => a.ScenarioId == scenario.Id
+                && a.Status == WritingAssessmentModelAnswerStatus.Ready
+                && a.IsCandidateVisible, ct);
 
-        if (string.IsNullOrWhiteSpace(scenario.Title))
-        {
-            issues.Add(Error("title_required", "Title is required."));
-        }
-
-        if (string.IsNullOrWhiteSpace(scenario.Profession))
-        {
-            issues.Add(Error("profession_required", "Profession is required."));
-        }
-
-        if (string.IsNullOrWhiteSpace(scenario.LetterType))
-        {
-            issues.Add(Error("letter_type_required", "Letter type is required."));
-        }
-
-        // PDF-driven authoring: the Case Notes PDF carries the prompt/case-notes, so the
-        // publish gate only requires identity (Title + Profession + Letter type). Task prompt,
-        // source provenance and the integrity acknowledgement are no longer gated; the entity
-        // keeps sane defaults for the fields the simplified admin form no longer surfaces.
-        if (scenario.WordGuideMin <= 0 || scenario.WordGuideMax < scenario.WordGuideMin)
-        {
-            issues.Add(Error("word_guide_invalid", "Word guide must have min > 0 and max >= min."));
-        }
+        var codes = BuildBlockingCodes(
+            scenario.Title,
+            scenario.Profession,
+            scenario.LetterType,
+            hasTaskPrompt: !string.IsNullOrWhiteSpace(scenario.TaskPromptMarkdown),
+            hasCaseNotes: hasCaseNotes,
+            rulebookResolvable: rulebookResolvable,
+            hasApprovedModelAnswer: hasApprovedModelAnswer,
+            scenario.WordGuideMin,
+            scenario.WordGuideMax);
 
         return new WritingTaskValidationResult
         {
-            IsPublishReady = !issues.Any(i => i.Severity == "error"),
-            Issues = issues,
+            IsPublishReady = codes.Count == 0,
+            Issues = codes.Select(c => Error(c, BlockingMessage(c))).ToList(),
         };
     }
+
+    /// <summary>
+    /// Single source of production-readiness blocking codes, shared by the
+    /// publish gate (<see cref="ValidateAsync(WritingScenario, CancellationToken)"/>)
+    /// and the preparation-status audit (<see cref="GetPreparationStatusAsync"/>)
+    /// so both always agree on what "ready" means.
+    /// </summary>
+    private static IReadOnlyList<string> BuildBlockingCodes(
+        string? title,
+        string? profession,
+        string? letterType,
+        bool hasTaskPrompt,
+        bool hasCaseNotes,
+        bool rulebookResolvable,
+        bool hasApprovedModelAnswer,
+        int wordGuideMin,
+        int wordGuideMax)
+    {
+        var codes = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(title)) codes.Add("title_required");
+        if (string.IsNullOrWhiteSpace(profession)) codes.Add("profession_required");
+
+        if (string.IsNullOrWhiteSpace(letterType))
+        {
+            codes.Add("letter_type_required");
+        }
+        else if (!WritingLetterTypeTaxonomy.IsValidCatalogueLetterType(letterType))
+        {
+            // Defence in depth: ApplyUpsert/import normalise by construction and
+            // PublishAsync heals legacy tokens, but any legacy row (e.g. retired
+            // LT-RP) reaching the gate another way must be blocked until it is
+            // reclassified — never published as-is.
+            codes.Add("letter_type_unsupported");
+        }
+
+        // Canonical grading inputs: the exact Writing Task text is the grading
+        // source — a task without it cannot be scored.
+        if (!hasTaskPrompt) codes.Add("written_task_required");
+
+        // Canonical grading inputs: readable case-note sentences must exist at
+        // preparation time. A stimulus PDF alone is NOT sufficient — runtime
+        // grading never performs live OCR/PDF extraction.
+        if (!hasCaseNotes) codes.Add("case_notes_required");
+
+        // The applicable profession-specific Writing Rulebook must resolve.
+        if (!string.IsNullOrWhiteSpace(profession) && !rulebookResolvable)
+        {
+            codes.Add("rulebook_unresolvable");
+        }
+
+        // ONE pre-generated, quality-approved Model Answer must exist before
+        // release. Normal candidate submissions reuse it and never trigger a
+        // fresh generation.
+        if (!hasApprovedModelAnswer) codes.Add("model_answer_not_approved");
+
+        if (wordGuideMin <= 0 || wordGuideMax < wordGuideMin) codes.Add("word_guide_invalid");
+
+        return codes;
+    }
+
+    private static string BlockingMessage(string code) => code switch
+    {
+        "title_required" => "Title is required.",
+        "profession_required" => "Profession is required.",
+        "letter_type_required" => "Letter type is required.",
+        "letter_type_unsupported" => "Letter type is not a valid Writing catalogue letter type.",
+        "written_task_required" => "Exact Writing Task text is required before publishing.",
+        "case_notes_required" => "Canonical case-note text is required before publishing. Extract it from the stimulus PDF into structured case notes first.",
+        "rulebook_unresolvable" => "Profession does not resolve to a supported Writing Rulebook.",
+        "model_answer_not_approved" => "An approved pre-generated Model Answer is required before publishing. Generate it once, quality-check it, then approve it.",
+        "word_guide_invalid" => "Word guide must have min > 0 and max >= min.",
+        _ => code,
+    };
 
     private static WritingTaskValidationIssue Error(string code, string message) => new()
     {
@@ -606,7 +797,11 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     }
 
     /// <summary>
-    /// Maps an import task-type label (human or canonical) to a canonical letter-type id.
+    /// Maps an import task-type label (human or canonical) to a catalogue letter-type code.
+    /// Known labels map to their valid modern code; retired Response-like labels
+    /// ("response", "reply", "update", "advice …", "LT-RP") and anything
+    /// unrecognised map to Other Letters (LT-OT) — never forced into a known
+    /// category, and never persisted as LT-RP.
     /// </summary>
     private static string MapTaskTypeToLetterType(string? taskType)
     {
@@ -616,28 +811,53 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         }
 
         var trimmed = taskType.Trim();
+
+        // Already a catalogue code (any case)? Canonicalise to uppercase LT-*.
+        if (WritingLetterTypeTaxonomy.IsValidCatalogueLetterType(trimmed))
+        {
+            return WritingLetterTypeTaxonomy.NormalizeCatalogueLetterType(trimmed);
+        }
+
         var key = trimmed.ToLowerInvariant();
 
-        // Already a canonical id?
+        // Legacy canonical ids from the ContentPaper pipeline.
         if (WritingContentStructure.IsCanonicalLetterType(trimmed))
         {
-            return key;
+            return key switch
+            {
+                "routine_referral" => WritingLetterTypeTaxonomy.RoutineReferral,
+                "urgent_referral" => WritingLetterTypeTaxonomy.UrgentReferral,
+                "update_discharge" => WritingLetterTypeTaxonomy.Discharge,
+                "transfer_letter" => WritingLetterTypeTaxonomy.Transfer,
+                "non_medical_referral" => WritingLetterTypeTaxonomy.NonMedical,
+                // update_referral_specialist_to_gp has no dedicated catalogue
+                // code: route to the explicit fallback instead of guessing.
+                _ => WritingLetterTypeTaxonomy.OtherLetters,
+            };
         }
 
         return key switch
         {
-            "referral letter" => "routine_referral",
-            "routine referral" => "routine_referral",
-            "routine referral letter" => "routine_referral",
-            "urgent referral letter" => "urgent_referral",
-            "urgent referral" => "urgent_referral",
-            "discharge letter" => "update_discharge",
-            "discharge summary" => "update_discharge",
-            "update letter" => "update_discharge",
-            "transfer letter" => "transfer_letter",
-            "advice letter" => "advice_letter",
-            "letter of advice" => "advice_letter",
-            _ => key.Replace(' ', '_'),
+            "referral letter" => WritingLetterTypeTaxonomy.RoutineReferral,
+            "routine referral" => WritingLetterTypeTaxonomy.RoutineReferral,
+            "routine referral letter" => WritingLetterTypeTaxonomy.RoutineReferral,
+            "urgent referral letter" => WritingLetterTypeTaxonomy.UrgentReferral,
+            "urgent referral" => WritingLetterTypeTaxonomy.UrgentReferral,
+            "discharge letter" => WritingLetterTypeTaxonomy.Discharge,
+            "discharge summary" => WritingLetterTypeTaxonomy.Discharge,
+            "update letter" => WritingLetterTypeTaxonomy.Discharge,
+            "transfer letter" => WritingLetterTypeTaxonomy.Transfer,
+            // Response-like / advice-like legacy labels: explicit fallback.
+            "response" => WritingLetterTypeTaxonomy.OtherLetters,
+            "response letter" => WritingLetterTypeTaxonomy.OtherLetters,
+            "reply" => WritingLetterTypeTaxonomy.OtherLetters,
+            "update" => WritingLetterTypeTaxonomy.OtherLetters,
+            "advice letter" => WritingLetterTypeTaxonomy.OtherLetters,
+            "letter of advice" => WritingLetterTypeTaxonomy.OtherLetters,
+            "advice_letter" => WritingLetterTypeTaxonomy.OtherLetters,
+            "other" => WritingLetterTypeTaxonomy.OtherLetters,
+            "other letters" => WritingLetterTypeTaxonomy.OtherLetters,
+            _ => WritingLetterTypeTaxonomy.OtherLetters,
         };
     }
 
@@ -745,6 +965,28 @@ public sealed record WritingTaskValidationResult
 {
     public bool IsPublishReady { get; init; }
     public List<WritingTaskValidationIssue> Issues { get; init; } = new();
+}
+
+/// <summary>
+/// One row of the preparation-status audit: everything the publish gate and
+/// the runtime grading path require, per task. Powers the admin backfill
+/// workflow and the machine-readable preparation report.
+/// </summary>
+public sealed record WritingTaskPreparationStatusDto
+{
+    public Guid ScenarioId { get; init; }
+    public string Title { get; init; } = string.Empty;
+    public string Profession { get; init; } = string.Empty;
+    public string LetterType { get; init; } = string.Empty;
+    public string Status { get; init; } = "draft";
+    public bool HasTaskPrompt { get; init; }
+    public int CaseNoteSentenceCount { get; init; }
+    public bool RulebookResolvable { get; init; }
+    public string? ModelAnswerStatus { get; init; }
+    public bool ModelAnswerApproved { get; init; }
+    public bool? ModelAnswerStale { get; init; }
+    public bool PublishReady { get; init; }
+    public List<string> BlockingCodes { get; init; } = new();
 }
 
 // ----- import/export JSON shape (spec §18; mirrors WritingTaskImportJson) -----

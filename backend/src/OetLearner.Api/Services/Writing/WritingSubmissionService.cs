@@ -12,6 +12,17 @@ public interface IWritingSubmissionService
     Task<WritingGradeResponseV2?> GetSubmissionGradeAsync(string userId, Guid submissionId, CancellationToken ct);
 
     /// <summary>
+    /// Controlled resume for a submission stuck in <c>failed</c> after a
+    /// transient provider/rate-limit failure. Re-runs grading on the SAME
+    /// persisted submission (the candidate letter is never retyped): the
+    /// credit reservation is idempotent on the submission's business
+    /// reference and any persisted provider result is resumed, so a retry
+    /// never creates a duplicate paid workflow. Returns null when the
+    /// submission is not owned; throws Conflict when it is not retryable.
+    /// </summary>
+    Task<WritingSubmissionGradeOutcome> RetryGradeAsync(string userId, Guid submissionId, CancellationToken ct);
+
+    /// <summary>
     /// Resolves the owning scenario's answer-sheet PDF download path for a submitted letter.
     /// Owner-gated and post-submission only — the answer sheet is never exposed on the live
     /// exam surface, only revealed on the results page after the learner has submitted.
@@ -97,9 +108,16 @@ public sealed class WritingSubmissionService(
             : await highlightStore.GetAsync(userId, request.ScenarioId, ct);
         if (!string.IsNullOrWhiteSpace(highlightsJson) && highlightsJson != EmptyHighlights)
         {
-            await db.WritingSubmissions
-                .Where(s => s.Id == submissionId)
-                .ExecuteUpdateAsync(set => set.SetProperty(s => s.CaseNoteHighlightsJson, highlightsJson), ct);
+            // Single-row unconditional update by key: load + save behaves
+            // identically on every provider (ExecuteUpdate is not translatable
+            // by the InMemory test provider).
+            var snapshotRow = await db.WritingSubmissions.FirstOrDefaultAsync(s => s.Id == submissionId, ct);
+            if (snapshotRow is not null)
+            {
+                snapshotRow.CaseNoteHighlightsJson = highlightsJson;
+                await db.SaveChangesAsync(ct);
+            }
+
             entity.CaseNoteHighlightsJson = highlightsJson;
             await highlightStore.SaveAsync(userId, request.ScenarioId, highlightsJson, ct);
         }
@@ -119,6 +137,58 @@ public sealed class WritingSubmissionService(
     {
         var s = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == submissionId && x.UserId == userId, ct);
         return s is null ? null : WritingV2ResponseMapper.ToSubmissionResponse(s);
+    }
+
+    public async Task<WritingSubmissionGradeOutcome> RetryGradeAsync(string userId, Guid submissionId, CancellationToken ct)
+    {
+        var submission = await db.WritingSubmissions.FirstOrDefaultAsync(x => x.Id == submissionId && x.UserId == userId, ct);
+        if (submission is null)
+        {
+            throw ApiException.NotFound("writing_submission_not_found", "Submission was not found.");
+        }
+
+        if (submission.Status == WritingSubmissionStatuses.Graded)
+        {
+            var existingGrade = await db.WritingGrades.AsNoTracking()
+                .FirstOrDefaultAsync(g => g.SubmissionId == submission.Id, ct);
+            if (existingGrade is not null)
+            {
+                return new WritingSubmissionGradeOutcome(
+                    submission.Id, existingGrade.Id, existingGrade.RawTotal, existingGrade.BandLabel, true);
+            }
+        }
+
+        if (submission.Status is WritingSubmissionStatuses.Queued
+            or WritingSubmissionStatuses.Preflight
+            or WritingSubmissionStatuses.Grading)
+        {
+            throw ApiException.Conflict(
+                "writing_rubric_already_in_progress",
+                "This submission is already being graded. Please wait a moment and check again.");
+        }
+
+        if (submission.Status != WritingSubmissionStatuses.Failed)
+        {
+            throw ApiException.Conflict(
+                "writing_grade_retry_not_eligible",
+                "Only a failed grading attempt can be retried. Submit a revision to try again with new content.");
+        }
+
+        // Reset the claim so the pipeline can re-claim; the letter, hashes,
+        // reservation business reference and any persisted provider result all
+        // survive, so this resumes the SAME logical grading attempt.
+        submission.Status = WritingSubmissionStatuses.Queued;
+        submission.ClaimedAt = null;
+        submission.ClaimOwner = null;
+        await db.SaveChangesAsync(ct);
+
+        logger.LogInformation(
+            "Writing grade retry requested for submission {SubmissionId} scenario {ScenarioId} user {UserId}.",
+            submission.Id, submission.ScenarioId, userId);
+
+        var outcome = await pipeline.EvaluateAsync(submission.Id, ct);
+        await EnsureGradeForSubmissionAsync(submission.Id, outcome, ct);
+        return outcome;
     }
 
     public async Task<string?> GetAnswerSheetDownloadPathAsync(string userId, Guid submissionId, CancellationToken ct)

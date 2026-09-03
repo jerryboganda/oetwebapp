@@ -36,11 +36,23 @@ public static class WritingTaskAdminEndpoints
 
         group.MapPost("/{id:guid}/publish", PublishTask).WithAdminWrite("AdminContentPublish");
 
+        // Preparation-status audit: per-task canonical inputs, rulebook
+        // resolvability, Model Answer state/staleness, and publish-gate
+        // blocking codes. Powers the backfill workflow and reporting.
+        group.MapGet("/preparation-status", PreparationStatus).WithAdminRead("AdminContentRead");
+
         // Case-note backfill (spec §22 / grading preflight): replaces this task's
         // structured, relevance-labeled case-note sentences without touching any
         // other authored field. See WritingTaskCaseNotesService for why this is a
         // separate narrow write path rather than reusing the scenario upsert.
         group.MapPut("/{id:guid}/case-notes", ReplaceCaseNotes).WithAdminWrite("AdminContentWrite");
+
+        // Preparation-time canonicalization: runs PDF text extraction / OCR on
+        // the task's stimulus PDF ONCE at preparation time and stores the
+        // result as structured case notes. Candidate grading reads the stored
+        // sentences and never touches the PDF — this is what eliminates
+        // case_note_pages_unreadable from the candidate runtime.
+        group.MapPost("/{id:guid}/case-notes/extract-from-pdf", ExtractCaseNotesFromPdf).WithAdminWrite("AdminContentWrite");
 
         // Bulk workflow actions (parity with POST /v1/admin/papers/bulk). Permission
         // is split per action inside the handler because a single route can't carry
@@ -170,6 +182,29 @@ public static class WritingTaskAdminEndpoints
         return export is null
             ? Results.NotFound(new { error = "Writing task not found" })
             : Results.Ok(export);
+    }
+
+    private static async Task<IResult> PreparationStatus(
+        IWritingTaskAuthoringService service,
+        [FromQuery] string? status,
+        [FromQuery] string? profession,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken ct = default)
+    {
+        var (items, total) = await service.GetPreparationStatusAsync(status, profession, page, pageSize, ct);
+        return Results.Ok(new { items, total });
+    }
+
+    private static async Task<IResult> ExtractCaseNotesFromPdf(
+        IWritingTaskCaseNotesService service,
+        Guid id,
+        CancellationToken ct)
+    {
+        var result = await service.ExtractFromStimulusPdfAsync(id, ct);
+        return result is null
+            ? Results.NotFound(new { error = "Writing task or its stimulus PDF was not found." })
+            : Results.Ok(result);
     }
 
     private static async Task<IResult> ReplaceCaseNotes(

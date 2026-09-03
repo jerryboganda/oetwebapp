@@ -14,7 +14,6 @@ import type { Highlight } from '@/components/domain/writing/WritingStimulusViewe
 import {
   beginWritingMockWriting,
   checkWritingScenarioEligibility,
-  createSubmitIdempotencyKey,
   createWritingSubmission,
   getWritingHighlights,
   getWritingMockSession,
@@ -23,6 +22,7 @@ import {
   putWritingHighlights,
   submitWritingMock,
 } from '@/lib/writing/api';
+import { keyForSubmitAction } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
   InsufficientCreditsModal,
@@ -390,7 +390,7 @@ export default function WritingPaperSessionPage() {
             timeSpentSeconds: elapsed,
             inputSource: 'editor',
             caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
-            idempotencyKey: createSubmitIdempotencyKey(),
+            idempotencyKey: keyForSubmitAction(scenarioId, submitText),
           });
           setSubmissionId(result.id ?? null);
         }

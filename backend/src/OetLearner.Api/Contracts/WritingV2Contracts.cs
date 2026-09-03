@@ -130,7 +130,10 @@ public sealed record WritingTodayPlanResponseV2(
 public sealed record WritingSubmissionCreateRequest(
     [property: Required] Guid ScenarioId,
     [property: Required, StringLength(16)] string Mode,
-    [property: Required] string LetterContent,
+    // Submit-for-grading is always available regardless of response length:
+    // empty/short/blank letters are valid submissions that receive a (poor)
+    // assessment — never a pre-submission validation block.
+    [property: Required(AllowEmptyStrings = true)] string LetterContent,
     [property: Range(0, 5000)] int WordCount,
     [property: Range(0, 7200)] int TimeSpentSeconds,
     [property: StringLength(16)] string? InputSource,
@@ -141,7 +144,7 @@ public sealed record WritingSubmissionCreateRequest(
     [property: StringLength(128)] string? IdempotencyKey = null);
 
 public sealed record WritingReviseRequest(
-    [property: Required] string LetterContent,
+    [property: Required(AllowEmptyStrings = true)] string LetterContent,
     [property: Range(0, 5000)] int WordCount,
     [property: Range(0, 7200)] int TimeSpentSeconds);
 

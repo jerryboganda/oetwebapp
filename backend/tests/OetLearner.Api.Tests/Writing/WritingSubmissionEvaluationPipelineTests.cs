@@ -127,6 +127,147 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
         Assert.Equal("failed", submission.Status);
     }
 
+    [Fact]
+    public async Task EvaluateAsync_BlankLetter_GradesZeroWithNoProviderCall()
+    {
+        var id = Guid.NewGuid();
+        _db.WritingSubmissions.Add(new WritingSubmission
+        {
+            Id = id,
+            UserId = "learner-1",
+            ScenarioId = Guid.NewGuid(),
+            Mode = "practice",
+            LetterContent = "   ",
+            LetterContentHash = $"hash-{id:N}",
+            WordCount = 0,
+            Status = "queued",
+            GradingTier = "express",
+            InputSource = "typed",
+            StartedAt = DateTimeOffset.UtcNow,
+            SubmittedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+
+        var gateway = new CountingGateway();
+        var pipeline = BuildPipeline(gateway, aiPathReached: true);
+
+        var outcome = await pipeline.EvaluateAsync(id, default);
+
+        var grade = await _db.WritingGrades.AsNoTracking().SingleAsync(g => g.SubmissionId == id);
+        Assert.Equal(0, grade.RawTotal);
+        Assert.Equal(0, grade.C1Purpose);
+        Assert.Equal(0, grade.C6Language);
+        Assert.Equal("E", grade.BandLabel);
+        Assert.Equal("deterministic-empty-v1", grade.ModelUsed);
+        Assert.Equal("graded", (await _db.WritingSubmissions.AsNoTracking().FirstAsync(s => s.Id == id)).Status);
+        Assert.False(outcome.IdempotentReuse);
+        // No provider call and therefore no grading charge for blank content.
+        Assert.Equal(0, gateway.Calls);
+    }
+
+    [Fact]
+    public async Task CreateSubmissionAsync_DifferentKeysSameContent_ReturnsSingleRow()
+    {
+        // Double-tap guard: two rapid sends of the same logical attempt carry
+        // different random client keys but identical content — they must
+        // collapse into ONE submission row (and therefore ONE grading job).
+        var gateway = new CountingGateway();
+        var pipeline = BuildPipeline(gateway, aiPathReached: true);
+        var scenarioId = Guid.NewGuid();
+        const string letter = "Dear Dr Smith,\nRe: Mr Jones\n\nI am writing to refer Mr Jones.\n\nYours sincerely,\nDoctor";
+
+        var first = await pipeline.CreateSubmissionAsync(new WritingSubmissionGradeContext(
+            "learner-1", scenarioId, "practice", "express", "typed", letter, 40,
+            DateTimeOffset.UtcNow.AddMinutes(-5), false, null, "random-key-1"), default);
+        var second = await pipeline.CreateSubmissionAsync(new WritingSubmissionGradeContext(
+            "learner-1", scenarioId, "practice", "express", "typed", letter, 40,
+            DateTimeOffset.UtcNow.AddMinutes(-5), false, null, "random-key-2"), default);
+
+        Assert.Equal(first, second);
+        Assert.Equal(1, await _db.WritingSubmissions.CountAsync());
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_GradingInput_NeverContainsModelAnswerText()
+    {
+        // Separation proof: even when an approved pre-generated Model Answer
+        // exists for the task, the rubric prompt is built ONLY from canonical
+        // case notes + exact task + candidate letter. No similarity,
+        // phrase-match or embedding comparison against the exemplar exists in
+        // the grading path — the answer is display-only.
+        const string canary = "CANARY-MODEL-ANSWER-PHRASE-ZEBRA-42";
+        var scenarioId = Guid.NewGuid();
+        _db.WritingScenarios.Add(new WritingScenario
+        {
+            Id = scenarioId,
+            Title = "Separation fixture",
+            Profession = "medicine",
+            LetterType = "LT-RR",
+            TaskPromptMarkdown = "Write a routine referral.",
+            Status = "published",
+            AuthorId = "admin-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        _db.WritingTaskModelAnswers.Add(new WritingTaskModelAnswer
+        {
+            Id = Guid.NewGuid(),
+            ScenarioId = scenarioId,
+            Status = WritingAssessmentModelAnswerStatus.Ready,
+            IsCandidateVisible = true,
+            ModelAnswerText = $"Dear Doctor, {canary} kindly review this patient. Yours sincerely, Doctor",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        var submissionId = Guid.NewGuid();
+        _db.WritingSubmissions.Add(new WritingSubmission
+        {
+            Id = submissionId,
+            UserId = "learner-1",
+            ScenarioId = scenarioId,
+            Mode = "practice",
+            LetterContent = "Dear Dr Smith,\nRe: Mr Jones\n\nI am writing to refer Mr Jones for assessment.\n\nYours sincerely,\nDoctor",
+            LetterContentHash = $"hash-{submissionId:N}",
+            WordCount = 120,
+            Status = "queued",
+            GradingTier = "express",
+            InputSource = "typed",
+            StartedAt = DateTimeOffset.UtcNow,
+            SubmittedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await _db.SaveChangesAsync();
+
+        const string completion = """
+            {
+              "findings": [],
+              "criteriaScores": { "purpose": 2, "content": 5, "conciseness_clarity": 5, "genre_style": 5, "organisation_layout": 5, "language": 5 },
+              "estimatedScaledScore": 340,
+              "estimatedGrade": "C+"
+            }
+            """;
+        var gateway = new CapturingGateway(completion);
+        var pipeline = BuildPipeline(gateway, aiPathReached: true);
+
+        await pipeline.EvaluateAsync(submissionId, default);
+
+        Assert.NotNull(gateway.LastUserInput);
+        Assert.DoesNotContain(canary, gateway.LastUserInput);
+    }
+
+    [Fact]
+    public async Task CreateSubmissionAsync_EmptyLetter_IsAcceptedForGrading()
+    {
+        var pipeline = BuildPipeline(new CountingGateway(), aiPathReached: true);
+
+        var id = await pipeline.CreateSubmissionAsync(new WritingSubmissionGradeContext(
+            "learner-1", Guid.NewGuid(), "practice", "express", "typed", string.Empty, 0,
+            DateTimeOffset.UtcNow, false, null, "empty-key-1"), default);
+
+        Assert.NotEqual(Guid.Empty, id);
+    }
+
     // -----------------------------------------------------------------
     // Harness
     // -----------------------------------------------------------------
@@ -199,6 +340,42 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
                 AppliedRuleIds = _appliedRuleIds,
                 Metadata = new AiGroundedPromptMetadata { AppliedRuleIds = _appliedRuleIds },
             });
+    }
+
+    private sealed class CapturingGateway(string completion) : IAiGatewayService
+    {
+        public string? LastUserInput { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "score",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            LastUserInput = request.UserInput;
+            return Task.FromResult(new AiGatewayResult { Completion = completion });
+        }
+    }
+
+    private sealed class CountingGateway : IAiGatewayService
+    {
+        public int Calls { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "score",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult(new AiGatewayResult { Completion = "{}" });
+        }
     }
 
     private sealed class EmptyCanonEngine : IWritingCanonEngine

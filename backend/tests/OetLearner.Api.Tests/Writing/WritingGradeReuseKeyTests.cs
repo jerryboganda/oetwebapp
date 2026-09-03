@@ -33,6 +33,9 @@ public sealed class WritingGradeReuseKeyTests : IAsyncDisposable
     [Fact]
     public async Task EvaluateAsync_SameReuseIdentity_ReusesGradeWithinTtl()
     {
+        // Double-tap contract: two sends of the same logical attempt carry
+        // different random client keys but identical content — they collapse
+        // into ONE submission row and ONE provider grading workflow.
         const string letter = "Dear Dr Smith,\nRe: Mr Jones\n\nI am writing to refer Mr Jones for review.\n\nYours sincerely,\nDoctor";
         var gateway = new CountingGateway(CanonicalCompletion);
         var pipeline = BuildPipeline(gateway);
@@ -43,11 +46,32 @@ public sealed class WritingGradeReuseKeyTests : IAsyncDisposable
         var secondId = await pipeline.CreateSubmissionAsync(Context("k2", letter), default);
         var second = await pipeline.EvaluateAsync(secondId, default);
 
-        Assert.NotEqual(firstId, secondId);
+        Assert.Equal(firstId, secondId);
         Assert.True(second.IdempotentReuse);
         Assert.Equal(first.RawTotal, second.RawTotal);
+        Assert.Equal(first.GradeId, second.GradeId);
         Assert.Equal(1, gateway.Calls);
-        Assert.Equal(2, await _db.WritingGrades.CountAsync());
+        Assert.Equal(1, await _db.WritingSubmissions.CountAsync());
+        Assert.Equal(1, await _db.WritingGrades.CountAsync());
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_DifferentContent_CreatesSeparateSubmission()
+    {
+        // The dedupe guard must not swallow a legitimate new attempt with
+        // different content: it creates its own submission row.
+        var gateway = new CountingGateway(CanonicalCompletion);
+        var pipeline = BuildPipeline(gateway);
+
+        var firstId = await pipeline.CreateSubmissionAsync(
+            Context("k1", "Dear Dr Smith,\nRe: Mr Jones\n\nFirst letter.\n\nYours sincerely,\nDoctor"), default);
+        await pipeline.EvaluateAsync(firstId, default);
+
+        var secondId = await pipeline.CreateSubmissionAsync(
+            Context("k2", "Dear Dr Smith,\nRe: Mr Jones\n\nSecond letter with different content.\n\nYours sincerely,\nDoctor"), default);
+
+        Assert.NotEqual(firstId, secondId);
+        Assert.Equal(2, await _db.WritingSubmissions.CountAsync());
     }
 
     private WritingSubmissionEvaluationPipeline BuildPipeline(IAiGatewayService gateway)

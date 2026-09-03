@@ -325,20 +325,34 @@ export interface WritingSubmissionCreatePayload {
   idempotencyKey?: string;
 }
 
-/**
- * A stable, unique key for one logical submit action — call once per submit
- * click/timer-expiry and pass the SAME value into every retry of that one
- * attempt; a fresh user-initiated submit should call this again for a new key.
- */
-export function createSubmitIdempotencyKey(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `submit-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
+export {
+  __resetSubmitKeyTrackerForTests,
+  createSubmitIdempotencyKey,
+  keyForSubmitAction,
+} from './submit-keys';
 
 export const createWritingSubmission = (payload: WritingSubmissionCreatePayload) =>
   apiClient.post<WritingSubmissionDto>('/v1/writing/submissions', payload);
+
+export interface WritingRetryGradeResponse {
+  submissionId: string;
+  gradeId: string;
+  rawTotal: number;
+  bandLabel: string;
+  idempotentReuse: boolean;
+}
+
+/**
+ * Controlled resume for a submission stuck in `failed` after a transient
+ * provider/rate-limit failure. Re-grades the SAME persisted submission —
+ * the letter is preserved server-side, and the retry never opens a duplicate
+ * paid workflow.
+ */
+export const retryWritingGrade = (submissionId: string) =>
+  apiClient.post<WritingRetryGradeResponse>(
+    path('/v1/writing/submissions/{id}/retry-grade', { id: submissionId }),
+    {},
+  );
 
 export const getWritingSubmission = (submissionId: string) =>
   apiClient.get<WritingSubmissionDto>(

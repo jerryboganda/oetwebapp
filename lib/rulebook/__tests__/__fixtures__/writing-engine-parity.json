@@ -34,7 +34,6 @@
       },
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his recurrent chest pain.\n\nMr Jones presented today with central chest tightness on exertion lasting two weeks. His blood pressure was 140 over 90 and his pulse was regular. Examination was otherwise unremarkable.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
-        "R03.4",
         "R04.1",
         "R11.8"
       ]
@@ -95,7 +94,6 @@
       },
       "letter": "Dr A B\nGeneral Hospital\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to update you regarding Mr Jones who was discharged from our ward today.\n\nMr Jones was presented with central chest pain and shortness of breath on admission. Initial investigations confirmed a non-ST-elevation myocardial infarction. He was managed with dual antiplatelet therapy and underwent coronary angiography during his admission.\n\nHis condition stabilised and he was discharged in good general condition. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
-        "R03.4",
         "R04.1",
         "R14.6",
         "R14.7"

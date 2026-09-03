@@ -143,39 +143,21 @@ type Detector = (
 ) => LintFinding[];
 
 const DETECTORS: Record<string, Detector> = {
-  // R03.4 — Smoking/drinking always included unless recipient is OT
-  content_requires_smoking_drinking(rule, input) {
-    const findings: LintFinding[] = [];
-    const recipient = (input.recipientSpecialty ?? '').toLowerCase();
-    const excluded = (rule.params as { excludeRecipientSpecialties?: string[] } | undefined)
-      ?.excludeRecipientSpecialties?.map((s) => s.toLowerCase()) ?? [];
-    if (excluded.some((x) => recipient.includes(x))) return findings;
-
-    const body = input.letterText.toLowerCase();
-    const hasSmoking = /\b(smok|tobacco|cigarett)/.test(body);
-    const hasDrinking = /\b(alcohol|drink(s|ing)?|units? per week)\b/.test(body);
-
-    if (!hasSmoking) {
-      findings.push(
-        ruleFinding(rule, 'Smoking status must be mentioned (positive or negative) unless writing to an occupational therapist.'),
-      );
-    }
-    if (!hasDrinking) {
-      findings.push(
-        ruleFinding(rule, 'Drinking status must be mentioned (positive or negative) unless writing to an occupational therapist.'),
-      );
-    }
-    return findings;
+  // R03.4 — FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance
+  // audit: OVERRIDDEN_OR_CORRECTED — "Smoking/alcohol are not universal
+  // always-include facts; relevance and reader needs control content." A
+  // deterministic detector cannot judge relevance, so it must not deduct.
+  // Intentionally inert; the corrected rule body guides the AI assessor.
+  content_requires_smoking_drinking(_rule, _input) {
+    return [];
   },
 
-  // R03.6 — Allergy always for atopic conditions
-  content_requires_allergy_for_atopic(rule, input) {
-    const atopic = Boolean(input.caseNotesMarkers?.atopicCondition);
-    if (!atopic) return [];
-    const hasAllergy = /\ballerg/i.test(input.letterText);
-    return hasAllergy
-      ? []
-      : [ruleFinding(rule, 'Allergy status (positive or negative) must be included for atopic conditions (asthma, eczema, hay fever).')];
+  // R03.6 — FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance
+  // audit: OVERRIDDEN_OR_CORRECTED — "Allergy inclusion is relevance/safety
+  // driven; the atopic-condition rule is a heuristic, not an official
+  // absolute." Intentionally inert; relevance is judged by the AI assessor.
+  content_requires_allergy_for_atopic(_rule, _input) {
+    return [];
   },
 
   // R03.8 — Body length advisory (180–200 words, configurable per profession via
@@ -831,15 +813,13 @@ const DETECTORS: Record<string, Detector> = {
     return [];
   },
 
-  // R14.4 — discharge omits FH/SH/smoking/PMH/occupation
-  discharge_omits_knownto_gp(rule, input) {
-    if (input.letterType !== 'discharge') return [];
-    const findings: LintFinding[] = [];
-    if (/\bfamily history\b/i.test(input.letterText)) findings.push(ruleFinding(rule, 'Discharge must not include family history — GP already knows it.'));
-    if (/\bsocial history\b/i.test(input.letterText)) findings.push(ruleFinding(rule, 'Discharge must not include social history.'));
-    if (/\bpast medical history\b/i.test(input.letterText)) findings.push(ruleFinding(rule, 'Discharge must not include past medical history.'));
-    if (/\bsmok(ing|es|er)\b/i.test(input.letterText)) findings.push(ruleFinding(rule, 'Discharge must not include smoking status.'));
-    return findings;
+  // R14.4 — FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance
+  // audit: OVERRIDDEN_OR_CORRECTED — "Social/family/past history can be
+  // relevant to discharge if it changed or affects ongoing care; do not
+  // exclude categorically." A deterministic detector cannot judge relevance,
+  // so it must not deduct. Intentionally inert.
+  discharge_omits_knownto_gp(_rule, _input) {
+    return [];
   },
 
   // R14.6 — admission phrasing ("was admitted with" not "was presented with")
@@ -869,23 +849,14 @@ const DETECTORS: Record<string, Detector> = {
     return [];
   },
 
-  // R15.2 — non-medical: no medical jargon
-  non_medical_no_jargon(rule, input) {
-    if (input.letterType !== 'non_medical_referral') return [];
-    const jargon = /\b(hypertension|hypoglycaemia|hyperglycaemia|myocardial infarction|tachycardia|bradycardia|BP|ECG|MRI|CT scan|paediatric|gynaecologic|endocrine)\b/gi;
-    const findings: LintFinding[] = [];
-    let m: RegExpExecArray | null;
-    while ((m = jargon.exec(input.letterText))) {
-      findings.push(
-        ruleFinding(rule, `Non-medical referral must avoid medical jargon "${m[0]}". Use plain English.`, {
-          quote: m[0],
-          start: m.index,
-          end: m.index + m[0].length,
-        }),
-      );
-      if (findings.length >= 3) break;
-    }
-    return findings;
+  // R15.2 — FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance
+  // audit: OVERRIDDEN_OR_CORRECTED — "Technicality should match the
+  // recipient. Allied-health professionals may understand clinical
+  // terminology; explain/simplify for the actual reader." A fixed word list
+  // cannot judge the actual reader, so it must not deduct. Intentionally
+  // inert; register is judged by the AI assessor from the task recipient.
+  non_medical_no_jargon(_rule, _input) {
+    return [];
   },
 
   // R05.5 — date format consistency (basic heuristic)
@@ -913,27 +884,14 @@ const DETECTORS: Record<string, Detector> = {
 
   // ----- 2026-05-27 audit fixes: 6 new CRITICAL detectors ----------------
 
-  // R01.5 — suspected cancer MUST trigger urgent referral.
-  //
-  // Reads `rule.params.cancerMarkers` (already defined in every profession
-  // rulebook) and scans both the letter body and the case-notes-derived flag
-  // `caseNotesMarkers.cancerSuspected`. When a marker is present, the letter
-  // type must be `urgent_referral`. Discharge / non-medical / GP-only letters
-  // are skipped (the urgency belongs to the referral path).
-  cancer_suspected_flagged_urgent(rule, input) {
-    if (input.letterType === 'discharge' || input.letterType === 'non_medical_referral') return [];
-    const params = (rule.params as { cancerMarkers?: string[] } | undefined) ?? {};
-    const markers = (params.cancerMarkers ?? []).map((m) => m.toLowerCase());
-    const hay = `${input.letterText} ${(input.diagnosisKeywords ?? []).join(' ')}`.toLowerCase();
-    const flagged = Boolean(input.caseNotesMarkers?.cancerSuspected) || markers.some((m) => hay.includes(m));
-    if (!flagged) return [];
-    if (input.letterType === 'urgent_referral') return [];
-    return [
-      ruleFinding(
-        rule,
-        'Suspected cancer in the case notes MUST be treated as an urgent referral — change the letter type to "urgent_referral", include the word "urgent" in the introduction, and close with "at your earliest convenience" (R01.5).',
-      ),
-    ];
+  // R01.5 — FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance
+  // audit: OVERRIDDEN_OR_CORRECTED — "Suspected cancer does not automatically
+  // define task type independently of the task/context; preserve urgency
+  // exactly as supported." Urgency follows the writing task, which a
+  // letter-only detector cannot see. Intentionally inert; urgency is judged
+  // by the AI assessor from task + case notes.
+  cancer_suspected_flagged_urgent(_rule, _input) {
+    return [];
   },
 
   // R08.3 — previous visits combined or summarised: do NOT give every visit
@@ -1027,23 +985,14 @@ const DETECTORS: Record<string, Detector> = {
     return findings;
   },
 
-  // R14.9 — ALL admission investigations (including normal results) must be
-  // listed in the discharge letter. Requires `caseNotesMarkers.investigationsPerformed`
-  // to know what should appear. We do a case-insensitive substring match per
-  // investigation name in the body.
-  discharge_all_investigations_listed(rule, input) {
-    if (input.letterType !== 'discharge') return [];
-    const investigations = input.caseNotesMarkers?.investigationsPerformed ?? [];
-    if (investigations.length === 0) return [];
-    const body = input.letterText.toLowerCase();
-    const missing = investigations.filter((inv) => !body.includes(inv.name.toLowerCase())).map((inv) => inv.name);
-    if (missing.length === 0) return [];
-    return [
-      ruleFinding(
-        rule,
-        `Discharge letter is missing ${missing.length} investigation${missing.length === 1 ? '' : 's'} performed during admission: ${missing.join(', ')}. ALL investigations (including normal results) MUST be listed with values (R14.9).`,
-      ),
-    ];
+  // R14.9 — FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance
+  // audit: OVERRIDDEN_OR_CORRECTED — "Do not list all investigations
+  // including all normal results; select what the reader needs." Listing
+  // every unmentioned investigation is exactly the overridden behavior, so
+  // the detector is inert (mirrors the .NET DetectMarkerDependentNoop);
+  // selection is judged by the AI assessor from task + case notes.
+  discharge_all_investigations_listed(_rule, _input) {
+    return [];
   },
 };
 

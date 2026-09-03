@@ -59,7 +59,7 @@ public sealed class WritingExamClosureTests
         InternalCode = "MED-WR-T01",
         Title = "Referral: Mr Sample Patient",
         Profession = "Medicine",
-        LetterType = "routine_referral",
+        LetterType = "LT-RR",
         WriterRole = "You are the doctor on duty.",
         TodayDate = "1 June 2026",
         TaskPromptMarkdown = "Write a referral letter.",
@@ -71,17 +71,19 @@ public sealed class WritingExamClosureTests
     // ── 1. Authoring publish-readiness validation ───────────────────────────
 
     [Fact]
-    public async Task Validate_not_publish_ready_when_source_provenance_and_integrity_missing()
+    public async Task Validate_not_publish_ready_when_canonical_inputs_missing()
     {
         await using var db = NewDb();
         var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
 
-        // Minimal task: no source provenance, integrity not acknowledged.
+        // Identity + exact task present, but no canonical case-note sentences
+        // and no approved Model Answer. A stimulus PDF alone is never
+        // sufficient — runtime grading performs no live OCR/PDF extraction.
         var created = await svc.CreateAsync(new WritingTaskUpsertDto
         {
             Title = "Incomplete task",
             Profession = "Medicine",
-            LetterType = "routine_referral",
+            LetterType = "LT-RR",
             TaskPromptMarkdown = "Write something.",
         }, User(), default);
 
@@ -89,8 +91,31 @@ public sealed class WritingExamClosureTests
 
         Assert.NotNull(validation);
         Assert.False(validation!.IsPublishReady);
-        Assert.Contains(validation.Issues, i => i.Code == "source_provenance_required");
-        Assert.Contains(validation.Issues, i => i.Code == "integrity_not_acknowledged");
+        Assert.Contains(validation.Issues, i => i.Code == "case_notes_required");
+        Assert.Contains(validation.Issues, i => i.Code == "model_answer_not_approved");
+        Assert.DoesNotContain(validation.Issues, i => i.Code == "written_task_required");
+    }
+
+    [Fact]
+    public async Task Validate_not_publish_ready_when_written_task_missing()
+    {
+        await using var db = NewDb();
+        var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
+
+        var created = await svc.CreateAsync(new WritingTaskUpsertDto
+        {
+            Title = "No prompt task",
+            Profession = "Medicine",
+            LetterType = "LT-DG",
+        }, User(), default);
+        await SeedCaseNotesAsync(db, created.Id);
+        await SeedApprovedModelAnswerAsync(db, created.Id);
+
+        var validation = await svc.ValidateAsync(created.Id, default);
+
+        Assert.NotNull(validation);
+        Assert.False(validation!.IsPublishReady);
+        Assert.Contains(validation.Issues, i => i.Code == "written_task_required");
     }
 
     [Fact]
@@ -100,11 +125,43 @@ public sealed class WritingExamClosureTests
         var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
 
         var created = await svc.CreateAsync(BuildValidUpsert(), User(), default);
+        await SeedCaseNotesAsync(db, created.Id);
+        await SeedApprovedModelAnswerAsync(db, created.Id);
+
         var validation = await svc.ValidateAsync(created.Id, default);
 
         Assert.NotNull(validation);
         Assert.True(validation!.IsPublishReady);
         Assert.DoesNotContain(validation.Issues, i => i.Severity == "error");
+    }
+
+    private static async Task SeedCaseNotesAsync(LearnerDbContext db, Guid scenarioId)
+    {
+        db.WritingScenarioStructuredSentences.Add(new WritingScenarioStructuredSentence
+        {
+            Id = Guid.NewGuid(),
+            ScenarioId = scenarioId,
+            Ordinal = 1,
+            SentenceText = "Patient presents with hypertension; allergy status negative.",
+            RelevanceLabel = "relevant",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private static async Task SeedApprovedModelAnswerAsync(LearnerDbContext db, Guid scenarioId)
+    {
+        db.WritingTaskModelAnswers.Add(new WritingTaskModelAnswer
+        {
+            Id = Guid.NewGuid(),
+            ScenarioId = scenarioId,
+            Status = WritingAssessmentModelAnswerStatus.Ready,
+            IsCandidateVisible = true,
+            ModelAnswerText = "Dear Doctor, …",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
     }
 
     // ── 2. Import → Export round trip (spec §18) ────────────────────────────
@@ -142,10 +199,11 @@ public sealed class WritingExamClosureTests
 
         var imported = await svc.ImportAsync(import, User(), default);
 
-        // Import creates a draft.
+        // Import creates a draft. Legacy canonical labels normalise to the
+        // valid modern catalogue codes (LT-RP is retired and can never result).
         Assert.Equal("draft", imported.Status);
         Assert.Equal("MED-WR-IMP1", imported.InternalCode);
-        Assert.Equal("routine_referral", imported.LetterType);
+        Assert.Equal("LT-RR", imported.LetterType);
         Assert.Equal("You are a GP.", imported.WriterRole);
 
         var export = await svc.ExportAsync(imported.Id, default);
@@ -154,7 +212,7 @@ public sealed class WritingExamClosureTests
         Assert.Equal("Imported referral", export!.TaskTitle);
         Assert.Equal("MED-WR-IMP1", export.InternalCode);
         Assert.Equal("Medicine", export.Profession);
-        Assert.Equal("routine_referral", export.TaskType);
+        Assert.Equal("LT-RR", export.TaskType);
         Assert.Equal("Refer for respiratory assessment.", export.Marking?.ExpectedPurpose);
         Assert.Equal("Write a referral letter to the respiratory clinic.", export.WritingTask?.Instruction);
     }
@@ -168,6 +226,8 @@ public sealed class WritingExamClosureTests
         var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
 
         var created = await svc.CreateAsync(BuildValidUpsert(), User(), default);
+        await SeedCaseNotesAsync(db, created.Id);
+        await SeedApprovedModelAnswerAsync(db, created.Id);
         var (published, _) = await svc.PublishAsync(created.Id, default);
         Assert.NotNull(published);
         Assert.Equal("published", published!.Status);
@@ -177,8 +237,68 @@ public sealed class WritingExamClosureTests
         Assert.NotNull(clone);
         Assert.NotEqual(created.Id, clone!.Id);
         Assert.Equal("draft", clone.Status);
-        Assert.Equal("routine_referral", clone.LetterType);
+        Assert.Equal("LT-RR", clone.LetterType);
         Assert.Equal("Medicine", clone.Profession);
+    }
+
+    // ── 3b. Retired Response / unknown import labels → Other Letters ─────────
+
+    [Theory]
+    [InlineData("LT-RP")]
+    [InlineData("response")]
+    [InlineData("Response letter")]
+    [InlineData("update")]
+    [InlineData("advice letter")]
+    [InlineData("letter of advice")]
+    [InlineData("some unknown label")]
+    public async Task Import_maps_retired_response_and_unknown_labels_to_other_letters(string taskType)
+    {
+        await using var db = NewDb();
+        var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
+
+        var imported = await svc.ImportAsync(new WritingTaskImportJson
+        {
+            TaskTitle = $"Imported {taskType}",
+            Profession = "Medicine",
+            TaskType = taskType,
+            WritingTask = new WritingImportWritingTask
+            {
+                Instruction = "Write the letter.",
+            },
+        }, User(), default);
+
+        Assert.Equal("LT-OT", imported.LetterType);
+        Assert.NotEqual("LT-RP", imported.LetterType);
+    }
+
+    [Fact]
+    public async Task Validate_blocks_publish_for_legacy_response_letter_type()
+    {
+        await using var db = NewDb();
+        var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
+
+        // Bypass the authoring normalisers to simulate a legacy row that still
+        // carries the retired code (e.g. written before the taxonomy revision).
+        var legacy = new WritingScenario
+        {
+            Id = Guid.NewGuid(),
+            Title = "Legacy response task",
+            Profession = "medicine",
+            LetterType = "LT-RP",
+            Status = "draft",
+            Version = 1,
+            AuthorId = "admin-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        db.WritingScenarios.Add(legacy);
+        await db.SaveChangesAsync(default);
+
+        var validation = await svc.ValidateAsync(legacy.Id, default);
+
+        Assert.NotNull(validation);
+        Assert.False(validation!.IsPublishReady);
+        Assert.Contains(validation.Issues, i => i.Code == "letter_type_unsupported");
     }
 
     // ── 4. Attempt events: persist known, skip unknown, respect batch cap ───

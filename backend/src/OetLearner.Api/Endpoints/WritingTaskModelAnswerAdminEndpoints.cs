@@ -25,6 +25,12 @@ public static class WritingTaskModelAnswerAdminEndpoints
         group.MapPost("/tasks/{id:guid}/model-answer/generate", GenerateModelAnswer).WithAdminWrite("AdminContentWrite");
         group.MapPost("/tasks/{id:guid}/model-answer/approve", ApproveModelAnswer).WithAdminWrite("AdminContentPublish");
         group.MapPost("/tasks/{id:guid}/model-answer/reject", RejectModelAnswer).WithAdminWrite("AdminContentWrite");
+        // Preparation-time backfill: generate the ONE reusable Model Answer
+        // for published tasks that lack a fresh approved one. Resumable
+        // (re-run with a limit to continue), idempotent (Ready+fresh answers
+        // are skipped), strictly sequential and bounded per call so provider
+        // rate limits are never burst. Never called from candidate submit.
+        group.MapPost("/model-answers/generate-missing", GenerateMissingModelAnswers).WithAdminWrite("AdminContentWrite");
 
         return app;
     }
@@ -56,6 +62,18 @@ public static class WritingTaskModelAnswerAdminEndpoints
         var adminId = GetUserId(user) ?? "system";
         var answer = await service.GenerateAsync(id, adminId, ct);
         return Results.Ok(answer);
+    }
+
+    private static async Task<IResult> GenerateMissingModelAnswers(
+        IWritingTaskModelAnswerService service,
+        ClaimsPrincipal user,
+        [FromQuery] int limit = 5,
+        [FromQuery] bool includeStale = false,
+        CancellationToken ct = default)
+    {
+        var adminId = GetUserId(user) ?? "system";
+        var result = await service.GenerateMissingAsync(adminId, limit, includeStale, ct);
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> ApproveModelAnswer(

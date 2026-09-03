@@ -9,7 +9,7 @@ describe('AI rulebook-grounded prompt — writing', () => {
       candidateCountry: 'UK',
       letterType: 'routine_referral',
     });
-    expect(p.metadata.rulebookVersion).toBe('1.0.0');
+    expect(p.metadata.rulebookVersion).toBe('1.0.1');
     expect(p.metadata.rulebookKind).toBe('writing');
     expect(p.metadata.profession).toBe('medicine');
     expect(p.metadata.appliedRulesCount).toBeGreaterThan(60);
