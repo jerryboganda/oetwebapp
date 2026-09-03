@@ -128,6 +128,7 @@ Load the named docs before editing these surfaces.
 - Reading, grammar, pronunciation, and conversation are server-authoritative; preserve their scoring, rulebook, ASR/TTS/provider, entitlement, retention, and publish-gate contracts. See the matching docs in `docs/`.
 - Reading save / import / validate / publish: load `docs/READING-MODULE-SAVE-AND-UPLOAD.md` first. Do not re-research the contract. Official papers are PDF-first 20/6/16; Part A last block starts at 15 or 16.
 - Runtime settings/secrets: services read through `IRuntimeSettingsProvider`, with encrypted DB value over env fallback and audit on writes. See `docs/ADMIN-RUNTIME-SETTINGS.md`.
+- Play Store release/listing/tester/review actions: fully automated via a Google Play Developer API service account + Python toolkit at `automation/` (sibling folder, outside this repo) — **compulsory**, read `docs/play-store-automation.md` before any such task and use the toolkit instead of manual Play Console work or independently regenerated store assets/docs. A parallel agent skipping this on 2026-09-04 shipped conflicting package/branding changes that had to be reverted (PR #186).
 
 ## Admin UI
 
@@ -167,5 +168,7 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
 - `.github/instructions/validation.instructions.md` — host validation command ladder.
 - `.github/instructions/deployment.instructions.md` — Docker/CI/CD/storage/VPS/desktop/mobile.
 - `.github/instructions/admin-hallmark.instructions.md` — admin operational UI discipline.
+- `docs/play-store-automation.md` — Google Play Console release/listing/tester/review
+  automation via service-account toolkit; compulsory before any Play Store action.
 - `.codex/AGENTS.md` — Codex-CLI agent operating model (host commands, production checks, commit attribution).
 - `.tools/autoskills/AGENTS.md` — scoped to `.tools/autoskills/` only (pnpm supply-chain hardening).

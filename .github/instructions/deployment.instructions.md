@@ -29,6 +29,22 @@ Local validation is NOT done here — it runs on the host via pnpm (see `validat
 
 - Electron packaging uses `electron-builder.config.cjs` and the desktop compose/Playwright configs.
 - Capacitor (`capacitor.config.ts`, `android/`, `ios/`) wraps the web build; keep platform configs in sync.
+- Android is `com.oetwithdrhesham.app`; iOS is `com.oetprep.learner`. These are
+  independently owned (Android was renamed, iOS deliberately was not) — never let an
+  Android-scoped change touch `ios/**` or vice versa without explicit owner sign-off.
+
+## Play Store release automation (compulsory) — see `docs/play-store-automation.md`
+
+Play Console access for this app is fully automated via a Google Play Developer API
+service account and a Python toolkit at `automation/` (sibling folder, outside this
+repo — see `docs/play-store-automation.md` for setup/CLI/gotchas). Any release upload,
+store listing text/image change, tester-list check, or review reply **must** go through
+that toolkit instead of manual Play Console clicking or a hand-authored/regenerated
+asset that duplicates what the toolkit already manages. Before changing anything that
+affects live Play Store state, query it first (`list-tracks` / `get-listing`) — don't
+assume this repo's `fastlane/`/`docs/`/asset files match what's actually live. A parallel
+agent skipping this check on 2026-09-04 shipped a conflicting package/branding change
+that had already been superseded on live Play Console and had to be reverted.
 
 ## Post-push ownership (do not stop at "deploy initiated")
 
