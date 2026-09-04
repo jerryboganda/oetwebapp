@@ -28,7 +28,7 @@ import org.json.JSONObject;
 public class InstallerSourcePlugin extends Plugin {
     private static final String PLAY_INSTALLER = "com.android.vending";
 
-    @PluginMethod
+    @com.getcapacitor.PluginMethod
     public void getInstallSource(PluginCall call) {
         Context context = getContext();
         String packageName = context.getPackageName();
