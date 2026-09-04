@@ -24,6 +24,11 @@ on:
         required: true
         default: 'v1.4.6-mobile-android'
         type: string
+      version_code:
+        description: 'Monotonic version code already stamped in the artifact (optional but recommended)'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -64,6 +69,7 @@ jobs:
           node scripts/release/assemble-mobile-manifest.mjs \
             --platform="${{ inputs.platform }}" \
             --version="${{ inputs.version }}" \
+            --version-code="${{ inputs.version_code }}" \
             --artifact-dir=stage \
             --public-base=https://app.oetwithdrhesham.co.uk \
             --out=stage/current.json

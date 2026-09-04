@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     platform: release.platform,
     version: release.version,
+    versionCode: release.versionCode ?? null,
     downloadUrl: release.downloadUrl,
     digest: release.digest ?? (release.sha256 ? `sha256:${release.sha256}` : null),
     publishedAt: release.publishedAt ?? null,

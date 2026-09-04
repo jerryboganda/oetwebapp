@@ -73,4 +73,49 @@ describe('native release discovery', () => {
       digest: 'sha256:ios',
     });
   });
+
+  it('passes the recorded versionCode through and defaults it to null', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'oet-native-vc-'));
+    process.env.RELEASES_ROOT = root;
+    process.env.RELEASES_PUBLIC_BASE_URL = 'https://app.oetwithdrhesham.co.uk';
+    writeRelease('android', {
+      platform: 'android',
+      version: '1.4.10',
+      versionCode: 5,
+      downloadUrl: 'https://app.oetwithdrhesham.co.uk/releases/mobile/android/1.4.10/OET-with-Dr-Hesham-1.4.10.apk',
+      digest: 'sha256:vc',
+      publishedAt: '2026-09-04T16:09:00Z',
+    });
+
+    const withCode = await GET(new NextRequest('https://app.example/api/releases/native?platform=android'));
+    expect(withCode.status).toBe(200);
+    await expect(withCode.json()).resolves.toMatchObject({ versionCode: 5 });
+
+    // Manifests assembled before version codes were recorded stay servable,
+    // with an explicit null so clients can distinguish "unknown" from 0.
+    writeRelease('android', {
+      platform: 'android',
+      version: '1.4.9',
+      downloadUrl: 'https://app.oetwithdrhesham.co.uk/releases/mobile/android/1.4.9/OET-with-Dr-Hesham-1.4.9.apk',
+      digest: 'sha256:novc',
+    });
+
+    const withoutCode = await GET(new NextRequest('https://app.example/api/releases/native?platform=android'));
+    expect(withoutCode.status).toBe(200);
+    await expect(withoutCode.json()).resolves.toMatchObject({ versionCode: null });
+  });
+
+  it('rejects a manifest with an invalid versionCode', async () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'oet-native-vcbad-'));
+    process.env.RELEASES_ROOT = root;
+    writeRelease('android', {
+      platform: 'android',
+      version: '1.4.10',
+      versionCode: -2,
+      downloadUrl: 'https://app.oetwithdrhesham.co.uk/releases/mobile/android/1.4.10/OET-with-Dr-Hesham-1.4.10.apk',
+    });
+
+    const response = await GET(new NextRequest('https://app.example/api/releases/native?platform=android'));
+    expect(response.status).toBe(404);
+  });
 });

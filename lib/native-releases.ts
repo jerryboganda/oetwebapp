@@ -46,6 +46,9 @@ export interface DesktopFeed {
 export interface MobileRelease {
   platform: 'android' | 'ios';
   version: string;
+  /** Monotonic update identity (Android versionCode). Absent on manifests
+   * assembled before version codes were recorded — never gate on it. */
+  versionCode?: number | null;
   downloadUrl: string;
   digest?: string | null;
   publishedAt?: string | null;
@@ -220,6 +223,10 @@ function validateMobileRelease(value: unknown, platform: 'android' | 'ios'): Mob
   const release = value as MobileRelease;
   if (release.platform !== platform) throw new Error('Mobile release platform mismatch.');
   if (!isSemver(release.version)) throw new Error('Mobile release version is invalid.');
+  if (release.versionCode !== undefined && release.versionCode !== null
+    && (!Number.isInteger(release.versionCode) || release.versionCode < 1)) {
+    throw new Error('Mobile release version code is invalid.');
+  }
   if (!isTrustedReleaseUrl(release.downloadUrl)) throw new Error('Mobile download URL is not trusted.');
   return release;
 }

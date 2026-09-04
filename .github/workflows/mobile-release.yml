@@ -211,9 +211,27 @@ jobs:
           node scripts/release/assemble-mobile-manifest.mjs \
             --platform=android \
             --version="${{ inputs.version }}" \
+            --version-code="${{ inputs.version_code }}" \
             --artifact-dir=stage \
             --public-base=https://app.oetwithdrhesham.co.uk \
             --out=stage/current.json
+
+      # Downgrade guard: a VPS feed serving a lower versionCode than what is
+      # live bricks updaters with "App not installed" until manual reinstall
+      # (same user-facing symptom as a signature conflict). Play enforces this
+      # server-side; the VPS feed needs this explicit check.
+      - name: Reject VPS feed downgrade
+        env:
+          EXPECT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          feed_json=$(curl --fail --silent --show-error --location 'https://app.oetwithdrhesham.co.uk/api/releases/native?platform=android' || echo '{}')
+          live_code=$(node -e "const f = JSON.parse(process.argv[1] || '{}'); console.log(Number(f.versionCode) || 0)" "$feed_json")
+          echo "Live feed versionCode: ${live_code}; releasing: ${EXPECT_VERSION_CODE}"
+          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -le "$live_code" ]; then
+            echo "::error::Release version_code ${EXPECT_VERSION_CODE} is not newer than the live VPS feed (${live_code}). Bump it."
+            exit 1
+          fi
 
       - name: Upload latest Android release to the VPS
         env:
@@ -397,9 +415,23 @@ jobs:
           node scripts/release/assemble-mobile-manifest.mjs \
             --platform=ios \
             --version="${{ inputs.version }}" \
+            --version-code="${{ inputs.version_code }}" \
             --artifact-dir=stage \
             --public-base=https://app.oetwithdrhesham.co.uk \
             --out=stage/current.json
+
+      - name: Reject VPS feed downgrade
+        env:
+          EXPECT_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -euo pipefail
+          feed_json=$(curl --fail --silent --show-error --location 'https://app.oetwithdrhesham.co.uk/api/releases/native?platform=ios' || echo '{}')
+          live_code=$(node -e "const f = JSON.parse(process.argv[1] || '{}'); console.log(Number(f.versionCode) || 0)" "$feed_json")
+          echo "Live feed versionCode: ${live_code}; releasing: ${EXPECT_VERSION_CODE}"
+          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -le "$live_code" ]; then
+            echo "::error::Release version_code ${EXPECT_VERSION_CODE} is not newer than the live VPS feed (${live_code}). Bump it."
+            exit 1
+          fi
 
       - name: Upload latest iOS release to the VPS
         env:
