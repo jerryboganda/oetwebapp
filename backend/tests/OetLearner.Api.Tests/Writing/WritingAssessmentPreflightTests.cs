@@ -163,6 +163,37 @@ public sealed class WritingAssessmentPreflightTests
         Assert.Contains("case_note_pages_unreadable", result.MissingInputCodes);
     }
 
+    [Fact]
+    public async Task Doris_white_community_nurse_recipient_allows_scoring()
+    {
+        await using var db = NewDb();
+        var scenario = Scenario(
+            taskPrompt: "Using the information in the case notes, write a letter to Mrs Lucy Walters , a Community Nurse , requesting for wound dressing. Address the letter to Mrs Lucy Walters, Newtown Nurse Clinic, 10 Stillwater St, Newtown.");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Graft healing 70% ,so plan for discharge."));
+        db.WritingAssessmentPackVersions.Add(new WritingAssessmentPackVersion
+        {
+            Id = Guid.NewGuid(),
+            Profession = "medicine",
+            LetterType = "routine_referral",
+            VersionKey = "medicine-core-v11",
+            Status = WritingAssessmentReleaseStatus.Approved,
+            CandidateFacing = true,
+        });
+        await db.SaveChangesAsync();
+
+        var submission = Submission(scenario.Id);
+        submission.LetterContent = "Dear Mrs Walters,\n\nI am writing to request wound dressing for Mrs Doris White.\n\nYours sincerely,\nDoctor";
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(submission, CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.Equal(WritingAssessmentV11Status.AwaitingPreflight, result.Status);
+        Assert.DoesNotContain("recipient", result.MissingInputCodes);
+        Assert.Equal("community_nurse", result.TaskUnderstanding?.RecipientCategory);
+    }
+
     private static WritingScenario Scenario(
         string? taskPrompt = "Write to Dr Green requesting a review.",
         string profession = "medicine",

@@ -1,6 +1,23 @@
 # Agent State (local)
 
-## Current task — Layout Alignment across /get-app, Boost widget, and /goals — READY TO SHIP
+## Current task — Writing Assessment: Fix false missing recipient block on submit (Doris White) — VERIFIED + READY TO SHIP
+- **User Request**: When submitting letter for grading on "Medicine - Doris White" in writing practice session, error banner appeared: `"Writing assessment is blocked because required input is missing: recipient."`
+- **Root Cause**: `WritingTaskUnderstandingService.RecipientCategory` had an overly narrow set of 6 regexes (`emergency registrar`, `occupational therapist`, `physiotherapist|social worker|psychologist|dietitian`, `GP|general practitioner`, `admissions officer`, `Dr|doctor|consultant|clinician`). The Doris White task prompt ("write a letter to Mrs Lucy Walters , a Community Nurse , requesting for wound dressing...") did not match any of those patterns, returning `"unknown"`. `WritingAssessmentPreflightService` then blocked grading with `"recipient"`.
+- **Fix**:
+  1. `WritingTaskUnderstandingService.cs`:
+     - Expanded `RecipientCategory(task, notes)` to detect `community_nurse` (Community Nurse, District Nurse, Home Care Nurse), `nurse` (Nurse, Charge Nurse, Registered Nurse, Practice Nurse, Nurse Unit Manager, Sister-in-Charge, Matron), expanded medical clinicians and specialists without mandatory "Dr" prefix (cardiologist, endocrinologist, neurologist, dermatologist, surgeon, etc.), admissions officers, and named recipients (`Mr|Mrs|Ms|Miss|Prof` or direct address).
+     - Added `ExtractPlanOrReferralLines` fallback: if the task prompt is generic, parses `Plan:`, `Referral:`, or `Address:` sections in the case notes to extract the recipient.
+     - Expanded `AddSignal` non-medical referral keywords to include `dietician`, `speech pathologist`, `speech therapist`, `podiatrist`, `audiologist` (keeping nurses strictly medical per Rule R01.7 / R15.1).
+  2. `WritingTaskUnderstandingTests.cs`:
+     - Added unit tests for Doris White task prompt, nurse and nurse-in-charge detection, specialist detection without "Dr", named recipients with honorifics, and case notes plan fallback.
+  3. `WritingAssessmentPreflightTests.cs`:
+     - Added `Doris_white_community_nurse_recipient_allows_scoring` integration test validating that Doris White submission passes preflight with `CanScore == true` and 0 missing input codes.
+- **Validation**:
+  - `dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj --filter "FullyQualifiedName~WritingTaskUnderstandingTests|FullyQualifiedName~WritingAssessmentPreflightTests"` passed (16 passed, 0 failed).
+  - `pnpm run ship:gate` passed (`ship-gate files=10 typescript=yes`).
+- **Next**: Ship via AGENTS.md Ship-It workflow.
+
+## Previous — Layout Alignment across /get-app, Boost widget, and /goals — READY TO SHIP
 - **User Request**: Layout alignment across all screen sizes (laptops, desktops, mobiles, tablets) per uploaded photo of `/get-app` with misaligned button baselines and mismatched columns, along with `/boost` and `/goal` alignments.
 - **Root Causes**:
   1. `/get-app` cards had mismatched subtitle line counts (macOS 3 lines vs Windows 1 line) with insufficient minimum height, and `store-badges.tsx` badge had fixed `px-7` padding causing "Download iOS App" to wrap and collide with `leading-none`.
@@ -152,3 +169,20 @@ Named volumes `oetwebsite_oet_*` are independent of containers. Compose pins the
 - Do not retry `admin@oet-prep.dev` or bootstrap passwords.
 - GitHub Actions for deploys. Make the repo public for the run, then private again. Never leave it public. No VPS compute. No green recreate.
 - Not DMB.
+
+## Current task — Writing AI grading & Model Answer final implementation — SHIPPED + LIVE
+- Commit 1b1210cd1 on origin/main; Build & Deploy SUCCESS; live web/api-ready (migrations ok)/api-live green; images on 1b1210cd1; repo PRIVATE again.
+- Canonical grading inputs enforced at publish (case notes + exact task + rulebook + approved Model Answer); prep endpoints preparation-status / extract-from-pdf / generate-missing + CSV runbook; grading uses stored snapshots only (no live OCR).
+- Submit always available incl. empty (deterministic zero grade, 0 provider calls, 0 credit hold); no exemplar-similarity scoring (canary test); LT-* pack/rule bridge ToPackLetterType.
+- FINAL MASTER v1.0: 26 overridden legacy rule bodies corrected verbatim in all 13 writing JSONs (v1.0.1); 6 legacy detectors neutralized (.NET+TS); parity fixtures updated.
+- One submit = one job: stable client key + server content-hash guard + claim/reuse/reservation; 429/409 single retry; retry-grade resume + grading-page retry card.
+- Validation: backend writing+rulebook selection 213 pass (3 pre-existing HEAD failures proven identical on pristine HEAD worktree); frontend lib/writing+lib/rulebook pass except 6 pre-existing pdf-policy-release snapshot failures; tsc clean; lint 0 errors; ship:gate OK.
+- Preserved uncommitted catalogue-track work in tree (analytics/focus/showcase pages, prompt templates, pathway services, builder files, CriticalFlowsTests, writing-catalogue-revision artifacts, *.txt logs) — not staged.
+- OPEN (need prod data/admin): run preparation-status CSV → backfill case notes/task text → generate-missing → approve packs + model answers; profession-specific OW-edition rulebook sync; live 10-way parallel submit check. Details: artifacts/writing-ai-final/.
+
+## Current task — Capacitor reload storm + device-limit OTP storm — SHIPPED + LIVE
+- Commit d9c7f93e7 on origin/main; Build & Deploy SUCCESS; live web/api-ready (migrations ok)/api-live green; green images on d9c7f93e7; repo PRIVATE again. Blue (1b1210cd1) still up = rollback path.
+- Fixes: single-flight hard auth navigation (lib/navigation/auth-redirect.ts, wired into auth-client sign-in redirect + api.ts email gate); SW registration blocked in native shells (providers.tsx runtime-kind guard; notification-worker guarded too); resend single-flight ref in device-challenge-form; backend device-OTP save-before-send + SentAt==null recovery (EmailOtpService).
+- Validation: tsc clean; lint 0 errors; ship:gate OK; frontend 43 pass (incl. 6 new); backend OTP 6/6 + device/Firebase/email 34/34. CI: Build&Deploy+Tauri+SBOM green; Mobile CI Android build+emulator smoke+unit+lint green (iOS sim launch blocked by GH billing, infra); Speaking CI + QA Smoke failures proven pre-existing on pristine parent worktree (dashboard-shell + 2 backend speaking tests).
+- Prod E2E (this session): admin login 200; 10x parallel /me all 200; fresh learner hit device_verification_required otp_required at 1/2 slots; 3x concurrent send-otp → SAME challengeId (no storm); wrong code → invalid_otp_code; test user hard-deleted (24 rows/9 tables). Valid-OTP acceptance on prod BLOCKED (no inbox access); covered by backend acceptance tests on identical SHA. E2E temp secrets scrubbed from $env:TEMP.
+- Note for next agent: curl.exe from PowerShell mangles inline -d JSON (empty-400 symptom) — always use --data-binary @file. Direct api.* POSTs 400 on public Host (allowlist is internal-only) — drive E2E via app.oetwithdrhesham.co.uk/api/backend with Origin/Referer.
