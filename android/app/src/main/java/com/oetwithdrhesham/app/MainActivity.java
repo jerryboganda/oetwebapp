@@ -9,6 +9,7 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.oetwithdrhesham.app.plugins.InstallerSourcePlugin;
 import com.oetwithdrhesham.app.plugins.PlaybackAttestationPlugin;
 import com.oetwithdrhesham.app.plugins.SpeakingRecorderPlugin;
 
@@ -21,6 +22,7 @@ public class MainActivity extends BridgeActivity {
 		// list, so calling it AFTER super.onCreate() is a no-op on the already-built
 		// Bridge — these plugins silently never reach the JS side. Register before
 		// super.onCreate(), matching iOS's OETBridgeViewController.capacitorDidLoad().
+		registerPlugin(InstallerSourcePlugin.class);
 		registerPlugin(SpeakingRecorderPlugin.class);
 		registerPlugin(PlaybackAttestationPlugin.class);
 		super.onCreate(savedInstanceState);

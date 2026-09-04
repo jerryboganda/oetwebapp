@@ -85,6 +85,25 @@ modules directly (`playstore/releases.py`, `playstore/listings.py`, `playstore/d
 edit → stage bundle/listing/image/detail changes → commit atomically, and always discard
 the draft edit on any exception so nothing partial is left staged).
 
+## Single-channel update policy (Android) — read before touching updates
+
+- The Play app-signing key differs from the CI upload key (verified 2026-09-04:
+  Play delivery cert `D2:8D:…:46:B3` vs VPS/upload cert `41:5F:…:7F:A9`). Android
+  treats those as different apps for update purposes, so a Play-installed copy
+  can NEVER be updated by the VPS APK and vice versa — every cross-channel
+  attempt fails with "App not installed" and no app code can override OS
+  signature enforcement.
+- The in-app update surface (`app/get-app/android-install`, backed by the
+  `InstallerSource` native plugin + `lib/mobile/install-source.ts`) therefore
+  routes by installer channel: Play-installed copies update via the Play
+  listing only; sideloaded copies via the direct APK only. Never offer the APK
+  to a Play-installed copy.
+- Release builds fail closed without `keystore.properties` (no silent
+  debug-signed "release" APKs), and `mobile-release.yml` aborts unless the
+  built APK carries the pinned upload certificate above. A rotated/wrong
+  keystore fails the release instead of shipping an uninstall-or-nothing
+  artifact.
+
 ## Known gotchas — read before you hit these again
 
 - **`edits().testers()` only accepts Google Groups, not individual email addresses.**

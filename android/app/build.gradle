@@ -40,11 +40,27 @@ android {
                 keyAlias keystoreProps['keyAlias']
                 keyPassword keystoreProps['keyPassword']
             }
+            // Fail CLOSED, never fall back to debug signing: a "release" APK
+            // signed with the debug key can never be updated by (or update)
+            // the properly-signed store/sideload lineage — every install
+            // after it fails with "App not installed" until the user wipes
+            // their data. CI (mobile-release.yml) always generates
+            // keystore.properties from secrets before building. Scoped to
+            // release tasks so local debug builds keep working: this block
+            // still configures on every invocation.
+            def buildingRelease = gradle.startParameter.taskNames.any { taskName ->
+                taskName.toLowerCase().contains('release')
+            }
+            if (buildingRelease && storeFile == null) {
+                throw new GradleException(
+                    "Release signing is not configured: android/keystore.properties is missing. "
+                    + "Refusing to produce a debug-signed 'release' build.")
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : null
+            signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

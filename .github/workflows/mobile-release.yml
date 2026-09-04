@@ -141,6 +141,30 @@ jobs:
         env:
           OET_MOBILE_ATTEST_SECRET: ${{ secrets.OET_MOBILE_ATTEST_SECRET }}
 
+      # Update-blocker guard: Android rejects updates signed with a different
+      # key ("App not installed", only fixable by uninstall). The release APK
+      # must carry the enrolled upload certificate — Play also rejects AABs
+      # whose upload cert drifts. This pins the cert that shipped the
+      # 1.4.7–1.4.9 lineage so a rotated/wrong keystore fails the release
+      # instead of shipping an uninstall-or-nothing artifact.
+      - name: Verify release signer matches pinned upload certificate
+        env:
+          PINNED_UPLOAD_CERT_SHA256: 41:5F:CB:E8:29:4A:64:4A:B8:13:3D:9D:75:2A:DC:D2:89:D0:B6:49:91:E5:1A:C7:E0:05:DD:A2:B6:07:7F:A9
+        run: |
+          set -euo pipefail
+          actual=$(keytool -printcert -jarfile android/app/build/outputs/apk/release/app-release.apk | grep -i 'SHA256:' | head -1 | sed 's/.*SHA256:[[:space:]]*//')
+          pinned_norm=$(printf '%s' "$PINNED_UPLOAD_CERT_SHA256" | tr -d ' :' | tr 'a-f' 'A-F')
+          actual_norm=$(printf '%s' "$actual" | tr -d ' :' | tr 'a-f' 'A-F')
+          if [ -z "$actual_norm" ]; then
+            echo "::error::Could not read a signing certificate from the release APK."
+            exit 1
+          fi
+          if [ "$actual_norm" != "$pinned_norm" ]; then
+            echo "::error::Release APK signer does not match the pinned upload certificate."
+            exit 1
+          fi
+          echo "Release signer matches pinned upload certificate."
+
       - name: Upload AAB
         uses: actions/upload-artifact@v4
         with:
