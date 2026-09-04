@@ -547,15 +547,47 @@ public sealed class EmailOtpService(
             .Where(x => x.ApplicationUserAccountId == account.Id && x.Purpose == purpose && x.VerifiedAt == null)
             .ToListAsync(cancellationToken);
 
+        // Unsent-recovery: a previous request persisted its challenge but died
+        // before the email left (timeout, crash, provider outage between save
+        // and send). Complete THAT send instead of minting a second code —
+        // otherwise the inbox holds a code with no live challenge row and
+        // verification reports "invalid". Mirrors the SentAt == null recovery
+        // in IssueEmailVerificationOtpLockedAsync. Firebase-SMS rows are
+        // excluded: their code lives with the provider, not in CodeHash, so a
+        // locally-generated email code could never verify against them.
+        var unsent = pendingChallenges
+            .Where(x => x.SentAt == null && !IsFirebaseSmsChallenge(x) && x.ExpiresAt > now && x.AttemptCount < MaxOtpAttempts)
+            .OrderByDescending(x => x.CreatedAt)
+            .FirstOrDefault();
+
+        if (unsent is not null)
+        {
+            await SendChannelEmailAsync(unsent, account, emailSubject, emailText, emailTemplate, cancellationToken);
+            unsent.SentAt = timeProvider.GetUtcNow();
+            unsent.DeliveryStatus = "accepted";
+            unsent.DeliveryUpdatedAt = unsent.SentAt;
+            await db.SaveChangesAsync(cancellationToken);
+
+            return new OtpChallengeResponse(
+                unsent.Id.ToString(),
+                purpose,
+                unsent.DeliveryChannel ?? "email",
+                unsent.DestinationHint ?? AuthEmailAddress.Mask(account.Email),
+                unsent.ExpiresAt,
+                RetryAfterSeconds);
+        }
+
         var reusable = pendingChallenges
-            .Where(x => x.ExpiresAt > now && x.AttemptCount < MaxOtpAttempts)
+            .Where(x => x.SentAt != null && x.ExpiresAt > now && x.AttemptCount < MaxOtpAttempts)
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefault();
 
         if (reusable is not null)
         {
-            // Firebase challenges deployed before this fix did not record
-            // SentAt, but they were only persisted after a successful send.
+            // Only rows with a recorded send are reusable without sending.
+            // Rows still missing SentAt are handled by the unsent-recovery
+            // branch above (email) or replaced below (legacy pre-fix Firebase
+            // rows, long expired in practice).
             var sentAt = reusable.SentAt ?? reusable.CreatedAt;
             if (now - sentAt < ResendCooldown)
             {
@@ -609,16 +641,20 @@ public sealed class EmailOtpService(
             };
             deliveryChannel = "sms";
             destinationHint = challenge.DestinationHint ?? PhoneNumberNormalizer.Mask(sms.PhoneNumber);
+
+            // SMS provider call already succeeded above; persist the sentinel
+            // row now (single SaveChanges for this branch).
+            db.EmailOtpChallenges.Add(challenge);
+            await db.SaveChangesAsync(cancellationToken);
         }
         else
         {
-            var otpCode = GenerateSixDigitCode();
             challenge = new EmailOtpChallenge
             {
                 Id = challengeId,
                 ApplicationUserAccountId = account.Id,
                 Purpose = purpose,
-                CodeHash = HashOtp(challengeId, otpCode, account.Id, purpose),
+                CodeHash = HashOtp(challengeId, GenerateSixDigitCode(), account.Id, purpose),
                 AttemptCount = 0,
                 CreatedAt = now,
                 ExpiresAt = expiresAt,
@@ -627,29 +663,26 @@ public sealed class EmailOtpService(
                 DestinationHint = AuthEmailAddress.Mask(account.Email)
             };
 
-            await emailSender.SendAsync(new EmailMessage(
-                account.Email,
-                emailSubject,
-                emailText(otpCode, expiresAt),
-                HtmlBody: BuildHtmlBody(emailSubject, account.Email, otpCode, expiresAt),
-                TemplateKey: emailTemplate,
-                TemplateParameters: new Dictionary<string, object?>
-                {
-                    ["email"] = account.Email,
-                    ["displayName"] = BuildDisplayName(account.Email),
-                    ["otpCode"] = otpCode,
-                    ["expiresAt"] = expiresAt.ToString("O")
-                }), cancellationToken);
+            // Persist BEFORE sending. If the process dies mid-send, the next
+            // request finds this row with SentAt == null and completes the
+            // send (see the unsent-recovery branch above) instead of leaving
+            // a delivered code with no live challenge — which verified as
+            // "invalid". On PostgreSQL the surrounding advisory-lock
+            // transaction rolls a failed send back automatically; on other
+            // providers the SentAt == null row is the recovery record.
+            db.EmailOtpChallenges.Add(challenge);
+            await db.SaveChangesAsync(cancellationToken);
 
-            challenge.SentAt = now;
+            await SendChannelEmailAsync(challenge, account, emailSubject, emailText, emailTemplate, cancellationToken);
+
+            challenge.SentAt = timeProvider.GetUtcNow();
             challenge.DeliveryStatus = "accepted";
-            challenge.DeliveryUpdatedAt = now;
+            challenge.DeliveryUpdatedAt = challenge.SentAt;
+            await db.SaveChangesAsync(cancellationToken);
+
             deliveryChannel = "email";
             destinationHint = AuthEmailAddress.Mask(account.Email);
         }
-
-        db.EmailOtpChallenges.Add(challenge);
-        await db.SaveChangesAsync(cancellationToken);
 
         return new OtpChallengeResponse(
             challengeId.ToString(),
@@ -658,6 +691,44 @@ public sealed class EmailOtpService(
             destinationHint,
             expiresAt,
             RetryAfterSeconds);
+    }
+
+    /// <summary>
+    /// (Re)generates the numeric code for an already-persisted email
+    /// challenge and sends it. The new hash is saved BEFORE the provider
+    /// call, so even a crash between send and the caller's SentAt stamp
+    /// leaves a row whose hash matches the delivered code — the next request
+    /// then regenerates and re-sends rather than stranding an "invalid" code
+    /// in the inbox. Centralised so the fresh-send and unsent-recovery paths
+    /// share one template/parameter set — a mismatch there would produce
+    /// codes that verify against a different hash than the email shows.
+    /// </summary>
+    private async Task SendChannelEmailAsync(
+        EmailOtpChallenge challenge,
+        ApplicationUserAccount account,
+        string emailSubject,
+        Func<string, DateTimeOffset, string> emailText,
+        string emailTemplate,
+        CancellationToken cancellationToken)
+    {
+        var otpCode = GenerateSixDigitCode();
+        challenge.CodeHash = HashOtp(challenge.Id, otpCode, account.Id, challenge.Purpose);
+        challenge.AttemptCount = 0;
+        await db.SaveChangesAsync(cancellationToken);
+
+        await emailSender.SendAsync(new EmailMessage(
+            account.Email,
+            emailSubject,
+            emailText(otpCode, challenge.ExpiresAt),
+            HtmlBody: BuildHtmlBody(emailSubject, account.Email, otpCode, challenge.ExpiresAt),
+            TemplateKey: emailTemplate,
+            TemplateParameters: new Dictionary<string, object?>
+            {
+                ["email"] = account.Email,
+                ["displayName"] = BuildDisplayName(account.Email),
+                ["otpCode"] = otpCode,
+                ["expiresAt"] = challenge.ExpiresAt.ToString("O")
+            }), cancellationToken);
     }
 
     private static void EnforceResendCooldownOrThrow(

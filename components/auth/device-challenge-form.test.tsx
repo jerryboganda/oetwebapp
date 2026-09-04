@@ -1,5 +1,5 @@
 import userEvent from '@testing-library/user-event';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { DeviceChallengeForm } from './device-challenge-form';
 import { renderWithRouter } from '@/tests/test-utils';
 
@@ -294,5 +294,32 @@ describe('DeviceChallengeForm', () => {
     const verifyBtn = screen.getByRole('button', { name: /Verify Device/i });
     expect(verifyBtn).toBeEnabled();
     expect(screen.getByText(/Enter the code we emailed you/)).toBeInTheDocument();
+  });
+
+  it('collapses a rapid resend double-tap into a single OTP request', async () => {
+    mockPendingChallenge = {
+      email: 'learner@example.com',
+      challengeToken: 'resend-token',
+      rememberMe: true,
+      mode: 'otp_required',
+      registeredDevices: [],
+      activeDeviceCount: 0,
+      maxDevices: 2,
+      // A code already went out, so the mount-time auto-send stays quiet and
+      // only the explicit resend taps below can trigger a request.
+      otpRequestedForToken: 'resend-token',
+    };
+
+    renderWithRouter(<DeviceChallengeForm />);
+
+    const resendButton = await screen.findByRole('button', { name: /Resend it/i });
+    expect(resendButton).toBeEnabled();
+
+    // Same-tick double tap: React state hasn't re-rendered (and therefore
+    // hasn't disabled the button) between these two dispatches.
+    fireEvent.click(resendButton);
+    fireEvent.click(resendButton);
+
+    await waitFor(() => expect(mockSendDeviceVerificationOtp).toHaveBeenCalledTimes(1));
   });
 });

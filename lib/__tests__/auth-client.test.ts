@@ -302,4 +302,38 @@ describe('auth-client', () => {
     await expect(reissueSessionAfterVerification()).resolves.toBeNull();
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it('collapses repeated session-loss redirects into a single hard navigation', async () => {
+    // A dead refresh token plus N concurrent API callers used to issue one
+    // full WebView document load each. forceSignOutAndRedirect is the shared
+    // funnel (direct calls and SignalR session_revoked pushes alike).
+    const realLocation = window.location;
+    const replaceSpy = vi.fn();
+    Object.defineProperty(window, 'location', {
+      value: { ...realLocation, pathname: '/dashboard', search: '', replace: replaceSpy },
+      writable: true,
+      configurable: true,
+    });
+
+    try {
+      const { forceSignOutAndRedirect } = await import('@/lib/auth-client');
+      const { resetAuthNavigationForTests } = await import('@/lib/navigation/auth-redirect');
+      resetAuthNavigationForTests();
+
+      forceSignOutAndRedirect('session_revoked');
+      forceSignOutAndRedirect('session_revoked');
+      forceSignOutAndRedirect('signed_out_elsewhere');
+
+      expect(replaceSpy).toHaveBeenCalledTimes(1);
+      expect(String(replaceSpy.mock.calls[0]?.[0])).toContain('/sign-in?next=');
+    } finally {
+      Object.defineProperty(window, 'location', {
+        value: realLocation,
+        writable: true,
+        configurable: true,
+      });
+      const { resetAuthNavigationForTests } = await import('@/lib/navigation/auth-redirect');
+      resetAuthNavigationForTests();
+    }
+  });
 });

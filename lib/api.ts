@@ -1,4 +1,5 @@
 import { ensureFreshAccessToken } from './auth-client';
+import { navigateAuthOnce } from './navigation/auth-redirect';
 import { loadStoredSession } from './auth-storage';
 import {
   titleCase as domainTitleCase,
@@ -569,6 +570,8 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
           // Security.RequireVerifiedEmailForLearners, unverified learners get
           // this 403 on every learner endpoint — route them to the verify
           // screen (skip if we're already on it to avoid a redirect loop).
+          // Single-flight: every concurrent query fails at once, but only
+          // the first performs the full document navigation.
           if (
             response.status === 403 &&
             code === 'email_verification_required' &&
@@ -585,7 +588,7 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
               params.set('next', nextPath);
             }
             const query = params.toString();
-            window.location.assign(query ? `/verify-email?${query}` : '/verify-email');
+            navigateAuthOnce(query ? `/verify-email?${query}` : '/verify-email', false);
           }
         } catch (err) {
           if (response.status === 401) {

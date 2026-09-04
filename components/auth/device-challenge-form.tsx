@@ -48,6 +48,11 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
   // effect below on its own.
   const [activeChallengeToken, setActiveChallengeToken] = useState<string | null>(pendingDeviceChallenge?.challengeToken ?? null);
   const sentForToken = useRef<string | null>(null);
+  // Single-flight for explicit resends: `isSending` state alone cannot stop
+  // two taps in the same tick (state hasn't re-rendered yet), and each tap
+  // would POST /device/send-otp — the second surfacing as a confusing
+  // cooldown error for an action the learner performed once.
+  const resendInFlight = useRef(false);
 
   const isReplacementRequired = pendingDeviceChallenge?.mode === 'replacement_required';
   const isCooldown = pendingDeviceChallenge?.mode === 'cooldown' || (pendingDeviceChallenge?.secondsRemaining != null && pendingDeviceChallenge?.cooldownUntil);
@@ -185,10 +190,14 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
   }, [activeChallengeToken, isReplacementRequired, selectedDeviceId]);
 
   const handleResend = async () => {
+    if (resendInFlight.current) {
+      return;
+    }
     if (isReplacementRequired && !selectedDeviceId) {
       setError('Select which device to replace before sending a code.');
       return;
     }
+    resendInFlight.current = true;
     setCode('');
     setError(null);
     setIsSending(true);
@@ -199,6 +208,7 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
     } catch (sendError) {
       setError(readErrorMessage(sendError, 'Unable to send the device verification code.'));
     } finally {
+      resendInFlight.current = false;
       setIsSending(false);
     }
   };

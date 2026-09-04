@@ -28,6 +28,7 @@ import type {
   SignInResult,
 } from './types/auth';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
+import { navigateAuthOnce } from './navigation/auth-redirect';
 
 const API_BASE_URL = env.apiBaseUrl;
 
@@ -298,8 +299,11 @@ function redirectToSignInAfterSessionLoss(reason?: string): void {
   const next = encodeURIComponent(currentPath + window.location.search);
   const reasonParam = reason ? `&reason=${encodeURIComponent(reason)}` : '';
   // Hard navigation so the Next.js middleware sees the cleared auth cookie and
-  // any in-flight React state is discarded.
-  window.location.replace(`/sign-in?next=${next}${reasonParam}`);
+  // any in-flight React state is discarded. Single-flight (see
+  // lib/navigation/auth-redirect.ts): every concurrent API caller funnels
+  // through ensureFreshSession, and without this one logical session loss
+  // produced one full WebView document load per in-flight request.
+  navigateAuthOnce(`/sign-in?next=${next}${reasonParam}`, true);
 }
 
 /**

@@ -13,6 +13,7 @@ import { AuthenticatedNotificationCenter } from '@/components/providers/authenti
 import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
 import { RuntimeShellBridges } from '@/components/shell/runtime-shell-bridges';
+import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
 import { AppVersionGateProvider } from './providers/AppVersionGateProvider';
 
@@ -31,8 +32,15 @@ function useServiceWorkerRegistration() {
   useEffect(() => {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
     if (navigator.webdriver) return;
-    // Don't register in the desktop or Capacitor native shells
-    if ((window as unknown as Record<string, unknown>).desktopBridge || (window as unknown as Record<string, unknown>).__CAPACITOR_NATIVE__) return;
+    // Don't register in the desktop or Capacitor native shells: the native
+    // WebView must always load the live remote origin, never a cached copy,
+    // and a controlling worker's skipWaiting/claim churn across deploys
+    // produces stale-build states the shell cannot clear. getAppRuntimeKind
+    // reads the bootstrap-stamped dataset plus the live Capacitor bridge —
+    // do NOT key this off a window global (a previous revision checked
+    // `__CAPACITOR_NATIVE__`, which nothing ever set, so the worker silently
+    // registered inside every SW-capable native WebView).
+    if (getAppRuntimeKind() !== 'web') return;
 
     navigator.serviceWorker.register('/sw.js').catch(() => {
       // Service worker registration failed — non-critical

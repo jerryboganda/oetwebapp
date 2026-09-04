@@ -22,6 +22,7 @@ import type {
   PushSubscriptionPayload,
 } from '@/lib/types/notifications';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import { useAuth } from './auth-context';
 import { useRuntimeConfig } from '@/app/providers/RuntimeConfigProvider';
 
@@ -180,6 +181,13 @@ function base64UrlToArrayBuffer(value: string): ArrayBuffer {
 
 async function ensureNotificationWorkerRegistered(): Promise<ServiceWorkerRegistration | null> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
+    return null;
+  }
+
+  // Web push subscriptions belong to the website only: native shells use
+  // Capacitor push, and a worker registered inside the native WebView would
+  // compete with /sw.js for the '/' scope across updates.
+  if (getAppRuntimeKind() !== 'web') {
     return null;
   }
 
