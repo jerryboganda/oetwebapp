@@ -38,11 +38,28 @@ public sealed class WritingAssessmentPreflightService(
         "dietetics", "other_allied_health",
     };
 
+    /// <summary>
+    /// Letter types for which the domain genuinely requires an exact,
+    /// owner-approved detailed pack (no profession-level fallback). Every
+    /// other letter type — including the universal <c>other</c> (Other
+    /// Letters) fallback — resolves through <see cref="ResolvePackAsync"/>:
+    /// exact pack first, then the profession's generic packs. Optional
+    /// specialized packs enhance grading where present; they never block a
+    /// valid task whose profession is released.
+    /// </summary>
     private static readonly HashSet<string> DetailedPackRequiredLetterTypes = new(StringComparer.Ordinal)
     {
         "transfer",
         "referral_to_gp",
     };
+
+    /// <summary>
+    /// Ordered profession-level fallback candidates for a letter type that
+    /// does not genuinely require its own detailed pack. <c>other</c> (the
+    /// generic Other Letters pack) is preferred over reusing another
+    /// concrete letter type's specifics.
+    /// </summary>
+    private static readonly string[] ProfessionFallbackLetterTypes = ["other", "routine_referral"];
 
     public async Task<WritingAssessmentPreflightResult> ValidateAsync(WritingSubmission submission, CancellationToken ct)
     {
@@ -105,43 +122,34 @@ public sealed class WritingAssessmentPreflightService(
             letterType);
         if (understanding.ConflictingEvidence)
         {
-            return new WritingAssessmentPreflightResult(
-                false,
-                WritingAssessmentV11Status.RequiresReview,
-                [],
-                ["task_classification_conflict"],
-                [],
-                profession,
-                letterType,
-                string.Empty,
-                taskSnapshot,
-                caseNotesSnapshot,
-                understanding);
+            // The admin-authored catalogue letter type is the explicit
+            // classification — heuristic task-text signals never overrule it
+            // into a candidate-facing failure. Grade under the configured
+            // type and keep the conflict as telemetry for content review.
+            logger?.LogWarning(
+                "Writing preflight task-classification conflict on submission {SubmissionId} scenario {ScenarioId}: configured letterType {LetterType} kept; evidence {Evidence}",
+                submission.Id, submission.ScenarioId, letterType, string.Join(";", understanding.EvidencePhrases));
         }
 
+        // Recipient / diagnosis uncertainty is a content-authoring concern,
+        // resolved at publication time (the publish gate blocks unknown
+        // recipients). It must never stop a completed candidate submission:
+        // grade with the best-effort interpretation instead.
         if (string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal))
         {
-            missing.Add("recipient");
+            logger?.LogWarning(
+                "Writing preflight recipient unresolved on submission {SubmissionId} scenario {ScenarioId}; grading proceeds with best-effort interpretation.",
+                submission.Id, submission.ScenarioId);
         }
 
         if (string.IsNullOrWhiteSpace(understanding.DiagnosisOrPlanEvidence))
         {
-            missing.Add("diagnosis_or_request");
+            logger?.LogWarning(
+                "Writing preflight diagnosis/request evidence thin on submission {SubmissionId} scenario {ScenarioId}; grading proceeds with best-effort interpretation.",
+                submission.Id, submission.ScenarioId);
         }
 
-        if (missing.Count > 0)
-        {
-            return BlockedMissing(profession, letterType, missing, taskSnapshot, caseNotesSnapshot);
-        }
-
-        var pack = await db.WritingAssessmentPackVersions.AsNoTracking()
-            .Where(x => x.Profession == profession
-                && x.LetterType == letterType
-                && x.Status == WritingAssessmentReleaseStatus.Approved
-                && x.CandidateFacing)
-            .OrderByDescending(x => x.ApprovedAt)
-            .ThenByDescending(x => x.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+        var pack = await ResolvePackAsync(db, profession, letterType, ct);
 
         var releaseBlocks = new List<string>();
         if (pack is null)
@@ -184,6 +192,85 @@ public sealed class WritingAssessmentPreflightService(
             caseNotesSnapshot,
             understanding);
     }
+
+    /// <summary>
+    /// Deterministic runtime pack resolution shared by candidate grading
+    /// (this service) and the publication preflight
+    /// (<see cref="WritingTaskAuthoringService"/>) so validator and runtime
+    /// can never disagree on what "released" means.
+    ///
+    /// Resolution order for an (already normalized) profession + pack letter
+    /// type: exact approved candidate-facing pack, then — unless the letter
+    /// type genuinely requires its own detailed pack — the profession's
+    /// generic packs (<c>other</c>, then <c>routine_referral</c>), then the
+    /// most recently approved candidate-facing pack for the profession.
+    /// Returns null only when the profession has no released pack at all: a
+    /// genuine configuration gap that must block publication, never silently
+    /// fall back to another profession's rules (that would mis-grade).
+    ///
+    /// Reads the current approved rows on every call (no process-memory
+    /// cache), so a rule-pack release/retirement takes effect immediately
+    /// without stale-approval drift.
+    /// </summary>
+    public static async Task<WritingAssessmentPackVersion?> ResolvePackAsync(
+        LearnerDbContext db,
+        string profession,
+        string packLetterType,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        if (string.IsNullOrWhiteSpace(profession) || string.IsNullOrWhiteSpace(packLetterType))
+            return null;
+
+        var exact = await db.WritingAssessmentPackVersions.AsNoTracking()
+            .Where(x => x.Profession == profession
+                && x.LetterType == packLetterType
+                && x.Status == WritingAssessmentReleaseStatus.Approved
+                && x.CandidateFacing)
+            .OrderByDescending(x => x.ApprovedAt)
+            .ThenByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (exact is not null) return exact;
+
+        // Letter types with a genuine detailed-pack requirement never fall
+        // back: grading them under generic rules would be incorrect.
+        if (DetailedPackRequiredLetterTypes.Contains(packLetterType))
+            return null;
+
+        foreach (var fallback in ProfessionFallbackLetterTypes)
+        {
+            if (string.Equals(fallback, packLetterType, StringComparison.Ordinal)) continue;
+            var generic = await db.WritingAssessmentPackVersions.AsNoTracking()
+                .Where(x => x.Profession == profession
+                    && x.LetterType == fallback
+                    && x.Status == WritingAssessmentReleaseStatus.Approved
+                    && x.CandidateFacing)
+                .OrderByDescending(x => x.ApprovedAt)
+                .ThenByDescending(x => x.CreatedAt)
+                .FirstOrDefaultAsync(ct);
+            if (generic is not null) return generic;
+        }
+
+        return await db.WritingAssessmentPackVersions.AsNoTracking()
+            .Where(x => x.Profession == profession
+                && x.Status == WritingAssessmentReleaseStatus.Approved
+                && x.CandidateFacing)
+            .OrderByDescending(x => x.ApprovedAt)
+            .ThenByDescending(x => x.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
+    /// Publication-time twin of <see cref="ResolvePackAsync"/> for callers
+    /// that already hold normalized catalogue values: maps the catalogue
+    /// letter type through the single vocabulary bridge first.
+    /// </summary>
+    public static Task<WritingAssessmentPackVersion?> ResolvePackForCatalogueAsync(
+        LearnerDbContext db,
+        string? profession,
+        string? catalogueLetterType,
+        CancellationToken ct)
+        => ResolvePackAsync(db, Normalize(profession), WritingLetterTypeTaxonomy.ToPackLetterType(catalogueLetterType), ct);
 
     private static WritingAssessmentPreflightResult BlockedMissing(
         string profession,

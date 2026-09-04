@@ -274,12 +274,26 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
 
     private async Task<Guid> SeedPracticeSubmissionAsync()
     {
+        // Grading resolves profession/letter-type from the owning scenario
+        // (fail-closed when absent), so the harness seeds a real scenario row.
+        var scenarioId = Guid.NewGuid();
+        _db.WritingScenarios.Add(new WritingScenario
+        {
+            Id = scenarioId,
+            Title = "Harness task",
+            Profession = "medicine",
+            LetterType = "routine_referral",
+            Status = "published",
+            AuthorId = "admin-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
         var id = Guid.NewGuid();
         _db.WritingSubmissions.Add(new WritingSubmission
         {
             Id = id,
             UserId = "learner-1",
-            ScenarioId = Guid.NewGuid(),
+            ScenarioId = scenarioId,
             Mode = "practice",
             LetterContent = "Dear Dr Smith,\nRe: Mr Jones\n\nI am writing to refer Mr Jones for assessment and ongoing management of his condition.\n\nYours sincerely,\nDoctor",
             LetterContentHash = $"hash-{id:N}",

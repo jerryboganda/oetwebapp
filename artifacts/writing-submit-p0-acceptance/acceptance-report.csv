@@ -1,0 +1,79 @@
+﻿scenarioId,profession,letterType,rulebookVersion,finalStatus
+MATRIX-medicine-LT-RR,medicine,LT-RR,medicine-routine_referral-v1,PASS
+MATRIX-medicine-LT-UR,medicine,LT-UR,medicine-other-v1 (fallback),PASS
+MATRIX-medicine-LT-DG,medicine,LT-DG,medicine-other-v1 (fallback),PASS
+MATRIX-medicine-LT-TR,medicine,LT-TR,medicine-transfer-v1,PASS
+MATRIX-medicine-LT-NM,medicine,LT-NM,medicine-other-v1 (fallback),PASS
+MATRIX-medicine-LT-OT,medicine,LT-OT,medicine-other-v1,PASS
+MATRIX-nursing-LT-RR,nursing,LT-RR,nursing-routine_referral-v1,PASS
+MATRIX-nursing-LT-UR,nursing,LT-UR,nursing-other-v1 (fallback),PASS
+MATRIX-nursing-LT-DG,nursing,LT-DG,nursing-other-v1 (fallback),PASS
+MATRIX-nursing-LT-TR,nursing,LT-TR,nursing-transfer-v1,PASS
+MATRIX-nursing-LT-NM,nursing,LT-NM,nursing-other-v1 (fallback),PASS
+MATRIX-nursing-LT-OT,nursing,LT-OT,nursing-other-v1,PASS
+MATRIX-dentistry-LT-RR,dentistry,LT-RR,dentistry-routine_referral-v1,PASS
+MATRIX-dentistry-LT-UR,dentistry,LT-UR,dentistry-other-v1 (fallback),PASS
+MATRIX-dentistry-LT-DG,dentistry,LT-DG,dentistry-other-v1 (fallback),PASS
+MATRIX-dentistry-LT-TR,dentistry,LT-TR,dentistry-transfer-v1,PASS
+MATRIX-dentistry-LT-NM,dentistry,LT-NM,dentistry-other-v1 (fallback),PASS
+MATRIX-dentistry-LT-OT,dentistry,LT-OT,dentistry-other-v1,PASS
+MATRIX-pharmacy-LT-RR,pharmacy,LT-RR,pharmacy-routine_referral-v1,PASS
+MATRIX-pharmacy-LT-UR,pharmacy,LT-UR,pharmacy-other-v1 (fallback),PASS
+MATRIX-pharmacy-LT-DG,pharmacy,LT-DG,pharmacy-other-v1 (fallback),PASS
+MATRIX-pharmacy-LT-TR,pharmacy,LT-TR,pharmacy-transfer-v1,PASS
+MATRIX-pharmacy-LT-NM,pharmacy,LT-NM,pharmacy-other-v1 (fallback),PASS
+MATRIX-pharmacy-LT-OT,pharmacy,LT-OT,pharmacy-other-v1,PASS
+MATRIX-physiotherapy-LT-RR,physiotherapy,LT-RR,physiotherapy-routine_referral-v1,PASS
+MATRIX-physiotherapy-LT-UR,physiotherapy,LT-UR,physiotherapy-other-v1 (fallback),PASS
+MATRIX-physiotherapy-LT-DG,physiotherapy,LT-DG,physiotherapy-other-v1 (fallback),PASS
+MATRIX-physiotherapy-LT-TR,physiotherapy,LT-TR,physiotherapy-transfer-v1,PASS
+MATRIX-physiotherapy-LT-NM,physiotherapy,LT-NM,physiotherapy-other-v1 (fallback),PASS
+MATRIX-physiotherapy-LT-OT,physiotherapy,LT-OT,physiotherapy-other-v1,PASS
+MATRIX-veterinary-LT-RR,veterinary,LT-RR,veterinary-routine_referral-v1,PASS
+MATRIX-veterinary-LT-UR,veterinary,LT-UR,veterinary-other-v1 (fallback),PASS
+MATRIX-veterinary-LT-DG,veterinary,LT-DG,veterinary-other-v1 (fallback),PASS
+MATRIX-veterinary-LT-TR,veterinary,LT-TR,veterinary-transfer-v1,PASS
+MATRIX-veterinary-LT-NM,veterinary,LT-NM,veterinary-other-v1 (fallback),PASS
+MATRIX-veterinary-LT-OT,veterinary,LT-OT,veterinary-other-v1,PASS
+MATRIX-optometry-LT-RR,optometry,LT-RR,optometry-routine_referral-v1,PASS
+MATRIX-optometry-LT-UR,optometry,LT-UR,optometry-other-v1 (fallback),PASS
+MATRIX-optometry-LT-DG,optometry,LT-DG,optometry-other-v1 (fallback),PASS
+MATRIX-optometry-LT-TR,optometry,LT-TR,optometry-transfer-v1,PASS
+MATRIX-optometry-LT-NM,optometry,LT-NM,optometry-other-v1 (fallback),PASS
+MATRIX-optometry-LT-OT,optometry,LT-OT,optometry-other-v1,PASS
+MATRIX-radiography-LT-RR,radiography,LT-RR,radiography-routine_referral-v1,PASS
+MATRIX-radiography-LT-UR,radiography,LT-UR,radiography-other-v1 (fallback),PASS
+MATRIX-radiography-LT-DG,radiography,LT-DG,radiography-other-v1 (fallback),PASS
+MATRIX-radiography-LT-TR,radiography,LT-TR,radiography-transfer-v1,PASS
+MATRIX-radiography-LT-NM,radiography,LT-NM,radiography-other-v1 (fallback),PASS
+MATRIX-radiography-LT-OT,radiography,LT-OT,radiography-other-v1,PASS
+MATRIX-occupational_therapy-LT-RR,occupational_therapy,LT-RR,occupational_therapy-routine_referral-v1,PASS
+MATRIX-occupational_therapy-LT-UR,occupational_therapy,LT-UR,occupational_therapy-other-v1 (fallback),PASS
+MATRIX-occupational_therapy-LT-DG,occupational_therapy,LT-DG,occupational_therapy-other-v1 (fallback),PASS
+MATRIX-occupational_therapy-LT-TR,occupational_therapy,LT-TR,occupational_therapy-transfer-v1,PASS
+MATRIX-occupational_therapy-LT-NM,occupational_therapy,LT-NM,occupational_therapy-other-v1 (fallback),PASS
+MATRIX-occupational_therapy-LT-OT,occupational_therapy,LT-OT,occupational_therapy-other-v1,PASS
+MATRIX-speech_pathology-LT-RR,speech_pathology,LT-RR,speech_pathology-routine_referral-v1,PASS
+MATRIX-speech_pathology-LT-UR,speech_pathology,LT-UR,speech_pathology-other-v1 (fallback),PASS
+MATRIX-speech_pathology-LT-DG,speech_pathology,LT-DG,speech_pathology-other-v1 (fallback),PASS
+MATRIX-speech_pathology-LT-TR,speech_pathology,LT-TR,speech_pathology-transfer-v1,PASS
+MATRIX-speech_pathology-LT-NM,speech_pathology,LT-NM,speech_pathology-other-v1 (fallback),PASS
+MATRIX-speech_pathology-LT-OT,speech_pathology,LT-OT,speech_pathology-other-v1,PASS
+MATRIX-podiatry-LT-RR,podiatry,LT-RR,podiatry-routine_referral-v1,PASS
+MATRIX-podiatry-LT-UR,podiatry,LT-UR,podiatry-other-v1 (fallback),PASS
+MATRIX-podiatry-LT-DG,podiatry,LT-DG,podiatry-other-v1 (fallback),PASS
+MATRIX-podiatry-LT-TR,podiatry,LT-TR,podiatry-transfer-v1,PASS
+MATRIX-podiatry-LT-NM,podiatry,LT-NM,podiatry-other-v1 (fallback),PASS
+MATRIX-podiatry-LT-OT,podiatry,LT-OT,podiatry-other-v1,PASS
+MATRIX-dietetics-LT-RR,dietetics,LT-RR,dietetics-routine_referral-v1,PASS
+MATRIX-dietetics-LT-UR,dietetics,LT-UR,dietetics-other-v1 (fallback),PASS
+MATRIX-dietetics-LT-DG,dietetics,LT-DG,dietetics-other-v1 (fallback),PASS
+MATRIX-dietetics-LT-TR,dietetics,LT-TR,dietetics-transfer-v1,PASS
+MATRIX-dietetics-LT-NM,dietetics,LT-NM,dietetics-other-v1 (fallback),PASS
+MATRIX-dietetics-LT-OT,dietetics,LT-OT,dietetics-other-v1,PASS
+MATRIX-other_allied_health-LT-RR,other_allied_health,LT-RR,other_allied_health-routine_referral-v1,PASS
+MATRIX-other_allied_health-LT-UR,other_allied_health,LT-UR,other_allied_health-other-v1 (fallback),PASS
+MATRIX-other_allied_health-LT-DG,other_allied_health,LT-DG,other_allied_health-other-v1 (fallback),PASS
+MATRIX-other_allied_health-LT-TR,other_allied_health,LT-TR,other_allied_health-transfer-v1,PASS
+MATRIX-other_allied_health-LT-NM,other_allied_health,LT-NM,other_allied_health-other-v1 (fallback),PASS
+MATRIX-other_allied_health-LT-OT,other_allied_health,LT-OT,other_allied_health-other-v1,PASS

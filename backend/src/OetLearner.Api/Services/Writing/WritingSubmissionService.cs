@@ -63,6 +63,28 @@ public sealed class WritingSubmissionService(
             throw ApiException.NotFound("writing_scenario_not_found", "Scenario was not found.");
         }
 
+        var mode = NormalizeMode(request.Mode);
+
+        // Idempotent resume BEFORE the terminal-state lock: a repeated send
+        // of the same logical submit action (same idempotency key) or the
+        // same content within the race window (double-tap, network retry,
+        // refresh, timer/manual race) resolves to the SAME submission and
+        // grading outcome — it must never see writing_submission_locked for
+        // its own attempt. Only genuinely NEW content after a terminal
+        // attempt hits the lock below (which correctly routes to revise).
+        var duplicateId = await FindDuplicateSubmissionIdAsync(userId, request, mode, ct);
+        if (duplicateId is not null)
+        {
+            logger.LogInformation(
+                "Writing submit resolved to existing submission {SubmissionId} for user {UserId} scenario {ScenarioId}; no new grading job.",
+                duplicateId.Value, userId, request.ScenarioId);
+            var duplicateOutcome = await pipeline.EvaluateAsync(duplicateId.Value, ct);
+            await EnsureGradeForSubmissionAsync(duplicateId.Value, duplicateOutcome, ct);
+            var duplicate = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == duplicateId.Value, ct)
+                ?? throw new InvalidOperationException("Submission missing after resolve.");
+            return WritingV2ResponseMapper.ToSubmissionResponse(duplicate);
+        }
+
         // Submission lock (§17.7): once a non-revision submission for this learner+scenario
         // has reached a submitted/locked state, reject further creates so a re-submit cannot
         // overwrite a locked attempt. Revisions go through ReviseSubmissionAsync intentionally.
@@ -344,6 +366,50 @@ public sealed class WritingSubmissionService(
     /// <summary>Simulation mode is paper | computer; anything else defaults to computer.</summary>
     private static string NormalizeSimulationMode(string? simulationMode)
         => string.Equals(simulationMode, "paper", StringComparison.OrdinalIgnoreCase) ? "paper" : "computer";
+
+    /// <summary>
+    /// Probes for the same logical attempt before creating anything: an
+    /// explicit idempotency-key match first, then the same race-window
+    /// content match the evaluation pipeline itself enforces. Mirrors the
+    /// pipeline's key/hash derivation so both layers always agree.
+    /// </summary>
+    private async Task<Guid?> FindDuplicateSubmissionIdAsync(
+        string userId,
+        WritingSubmissionCreateRequest request,
+        string mode,
+        CancellationToken ct)
+    {
+        var key = string.IsNullOrWhiteSpace(request.IdempotencyKey)
+            ? null
+            : request.IdempotencyKey.Trim() is { Length: > 128 } trimmed ? trimmed[..128] : request.IdempotencyKey.Trim();
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            var byKey = await db.WritingSubmissions.AsNoTracking()
+                .Where(s => s.UserId == userId && s.IdempotencyKey == key)
+                .Select(s => (Guid?)s.Id)
+                .FirstOrDefaultAsync(ct);
+            if (byKey is not null) return byKey;
+        }
+
+        var hash = ComputeContentHash(request.LetterContent ?? string.Empty);
+        var cutoff = DateTimeOffset.UtcNow - TimeSpan.FromMinutes(10);
+        return await db.WritingSubmissions.AsNoTracking()
+            .Where(s => s.UserId == userId
+                && s.ScenarioId == request.ScenarioId
+                && !s.IsRevision
+                && s.Mode == mode
+                && s.LetterContentHash == hash
+                && s.CreatedAt >= cutoff)
+            .OrderByDescending(s => s.CreatedAt)
+            .Select(s => (Guid?)s.Id)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    private static string ComputeContentHash(string letter)
+    {
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(letter));
+        return Convert.ToHexString(bytes)[..40];
+    }
 
     /// <summary>
     /// Emit a Writing attempt event without ever throwing into the caller

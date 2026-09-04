@@ -306,7 +306,24 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             .Where(a => ids.Contains(a.ScenarioId))
             .ToDictionaryAsync(a => a.ScenarioId, ct);
 
-        var items = rows.Select(s =>
+        // Pack resolvability uses the exact runtime resolver so the audit
+        // agrees with candidate grading. One batched query keeps this cheap.
+        var normalizedProfessions = rows
+            .Select(r => (r.Profession ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_'))
+            .Where(p => p.Length > 0)
+            .Distinct()
+            .ToList();
+        var releasedPacks = await db.WritingAssessmentPackVersions.AsNoTracking()
+            .Where(x => normalizedProfessions.Contains(x.Profession)
+                && x.Status == WritingAssessmentReleaseStatus.Approved
+                && x.CandidateFacing)
+            .ToListAsync(ct);
+        var releasedByProfession = releasedPacks
+            .GroupBy(x => x.Profession)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var items = new List<WritingTaskPreparationStatusDto>(rows.Count);
+        foreach (var s in rows)
         {
             sentenceGroups.TryGetValue(s.Id, out var sentences);
             sentences ??= new List<WritingScenarioStructuredSentence>();
@@ -326,6 +343,18 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
                 stale = !string.Equals(answer.SourceContentHash, current, StringComparison.OrdinalIgnoreCase);
             }
 
+            var normalizedProfession = (s.Profession ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
+            var packLetterType = WritingLetterTypeTaxonomy.ToPackLetterType(s.LetterType);
+            var packResolvable = PackResolvableFromBatch(releasedByProfession, normalizedProfession, packLetterType);
+
+            var caseNotesText = string.Join("\n", sentences
+                .Select(x => (x.SentenceText ?? string.Empty).Trim())
+                .Where(x => x.Length > 0));
+            var understanding = WritingTaskUnderstandingService.Understand(
+                s.TaskPromptMarkdown ?? string.Empty,
+                caseNotesText,
+                packLetterType);
+
             var blocking = BuildBlockingCodes(
                 s.Title,
                 s.Profession,
@@ -335,9 +364,13 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
                 rulebookResolvable,
                 answerApproved,
                 s.WordGuideMin,
-                s.WordGuideMax);
+                s.WordGuideMax,
+                packResolvable: packResolvable,
+                recipientResolved: !string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal),
+                diagnosisPresent: !string.IsNullOrWhiteSpace(understanding.DiagnosisOrPlanEvidence),
+                classificationConflicting: understanding.ConflictingEvidence);
 
-            return new WritingTaskPreparationStatusDto
+            items.Add(new WritingTaskPreparationStatusDto
             {
                 ScenarioId = s.Id,
                 Title = s.Title,
@@ -347,13 +380,15 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
                 HasTaskPrompt = hasPrompt,
                 CaseNoteSentenceCount = sentences.Count,
                 RulebookResolvable = rulebookResolvable,
+                PackResolvable = packResolvable,
+                RecipientResolved = !string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal),
                 ModelAnswerStatus = answer?.Status.ToString(),
                 ModelAnswerApproved = answerApproved,
                 ModelAnswerStale = stale,
                 PublishReady = blocking.Count == 0,
                 BlockingCodes = blocking.ToList(),
-            };
-        }).ToList();
+            });
+        }
 
         return (items, total);
     }
@@ -610,14 +645,33 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     /// </summary>
     private async Task<WritingTaskValidationResult> ValidateAsync(WritingScenario scenario, CancellationToken ct)
     {
-        var hasCaseNotes = await db.WritingScenarioStructuredSentences.AsNoTracking()
-            .AnyAsync(x => x.ScenarioId == scenario.Id, ct);
+        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .Where(x => x.ScenarioId == scenario.Id)
+            .OrderBy(x => x.Ordinal)
+            .ToListAsync(ct);
+        var hasCaseNotes = sentences.Count > 0;
         var rulebookResolvable = !string.IsNullOrWhiteSpace(scenario.Profession)
             && RulebookProfessionParser.TryParse(scenario.Profession, out _);
         var hasApprovedModelAnswer = await db.WritingTaskModelAnswers.AsNoTracking()
             .AnyAsync(a => a.ScenarioId == scenario.Id
                 && a.Status == WritingAssessmentModelAnswerStatus.Ready
                 && a.IsCandidateVisible, ct);
+
+        // Same resolver the runtime grading path uses: a task is publishable
+        // only if candidate grading can resolve a released pack for it.
+        var pack = await WritingAssessmentPreflightService.ResolvePackForCatalogueAsync(
+            db, scenario.Profession, scenario.LetterType, ct);
+
+        // Same recipient/task interpretation the runtime depends on: resolve
+        // it here, at publication, where an admin can confirm or correct it.
+        var caseNotesText = string.Join("\n", sentences
+            .Select(x => (x.SentenceText ?? string.Empty).Trim())
+            .Where(x => x.Length > 0));
+        var packLetterType = WritingLetterTypeTaxonomy.ToPackLetterType(scenario.LetterType);
+        var understanding = WritingTaskUnderstandingService.Understand(
+            scenario.TaskPromptMarkdown ?? string.Empty,
+            caseNotesText,
+            packLetterType);
 
         var codes = BuildBlockingCodes(
             scenario.Title,
@@ -628,7 +682,11 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             rulebookResolvable: rulebookResolvable,
             hasApprovedModelAnswer: hasApprovedModelAnswer,
             scenario.WordGuideMin,
-            scenario.WordGuideMax);
+            scenario.WordGuideMax,
+            packResolvable: pack is not null,
+            recipientResolved: !string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal),
+            diagnosisPresent: !string.IsNullOrWhiteSpace(understanding.DiagnosisOrPlanEvidence),
+            classificationConflicting: understanding.ConflictingEvidence);
 
         return new WritingTaskValidationResult
         {
@@ -643,6 +701,31 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
     /// and the preparation-status audit (<see cref="GetPreparationStatusAsync"/>)
     /// so both always agree on what "ready" means.
     /// </summary>
+    /// <summary>
+    /// Batch mirror of the runtime pack fallback in
+    /// <see cref="WritingAssessmentPreflightService"/> for the
+    /// preparation-status audit (avoids N+1 pack queries across the page).
+    /// </summary>
+    private static bool PackResolvableFromBatch(
+        Dictionary<string, List<WritingAssessmentPackVersion>> releasedByProfession,
+        string normalizedProfession,
+        string packLetterType)
+    {
+        if (string.IsNullOrWhiteSpace(normalizedProfession)
+            || !releasedByProfession.TryGetValue(normalizedProfession, out var packs)
+            || packs.Count == 0)
+            return false;
+        if (packs.Any(x => string.Equals(x.LetterType, packLetterType, StringComparison.Ordinal)))
+            return true;
+        // transfer / referral_to_gp genuinely require their detailed pack.
+        if (packLetterType is "transfer" or "referral_to_gp")
+            return false;
+        // Every other letter type grades under the profession's generic
+        // packs (Other Letters is first-class); any released profession
+        // pack suffices.
+        return true;
+    }
+
     private static IReadOnlyList<string> BuildBlockingCodes(
         string? title,
         string? profession,
@@ -652,7 +735,11 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         bool rulebookResolvable,
         bool hasApprovedModelAnswer,
         int wordGuideMin,
-        int wordGuideMax)
+        int wordGuideMax,
+        bool packResolvable,
+        bool recipientResolved,
+        bool diagnosisPresent,
+        bool classificationConflicting)
     {
         var codes = new List<string>();
 
@@ -687,6 +774,36 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             codes.Add("rulebook_unresolvable");
         }
 
+        // The runtime release gate must resolve a released pack for this
+        // exact task (same resolver as candidate grading). Without it the
+        // learner would discover the gap 40 minutes later.
+        if (!string.IsNullOrWhiteSpace(profession)
+            && rulebookResolvable
+            && !string.IsNullOrWhiteSpace(letterType)
+            && WritingLetterTypeTaxonomy.IsValidCatalogueLetterType(letterType)
+            && !packResolvable)
+        {
+            codes.Add("profession_pack_unapproved");
+        }
+
+        // Recipient/task interpretation the runtime depends on: an admin must
+        // confirm or correct it before candidates see the task. Never
+        // auto-guessed — and never discovered by the learner at submit time.
+        if (hasTaskPrompt && hasCaseNotes && !recipientResolved)
+        {
+            codes.Add("recipient_unresolved");
+        }
+
+        if (hasTaskPrompt && hasCaseNotes && !diagnosisPresent)
+        {
+            codes.Add("diagnosis_or_request_unresolved");
+        }
+
+        if (classificationConflicting)
+        {
+            codes.Add("task_classification_conflict");
+        }
+
         // ONE pre-generated, quality-approved Model Answer must exist before
         // release. Normal candidate submissions reuse it and never trigger a
         // fresh generation.
@@ -706,6 +823,10 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         "written_task_required" => "Exact Writing Task text is required before publishing.",
         "case_notes_required" => "Canonical case-note text is required before publishing. Extract it from the stimulus PDF into structured case notes first.",
         "rulebook_unresolvable" => "Profession does not resolve to a supported Writing Rulebook.",
+        "profession_pack_unapproved" => "No approved candidate-facing assessment pack is released for this profession and letter type. Approve one before publishing.",
+        "recipient_unresolved" => "Recipient could not be resolved from the task and case notes. Confirm or correct the recipient before publishing.",
+        "diagnosis_or_request_unresolved" => "No diagnosis, plan, or request evidence was found in the task or case notes. Confirm the clinical purpose before publishing.",
+        "task_classification_conflict" => "Task text carries conflicting letter-type signals. Confirm the intended letter type before publishing.",
         "model_answer_not_approved" => "An approved pre-generated Model Answer is required before publishing. Generate it once, quality-check it, then approve it.",
         "word_guide_invalid" => "Word guide must have min > 0 and max >= min.",
         _ => code,
@@ -982,6 +1103,8 @@ public sealed record WritingTaskPreparationStatusDto
     public bool HasTaskPrompt { get; init; }
     public int CaseNoteSentenceCount { get; init; }
     public bool RulebookResolvable { get; init; }
+    public bool PackResolvable { get; init; }
+    public bool RecipientResolved { get; init; }
     public string? ModelAnswerStatus { get; init; }
     public bool ModelAnswerApproved { get; init; }
     public bool? ModelAnswerStale { get; init; }

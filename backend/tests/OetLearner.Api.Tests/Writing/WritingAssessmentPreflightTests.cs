@@ -194,6 +194,152 @@ public sealed class WritingAssessmentPreflightTests
         Assert.Equal("community_nurse", result.TaskUnderstanding?.RecipientCategory);
     }
 
+    [Fact]
+    public async Task Other_letters_resolves_via_profession_fallback_pack()
+    {
+        // Other Letters is a first-class route: with no LT-OT-specific pack,
+        // the profession's generic release still grades the task.
+        await using var db = NewDb();
+        var scenario = Scenario(letterType: "LT-OT");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Asthma; allergy status negative."));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "routine_referral"));
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.Equal("other", result.LetterType);
+        Assert.Contains("medicine:routine_referral:medicine-core-v11", result.AppliedRulePacks);
+    }
+
+    [Fact]
+    public async Task Other_letters_prefers_exact_other_pack_when_released()
+    {
+        await using var db = NewDb();
+        var scenario = Scenario(letterType: "LT-OT");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Asthma; allergy status negative."));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "routine_referral"));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "other", "medicine-other-v3"));
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.Equal("medicine-other-v3", result.RulePackVersion);
+    }
+
+    [Fact]
+    public async Task Non_detailed_letter_type_falls_back_to_profession_pack()
+    {
+        await using var db = NewDb();
+        var scenario = Scenario(letterType: "urgent_referral");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Asthma; allergy status negative."));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "routine_referral"));
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.DoesNotContain("profession_pack_not_approved", result.ReleaseBlockCodes);
+    }
+
+    [Fact]
+    public async Task Transfer_without_detailed_pack_remains_blocked()
+    {
+        // transfer genuinely requires its detailed pack: a generic profession
+        // pack must NOT silently stand in for it.
+        await using var db = NewDb();
+        var scenario = Scenario(letterType: "transfer");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Transfer of care requested."));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "routine_referral"));
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.False(result.CanScore);
+        Assert.Contains("letter_type_pack_not_approved", result.ReleaseBlockCodes);
+    }
+
+    [Fact]
+    public async Task Unknown_recipient_does_not_block_candidate_scoring()
+    {
+        // Recipient uncertainty is resolved at publication, never at submit:
+        // the candidate still grades under a best-effort interpretation.
+        await using var db = NewDb();
+        var scenario = Scenario(taskPrompt: "Write the required letter.");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "The patient attended clinic today."));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "routine_referral"));
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.DoesNotContain("recipient", result.MissingInputCodes);
+    }
+
+    [Fact]
+    public async Task Conflicting_task_signals_keep_configured_letter_type()
+    {
+        // Heuristic task-text signals never overrule the admin-authored
+        // catalogue letter type into a candidate-facing review block.
+        await using var db = NewDb();
+        var scenario = Scenario(
+            taskPrompt: "Write a discharge letter to Dr Green. The patient is being discharged and transfer of care is arranged. Please review.");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Asthma; allergy status negative."));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "routine_referral"));
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.True(result.CanScore);
+        Assert.NotEqual(WritingAssessmentV11Status.RequiresReview, result.Status);
+    }
+
+    [Fact]
+    public async Task Profession_is_never_silently_defaulted()
+    {
+        // An unsupported profession blocks explicitly instead of grading
+        // under another profession's rules.
+        await using var db = NewDb();
+        var scenario = Scenario(profession: "martian_medicine");
+        db.WritingScenarios.Add(scenario);
+        db.WritingScenarioStructuredSentences.Add(Fact(scenario.Id, "Asthma; allergy status negative."));
+        db.WritingAssessmentPackVersions.Add(Pack("medicine", "routine_referral"));
+        await db.SaveChangesAsync();
+
+        var result = await new WritingAssessmentPreflightService(db)
+            .ValidateAsync(Submission(scenario.Id), CancellationToken.None);
+
+        Assert.False(result.CanScore);
+        Assert.Contains("profession_unsupported", result.MissingInputCodes);
+        Assert.Empty(result.AppliedRulePacks);
+    }
+
+    private static WritingAssessmentPackVersion Pack(
+        string profession,
+        string letterType,
+        string versionKey = "medicine-core-v11") => new()
+    {
+        Id = Guid.NewGuid(),
+        Profession = profession,
+        LetterType = letterType,
+        VersionKey = versionKey,
+        Status = WritingAssessmentReleaseStatus.Approved,
+        CandidateFacing = true,
+    };
+
     private static WritingScenario Scenario(
         string? taskPrompt = "Write to Dr Green requesting a review.",
         string profession = "medicine",

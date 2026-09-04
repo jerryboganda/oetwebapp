@@ -12,6 +12,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Card, CardContent } from '@/components/ui/card';
 import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { getWritingSubmission, getWritingSubmissionGrade, retryWritingGrade } from '@/lib/writing/api';
+import { toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { connectWritingSubmissionStream } from '@/lib/writing/realtime';
 import type { WritingSubmissionDto } from '@/lib/writing/types';
 
@@ -62,7 +63,7 @@ export default function WritingSubmissionGradingPage() {
       })
       .catch((err) => {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : t('writing.submissions.grading.error.load'));
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.submissions.grading.error.load')));
       });
     return () => {
       cancelled = true;
@@ -86,7 +87,7 @@ export default function WritingSubmissionGradingPage() {
         }
       })
       .catch((err) => {
-        setError(err instanceof Error ? err.message : t('writing.submissions.grading.error.load'));
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.submissions.grading.error.load')));
       })
       .finally(() => {
         setRetrying(false);

@@ -68,9 +68,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IWritingAssessmentPreflightService? assessmentPreflight = null,
     WritingAssessmentV11RuleEngine? assessmentRuleEngine = null,
     WritingCalibrationReleaseService? calibrationReleaseService = null,
-    WritingModelAnswerService? modelAnswerService = null,
     IAiCreditReservationService? creditReservations = null) : IWritingSubmissionEvaluationPipeline
 {
+    // NOTE: there is deliberately NO WritingModelAnswerService dependency on
+    // this pipeline. The Model Answer is generated once per task in the admin
+    // preparation path (WritingTaskModelAnswerService) and only REUSED at
+    // Submit. Wiring a generator in here is what previously caused a live
+    // exemplar-generation provider call on every candidate submission.
     /// <summary>
     /// Window in which an identical-content (learner, task, mode) submission
     /// is treated as the same logical grading attempt. Collapses double-taps,
@@ -237,23 +241,28 @@ public sealed class WritingSubmissionEvaluationPipeline(
             submission.Status = "failed";
             await db.SaveChangesAsync(ct);
 
+            // Candidate-safe messaging: internal configuration codes are logged
+            // with the attempt/scenario identifiers above and persisted on the
+            // blocked assessment report for admin diagnosis. The learner sees
+            // only a controlled message — never an internal code, parser
+            // name, or provider detail.
             if (assessmentPreflightResult.Status == WritingAssessmentV11Status.BlockedMissingInput)
             {
                 throw ApiException.Validation(
                     "writing_assessment_missing_input",
-                    $"Writing assessment is blocked because required input is missing: {string.Join(", ", assessmentPreflightResult.MissingInputCodes)}.");
+                    "This writing task is not ready for grading yet. Please try another task or contact support.");
             }
 
             if (assessmentPreflightResult.Status == WritingAssessmentV11Status.RequiresReview)
             {
                 throw ApiException.Conflict(
                     "writing_assessment_requires_review",
-                    $"Writing assessment requires human review before scoring: {string.Join(", ", assessmentPreflightResult.ReleaseBlockCodes)}.");
+                    "This writing task needs a quick review before it can be graded. Please try another task for now.");
             }
 
             throw ApiException.Conflict(
                 "writing_assessment_release_blocked",
-                $"Writing assessment is not released for this profession and letter type: {string.Join(", ", assessmentPreflightResult.ReleaseBlockCodes)}.");
+                "Grading is not available for this writing task right now. Please try another task or contact support.");
         }
 
         var quickChecks = PreflightChecks(submission);
@@ -276,10 +285,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         var (rubric, reservationId) = await GradeWithReservationAsync(submission, scenario, assessmentPreflightResult.CaseNotesSnapshot, ct);
 
+        // Canon scoping uses the preflight-resolved profession (already
+        // validated as supported) — never a silent fallback profession.
         var canon = await canonEngine.DetectViolationsAsync(
             new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
-                WritingLetterTypeTaxonomy.ToPackLetterType(scenario?.LetterType),
-                scenario?.Profession ?? "medicine"), ct);
+                assessmentPreflightResult.LetterType,
+                assessmentPreflightResult.Profession), ct);
 
         var bandLabel = OetBandLabel(rubric.EstimatedBand);
         var grade = new WritingGrade
@@ -319,18 +330,18 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     grade.ModelUsed,
                     "unreleased",
                     ct);
-                // Reuse the task's pre-generated Model Answer when one exists AND an
-                // admin has approved it for candidates (spec: generate once per task,
-                // never regenerate per candidate). A Ready-but-not-yet-approved
-                // pregenerated answer is intentionally NOT picked up here — that is
-                // the "hold for admin review before publishing" gate — so those
-                // submissions fall back to the existing live per-submission path
-                // below rather than exposing an unreviewed exemplar.
+                // Reuse the task's ONE pre-generated Model Answer when an admin
+                // has generated, quality-checked, and approved it for
+                // candidates. Normal Submit NEVER generates a Model Answer:
+                // no extra provider call, no per-candidate exemplar cost. A
+                // Ready-but-not-yet-approved answer stays held for admin
+                // review; a missing answer leaves the exemplar held WITHOUT
+                // blocking the candidate's own assessment (its absence is a
+                // publication-gate defect, reported there — not at submit).
                 var pregenerated = await db.WritingTaskModelAnswers.AsNoTracking()
                     .FirstOrDefaultAsync(a => a.ScenarioId == submission.ScenarioId
                         && a.Status == WritingAssessmentModelAnswerStatus.Ready
                         && a.IsCandidateVisible, ct);
-                bool modelAnswerReady;
                 if (pregenerated is not null)
                 {
                     assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.Ready;
@@ -339,23 +350,23 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     assessmentReport.ModelAnswer.HoldReason = null;
                     assessmentReport.ModelAnswer.IsCandidateVisible = pregenerated.IsCandidateVisible;
                     assessmentReport.ModelAnswer.UpdatedAt = clock.GetUtcNow();
-                    modelAnswerReady = true;
                 }
                 else
                 {
-                    modelAnswerReady = modelAnswerService is not null
-                        && (await modelAnswerService.PopulateAsync(
-                            assessmentReport.Report,
-                            assessmentReport.ModelAnswer,
-                            submission.UserId,
-                            ct)).IsReady;
+                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
+                    assessmentReport.ModelAnswer.HoldReason = "model_answer_not_pregenerated";
+                    assessmentReport.ModelAnswer.IsCandidateVisible = false;
+                    assessmentReport.ModelAnswer.UpdatedAt = clock.GetUtcNow();
+                    logger.LogWarning(
+                        "Writing submission {SubmissionId} scenario {ScenarioId} graded without a pre-generated Model Answer; exemplar held for admin backfill.",
+                        submission.Id, submission.ScenarioId);
                 }
-                if (release.CandidateNumericScoreEnabled && modelAnswerReady)
+
+                if (release.CandidateNumericScoreEnabled)
                 {
                     assessmentReport.Report.Status = WritingAssessmentV11Status.CandidateReady;
                     assessmentReport.Report.CandidateNumericScoreEnabled = true;
                     assessmentReport.Report.CandidateReportVisible = true;
-                    assessmentReport.ModelAnswer.IsCandidateVisible = true;
                     assessmentReport.Report.ConfidenceLabel = "medium";
                     assessmentReport.Report.ConfidenceRange = "calibration-approved range";
                 }
@@ -790,11 +801,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     grade.ModelUsed,
                     "unreleased",
                     ct);
+                // Blank submissions reuse the pre-generated exemplar only;
+                // never generate one (see the graded path above).
                 var pregenerated = await db.WritingTaskModelAnswers.AsNoTracking()
                     .FirstOrDefaultAsync(a => a.ScenarioId == submission.ScenarioId
                         && a.Status == WritingAssessmentModelAnswerStatus.Ready
                         && a.IsCandidateVisible, ct);
-                bool modelAnswerReady;
                 if (pregenerated is not null)
                 {
                     assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.Ready;
@@ -803,18 +815,20 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     assessmentReport.ModelAnswer.HoldReason = null;
                     assessmentReport.ModelAnswer.IsCandidateVisible = pregenerated.IsCandidateVisible;
                     assessmentReport.ModelAnswer.UpdatedAt = now;
-                    modelAnswerReady = true;
                 }
                 else
                 {
-                    modelAnswerReady = false;
+                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
+                    assessmentReport.ModelAnswer.HoldReason = "model_answer_not_pregenerated";
+                    assessmentReport.ModelAnswer.IsCandidateVisible = false;
+                    assessmentReport.ModelAnswer.UpdatedAt = now;
                 }
-                if (release.CandidateNumericScoreEnabled && modelAnswerReady)
+
+                if (release.CandidateNumericScoreEnabled)
                 {
                     assessmentReport.Report.Status = WritingAssessmentV11Status.CandidateReady;
                     assessmentReport.Report.CandidateNumericScoreEnabled = true;
                     assessmentReport.Report.CandidateReportVisible = true;
-                    assessmentReport.ModelAnswer.IsCandidateVisible = true;
                     assessmentReport.Report.ConfidenceLabel = "medium";
                     assessmentReport.Report.ConfidenceRange = "calibration-approved range";
                 }
@@ -855,8 +869,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
         string? creditReservationId,
         CancellationToken ct)
     {
-        var letterType = scenario?.LetterType ?? "routine_referral";
-        var profession = scenario?.Profession ?? "medicine";
+        // Fail closed on missing scenario metadata: ParseProfession throws a
+        // controlled error for unresolvable professions instead of silently
+        // grading under another profession's rules.
+        var letterType = scenario?.LetterType ?? string.Empty;
+        var profession = scenario?.Profession ?? string.Empty;
         AiGroundedPrompt prompt;
         try
         {
@@ -1301,8 +1318,18 @@ public sealed class WritingSubmissionEvaluationPipeline(
     private static int CountWords(string content)
         => string.IsNullOrWhiteSpace(content) ? 0 : content.Split(new[] { ' ', '\n', '\r', '\t' }, StringSplitOptions.RemoveEmptyEntries).Length;
 
+    /// <summary>
+    /// Never silently defaults to Medicine: an unresolvable profession is a
+    /// configuration defect that must surface as a controlled error (the
+    /// grading preflight already blocks unpublished professions before this
+    /// point, so this is defence in depth, not a grading input).
+    /// </summary>
     private static ExamProfession ParseProfession(string raw)
-        => RulebookProfessionParser.TryParse(raw, out var p) ? p : ExamProfession.Medicine;
+        => RulebookProfessionParser.TryParse(raw, out var p)
+            ? p
+            : throw ApiException.Conflict(
+                "writing_assessment_profession_unsupported",
+                "Grading is not available for this writing task right now. Please try another task or contact support.");
 
     /// <summary>
     /// Maps any stored letter-type token to the rulebook genre token consumed

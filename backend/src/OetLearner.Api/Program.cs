@@ -2027,6 +2027,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskModelAnsw
     OetLearner.Api.Services.Writing.WritingTaskModelAnswerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskProjectionService,
     OetLearner.Api.Services.Writing.WritingTaskProjectionService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCataloguePreflightService,
+    OetLearner.Api.Services.Writing.WritingCataloguePreflightService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAttemptEventService,
     OetLearner.Api.Services.Writing.WritingAttemptEventService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTutorReviewService,

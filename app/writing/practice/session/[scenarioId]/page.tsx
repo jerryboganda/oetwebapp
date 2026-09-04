@@ -30,7 +30,7 @@ import {
   putWritingDraftV2,
   putWritingHighlights,
 } from '@/lib/writing/api';
-import { keyForSubmitAction } from '@/lib/writing/submit-keys';
+import { keyForSubmitAction, toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
@@ -165,7 +165,7 @@ export default function WritingPracticeSessionPage() {
           setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
           return;
         }
-        setError(err instanceof Error ? err.message : t('writing.practice.session.error.load'));
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.practice.session.error.load')));
       });
     return () => {
       cancelled = true;
@@ -243,13 +243,14 @@ export default function WritingPracticeSessionPage() {
       // Balance = 0 (spec §9): the AI grading credit pool is exhausted. Surface
       // a dedicated modal with a direct path to the AI Credits storefront rather
       // than a generic inline error. The draft autosaves, so nothing is lost.
+      // All other failures render candidate-safe copy (never internal codes).
       const handleFailure = (err: unknown) => {
         const code = (err as { code?: string }).code;
         const status = (err as { status?: number }).status;
         if (code === 'ai_credits_insufficient' || status === 402) {
           setNoCreditsOpen(true);
         } else if (!auto) {
-          setError(err instanceof Error ? err.message : t('writing.practice.session.error.submit'));
+          setError(toCandidateSafeWritingErrorMessage(err, t('writing.practice.session.error.submit')));
         }
         setSubmitting(false);
       };

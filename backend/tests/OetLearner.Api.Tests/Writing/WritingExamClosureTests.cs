@@ -62,11 +62,28 @@ public sealed class WritingExamClosureTests
         LetterType = "LT-RR",
         WriterRole = "You are the doctor on duty.",
         TodayDate = "1 June 2026",
-        TaskPromptMarkdown = "Write a referral letter.",
+        // Recipient (Dr Green) and request cue (review) must be resolvable:
+        // the publish gate runs the same recipient/task interpretation as
+        // candidate grading, and blocks until an admin confirms it.
+        TaskPromptMarkdown = "Write a referral letter to Dr Green requesting a review.",
         FixedInstructions = new List<string> { "Expand the relevant notes into complete sentences" },
         SourceProvenance = "Authored in-house for tests.",
         IntegrityAcknowledged = true,
     };
+
+    private static async Task SeedReleasedPackAsync(LearnerDbContext db, string profession, string letterType)
+    {
+        db.WritingAssessmentPackVersions.Add(new WritingAssessmentPackVersion
+        {
+            Id = Guid.NewGuid(),
+            Profession = profession,
+            LetterType = letterType,
+            VersionKey = $"{profession}-{letterType}-vtest",
+            Status = WritingAssessmentReleaseStatus.Approved,
+            CandidateFacing = true,
+        });
+        await db.SaveChangesAsync();
+    }
 
     // ── 1. Authoring publish-readiness validation ───────────────────────────
 
@@ -127,12 +144,61 @@ public sealed class WritingExamClosureTests
         var created = await svc.CreateAsync(BuildValidUpsert(), User(), default);
         await SeedCaseNotesAsync(db, created.Id);
         await SeedApprovedModelAnswerAsync(db, created.Id);
+        // The publish gate requires the same released pack candidate grading
+        // resolves: without it the learner would discover the gap at submit.
+        await SeedReleasedPackAsync(db, "medicine", "routine_referral");
 
         var validation = await svc.ValidateAsync(created.Id, default);
 
         Assert.NotNull(validation);
         Assert.True(validation!.IsPublishReady);
         Assert.DoesNotContain(validation.Issues, i => i.Severity == "error");
+    }
+
+    [Fact]
+    public async Task Publish_blocked_without_released_pack_for_task()
+    {
+        // Validator/runtime parity: candidate grading would release-block
+        // with profession_pack_not_approved, so publication must refuse first
+        // with the actionable admin code instead.
+        await using var db = NewDb();
+        var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
+
+        var created = await svc.CreateAsync(BuildValidUpsert(), User(), default);
+        await SeedCaseNotesAsync(db, created.Id);
+        await SeedApprovedModelAnswerAsync(db, created.Id);
+
+        var (published, validation) = await svc.PublishAsync(created.Id, default);
+
+        Assert.Null(published);
+        Assert.NotNull(validation);
+        Assert.Contains(validation!.Issues, i => i.Code == "profession_pack_unapproved");
+    }
+
+    [Fact]
+    public async Task Publish_blocked_when_recipient_unresolved()
+    {
+        // Recipient uncertainty requires admin confirmation before candidate
+        // visibility; it must never become a learner-facing submit failure.
+        await using var db = NewDb();
+        var svc = new WritingTaskAuthoringService(db, NullLogger<WritingTaskAuthoringService>.Instance);
+
+        var created = await svc.CreateAsync(new WritingTaskUpsertDto
+        {
+            Title = "Recipient-free task",
+            Profession = "Medicine",
+            LetterType = "LT-RR",
+            TaskPromptMarkdown = "Write the required letter.",
+        }, User(), default);
+        await SeedCaseNotesAsync(db, created.Id);
+        await SeedApprovedModelAnswerAsync(db, created.Id);
+        await SeedReleasedPackAsync(db, "medicine", "routine_referral");
+
+        var (published, validation) = await svc.PublishAsync(created.Id, default);
+
+        Assert.Null(published);
+        Assert.NotNull(validation);
+        Assert.Contains(validation!.Issues, i => i.Code == "recipient_unresolved");
     }
 
     private static async Task SeedCaseNotesAsync(LearnerDbContext db, Guid scenarioId)
@@ -228,6 +294,7 @@ public sealed class WritingExamClosureTests
         var created = await svc.CreateAsync(BuildValidUpsert(), User(), default);
         await SeedCaseNotesAsync(db, created.Id);
         await SeedApprovedModelAnswerAsync(db, created.Id);
+        await SeedReleasedPackAsync(db, "medicine", "routine_referral");
         var (published, _) = await svc.PublishAsync(created.Id, default);
         Assert.NotNull(published);
         Assert.Equal("published", published!.Status);

@@ -48,13 +48,22 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
 
         scenario.Title = paper.Title;
         scenario.Profession = (paper.ProfessionId ?? scenario.Profession ?? string.Empty).Trim();
-        scenario.LetterType = (paper.LetterType ?? scenario.LetterType ?? string.Empty).Trim();
+        // Catalogue taxonomy gate: never project an unclassifiable letter
+        // type. Legacy or unclear values resolve to Other Letters (LT-OT);
+        // empty is preserved so the publish gate still flags it as missing.
+        var rawLetterType = (paper.LetterType ?? scenario.LetterType ?? string.Empty).Trim();
+        scenario.LetterType = string.IsNullOrWhiteSpace(rawLetterType)
+            ? rawLetterType
+            : WritingLetterTypeTaxonomy.NormalizeCatalogueLetterType(rawLetterType);
         scenario.InternalCode = ReadString(structure, "internalCode", "taskCode") ?? scenario.InternalCode;
-        scenario.TaskPromptMarkdown = ReadString(structure, "taskPrompt", "task", "brief", "scenario");
-        scenario.WriterRole = ReadString(structure, "writerRole", "candidateRole");
-        scenario.TodayDate = ReadString(structure, "todayDate", "taskDate", "date");
-        scenario.ExpectedPurpose = ReadString(structure, "expectedPurpose", "purpose");
-        scenario.ExpectedAction = ReadString(structure, "expectedAction", "action", "request");
+        // Preserve existing authored values when the incoming structure does
+        // not carry them: a re-projection must never wipe the exact Writing
+        // Task or recipient metadata a published task grades from.
+        scenario.TaskPromptMarkdown = ReadString(structure, "taskPrompt", "task", "brief", "scenario") ?? scenario.TaskPromptMarkdown;
+        scenario.WriterRole = ReadString(structure, "writerRole", "candidateRole") ?? scenario.WriterRole;
+        scenario.TodayDate = ReadString(structure, "todayDate", "taskDate", "date") ?? scenario.TodayDate;
+        scenario.ExpectedPurpose = ReadString(structure, "expectedPurpose", "purpose") ?? scenario.ExpectedPurpose;
+        scenario.ExpectedAction = ReadString(structure, "expectedAction", "action", "request") ?? scenario.ExpectedAction;
         scenario.FixedInstructionsJson = SerializeFixedInstructions(structure);
 
         var (wordMin, wordMax) = ReadWordGuide(structure);
@@ -71,8 +80,24 @@ public sealed class WritingTaskProjectionService(LearnerDbContext db, ILogger<Wr
         scenario.IntegrityAcknowledgedById = paper.IntegrityAcknowledgedByAdminId ?? scenario.IntegrityAcknowledgedById;
         scenario.IntegrityAcknowledgedAt = paper.IntegrityAcknowledgedAt ?? scenario.IntegrityAcknowledgedAt;
         scenario.ContentOwnerId ??= paper.CreatedByAdminId;
-        scenario.Status = "published";
-        scenario.PublishedAt ??= now;
+        // A projection carries no canonical case-note sentences and no
+        // pre-generated Model Answer, so it can never satisfy the
+        // production-readiness gate on its own. Publish only when the exact
+        // Writing Task text is present; otherwise hold as draft for the
+        // admin backfill workflow. Either way the catalogue reconciliation
+        // audit (preparation-status) reports the remaining blockers — the
+        // learner never discovers them at submit time.
+        var hasTask = !string.IsNullOrWhiteSpace(scenario.TaskPromptMarkdown);
+        if (hasTask && scenario.Status != "published")
+        {
+            scenario.Status = "published";
+            scenario.PublishedAt ??= now;
+        }
+        else if (!hasTask && scenario.Status == "published" && isNew)
+        {
+            scenario.Status = "draft";
+        }
+
         scenario.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -143,12 +144,91 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
     {
         var entity = await db.WritingScenarios.FirstOrDefaultAsync(s => s.Id == id, ct)
             ?? throw ApiException.NotFound("writing_scenario_not_found", "Scenario was not found.");
+        // Legacy approve path enforces the same production-readiness gate as
+        // the task authoring publish flow: a scenario must never become
+        // candidate-visible when candidate grading cannot serve it. The
+        // failure must surface to the admin here, not to the learner later.
+        if (!string.IsNullOrWhiteSpace(entity.LetterType))
+        {
+            entity.LetterType = WritingLetterTypeTaxonomy.NormalizeCatalogueLetterType(entity.LetterType);
+        }
+
+        var blocking = await CollectPublishBlockersAsync(entity, ct);
+        if (blocking.Count > 0)
+        {
+            throw ApiException.Validation(
+                "writing_scenario_not_publish_ready",
+                $"Scenario is not publish-ready: {string.Join(", ", blocking)}.");
+        }
+
         entity.Status = "published";
         entity.ApprovedById = userId;
         entity.PublishedAt = clock.GetUtcNow();
         AddAuditEvent(userId, "WritingScenario", id.ToString("D"), "writing.scenario.approved", entity.Title);
         await db.SaveChangesAsync(ct);
         return (await GetAsync(userId, id, ct))!;
+    }
+
+    /// <summary>
+    /// Publication blockers using the same resolvers as candidate grading
+    /// (pack resolution, recipient/task interpretation, canonical inputs).
+    /// Shared vocabulary with <c>WritingTaskAuthoringService</c> so the two
+    /// publish paths can never disagree.
+    /// </summary>
+    private async Task<List<string>> CollectPublishBlockersAsync(WritingScenario entity, CancellationToken ct)
+    {
+        var blocking = new List<string>();
+        if (string.IsNullOrWhiteSpace(entity.Title)) blocking.Add("title_required");
+        if (string.IsNullOrWhiteSpace(entity.Profession)) blocking.Add("profession_required");
+        if (string.IsNullOrWhiteSpace(entity.LetterType)) blocking.Add("letter_type_required");
+        else if (!WritingLetterTypeTaxonomy.IsValidCatalogueLetterType(entity.LetterType))
+            blocking.Add("letter_type_unsupported");
+        if (string.IsNullOrWhiteSpace(entity.TaskPromptMarkdown)) blocking.Add("written_task_required");
+
+        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .Where(x => x.ScenarioId == entity.Id)
+            .OrderBy(x => x.Ordinal)
+            .ToListAsync(ct);
+        if (sentences.Count == 0) blocking.Add("case_notes_required");
+
+        var rulebookResolvable = !string.IsNullOrWhiteSpace(entity.Profession)
+            && RulebookProfessionParser.TryParse(entity.Profession, out _);
+        if (!string.IsNullOrWhiteSpace(entity.Profession) && !rulebookResolvable)
+            blocking.Add("rulebook_unresolvable");
+
+        if (rulebookResolvable
+            && !string.IsNullOrWhiteSpace(entity.LetterType)
+            && WritingLetterTypeTaxonomy.IsValidCatalogueLetterType(entity.LetterType))
+        {
+            var pack = await WritingAssessmentPreflightService.ResolvePackForCatalogueAsync(
+                db, entity.Profession, entity.LetterType, ct);
+            if (pack is null) blocking.Add("profession_pack_unapproved");
+        }
+
+        if (!string.IsNullOrWhiteSpace(entity.TaskPromptMarkdown) && sentences.Count > 0)
+        {
+            var caseNotesText = string.Join("\n", sentences
+                .Select(x => (x.SentenceText ?? string.Empty).Trim())
+                .Where(x => x.Length > 0));
+            var understanding = WritingTaskUnderstandingService.Understand(
+                entity.TaskPromptMarkdown ?? string.Empty,
+                caseNotesText,
+                WritingLetterTypeTaxonomy.ToPackLetterType(entity.LetterType));
+            if (string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal))
+                blocking.Add("recipient_unresolved");
+            if (string.IsNullOrWhiteSpace(understanding.DiagnosisOrPlanEvidence))
+                blocking.Add("diagnosis_or_request_unresolved");
+            if (understanding.ConflictingEvidence)
+                blocking.Add("task_classification_conflict");
+        }
+
+        var hasApprovedModelAnswer = await db.WritingTaskModelAnswers.AsNoTracking()
+            .AnyAsync(a => a.ScenarioId == entity.Id
+                && a.Status == WritingAssessmentModelAnswerStatus.Ready
+                && a.IsCandidateVisible, ct);
+        if (!hasApprovedModelAnswer) blocking.Add("model_answer_not_approved");
+
+        return blocking;
     }
 
     private async Task<Dictionary<Guid, List<WritingScenarioStructuredSentence>>> LoadSentencesAsync(IEnumerable<Guid> ids, CancellationToken ct)

@@ -41,6 +41,18 @@ public static class WritingTaskAdminEndpoints
         // blocking codes. Powers the backfill workflow and reporting.
         group.MapGet("/preparation-status", PreparationStatus).WithAdminRead("AdminContentRead");
 
+        // Full-catalogue release gate (§22/§15): enumerates EVERY published
+        // candidate-facing scenario from the live application model and runs
+        // the same resolvers candidate grading depends on. A non-zero
+        // invalid count BLOCKS release. Machine-readable (§32) for CI/CD.
+        group.MapGet("/catalogue-compatibility", CatalogueCompatibility).WithAdminRead("AdminContentRead");
+
+        // Quarantine for §23: archives (never deletes) published tasks that
+        // cannot safely grade, so learners stop discovering them at submit
+        // time. Dry-run by default; ambiguous tasks still need admin repair
+        // before re-publication.
+        group.MapPost("/catalogue-quarantine", CatalogueQuarantine).WithAdminWrite("AdminContentWrite");
+
         // Case-note backfill (spec §22 / grading preflight): replaces this task's
         // structured, relevance-labeled case-note sentences without touching any
         // other authored field. See WritingTaskCaseNotesService for why this is a
@@ -196,6 +208,67 @@ public static class WritingTaskAdminEndpoints
         return Results.Ok(new { items, total });
     }
 
+    private static async Task<IResult> CatalogueCompatibility(
+        IWritingCataloguePreflightService service,
+        CancellationToken ct)
+    {
+        var report = await service.ScanPublishedCatalogueAsync(ct);
+        return Results.Ok(new
+        {
+            generatedAt = report.GeneratedAt,
+            publishedScenarios = report.PublishedScenarios,
+            publishReady = report.PublishReady,
+            invalid = report.Invalid,
+            releaseBlocked = report.Invalid > 0,
+            rows = report.Rows.Select(r => new
+            {
+                scenarioId = r.ScenarioId,
+                taskTitle = r.TaskTitle,
+                publicationStatus = r.PublicationStatus,
+                candidateVisible = r.CandidateVisible,
+                profession = r.Profession,
+                professionResolutionStatus = r.ProfessionResolutionStatus,
+                letterType = r.LetterType,
+                otherLetters = r.OtherLetters,
+                rulebookId = r.RulePackId,
+                rulebookVersion = r.RulePackVersion,
+                rulebookApprovalStatus = r.RulePackApprovalStatus,
+                sharedRulesVersion = r.SharedRulesVersion,
+                canonicalCaseNotesReady = r.CanonicalCaseNotesReady,
+                caseNoteSentenceCount = r.CaseNoteSentenceCount,
+                exactWritingTaskReady = r.ExactWritingTaskReady,
+                recipientMetadataReady = r.RecipientMetadataReady,
+                recipientCategory = r.RecipientCategory,
+                savedModelAnswerReady = r.SavedModelAnswerReady,
+                modelAnswerStatus = r.ModelAnswerStatus,
+                publishReady = r.PublishReady,
+                blockingCodes = r.BlockingCodes,
+                recommendedAction = r.RecommendedAction,
+            }),
+        });
+    }
+
+    private static async Task<IResult> CatalogueQuarantine(
+        IWritingCataloguePreflightService service,
+        [FromBody] WritingCatalogueQuarantineRequest? request,
+        CancellationToken ct)
+    {
+        var result = await service.QuarantineInvalidPublishedAsync(request?.DryRun ?? true, ct);
+        return Results.Ok(new
+        {
+            scanned = result.Scanned,
+            quarantined = result.Quarantined,
+            skipped = result.Skipped,
+            items = result.Items.Select(i => new
+            {
+                scenarioId = i.ScenarioId,
+                title = i.Title,
+                reasons = i.Reasons,
+                outcome = i.Outcome,
+            }),
+        });
+    }
+
     private static async Task<IResult> ExtractCaseNotesFromPdf(
         IWritingTaskCaseNotesService service,
         Guid id,
@@ -281,6 +354,13 @@ public sealed record WritingTaskBulkRequest(string Action, string[] Ids, string?
 
 /// <summary>Request body for <c>PUT /v1/admin/writing/tasks/{id}/case-notes</c>.</summary>
 public sealed record WritingTaskCaseNotesRequest(List<WritingTaskCaseNoteSentence> Sentences);
+
+/// <summary>
+/// Request body for <c>POST /v1/admin/writing/tasks/catalogue-quarantine</c>.
+/// <c>DryRun</c> defaults to true (report only); false archives invalid
+/// published tasks.
+/// </summary>
+public sealed record WritingCatalogueQuarantineRequest(bool DryRun = true);
 
 /// <summary><c>Relevance</c> must be one of relevant | maybe | irrelevant.</summary>
 public sealed record WritingTaskCaseNoteSentence(int? Ordinal, string? Text, string? Relevance, string? Notes);

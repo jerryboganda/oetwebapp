@@ -23,6 +23,20 @@ public sealed class WritingDoubleSubmitRaceTests : IAsyncDisposable
         _connection.Open();
         _db = new LearnerDbContext(new DbContextOptionsBuilder<LearnerDbContext>().UseSqlite(_connection).Options);
         _db.Database.EnsureCreated();
+        // Grading resolves profession/letter-type from the owning scenario
+        // (fail-closed when absent), so the harness seeds a real scenario row.
+        _db.WritingScenarios.Add(new WritingScenario
+        {
+            Id = Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            Title = "Harness task",
+            Profession = "medicine",
+            LetterType = "routine_referral",
+            Status = "published",
+            AuthorId = "admin-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        _db.SaveChanges();
     }
 
     public async ValueTask DisposeAsync()
