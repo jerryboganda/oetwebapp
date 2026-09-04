@@ -344,6 +344,13 @@ public sealed class UserAccessAllocationService(
 
         await RepointPrimaryAwayFromAsync(learner, sub, ct);
         await db.SaveChangesAsync(ct);
+        if (aiPackageCreditService is not null)
+        {
+            // Suspended grants nothing: park this package's AI lots (balances
+            // preserved for restore) and reconcile orphaned allowances.
+            await aiPackageCreditService.ParkSubscriptionLotsAsync(userId, sub.Id, ct);
+            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
+        }
         await SyncAccessExpiryAsync(learner, ct);
         await AuditAsync(adminId, adminName, "Package Suspended", sub.Id,
             $"Suspended package {sub.PlanId} for {userId}", ct);
@@ -362,6 +369,13 @@ public sealed class UserAccessAllocationService(
         if (string.IsNullOrWhiteSpace(learner.CurrentPlanId)) learner.CurrentPlanId = sub.PlanId;
 
         await db.SaveChangesAsync(ct);
+        if (aiPackageCreditService is not null)
+        {
+            // Revive this package's parked lots whose validity is still open,
+            // then reconcile. Reversed/consumed lots are never revived.
+            await aiPackageCreditService.UnparkSubscriptionLotsAsync(userId, sub.Id, ct);
+            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
+        }
         await SyncAccessExpiryAsync(learner, ct);
         await AuditAsync(adminId, adminName, "Package Restored", sub.Id,
             $"Restored package {sub.PlanId} for {userId}", ct);
@@ -426,6 +440,23 @@ public sealed class UserAccessAllocationService(
         if (aiPackageCreditService is not null)
         {
             await aiPackageCreditService.UpdateGrantWindowAsync(userId, sub.Id, sub.StartedAt, sub.ExpiresAt, ct);
+            // The date override may have expired or revived this package: park or
+            // unpark ALL of its lots (including attached add-on lots, which the
+            // window sync above does not cover) so effective entitlement follows
+            // the new window immediately, then reconcile orphaned allowances.
+            var now = timeProvider.GetUtcNow();
+            var eligible = AccessGrantingStatuses.Contains(sub.Status)
+                && sub.StartedAt <= now
+                && (sub.ExpiresAt is null || sub.ExpiresAt > now);
+            if (eligible)
+            {
+                await aiPackageCreditService.UnparkSubscriptionLotsAsync(userId, sub.Id, ct);
+            }
+            else
+            {
+                await aiPackageCreditService.ParkSubscriptionLotsAsync(userId, sub.Id, ct);
+            }
+            await aiPackageCreditService.RecalculateObjectiveAllowancesAsync(userId, ct);
         }
 
         await AuditAsync(adminId, adminName, "Package Dates Updated", sub.Id,
@@ -450,13 +481,15 @@ public sealed class UserAccessAllocationService(
         // else a hidden standalone container for AI / skill / mock packs that
         // do not require a parent (Quick Check, Reading Starter, Full Mocks, …).
         string targetSubId;
+        var now = timeProvider.GetUtcNow();
         if (!string.IsNullOrWhiteSpace(request.SubscriptionId))
         {
             targetSubId = request.SubscriptionId.Trim();
             var target = await db.Subscriptions.AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == targetSubId && s.UserId == userId, ct);
             if (target is null) throw ApiException.Validation("subscription_not_found", "Target subscription not found for this user.");
-            if (!AccessGrantingStatuses.Contains(target.Status))
+            if (!AccessGrantingStatuses.Contains(target.Status)
+                || !SubscriptionStateMachine.IsWithinAccessWindow(target, now))
             {
                 throw ApiException.Conflict("subscription_not_current", "Add-ons can only be attached to a current active package.");
             }
@@ -466,6 +499,8 @@ public sealed class UserAccessAllocationService(
             var primary = await db.Subscriptions.AsNoTracking()
                 .Where(s => s.UserId == userId
                     && AccessGrantingStatuses.Contains(s.Status)
+                    && s.StartedAt <= now
+                    && (s.ExpiresAt == null || s.ExpiresAt > now)
                     && s.PlanId != Subscription.StandaloneAddonPlanId)
                 .OrderByDescending(s => s.ChangedAt)
                 .FirstOrDefaultAsync(ct);

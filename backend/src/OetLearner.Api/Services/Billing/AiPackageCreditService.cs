@@ -87,8 +87,30 @@ public interface IAiPackageCreditService
     /// <summary>
     /// If unlimited Listening/Reading was lost because the last unlimited
     /// add-on item was cancelled, drop the null sentinel back to a finite pool.
+    /// Also expires orphaned unlimited lots (including legacy lots with no
+    /// source attribution) and repairs stuck null pools, so a deleted/revoked
+    /// source can never keep contributing Unlimited. Finite manual
+    /// (admin-adjust) lots are independent sources and are never touched.
     /// </summary>
     Task RecalculateObjectiveAllowancesAsync(string userId, CancellationToken ct);
+
+    /// <summary>
+    /// Reversibly park every AI-credit lot granted from
+    /// <paramref name="subscriptionId"/> (course-gift lots, plan lots and
+    /// add-on lots attached to it): balances and unlimited flags are preserved
+    /// but flagged <c>Expired</c> so the effective entitlement drops to zero
+    /// immediately. Paired with <see cref="UnparkSubscriptionLotsAsync"/>.
+    /// Used by suspend/cancel/expire flows; idempotent.
+    /// </summary>
+    Task ParkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct);
+
+    /// <summary>
+    /// Undo <see cref="ParkSubscriptionLotsAsync"/>: revive parked lots of
+    /// <paramref name="subscriptionId"/> whose validity window is still open.
+    /// Lots zeroed by a real reversal and lots past their validity end are
+    /// never revived. Idempotent.
+    /// </summary>
+    Task UnparkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct);
 
     /// <summary>
     /// Re-sync the valid-until of course-gifted AI credit lots that were granted
@@ -457,41 +479,23 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
 
         var now = DateTimeOffset.UtcNow;
-        var entitlementJson = await (
-            from item in db.SubscriptionItems.AsNoTracking()
-            join subscription in db.Subscriptions.AsNoTracking()
-                on item.SubscriptionId equals subscription.Id
-            join addOn in db.BillingAddOns.AsNoTracking()
-                on item.ItemCode equals addOn.Code
-            where subscription.UserId == userId
-                  && (subscription.Status == SubscriptionStatus.Active
-                      || subscription.Status == SubscriptionStatus.Trial
-                      || subscription.Status == SubscriptionStatus.FreezeRequested)
-                  && subscription.StartedAt <= now
-                  && (subscription.ExpiresAt == null || subscription.ExpiresAt > now)
-                  && item.Status == SubscriptionItemStatus.Active
-                  && item.StartsAt <= now
-                  && (item.EndsAt == null || item.EndsAt > now)
-                  && addOn.AddonKind == "ai_package"
-            select addOn.GrantEntitlementsJson
-        ).ToListAsync(ct);
+        // Quantity-aware parse of every currently-eligible ai_package grant. A
+        // grant only counts while its subscription AND its item are both live
+        // (Active/Trial/FreezeRequested + within StartedAt/EndsAt window).
+        var activeGrants = await LoadEligibleAiPackageGrantsAsync(userId, now, ct);
 
         var listeningUnlimited = false;
         var readingUnlimited = false;
-        var listeningSum = 0;
-        var readingSum = 0;
-        foreach (var json in entitlementJson)
+        foreach (var active in activeGrants)
         {
             var grant = AiPackageGrant.FromAddOn(new BillingAddOn
             {
                 Code = "pkg_recalc",
                 AddonKind = "ai_package",
-                GrantEntitlementsJson = json,
-            }, 1);
+                GrantEntitlementsJson = active.Json,
+            }, active.Quantity);
             if (grant.ListeningTests is null) listeningUnlimited = true;
-            else listeningSum += grant.ListeningTests.Value;
             if (grant.ReadingTests is null) readingUnlimited = true;
-            else readingSum += grant.ReadingTests.Value;
         }
 
         account.UpdatedAt = now;
@@ -501,26 +505,126 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         if (refreshed is not null)
         {
             await EnsureLotsLoadedAsync(refreshed, ct);
+            await MaterializeMissingUnlimitedLotsAsync(refreshed, activeGrants, now, ct);
+            await ExpireOrphanedUnlimitedLotsAsync(refreshed, listeningUnlimited, readingUnlimited, now, ct);
             RebuildAccountFromLots(refreshed);
-            if (listeningUnlimited)
+            // Stuck-sentinel repair: a null pool with no live unlimited lot is a
+            // ghost (legacy account or orphaned lot). Finite manual lots are
+            // independent sources and are deliberately left untouched — there is
+            // intentionally no finite clamp here.
+            if (refreshed.ListeningTestsRemaining is null
+                && !LiveLots(refreshed).Any(lot => lot.UnlimitedListening))
             {
-                refreshed.ListeningTestsRemaining = null;
+                refreshed.ListeningTestsRemaining = 0;
             }
-            else if (refreshed.ListeningTestsRemaining is int listeningRemaining)
+            if (refreshed.ReadingTestsRemaining is null
+                && !LiveLots(refreshed).Any(lot => lot.UnlimitedReading))
             {
-                refreshed.ListeningTestsRemaining = Math.Min(listeningRemaining, listeningSum);
-            }
-            if (readingUnlimited)
-            {
-                refreshed.ReadingTestsRemaining = null;
-            }
-            else if (refreshed.ReadingTestsRemaining is int readingRemaining)
-            {
-                refreshed.ReadingTestsRemaining = Math.Min(readingRemaining, readingSum);
+                refreshed.ReadingTestsRemaining = 0;
             }
             refreshed.UpdatedAt = now;
             await db.SaveChangesAsync(ct);
         }
+    }
+
+    public async Task ParkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(subscriptionId))
+        {
+            return;
+        }
+
+        var account = await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
+        if (account is null)
+        {
+            return;
+        }
+
+        await EnsureLotsLoadedAsync(account, ct);
+        var now = DateTimeOffset.UtcNow;
+        var ownedReferences = await CollectSubscriptionLotReferencesAsync(userId, subscriptionId, ct);
+        var parked = 0;
+        foreach (var lot in AccountLots(account).Where(lot => !lot.Expired && LotRetainsValue(lot)))
+        {
+            if (lot.SourceReferenceId is null
+                || (!ownedReferences.Contains(lot.SourceReferenceId)
+                    && !LotSourceBelongsToSubscription(lot.SourceReferenceId, subscriptionId)))
+            {
+                continue;
+            }
+
+            lot.Expired = true;
+            lot.ExpiredAt = now;
+            parked++;
+        }
+
+        if (parked == 0)
+        {
+            return;
+        }
+
+        RebuildAccountFromLots(account);
+        RepairNullSentinels(account);
+        account.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "AiPackageCreditService parked {Parked} lots for learner {UserId} on subscription {SubscriptionId}.",
+            parked, userId, subscriptionId);
+    }
+
+    public async Task UnparkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId) || string.IsNullOrWhiteSpace(subscriptionId))
+        {
+            return;
+        }
+
+        var account = await db.AiPackageCreditAccounts.FirstOrDefaultAsync(row => row.UserId == userId, ct);
+        if (account is null)
+        {
+            return;
+        }
+
+        await EnsureLotsLoadedAsync(account, ct);
+        var now = DateTimeOffset.UtcNow;
+        var ownedReferences = await CollectSubscriptionLotReferencesAsync(userId, subscriptionId, ct);
+        var revived = 0;
+        foreach (var lot in AccountLots(account).Where(lot => lot.Expired))
+        {
+            if (lot.SourceReferenceId is null
+                || (!ownedReferences.Contains(lot.SourceReferenceId)
+                    && !LotSourceBelongsToSubscription(lot.SourceReferenceId, subscriptionId)))
+            {
+                continue;
+            }
+
+            // Only parked lots come back: reversed/consumed lots carry no value
+            // and lots past their validity end stay expired.
+            if (!LotRetainsValue(lot))
+            {
+                continue;
+            }
+            if (lot.ExpiresAt is { } endsAt && endsAt <= now)
+            {
+                continue;
+            }
+
+            lot.Expired = false;
+            lot.ExpiredAt = null;
+            revived++;
+        }
+
+        if (revived == 0)
+        {
+            return;
+        }
+
+        RebuildAccountFromLots(account);
+        account.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "AiPackageCreditService unparked {Revived} lots for learner {UserId} on subscription {SubscriptionId}.",
+            revived, userId, subscriptionId);
     }
 
     /// <summary>
@@ -742,7 +846,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         var allocations = new List<LotAllocation>();
         if (normalized == "listening")
         {
-            if (HasUnlimitedObjective(account, "listening"))
+            if (HasLiveRealUnlimited(account, "listening"))
             {
                 return new(true, null, null, referenceId, BalanceSource: "listening", FeedbackMessage: "Unlimited Listening practice — no credits consumed.");
             }
@@ -768,7 +872,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
         else
         {
-            if (HasUnlimitedObjective(account, "reading"))
+            if (HasLiveRealUnlimited(account, "reading"))
             {
                 return new(true, null, null, referenceId, BalanceSource: "reading", FeedbackMessage: "Unlimited Reading practice — no credits consumed.");
             }
@@ -842,15 +946,14 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         // Legacy bypass is NOT treated as an allowance — it is a debit-only shortcut
         // for pre-package accounts. Content visibility still requires a real purchase.
-        // Also treat the account null sentinel (ReadingTestsRemaining == null) as unlimited.
+        // A null pool WITHOUT a live, real (non-synthetic) unlimited lot is a ghost
+        // sentinel from a deleted source — never an allowance.
         if (normalized == "listening")
-            return HasUnlimitedObjective(account, "listening")
-                || account.ListeningTestsRemaining is null
+            return HasLiveRealUnlimited(account, "listening")
                 || (account.ListeningTestsRemaining ?? 0) > 0
                 || account.SharedCredits >= AiGradingCreditCost.ListeningExam;
 
-        return HasUnlimitedObjective(account, "reading")
-            || account.ReadingTestsRemaining is null
+        return HasLiveRealUnlimited(account, "reading")
             || (account.ReadingTestsRemaining ?? 0) > 0
             || account.SharedCredits >= AiGradingCreditCost.ReadingExam;
     }
@@ -1015,6 +1118,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         account.ExpiresAt = request.ExpiresAt ?? account.ExpiresAt;
         account.UpdatedAt = DateTimeOffset.UtcNow;
         RebuildAccountFromLots(account);
+        // An explicit admin set-to-finite must be able to clear a stuck null
+        // sentinel left by a deleted source: with no live unlimited lot the
+        // null pool is a ghost, never an entitlement.
+        RepairNullSentinels(account);
 
         AddTransaction(account, new AiPackageCreditTransaction
         {
@@ -1156,6 +1263,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             if (!accountExpired)
             {
                 RebuildAccountFromLots(account);
+                RepairNullSentinels(account);
             }
 
             return;
@@ -1199,6 +1307,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
 
         RebuildAccountFromLots(account);
+        RepairNullSentinels(account);
         if (preservedAccountExpiry is { } kept && (account.ExpiresAt is null || account.ExpiresAt < kept))
         {
             account.ExpiresAt = kept;
@@ -1242,11 +1351,32 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         await ExpireIfNeededAsync(account, DateTimeOffset.UtcNow, ct);
         var matchingLots = AccountLots(account)
-            .Where(lot => LotHasRemaining(lot)
+            .Where(lot => !lot.Expired
+                && LotHasRemaining(lot)
                 && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
                     || (purchase.SourceReferenceId is not null
                         && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))))
             .ToList();
+
+        if (matchingLots.Count == 0)
+        {
+            // Parked lots (suspended/cancelled-but-restorable sources) still
+            // carry value behind the Expired flag. Do NOT mark the purchase
+            // reversed: unpark (restore/reactivate/extend) must be able to
+            // revive them, and the later removal must still find the purchase
+            // unmarked so it reverses for real. Lots already contribute nothing
+            // while flagged, so there is nothing to reverse right now.
+            var hasParkedLots = AccountLots(account).Any(lot =>
+                lot.Expired
+                && LotRetainsValue(lot)
+                && (string.Equals(lot.SourceReferenceId, purchase.ReferenceId, StringComparison.OrdinalIgnoreCase)
+                    || (purchase.SourceReferenceId is not null
+                        && string.Equals(lot.SourceReferenceId, purchase.SourceReferenceId, StringComparison.OrdinalIgnoreCase))));
+            if (hasParkedLots)
+            {
+                return false;
+            }
+        }
 
         var shared = 0;
         var flexible = 0;
@@ -1314,33 +1444,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private async Task ReverseOrphanedGrantsAsync(string userId, DateTimeOffset now, CancellationToken ct)
     {
-        var ownedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var ownedSubscriptions = await db.Subscriptions.AsNoTracking()
-            .Where(subscription => subscription.UserId == userId
-                && subscription.Status != SubscriptionStatus.Cancelled)
-            .ToListAsync(ct);
-        foreach (var subscription in ownedSubscriptions)
-        {
-            if (subscription.PlanId != Subscription.StandaloneAddonPlanId)
-            {
-                ownedSources.Add(AiPackageCreditSources.Plan(subscription.Id, subscription.PlanId));
-                ownedSources.Add(AiPackageCreditSources.AdminPackage(subscription.Id, subscription.PlanId));
-            }
-        }
-
-        var ownedItems = await (
-            from item in db.SubscriptionItems.AsNoTracking()
-            join subscription in db.Subscriptions.AsNoTracking()
-                on item.SubscriptionId equals subscription.Id
-            where subscription.UserId == userId
-                  && subscription.Status != SubscriptionStatus.Cancelled
-                  && item.Status == SubscriptionItemStatus.Active
-            select new { item.SubscriptionId, item.ItemCode })
-            .ToListAsync(ct);
-        foreach (var item in ownedItems)
-        {
-            ownedSources.Add(AiPackageCreditSources.Addon(item.SubscriptionId, item.ItemCode));
-        }
+        var ownedSources = await ComputeOwnedSourceReferencesAsync(userId, now, ct);
 
         var purchaseSources = await db.AiPackageCreditTransactions.AsNoTracking()
             .Where(row => row.UserId == userId
@@ -1357,6 +1461,355 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             }
 
             await ReverseGrantsAsync(userId, sourceReference, ct);
+        }
+    }
+
+    /// <summary>
+    /// Every grant source that still owns its entitlement: plan/course-gift
+    /// sources of subscriptions that have not reached a terminal state, plus
+    /// add-on sources whose subscription AND item are both currently live.
+    /// Suspended/Frozen/Paused subs keep ownership (their lots are parked, not
+    /// reversed) while Cancelled/Expired subs own nothing. Mirrors the
+    /// eligibility gate used for the unlimited/allowance derivation so the two
+    /// can never disagree about whether a source is active.
+    /// </summary>
+    private async Task<HashSet<string>> ComputeOwnedSourceReferencesAsync(
+        string userId, DateTimeOffset now, CancellationToken ct)
+    {
+        var ownedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var ownedSubscriptions = await db.Subscriptions.AsNoTracking()
+            .Where(subscription => subscription.UserId == userId
+                && subscription.Status != SubscriptionStatus.Cancelled
+                && subscription.Status != SubscriptionStatus.Expired)
+            .ToListAsync(ct);
+        foreach (var subscription in ownedSubscriptions)
+        {
+            if (subscription.PlanId != Subscription.StandaloneAddonPlanId)
+            {
+                ownedSources.Add(AiPackageCreditSources.Plan(subscription.Id, subscription.PlanId));
+                ownedSources.Add(AiPackageCreditSources.AdminPackage(subscription.Id, subscription.PlanId));
+            }
+        }
+
+        var ownedItems = await (
+            from item in db.SubscriptionItems.AsNoTracking()
+            join subscription in db.Subscriptions.AsNoTracking()
+                on item.SubscriptionId equals subscription.Id
+            where subscription.UserId == userId
+                  && (subscription.Status == SubscriptionStatus.Active
+                      || subscription.Status == SubscriptionStatus.Trial
+                      || subscription.Status == SubscriptionStatus.FreezeRequested)
+                  && subscription.StartedAt <= now
+                  && (subscription.ExpiresAt == null || subscription.ExpiresAt > now)
+                  && item.Status == SubscriptionItemStatus.Active
+                  && item.StartsAt <= now
+                  && (item.EndsAt == null || item.EndsAt > now)
+            select new { item.SubscriptionId, item.ItemCode })
+            .ToListAsync(ct);
+        foreach (var item in ownedItems)
+        {
+            ownedSources.Add(AiPackageCreditSources.Addon(item.SubscriptionId, item.ItemCode));
+        }
+
+        return ownedSources;
+    }
+
+    /// <summary>
+    /// Currently-eligible ai_package grants with their purchased quantities.
+    /// Single source of truth for "which objective allowances are active".
+    /// </summary>
+    private async Task<IReadOnlyList<EligibleAiPackageGrant>> LoadEligibleAiPackageGrantsAsync(
+        string userId, DateTimeOffset now, CancellationToken ct)
+    {
+        var rows = await (
+            from item in db.SubscriptionItems.AsNoTracking()
+            join subscription in db.Subscriptions.AsNoTracking()
+                on item.SubscriptionId equals subscription.Id
+            join addOn in db.BillingAddOns.AsNoTracking()
+                on item.ItemCode equals addOn.Code
+            where subscription.UserId == userId
+                  && (subscription.Status == SubscriptionStatus.Active
+                      || subscription.Status == SubscriptionStatus.Trial
+                      || subscription.Status == SubscriptionStatus.FreezeRequested)
+                  && subscription.StartedAt <= now
+                  && (subscription.ExpiresAt == null || subscription.ExpiresAt > now)
+                  && item.Status == SubscriptionItemStatus.Active
+                  && item.StartsAt <= now
+                  && (item.EndsAt == null || item.EndsAt > now)
+                  && addOn.AddonKind == "ai_package"
+            select new { item.SubscriptionId, item.ItemCode, item.Quantity, item.EndsAt, addOn.GrantEntitlementsJson }
+        ).ToListAsync(ct);
+        return rows
+            .GroupBy(row => (row.SubscriptionId, row.ItemCode, row.GrantEntitlementsJson, row.EndsAt))
+            .Select(group => new EligibleAiPackageGrant(
+                group.Key.GrantEntitlementsJson,
+                group.Sum(row => Math.Max(1, row.Quantity)),
+                group.Key.SubscriptionId,
+                group.Key.ItemCode,
+                group.Key.EndsAt))
+            .ToList();
+    }
+
+    private sealed record EligibleAiPackageGrant(
+        string? Json,
+        int Quantity,
+        string SubscriptionId,
+        string ItemCode,
+        DateTimeOffset? EndsAt);
+
+    /// <summary>
+    /// Heal partial-failure grants: an eligible unlimited item with no purchase
+    /// ledger row at all never granted its lot (the item row and the lot are
+    /// written by separate steps). Materialize the missing unlimited lot so
+    /// the active source actually contributes — unlimited has no consumption
+    /// semantics, so this cannot over-grant. Skipped whenever a purchase row
+    /// exists (the ledger then owns the outcome: live, consumed or reversed).
+    /// Finite allowances are intentionally not materialized: consumption makes
+    /// "missing row" ambiguous there.
+    /// </summary>
+    private async Task MaterializeMissingUnlimitedLotsAsync(
+        AiPackageCreditAccount account,
+        IReadOnlyList<EligibleAiPackageGrant> activeGrants,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var unlimitedGrants = new List<(EligibleAiPackageGrant Grant, AiPackageGrant Parsed)>();
+        foreach (var grant in activeGrants)
+        {
+            var parsed = AiPackageGrant.FromAddOn(new BillingAddOn
+            {
+                Code = "pkg_recalc",
+                AddonKind = "ai_package",
+                GrantEntitlementsJson = grant.Json,
+            }, grant.Quantity);
+            if (parsed.ListeningTests is null || parsed.ReadingTests is null)
+            {
+                unlimitedGrants.Add((grant, parsed));
+            }
+        }
+
+        if (unlimitedGrants.Count == 0)
+        {
+            return;
+        }
+
+        var purchaseSources = await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == account.UserId
+                          && row.Reason == AiPackageCreditReason.Purchase
+                          && row.SourceReferenceId != null)
+            .Select(row => row.SourceReferenceId!)
+            .Distinct()
+            .ToListAsync(ct);
+        var purchaseSourceSet = purchaseSources.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var liveLots = LiveLots(account);
+        var materialized = 0;
+
+        foreach (var (grant, parsed) in unlimitedGrants)
+        {
+            var source = AiPackageCreditSources.Addon(grant.SubscriptionId, grant.ItemCode);
+            if (purchaseSourceSet.Contains(source))
+            {
+                continue;
+            }
+
+            var needsListening = parsed.ListeningTests is null
+                && !liveLots.Any(lot => lot.UnlimitedListening && LotSourceMatches(lot, source));
+            var needsReading = parsed.ReadingTests is null
+                && !liveLots.Any(lot => lot.UnlimitedReading && LotSourceMatches(lot, source));
+            if (!needsListening && !needsReading)
+            {
+                continue;
+            }
+
+            var lot = new AiPackageCreditLot
+            {
+                Id = NewId("aipkg-lot"),
+                PackageId = grant.ItemCode,
+                PackageType = parsed.PackageType,
+                ListeningTestsRemaining = parsed.ListeningTests is null ? null : 0,
+                ReadingTestsRemaining = parsed.ReadingTests is null ? null : 0,
+                UnlimitedListening = parsed.ListeningTests is null,
+                UnlimitedReading = parsed.ReadingTests is null,
+                ValidFrom = now,
+                ExpiresAt = grant.EndsAt,
+                SourceReferenceId = source,
+                CreatedAt = now,
+            };
+            AddLot(account, lot);
+            liveLots.Add(lot);
+            AddTransaction(account, new AiPackageCreditTransaction
+            {
+                Id = NewId("aipkg-tx"),
+                PackageId = grant.ItemCode,
+                PackageType = parsed.PackageType,
+                Reason = AiPackageCreditReason.Purchase,
+                ReferenceId = AddonGrantProcessor.FitDatabaseKey($"heal:{grant.SubscriptionId}:{grant.ItemCode}"),
+                SourceReferenceId = source,
+                Description = $"{grant.ItemCode} reconciled missing unlimited grant",
+                ValidFrom = now,
+                ExpiresAt = grant.EndsAt,
+                CreatedAt = now,
+            });
+            purchaseSourceSet.Add(source);
+            materialized++;
+        }
+
+        if (materialized == 0)
+        {
+            return;
+        }
+
+        await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "AiPackageCreditService materialized {Materialized} missing unlimited lots for learner {UserId}.",
+            materialized, account.UserId);
+    }
+
+    private static bool LotSourceMatches(AiPackageCreditLot lot, string source)
+        => string.Equals(lot.SourceReferenceId, source, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Legacy/ghost repair: expire live unlimited lots that have no eligible
+    /// unlimited source. This covers lots with missing source attribution
+    /// (pre-attribution data, persisted synthetic legacy lots) that
+    /// <see cref="ReverseOrphanedGrantsAsync"/> cannot match to a purchase.
+    /// Finite manual (admin-adjust) lots are never unlimited, so they are
+    /// inherently safe from this pass.
+    /// </summary>
+    private async Task ExpireOrphanedUnlimitedLotsAsync(
+        AiPackageCreditAccount account,
+        bool listeningUnlimited,
+        bool readingUnlimited,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        if (listeningUnlimited && readingUnlimited)
+        {
+            return;
+        }
+
+        var ownedSources = await ComputeOwnedSourceReferencesAsync(account.UserId, now, ct);
+        var expired = 0;
+        foreach (var lot in AccountLots(account).Where(lot => !lot.Expired))
+        {
+            var needsListeningRepair = !listeningUnlimited && lot.UnlimitedListening;
+            var needsReadingRepair = !readingUnlimited && lot.UnlimitedReading;
+            if (!needsListeningRepair && !needsReadingRepair)
+            {
+                continue;
+            }
+
+            if (lot.SourceReferenceId is not null && ownedSources.Contains(lot.SourceReferenceId))
+            {
+                continue;
+            }
+
+            lot.UnlimitedGrading = false;
+            lot.UnlimitedListening = false;
+            lot.UnlimitedReading = false;
+            if (lot.ListeningTestsRemaining is null) lot.ListeningTestsRemaining = 0;
+            if (lot.ReadingTestsRemaining is null) lot.ReadingTestsRemaining = 0;
+            if (!LotHasRemaining(lot))
+            {
+                lot.Expired = true;
+                lot.ExpiredAt = now;
+            }
+            expired++;
+        }
+
+        if (expired > 0)
+        {
+            logger.LogWarning(
+                "AiPackageCreditService expired {Expired} orphaned unlimited lots for learner {UserId}.",
+                expired, account.UserId);
+        }
+    }
+
+    /// <summary>
+    /// All lot/transaction reference ids through which lots granted from
+    /// <paramref name="subscriptionId"/> can be addressed, whatever grant path
+    /// created them (admin add-on, checkout stripe/quote, course gift).
+    /// </summary>
+    private async Task<HashSet<string>> CollectSubscriptionLotReferencesAsync(
+        string userId, string subscriptionId, CancellationToken ct)
+    {
+        var references = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Canonical prefixes cover lots/transactions written with the exact
+            // source key even when no purchase transaction exists (course gift
+            // lots carry the admin-package reference directly).
+            AddonGrantProcessor.FitDatabaseKey($"admin-package:{subscriptionId}:"),
+            AddonGrantProcessor.FitDatabaseKey($"plan:{subscriptionId}:"),
+            AddonGrantProcessor.FitDatabaseKey($"addon:{subscriptionId}:"),
+        };
+
+        var rows = await db.AiPackageCreditTransactions.AsNoTracking()
+            .Where(row => row.UserId == userId
+                && (row.Reason == AiPackageCreditReason.Purchase || row.Reason == AiPackageCreditReason.AdminAdjustment))
+            .Select(row => new { row.ReferenceId, row.SourceReferenceId })
+            .ToListAsync(ct);
+        foreach (var row in rows)
+        {
+            if (SourceBelongsToSubscription(row.SourceReferenceId, row.ReferenceId, subscriptionId))
+            {
+                if (row.ReferenceId is not null) references.Add(row.ReferenceId);
+                if (row.SourceReferenceId is not null) references.Add(row.SourceReferenceId);
+            }
+        }
+
+        return references;
+    }
+
+    private static bool LotSourceBelongsToSubscription(string sourceReferenceId, string subscriptionId)
+        => sourceReferenceId.StartsWith($"admin-package:{subscriptionId}:", StringComparison.OrdinalIgnoreCase)
+            || sourceReferenceId.StartsWith($"plan:{subscriptionId}:", StringComparison.OrdinalIgnoreCase)
+            || sourceReferenceId.StartsWith($"addon:{subscriptionId}:", StringComparison.OrdinalIgnoreCase);
+
+    private static bool SourceBelongsToSubscription(
+        string? sourceReferenceId, string? referenceId, string subscriptionId)
+    {
+        if (!string.IsNullOrWhiteSpace(sourceReferenceId)
+            && (sourceReferenceId.StartsWith($"admin-package:{subscriptionId}:", StringComparison.OrdinalIgnoreCase)
+                || sourceReferenceId.StartsWith($"plan:{subscriptionId}:", StringComparison.OrdinalIgnoreCase)
+                || sourceReferenceId.StartsWith($"addon:{subscriptionId}:", StringComparison.OrdinalIgnoreCase)
+                || sourceReferenceId.Contains(subscriptionId, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(referenceId)
+            && referenceId.Contains(subscriptionId, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A lot that still carries value: any unlimited flag or any positive
+    /// finite balance. Reversed/consumed lots fail this; parked lots pass it.
+    /// </summary>
+    private static bool LotRetainsValue(AiPackageCreditLot lot)
+        => lot.UnlimitedGrading
+            || lot.UnlimitedListening
+            || lot.UnlimitedReading
+            || lot.SharedCredits > 0
+            || lot.FlexibleCredits > 0
+            || lot.WritingOnlyCredits > 0
+            || lot.SpeakingOnlyCredits > 0
+            || lot.MockExamsRemaining > 0
+            || (lot.ListeningTestsRemaining ?? 0) > 0
+            || (lot.ReadingTestsRemaining ?? 0) > 0;
+
+    /// <summary>Null-pool repair: a null Listening/Reading pool with no live
+    /// unlimited lot is a ghost sentinel — drop it to zero.</summary>
+    private void RepairNullSentinels(AiPackageCreditAccount account)
+    {
+        if (account.ListeningTestsRemaining is null
+            && !LiveLots(account).Any(lot => lot.UnlimitedListening))
+        {
+            account.ListeningTestsRemaining = 0;
+        }
+        if (account.ReadingTestsRemaining is null
+            && !LiveLots(account).Any(lot => lot.UnlimitedReading))
+        {
+            account.ReadingTestsRemaining = 0;
         }
     }
 
@@ -1831,7 +2284,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         AddLot(account, new AiPackageCreditLot
         {
             Id = NewId("aipkg-lot"),
-            PackageId = "legacy",
+            PackageId = LegacySyntheticPackageId,
             PackageType = "legacy",
             SharedCredits = Math.Max(0, account.SharedCredits),
             FlexibleCredits = Math.Max(0, account.FlexibleCredits),
@@ -1848,10 +2301,23 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         });
     }
 
+    private const string LegacySyntheticPackageId = "legacy";
+
     private bool HasUnlimitedObjective(AiPackageCreditAccount account, string subtest)
         => subtest == "listening"
             ? LiveLots(account).Any(lot => lot.UnlimitedListening)
             : LiveLots(account).Any(lot => lot.UnlimitedReading);
+
+    /// <summary>
+    /// Authorization-grade unlimited check: synthetic <c>"legacy"</c> lots only
+    /// mirror pre-lot account balances and carry no grant provenance, so they
+    /// can never authorize unlimited practice on their own. A stuck null pool
+    /// from a deleted source therefore denies instead of granting.
+    /// </summary>
+    private bool HasLiveRealUnlimited(AiPackageCreditAccount account, string subtest)
+        => LiveLots(account).Any(lot =>
+            !string.Equals(lot.PackageId, LegacySyntheticPackageId, StringComparison.OrdinalIgnoreCase)
+            && (subtest == "listening" ? lot.UnlimitedListening : lot.UnlimitedReading));
 
     private List<AiPackageCreditLot> LiveLots(AiPackageCreditAccount account)
         => db.AiPackageCreditLots.Local

@@ -32,7 +32,8 @@ public partial class AdminService(
     ISecurityEventLogger? securityEventLogger = null,
     OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettingsProvider = null,
     OetLearner.Api.Services.Admin.UserHardDeleteService? userHardDeleteService = null,
-    ISessionRevocationService? sessionRevocationService = null)
+    ISessionRevocationService? sessionRevocationService = null,
+    IAiPackageCreditService? aiPackageCredits = null)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -5948,6 +5949,15 @@ public partial class AdminService(
 
         await db.SaveChangesAsync(ct);
 
+        if (request.Immediate && aiPackageCredits is not null)
+        {
+            // Immediate cancellation is a termination event: park this
+            // subscription's AI lots (balances preserved for a later
+            // reactivate) and reconcile orphaned allowances immediately.
+            await aiPackageCredits.ParkSubscriptionLotsAsync(subscription.UserId, subscription.Id, ct);
+            await aiPackageCredits.RecalculateObjectiveAllowancesAsync(subscription.UserId, ct);
+        }
+
         var details = request.Immediate
             ? $"Cancelled (status {previousStatus} → cancelled, immediate)"
               + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}")
@@ -6016,6 +6026,14 @@ public partial class AdminService(
             + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");
         await LogAuditAsync(adminId, adminName, "Subscription Reactivation", "Subscription", subscriptionId, details, ct);
 
+        if (aiPackageCredits is not null)
+        {
+            // Revive this subscription's parked lots whose validity is still
+            // open, then reconcile. Reversed/consumed lots never come back.
+            await aiPackageCredits.UnparkSubscriptionLotsAsync(subscription.UserId, subscription.Id, ct);
+            await aiPackageCredits.RecalculateObjectiveAllowancesAsync(subscription.UserId, ct);
+        }
+
         var planName = await ResolvePlanNameAsync(subscription.PlanId, ct);
         var learnerName = await ResolveUserDisplayNameAsync(subscription.UserId, ct);
         return ProjectSubscription(subscription, planName, learnerName);
@@ -6053,6 +6071,23 @@ public partial class AdminService(
         SubscriptionStateMachine.Transition(subscription, parsedStatus, "admin_set_subscription_status");
 
         await db.SaveChangesAsync(ct);
+
+        if (aiPackageCredits is not null)
+        {
+            // Manual status override is a termination/restore event for AI
+            // lots: non-granting terminal states park, granting states unpark.
+            // Other states (freeze-dunning nuances) are left to their own flows.
+            if (parsedStatus is SubscriptionStatus.Cancelled or SubscriptionStatus.Expired or SubscriptionStatus.Suspended)
+            {
+                await aiPackageCredits.ParkSubscriptionLotsAsync(subscription.UserId, subscription.Id, ct);
+                await aiPackageCredits.RecalculateObjectiveAllowancesAsync(subscription.UserId, ct);
+            }
+            else if (parsedStatus is SubscriptionStatus.Active or SubscriptionStatus.Trial or SubscriptionStatus.FreezeRequested)
+            {
+                await aiPackageCredits.UnparkSubscriptionLotsAsync(subscription.UserId, subscription.Id, ct);
+                await aiPackageCredits.RecalculateObjectiveAllowancesAsync(subscription.UserId, ct);
+            }
+        }
 
         var details = $"Status {previousStatus} → {parsedStatus}"
             + (string.IsNullOrWhiteSpace(request.Reason) ? "" : $"; reason: {request.Reason}");

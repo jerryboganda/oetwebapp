@@ -543,6 +543,19 @@ export default function UserDetailPage() {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: readErrorMessage(error, 'Unable to update access for this learner.') });
+      // The save is a chain of sequential server mutations: an early step may
+      // have succeeded before a later one failed. Re-read server truth so the
+      // package panel and the Access & Allocation balances can never disagree
+      // with the backend after a partial save.
+      try {
+        const fresh = await fetchUserAccess(user.id);
+        setAccess(fresh);
+        setOriginalAccess(fresh);
+        await refreshAiCredits(user.id);
+        await reloadUser();
+      } catch (resyncError) {
+        console.error(resyncError);
+      }
     } finally {
       setIsSavingAccess(false);
     }

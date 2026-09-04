@@ -150,6 +150,10 @@ public sealed class WritingEntitlementServiceTests : IAsyncDisposable
             => throw new NotImplementedException();
         public Task RecalculateObjectiveAllowancesAsync(string userId, CancellationToken ct)
             => throw new NotImplementedException();
+        public Task ParkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct)
+            => Task.CompletedTask;
+        public Task UnparkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct)
+            => Task.CompletedTask;
         public Task UpdateGrantExpiryAsync(string userId, string subscriptionId, DateTimeOffset? expiresAt, CancellationToken ct)
             => throw new NotImplementedException();
         public Task UpdateGrantWindowAsync(string userId, string subscriptionId, DateTimeOffset? validFrom, DateTimeOffset? expiresAt, CancellationToken ct)
