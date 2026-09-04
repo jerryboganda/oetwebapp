@@ -1,6 +1,12 @@
 # Agent State (local)
 
-## Current task — CRITICAL entitlement revocation: deleting package/add-on must revoke access (ghost Unlimited Reading) — IMPLEMENTED + TARGETED TESTS GREEN, NOT SHIPPED
+## Current task — App release playbook ("cut app releases" = Android + iOS + Desktop) — WRITTEN, NOT COMMITTED
+- **Owner order 2026-09-04**: any agent hearing "cut app releases" must cut all three pathways; desktop Windows pathway included.
+- **New**: `docs/app-release-playbook.md` (canonical procedure: live-state reads, version rules, A-Android/Play-internal+VPS, B-iOS/VPS-only + TestFlight-manual, C-Tauri desktop updater, done-definition, gotchas). **Wired**: `AGENTS.md` OET Domain Invariants + file-map pointer.
+- **Verified live facts baked in**: Play internal 1.4.11/code 6 (released this session via `mobile-release.yml` run 33914994724 + toolkit `publish-bundle --track internal`, edit 18234382676714791027); VPS android feed 1.4.11/6; iOS feed `{}` (no TestFlight automation exists); desktop feed 0.7.5/windows-x86_64-only.
+- **Next**: committed + pushed per owner "do it" order; watch Build & Deploy for the SHA to green, then repo private + live health check.
+
+## Previous task — CRITICAL entitlement revocation: deleting package/add-on must revoke access (ghost Unlimited Reading) — IMPLEMENTED + TARGETED TESTS GREEN, NOT SHIPPED
 - **Root cause (proven)**: AI-credit lots (`AiPackageCreditLots`) are the spendable truth, but only some removal paths reversed them. `SuspendPackage`, `UpdatePackageDates` (expiry override), billing immediate-cancel / manual status-set never touched lots; `ReverseOrphanedGrants` owned `!= Cancelled` (expired/suspended kept contributing); `RecalculateObjectiveAllowances` could not clear null-sentinel/legacy lots with no source attribution; read gates (`HasObjectivePracticeAllowance`, `DeductObjectivePractice`) treated bare null pools and synthetic legacy lots as Unlimited.
 - **Fix** (`AiPackageCreditService` central + wiring, no migration, existing indexes cover new queries):
   - `RecalculateObjectiveAllowancesAsync`: quantity-aware eligible-grant derivation; window-aware orphan reversal; expire orphaned unlimited lots (incl. null-source legacy); stuck-null repair; materialize missing unlimited lots when an eligible item has zero ledger rows (partial-grant heal); finite manual (admin-adjust) lots never clamped/touched.
@@ -11,6 +17,7 @@
   - Frontend `handleSaveAccess` catch: re-reads server truth (access + credits + user) after partial-save failure.
 - **Tests**: new `EntitlementRevocationTests` (10 tests) + 2-line stubs for 3 existing fakes. Verified 5/10 FAIL on pre-fix code (ghost proven) and 10/10 PASS fixed; 179/179 across 15 related suites green; backend `dotnet build` 0 errors.
 - **NOT run**: full `dotnet test`, `tsc`, `lint`, `vitest`, E2E (node_modules `.bin` not linked in this env; frontend change is 13 lines using in-scope imports — verify via ship:gate on host before shipping).
+- **SHIP STATUS 2026-09-04 (SHA 1b5abc7)**: ✅ DEPLOYED + LIVE. After owner fixed Docker billing, re-ran failed jobs → all 7 jobs SUCCESS (`syntax-gate`, `build-agent-gateway`, `build-api`, `build-web`, `build-backup`, `migrate-production`, `deploy`). GHCR `oetwebapp-web` + `oetwebapp-api` both tagged `1b5abc7…`/`latest`. Repo flipped PRIVATE. Live health green: `app…/api/health` 200, `api…/health/ready` 200, `api…/health/live` 200.
 - **Next**: run `pnpm run ship:gate`, then ship via AGENTS.md Ship-It workflow (stage ONLY: `backend/src/.../AiPackageCreditService.cs`, `UserAccessAllocationService.cs`, `AdminService.cs`, `backend/tests/...` (4 files), `app/admin/users/[id]/page.tsx`; do NOT stage unrelated dirty files: `artifacts/developer-action-brief/*`, `scripts/*`, pre-existing `agent-state` edits by others).
 - **Residual risks**: Frozen/PastDue/Paused don't park lots (freeze `None` mode intentionally keeps clock running); finite pre-lot-era balances unattributable (fail-open, admin Adjust can zero); natural-expiry alignment relies on lot ExpiresAt ~= sub ExpiresAt (date edits now synced).
 
@@ -207,3 +214,9 @@ Named volumes `oetwebsite_oet_*` are independent of containers. Compose pins the
 - 1.4.10/vc5: Android Release workflow GREEN (incl. new signer-pin step); publish job blocked by GH billing so published manually via repo scripts — VPS feed serves 1.4.10 (digest c52b…fb6c), Play internal track 1.4.10/vc5 completed. Same signer verified pre-publish. Repo PRIVATE again.
 - iOS release BLOCKED: missing APPLE_TEAM_ID + iOS signing secrets in CI + apple-app-site-association placeholders (owner-gated) + macOS runners billing-blocked.
 - USER PROTOCOL: uninstall once, fresh-install 1.4.10 from ONE channel (VPS APK or Play internal — never mix), future updates then work. Local node_modules was corrupt during this session (pnpm exec/vitest broken) — CI was used for validation; another agent is active in-tree (writing track), do not disturb.
+
+## Follow-up hardening — SHIPPED (e62ac9d30, origin/main, repo PRIVATE again)
+- Feed versionCode chain: assemble-mobile-manifest.mjs --version-code, MobileRelease.versionCode + validation, /api/releases/native passes it through (null for legacy), both publish jobs reject feed downgrades, publish-existing accepts optional version_code. Route tests added.
+- Live VPS feed backfilled: android current.json now serves versionCode 5 (same APK bytes, digest c52b…fb6c verified before re-upload) — downgrade gate effective immediately.
+- Full postmortem: docs/incidents/2026-09-04-update-and-otp-storms-postmortem.md (all 3 defects + never-again inventory + open items).
+- CI: new route tests pass (no new failures vs pre-existing baseline); Mobile CI skipped by paths-filter (correct); Build&Deploy redeploys web with the route change (feed versionCode live = proof).

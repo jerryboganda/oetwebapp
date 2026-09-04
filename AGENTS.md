@@ -129,6 +129,7 @@ Load the named docs before editing these surfaces.
 - Reading save / import / validate / publish: load `docs/READING-MODULE-SAVE-AND-UPLOAD.md` first. Do not re-research the contract. Official papers are PDF-first 20/6/16; Part A last block starts at 15 or 16.
 - Runtime settings/secrets: services read through `IRuntimeSettingsProvider`, with encrypted DB value over env fallback and audit on writes. See `docs/ADMIN-RUNTIME-SETTINGS.md`.
 - Play Store release/listing/tester/review actions: fully automated via a Google Play Developer API service account + Python toolkit at `automation/` (sibling folder, outside this repo) — **compulsory**, read `docs/play-store-automation.md` before any such task and use the toolkit instead of manual Play Console work or independently regenerated store assets/docs. A parallel agent skipping this on 2026-09-04 shipped conflicting package/branding changes that had to be reverted (PR #186).
+- App releases: the owner order "cut app releases" means ALL THREE pathways — Android (Play internal + VPS feed), iOS (VPS feed; TestFlight is manual), Windows desktop updater (macOS best-effort) — **compulsory**, load `docs/app-release-playbook.md` before any release task and follow it with no deviations. Platform-scoped orders ("cut an android release") run only that pathway. Never drop a pathway silently, never change package/bundle IDs, never create a keystore.
 
 ## Admin UI
 
@@ -170,5 +171,7 @@ instructions load by `applyTo` glob. Repo rules beat generic skill/agent/plugin 
 - `.github/instructions/admin-hallmark.instructions.md` — admin operational UI discipline.
 - `docs/play-store-automation.md` — Google Play Console release/listing/tester/review
   automation via service-account toolkit; compulsory before any Play Store action.
+- `docs/app-release-playbook.md` — the "cut app releases" procedure across Android,
+  iOS, and Windows desktop pathways; compulsory before any release task.
 - `.codex/AGENTS.md` — Codex-CLI agent operating model (host commands, production checks, commit attribution).
 - `.tools/autoskills/AGENTS.md` — scoped to `.tools/autoskills/` only (pnpm supply-chain hardening).
