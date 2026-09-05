@@ -37,6 +37,9 @@ public sealed record WritingSubmissionGradeOutcome(
 /// Callers pass a single idempotency key per submit click/timer-expiry;
 /// key normalisation, content-hash guarding, claim and the terminal-state
 /// lock all live behind <see cref="IWritingSubmissionEvaluationPipeline.SubmitAsync"/>.
+/// Mock sessions run their own lifecycle and pass
+/// <c>CheckTerminalLock: false</c> so a mock is never blocked by a terminal
+/// practice attempt for the same scenario.
 /// </summary>
 public sealed record WritingSubmitAttempt(
     string UserId,
@@ -49,7 +52,8 @@ public sealed record WritingSubmitAttempt(
     DateTimeOffset StartedAt,
     bool IsRevision,
     Guid? OriginalSubmissionId,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    bool CheckTerminalLock = true);
 
 /// <summary>
 /// Result of a seam submit: which submission owns this logical attempt,
@@ -150,15 +154,19 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         // Submission lock (§17.7): once a non-revision submission for this learner+scenario
         // has reached a submitted/locked state, reject further creates so a re-submit cannot
-        // overwrite a locked attempt. Revisions go through the revise path intentionally.
+        // overwrite a locked attempt. Revisions go through the revise path intentionally,
+        // and mock sessions run their own lifecycle (CheckTerminalLock: false).
+        // Mock rows never block practice either: a graded mock must not lock
+        // the learner out of practising the same scenario.
         // Repeats never reach here — they resolved above — so a repeat of the same logical
         // attempt never sees writing_submission_locked for its own attempt.
-        if (!attempt.IsRevision)
+        if (attempt.CheckTerminalLock && !attempt.IsRevision)
         {
             var alreadyLocked = await db.WritingSubmissions.AsNoTracking()
                 .AnyAsync(s => s.UserId == attempt.UserId
                     && s.ScenarioId == attempt.ScenarioId
                     && !s.IsRevision
+                    && s.Mode != "mock"
                     && (s.Status == "submitted" || s.Status == "graded" || s.Status == "locked"), ct);
             if (alreadyLocked)
             {

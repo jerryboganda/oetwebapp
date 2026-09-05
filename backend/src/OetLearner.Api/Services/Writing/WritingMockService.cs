@@ -382,7 +382,10 @@ public sealed class WritingMockService(
         Guid submissionId;
         try
         {
-            submissionId = await pipeline.CreateSubmissionAsync(new WritingSubmissionGradeContext(
+            // Mock surface via the SubmitGrading seam: same key/hash dedupe as
+            // every surface, but no practice terminal lock — the mock session
+            // state machine above owns the mock lifecycle.
+            var mockSubmit = await pipeline.SubmitAsync(new WritingSubmitAttempt(
                 UserId: userId,
                 ScenarioId: scenarioId,
                 Mode: "mock",
@@ -392,7 +395,10 @@ public sealed class WritingMockService(
                 TimeSpentSeconds: Math.Clamp((int)(now - writingStartedAt).TotalSeconds, 0, WritingPhaseSeconds),
                 StartedAt: writingStartedAt,
                 IsRevision: false,
-                OriginalSubmissionId: null), ct);
+                OriginalSubmissionId: null,
+                IdempotencyKey: null,
+                CheckTerminalLock: false), ct);
+            submissionId = mockSubmit.SubmissionId;
 
             await pipeline.EvaluateAsync(submissionId, ct);
             await tutorReview.EnsureMockReviewAssignmentAsync(userId, submissionId, ct);

@@ -275,7 +275,10 @@ public sealed class WritingSubmissionService(
         var original = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == originalSubmissionId && x.UserId == userId, ct);
         if (original is null) return null;
         var startedAt = DateTimeOffset.UtcNow.AddSeconds(-Math.Max(0, request.TimeSpentSeconds));
-        var newId = await pipeline.CreateSubmissionAsync(new WritingSubmissionGradeContext(
+        // Revise path via the SubmitGrading seam: revisions intentionally
+        // create new rows linked to the original (no content dedupe, no
+        // terminal lock), with the key derived from the original submission.
+        var reviseSubmit = await pipeline.SubmitAsync(new WritingSubmitAttempt(
             UserId: userId,
             ScenarioId: original.ScenarioId,
             Mode: original.Mode,
@@ -286,6 +289,7 @@ public sealed class WritingSubmissionService(
             StartedAt: startedAt,
             IsRevision: true,
             OriginalSubmissionId: originalSubmissionId), ct);
+        var newId = reviseSubmit.SubmissionId;
         var outcome = await pipeline.EvaluateAsync(newId, ct);
         await EnsureGradeForSubmissionAsync(newId, outcome, ct);
         var entity = await db.WritingSubmissions.AsNoTracking().FirstOrDefaultAsync(s => s.Id == newId, ct)
