@@ -290,6 +290,16 @@ public class WritingWave5ServiceTests
 
         public int CreateCalls { get; private set; }
 
+        public async Task<WritingSubmitOutcome> SubmitAsync(WritingSubmitAttempt attempt, CancellationToken ct)
+        {
+            var id = await CreateSubmissionAsync(new WritingSubmissionGradeContext(
+                attempt.UserId, attempt.ScenarioId, attempt.Mode, attempt.GradingTier,
+                attempt.InputSource, attempt.LetterContent ?? string.Empty, attempt.TimeSpentSeconds,
+                attempt.StartedAt, attempt.IsRevision, attempt.OriginalSubmissionId,
+                attempt.IdempotencyKey), ct);
+            return new WritingSubmitOutcome(id, true);
+        }
+
         public async Task<Guid> CreateSubmissionAsync(WritingSubmissionGradeContext context, CancellationToken ct)
         {
             CreateCalls++;

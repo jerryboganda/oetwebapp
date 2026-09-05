@@ -32,10 +32,45 @@ public sealed record WritingSubmissionGradeOutcome(
     string BandLabel,
     bool IdempotentReuse);
 
+/// <summary>
+/// One logical submit action: the input to the SubmitGrading seam.
+/// Callers pass a single idempotency key per submit click/timer-expiry;
+/// key normalisation, content-hash guarding, claim and the terminal-state
+/// lock all live behind <see cref="IWritingSubmissionEvaluationPipeline.SubmitAsync"/>.
+/// </summary>
+public sealed record WritingSubmitAttempt(
+    string UserId,
+    Guid ScenarioId,
+    string Mode,
+    string GradingTier,
+    string InputSource,
+    string? LetterContent,
+    int TimeSpentSeconds,
+    DateTimeOffset StartedAt,
+    bool IsRevision,
+    Guid? OriginalSubmissionId,
+    string? IdempotencyKey = null);
+
+/// <summary>
+/// Result of a seam submit: which submission owns this logical attempt,
+/// and whether it was newly created (<c>true</c>) or resolved to an
+/// existing row (<c>false</c>, never a new paid workflow).
+/// </summary>
+public sealed record WritingSubmitOutcome(Guid SubmissionId, bool IsNew);
+
 public interface IWritingSubmissionEvaluationPipeline
 {
     Task<Guid> CreateSubmissionAsync(WritingSubmissionGradeContext context, CancellationToken ct);
     Task<WritingSubmissionGradeOutcome> EvaluateAsync(Guid submissionId, CancellationToken ct);
+
+    /// <summary>
+    /// SubmitGrading seam: resolve-or-create exactly one submission for a
+    /// logical submit action. Repeats of the same key or the same content
+    /// within the race window resolve to the existing row; genuinely new
+    /// content after a terminal attempt throws the submission lock (the
+    /// caller must route to revise instead).
+    /// </summary>
+    Task<WritingSubmitOutcome> SubmitAsync(WritingSubmitAttempt attempt, CancellationToken ct);
 }
 
 /// <summary>
@@ -88,14 +123,68 @@ public sealed class WritingSubmissionEvaluationPipeline(
     public async Task<Guid> CreateSubmissionAsync(WritingSubmissionGradeContext context, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var now = clock.GetUtcNow();
+        var existing = await FindExistingSubmissionIdAsync(context, now, ct);
+        if (existing is not null) return existing.Value;
+        return await InsertSubmissionAsync(context, now, ct);
+    }
+
+    public async Task<WritingSubmitOutcome> SubmitAsync(WritingSubmitAttempt attempt, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(attempt);
+        var context = new WritingSubmissionGradeContext(
+            UserId: attempt.UserId,
+            ScenarioId: attempt.ScenarioId,
+            Mode: attempt.Mode,
+            GradingTier: attempt.GradingTier,
+            InputSource: attempt.InputSource,
+            LetterContent: attempt.LetterContent ?? string.Empty,
+            TimeSpentSeconds: attempt.TimeSpentSeconds,
+            StartedAt: attempt.StartedAt,
+            IsRevision: attempt.IsRevision,
+            OriginalSubmissionId: attempt.OriginalSubmissionId,
+            IdempotencyKey: attempt.IdempotencyKey);
+        var now = clock.GetUtcNow();
+        var existing = await FindExistingSubmissionIdAsync(context, now, ct);
+        if (existing is not null) return new WritingSubmitOutcome(existing.Value, false);
+
+        // Submission lock (§17.7): once a non-revision submission for this learner+scenario
+        // has reached a submitted/locked state, reject further creates so a re-submit cannot
+        // overwrite a locked attempt. Revisions go through the revise path intentionally.
+        // Repeats never reach here — they resolved above — so a repeat of the same logical
+        // attempt never sees writing_submission_locked for its own attempt.
+        if (!attempt.IsRevision)
+        {
+            var alreadyLocked = await db.WritingSubmissions.AsNoTracking()
+                .AnyAsync(s => s.UserId == attempt.UserId
+                    && s.ScenarioId == attempt.ScenarioId
+                    && !s.IsRevision
+                    && (s.Status == "submitted" || s.Status == "graded" || s.Status == "locked"), ct);
+            if (alreadyLocked)
+            {
+                throw ApiException.Conflict(
+                    "writing_submission_locked",
+                    "You have already submitted this task. Submitted attempts are locked; use revise to try again.");
+            }
+        }
+
+        return new WritingSubmitOutcome(await InsertSubmissionAsync(context, now, ct), true);
+    }
+
+    /// <summary>
+    /// Probes for the same logical attempt before creating anything: an
+    /// explicit idempotency-key match first, then the same race-window
+    /// content match. Single owner of key/hash derivation — callers must
+    /// not re-derive it.
+    /// </summary>
+    private async Task<Guid?> FindExistingSubmissionIdAsync(
+        WritingSubmissionGradeContext context, DateTimeOffset now, CancellationToken ct)
+    {
         // Submit-for-grading is always available regardless of response
         // length: empty/short/blank letters are valid submissions that receive
         // a (poor) assessment downstream — never a pre-submission block.
         var letter = context.LetterContent ?? string.Empty;
-
-        var now = clock.GetUtcNow();
         var hash = ComputeHash(letter);
-        var wordCount = CountWords(letter);
         var mode = string.IsNullOrWhiteSpace(context.Mode) ? "practice" : context.Mode.Trim().ToLowerInvariant();
         var idempotencyKey = NormalizeIdempotencyKey(context.IdempotencyKey)
             ?? BuildDerivedIdempotencyKey(context, hash);
@@ -115,7 +204,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         // different keys and would otherwise create two submissions (and two
         // paid grading workflows). A recent identical-content submission for
         // the same learner + task + mode is the same logical attempt — reuse
-        // it. The service-layer submission lock already prevents legitimate
+        // it. The seam submission lock already prevents legitimate
         // re-submits after grading; this guard only collapses in-flight races
         // and immediate retries. Revisions are excluded (they intentionally
         // create new rows linked to the original).
@@ -140,6 +229,18 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 return contentDuplicate;
             }
         }
+
+        return null;
+    }
+
+    private async Task<Guid> InsertSubmissionAsync(
+        WritingSubmissionGradeContext context, DateTimeOffset now, CancellationToken ct)
+    {
+        var letter = context.LetterContent ?? string.Empty;
+        var hash = ComputeHash(letter);
+        var wordCount = CountWords(letter);
+        var idempotencyKey = NormalizeIdempotencyKey(context.IdempotencyKey)
+            ?? BuildDerivedIdempotencyKey(context, hash);
 
         var submission = new WritingSubmission
         {
