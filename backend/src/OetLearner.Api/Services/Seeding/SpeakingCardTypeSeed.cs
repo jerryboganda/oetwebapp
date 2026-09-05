@@ -31,27 +31,41 @@ public static class SpeakingCardTypeSeed
     /// <c>SeedId("bad-news")</c> → <c>"sct-seed-bad-news"</c>.</summary>
     public static string SeedId(string slug) => $"{SeedIdPrefix}{slug}";
 
+    // The canonical taxonomy is VISIT TYPE, matching `tables.cardTypes` in
+    // rulebooks/speaking/{profession}/rulebook.v1.json (authored by the owner)
+    // and the way the owner's own source card sets are organised. The slugs
+    // below are identical to the rulebook's so the rule engine, the AI scorer
+    // and this table all name a card type the same way.
+    //
+    // (Before 2026-09 this seeded a *communication-function* taxonomy —
+    // Diagnosis / Counselling / Reassurance / Persuasion / Bad news / Health
+    // education — which matched neither the rulebook nor the source material,
+    // so every card imported from the owner's sets would have been typed
+    // against the wrong axis. See the accompanying migration for how existing
+    // databases are realigned.)
     private static readonly (string Slug, string Name, string Description)[] Types =
     {
-        ("diagnosis", "Diagnosis / Explanation",
-            "The candidate explains a diagnosis or clinical findings clearly: establishing what the "
-            + "patient already knows, checking their reaction, and translating technical detail into "
-            + "plain language."),
-        ("counselling", "Counselling / Advice",
-            "The candidate guides the patient through options or lifestyle/behaviour change, eliciting "
-            + "the patient's ideas, concerns and expectations and agreeing a shared, realistic plan."),
-        ("reassurance", "Reassurance (anxious patient)",
-            "The patient is anxious or worried. The candidate must acknowledge the emotion, give honest "
-            + "reassurance, and address the specific fears without dismissing them."),
-        ("persuasion", "Persuasion / Adherence (reluctant patient)",
-            "The patient resists advice or requests something inappropriate. The candidate negotiates "
-            + "respectfully, explains the rationale, and reaches a plan the patient can accept."),
-        ("bad-news", "Breaking bad news",
+        ("first-visit-routine", "First visit — routine",
+            "The patient is presenting for the first time with a non-urgent problem. The candidate takes "
+            + "a history from scratch, establishes the reason for attendance, and works toward a "
+            + "provisional explanation and plan."),
+        ("first-visit-emergency", "First visit — emergency",
+            "A first presentation in an urgent or emergency setting. The candidate must calm the patient "
+            + "or relative, gather the critical history quickly, and explain immediate management without "
+            + "losing empathy under time pressure."),
+        ("follow-up", "Follow-up (second visit)",
+            "The patient is returning for review of a problem already diagnosed or treated. The candidate "
+            + "checks progress since the last visit, responds to what has changed, and adjusts the plan. "
+            + "Look for 'coming back for', 'returning for', 'follow-up', 'review of' (see RULE_35)."),
+        ("examination", "Examination card",
+            "The card requires the candidate to explain, seek consent for, or act on a physical "
+            + "examination — describing what will happen, why it is needed, and what was found."),
+        ("already-known-patient", "Already known patient",
+            "The candidate already knows this patient or has their notes to hand, so no full history is "
+            + "needed. The task centres on addressing specific questions, concerns or new information."),
+        ("breaking-bad-news", "Breaking bad news",
             "The candidate delivers serious or unexpected news with appropriate pacing — a warning shot, "
-            + "silence, and emotional support — before moving to next steps."),
-        ("health-education", "Health education / promotion",
-            "The candidate educates the patient on prevention or self-management, prioritising the "
-            + "highest-yield information and confirming understanding."),
+            + "silence, and emotional support — before moving to next steps (see rulebook section 06)."),
     };
 
     public static async Task SeedAsync(LearnerDbContext db, CancellationToken ct = default)

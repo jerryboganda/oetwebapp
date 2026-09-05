@@ -41,7 +41,16 @@ public record AdminRolePlayCardCreateRequest(
     bool? IsLiveTutorEligible,
     // Speaking module rebuild (2026-06-11). Hidden card type + printed card no.
     string? CardTypeId = null,
-    int? DisplayCardNumber = null);
+    int? DisplayCardNumber = null,
+    // PREFERRED: the full ordered task list, ANY length. `Task1..Task5` above
+    // remain accepted for older callers and are used only when `Tasks` is null.
+    // A card printed with six or more bullets MUST use `Tasks` — the five
+    // positional fields cannot represent it and content would be lost.
+    string[]? Tasks = null,
+    // Verbatim provenance/rights notice printed on the source card (footer or
+    // watermark). ADMIN-ONLY — never projected to learners. Preserve it on
+    // import; do not strip a rights-holder notice off transcribed material.
+    string? SourceAttribution = null);
 
 /// <summary>Bulk lifecycle action over a set of role-play cards. <c>Action</c>
 /// is one of <c>publish</c> | <c>archive</c> (duplicate stays a per-row action
@@ -81,7 +90,14 @@ public record AdminRolePlayCardUpdateRequest(
     // Speaking module rebuild (2026-06-11). Hidden card type + printed card no.
     // Sentinel "" on CardTypeId clears the type; null leaves it unchanged.
     string? CardTypeId = null,
-    int? DisplayCardNumber = null);
+    int? DisplayCardNumber = null,
+    // PREFERRED: replaces the WHOLE ordered task list when supplied (any
+    // length). Leave null to keep the existing list, or to patch individual
+    // bullets via Task1..Task5 above.
+    string[]? Tasks = null,
+    // Verbatim provenance/rights notice from the source card. ADMIN-ONLY.
+    // Sentinel "" clears it; null leaves it unchanged.
+    string? SourceAttribution = null);
 
 // ── Interlocutor script request ──────────────────────────────────────────
 
@@ -115,7 +131,11 @@ public record AdminInterlocutorScriptUpsertRequest(
     // independent-card behaviour.
     bool? AllowsSecondVisit = null,
     string? SecondVisitIndicator = null,
-    string[]? SecondVisitCarryFacts = null);
+    string[]? SecondVisitCarryFacts = null,
+    // PREFERRED: the full ordered roleplayer task list, ANY length. Replaces
+    // the whole list when supplied; PatientTask1..PatientTask5 above are used
+    // only when this is null.
+    string[]? PatientTasks = null);
 
 // ── Response shapes ──────────────────────────────────────────────────────
 
@@ -138,7 +158,11 @@ public record AdminRolePlayCardSummary(
     DateTimeOffset? ArchivedAt,
     // Speaking module rebuild (2026-06-11). Hidden card type (admin/tutor only).
     string? CardTypeId = null,
-    string? CardTypeName = null);
+    string? CardTypeName = null,
+    // Verbatim provenance/rights notice from the printed source. ADMIN-ONLY —
+    // present here so the admin list can show where a card came from, and so a
+    // bulk importer has a stable natural key to dedupe against.
+    string? SourceAttribution = null);
 
 /// <summary>Full admin projection of a role-play card. The
 /// <see cref="InterlocutorScript"/> property surfaces the hidden card
@@ -176,7 +200,10 @@ public record AdminRolePlayCardDetail(
     // tutor only) + printed card number.
     string? CardTypeId = null,
     string? CardTypeName = null,
-    int? DisplayCardNumber = null);
+    int? DisplayCardNumber = null,
+    // Verbatim provenance/rights notice from the printed source. Present on
+    // the ADMIN projection only — never on AdminRolePlayCardLearnerDetail.
+    string? SourceAttribution = null);
 
 /// <summary>Admin projection of the hidden interlocutor card. Holds every
 /// field that drives the AI patient persona and the tutor cue panel.</summary>

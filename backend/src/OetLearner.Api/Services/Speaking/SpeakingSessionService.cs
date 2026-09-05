@@ -609,10 +609,7 @@ public sealed class SpeakingSessionService(
     /// </summary>
     public static object ProjectLearnerCard(RolePlayCard card)
     {
-        var tasks = new[] { card.Task1, card.Task2, card.Task3, card.Task4, card.Task5 }
-            .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Select(t => t!.Trim())
-            .ToArray();
+        var tasks = card.Tasks.ToArray();
 
         var criteriaFocus = AdminService.DeserializeCriteriaFocus(card.CriteriaFocusJson);
 

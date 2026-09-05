@@ -18,11 +18,15 @@ namespace OetLearner.Api.Services;
 // `AdminService.SpeakingMockSets.PublishSpeakingMockSetAsync` and the
 // content publish gate at `IContentPaperService.RequiredRolesFor`):
 //   - The card must have a linked InterlocutorScript.
-//   - At least 3 of Task1..Task5 must be non-empty (an OET role-play is
+//   - At least 3 task bullets must be present (an OET role-play is
 //     typically four-five tasks; three is the minimum that constitutes a
 //     usable card).
 //   - Background must be non-empty.
-//   - The card must not already be archived.
+// All three are enforced in one place — `EvaluatePublishGate` — shared by the
+// per-card publish endpoint and the bulk publish action. Publishing an ARCHIVED
+// card is allowed on purpose: there is no separate restore endpoint and updates
+// are refused while archived, so publish is the only way back; it clears
+// ArchivedAt.
 //
 // Permissions reuse the existing AdminContent grants: read for list/get,
 // write for create/update/archive/duplicate, publish for the publish
@@ -92,7 +96,8 @@ public partial class AdminService
                     PublishedAt: r.PublishedAt,
                     ArchivedAt: r.ArchivedAt,
                     CardTypeId: r.CardTypeId,
-                    CardTypeName: r.CardTypeId is not null && typeNames.TryGetValue(r.CardTypeId, out var tn) ? tn : null))
+                    CardTypeName: r.CardTypeId is not null && typeNames.TryGetValue(r.CardTypeId, out var tn) ? tn : null,
+                    SourceAttribution: r.SourceAttribution))
                 .ToArray(),
         };
     }
@@ -168,11 +173,11 @@ public partial class AdminService
             PatientName = req.PatientName?.Trim(),
             PatientAge = req.PatientAge?.Trim(),
             Background = req.Background?.Trim() ?? string.Empty,
-            Task1 = req.Task1?.Trim(),
-            Task2 = req.Task2?.Trim(),
-            Task3 = req.Task3?.Trim(),
-            Task4 = req.Task4?.Trim(),
-            Task5 = req.Task5?.Trim(),
+            // `Tasks` wins when supplied; otherwise fold the five positional
+            // fields into the list. The setter mirrors back to Task1..Task5.
+            Tasks = req.Tasks
+                ?? new[] { req.Task1, req.Task2, req.Task3, req.Task4, req.Task5 }
+                    .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToArray(),
             AllowedNotes = req.AllowedNotes ?? true,
             PrepTimeSeconds = req.PrepTimeSeconds ?? 180,
             RolePlayTimeSeconds = req.RolePlayTimeSeconds ?? 300,
@@ -194,6 +199,7 @@ public partial class AdminService
             IsLiveTutorEligible = req.IsLiveTutorEligible ?? false,
             CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim(),
             DisplayCardNumber = req.DisplayCardNumber,
+            SourceAttribution = NormaliseSourceAttribution(req.SourceAttribution),
             CreatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,
@@ -256,11 +262,27 @@ public partial class AdminService
         if (req.PatientName is not null) card.PatientName = string.IsNullOrWhiteSpace(req.PatientName) ? null : req.PatientName.Trim();
         if (req.PatientAge is not null) card.PatientAge = string.IsNullOrWhiteSpace(req.PatientAge) ? null : req.PatientAge.Trim();
         if (req.Background is not null) card.Background = req.Background.Trim();
-        if (req.Task1 is not null) card.Task1 = string.IsNullOrWhiteSpace(req.Task1) ? null : req.Task1.Trim();
-        if (req.Task2 is not null) card.Task2 = string.IsNullOrWhiteSpace(req.Task2) ? null : req.Task2.Trim();
-        if (req.Task3 is not null) card.Task3 = string.IsNullOrWhiteSpace(req.Task3) ? null : req.Task3.Trim();
-        if (req.Task4 is not null) card.Task4 = string.IsNullOrWhiteSpace(req.Task4) ? null : req.Task4.Trim();
-        if (req.Task5 is not null) card.Task5 = string.IsNullOrWhiteSpace(req.Task5) ? null : req.Task5.Trim();
+        if (req.Tasks is not null)
+        {
+            // Whole-list replace — the only way to express six or more bullets.
+            card.Tasks = req.Tasks;
+        }
+        else if (req.Task1 is not null || req.Task2 is not null || req.Task3 is not null
+                 || req.Task4 is not null || req.Task5 is not null)
+        {
+            // Legacy per-slot patch. Applied over the CURRENT list so patching
+            // Task2 on an eight-bullet card no longer truncates it to five.
+            var slots = card.Tasks.ToList();
+            while (slots.Count < 5) slots.Add(string.Empty);
+            void Patch(int i, string? v)
+            {
+                if (v is null) return;
+                slots[i] = string.IsNullOrWhiteSpace(v) ? string.Empty : v.Trim();
+            }
+            Patch(0, req.Task1); Patch(1, req.Task2); Patch(2, req.Task3);
+            Patch(3, req.Task4); Patch(4, req.Task5);
+            card.Tasks = slots;
+        }
         if (req.AllowedNotes.HasValue) card.AllowedNotes = req.AllowedNotes.Value;
         if (req.PrepTimeSeconds.HasValue) card.PrepTimeSeconds = Math.Max(0, req.PrepTimeSeconds.Value);
         if (req.RolePlayTimeSeconds.HasValue) card.RolePlayTimeSeconds = Math.Max(0, req.RolePlayTimeSeconds.Value);
@@ -282,6 +304,12 @@ public partial class AdminService
             card.CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim();
         }
         if (req.DisplayCardNumber.HasValue) card.DisplayCardNumber = req.DisplayCardNumber.Value;
+        // SourceAttribution: "" clears the notice; a non-blank value sets it;
+        // null leaves it unchanged.
+        if (req.SourceAttribution is not null)
+        {
+            card.SourceAttribution = NormaliseSourceAttribution(req.SourceAttribution);
+        }
 
         card.UpdatedAt = DateTimeOffset.UtcNow;
 
@@ -322,18 +350,23 @@ public partial class AdminService
         var script = await db.InterlocutorScripts
             .FirstOrDefaultAsync(x => x.RolePlayCardId == cardId, ct);
 
-        // Publish gate: a role-play card is not usable by learners without an
-        // interlocutor script, so refuse to publish one that is missing it.
-        if (script is null)
+        // Publish gate — see EvaluatePublishGate. A card that is missing its
+        // interlocutor script, its background, or its task bullets is not
+        // usable by a learner, so refuse to publish it.
+        var blocker = EvaluatePublishGate(card, script is not null);
+        if (blocker is not null)
         {
-            throw ApiException.Validation("role_play_card_missing_interlocutor",
-                "This role-play card cannot be published without an interlocutor script.");
+            throw ApiException.Validation(blocker.Value.Code, blocker.Value.Message);
         }
 
         var now = DateTimeOffset.UtcNow;
         card.Status = ContentStatus.Published;
         card.PublishedAt = now;
         card.UpdatedAt = now;
+        // Publishing doubles as the restore path for an archived card, so clear
+        // the archive marker — otherwise the row stays flagged archived in every
+        // admin projection despite being live.
+        card.ArchivedAt = null;
 
         // Publish the underlying ContentItem so legacy speaking surfaces
         // that read from `ContentItem.Status == Published` keep working.
@@ -343,6 +376,7 @@ public partial class AdminService
             content.Status = ContentStatus.Published;
             content.PublishedAt = now;
             content.UpdatedAt = now;
+            content.ArchivedAt = null;
             if (string.IsNullOrWhiteSpace(content.PublishedRevisionId))
             {
                 content.PublishedRevisionId = $"{content.Id}-r1";
@@ -448,11 +482,7 @@ public partial class AdminService
             PatientName = source.PatientName,
             PatientAge = source.PatientAge,
             Background = source.Background,
-            Task1 = source.Task1,
-            Task2 = source.Task2,
-            Task3 = source.Task3,
-            Task4 = source.Task4,
-            Task5 = source.Task5,
+            Tasks = source.Tasks,
             AllowedNotes = source.AllowedNotes,
             PrepTimeSeconds = source.PrepTimeSeconds,
             RolePlayTimeSeconds = source.RolePlayTimeSeconds,
@@ -466,6 +496,9 @@ public partial class AdminService
             IsLiveTutorEligible = source.IsLiveTutorEligible,
             CardTypeId = source.CardTypeId,
             DisplayCardNumber = source.DisplayCardNumber,
+            // A duplicate is derived from the same printed source, so the
+            // rights notice travels with it.
+            SourceAttribution = source.SourceAttribution,
             CreatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,
@@ -489,11 +522,7 @@ public partial class AdminService
                 ProfessionRoleNotes = sourceScript.ProfessionRoleNotes,
                 LayLanguageTriggersJson = sourceScript.LayLanguageTriggersJson,
                 PatientBackground = sourceScript.PatientBackground,
-                PatientTask1 = sourceScript.PatientTask1,
-                PatientTask2 = sourceScript.PatientTask2,
-                PatientTask3 = sourceScript.PatientTask3,
-                PatientTask4 = sourceScript.PatientTask4,
-                PatientTask5 = sourceScript.PatientTask5,
+                PatientTasks = sourceScript.PatientTasks,
                 AllowsSecondVisit = sourceScript.AllowsSecondVisit,
                 SecondVisitIndicator = sourceScript.SecondVisitIndicator,
                 SecondVisitCarryFactsJson = sourceScript.SecondVisitCarryFactsJson,
@@ -631,21 +660,25 @@ public partial class AdminService
                     skipped++;
                     continue;
                 }
-                // Same interlocutor-script gate the per-item publish enforces.
-                if (!hasScript.Contains(card.Id))
+                // Exactly the gate the per-item publish enforces — shared so the
+                // two paths can never drift apart.
+                var blocker = EvaluatePublishGate(card, hasScript.Contains(card.Id));
+                if (blocker is not null)
                 {
-                    RecordError($"{card.ScenarioTitle}: cannot be published without an interlocutor script.");
+                    RecordError($"{card.ScenarioTitle}: {blocker.Value.Message}");
                     continue;
                 }
 
                 card.Status = ContentStatus.Published;
                 card.PublishedAt = now;
                 card.UpdatedAt = now;
+                card.ArchivedAt = null;
                 if (content is not null)
                 {
                     content.Status = ContentStatus.Published;
                     content.PublishedAt = now;
                     content.UpdatedAt = now;
+                    content.ArchivedAt = null;
                     if (string.IsNullOrWhiteSpace(content.PublishedRevisionId))
                     {
                         content.PublishedRevisionId = $"{content.Id}-r1";
@@ -739,15 +772,60 @@ public partial class AdminService
         }
     }
 
-    private static int CountNonEmptyTasks(RolePlayCard card)
+    /// <summary>Minimum candidate task bullets a publishable card must carry.
+    /// An OET role-play is typically four-five tasks; three is the fewest that
+    /// still constitutes a usable card.</summary>
+    internal const int MinPublishableTasks = 3;
+
+    /// <summary>Trims the verbatim rights/provenance notice printed on the
+    /// source card and clamps it to the column width. Blank becomes null.</summary>
+    private static string? NormaliseSourceAttribution(string? raw)
     {
-        var count = 0;
-        if (!string.IsNullOrWhiteSpace(card.Task1)) count++;
-        if (!string.IsNullOrWhiteSpace(card.Task2)) count++;
-        if (!string.IsNullOrWhiteSpace(card.Task3)) count++;
-        if (!string.IsNullOrWhiteSpace(card.Task4)) count++;
-        if (!string.IsNullOrWhiteSpace(card.Task5)) count++;
-        return count;
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var trimmed = raw.Trim();
+        return trimmed.Length <= 400 ? trimmed : trimmed[..400];
+    }
+
+    /// <summary>Counts the authoritative task list, not the five legacy mirror
+    /// columns — a card inserted with eight bullets must not be counted as five
+    /// (or as zero, if the mirror was never written).</summary>
+    private static int CountNonEmptyTasks(RolePlayCard card) => card.Tasks.Count;
+
+    /// <summary>
+    /// The single publish gate for a role-play card, shared by the per-card
+    /// publish endpoint and the bulk publish action so the two can never drift.
+    ///
+    /// Returns <c>null</c> when the card may be published, otherwise a
+    /// <c>(code, message)</c> pair describing the first blocker.
+    ///
+    /// These are exactly the rules this file has always documented; before
+    /// 2026-09 only the interlocutor-script rule was actually enforced and
+    /// <see cref="CountNonEmptyTasks"/> was dead code, so a card with no
+    /// background and no tasks could be published and would render blank to
+    /// the learner.
+    /// </summary>
+    /// <remarks>Publishing is deliberately allowed on an Archived card: there is
+    /// no separate restore endpoint, and updates are refused while archived, so
+    /// publish is the only way back. The caller clears <c>ArchivedAt</c>.</remarks>
+    internal static (string Code, string Message)? EvaluatePublishGate(RolePlayCard card, bool hasInterlocutorScript)
+    {
+        if (!hasInterlocutorScript)
+        {
+            return ("role_play_card_missing_interlocutor",
+                "This role-play card cannot be published without an interlocutor script.");
+        }
+        if (string.IsNullOrWhiteSpace(card.Background))
+        {
+            return ("role_play_card_missing_background",
+                "This role-play card cannot be published without a candidate background.");
+        }
+        var taskCount = CountNonEmptyTasks(card);
+        if (taskCount < MinPublishableTasks)
+        {
+            return ("role_play_card_insufficient_tasks",
+                $"This role-play card needs at least {MinPublishableTasks} candidate task bullets to be published (it has {taskCount}).");
+        }
+        return null;
     }
 
     private static string NormaliseProfession(string raw)
@@ -770,15 +848,46 @@ public partial class AdminService
         return Math.Max(1, (int)Math.Ceiling(total / 60.0));
     }
 
+    /// <summary>
+    /// Normalise + validate the criteria-focus codes against the canonical nine
+    /// OET Speaking criteria (<see cref="SpeakingCriterionCodes"/>).
+    ///
+    /// Previously this accepted any string, so a typo ("infoGiving") persisted
+    /// silently and simply never matched anything downstream — the card looked
+    /// authored but its criteria focus was inert. Unknown codes are now a
+    /// validation error, and known codes are canonicalised to their exact
+    /// casing so equality checks downstream are reliable.
+    /// </summary>
     private static string SerializeCriteriaFocus(string[]? codes)
     {
         if (codes is null || codes.Length == 0) return "[]";
-        var cleaned = codes
-            .Where(c => !string.IsNullOrWhiteSpace(c))
-            .Select(c => c.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        return JsonSerializer.Serialize(cleaned);
+
+        var canonical = new List<string>();
+        var unknown = new List<string>();
+        foreach (var raw in codes)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            var trimmed = raw.Trim();
+            var match = SpeakingCriterionCodes
+                .FirstOrDefault(c => string.Equals(c, trimmed, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+            {
+                unknown.Add(trimmed);
+            }
+            else if (!canonical.Contains(match, StringComparer.Ordinal))
+            {
+                canonical.Add(match);
+            }
+        }
+
+        if (unknown.Count > 0)
+        {
+            throw ApiException.Validation("ROLE_PLAY_CARD_CRITERIA_FOCUS_INVALID",
+                $"Unknown criteria focus code(s): {string.Join(", ", unknown)}. "
+                + $"Valid codes are: {string.Join(", ", SpeakingCriterionCodes)}.");
+        }
+
+        return JsonSerializer.Serialize(canonical);
     }
 
     internal static string[] DeserializeCriteriaFocus(string? json)
@@ -799,7 +908,7 @@ public partial class AdminService
         InterlocutorScript? interlocutorScript,
         string? cardTypeName = null)
     {
-        var tasks = new[] { card.Task1, card.Task2, card.Task3, card.Task4, card.Task5 };
+        var tasks = card.Tasks.Cast<string?>().ToArray();
         return new AdminRolePlayCardDetail(
             CardId: card.Id,
             ContentItemId: card.ContentItemId,
@@ -833,7 +942,8 @@ public partial class AdminService
                 : ProjectInterlocutorScript(interlocutorScript),
             CardTypeId: card.CardTypeId,
             CardTypeName: cardTypeName,
-            DisplayCardNumber: card.DisplayCardNumber);
+            DisplayCardNumber: card.DisplayCardNumber,
+            SourceAttribution: card.SourceAttribution);
     }
 
     internal static AdminInterlocutorScriptDetail ProjectInterlocutorScript(InterlocutorScript script)
@@ -854,11 +964,7 @@ public partial class AdminService
             CreatedAt: script.CreatedAt,
             UpdatedAt: script.UpdatedAt,
             PatientBackground: script.PatientBackground,
-            PatientTasks: new[]
-            {
-                script.PatientTask1, script.PatientTask2, script.PatientTask3,
-                script.PatientTask4, script.PatientTask5,
-            },
+            PatientTasks: script.PatientTasks.Cast<string?>().ToArray(),
             AllowsSecondVisit: script.AllowsSecondVisit,
             SecondVisitIndicator: script.SecondVisitIndicator,
             SecondVisitCarryFacts: DeserializeStringArray(script.SecondVisitCarryFactsJson));
@@ -1025,11 +1131,7 @@ public partial class AdminService
             PatientName = parsed.PatientName,
             PatientAge = parsed.PatientAge,
             Background = parsed.Background,
-            Task1 = parsed.Tasks.ElementAtOrDefault(0),
-            Task2 = parsed.Tasks.ElementAtOrDefault(1),
-            Task3 = parsed.Tasks.ElementAtOrDefault(2),
-            Task4 = parsed.Tasks.ElementAtOrDefault(3),
-            Task5 = parsed.Tasks.ElementAtOrDefault(4),
+            Tasks = parsed.Tasks,
             AllowedNotes = true,
             PrepTimeSeconds = parsed.PrepTimeSeconds,
             RolePlayTimeSeconds = parsed.RolePlayTimeSeconds,

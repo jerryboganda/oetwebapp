@@ -758,8 +758,7 @@ Rules:
         {
             cardId = card.Id, professionId = card.ProfessionId, scenarioTitle = card.ScenarioTitle,
             setting = card.Setting, candidateRole = card.CandidateRole,
-            tasks = new[] { card.Task1, card.Task2, card.Task3, card.Task4, card.Task5 }
-                .Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!.Trim()).ToArray(),
+            tasks = card.Tasks.ToArray(),
             communicationGoal = card.CommunicationGoal, clinicalTopic = card.ClinicalTopic,
         }));
         sb.AppendLine("---- RELEASED RUBRIC ----");

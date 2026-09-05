@@ -247,8 +247,7 @@ public sealed class SpeakingExamService(
 
         var tasks = script is null
             ? Array.Empty<string>()
-            : new[] { script.PatientTask1, script.PatientTask2, script.PatientTask3, script.PatientTask4, script.PatientTask5 }
-                .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim()).ToArray();
+            : script.PatientTasks.ToArray();
 
         return new SpeakingExamRoleplayerCard(
             CardNumber: cardNumber,

@@ -69,6 +69,9 @@ public partial class LearnerService
                 card.PatientName,
                 card.PatientAge,
                 card.Background,
+                // TasksJson is authoritative; the legacy five come along so a
+                // row written before the unbounded-tasks migration still reads.
+                card.TasksJson,
                 card.Task1,
                 card.Task2,
                 card.Task3,
@@ -98,9 +101,8 @@ public partial class LearnerService
 
         var summaries = filtered.Select(r =>
         {
-            var tasks = new[] { r.Task1, r.Task2, r.Task3, r.Task4, r.Task5 }
-                .Where(t => !string.IsNullOrWhiteSpace(t))
-                .Select(t => t!.Trim())
+            var tasks = RolePlayCardTasks
+                .Effective(r.TasksJson, r.Task1, r.Task2, r.Task3, r.Task4, r.Task5)
                 .ToArray();
             var criteriaFocus = AdminService.DeserializeCriteriaFocus(r.CriteriaFocusJson);
             return new
@@ -205,10 +207,7 @@ public partial class LearnerService
         }
 
         var card = record.Card;
-        var tasks = new[] { card.Task1, card.Task2, card.Task3, card.Task4, card.Task5 }
-            .Where(t => !string.IsNullOrWhiteSpace(t))
-            .Select(t => t!.Trim())
-            .ToArray();
+        var tasks = card.Tasks.ToArray();
 
         var criteriaFocus = AdminService.DeserializeCriteriaFocus(card.CriteriaFocusJson);
 

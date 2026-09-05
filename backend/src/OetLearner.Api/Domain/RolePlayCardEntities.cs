@@ -1,7 +1,88 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
+
+/// <summary>
+/// Serialisation helpers for the unbounded task-bullet lists on
+/// <see cref="RolePlayCard"/> and <see cref="InterlocutorScript"/>.
+///
+/// <para>These replaced the fixed <c>Task1..Task5</c> columns: the owner's real
+/// OET card sets contain cards with six to eight printed bullets, so a
+/// five-slot schema silently dropped printed content at import time.</para>
+/// </summary>
+public static class RolePlayCardTasks
+{
+    /// <summary>Null/blank entries are dropped; order and text are preserved.</summary>
+    public static string Serialize(IEnumerable<string>? tasks)
+    {
+        if (tasks is null) return "[]";
+        var cleaned = tasks
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .ToArray();
+        return cleaned.Length == 0 ? "[]" : JsonSerializer.Serialize(cleaned);
+    }
+
+    public static IReadOnlyList<string> Deserialize(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+        try
+        {
+            return JsonSerializer.Deserialize<string[]>(json) ?? Array.Empty<string>();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    /// <summary>
+    /// Keep the legacy five columns in step with the first five list entries so
+    /// an instance still running the previous build renders a sane (if
+    /// truncated) card during a blue/green rollout.
+    /// </summary>
+    /// <remarks>
+    /// The legacy columns are <c>varchar(500)</c> but the authoritative JSON
+    /// list is not bounded, and real printed cards carry bullets longer than
+    /// that (the longest in the owner's corpus is 602 characters). Writing the
+    /// untruncated value straight through made the whole save fail with
+    /// "value too long for type character varying(500)", so a perfectly valid
+    /// card could not be created at all. Clamping here is safe: nothing reads
+    /// these columns any more, <see cref="Serialize"/> has already stored the
+    /// full text, and truncation is exactly what the mirror was documented to
+    /// do.
+    /// </remarks>
+    public const int LegacyColumnLength = 500;
+
+    public static void MirrorToLegacyColumns(
+        IEnumerable<string>? tasks,
+        params Action<string?>[] setters)
+    {
+        var list = (tasks ?? Enumerable.Empty<string>())
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Select(t => t.Length <= LegacyColumnLength ? t : t[..LegacyColumnLength])
+            .ToArray();
+        for (var i = 0; i < setters.Length; i++)
+        {
+            setters[i](i < list.Length ? list[i] : null);
+        }
+    }
+
+    /// <summary>
+    /// Read the effective task list for a card that may pre-date
+    /// <c>TasksJson</c>: prefer the JSON list, fall back to the legacy columns.
+    /// </summary>
+    public static IReadOnlyList<string> Effective(string? json, params string?[] legacy)
+    {
+        var fromJson = Deserialize(json);
+        if (fromJson.Count > 0) return fromJson;
+        return legacy.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim()).ToArray();
+    }
+}
 
 // Phase 1 of the OET Speaking module roadmap
 // (see C:\Users\Dr Faisal Maqsood PC\.claude\plans\1-oet-speaking-module-quirky-kurzweil.md).
@@ -81,9 +162,35 @@ public class RolePlayCard
     [MaxLength(4000)]
     public string Background { get; set; } = string.Empty;
 
-    // Up to five task bullets shown on the candidate card. Nullable so a
-    // card can carry fewer than five tasks; the publish gate validates
-    // that at least three are present.
+    /// <summary>
+    /// AUTHORITATIVE ordered list of candidate task bullets, as a JSON array of
+    /// strings. Unbounded: real OET cards routinely carry six, seven or eight
+    /// bullets, and a bullet may itself contain indented sub-items (kept inside
+    /// the parent string, one per line).
+    ///
+    /// <para>Use <see cref="Tasks"/> to read/write this. The legacy
+    /// <c>Task1..Task5</c> columns below are a MIRROR of the first five entries,
+    /// kept populated only so that instances running the previous build keep
+    /// working across a blue/green rollout; nothing reads them any more and a
+    /// later migration drops them.</para>
+    /// </summary>
+    public string TasksJson { get; set; } = "[]";
+
+    /// <summary>Ordered candidate task bullets. Backed by <see cref="TasksJson"/>.</summary>
+    [NotMapped]
+    public IReadOnlyList<string> Tasks
+    {
+        get => RolePlayCardTasks.Effective(TasksJson, Task1, Task2, Task3, Task4, Task5);
+        set
+        {
+            TasksJson = RolePlayCardTasks.Serialize(value);
+            RolePlayCardTasks.MirrorToLegacyColumns(value, s => Task1 = s, s => Task2 = s,
+                s => Task3 = s, s => Task4 = s, s => Task5 = s);
+        }
+    }
+
+    // LEGACY mirror of the first five entries of `Tasks` — see TasksJson.
+    // Do not read these; do not add a Task6. Kept for rollout compatibility.
     [MaxLength(500)] public string? Task1 { get; set; }
     [MaxLength(500)] public string? Task2 { get; set; }
     [MaxLength(500)] public string? Task3 { get; set; }
@@ -149,6 +256,18 @@ public class RolePlayCard
     public string Disclaimer { get; set; } =
         "Practice estimate only. This is not an official OET score or result.";
 
+    /// <summary>Provenance of the printed source this card was transcribed
+    /// from — verbatim footer/watermark text such as
+    /// "© Cambridge Boxhill Language Assessment / SEPTEMBER 2015".
+    ///
+    /// ADMIN/TUTOR ONLY. Deliberately absent from every learner-facing
+    /// projection (<c>RolePlayCardLearnerDetail</c>) so the card face renders
+    /// clean, while the record itself never loses the rights-holder notice
+    /// attached to the source material. Do not repurpose this as a display
+    /// field, and do not strip it on import.</summary>
+    [MaxLength(400)]
+    public string? SourceAttribution { get; set; }
+
     public ContentStatus Status { get; set; } = ContentStatus.Draft;
 
     /// <summary>True when the card is wired into the live-tutor flow
@@ -199,6 +318,27 @@ public class InterlocutorScript
     [MaxLength(4000)]
     public string PatientBackground { get; set; } = string.Empty;
 
+    /// <summary>
+    /// AUTHORITATIVE ordered list of roleplayer task bullets, as a JSON array of
+    /// strings. Unbounded — see <see cref="RolePlayCard.TasksJson"/> for why.
+    /// </summary>
+    public string PatientTasksJson { get; set; } = "[]";
+
+    /// <summary>Ordered roleplayer task bullets. Backed by <see cref="PatientTasksJson"/>.</summary>
+    [NotMapped]
+    public IReadOnlyList<string> PatientTasks
+    {
+        get => RolePlayCardTasks.Effective(PatientTasksJson,
+            PatientTask1, PatientTask2, PatientTask3, PatientTask4, PatientTask5);
+        set
+        {
+            PatientTasksJson = RolePlayCardTasks.Serialize(value);
+            RolePlayCardTasks.MirrorToLegacyColumns(value, s => PatientTask1 = s, s => PatientTask2 = s,
+                s => PatientTask3 = s, s => PatientTask4 = s, s => PatientTask5 = s);
+        }
+    }
+
+    // LEGACY mirror of the first five entries of `PatientTasks`.
     [MaxLength(500)] public string? PatientTask1 { get; set; }
     [MaxLength(500)] public string? PatientTask2 { get; set; }
     [MaxLength(500)] public string? PatientTask3 { get; set; }

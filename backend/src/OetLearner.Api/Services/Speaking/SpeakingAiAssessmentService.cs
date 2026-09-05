@@ -497,8 +497,7 @@ Scoring rules:
             patientName = card.PatientName,
             patientAge = card.PatientAge,
             background = card.Background,
-            tasks = new[] { card.Task1, card.Task2, card.Task3, card.Task4, card.Task5 }
-                .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim()).ToArray(),
+            tasks = card.Tasks.ToArray(),
             patientEmotion = card.PatientEmotion,
             communicationGoal = card.CommunicationGoal,
             clinicalTopic = card.ClinicalTopic,
@@ -510,12 +509,7 @@ Scoring rules:
             : JsonSerializer.Serialize(new
             {
                 patientBackground = script.PatientBackground,
-                patientTasks = new[]
-                    {
-                        script.PatientTask1, script.PatientTask2, script.PatientTask3,
-                        script.PatientTask4, script.PatientTask5,
-                    }
-                    .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim()).ToArray(),
+                patientTasks = script.PatientTasks.ToArray(),
                 openingResponse = script.OpeningResponse,
                 prompts = new[] { script.Prompt1, script.Prompt2, script.Prompt3 }
                     .Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim()).ToArray(),

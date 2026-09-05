@@ -30,29 +30,48 @@ public static class SpeakingWarmUpSeed
     private const string UniversalKey = "_universal";
 
     // ─────────────────────────────────────────────────────────────────
-    // Code-defined question pool — 15 per top-4 profession + 10 universal
+    // Code-defined question pool — 15 per profession + the universal set
     // ─────────────────────────────────────────────────────────────────
 
-    private static readonly ImmutableDictionary<string, ImmutableArray<string>> Pool = BuildPool();
+    /// <summary>
+    /// One warm-up prompt. <paramref name="ModelAnswer"/> is the sample answer a
+    /// learner can study after the unscored warm-up; it is <c>null</c> for
+    /// prompts that have no published model answer.
+    ///
+    /// <para>Before 2026-09 the pool was a bare <c>ImmutableArray&lt;string&gt;</c>,
+    /// so the owner's intro-question material — which is authored as
+    /// question + model-answer PAIRS — had nowhere to live and only half of it
+    /// could be represented.</para>
+    /// </summary>
+    public sealed record WarmUpPrompt(string Question, string? ModelAnswer = null);
+
+    private static readonly ImmutableDictionary<string, ImmutableArray<WarmUpPrompt>> Pool = BuildPool();
 
     /// <summary>
-    /// Returns the merged warm-up question pool for the given profession.
-    /// Falls back to the universal pool when the profession is unknown.
-    /// Profession-specific questions always sort first.
+    /// Returns the merged warm-up prompts for the given profession, model
+    /// answers included. Falls back to the universal pool when the profession
+    /// is unknown. Profession-specific prompts always sort first.
     /// </summary>
-    public static IReadOnlyList<string> GetQuestions(string? professionId)
+    public static IReadOnlyList<WarmUpPrompt> GetPrompts(string? professionId)
     {
         var key = NormaliseProfession(professionId);
         var universal = Pool[UniversalKey];
-        if (string.IsNullOrEmpty(key) || !Pool.TryGetValue(key, out var profQuestions))
+        if (string.IsNullOrEmpty(key) || !Pool.TryGetValue(key, out var profPrompts))
         {
             return universal;
         }
-        var merged = new List<string>(profQuestions.Length + universal.Length);
-        merged.AddRange(profQuestions);
+        var merged = new List<WarmUpPrompt>(profPrompts.Length + universal.Length);
+        merged.AddRange(profPrompts);
         merged.AddRange(universal);
         return merged;
     }
+
+    /// <summary>
+    /// Question text only — the shape <c>ConversationHub.SpeakingRoleplay</c>
+    /// consumes when driving the warm-up conversation.
+    /// </summary>
+    public static IReadOnlyList<string> GetQuestions(string? professionId)
+        => GetPrompts(professionId).Select(p => p.Question).ToList();
 
     /// <summary>
     /// Seeds the database catalogue rows so admins can see the
@@ -124,15 +143,29 @@ public static class SpeakingWarmUpSeed
     // Helpers
     // ─────────────────────────────────────────────────────────────────
 
+    /// <summary>Question-only prompts (no published model answer yet).</summary>
+    private static ImmutableArray<WarmUpPrompt> ToPrompts(params string[] questions)
+        => questions.Select(q => new WarmUpPrompt(q)).ToImmutableArray();
+
+    /// <summary>
+    /// Canonicalise a profession id onto a pool key. Every OET profession in
+    /// <c>PROFESSION_CATALOG</c> is recognised, so a profession that has no
+    /// dedicated pool yet still resolves to its own key rather than being
+    /// silently flattened to "unknown" — adding a pool later just works.
+    /// Unrecognised ids fall back to the universal pool.
+    /// </summary>
     private static string NormaliseProfession(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         return raw.Trim().ToLowerInvariant() switch
         {
-            "nursing" => "nursing",
+            "nursing" or "nurse" => "nursing",
             "medicine" or "medical" or "doctor" => "medicine",
             "pharmacy" or "pharmacist" => "pharmacy",
             "physiotherapy" or "physio" => "physiotherapy",
+            "dentistry" or "dental" or "dentist" => "dentistry",
+            "radiography" or "radiographer" => "radiography",
+            "other-allied-health" or "allied-health" => "other-allied-health",
             _ => string.Empty,
         };
     }
@@ -143,26 +176,81 @@ public static class SpeakingWarmUpSeed
         "medicine" => "Medicine",
         "pharmacy" => "Pharmacy",
         "physiotherapy" => "Physiotherapy",
+        "dentistry" => "Dentistry",
+        "radiography" => "Radiography",
+        "other-allied-health" => "Modified Allied Health Profession",
         _ => key,
     };
 
-    private static ImmutableDictionary<string, ImmutableArray<string>> BuildPool()
+    private static ImmutableDictionary<string, ImmutableArray<WarmUpPrompt>> BuildPool()
     {
         return ImmutableDictionary.CreateRange(new[]
         {
-            new KeyValuePair<string, ImmutableArray<string>>(UniversalKey, ImmutableArray.Create(
-                "Could you tell me your full name, please?",
-                "Where are you joining us from today?",
-                "Could you spell your family name for me, please?",
-                "How long have you been preparing for the OET?",
-                "What made you decide to take this exam?",
-                "How are you feeling about the test today?",
-                "Tell me a little about your typical week.",
-                "What do you enjoy doing in your free time?",
-                "Have you taken any other English exams before?",
-                "Is there anything you would like to ask before we start the role-play?")),
+            // The universal set is the owner's own authoritative intro-question
+            // material ("Speaking Intro Qs — SAME FOR ALL PROFESSIONS"),
+            // transcribed VERBATIM including its original wording and typos.
+            // Do not "correct" these strings: they are published study material
+            // and are expected to match the owner's PDF word for word.
+            //
+            // The model answers are exemplars written in a doctor's voice (that
+            // is how the source authors them). They are shown to the learner as
+            // sample answers, not as something to recite.
+            new KeyValuePair<string, ImmutableArray<WarmUpPrompt>>(UniversalKey, ImmutableArray.Create(
+                new WarmUpPrompt("What is your name?",
+                    "My name is (your first name + last name)"),
+                new WarmUpPrompt("What is your profession?",
+                    "My profession is medicine"),
+                new WarmUpPrompt("Why are you taking the OET?",
+                    "Honestly I'm taking the OET to complete Australian medical council registration process "
+                    + "because it is one of the two tests required to practice medicine in Australia. Practicing "
+                    + "medicine in Australia is one of my dreams to upgrade myself in my career. In Australia i "
+                    + "can get advanced training and recent modalities of diagnosis and treatment. I am also "
+                    + "searching for a better chance of education for my children who are an essential part of my "
+                    + "life so I hope to pass the OET as soon as possible to start practicing medicine in Australia."),
+                new WarmUpPrompt("How long have you been working as a physician?",
+                    "I've been working as a physician for 10 years. 5 years were in Egypt and the other 5 years "
+                    + "were in United Arab Emirates."),
+                new WarmUpPrompt("What about your working hours?",
+                    "I'm working for 8 hours daily from Saturday to Thursday so I'm working a bout 48 hours per "
+                    + "week. Unfortunately, I've no enough time to spend with my family."),
+                new WarmUpPrompt("Why did you choose medicine as a career?",
+                    "Actually, it was my childhood dream and it was Also a dream of my family especially my mother "
+                    + "so I studied hard to a achieve my target. My first day in the faculty of medicine was one of "
+                    + "the happiest days in my life. I like medicine a lot because it gives me the chance to help "
+                    + "the others."),
+                new WarmUpPrompt("What about your specialty? And why?",
+                    "I like all branches of medicine so I was hesitated to choose a specific specialty and Leave "
+                    + "the others. Finally I found my target in family medicine because it allows me to practice "
+                    + "all branches of medicine and to deal with a variety of cases which in turn help me to feel "
+                    + "satisfied."),
+                new WarmUpPrompt("What is your advice for fresh graduates?",
+                    "Ooh! the most important advice I give to them is to choose their specialty carefully by "
+                    + "choosing what they actually like because they will spend the rest of their life practicing "
+                    + "it. I also advise them to outline their target at an early stage to avoid wasting their time "
+                    + "so I recommend them to find out the different styles of post graduation qualifications "
+                    + "before choosing a specific one and to keep updated with the recent guidelines to help people well."),
+                new WarmUpPrompt("How to be a successful physician?",
+                    "Ooh! What a difficult question! from my point of view I think that success in the field of "
+                    + "medicine mainly depends on early and proper planning for your career pathway. You should "
+                    + "fulfill two elements. The first element is the good planning which will save time and effort "
+                    + "for you and the second one is hard continuous working. You should also have a lot of skills "
+                    + "like being a good listener, showing sympathy to your patients, respecting the patients' time "
+                    + "and confidentiality, building a trust bond between you and the patients and continuously "
+                    + "updating yourself with the new guidelines"),
+                new WarmUpPrompt("What was the last training you had?",
+                    "I'm keen to get frequent training courses. The last one that I had was about \"advanced cardiac "
+                    + "life support\" which was about one month ago and implied how to perform a cardiac and "
+                    + "respiratory support in case of cardiac arrest. It also taught us how to deal with the cases "
+                    + "of life threatening arrhythmias. It was really a valuable course."),
+                new WarmUpPrompt("What is the most recent medical advance you heard about?",
+                    "No doubt that the medical field is one of the fastest developing fields in the world. Nearly "
+                    + "every month there are new researches, theories and guidelines. Diabetes mellitus treatment is "
+                    + "one of the most important tasks that is developing rapidly. I heard about a new trend of the "
+                    + "treatment of diabetic patients by putting a pump of insulin under their skin to release proper "
+                    + "amounts of insulin according to their need which will help them to get rid of the needles "
+                    + "pricks and gain a good control of their blood glucose level all over the day."))),
 
-            new KeyValuePair<string, ImmutableArray<string>>("nursing", ImmutableArray.Create(
+            new KeyValuePair<string, ImmutableArray<WarmUpPrompt>>("nursing", ToPrompts(
                 "Could you tell me about your current role in nursing?",
                 "Which clinical setting do you work in at the moment?",
                 "How long have you been working as a nurse?",
@@ -179,7 +267,7 @@ public static class SpeakingWarmUpSeed
                 "Are you currently working alongside a multidisciplinary team?",
                 "What inspired you to broaden your career internationally?")),
 
-            new KeyValuePair<string, ImmutableArray<string>>("medicine", ImmutableArray.Create(
+            new KeyValuePair<string, ImmutableArray<WarmUpPrompt>>("medicine", ToPrompts(
                 "Could you tell me about your current role in medicine?",
                 "Which speciality are you working in at the moment?",
                 "How many years have you been practising?",
@@ -196,7 +284,7 @@ public static class SpeakingWarmUpSeed
                 "Are you involved in any teaching or research alongside clinical work?",
                 "What drew you to internationally recognised qualifications such as OET?")),
 
-            new KeyValuePair<string, ImmutableArray<string>>("pharmacy", ImmutableArray.Create(
+            new KeyValuePair<string, ImmutableArray<WarmUpPrompt>>("pharmacy", ToPrompts(
                 "Could you tell me about your current role in pharmacy?",
                 "Do you work mainly in community pharmacy or in a hospital?",
                 "How long have you been working as a pharmacist?",
@@ -213,7 +301,7 @@ public static class SpeakingWarmUpSeed
                 "What kind of pharmacy role do you hope to move into next?",
                 "How do you typically support patients with complex regimens?")),
 
-            new KeyValuePair<string, ImmutableArray<string>>("physiotherapy", ImmutableArray.Create(
+            new KeyValuePair<string, ImmutableArray<WarmUpPrompt>>("physiotherapy", ToPrompts(
                 "Could you tell me about your current role in physiotherapy?",
                 "Which patient group do you work with most often?",
                 "How long have you been practising as a physiotherapist?",

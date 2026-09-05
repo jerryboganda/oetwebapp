@@ -193,11 +193,7 @@ public sealed class SpeakingSimulationV11PersonaService(LearnerDbContext db)
                 resistanceLevel = ResistanceLevels.ToCode(script.ResistanceLevel),
                 layLanguageTriggersJson = script.LayLanguageTriggersJson,
                 patientBackground = script.PatientBackground,
-                patientTasks = new[]
-                {
-                    script.PatientTask1, script.PatientTask2, script.PatientTask3,
-                    script.PatientTask4, script.PatientTask5,
-                }.Where(x => !string.IsNullOrWhiteSpace(x)).Select(x => x!.Trim()).ToArray(),
+                patientTasks = script.PatientTasks.ToArray(),
             }),
             CapturedAt = revealedAt,
             CreatedAt = revealedAt,
