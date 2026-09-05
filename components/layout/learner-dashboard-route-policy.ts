@@ -59,6 +59,40 @@ export const LEARNER_DASHBOARD_REEXPORT_PAGE_PATHS = [
   'app/dashboard/project/page.tsx',
 ] as const;
 
+/**
+ * Learner paths that exist only to namespace a dynamic child (e.g.
+ * `/speaking/roleplay` is just the parent folder of `/speaking/roleplay/[id]`).
+ * They have no `page.tsx`, so a breadcrumb that links them is a guaranteed 404.
+ * Kept honest by `__tests__/learner-breadcrumb-routability.test.ts`, which walks
+ * `app/` and fails if this list drifts from the filesystem.
+ */
+export const NON_ROUTABLE_LEARNER_PATHS = [
+  '/listening/drills',
+  '/listening/paper',
+  '/listening/player',
+  '/listening/practice',
+  '/listening/review',
+  '/reading/community',
+  '/reading/paper',
+  '/reading/parts',
+  '/reading/player',
+  '/reading/results',
+  '/speaking/expert-review',
+  '/speaking/phrasing',
+  '/speaking/roleplay',
+  '/speaking/sessions',
+  '/speaking/task',
+  '/speaking/transcript',
+  '/writing/mocks/session',
+  '/writing/paper',
+  '/writing/practice',
+  '/writing/practice/session',
+  '/writing/submissions',
+  '/writing/tools',
+] as const;
+
+const NON_ROUTABLE_LEARNER_PATH_SET = new Set<string>(NON_ROUTABLE_LEARNER_PATHS);
+
 const LEARNER_WORKSPACE_ROUTE_ROOTS = [
   '/',
   '/dashboard',
@@ -152,4 +186,12 @@ export function shouldShowLearnerBreadcrumbs(pathname: string | null | undefined
   }
 
   return isLearnerWorkspaceRoute(normalized) && !isImmersiveLearnerRoute(normalized);
+}
+
+/**
+ * False for a folder-only path that has no page of its own. Breadcrumbs must
+ * render these as plain text — linking them navigates the learner into a 404.
+ */
+export function isRoutableLearnerPath(pathname: string | null | undefined) {
+  return !NON_ROUTABLE_LEARNER_PATH_SET.has(normalizeLearnerPathname(pathname));
 }

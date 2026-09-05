@@ -3,14 +3,13 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight, Home } from 'lucide-react';
-import { shouldShowLearnerBreadcrumbs } from '@/components/layout/learner-dashboard-route-policy';
+import { isRoutableLearnerPath, shouldShowLearnerBreadcrumbs } from '@/components/layout/learner-dashboard-route-policy';
 import { cn } from '@/lib/utils';
 
 const routeLabelOverrides: Record<string, string> = {
   achievements: 'Achievements',
   billing: 'Billing',
   cards: 'Cards',
-  check: 'Mic Check',
   compare: 'Compare',
   conversation: 'AI Conversation',
   diagnostic: 'Diagnostic',
@@ -82,6 +81,7 @@ export function LearnerBreadcrumbs({ className, labelOverrides }: { className?: 
       href,
       label: labelOverrides?.[href] ?? humanizeSegment(segment),
       current: index === segments.length - 1,
+      routable: isRoutableLearnerPath(href),
     };
   });
 
@@ -104,13 +104,15 @@ export function LearnerBreadcrumbs({ className, labelOverrides }: { className?: 
               <span className="truncate rounded-full bg-white/70 px-2 py-1 text-navy dark:bg-slate-900/70 dark:text-slate-100" aria-current="page">
                 {crumb.label}
               </span>
-            ) : (
+            ) : crumb.routable ? (
               <Link
                 href={crumb.href}
                 className="truncate rounded-full px-2 py-1 text-muted transition-colors hover:bg-white/80 hover:text-navy dark:hover:bg-white/10 dark:hover:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
               >
                 {crumb.label}
               </Link>
+            ) : (
+              <span className="truncate rounded-full px-2 py-1 text-muted">{crumb.label}</span>
             )}
           </li>
         ))}
