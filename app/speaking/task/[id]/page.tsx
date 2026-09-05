@@ -952,6 +952,14 @@ function LiveSpeakingTaskContent() {
                   <p className="text-xs text-muted uppercase font-bold tracking-wider">{card?.profession} - {card?.setting}</p>
                 </div>
                 <p className="text-sm text-navy/80 leading-relaxed">{card?.brief}</p>
+                {card?.patient && (
+                  <p className="text-sm text-navy/80 leading-relaxed">
+                    <span className="font-bold text-navy">Patient / Client:</span> {card.patient}
+                  </p>
+                )}
+                {card?.background && (
+                  <p className="text-sm text-navy/80 leading-relaxed whitespace-pre-line">{card.background}</p>
+                )}
                 {(card?.patientEmotion || card?.communicationGoal || card?.clinicalTopic) && (
                   <div className="grid gap-2 rounded-2xl bg-background-light p-3 text-xs text-muted sm:grid-cols-3">
                     {card?.patientEmotion && <p><span className="font-bold text-navy">Emotion:</span> {card.patientEmotion}</p>}
@@ -966,6 +974,9 @@ function LiveSpeakingTaskContent() {
                     </li>
                   ))}
                 </ul>
+                {card?.sourceAttribution && (
+                  <p className="text-[11px] leading-relaxed text-muted/80">{card.sourceAttribution}</p>
+                )}
               </div>
             </motion.div>
           )}

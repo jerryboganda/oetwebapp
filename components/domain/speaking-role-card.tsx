@@ -14,6 +14,8 @@ interface SpeakingRoleCardProps {
   prepTimeSeconds?: number;
   roleplayTimeSeconds?: number;
   disclaimer?: string;
+  /** Rights notice printed on the source card. Shown verbatim beneath the card. */
+  sourceAttribution?: string;
   className?: string;
 }
 
@@ -37,6 +39,7 @@ export function SpeakingRoleCard({
   prepTimeSeconds,
   roleplayTimeSeconds,
   disclaimer,
+  sourceAttribution,
   className,
 }: SpeakingRoleCardProps) {
   const prepLabel = formatSeconds(prepTimeSeconds);
@@ -144,6 +147,11 @@ export function SpeakingRoleCard({
         {disclaimer && (
           <p className="rounded-xl bg-background-light px-4 py-3 text-xs font-bold leading-relaxed text-muted border border-border/60 text-center">
             {disclaimer}
+          </p>
+        )}
+        {sourceAttribution && (
+          <p className="px-1 pt-1 text-[11px] leading-relaxed text-muted/80 text-center">
+            {sourceAttribution}
           </p>
         )}
       </div>

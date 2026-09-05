@@ -90,7 +90,6 @@ const ROUTES = [
   '/settings/reminders',
   '/settings/sessions',
   '/speaking',
-  '/speaking/check',
   '/speaking/fluency-timeline',
   '/speaking/selection',
   '/strategies',

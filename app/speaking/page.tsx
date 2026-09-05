@@ -221,7 +221,7 @@ export default function SpeakingHome() {
                           </div>
                         </div>
                         <Link
-                          href={`/speaking/check?taskId=${taskId}`}
+                          href={`/speaking/roleplay/${encodeURIComponent(taskId)}`}
                           className={primaryLinkClasses}
                           onClick={() => {
                             analytics.track('task_started', { taskId, subtest: 'speaking' });

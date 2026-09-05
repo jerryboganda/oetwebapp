@@ -2441,6 +2441,9 @@ function mapRoleCardPayload(item: ApiRecord): RoleCard {
     clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
     criteriaFocus,
     disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
+    sourceAttribution: typeof item.sourceAttribution === 'string' && item.sourceAttribution.trim()
+      ? item.sourceAttribution
+      : undefined,
   };
 }
 

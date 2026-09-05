@@ -251,7 +251,7 @@ export default function SpeakingSessionResultsPage() {
     />
   );
 
-  const reattemptHref = session ? `/speaking/check?taskId=${encodeURIComponent(session.card.cardId)}` : '/speaking/check';
+  const reattemptHref = session ? `/speaking/roleplay/${encodeURIComponent(session.card.cardId)}` : '/speaking';
   const submissionAtLabel = session?.submittedAt
     ? new Date(session.submittedAt).toLocaleString()
     : null;

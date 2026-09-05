@@ -178,37 +178,59 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task RightsNotice_IsKeptForAdmins_AndNeverReachesTheLearner()
+    public async Task RightsNotice_ReachesTheLearner_WithoutTheInternalProvenanceToken()
     {
-        // 291 of 382 corpus records carry this notice. The owner asked for the
-        // marker off the learner-facing card — NOT for the content to be
-        // dropped, and stripping a rights notice outright would be worse than
-        // keeping it. So it rides along in an admin-only column.
+        // 374 of 387 production cards carry this notice. The owner holds the
+        // rights and requires it displayed on the learner's card, so the only
+        // thing stripped is the trailing provenance token — our own bookkeeping,
+        // which names an internal source scan and page range.
         var attribution = $"{RealRightsNotice} [Official_Samples_p012-014 p12,13]";
 
         var created = await CreateCardAsync(
             tasks: ["First.", "Second.", "Third."],
             sourceAttribution: attribution);
 
+        // Admins keep the value byte-for-byte, token included.
         var adminView = await _adminService.GetSpeakingRolePlayCardAsync(
             created.CardId, CancellationToken.None);
         Assert.Equal(attribution, adminView.SourceAttribution);
 
         await PublishWithScriptAsync(created.CardId);
-        const string userId = "corpus-import-learner";
-        await SeedLearnerAsync(userId);
 
-        var learnerView = await _learnerService.GetSpeakingRolePlayCardForLearnerAsync(
-            userId, created.CardId, CancellationToken.None);
-        var json = JsonSerializer.Serialize(learnerView);
+        var contentItemId = await _db.RolePlayCards
+            .Where(c => c.Id == created.CardId)
+            .Select(c => c.ContentItemId)
+            .FirstAsync();
+        var payload = Assert.IsAssignableFrom<IDictionary<string, object?>>(
+            await _learnerService.GetSpeakingTaskAsync(contentItemId, CancellationToken.None));
 
-        Assert.DoesNotContain("SourceAttribution", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Cambridge Boxhill", json, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("\u00a9", json, StringComparison.Ordinal);
+        // The notice reaches the learner verbatim, minus the trailing token.
+        Assert.Equal(RealRightsNotice, payload["sourceAttribution"]);
 
-        // Sanity: the learner still got a real card, so the assertions above
-        // are not passing merely because the projection came back empty.
-        Assert.Contains("Corpus fidelity scenario", json, StringComparison.Ordinal);
+        // Sanity: the learner still got a real card, so the assertion above is
+        // not passing merely because the projection came back empty.
+        Assert.Equal("Corpus fidelity scenario", payload["title"]);
+    }
+
+    [Fact]
+    public async Task RightsNotice_ThatIsNothingButAProvenanceToken_IsOmitted()
+    {
+        // 51 production cards carry the token and no notice. Stripping the token
+        // must leave null, not an empty attribution line under the card.
+        var created = await CreateCardAsync(
+            tasks: ["First.", "Second.", "Third."],
+            sourceAttribution: "[Pharmacy__Speaking_Pharmacy_Cards_p004-006 p6]");
+
+        await PublishWithScriptAsync(created.CardId);
+
+        var contentItemId = await _db.RolePlayCards
+            .Where(c => c.Id == created.CardId)
+            .Select(c => c.ContentItemId)
+            .FirstAsync();
+        var payload = await _learnerService.GetSpeakingTaskAsync(
+            contentItemId, CancellationToken.None);
+
+        Assert.Null(Assert.IsAssignableFrom<IDictionary<string, object?>>(payload)["sourceAttribution"]);
     }
 
     [Fact]
@@ -260,10 +282,71 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
 
     // ── Fixture helpers ──────────────────────────────────────────────────
 
+    // The learner's role-play page (`/speaking/roleplay/[id]`) does not read the
+    // card table — it reads `GET /v1/speaking/tasks/{id}`, which projects the
+    // `ContentItem` shell. That shell is created with `DetailJson = "{}"` and
+    // nothing ever back-fills it, so a projection that trusts the shell alone
+    // serves a card with the right title, an empty background and zero task
+    // bullets. In production that was true of 368 of 380 published role plays:
+    // every one of them opened blank.
+    [Fact]
+    public async Task LearnerSpeakingTask_CarriesCardBackground_AndEveryBullet()
+    {
+        var tasks = Enumerable.Range(1, 7)
+            .Select(i => $"Find out detail number {i}.")
+            .ToArray();
+        const string background =
+            "You are seeing a 54-year-old teacher who has had a cough for three weeks.";
+
+        var created = await CreateCardAsync(
+            tasks: tasks,
+            background: background,
+            patientName: "Mr Felix Hartwell",
+            patientAge: "39");
+        await PublishWithScriptAsync(created.CardId);
+
+        var contentItemId = await _db.RolePlayCards
+            .Where(c => c.Id == created.CardId)
+            .Select(c => c.ContentItemId)
+            .FirstAsync();
+
+        var payload = await _learnerService.GetSpeakingTaskAsync(
+            contentItemId, CancellationToken.None);
+        var json = JsonSerializer.Serialize(payload);
+
+        // Premise check: the shell really is empty. Without this the assertions
+        // below could pass for the wrong reason if the shell were ever
+        // back-filled, and the join they exist to protect could rot unnoticed.
+        var detailJson = await _db.ContentItems
+            .Where(c => c.Id == contentItemId)
+            .Select(c => c.DetailJson)
+            .FirstAsync();
+        Assert.DoesNotContain(background, detailJson ?? string.Empty, StringComparison.Ordinal);
+
+        Assert.Contains(background, json, StringComparison.Ordinal);
+        foreach (var bullet in tasks)
+        {
+            Assert.Contains(bullet, json, StringComparison.Ordinal);
+        }
+
+        // 13 production cards name the patient and give an age. That is card
+        // content, so it has to reach the learner too.
+        Assert.Contains("Mr Felix Hartwell, 39", json, StringComparison.Ordinal);
+
+        // The results page's "practise again" link only knows the card id, so
+        // the same task lookup has to resolve that too.
+        var viaCardId = await _learnerService.GetSpeakingTaskAsync(
+            created.CardId, CancellationToken.None);
+        Assert.Contains(
+            background, JsonSerializer.Serialize(viaCardId), StringComparison.Ordinal);
+    }
+
     private async Task<AdminRolePlayCardDetail> CreateCardAsync(
         string[] tasks,
         string? sourceAttribution = null,
-        string? background = null)
+        string? background = null,
+        string? patientName = null,
+        string? patientAge = null)
         => await _adminService.CreateSpeakingRolePlayCardAsync(
             "admin-1", "Admin One",
             new AdminRolePlayCardCreateRequest(
@@ -272,8 +355,8 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
                 Setting: "Suburban general practice",
                 CandidateRole: "Doctor",
                 InterlocutorRole: "Patient",
-                PatientName: null,
-                PatientAge: null,
+                PatientName: patientName,
+                PatientAge: patientAge,
                 Background: background ?? "You are a general practitioner.",
                 Task1: null, Task2: null, Task3: null, Task4: null, Task5: null,
                 AllowedNotes: true,

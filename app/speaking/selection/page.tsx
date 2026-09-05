@@ -131,7 +131,7 @@ export default function SpeakingTaskSelection() {
                   tags={[task.scenarioType]}
                   onStart={() => {
                     analytics.track('task_started', { taskId: task.id, subtest: 'speaking' });
-                    window.location.href = `/speaking/check?taskId=${task.id}`;
+                    window.location.href = `/speaking/roleplay/${encodeURIComponent(task.id)}`;
                   }}
                 />
               </MotionItem>

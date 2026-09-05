@@ -230,6 +230,8 @@ export interface RoleCard {
   clinicalTopic?: string;
   criteriaFocus?: string[];
   disclaimer?: string;
+  /** Rights notice printed on the source card, shown verbatim to the learner. */
+  sourceAttribution?: string;
 }
 
 export type MarkerType =

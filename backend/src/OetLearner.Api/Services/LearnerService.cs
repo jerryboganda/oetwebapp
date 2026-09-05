@@ -3145,9 +3145,31 @@ public partial class LearnerService(
 
     public async Task<object> GetSpeakingTaskAsync(string contentId, CancellationToken cancellationToken)
     {
-        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "speaking" && x.Status == ContentStatus.Published, cancellationToken)
-                   ?? throw ApiException.NotFound("content_not_found", "Speaking task not found.");
-        return BuildLearnerSpeakingTaskPayload(item);
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == "speaking" && x.Status == ContentStatus.Published, cancellationToken);
+        if (item is null)
+        {
+            // Also accept a RolePlayCard id. Learner surfaces that already hold
+            // a card (the results page "practise again" link) only know the
+            // card's id, not the id of the ContentItem shell behind it.
+            var contentItemId = await db.RolePlayCards
+                .AsNoTracking()
+                .Where(c => c.Id == contentId)
+                .Select(c => c.ContentItemId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!string.IsNullOrEmpty(contentItemId))
+            {
+                item = await db.ContentItems.FirstOrDefaultAsync(
+                    x => x.Id == contentItemId && x.SubtestCode == "speaking" && x.Status == ContentStatus.Published,
+                    cancellationToken);
+            }
+        }
+
+        if (item is null)
+        {
+            throw ApiException.NotFound("content_not_found", "Speaking task not found.");
+        }
+
+        return BuildLearnerSpeakingTaskPayload(item, await LoadRolePlayCardAsync(item.Id, cancellationToken));
     }
 
     public async Task<object> CreateSpeakingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken)
@@ -3411,7 +3433,7 @@ public partial class LearnerService(
         // See docs/SPEAKING-MODULE-PLAN.md §3 Wave 1.
         var criteria = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, []);
         var (estimatedScaledScore, readinessBandCode, criteriaSource) = ReadSpeakingBandFromAnalysis(attempt.AnalysisJson);
-        var roleCard = BuildLearnerSpeakingTaskPayload(content);
+        var roleCard = BuildLearnerSpeakingTaskPayload(content, await LoadRolePlayCardAsync(content.Id, cancellationToken));
         var disclaimer = string.IsNullOrWhiteSpace(evaluation.LearnerDisclaimer)
             ? SpeakingContentStructure.PracticeDisclaimer
             : evaluation.LearnerDisclaimer;
@@ -3551,7 +3573,7 @@ public partial class LearnerService(
         return new
         {
             summary = await GetSpeakingEvaluationSummaryAsync(userId, evaluationId, cancellationToken),
-            roleCard = BuildLearnerSpeakingTaskPayload(content),
+            roleCard = BuildLearnerSpeakingTaskPayload(content, await LoadRolePlayCardAsync(content.Id, cancellationToken)),
             disclaimer,
             transcript = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(attempt.TranscriptJson, []),
             analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>()),
@@ -6753,40 +6775,61 @@ public partial class LearnerService(
         return JsonSupport.Deserialize<Dictionary<string, object?>>(JsonSupport.Serialize(value), new Dictionary<string, object?>());
     }
 
-    private static Dictionary<string, object?> BuildLearnerSpeakingTaskPayload(ContentItem item)
+    /// <param name="card">
+    /// The typed role-play card behind this ContentItem, when one exists.
+    /// Every card authored through the admin wizard (and the whole imported
+    /// corpus) writes <see cref="RolePlayCard"/> and leaves the ContentItem
+    /// shell's <c>DetailJson</c> as <c>{}</c>, so reading DetailJson alone
+    /// hands the learner a titled card with an empty background and zero task
+    /// bullets. The card is the authoritative source; DetailJson is only
+    /// consulted for legacy speaking content that has no card row.
+    /// </param>
+    private static Dictionary<string, object?> BuildLearnerSpeakingTaskPayload(
+        ContentItem item,
+        RolePlayCard? card = null)
     {
         var detail = SpeakingContentStructure.ExtractStructure(item.DetailJson);
         var candidate = SpeakingContentStructure.ToDictionary(SpeakingContentStructure.ReadValue(detail, "candidateCard"));
 
-        var role = SpeakingContentStructure.ReadString(candidate, "candidateRole", "role")
+        var role = Trimmed(card?.CandidateRole)
+                   ?? SpeakingContentStructure.ReadString(candidate, "candidateRole", "role")
                    ?? SpeakingContentStructure.ReadString(detail, "candidateRole", "role")
                    ?? "Candidate";
-        var setting = SpeakingContentStructure.ReadString(candidate, "setting")
+        var setting = Trimmed(card?.Setting)
+                      ?? SpeakingContentStructure.ReadString(candidate, "setting")
                       ?? SpeakingContentStructure.ReadString(detail, "setting")
                       ?? "Clinical setting";
-        var patient = SpeakingContentStructure.ReadString(candidate, "patientRole", "patient")
+        var patient = Trimmed(card?.InterlocutorRole)
+                      ?? SpeakingContentStructure.ReadString(candidate, "patientRole", "patient")
                       ?? SpeakingContentStructure.ReadString(detail, "patientRole", "patient")
                       ?? "Patient";
+        patient = WithPatientIdentity(patient, card);
         var task = SpeakingContentStructure.ReadString(candidate, "task", "brief")
                    ?? SpeakingContentStructure.ReadString(detail, "task", "brief")
                    ?? "Complete the role play using patient-centred communication.";
-        var background = SpeakingContentStructure.ReadString(candidate, "background")
+        var background = Trimmed(card?.Background)
+                         ?? SpeakingContentStructure.ReadString(candidate, "background")
                          ?? SpeakingContentStructure.ReadString(detail, "background", "caseNotes")
                          ?? item.CaseNotes
                          ?? string.Empty;
         var tasks = FirstNonEmptyList(
+            card?.Tasks.ToList() ?? [],
             SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(candidate, "tasks")),
             SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "tasks")),
             SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "roleObjectives")));
         var warmUps = SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "warmUpQuestions"));
         var criteriaFocus = FirstNonEmptyList(
+            JsonSupport.Deserialize<List<string>>(card?.CriteriaFocusJson, []),
             SpeakingContentStructure.ReadStringList(SpeakingContentStructure.ReadValue(detail, "criteriaFocus")),
             JsonSupport.Deserialize<List<string>>(item.CriteriaFocusJson, []));
-        var prepSeconds = SpeakingContentStructure.ReadInt(detail, "prepTimeSeconds")
+        var prepSeconds = card?.PrepTimeSeconds
+                          ?? SpeakingContentStructure.ReadInt(detail, "prepTimeSeconds")
                           ?? SpeakingContentStructure.DefaultPrepTimeSeconds;
-        var roleplaySeconds = SpeakingContentStructure.ReadInt(detail, "roleplayTimeSeconds")
+        var roleplaySeconds = card?.RolePlayTimeSeconds
+                              ?? SpeakingContentStructure.ReadInt(detail, "roleplayTimeSeconds")
                               ?? SpeakingContentStructure.DefaultRoleplayTimeSeconds;
-        var disclaimer = SpeakingContentStructure.ReadString(detail, "disclaimer")
+        var disclaimer = Trimmed(card?.Disclaimer)
+                         ?? SpeakingContentStructure.ReadString(detail, "disclaimer")
                          ?? SpeakingContentStructure.PracticeDisclaimer;
 
         var candidateCard = new Dictionary<string, object?>
@@ -6829,10 +6872,11 @@ public partial class LearnerService(
             ["warmUpQuestions"] = warmUps,
             ["prepTimeSeconds"] = prepSeconds,
             ["roleplayTimeSeconds"] = roleplaySeconds,
-            ["patientEmotion"] = SpeakingContentStructure.ReadString(detail, "patientEmotion") ?? "neutral",
-            ["communicationGoal"] = SpeakingContentStructure.ReadString(detail, "communicationGoal", "purpose") ?? "Build rapport and complete the clinical task.",
-            ["clinicalTopic"] = SpeakingContentStructure.ReadString(detail, "clinicalTopic") ?? item.ScenarioType ?? "roleplay",
+            ["patientEmotion"] = Trimmed(card?.PatientEmotion) ?? SpeakingContentStructure.ReadString(detail, "patientEmotion") ?? "neutral",
+            ["communicationGoal"] = Trimmed(card?.CommunicationGoal) ?? SpeakingContentStructure.ReadString(detail, "communicationGoal", "purpose") ?? "Build rapport and complete the clinical task.",
+            ["clinicalTopic"] = Trimmed(card?.ClinicalTopic) ?? SpeakingContentStructure.ReadString(detail, "clinicalTopic") ?? item.ScenarioType ?? "roleplay",
             ["disclaimer"] = disclaimer,
+            ["sourceAttribution"] = LearnerSafeAttribution(card?.SourceAttribution),
             ["compliance"] = new
             {
                 learnerSafe = true,
@@ -6851,6 +6895,63 @@ public partial class LearnerService(
     private static List<string> FirstNonEmptyList(params List<string>[] lists)
         => lists.FirstOrDefault(list => list.Count > 0) ?? [];
 
+    /// <summary>
+    /// The rights notice printed on the source card, safe to show a learner.
+    /// </summary>
+    /// <remarks>
+    /// The stored value ends with an internal provenance token naming the
+    /// source scan and page — "© Cambridge Boxhill … [Nursing__Cards_p040 p40,41]".
+    /// That token is our own bookkeeping and leaks internal file names, so it is
+    /// stripped. 51 cards carry the token and nothing else; those return null
+    /// rather than an empty notice.
+    /// </remarks>
+    private static string? LearnerSafeAttribution(string? stored)
+        => Trimmed(ProvenanceToken.Replace(Trimmed(stored) ?? string.Empty, string.Empty));
+
+    private static readonly System.Text.RegularExpressions.Regex ProvenanceToken =
+        new(@"\s*\[[^\]]*\]\s*$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static string? Trimmed(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    /// <summary>
+    /// Folds the card's named patient and age into the interlocutor role line.
+    /// The learner card renders <c>patient</c> as free prose under a
+    /// "Patient / Client" heading, so this is the slot that identity belongs in
+    /// and no extra payload field or render slot is needed.
+    /// </summary>
+    /// <remarks>
+    /// Age is skipped when the name already states it, because several cards
+    /// name a third party rather than the interlocutor — "Parent" +
+    /// "Lily (8 months, daughter of the parent)" would otherwise repeat the age.
+    /// </remarks>
+    private static string WithPatientIdentity(string role, RolePlayCard? card)
+    {
+        var name = Trimmed(card?.PatientName);
+        if (name is null)
+        {
+            return role;
+        }
+
+        var age = Trimmed(card?.PatientAge);
+        var identity = age is null || name.Contains(age, StringComparison.OrdinalIgnoreCase)
+            ? name
+            : $"{name}, {age}";
+
+        return role.Contains(identity, StringComparison.OrdinalIgnoreCase)
+            ? role
+            : $"{role} \u2014 {identity}";
+    }
+
+    /// <summary>
+    /// The role-play card behind a speaking ContentItem, or null for legacy
+    /// speaking content that predates the card schema.
+    /// </summary>
+    private Task<RolePlayCard?> LoadRolePlayCardAsync(string contentItemId, CancellationToken cancellationToken)
+        => db.RolePlayCards
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ContentItemId == contentItemId, cancellationToken);
+
     private async Task<List<object>> GetTasksBySubtestAsync(string subtest, CancellationToken cancellationToken)
     {
         var items = await db.ContentItems
@@ -6860,7 +6961,18 @@ public partial class LearnerService(
             .ToListAsync(cancellationToken);
         if (string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase))
         {
-            return items.Select(item => (object)BuildLearnerSpeakingTaskPayload(item)).ToList();
+            // Batch the card lookup: this list is the whole published speaking
+            // corpus, so a per-item query would be ~400 round trips.
+            var itemIds = items.Select(x => x.Id).ToList();
+            var cards = await db.RolePlayCards
+                .AsNoTracking()
+                .Where(c => itemIds.Contains(c.ContentItemId))
+                .ToDictionaryAsync(c => c.ContentItemId, c => c, cancellationToken);
+            return items
+                .Select(item => (object)BuildLearnerSpeakingTaskPayload(
+                    item,
+                    cards.GetValueOrDefault(item.Id)))
+                .ToList();
         }
 
         return items.Select(item => (object)new
@@ -7017,7 +7129,7 @@ public partial class LearnerService(
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(content.DetailJson, new Dictionary<string, object?>());
         var contentPayload = string.Equals(content.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
-            ? BuildLearnerSpeakingTaskPayload(content)
+            ? BuildLearnerSpeakingTaskPayload(content, await LoadRolePlayCardAsync(content.Id, cancellationToken))
             : Merge(new Dictionary<string, object?>
             {
                 ["contentId"] = content.Id,

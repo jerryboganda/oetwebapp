@@ -138,6 +138,7 @@ export default function RoleCardPreview() {
               prepTimeSeconds={prepTimeSeconds}
               roleplayTimeSeconds={roleplayTimeSeconds}
               disclaimer={card.disclaimer}
+              sourceAttribution={card.sourceAttribution}
             />
 
             {/* Computer-based Speaking paper rule notice (rulebook RULE_61/RULE_75 + RULE_62/RULE_76). */}
