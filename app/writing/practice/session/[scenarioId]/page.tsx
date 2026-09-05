@@ -30,7 +30,7 @@ import {
   putWritingDraftV2,
   putWritingHighlights,
 } from '@/lib/writing/api';
-import { keyForSubmitAction, toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
+import { createSubmitIdempotencyKey, toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import { parseHighlights, serializeHighlights } from '@/lib/writing/highlights';
 import { useDeadlineCountdown } from '@/lib/writing/useCountdown';
@@ -216,15 +216,16 @@ export default function WritingPracticeSessionPage() {
   const retriedAfterThrottleRef = useRef(false);
 
   // Shared submit path. `auto` = true when fired by the writing-timer expiry.
-  // The idempotency key is stable per (scenario, content): a double-tap, a
-  // network resend, or the single 429/409 retry below all carry the SAME key
-  // for unchanged content, so one logical Submit can never open two paid
-  // grading workflows. Edited content mints a fresh key.
+  // One key is minted per submit action and reused across the initial send
+  // and the single 429/409 retry below, so one logical Submit can never open
+  // two paid grading workflows. Same-attempt collapsing (identical or
+  // near-identical resends) is owned server-side by the SubmitGrading seam.
   const finalizeSubmit = useCallback(
     async (auto: boolean) => {
       if (submitting || !scenario) return;
       setSubmitting(true);
       setError(null);
+      const idempotencyKey = createSubmitIdempotencyKey();
 
       const attemptOnce = async () => {
         const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
@@ -236,7 +237,7 @@ export default function WritingPracticeSessionPage() {
           timeSpentSeconds: elapsed,
           inputSource: 'editor',
           caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
-          idempotencyKey: keyForSubmitAction(scenario.id, contentRef.current),
+          idempotencyKey,
         });
       };
 

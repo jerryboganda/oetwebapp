@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Writing;
 using OetLearner.Api.Services.Writing.Configuration;
@@ -372,6 +373,68 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         Assert.Equal(1, preflight.Calls);
     }
 
+    [Fact]
+    public async Task SeamReserve_QuotaDenied_SurfacesInsufficient_WithFailedStatus()
+    {
+        var credits = new CountingReservations();
+        var pipeline = BuildRealPreflightPipeline(new QuotaDeniedGateway(), credits);
+        var submit = await pipeline.SubmitAsync(
+            SampleAttempt("matrix-quota-1", LetterA, scenarioId: ScenarioReadyId), default);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => pipeline.EvaluateAsync(submit.SubmissionId, default));
+
+        Assert.Equal("ai_credits_insufficient", ex.Code);
+        Assert.Equal(402, ex.StatusCode);
+        Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        Assert.Equal(0, await _db.WritingGrades.CountAsync());
+        Assert.Equal(1, credits.ReserveCalls);
+        Assert.Equal(1, credits.ReleaseCalls);
+    }
+
+    [Fact]
+    public async Task SeamReserve_RubricFailure_ReleasesReservation_AndFailsRetryable()
+    {
+        var credits = new CountingReservations();
+        var pipeline = BuildRealPreflightPipeline(new ThrowingGateway(), credits);
+        var submit = await pipeline.SubmitAsync(
+            SampleAttempt("matrix-rubric-1", LetterA, scenarioId: ScenarioReadyId), default);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => pipeline.EvaluateAsync(submit.SubmissionId, default));
+
+        Assert.Equal("writing_rubric_failed", ex.Code);
+        Assert.True(ex.Retryable);
+        Assert.Equal(503, ex.StatusCode);
+        // Pinned: generic rubric failures intentionally leave Status alone
+        // (no failed-row write) so the learner can retry the same attempt.
+        Assert.NotEqual("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        Assert.Equal(1, credits.ReserveCalls);
+        Assert.Equal(1, credits.ReleaseCalls);
+        Assert.Equal(0, await _db.WritingGrades.CountAsync());
+    }
+
+    [Fact]
+    public async Task SeamReserve_ReserveDenied_SurfacesInsufficient_NoRelease()
+    {
+        var credits = new DenyingReservations();
+        var pipeline = BuildRealPreflightPipeline(new CountingGateway(CanonicalCompletion), credits);
+        var submit = await pipeline.SubmitAsync(
+            SampleAttempt("matrix-deny-1", LetterA, scenarioId: ScenarioReadyId), default);
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => pipeline.EvaluateAsync(submit.SubmissionId, default));
+
+        // Real AiCreditReservationService denies the same way: 402 with no
+        // reservation opened, so there is nothing to release and no
+        // failed-row write on this path.
+        Assert.Equal("ai_credits_insufficient", ex.Code);
+        Assert.Equal(402, ex.StatusCode);
+        Assert.Equal(1, credits.ReserveCalls);
+        Assert.Equal(0, credits.ReleaseCalls);
+        Assert.Equal(0, await _db.WritingGrades.CountAsync());
+    }
+
     private void MarkTerminal(string userId, Guid scenarioId)
     {
         foreach (var row in _db.WritingSubmissions.Where(
@@ -383,7 +446,7 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
     }
 
     private WritingSubmissionEvaluationPipeline BuildRealPreflightPipeline(
-        IAiGatewayService gateway, CountingReservations credits,
+        IAiGatewayService gateway, IAiCreditReservationService credits,
         IWritingAssessmentPreflightService? preflight = null)
         => new(
             _db,
@@ -491,10 +554,51 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
 
     private sealed class CountingReservations : IAiCreditReservationService
     {
+        public int ReserveCalls { get; private set; }
+        public int CommitCalls { get; private set; }
+        public int ReleaseCalls { get; private set; }
+
         public Task<AiCreditReservationTicket> ReserveWritingAsync(
             string userId, string operationId, string businessReference, CancellationToken ct)
-            => Task.FromResult(new AiCreditReservationTicket(
+        {
+            ReserveCalls++;
+            return Task.FromResult(new AiCreditReservationTicket(
                 "res-1", operationId, "writing", 1, AiCreditReservationState.Reserved, false));
+        }
+
+        public Task<AiCreditReservationTicket> ReserveSpeakingAsync(
+            string userId, string operationId, string businessReference, CancellationToken ct)
+            => ReserveWritingAsync(userId, operationId, businessReference, ct);
+
+        public Task CommitAsync(string reservationId, CancellationToken ct)
+        {
+            CommitCalls++;
+            return Task.CompletedTask;
+        }
+
+        public Task CommitByBusinessReferenceAsync(string businessReference, CancellationToken ct)
+            => CommitAsync("res-1", ct);
+
+        public Task ReleaseAsync(string reservationId, CancellationToken ct)
+        {
+            ReleaseCalls++;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class DenyingReservations : IAiCreditReservationService
+    {
+        public int ReserveCalls { get; private set; }
+        public int ReleaseCalls { get; private set; }
+
+        public Task<AiCreditReservationTicket> ReserveWritingAsync(
+            string userId, string operationId, string businessReference, CancellationToken ct)
+        {
+            ReserveCalls++;
+            throw ApiException.PaymentRequired(
+                "ai_credits_insufficient",
+                "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
+        }
 
         public Task<AiCreditReservationTicket> ReserveSpeakingAsync(
             string userId, string operationId, string businessReference, CancellationToken ct)
@@ -507,7 +611,28 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
             => Task.CompletedTask;
 
         public Task ReleaseAsync(string reservationId, CancellationToken ct)
-            => Task.CompletedTask;
+        {
+            ReleaseCalls++;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class QuotaDeniedGateway : IAiGatewayService
+    {
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new() { SystemPrompt = "score", TaskInstruction = "score" };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+            => throw new AiQuotaDeniedException("ai_quota_exhausted", "denied");
+    }
+
+    private sealed class ThrowingGateway : IAiGatewayService
+    {
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new() { SystemPrompt = "score", TaskInstruction = "score" };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+            => throw new InvalidOperationException("provider boom");
     }
 
     private sealed class EmptyCanonEngine : IWritingCanonEngine

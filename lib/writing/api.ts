@@ -326,9 +326,7 @@ export interface WritingSubmissionCreatePayload {
 }
 
 export {
-  __resetSubmitKeyTrackerForTests,
   createSubmitIdempotencyKey,
-  keyForSubmitAction,
 } from './submit-keys';
 
 export const createWritingSubmission = (payload: WritingSubmissionCreatePayload) =>

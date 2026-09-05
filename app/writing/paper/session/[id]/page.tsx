@@ -22,7 +22,7 @@ import {
   putWritingHighlights,
   submitWritingMock,
 } from '@/lib/writing/api';
-import { keyForSubmitAction } from '@/lib/writing/submit-keys';
+import { createSubmitIdempotencyKey } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
   InsufficientCreditsModal,
@@ -373,6 +373,8 @@ export default function WritingPaperSessionPage() {
       setSubmitting(true);
       setError(null);
       const elapsed = Math.round((Date.now() - startedAtRef.current) / 1000);
+      // One key per submit action; same-attempt collapsing lives server-side.
+      const idempotencyKey = createSubmitIdempotencyKey();
       try {
         if (resolution === 'mock' && session?.id) {
           const result = await submitWritingMock(session.id, {
@@ -390,7 +392,7 @@ export default function WritingPaperSessionPage() {
             timeSpentSeconds: elapsed,
             inputSource: 'editor',
             caseNoteHighlightsJson: serializeHighlights(highlightsRef.current),
-            idempotencyKey: keyForSubmitAction(scenarioId, submitText),
+            idempotencyKey,
           });
           setSubmissionId(result.id ?? null);
         }
