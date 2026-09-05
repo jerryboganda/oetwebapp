@@ -826,6 +826,26 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Reading_pdf_annotations_hidden_paper_returns_not_found()
+    {
+        using var factory = new TestWebApplicationFactory();
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+        const string paperId = "annotation-hidden-paper";
+        await SeedPublishedReadingPaperForEndpointsAsync(db, paperId);
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == paperId);
+        paper.CandidateVisible = false;
+        await db.SaveChangesAsync();
+
+        using var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", "learner-annotations-hidden");
+
+        using var listResponse = await client.GetAsync($"/v1/reading-papers/papers/{paperId}/annotations");
+        Assert.Equal(HttpStatusCode.NotFound, listResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Reading_pdf_annotations_reject_invalid_geometry_and_isolate_users()
     {
         using var factory = new TestWebApplicationFactory();

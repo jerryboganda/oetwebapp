@@ -275,7 +275,8 @@ public sealed class MediaAssetAccessService(
                 .AsNoTracking()
                 .Where(asset => asset.MediaAssetId == mediaAssetId
                     && asset.Paper != null
-                    && asset.Paper.Status == ContentStatus.Published)
+                    && asset.Paper.Status == ContentStatus.Published
+                    && asset.Paper.CandidateVisible)
                 .Select(_ => PublishedPaperRelation))
             .Concat(db.FreePreviewAssets
                 .AsNoTracking()

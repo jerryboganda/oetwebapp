@@ -177,6 +177,29 @@ public class ListeningV2PathwayLaunchTargetEndpointTests : IClassFixture<TestWeb
         Assert.Equal(JsonValueKind.Null, diagnostic.GetProperty("actionHref").ValueKind);
     }
 
+    [Fact]
+    public async Task Pathway_endpoint_never_launches_hidden_paper()
+    {
+        await ClearPathwayLaunchPapersAsync();
+
+        var userId = $"listener-{Guid.NewGuid():N}";
+        var paperId = $"paper-{Guid.NewGuid():N}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await SeedObjectiveReadyPaperAsync(userId, paperId, includeQuestion: true, visible: false);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+
+        var response = await client.GetAsync("/v1/listening/v2/me/pathway");
+        response.EnsureSuccessStatusCode();
+        var rows = await response.Content.ReadFromJsonAsync<JsonElement[]>(JsonSupport.Options);
+
+        Assert.NotNull(rows);
+        var foundation = rows.Single(row => row.GetProperty("stage").GetString() == "foundation_partA");
+        Assert.Equal(JsonValueKind.Null, foundation.GetProperty("actionHref").ValueKind);
+    }
+
     private async Task ClearPathwayLaunchPapersAsync()
     {
         await using var scope = _factory.Services.CreateAsyncScope();
@@ -204,7 +227,8 @@ public class ListeningV2PathwayLaunchTargetEndpointTests : IClassFixture<TestWeb
         string userId,
         string paperId,
         bool includeQuestion,
-        bool isFree = true)
+        bool isFree = true,
+        bool visible = true)
     {
         await using var scope = _factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -218,6 +242,7 @@ public class ListeningV2PathwayLaunchTargetEndpointTests : IClassFixture<TestWeb
             Slug = $"pathway-launch-{paperId}",
             AppliesToAllProfessions = true,
             Status = ContentStatus.Published,
+            CandidateVisible = visible,
             TagsCsv = isFree ? "access:free" : "access:premium",
             SourceProvenance = "Test seed",
             CreatedAt = now,

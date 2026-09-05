@@ -2658,7 +2658,9 @@ public sealed class ListeningLearnerService(
         var paper = await db.ContentPapers.AsNoTracking()
             .Include(p => p.Assets.Where(a => a.IsPrimary))
                 .ThenInclude(a => a.MediaAsset)
-            .FirstOrDefaultAsync(p => p.Id == id && p.SubtestCode == Subtest && p.Status == ContentStatus.Published, ct);
+            .Where(p => p.Id == id && p.SubtestCode == Subtest)
+            .WhereCandidateVisible()
+            .FirstOrDefaultAsync(ct);
         if (paper is not null)
         {
             return await BuildPaperSourceAsync(paper, ct);

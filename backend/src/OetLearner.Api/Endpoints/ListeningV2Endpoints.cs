@@ -570,10 +570,10 @@ public static class ListeningV2Endpoints
             .SingleOrDefaultAsync(ct);
 
         var candidates = await db.ContentPapers.AsNoTracking()
-            .Where(p => p.Status == ContentStatus.Published
-                && p.SubtestCode == "listening"
+            .Where(p => p.SubtestCode == "listening"
                 && (p.AppliesToAllProfessions
                     || (!string.IsNullOrWhiteSpace(profession) && p.ProfessionId == profession)))
+            .WhereCandidateVisible()
             .OrderByDescending(p => p.Priority)
             .ThenByDescending(p => p.PublishedAt)
             .ThenBy(p => p.Title)
