@@ -18,7 +18,8 @@ namespace OetLearner.Api.Tests;
 public class RefundDisputeTests
 {
     private static (LearnerDbContext db, RefundService refundService, DisputeService disputeService) Build(
-        IPaymentGatewayProvider? gatewayProvider = null)
+        IPaymentGatewayProvider? gatewayProvider = null,
+        IAiPackageCreditService? aiCredits = null)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -35,7 +36,7 @@ public class RefundDisputeTests
             new OetLearner.Api.Services.Billing.Gateways.EasyKashGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
             new OetLearner.Api.Services.Billing.Gateways.WhopGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)),
             new OetLearner.Api.Services.Billing.Gateways.FawaterakGateway(new HttpClient(), billingOpts, TestRuntimeSettingsProvider.FromBillingOptions(billingOptions)));
-        return (db, new RefundService(db, gatewayProvider ?? gateways), new DisputeService(db));
+        return (db, new RefundService(db, gatewayProvider ?? gateways, aiCredits), new DisputeService(db));
     }
 
     private static async Task SeedCompletedSubscriptionPaymentAsync(LearnerDbContext db, string userId, string txId, decimal amount, int includedCredits = 0)
@@ -137,6 +138,78 @@ public class RefundDisputeTests
 
         // Audit ledger entry was written.
         Assert.True(await db.BillingEvents.AnyAsync(e => e.EventType == "refund_full_issued"));
+    }
+
+    [Fact]
+    public async Task FullRefund_WithPackageLedger_RecalculatesAllowances()
+    {
+        var ledger = new CountingLedger();
+        var (db, refundService, _) = Build(aiCredits: ledger);
+        await SeedCompletedSubscriptionPaymentAsync(db, "u3", "tx_recalc", 100m);
+        var tx = await db.PaymentTransactions.SingleAsync();
+        tx.QuoteId = "q-recalc";
+        await db.SaveChangesAsync();
+
+        var result = await refundService.IssueRefundAsync(
+            new RefundRequest("tx_recalc", 100m, "requested_by_customer", "idem-recalc"),
+            default);
+
+        Assert.Equal("full", result.RefundType);
+        Assert.Equal(2, ledger.ReverseCalls);
+        Assert.Equal(1, ledger.RecalculateCalls);
+    }
+
+    private sealed class CountingLedger : IAiPackageCreditService
+    {
+        public int ReverseCalls { get; private set; }
+        public int RecalculateCalls { get; private set; }
+
+        public Task<int> ReverseGrantsAsync(string userId, string sourceReferenceId, CancellationToken ct)
+        {
+            ReverseCalls++;
+            return Task.FromResult(1);
+        }
+
+        public Task RecalculateObjectiveAllowancesAsync(string userId, CancellationToken ct)
+        {
+            RecalculateCalls++;
+            return Task.CompletedTask;
+        }
+
+        public Task<AiPackageCreditSnapshot> GetSnapshotAsync(string userId, int transactionLimit, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageCreditSnapshot> GrantPackageAsync(string userId, BillingAddOn addOn, int quantity, string stripeSessionId, string? quoteId, CancellationToken ct, string? sourceReferenceId = null, DateTimeOffset? validFrom = null)
+            => throw new NotImplementedException();
+        public Task<bool> GrantCourseGiftCreditsAsync(string userId, string planCode, string planName, int credits, string referenceId, DateTimeOffset? expiresAt, CancellationToken ct, string? sourceReferenceId = null, DateTimeOffset? validFrom = null)
+            => throw new NotImplementedException();
+        public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageDebitResult> DeductGradingCreditAsync(string userId, string subtest, string referenceId, int quantity, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, int quantity, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageDebitResult> DeductObjectivePracticeAsync(string userId, string subtest, string referenceId, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<bool> RefundAsync(string userId, string originalReferenceId, string refundReferenceId, string description, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageCreditSnapshot> AdjustAsync(string userId, AiPackageCreditAdjustmentRequest request, string adminId, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<AiPackageCreditSnapshot> RecordExamOutcomeAsync(string userId, LearnerExamOutcomeRequest request, string adminId, string adminName, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task ParkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct)
+            => Task.CompletedTask;
+        public Task UnparkSubscriptionLotsAsync(string userId, string subscriptionId, CancellationToken ct)
+            => Task.CompletedTask;
+        public Task UpdateGrantExpiryAsync(string userId, string subscriptionId, DateTimeOffset? expiresAt, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task UpdateGrantWindowAsync(string userId, string subscriptionId, DateTimeOffset? validFrom, DateTimeOffset? expiresAt, CancellationToken ct)
+            => throw new NotImplementedException();
+        public Task<bool> HasObjectivePracticeAllowanceAsync(string userId, string subtest, CancellationToken ct)
+            => throw new NotImplementedException();
     }
 
     [Fact]

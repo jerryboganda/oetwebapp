@@ -279,14 +279,10 @@ public sealed class UserAccessAllocationService(
         await ReverseLinkedAddOnsAsync(userId, sub, ct);
         if (aiPackageCreditService is not null)
         {
-            await aiPackageCreditService.ReverseGrantsAsync(
-                userId,
-                AiPackageCreditSources.AdminPackage(sub.Id, sub.PlanId),
-                ct);
-            await aiPackageCreditService.ReverseGrantsAsync(
-                userId,
-                AiPackageCreditSources.Plan(sub.Id, sub.PlanId),
-                ct);
+            foreach (var sourceReference in AiPackageCreditSources.PlanKeys(sub.Id, sub.PlanId))
+            {
+                await aiPackageCreditService.ReverseGrantsAsync(userId, sourceReference, ct);
+            }
         }
 
         // Expired/Cancelled already grant nothing, and the state machine keeps Expired
@@ -871,7 +867,7 @@ public sealed class UserAccessAllocationService(
             plan.Code,
             plan.Name,
             plan.BundledAiCredits,
-            $"admin-package:{subscription.Id}:{plan.Code}",
+            AiPackageCreditSources.AdminPackage(subscription.Id, plan.Code),
             subscription.ExpiresAt ?? startsAt.AddDays(plan.AccessDurationDays > 0 ? plan.AccessDurationDays : 180),
             ct,
             AiPackageCreditSources.AdminPackage(subscription.Id, plan.Code),

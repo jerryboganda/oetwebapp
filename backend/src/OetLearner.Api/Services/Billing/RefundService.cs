@@ -245,6 +245,16 @@ public sealed class RefundService
         {
             await finalizationTransaction.CommitAsync(ct);
         }
+
+        // Every state transition ends in Recalculate: reversal zeroes lots,
+        // Recalculate converges derived allowances + sweeps orphans. This was
+        // the one transition missing it (remove/cancel/reactivate/status/dates
+        // all recalculate); reads self-heal via GetAccess, but the window
+        // between refund and next read served stale allowances.
+        if (_aiPackageCredits is not null)
+        {
+            await _aiPackageCredits.RecalculateObjectiveAllowancesAsync(transaction.LearnerUserId, ct);
+        }
     }
 
     private async Task EnsureRefundBillingEventAsync(
@@ -506,7 +516,13 @@ public sealed class RefundService
             if (string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase)
                 && !string.IsNullOrWhiteSpace(planCode))
             {
-                sourceReferences.Add(AiPackageCreditSources.Plan(subscription.Id, planCode));
+                // Same plan-key set the remove path and the orphan sweep use:
+                // direct reversal covers both, the trailing Recalculate sweep
+                // converges anything this misses.
+                foreach (var planKey in AiPackageCreditSources.PlanKeys(subscription.Id, planCode))
+                {
+                    sourceReferences.Add(planKey);
+                }
             }
         }
 

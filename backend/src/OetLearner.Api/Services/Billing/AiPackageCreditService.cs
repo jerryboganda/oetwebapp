@@ -22,6 +22,14 @@ public static class AiPackageCreditSources
 
     public static string AdminPackage(string subscriptionId, string planCode)
         => AddonGrantProcessor.FitDatabaseKey($"admin-package:{subscriptionId}:{planCode}");
+
+    /// <summary>
+    /// Every plan-shaped source key owned by one subscription. Removal,
+    /// refund, and orphan-sweep paths must use this set — never re-derive
+    /// the pair — so a new key shape lands in all three at once.
+    /// </summary>
+    public static IReadOnlyList<string> PlanKeys(string subscriptionId, string planCode)
+        => [Plan(subscriptionId, planCode), AdminPackage(subscriptionId, planCode)];
 }
 
 public interface IAiPackageCreditService
@@ -1486,8 +1494,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         {
             if (subscription.PlanId != Subscription.StandaloneAddonPlanId)
             {
-                ownedSources.Add(AiPackageCreditSources.Plan(subscription.Id, subscription.PlanId));
-                ownedSources.Add(AiPackageCreditSources.AdminPackage(subscription.Id, subscription.PlanId));
+                foreach (var source in AiPackageCreditSources.PlanKeys(subscription.Id, subscription.PlanId))
+                {
+                    ownedSources.Add(source);
+                }
             }
         }
 
