@@ -401,7 +401,14 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 assessmentPreflightResult.LetterType,
                 assessmentPreflightResult.Profession), ct);
 
-        var bandLabel = OetBandLabel(rubric.EstimatedBand);
+        // Candidate-facing grade letter MUST come from the canonical 0-500
+        // scaled score, never a linear conversion of the raw /38 total (the
+        // brief's own §5 explicitly forbids this) — OetScoring.OetGradeLetterFromScaled
+        // is the same A/450+ B/350+ C+/300+ C/200+ D/100+ E ladder used
+        // everywhere else in the app. OetBandLabel's raw-total ladder (which
+        // includes a non-OET "B+" band) stays only for the legacy 0-38
+        // RawTotal/EstimatedBand analytics columns below, never for BandLabel.
+        var bandLabel = OetScoring.OetGradeLetterFromScaled(rubric.EstimatedScaledScore);
         var grade = new WritingGrade
         {
             Id = Guid.NewGuid(),
@@ -880,7 +887,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
             C6Language = 0,
             RawTotal = 0,
             EstimatedBand = 0,
-            BandLabel = OetBandLabel(0),
+            BandLabel = OetScoring.OetGradeLetterFromScaled(0),
             PerCriterionFeedbackJson = BuildBlankPerCriterionFeedbackJson(),
             TopThreePrioritiesJson = JsonSerializer.Serialize(new[]
             {
@@ -1173,8 +1180,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
         var topThree = BuildTopThreePrioritiesJson(findings);
         var model = string.IsNullOrWhiteSpace(result.ResolvedModel) ? "claude-sonnet-5" : result.ResolvedModel;
 
-        // EstimatedBand is stored in raw-total units (0–38) to match OetBandLabel
-        // and the seed data; a complete contract is high confidence.
+        // EstimatedBand is stored in raw-total units (0–38), matching the seed
+        // data and analytics columns (RawTotal/EstimatedBand). The candidate-
+        // facing BandLabel is derived separately from EstimatedScaledScore via
+        // OetScoring.OetGradeLetterFromScaled — never from this raw total.
+        // A complete contract is high confidence.
         return new RubricResult(c1, c2, c3, c4, c5, c6, rawTotal, ai.EstimatedScaledScore!.Value, perCriterion, topThree, "high", model);
     }
 
@@ -1405,17 +1415,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
     {
         var max = await db.WritingCanonRules.AsNoTracking().MaxAsync(r => (int?)r.Version, ct);
         return $"v{max ?? 1}";
-    }
-
-    private static string OetBandLabel(int rawTotal)
-    {
-        if (rawTotal >= 38) return "A";
-        if (rawTotal >= 34) return "B+";
-        if (rawTotal >= 30) return "B";
-        if (rawTotal >= 24) return "C+";
-        if (rawTotal >= 18) return "C";
-        if (rawTotal >= 12) return "D";
-        return "E";
     }
 
     private static string ComputeHash(string input)

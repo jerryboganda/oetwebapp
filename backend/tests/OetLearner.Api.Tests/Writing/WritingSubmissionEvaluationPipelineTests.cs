@@ -83,8 +83,10 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
         Assert.Equal(4, grade.C5Organisation);
         Assert.Equal(6, grade.C6Language);
         Assert.Equal(31, grade.RawTotal);
-        // EstimatedBand is stored in raw-total units (0..38) so OetBandLabel is
-        // correct — the previous code stored a scaled/200 value and mislabelled.
+        // EstimatedBand is stored in raw-total units (0..38, analytics only).
+        // BandLabel is the candidate-facing grade letter and is derived from
+        // the canonical 0-500 estimatedScaledScore (380 here) via
+        // OetScoring.OetGradeLetterFromScaled — never from the raw total.
         Assert.Equal(31, grade.EstimatedBand);
         Assert.Equal("B", grade.BandLabel);
         Assert.Equal("high", grade.ConfidenceFlag);
