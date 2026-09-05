@@ -1221,6 +1221,21 @@ builder.Services.AddSingleton<OetLearner.Api.Services.VideoLibrary.IVideoWorkerL
 });
 builder.Services.AddHostedService<OetLearner.Api.Services.VideoLibrary.BunnyEncodeStatusWorker>();
 builder.Services.AddScoped<StrategyGuideService>();
+// AI Learning Companion (docs/ai-learning-companion/). Kill switches read the
+// existing FeatureFlags table so /admin/flags can disable retrieval, actions or
+// credit consumption independently, without a deploy. All fail closed.
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionFeatureFlags,
+    OetLearner.Api.Services.Companion.CompanionFeatureFlags>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionContextResolver,
+    OetLearner.Api.Services.Companion.CompanionContextResolver>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionRetriever,
+    OetLearner.Api.Services.Companion.CompanionRetriever>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionPromptComposer,
+    OetLearner.Api.Services.Companion.CompanionPromptComposer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionRulebookIndexer,
+    OetLearner.Api.Services.Companion.CompanionRulebookIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionDestinationRegistry,
+    OetLearner.Api.Services.Companion.CompanionDestinationRegistry>();
 builder.Services.AddScoped<OetLearner.Api.Services.Admin.UserHardDeleteService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<INotificationCampaignService, NotificationCampaignService>();
@@ -1908,6 +1923,20 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.BookmarkRecallTermTool>();
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.FetchDictionaryDefinitionTool>();
+
+// Companion action layer (S1.5). Still deny-by-default: these resolve only for
+// features that hold an AiFeatureToolGrant row, and only for feature codes on
+// AiToolRegistry.LearnerSafeToolCodes.
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionFindDestinationTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionOpenDestinationTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionContinueLastActivityTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionShowAllowanceTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiTools.Tools.CompanionAddPlanItemTool>();
 
 // External-network tool HTTP client — strict timeout, no auto-redirect, no
 // proxy passthrough. The tool itself enforces host allowlist + max-bytes.

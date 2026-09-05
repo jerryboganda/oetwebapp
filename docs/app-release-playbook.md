@@ -52,7 +52,14 @@ assets independently.
    with each other.
 7. Never commit/print secrets (keystore, service-account key, certs, API keys).
 
-## 2. Pathway A — Android (Play internal + VPS sideload)
+## 2. Pathway A — Android (EVERY active Play track + VPS sideload)
+
+**"Cut an app release" means every channel that currently has real users moves
+together — never just internal.** Android alone has three independent
+destinations (internal track, closed-testing/alpha track, VPS sideload feed);
+the 2026-09-05 "Play shows Open not Update" incident happened precisely
+because a release landed on internal + VPS but alpha was left behind. Do not
+repeat that: step 6 below is not optional and not limited to `internal`.
 
 CI (`mobile-release.yml`, `platform=android`) stamps `versionCode`/`versionName`,
 builds Next.js + `cap sync`, builds signed AAB+APK, verifies the APK against the
@@ -69,11 +76,24 @@ release; to stage Play-only, roll the feed back afterwards with
 4. Repo **private** again immediately; confirm with `gh repo view`.
 5. Download the AAB: `gh run download <id> --repo jerryboganda/oetwebapp --name android-release-aab-<X> --dir <out>`
    and sanity-check it (ZIP magic `PK`, contains `BundleConfig.pb` + `base/`).
-6. Publish to Play (toolkit, from `automation/`):
-   `.venv\Scripts\python.exe -m playstore.cli publish-bundle <out>\app-release.aab --track internal`
-   Expect `track_result.track == internal`, `versionCodes == ["<N>"]`, `status == completed`.
-7. Verify live: `list-tracks` shows `<X>`/`<N>` on internal (production/beta
-   untouched) AND the VPS android feed serves `<X>`/`<N>`.
+6. Publish with `.venv\Scripts\python.exe -m playstore.cli cut-android-release <out>\app-release.aab`
+   — this is the **default, non-bypassable command for a general release**: it
+   discovers every track that already has a live release (as of 2026-09-05:
+   `internal` and `alpha`/Closed Testing; `beta`/`production` are empty and
+   untouched — it re-checks live state itself every run, don't hardcode this
+   list) and lands the same versionCode on all of them in one atomic edit.
+   Expect `tracks_synced` to list every previously-live track, `version_code
+   == <N>` on each. Only use `publish-bundle --track <t>` for a single named
+   track when the owner has explicitly scoped the order to that one track —
+   never as the default for "cut an android release." If you ever do use
+   `publish-bundle`/`assign-track` directly, they print a red WARNING if
+   another live track is left behind; treat that warning as a failed step,
+   not a note to ignore.
+7. Verify live: `list-tracks` shows `<X>`/`<N>` on **every track that was live
+   before this release** (production/beta stay untouched only if they were
+   already empty) AND the VPS android feed serves `<X>`/`<N>`. A track still
+   showing an older version after this step is an incomplete release, not a
+   "someone else can update it later" — fix it in the same pass.
 
 ## 3. Pathway B — iOS (VPS sideload feed; TestFlight is manual)
 
@@ -116,7 +136,10 @@ installer is unsigned but still updater-valid).
 - Each dispatched run: `conclusion == success` (state run id, versions).
 - Repo is private again. Secrets untouched/uncommitted.
 - Live-state proof per pathway (Play `list-tracks` output, VPS feed JSON,
-  desktop `latest.json`) — paste the evidence, not assertions.
+  desktop `latest.json`) — paste the evidence, not assertions. For Android,
+  the pasted `list-tracks` output must show the new version/code on **every
+  track that was already live**, not just internal — a stale `alpha` (or any
+  other previously-live track) after "done" is not done.
 - Report: versions shipped per channel, anything intentionally unchanged
   (e.g. production track, TestFlight manual step, macOS dmg absent), and any
   remaining warnings (e.g. review delays, propagation lag).

@@ -8,6 +8,7 @@ using OetLearner.Api.Domain;
 using OetLearner.Api.Hubs;
 using OetLearner.Api.Services.AiAssistant.SystemPrompts;
 using OetLearner.Api.Services.AiTools;
+using OetLearner.Api.Services.Companion;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 
@@ -94,8 +95,24 @@ public sealed class AiAssistantOrchestrator(
                 .OrderBy(m => m.CreatedAt)
                 .ToListAsync(turnCts.Token);
 
-            // Get system prompt for role
+            // Get system prompt for role.
+            //
+            // Learners get the AI Learning Companion prompt: persona, their own
+            // profile, entitlement-filtered evidence and the safety boundaries
+            // (docs/ai-learning-companion/). Admin and expert keep the existing
+            // developer-assistant prompts untouched.
+            //
+            // If anything in the companion path fails we fall back to the previous
+            // static prompt rather than dropping the turn — but the fallback cannot
+            // leak protected content, because it carries no retrieved evidence.
             var systemPrompt = systemPromptProvider.GetSystemPrompt(role, userId);
+
+            if (!string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(role, "expert", StringComparison.OrdinalIgnoreCase))
+            {
+                systemPrompt = await BuildCompanionPromptAsync(
+                    scope.ServiceProvider, userId, userMessage, systemPrompt, turnCts.Token);
+            }
 
             // Get available tools for role
             var featureCode = GetFeatureCode(role);
@@ -270,6 +287,45 @@ public sealed class AiAssistantOrchestrator(
         thread.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    /// <summary>
+    /// Builds the grounded companion system prompt for a learner turn.
+    /// Resolved from the request scope because the companion services are scoped.
+    /// </summary>
+    private async Task<string> BuildCompanionPromptAsync(
+        IServiceProvider scopedProvider,
+        string userId,
+        string userMessage,
+        string fallbackPrompt,
+        CancellationToken ct)
+    {
+        try
+        {
+            var flags = scopedProvider.GetRequiredService<ICompanionFeatureFlags>();
+            if (!await flags.IsEnabledAsync(ct))
+            {
+                return fallbackPrompt;
+            }
+
+            var contextResolver = scopedProvider.GetRequiredService<ICompanionContextResolver>();
+            var retriever = scopedProvider.GetRequiredService<ICompanionRetriever>();
+            var composer = scopedProvider.GetRequiredService<ICompanionPromptComposer>();
+
+            var context = await contextResolver.ResolveAsync(userId, envelope: null, ct);
+            var retrieval = await retriever.RetrieveAsync(userMessage, context, maxResults: 8, ct);
+
+            logger.LogDebug(
+                "Companion turn for {UserId}: {Evidence} evidence, vector={Vector}, conflict={Conflict}, examMode={ExamMode}",
+                userId, retrieval.Evidence.Count, retrieval.VectorSearchUsed, retrieval.AuthorityConflict, context.ExamMode);
+
+            return await composer.ComposeAsync(context, retrieval, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogError(ex, "Companion prompt composition failed for {UserId}; using the static learner prompt.", userId);
+            return fallbackPrompt;
+        }
     }
 
     private static string GetFeatureCode(string role) => role switch

@@ -3,15 +3,34 @@
 // applies the EXACT rule-based classification used by the backend (no AI), and writes one CSV row per file.
 // Usage: node ./scripts/writing-qa-export.mjs [--out artifacts/developer-action-brief/02-writing-qa-export.csv]
 // Exit code 0 on success; prints TOTAL vs EXPORTED reconciliation + summaries to stdout.
-import { readdirSync, statSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readdirSync, statSync, writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { createHash } from "node:crypto";
+import { execSync } from "node:child_process";
 
 const REPO = process.cwd();
 const DEFAULT_OUT = "artifacts/developer-action-brief/02-writing-qa-export.csv";
 const outPath = process.argv.includes("--out")
   ? process.argv[process.argv.indexOf("--out") + 1]
   : DEFAULT_OUT;
+
+const CACHE_FILE = join(REPO, "artifacts/developer-action-brief/writing-extracted-text.json");
+let extractedTextMap = {};
+if (!existsSync(CACHE_FILE)) {
+  console.log("[info] writing-extracted-text.json not found, generating via extract_writing_text.py...");
+  try {
+    execSync("python scripts/extract_writing_text.py", { stdio: "inherit", cwd: REPO });
+  } catch (err) {
+    console.warn("[warn] Failed to run extract_writing_text.py:", err.message);
+  }
+}
+if (existsSync(CACHE_FILE)) {
+  try {
+    extractedTextMap = JSON.parse(readFileSync(CACHE_FILE, "utf8"));
+  } catch (err) {
+    console.warn("[warn] failed to parse writing-extracted-text.json", err.message);
+  }
+}
 
 const WRITING_ROOTS = [
   "OET/Materials ( To be Uploaded )/Writing",
@@ -56,6 +75,14 @@ const CANONICAL_SET = new Set([
   "update_discharge",
   "update_referral_specialist_to_gp",
   "transfer_letter",
+  "Other Letters",
+  "other_letters",
+  "LT-OT",
+  "LT-RR",
+  "LT-UR",
+  "LT-DG",
+  "LT-TR",
+  "LT-NM",
 ]);
 
 function classifyLetterType(folderPath, fileName) {
@@ -71,7 +98,8 @@ function classifyLetterType(folderPath, fileName) {
   for (const [hint, code] of LETTER_MAP) {
     if (lower.includes(hint)) return { letterType: code, method: "importer-hint-map" };
   }
-  return { letterType: "Other", method: "fallback-other" };
+  // Other Letters is a fully valid catalogue category (LT-OT / other_letters) under every profession.
+  return { letterType: "Other Letters", method: "fallback-other-letters" };
 }
 
 function classifyProfession(fullPath) {
@@ -87,12 +115,59 @@ function classifyProfession(fullPath) {
   return "unknown";
 }
 
-function roleOf(fileName) {
+function roleOf(relPath, fileName) {
+  const p = relPath.toLowerCase().split("\\").join("/");
   const f = fileName.toLowerCase();
-  if (f.includes("answer sheet") || f.includes("model answer") || f.includes("corrected")) return "ModelAnswer";
-  if (f.includes("case notes") || f.includes("case-notes") || f.includes("case notes")) return "CaseNotes";
-  if (f.includes("criteria") || f.includes("grammar") || f.includes("rulebook") || f.includes("booklet") || f.includes("criteria")) return "Reference";
-  if (/\.(pdf|docx?)$/.test(f)) return "CaseNotes-candidate";
+
+  // 1. Reference: Rulebooks, grammar guides, booklet templates, assessment criteria
+  if (
+    f.includes("rulebook") ||
+    f.includes("grammar") ||
+    f.includes("booklet") ||
+    f.includes("criteria") ||
+    p.includes("/writing rulebook") ||
+    p.includes("/grammar rules")
+  ) {
+    return "Reference";
+  }
+
+  // 2. Case notes explicit in filename (even inside corrected folders)
+  if (
+    f.includes("case notes") ||
+    f.includes("case-notes") ||
+    f.includes("casenotes") ||
+    f.includes("( case notes )") ||
+    f.includes("(case notes)")
+  ) {
+    return "CaseNotes";
+  }
+
+  // 3. Model answers / Answer sheets / Corrected letters / Sample letters
+  if (
+    f.includes("answer sheet") ||
+    f.includes("model answer") ||
+    f.includes("model answers") ||
+    f.includes("answers.pdf") ||
+    f.includes("corrected") ||
+    f.includes("50 medical writing task answers") ||
+    p.includes("/corrected letters") ||
+    p.includes("/nursing corrected letters")
+  ) {
+    return "ModelAnswer";
+  }
+
+  // 4. Case notes: all candidate tasks/stimulus files (PDFs, DOCX, and case-note images)
+  // Images and documents in New Writing Tasks, Nursing Case Notes, Workshops, Recalls, etc.
+  if (
+    p.includes("case notes") ||
+    p.includes("new writing tasks") ||
+    p.includes("recalls") ||
+    p.includes("workshops") ||
+    /\.(pdf|docx?|jpg|jpeg|png)$/.test(f)
+  ) {
+    return "CaseNotes";
+  }
+
   return "Supplementary";
 }
 
@@ -148,9 +223,10 @@ const rows = taskFiles.map((f, i) => {
   const folder = rel.split("/").slice(0, -1).join("/");
   const { letterType, method } = classifyLetterType(folder, fileName);
   const profession = classifyProfession(rel);
-  const role = roleOf(fileName);
+  const role = roleOf(rel, fileName);
   const id = `W-${String(i + 1).padStart(4, "0")}`;
   const hash = createHash("sha256").update(rel.toLowerCase()).digest("hex").slice(0, 12);
+  const extracted = extractedTextMap[rel] ?? extractedTextMap[f.abs] ?? "";
   return {
     task_id: id,
     profession,
@@ -164,18 +240,18 @@ const rows = taskFiles.map((f, i) => {
     asset_role: role,
     // No AI classifier exists in the backend (rule-based only) — represent explicitly, never omit.
     ai_confidence: "",
-    review_flag: letterType === "Other" ? "needs_review" : "",
-    pending_review: letterType === "Other" ? "yes" : "no",
+    review_flag: f.size === 0 ? "empty_file" : "",
+    pending_review: f.size === 0 ? "yes" : "no",
     import_status: "prepared-filesystem",
     source_id: hash,
-    case_note_text: "",
-    notes: letterType === "Other" ? "unclassified by deterministic rules; requires admin review before publish" : "",
+    case_note_text: extracted,
+    notes: f.size === 0 ? "empty file requires review" : "",
   };
 });
 
 function csvCell(v) {
   const s = String(v ?? "");
-  const needsQuote = s.includes('"') || s.includes(",") || s.includes("\n");
+  const needsQuote = s.includes('"') || s.includes(",") || s.includes("\n") || s.includes("\r");
   return needsQuote ? `"${s.split('"').join('""')}"` : s;
 }
 const header = [
@@ -197,7 +273,7 @@ const seenName = new Map(), dupNames = [];
 for (const r of rows) {
   byProf[r.profession] = (byProf[r.profession] || 0) + 1;
   byLetter[r.letter_type] = (byLetter[r.letter_type] || 0) + 1;
-  if (r.letter_type === "Other") other++;
+  if (r.letter_type === "Other Letters" || r.letter_type === "Other") other++;
   if (r.pending_review === "yes") pending++;
   if (r.file_bytes === 0) empty++;
   const k = r.source_path.toLowerCase();

@@ -442,6 +442,24 @@ public static class AiFeatureCodes
     /// <summary>OpenAI-compatible embeddings generation (non-Claude).</summary>
     public const string EmbeddingsGenerate = "embeddings.generate";
 
+    // ── AI Learning Companion (persona "Jana") — Stage 1 ───────────────────
+    // Learner-facing grounded OET mentor. See docs/ai-learning-companion/.
+    // All three are NON-SCORING but PLATFORM-ONLY: the companion reads learner
+    // performance history, entitlements and credit state, so a learner-supplied
+    // BYOK key must never see that context. This mirrors the privacy reasoning
+    // already applied to conversation.reply and writing.coach.* in
+    // docs/AI-USAGE-POLICY.md §5, and is enforced by
+    // AiCredentialResolver.PlatformOnlyFeatures (locked by AiFeatureEligibilityTests).
+
+    /// <summary>Companion conversational turn: grounded, cited, entitlement-filtered.</summary>
+    public const string CompanionChat = "companion.chat.v1";
+
+    /// <summary>Companion knowledge retrieval (embedding + hybrid search over approved sources).</summary>
+    public const string CompanionRetrieval = "companion.retrieval.v1";
+
+    /// <summary>Companion typed platform action proposal/execution (server-resolved targets only).</summary>
+    public const string CompanionAction = "companion.action.v1";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

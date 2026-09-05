@@ -27,8 +27,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CriterionRubricForm, EMPTY_RUBRIC_VALUE, type CriterionRubricFormValue } from '@/components/domain/speaking/CriterionRubricForm';
 import { DualAssessmentColumn } from '@/components/domain/speaking/DualAssessmentColumn';
 import { TranscriptPlayerWithComments, type TranscriptPayload } from '@/components/domain/speaking/TranscriptPlayerWithComments';
+import { ApiError } from '@/lib/api';
 import {
-  SpeakingAssessmentApiError,
   moderationOpenCase,
   tutorAddTimestampedComment,
   tutorCreateDraft,
@@ -139,7 +139,7 @@ export default function AssessSpeakingSessionPage() {
       });
       setComments(sessionContext.comments ?? []);
     } catch (err) {
-      const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to load session.';
+      const msg = err instanceof ApiError ? err.message : 'Failed to load session.';
       setErrorMsg(msg);
     } finally {
       setLoading(false);
@@ -192,7 +192,7 @@ export default function AssessSpeakingSessionPage() {
       }
       setToast({ variant: 'success', message: 'Draft saved.' });
     } catch (err) {
-      const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to save draft.';
+      const msg = err instanceof ApiError ? err.message : 'Failed to save draft.';
       setToast({ variant: 'error', message: msg });
     } finally {
       setSavingDraft(false);
@@ -236,7 +236,7 @@ export default function AssessSpeakingSessionPage() {
       }
       router.push('/expert/speaking/queue?flash=assessment-submitted');
     } catch (err) {
-      const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to submit assessment.';
+      const msg = err instanceof ApiError ? err.message : 'Failed to submit assessment.';
       setToast({ variant: 'error', message: msg });
     } finally {
       setSubmitting(false);
@@ -250,7 +250,7 @@ export default function AssessSpeakingSessionPage() {
       router.push(`/expert/speaking/moderation/${encodeURIComponent(sessionId)}`);
     } catch (err) {
       const msg =
-        err instanceof SpeakingAssessmentApiError
+        err instanceof ApiError
           ? err.message
           : 'Could not open a moderation case. Submit your assessment first.';
       setToast({ variant: 'error', message: msg });

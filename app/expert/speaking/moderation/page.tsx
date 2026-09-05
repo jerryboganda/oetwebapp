@@ -26,10 +26,10 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PROFESSION_OPTIONS } from '@/lib/api/speaking-role-play-cards';
+import { ApiError } from '@/lib/api';
 import {
   moderationListQueue,
   moderationStatusLabel,
-  SpeakingAssessmentApiError,
   type SpeakingModerationQueueItem,
 } from '@/lib/api/speaking-assessments';
 
@@ -74,7 +74,7 @@ export default function SpeakingModerationQueuePage() {
       setItems(next);
     } catch (err) {
       const message =
-        err instanceof SpeakingAssessmentApiError
+        err instanceof ApiError
           ? err.message
           : 'Could not load the moderation queue. Please try again.';
       setErrorMsg(message);

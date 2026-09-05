@@ -67,6 +67,11 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.PronunciationLinguisticScore,
         AiFeatureCodes.PronunciationFeedback,
         AiFeatureCodes.ConversationEvaluation,
+        // AI Learning Companion — reads learner performance history, entitlements
+        // and credit state. A learner-supplied BYOK key must never see that context.
+        AiFeatureCodes.CompanionChat,
+        AiFeatureCodes.CompanionRetrieval,
+        AiFeatureCodes.CompanionAction,
     };
 
     public async Task<AiCredentialResolution> ResolveAsync(

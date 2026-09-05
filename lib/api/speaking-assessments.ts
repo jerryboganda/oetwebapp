@@ -1,9 +1,9 @@
 /**
  * Typed API client for the Speaking dual-scoring (AI + Tutor) surface.
  *
- * Mirrors the self-contained pattern from `lib/api/speaking-role-play-cards.ts`:
- * Bearer-token auth via `ensureFreshAccessToken`, CSRF token via the
- * `oet_csrf` cookie, retry on 5xx/408/429.
+ * Uses the shared `apiRequest`/`apiBlobRequest` pipeline from `./client`
+ * (Bearer-token auth, CSRF, retry on 5xx/408/429) so auth handling stays
+ * consistent with the rest of the app.
  *
  * Backend endpoints targeted (see plan section E):
  *   GET    /v1/speaking/sessions/{id}/assessments
@@ -19,143 +19,7 @@
  *   POST   /v1/expert/speaking/queue/{sessionId}/release
  */
 
-import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { env } from '@/lib/env';
-import { fetchWithTimeout } from '@/lib/network/fetch-with-timeout';
-
-const API_BASE_URL = env.apiBaseUrl;
-
-function resolveApiUrl(pathOrUrl: string): string {
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  return `${API_BASE_URL}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
-}
-
-async function buildHeaders(init?: RequestInit): Promise<HeadersInit> {
-  const headers = new Headers(init?.headers);
-  if (!headers.has('Content-Type') && init?.body && typeof init.body === 'string') {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  if (typeof document !== 'undefined') {
-    const csrf = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
-    if (csrf) headers.set('x-csrf-token', csrf[1]);
-  }
-
-  try {
-    const token = await ensureFreshAccessToken();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-  } catch {
-    // Silent: caller handles 401 redirects.
-  }
-
-  return headers;
-}
-
-const RETRYABLE_STATUS = (status: number) => status >= 500 || status === 408 || status === 429;
-const MAX_RETRIES = 2;
-const RETRY_DELAYS_MS = [1000, 3000];
-
-export class SpeakingAssessmentApiError extends Error {
-  status: number;
-  code: string;
-  retryable: boolean;
-  fieldErrors: Array<{ field: string; code: string; message: string }>;
-
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    retryable: boolean,
-    fieldErrors: Array<{ field: string; code: string; message: string }> = [],
-  ) {
-    super(message);
-    this.name = 'SpeakingAssessmentApiError';
-    this.status = status;
-    this.code = code;
-    this.retryable = retryable;
-    this.fieldErrors = fieldErrors;
-  }
-}
-
-async function request<T>(path: string, init?: RequestInit, opts?: { acceptedStatuses?: number[] }): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetchWithTimeout(resolveApiUrl(path), {
-        ...init,
-        headers: await buildHeaders(init),
-      });
-
-      const accepted = opts?.acceptedStatuses ?? [];
-      if (!response.ok && accepted.includes(response.status)) {
-        if (response.status === 204) return undefined as T;
-        return (await response.json()) as T;
-      }
-
-      if (!response.ok) {
-        let code = 'unknown_error';
-        let message = `Request failed: ${response.status}`;
-        let retryable = false;
-        let fieldErrors: Array<{ field: string; code: string; message: string }> = [];
-        try {
-          const err = await response.json();
-          code = err.code ?? (response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : code);
-          message = err.message ?? err.title ?? message;
-          retryable = err.retryable ?? RETRYABLE_STATUS(response.status);
-          fieldErrors = Array.isArray(err.fieldErrors) ? err.fieldErrors : [];
-        } catch {
-          retryable = RETRYABLE_STATUS(response.status);
-          if (response.status === 401) code = 'not_authenticated';
-          else if (response.status === 403) code = 'forbidden';
-        }
-
-        const apiError = new SpeakingAssessmentApiError(response.status, code, message, retryable, fieldErrors);
-        if (retryable && attempt < MAX_RETRIES) {
-          lastError = apiError;
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-          continue;
-        }
-        throw apiError;
-      }
-
-      if (response.status === 204) return undefined as T;
-      return (await response.json()) as T;
-    } catch (err) {
-      if (err instanceof SpeakingAssessmentApiError) throw err;
-      if (attempt < MAX_RETRIES) {
-        lastError = err as Error;
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  throw lastError ?? new Error('Request failed after retries');
-}
-
-async function requestBlob(path: string, init?: RequestInit): Promise<Blob> {
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    ...init,
-    headers: await buildHeaders(init),
-  });
-
-  if (!response.ok) {
-    let code = response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : 'unknown_error';
-    let message = `Request failed: ${response.status}`;
-    try {
-      const err = await response.json();
-      code = err.code ?? code;
-      message = err.message ?? err.title ?? message;
-    } catch {
-      // Keep the fallback message for non-JSON blob errors.
-    }
-    throw new SpeakingAssessmentApiError(response.status, code, message, RETRYABLE_STATUS(response.status));
-  }
-
-  return response.blob();
-}
+import { apiBlobRequest, apiRequest } from './client';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — public surface
@@ -492,7 +356,7 @@ export interface TutorSessionContext {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function learnerGetDualAssessment(sessionId: string): Promise<DualAssessmentResponse> {
-  return request<DualAssessmentResponse>(
+  return apiRequest<DualAssessmentResponse>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/assessments`,
     undefined,
     { acceptedStatuses: [404] },
@@ -500,19 +364,19 @@ export async function learnerGetDualAssessment(sessionId: string): Promise<DualA
 }
 
 export async function tutorGetDualAssessment(sessionId: string): Promise<DualAssessmentResponse> {
-  return request<DualAssessmentResponse>(
+  return apiRequest<DualAssessmentResponse>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/assessments`,
   );
 }
 
 export async function tutorGetSessionContext(sessionId: string): Promise<TutorSessionContext> {
-  return request<TutorSessionContext>(
+  return apiRequest<TutorSessionContext>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/context`,
   );
 }
 
 export async function tutorGetSessionRecordingObjectUrl(sessionId: string): Promise<string> {
-  const blob = await requestBlob(`/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/recording`);
+  const blob = await apiBlobRequest(`/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/recording`);
   return URL.createObjectURL(blob);
 }
 
@@ -525,7 +389,7 @@ export async function tutorListQueue(filters: TutorQueueFilters = {}): Promise<T
   if (filters.professionId) qs.set('professionId', filters.professionId);
   if (filters.agePreset) qs.set('agePreset', filters.agePreset);
   const query = qs.toString();
-  const response = await request<RawTutorQueueResponse>(`/v1/expert/speaking/queue${query ? `?${query}` : ''}`);
+  const response = await apiRequest<RawTutorQueueResponse>(`/v1/expert/speaking/queue${query ? `?${query}` : ''}`);
   const items = (response.items ?? []).map((item): TutorQueueItem => ({
     sessionId: item.sessionId,
     userId: item.userId,
@@ -549,7 +413,7 @@ export async function tutorListQueue(filters: TutorQueueFilters = {}): Promise<T
 }
 
 export async function tutorClaimSession(sessionId: string): Promise<void> {
-  await request<void>(
+  await apiRequest<void>(
     `/v1/expert/speaking/queue/${encodeURIComponent(sessionId)}/claim`,
     { method: 'POST', body: '{}' },
     { acceptedStatuses: [204] },
@@ -557,7 +421,7 @@ export async function tutorClaimSession(sessionId: string): Promise<void> {
 }
 
 export async function tutorReleaseSession(sessionId: string): Promise<void> {
-  await request<void>(
+  await apiRequest<void>(
     `/v1/expert/speaking/queue/${encodeURIComponent(sessionId)}/release`,
     { method: 'POST', body: '{}' },
   );
@@ -571,7 +435,7 @@ export async function tutorCreateDraft(
   sessionId: string,
   body: CreateTutorDraftInput,
 ): Promise<TutorDraftMutationResult> {
-  const created = await request<{ id: string }>(
+  const created = await apiRequest<{ id: string }>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/tutor-assessment`,
     { method: 'POST', body: JSON.stringify(body) },
   );
@@ -583,7 +447,7 @@ export async function tutorUpdateDraft(
   assessmentId: string,
   body: UpdateTutorDraftInput,
 ): Promise<void> {
-  await request<void>(
+  await apiRequest<void>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/tutor-assessments/${encodeURIComponent(assessmentId)}`,
     { method: 'PATCH', body: JSON.stringify(body) },
     { acceptedStatuses: [204] },
@@ -595,7 +459,7 @@ export async function tutorSubmitAssessment(
   assessmentId: string,
   body: SubmitTutorAssessmentInput,
 ): Promise<TutorAssessment> {
-  return request<TutorAssessment>(
+  return apiRequest<TutorAssessment>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/tutor-assessments/${encodeURIComponent(assessmentId)}/submit`,
     { method: 'POST', body: JSON.stringify(body) },
   );
@@ -609,7 +473,7 @@ export async function tutorAddTimestampedComment(
   sessionId: string,
   body: TimestampedCommentInput,
 ): Promise<TimestampedComment> {
-  const created = await request<{ id: string }>(
+  const created = await apiRequest<{ id: string }>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/comments`,
     { method: 'POST', body: JSON.stringify(body) },
   );
@@ -758,14 +622,14 @@ export interface SpeakingModerationFinalizeInput {
 
 export async function moderationListQueue(professionId?: string): Promise<SpeakingModerationQueueItem[]> {
   const qs = professionId ? `?professionId=${encodeURIComponent(professionId)}` : '';
-  const res = await request<{ items: SpeakingModerationQueueItem[] }>(
+  const res = await apiRequest<{ items: SpeakingModerationQueueItem[] }>(
     `/v1/expert/speaking/moderation/queue${qs}`,
   );
   return res.items ?? [];
 }
 
 export async function moderationGetCase(sessionId: string): Promise<SpeakingModerationCase | null> {
-  return request<SpeakingModerationCase | null>(
+  return apiRequest<SpeakingModerationCase | null>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation`,
     undefined,
     { acceptedStatuses: [404] },
@@ -776,7 +640,7 @@ export async function moderationOpenCase(
   sessionId: string,
   reason?: SpeakingModerationReason,
 ): Promise<SpeakingModerationCase> {
-  return request<SpeakingModerationCase>(
+  return apiRequest<SpeakingModerationCase>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation/open`,
     { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
   );
@@ -786,7 +650,7 @@ export async function moderationSubmitSecondMark(
   sessionId: string,
   body: SpeakingMarkInput,
 ): Promise<SpeakingModerationCase> {
-  return request<SpeakingModerationCase>(
+  return apiRequest<SpeakingModerationCase>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation/second-mark`,
     { method: 'POST', body: JSON.stringify(body) },
   );
@@ -796,7 +660,7 @@ export async function moderationFinalize(
   sessionId: string,
   body: SpeakingModerationFinalizeInput,
 ): Promise<SpeakingModerationCase> {
-  return request<SpeakingModerationCase>(
+  return apiRequest<SpeakingModerationCase>(
     `/v1/expert/speaking/sessions/${encodeURIComponent(sessionId)}/moderation/finalize`,
     { method: 'POST', body: JSON.stringify(body) },
   );

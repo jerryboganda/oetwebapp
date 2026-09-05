@@ -36,7 +36,7 @@
  */
 
 import { apiClient } from '@/lib/api';
-import { env } from '@/lib/env';
+import { resolveApiUrl as resolveUrl } from './client';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
 import { fetchWithTimeout } from '@/lib/network/fetch-with-timeout';
 
@@ -261,12 +261,6 @@ export interface AdminVideoViewerRow {
 // Raw-fetch transport for X-Total-Count paged lists
 // (copied from listContentPapersPaged in lib/content-upload-api.ts)
 // ─────────────────────────────────────────────────────────────────────────────
-
-function resolveUrl(path: string): string {
-  if (path.startsWith('http')) return path;
-  const base = env.apiBaseUrl || '';
-  return base ? `${base.replace(/\/$/, '')}${path}` : path;
-}
 
 function readCsrfCookie(): string | null {
   if (typeof document === 'undefined') return null;

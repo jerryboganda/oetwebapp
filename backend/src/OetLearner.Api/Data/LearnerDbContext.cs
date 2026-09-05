@@ -1428,6 +1428,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Writing Module V2 — scenarios, exemplars, submissions, grades, canon,
         // drills, lessons, mocks, readiness, mistakes, tutor, OCR, showcase.
         // Each partial lives in LearnerDbContext.WritingScenarios.cs etc.
+        // AI Learning Companion knowledge index (docs/ai-learning-companion/).
+        OnModelCreatingCompanion(modelBuilder);
+
         OnModelCreatingWritingScenarios(modelBuilder);
         OnModelCreatingWritingExemplars(modelBuilder);
         OnModelCreatingWritingSubmissions(modelBuilder);
@@ -1620,6 +1623,10 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     /// Defined in <see cref="LearnerDbContext"/>.Readiness.cs (partial).
     /// </summary>
     partial void OnModelCreatingReadiness(ModelBuilder modelBuilder);
+
+    // AI Learning Companion knowledge index. Implementation lives in
+    // LearnerDbContext.Companion.cs.
+    partial void OnModelCreatingCompanion(ModelBuilder modelBuilder);
 
     // Writing Module V2 — partial method declarations. Implementations live in
     // LearnerDbContext.Writing*.cs (one file per logical entity grouping).

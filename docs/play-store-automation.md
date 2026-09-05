@@ -72,7 +72,8 @@ python -m playstore.cli test-auth
 python -m playstore.cli list-tracks
 python -m playstore.cli get-listing en-US
 python -m playstore.cli update-listing en-US --title "..." --short-description "..." --full-description "..."
-python -m playstore.cli publish-bundle path\to\app.aab --track internal
+python -m playstore.cli cut-android-release path\to\app.aab   # default for "cut a release" -- syncs every live track
+python -m playstore.cli publish-bundle path\to\app.aab --track internal   # single track only, owner must scope it explicitly
 python -m playstore.cli list-reviews --max-results 20
 python -m playstore.cli reply-review <review_id> "Thanks for the feedback!"
 ```
@@ -106,6 +107,21 @@ the draft edit on any exception so nothing partial is left staged).
 
 ## Known gotchas — read before you hit these again
 
+- **A general "cut a release" must land on EVERY track that already has a live release —
+  this is an owner rule stated as most-critical, not a style preference.** Use
+  `python -m playstore.cli cut-android-release <aab_path>` by default: it discovers live
+  tracks itself and syncs all of them in one atomic edit, so it can't accidentally leave
+  one behind. Only use `publish-bundle --track <t>` for a single track when the owner has
+  explicitly scoped the request to that one track by name.
+- **Promoting an already-uploaded build to a second track (e.g. internal → alpha/Closed
+  Testing) must NOT re-run `publish-bundle`.** That command always re-uploads the `.aab`,
+  and Play rejects a versionCode that's already live on any track with `403 "Version code
+  N has already been used"`. Use `python -m playstore.cli assign-track <version_code>
+  --track <track>` instead — it opens an edit, points the track at the existing
+  versionCode with no upload, and commits. Root cause of the 2026-09-05 "Play shows Open
+  not Update" bug for closed testers: internal/VPS had moved to 1.4.11 while alpha was
+  still pinned to an older build — `assign-track` fixed it without a rebuild, and
+  `cut-android-release` now exists so it can't recur.
 - **`edits().testers()` only accepts Google Groups, not individual email addresses.**
   Internal/closed-testing tester lists must be managed by pasting emails into the Play
   Console UI's per-track Testers tab — there is no API path for individual testers. This

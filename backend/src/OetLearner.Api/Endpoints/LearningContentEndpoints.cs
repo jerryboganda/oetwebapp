@@ -24,6 +24,7 @@ public static class LearningContentEndpoints
             string featureKey,
             OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService videoLibrary,
             StrategyGuideService strategyGuides,
+            OetLearner.Api.Services.Companion.ICompanionFeatureFlags companionFlags,
             CancellationToken ct) =>
         {
             var normalized = featureKey.Trim().ToLowerInvariant();
@@ -35,6 +36,11 @@ public static class LearningContentEndpoints
                     Results.Ok(new LearnerFeatureFlagResponse("video_library", await videoLibrary.IsEnabledAsync(ct))),
                 "strategy_guides" or "strategy-guides" =>
                     Results.Ok(new LearnerFeatureFlagResponse("strategy_guides", await strategyGuides.IsEnabledAsync(ct))),
+                // AI Learning Companion master switch. Fails closed: an unset or
+                // unreadable flag reports disabled, so the surface never appears
+                // by accident. docs/ai-learning-companion/.
+                "ai_learning_companion" or "ai-learning-companion" =>
+                    Results.Ok(new LearnerFeatureFlagResponse("ai_learning_companion", await companionFlags.IsEnabledAsync(ct))),
                 _ => Results.NotFound(new { code = "NOT_FOUND", message = "Feature flag is not exposed to learners." })
             };
         })

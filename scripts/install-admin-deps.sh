@@ -8,7 +8,6 @@
 #   - Polished UX libraries that the design system standardises on:
 #       sonner            → toast notifications
 #       vaul              → bottom-sheet drawer (mobile)
-#       cmdk              → ⌘K command palette
 #       @tanstack/react-table → headless table for admin grids
 #
 # How to run (remote production VPS)
@@ -43,9 +42,8 @@ pnpm add \
   @radix-ui/react-slot \
   @radix-ui/react-separator \
   @radix-ui/react-popover \
-  sonner \
-  vaul \
-  cmdk \
-  @tanstack/react-table
+   sonner \
+   vaul \
+   @tanstack/react-table
 
 echo "==> Done. Restart the dev server (pnpm run dev) for the new packages to be picked up."

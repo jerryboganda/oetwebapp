@@ -1,5 +1,6 @@
 'use client';
 
+import { MarkdownContent } from '@/components/ui/markdown-content';
 import type { AiMessage } from '@/lib/ai-assistant/types';
 
 export interface AiAssistantMessagesProps {
@@ -25,7 +26,7 @@ export function AiAssistantMessages({ messages, streamingContent }: AiAssistantM
       ))}
       {streamingContent !== undefined && (
         <div className="rounded-lg bg-background-light p-3" data-testid="streaming-message">
-          <div className="prose prose-sm max-w-none">{streamingContent}</div>
+          <MarkdownContent markdown={streamingContent} className="prose prose-sm max-w-none" />
           <span className="inline-block h-4 w-1 animate-pulse bg-primary" data-testid="streaming-cursor" />
         </div>
       )}
@@ -54,7 +55,17 @@ function MessageBubble({ message }: { message: AiMessage }) {
       className={`rounded-lg p-3 ${isUser ? 'ml-8 bg-primary/10' : 'mr-8 bg-background-light'}`}
       data-testid={isUser ? 'user-message' : 'assistant-message'}
     >
-      <div className="prose prose-sm max-w-none">{message.content}</div>
+      {/*
+        Assistant output is markdown (the companion cites rules, lists steps and
+        quotes short examples). The learner's own message is deliberately NOT
+        parsed as markdown: it is untrusted input, and echoing it through a
+        renderer changes what the learner sees themselves type.
+      */}
+      {isUser ? (
+        <div className="whitespace-pre-wrap text-sm">{message.content}</div>
+      ) : (
+        <MarkdownContent markdown={message.content} className="prose prose-sm max-w-none" />
+      )}
     </div>
   );
 }

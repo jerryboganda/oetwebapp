@@ -199,7 +199,7 @@ export async function queueOfflineAttempt(
   const tx = db.transaction(STORES.attempts, 'readwrite');
   const store = tx.objectStore(STORES.attempts);
 
-  const id = options.id ?? `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const id = options.id ?? (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? `offline-${crypto.randomUUID()}` : `offline-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
   const encryptedPayload = await encryptForStorage(payload, _encryptionKey);
   const attempt: StoredOfflineAttempt = {
     id,

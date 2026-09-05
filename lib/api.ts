@@ -1,6 +1,23 @@
 import { ensureFreshAccessToken } from './auth-client';
-import { navigateAuthOnce } from './navigation/auth-redirect';
-import { loadStoredSession } from './auth-storage';
+import {
+  ApiError,
+  API_BASE_URL,
+  apiBlobRequest,
+  apiRequest,
+  asArray,
+  asRecord,
+  getHeaders,
+  isApiError,
+  isRetryable,
+  resolveApiUploadUrl,
+  resolveApiUrl,
+  resolveBrowserApiResourceUrl,
+  toStringArray,
+  type ApiRecord,
+} from './api/client';
+export { ApiError, isApiError } from './api/client';
+import { mapMockBooking, normalizeMockDeliveryMode } from './api/mock-bookings';
+import { uploadMedia } from './api/content-discovery';
 import {
   titleCase as domainTitleCase,
   minutesToLabel as domainMinutesToLabel,
@@ -10,10 +27,7 @@ import {
   parseCriterionScore as domainParseCriterionScore,
   scoreToGrade as domainScoreToGrade,
 } from './domain/format';
-import { env } from './env';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
-import { getClientIdentitySnapshot } from './client-version';
-import { getDeviceIdForRequest } from './device-id';
 import type { CurrentUser } from './types/auth';
 import type {
   ExamFamilyCode,
@@ -97,9 +111,6 @@ export type {
   AiPackagesResponse,
 };
 import { mapAiPackageCreditSnapshot } from './map-ai-package-credit-snapshot';
-import type { FreezePolicy } from './types/freeze';
-import type { BulkActionResultDto } from './types/admin';
-import type { LearnerVocabulary, MyVocabularyPageResponse } from './types/vocabulary';
 import type {
   CalibrationCaseDetail,
   CalibrationCase,
@@ -160,9 +171,6 @@ import type {
   GrammarTopicUpsertPayload,
 } from './grammar/types';
 
-const API_BASE_URL = env.apiBaseUrl;
-type ApiRecord = Record<string, any>;
-
 export interface SpeakingHomeAction {
   id: string;
   title: string;
@@ -205,31 +213,6 @@ export interface SpeakingHome {
   writingTaskRoute?: string;
   readingTaskRoute?: string;
   listeningTaskRoute?: string;
-}
-
-export interface LearnerFeatureFlag {
-  key: string;
-  enabled: boolean;
-}
-
-function asRecord(value: unknown): ApiRecord {
-  return value && typeof value === 'object' ? (value as ApiRecord) : {};
-}
-
-function asArray(value: unknown): ApiRecord[] {
-  return Array.isArray(value) ? value.map(asRecord) : [];
-}
-
-function toStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((item) => {
-      if (typeof item === 'string') return item;
-      if (typeof item === 'number' || typeof item === 'boolean') return String(item);
-      const record = item && typeof item === 'object' ? (item as ApiRecord) : {};
-      return record.code ?? record.value ?? record.id ?? record.name ?? null;
-    })
-    .filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
 function toNullableString(value: unknown): string | null {
@@ -373,100 +356,6 @@ function normalizeCriterionName(code: string | null | undefined): string {
   }
 }
 
-function resolveApiUrl(pathOrUrl: string): string {
-  if (/^https?:\/\//i.test(pathOrUrl)) {
-    return pathOrUrl;
-  }
-
-  return `${API_BASE_URL}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
-}
-
-function resolveBrowserApiResourceUrl(pathOrUrl: string): string | null {
-  if (typeof window !== 'undefined' && /^https?:\/\//i.test(pathOrUrl)) {
-    try {
-      const url = new URL(pathOrUrl);
-      if (url.pathname.startsWith('/v1/')) {
-        return resolveApiUrl(`${url.pathname}${url.search}`);
-      }
-    } catch {
-      // Fall back to the normal resolver for malformed input.
-    }
-  }
-
-  return null;
-}
-
-function resolveApiUploadUrl(pathOrUrl: string): string {
-  return resolveBrowserApiResourceUrl(pathOrUrl) ?? resolveApiUrl(pathOrUrl);
-}
-
-async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: boolean }): Promise<HeadersInit> {
-  const headers = new Headers(extra);
-  if (options?.json ?? true) {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  // Attach CSRF token (double-submit cookie pattern) for mutation requests
-  if (typeof document !== 'undefined') {
-    const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
-    if (csrfMatch) {
-      headers.set('x-csrf-token', csrfMatch[1]);
-    }
-  }
-
-  // Identify the app shell (desktop/mobile) so the backend can enforce the
-  // forced-update gate. Only shells send these headers — a plain web browser
-  // never does, so the website is structurally exempt from the 426 gate.
-  const identity = getClientIdentitySnapshot();
-  if (identity && identity.platform !== 'web') {
-    headers.set('X-Client-Platform', identity.platform);
-    if (identity.version) {
-      headers.set('X-App-Version', identity.version);
-    }
-  }
-
-  // Bind protected resource calls (especially playback sessions) to the same
-  // opaque device identity used at sign-in/refresh.
-  const deviceId = await getDeviceIdForRequest();
-  if (deviceId) {
-    headers.set('X-OET-Device-Id', deviceId);
-  }
-
-  try {
-    const token = await ensureFreshAccessToken();
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    } else if (process.env.NODE_ENV === 'development') {
-      console.debug('[API] No auth token available for request to', path);
-    }
-  } catch (err) {
-    if (process.env.NODE_ENV === 'development') {
-      console.debug('[API] Failed to retrieve auth token:', err);
-    }
-  }
-
-  return headers;
-}
-
-/** Typed API error with status, error code, retryable flag, and user-friendly message. */
-export class ApiError extends Error {
-  status: number;
-  code: string;
-  retryable: boolean;
-  userMessage: string;
-  fieldErrors: Array<{ field: string; code: string; message: string }>;
-
-  constructor(status: number, code: string, message: string, retryable: boolean, fieldErrors: Array<{ field: string; code: string; message: string }> = []) {
-    super(message);
-    this.name = 'ApiError';
-    this.status = status;
-    this.code = code;
-    this.retryable = retryable;
-    this.fieldErrors = fieldErrors;
-    this.userMessage = mapErrorCodeToUserMessage(code, message);
-  }
-}
-
 export interface WritingLintResponse {
   findings: LintFinding[];
   totals: { critical: number; major: number; minor: number; info: number };
@@ -489,198 +378,6 @@ export interface AiCompletionResponse {
     appliedRulesCount: number;
   };
   promptHeadSnippet?: string;
-}
-
-export function isApiError(error: unknown): error is ApiError {
-  return error instanceof ApiError;
-}
-
-function mapErrorCodeToUserMessage(code: string, fallback: string): string {
-  switch (code) {
-    case 'not_authenticated': return 'Your session expired. Please sign in again.';
-    case 'unauthorized': return 'Please sign in again to continue.';
-    case 'draft_version_conflict': return 'Your draft was updated in another tab. Please refresh and try again.';
-    case 'calibration_already_submitted': return 'This calibration case is already finalized and is now locked.';
-    case 'idempotency_duplicate': return 'This action was already completed.';
-    case 'not_found': return 'The requested resource was not found.';
-    case 'forbidden': return 'You do not have permission to perform this action.';
-    case 'validation_error': return 'Please check your input and try again.';
-    case 'rate_limited': return 'Too many requests. Please wait a moment and try again.';
-    case 'internal_server_error': return 'Server encountered an issue processing this request. Tap retry or reload.';
-    case 'no_reading_tests':
-    case 'no_listening_tests':
-    case 'no_ai_package_credits':
-    case 'ai_credits_insufficient':
-    case 'ai_package_expired':
-    case 'no_mock_exams':
-    case 'no_credits':
-    case 'insufficient_review_credits':
-    case 'speaking_exam_insufficient_credits':
-      return fallback || 'You do not have enough credits to start this. Purchase a package to continue.';
-    default: return fallback;
-  }
-}
-
-const MAX_RETRIES = 2;
-const RETRY_DELAYS = [1000, 3000];
-
-function isRetryable(status: number): boolean {
-  return status >= 500 || status === 408 || status === 429;
-}
-
-async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean; acceptedStatuses?: number[] }): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetchWithTimeout(resolveApiUrl(path), {
-        ...init,
-        headers: await getHeaders(path, init?.headers, options),
-      });
-
-      const acceptedStatuses = options?.acceptedStatuses ?? [];
-      if (!response.ok && acceptedStatuses.includes(response.status)) {
-        if (response.status === 204) {
-          return undefined as T;
-        }
-
-        return (await response.json()) as T;
-      }
-
-      if (!response.ok) {
-        let code = 'unknown_error';
-        let message = `Request failed: ${response.status}`;
-        let retryable = false;
-        let fieldErrors: Array<{ field: string; code: string; message: string }> = [];
-        try {
-          const error = await response.json();
-          code = error.code ?? (response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : code);
-          message = error.message ?? error.title ?? message;
-          retryable = error.retryable ?? isRetryable(response.status);
-          fieldErrors = Array.isArray(error.fieldErrors) ? error.fieldErrors : [];
-
-          // Forced-update gate: the backend rejects out-of-date shells with 426.
-          // Broadcast so the AppVersionGateProvider can raise the blocking
-          // overlay mid-session, then fall through to throw as a normal ApiError.
-          if (response.status === 426 && typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('oet:upgrade-required', { detail: error }));
-          }
-
-          // Security spec §4.2 learner hard gate: once the owner flips
-          // Security.RequireVerifiedEmailForLearners, unverified learners get
-          // this 403 on every learner endpoint — route them to the verify
-          // screen (skip if we're already on it to avoid a redirect loop).
-          // Single-flight: every concurrent query fails at once, but only
-          // the first performs the full document navigation.
-          if (
-            response.status === 403 &&
-            code === 'email_verification_required' &&
-            typeof window !== 'undefined' &&
-            !window.location.pathname.startsWith('/verify-email')
-          ) {
-            const params = new URLSearchParams();
-            const storedEmail = loadStoredSession()?.currentUser?.email;
-            if (storedEmail) {
-              params.set('email', storedEmail);
-            }
-            const nextPath = `${window.location.pathname}${window.location.search}`;
-            if (nextPath && nextPath !== '/verify-email') {
-              params.set('next', nextPath);
-            }
-            const query = params.toString();
-            navigateAuthOnce(query ? `/verify-email?${query}` : '/verify-email', false);
-          }
-        } catch (err) {
-          if (response.status === 401) {
-            code = 'not_authenticated';
-          } else if (response.status === 403) {
-            code = 'forbidden';
-          }
-          // Body wasn't JSON (e.g. backend returned an HTML error page). This
-          // isn't actionable for the user and we still surface the status code
-          // via the thrown ApiError; demote to debug so it doesn't spam the
-          // console in production.
-          if (process.env.NODE_ENV === 'development') {
-            console.debug('[API] Non-JSON error response body:', err);
-          }
-          retryable = isRetryable(response.status);
-        }
-
-        const apiError = new ApiError(response.status, code, message, retryable, fieldErrors);
-
-        // Retry on 5xx/408/429, but not on 4xx client errors
-        if (retryable && attempt < MAX_RETRIES) {
-          lastError = apiError;
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
-          continue;
-        }
-
-        throw apiError;
-      }
-
-      if (response.status === 204) {
-        return undefined as T;
-      }
-
-      // Some endpoints legitimately return 200 with an empty body (e.g. the
-      // expert private-speaking profile returns Results.Ok(null), which
-      // ASP.NET writes as no content). Treat that as undefined instead of
-      // failing JSON parsing and burning the retry budget on a phantom
-      // "network error".
-      const text = await response.text();
-      if (!text) {
-        return undefined as T;
-      }
-      return JSON.parse(text) as T;
-    } catch (err) {
-      if (err instanceof ApiError) {
-        throw err;
-      }
-
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        const timeoutError = new ApiError(408, 'request_timeout', 'The request timed out. Please try again.', true);
-        lastError = timeoutError;
-        if (attempt < MAX_RETRIES) {
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
-          continue;
-        }
-        throw timeoutError;
-      }
-
-      // Network errors (TypeError from fetch) are retryable
-      lastError = err instanceof Error ? err : new Error(String(err));
-      if (attempt < MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
-        continue;
-      }
-      throw new ApiError(0, 'network_error', 'Unable to connect to the server. Please check your internet connection.', true);
-    }
-  }
-
-  throw lastError ?? new Error('Request failed');
-}
-
-async function apiBlobRequest(path: string, init?: RequestInit): Promise<Blob> {
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    ...init,
-    credentials: init?.credentials ?? 'include',
-    headers: await getHeaders(path, init?.headers),
-  });
-
-  if (!response.ok) {
-    let code = response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : 'unknown_error';
-    let message = `Request failed: ${response.status}`;
-    try {
-      const error = await response.json();
-      code = error.code ?? code;
-      message = error.message ?? error.title ?? message;
-    } catch {
-      // Binary endpoints often return non-JSON error bodies; status/code still carry the failure.
-    }
-    throw new ApiError(response.status, code, message, isRetryable(response.status));
-  }
-
-  return response.blob();
 }
 
 type ApiClientInit = Omit<RequestInit, 'body' | 'method'>;
@@ -3019,13 +2716,6 @@ function normalizeMockTypeToken(value: unknown): MockTypeToken {
   const v = typeof value === 'string' ? value.toLowerCase() : '';
   return MOCK_TYPE_TOKENS.has(v as MockTypeToken) ? (v as MockTypeToken) : 'full';
 }
-const MOCK_DELIVERY_MODES: ReadonlySet<MockDeliveryMode> = new Set<MockDeliveryMode>([
-  'computer', 'paper', 'oet_home',
-]);
-function normalizeMockDeliveryMode(value: unknown): MockDeliveryMode | undefined {
-  const v = typeof value === 'string' ? value.toLowerCase() : '';
-  return MOCK_DELIVERY_MODES.has(v as MockDeliveryMode) ? (v as MockDeliveryMode) : undefined;
-}
 const MOCK_STRICTNESS_OPTIONS: ReadonlySet<MockStrictness> = new Set<MockStrictness>([
   'learning', 'exam', 'final_readiness',
 ]);
@@ -3322,73 +3012,6 @@ export async function recordMockProctoringEvents(
   };
 }
 
-function mapMockBooking(item: ApiRecord): MockBooking {
-  return {
-    id: String(item.id ?? item.bookingId ?? ''),
-    bookingId: String(item.bookingId ?? item.id ?? ''),
-    mockBundleId: String(item.mockBundleId ?? ''),
-    mockAttemptId: item.mockAttemptId ? String(item.mockAttemptId) : null,
-    tutorProfileId: item.tutorProfileId ? String(item.tutorProfileId) : null,
-    title: item.title ? String(item.title) : item.mockBundleTitle ? String(item.mockBundleTitle) : undefined,
-    scheduledStartAt: String(item.scheduledStartAt ?? ''),
-    timezoneIana: String(item.timezoneIana ?? 'UTC'),
-    status: String(item.status ?? 'scheduled'),
-    deliveryMode: normalizeMockDeliveryMode(item.deliveryMode),
-    liveRoomState: item.liveRoomState ? String(item.liveRoomState) : undefined,
-    liveRoomTransitionVersion: typeof item.liveRoomTransitionVersion === 'number' ? item.liveRoomTransitionVersion : undefined,
-    consentToRecording: Boolean(item.consentToRecording),
-    rescheduleCount: Number(item.rescheduleCount ?? 0),
-    refundDecision: item.refundDecision ? String(item.refundDecision) : null,
-    refundIssued: Boolean(item.refundIssued),
-    joinUrl: item.joinUrl ? String(item.joinUrl) : null,
-    zoomJoinUrl: item.zoomJoinUrl ? String(item.zoomJoinUrl) : null,
-    learnerNotes: item.learnerNotes ? String(item.learnerNotes) : null,
-    releasePolicy: item.releasePolicy ? String(item.releasePolicy) : undefined,
-    candidateCardVisible: typeof item.candidateCardVisible === 'boolean' ? item.candidateCardVisible : undefined,
-    interlocutorCardVisible: typeof item.interlocutorCardVisible === 'boolean' ? item.interlocutorCardVisible : undefined,
-    speakingPaperId: typeof item.speakingPaperId === 'string' ? item.speakingPaperId : undefined,
-    speakingContent: mapMockSpeakingContent(item.speakingContent),
-  };
-}
-
-function mapMockSpeakingContent(value: unknown): MockSpeakingContent | null {
-  if (!value || typeof value !== 'object') return null;
-  const item = asRecord(value);
-  const candidateCard = asRecord(item.candidateCard);
-  const tasks = toStringArray(candidateCard.tasks).length > 0
-    ? toStringArray(candidateCard.tasks)
-    : toStringArray(item.tasks);
-  return {
-    role: typeof item.role === 'string' ? item.role : typeof candidateCard.role === 'string' ? candidateCard.role : undefined,
-    setting: typeof item.setting === 'string' ? item.setting : typeof candidateCard.setting === 'string' ? candidateCard.setting : undefined,
-    patient: typeof item.patient === 'string' ? item.patient : typeof candidateCard.patient === 'string' ? candidateCard.patient : undefined,
-    task: typeof item.task === 'string' ? item.task : typeof candidateCard.task === 'string' ? candidateCard.task : undefined,
-    brief: typeof item.brief === 'string' ? item.brief : typeof candidateCard.brief === 'string' ? candidateCard.brief : undefined,
-    background: typeof item.background === 'string' ? item.background : typeof candidateCard.background === 'string' ? candidateCard.background : undefined,
-    tasks,
-    candidateCard: {
-      role: typeof candidateCard.role === 'string' ? candidateCard.role : undefined,
-      candidateRole: typeof candidateCard.candidateRole === 'string' ? candidateCard.candidateRole : undefined,
-      setting: typeof candidateCard.setting === 'string' ? candidateCard.setting : undefined,
-      patient: typeof candidateCard.patient === 'string' ? candidateCard.patient : undefined,
-      patientRole: typeof candidateCard.patientRole === 'string' ? candidateCard.patientRole : undefined,
-      brief: typeof candidateCard.brief === 'string' ? candidateCard.brief : undefined,
-      task: typeof candidateCard.task === 'string' ? candidateCard.task : undefined,
-      background: typeof candidateCard.background === 'string' ? candidateCard.background : undefined,
-      tasks,
-    },
-    warmUpQuestions: toStringArray(item.warmUpQuestions),
-    prepTimeSeconds: typeof item.prepTimeSeconds === 'number' ? item.prepTimeSeconds : undefined,
-    roleplayTimeSeconds: typeof item.roleplayTimeSeconds === 'number' ? item.roleplayTimeSeconds : undefined,
-    roleplayCount: typeof item.roleplayCount === 'number' ? item.roleplayCount : undefined,
-    patientEmotion: typeof item.patientEmotion === 'string' ? item.patientEmotion : undefined,
-    communicationGoal: typeof item.communicationGoal === 'string' ? item.communicationGoal : undefined,
-    clinicalTopic: typeof item.clinicalTopic === 'string' ? item.clinicalTopic : undefined,
-    criteriaFocus: toStringArray(item.criteriaFocus),
-    disclaimer: typeof item.disclaimer === 'string' ? item.disclaimer : undefined,
-  };
-}
-
 export async function fetchMockBookings(): Promise<MockBooking[]> {
   const response = await apiRequest<ApiRecord>('/v1/mock-bookings');
   return asArray(response.items).map(mapMockBooking);
@@ -3649,60 +3272,6 @@ export async function rescheduleMockBooking(
 export async function cancelMockBooking(bookingId: string): Promise<MockBooking> {
   const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${bookingId}/cancel`, {
     method: 'POST',
-  });
-  return mapMockBooking(response);
-}
-
-export type MockLiveRoomTargetState = 'in_progress' | 'completed' | 'tutor_no_show' | 'learner_no_show';
-
-export interface MockLiveRoomTransitionOptions {
-  reason?: string;
-  clientTransitionId?: string;
-}
-
-function mockLiveRoomTransitionPayload(
-  targetState: MockLiveRoomTargetState,
-  options?: MockLiveRoomTransitionOptions,
-) {
-  return {
-    targetState,
-    ...(options?.reason ? { reason: options.reason } : {}),
-    ...(options?.clientTransitionId ? { clientTransitionId: options.clientTransitionId } : {}),
-  };
-}
-
-export async function transitionMockBookingLiveRoom(
-  bookingId: string,
-  targetState: MockLiveRoomTargetState,
-  options?: MockLiveRoomTransitionOptions,
-): Promise<MockBooking> {
-  const response = await apiRequest<ApiRecord>(`/v1/mock-bookings/${bookingId}/live-room/transition`, {
-    method: 'POST',
-    body: JSON.stringify(mockLiveRoomTransitionPayload(targetState, options)),
-  });
-  return mapMockBooking(response);
-}
-
-export async function transitionExpertMockBookingLiveRoom(
-  bookingId: string,
-  targetState: MockLiveRoomTargetState,
-  options?: MockLiveRoomTransitionOptions,
-): Promise<MockBooking> {
-  const response = await apiRequest<ApiRecord>(`/v1/expert/mocks/bookings/${encodeURIComponent(bookingId)}/live-room/transition`, {
-    method: 'POST',
-    body: JSON.stringify(mockLiveRoomTransitionPayload(targetState, options)),
-  });
-  return mapMockBooking(response);
-}
-
-export async function transitionAdminMockBookingLiveRoom(
-  bookingId: string,
-  targetState: MockLiveRoomTargetState,
-  options?: MockLiveRoomTransitionOptions,
-): Promise<MockBooking> {
-  const response = await apiRequest<ApiRecord>(`/v1/admin/mock-bookings/${encodeURIComponent(bookingId)}/live-room/transition`, {
-    method: 'POST',
-    body: JSON.stringify(mockLiveRoomTransitionPayload(targetState, options)),
   });
   return mapMockBooking(response);
 }
@@ -6117,219 +5686,50 @@ export async function deleteAdminBillingAddOn(addOnId: string): Promise<{ id: st
 }
 
 // ── Billing page copy (admin-editable learner-page strings) ──────────────
-
-export interface AdminBillingContentEntry {
-  key: string;
-  value: string;
-  section?: string | null;
-  description?: string | null;
-  updatedAt?: string;
-  updatedByAdminName?: string | null;
-}
-
-/** Stored copy overrides only — defaults live in lib/billing-copy-defaults.ts. */
-export async function fetchAdminBillingContent(): Promise<{ entries: AdminBillingContentEntry[] }> {
-  return apiRequest('/v1/admin/billing/content');
-}
-
-export async function replaceAdminBillingContent(
-  entries: Array<{ key: string; value: string; section?: string; description?: string }>,
-): Promise<{ entries: AdminBillingContentEntry[] }> {
-  return apiRequest('/v1/admin/billing/content', {
-    method: 'PUT',
-    body: JSON.stringify({ entries }),
-  });
-}
-
-export async function deleteAdminBillingContentEntry(key: string): Promise<{ key: string; deleted: boolean }> {
-  return apiRequest(`/v1/admin/billing/content/${encodeURIComponent(key)}`, { method: 'DELETE' });
-}
-
-/** Public learner-page copy overrides as a flat { key: value } map. */
-export async function fetchBillingContent(): Promise<Record<string, string>> {
-  return apiRequest('/v1/billing/content') as Promise<Record<string, string>>;
-}
+export type { AdminBillingContentEntry } from './api/billing-content';
+export {
+  deleteAdminBillingContentEntry,
+  fetchAdminBillingContent,
+  fetchBillingContent,
+  replaceAdminBillingContent,
+} from './api/billing-content';
 
 // ── OET 2026 catalog API ─────────────────────────────────────────────────
-
-export async function fetchPublicCatalog(): Promise<import('./types/admin').PublicCatalogResponse> {
-  return apiRequest('/v1/catalog/pricing');
-}
-
-export interface AdminCatalogPresentationResponse {
-  planCodes: string[];
-  addOnCodes: string[];
-  presentation: import('./catalog-presentation').CatalogPresentation | null;
-}
-
-export async function fetchAdminCatalogPresentation(): Promise<AdminCatalogPresentationResponse> {
-  return apiRequest('/v1/admin/billing/catalog/presentation');
-}
-
-export async function saveAdminCatalogPresentation(
-  presentation: import('./catalog-presentation').CatalogPresentation | null,
-): Promise<void> {
-  await apiRequest('/v1/admin/billing/catalog/presentation', {
-    method: 'PUT',
-    body: JSON.stringify({ presentation }),
-  });
-}
-
-export async function quoteAddonEligibility(addOnCode: string): Promise<import('./types/admin').AddonQuoteResponse> {
-  return apiRequest('/v1/billing/quote/addon', {
-    method: 'POST',
-    body: JSON.stringify({ addOnCode }),
-  });
-}
-
-export async function fetchEligibilityMatrix(): Promise<import('./types/admin').EligibilityMatrixResponse> {
-  return apiRequest('/v1/admin/billing/eligibility/matrix');
-}
-
-export interface MyEntitlementSnapshot {
-  hasEligibleSubscription: boolean;
-  tier: string;
-  planCode?: string | null;
-  productCategory?: string | null;
-  enabledModules: string[];
-  writingAddonsEnabled: boolean;
-  speakingAddonsEnabled: boolean;
-  speakingPracticeAccessEnabled: boolean;
-  tutorBookDiscountEnabled: boolean;
-  writingAssessmentsRemaining: number;
-  speakingSessionsRemaining: number;
-  aiCreditsRemaining: number;
-  tutorBookUnlocked: boolean;
-  basicEnglishUnlocked: boolean;
-  expiresAt?: string | null;
-  isFrozen: boolean;
-}
-
-export async function fetchMyEntitlementSnapshot(): Promise<MyEntitlementSnapshot> {
-  return apiRequest('/v1/me/entitlement-snapshot');
-}
-
-export interface Oet2026ReseedResponse {
-  plansCreated: number;
-  plansUpdated: number;
-  addOnsCreated: number;
-  addOnsUpdated: number;
-  packagesCreated: number;
-  packagesUpdated: number;
-}
-
-export async function reseedOet2026Catalog(): Promise<Oet2026ReseedResponse> {
-  return apiRequest('/v1/admin/billing/catalog/seed-oet-2026', { method: 'POST' });
-}
+export type {
+  AdminCatalogPresentationResponse,
+  MyEntitlementSnapshot,
+  Oet2026ReseedResponse,
+} from './api/catalog';
+export {
+  fetchAdminCatalogPresentation,
+  fetchEligibilityMatrix,
+  fetchMyEntitlementSnapshot,
+  fetchPublicCatalog,
+  quoteAddonEligibility,
+  reseedOet2026Catalog,
+  saveAdminCatalogPresentation,
+} from './api/catalog';
 
 // ── Tutor Book API ───────────────────────────────────────────────────────
-
-export interface TutorBookAudioScript {
-  chapter: string;
-  title: string;
-  audioUrl: string;
-  transcriptUrl?: string | null;
-}
-
-export interface TutorBookUpdate {
-  id: string;
-  title: string;
-  bodyMarkdown: string;
-  publishedAt: string;
-  audience: string;
-}
-
-export interface TutorBookWhatsAppResponse {
-  number: string;
-  url: string;
-}
-
-export async function fetchTutorBookAudioScripts(): Promise<TutorBookAudioScript[]> {
-  return apiRequest('/v1/tutor-book/audio-scripts');
-}
-
-export async function fetchTutorBookUpdates(): Promise<TutorBookUpdate[]> {
-  return apiRequest('/v1/tutor-book/updates');
-}
-
-export async function fetchTutorBookWhatsApp(): Promise<TutorBookWhatsAppResponse> {
-  return apiRequest('/v1/tutor-book/whatsapp');
-}
-
-/** Returns the URL for the watermarked PDF download (same-origin /api/backend proxy). */
-export function tutorBookDownloadUrl(): string {
-  // FE-003: reuse the module's resolved API base instead of re-reading env with a
-  // wrong-port (5199) localhost fallback. In the browser this is the same-origin
-  // `/api/backend` proxy path, so the download is cookie-authenticated and works
-  // without depending on NEXT_PUBLIC_API_BASE_URL being set.
-  return `${API_BASE_URL.replace(/\/$/, '')}/v1/tutor-book/download`;
-}
-
-// ── Admin Tutor Book management ──────────────────────────────────────────
-
-export interface AdminTutorBookUpdate {
-  id: string;
-  title: string;
-  bodyMarkdown: string;
-  publishedAt: string;
-  audience: string;
-  isPublished: boolean;
-}
-
-export interface AdminTutorBookAudioScript {
-  id: string;
-  chapter: string;
-  title: string;
-  audioUrl: string;
-  transcriptUrl?: string | null;
-  displayOrder: number;
-  isPublished: boolean;
-}
-
-export async function adminListTutorBookUpdates(): Promise<AdminTutorBookUpdate[]> {
-  return apiRequest('/v1/admin/tutor-book/updates');
-}
-
-export async function adminUpsertTutorBookUpdate(payload: {
-  id?: string;
-  title: string;
-  bodyMarkdown: string;
-  audience?: string;
-  isPublished?: boolean;
-  publishedAt?: string | null;
-}): Promise<AdminTutorBookUpdate> {
-  return apiRequest('/v1/admin/tutor-book/updates', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function adminDeleteTutorBookUpdate(id: string): Promise<void> {
-  await apiRequest(`/v1/admin/tutor-book/updates/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
-
-export async function adminListTutorBookAudioScripts(): Promise<AdminTutorBookAudioScript[]> {
-  return apiRequest('/v1/admin/tutor-book/audio-scripts');
-}
-
-export async function adminUpsertTutorBookAudioScript(payload: {
-  id?: string;
-  chapter: string;
-  title: string;
-  audioUrl: string;
-  transcriptUrl?: string | null;
-  displayOrder: number;
-  isPublished?: boolean;
-}): Promise<AdminTutorBookAudioScript> {
-  return apiRequest('/v1/admin/tutor-book/audio-scripts', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function adminDeleteTutorBookAudioScript(id: string): Promise<void> {
-  await apiRequest(`/v1/admin/tutor-book/audio-scripts/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
+export type {
+  AdminTutorBookAudioScript,
+  AdminTutorBookUpdate,
+  TutorBookAudioScript,
+  TutorBookUpdate,
+  TutorBookWhatsAppResponse,
+} from './api/tutor-book';
+export {
+  adminDeleteTutorBookAudioScript,
+  adminDeleteTutorBookUpdate,
+  adminListTutorBookAudioScripts,
+  adminListTutorBookUpdates,
+  adminUpsertTutorBookAudioScript,
+  adminUpsertTutorBookUpdate,
+  fetchTutorBookAudioScripts,
+  fetchTutorBookUpdates,
+  fetchTutorBookWhatsApp,
+  tutorBookDownloadUrl,
+} from './api/tutor-book';
 
 export async function fetchAdminBillingCoupons(params?: { status?: string }) {
   const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
@@ -6433,1992 +5833,307 @@ export async function fetchAdminBillingSubscriptions(params?: { status?: string;
 }
 
 // ── Subscription lifecycle (admin manual actions) ──
-
-export async function adminCreateSubscription(payload: { userId: string; planCode: string; grantIncludedCredits?: boolean; reason?: string }) {
-  return apiRequest('/v1/admin/billing/subscriptions', {
-    method: 'POST',
-    body: JSON.stringify({
-      userId: payload.userId,
-      planCode: payload.planCode,
-      grantIncludedCredits: payload.grantIncludedCredits ?? false,
-      reason: payload.reason ?? null,
-    }),
-  });
-}
-
-export async function adminChangeSubscriptionPlan(subscriptionId: string, payload: { planCode: string; resetRenewalDate?: boolean; grantIncludedCredits?: boolean; reason?: string }) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/change-plan`, {
-    method: 'POST',
-    body: JSON.stringify({
-      planCode: payload.planCode,
-      resetRenewalDate: payload.resetRenewalDate ?? true,
-      grantIncludedCredits: payload.grantIncludedCredits ?? false,
-      reason: payload.reason ?? null,
-    }),
-  });
-}
-
-export async function adminExtendSubscription(subscriptionId: string, payload: { addDays?: number; addMonths?: number; newRenewalAt?: string; reason?: string }) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/extend`, {
-    method: 'POST',
-    body: JSON.stringify({
-      addDays: payload.addDays ?? null,
-      addMonths: payload.addMonths ?? null,
-      newRenewalAt: payload.newRenewalAt ?? null,
-      reason: payload.reason ?? null,
-    }),
-  });
-}
-
-export async function adminCancelSubscription(subscriptionId: string, payload: { immediate?: boolean; reason?: string }) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, {
-    method: 'POST',
-    body: JSON.stringify({
-      immediate: payload.immediate ?? false,
-      reason: payload.reason ?? null,
-    }),
-  });
-}
-
-export async function adminReactivateSubscription(subscriptionId: string, payload: { resetRenewalDate?: boolean; reason?: string } = {}) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/reactivate`, {
-    method: 'POST',
-    body: JSON.stringify({
-      resetRenewalDate: payload.resetRenewalDate ?? true,
-      reason: payload.reason ?? null,
-    }),
-  });
-}
-
-export async function adminSetSubscriptionStatus(subscriptionId: string, payload: { status: string; reason?: string }) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/status`, {
-    method: 'POST',
-    body: JSON.stringify({
-      status: payload.status,
-      reason: payload.reason ?? null,
-    }),
-  });
-}
-
-export async function adminApproveSubscriptionFreeze(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/approve-freeze`, {
-    method: 'POST',
-    body: JSON.stringify({
-      reason: payload.reason ?? null,
-      internalNotes: payload.internalNotes ?? null,
-    }),
-  });
-}
-
-export async function adminRejectSubscriptionFreeze(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/reject-freeze`, {
-    method: 'POST',
-    body: JSON.stringify({
-      reason: payload.reason ?? null,
-      internalNotes: payload.internalNotes ?? null,
-    }),
-  });
-}
-
-export async function adminFreezeSubscription(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/freeze`, {
-    method: 'POST',
-    body: JSON.stringify({
-      reason: payload.reason ?? null,
-      internalNotes: payload.internalNotes ?? null,
-    }),
-  });
-}
-
-export async function adminResumeSubscription(subscriptionId: string, payload: { reason?: string; internalNotes?: string } = {}) {
-  return apiRequest(`/v1/admin/billing/subscriptions/${encodeURIComponent(subscriptionId)}/resume`, {
-    method: 'POST',
-    body: JSON.stringify({
-      reason: payload.reason ?? null,
-      internalNotes: payload.internalNotes ?? null,
-    }),
-  });
-}
-
-export async function fetchAdminBillingEntitlementDiagnostics() {
-  return apiRequest('/v1/admin/billing/entitlement-diagnostics');
-}
-
-export async function fetchAdminBillingCouponRedemptions(params?: { couponCode?: string; userId?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.couponCode) qs.set('couponCode', params.couponCode);
-  if (params?.userId) qs.set('userId', params.userId);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/billing/redemptions${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminBillingInvoices(params?: { status?: string; search?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set('status', params.status);
-  if (params?.search) qs.set('search', params.search);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/billing/invoices${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminBillingInvoiceEvidence(invoiceId: string) {
-  return apiRequest(`/v1/admin/billing/invoices/${encodeURIComponent(invoiceId)}/evidence`);
-}
-
-export async function fetchAdminBillingPaymentTransactions(params?: { status?: string; gateway?: string; transactionType?: string; search?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set('status', params.status);
-  if (params?.gateway) qs.set('gateway', params.gateway);
-  if (params?.transactionType) qs.set('transactionType', params.transactionType);
-  if (params?.search) qs.set('search', params.search);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/billing/payment-transactions${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminBillingProviderLifecycleSignals(params?: { gateway?: string; category?: string; processingStatus?: string; verificationStatus?: string; search?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.gateway) qs.set('gateway', params.gateway);
-  if (params?.category) qs.set('category', params.category);
-  if (params?.processingStatus) qs.set('processingStatus', params.processingStatus);
-  if (params?.verificationStatus) qs.set('verificationStatus', params.verificationStatus);
-  if (params?.search) qs.set('search', params.search);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/billing/provider-lifecycle-signals${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminReviewOpsSummary() {
-  return apiRequest('/v1/admin/review-ops/summary');
-}
-
-export async function fetchAdminReviewOpsQueue(params?: { status?: string; priority?: string }) {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set('status', params.status);
-  if (params?.priority) qs.set('priority', params.priority);
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/review-ops/queue${q ? `?${q}` : ''}`);
-}
-
-export async function assignAdminReview(reviewRequestId: string, payload: { expertId: string; reason?: string }) {
-  return apiRequest(`/v1/admin/review-ops/${encodeURIComponent(reviewRequestId)}/assign`, { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function fetchAdminQualityAnalytics(params?: { timeRange?: string; subtest?: string; profession?: string }) {
-  const qs = new URLSearchParams();
-  if (params?.timeRange) qs.set('timeRange', params.timeRange);
-  if (params?.subtest) qs.set('subtest', params.subtest);
-  if (params?.profession) qs.set('profession', params.profession);
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/quality-analytics${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminCohortAnalysis(params?: { groupBy?: string }) {
-  const qs = params?.groupBy ? `?groupBy=${encodeURIComponent(params.groupBy)}` : '';
-  return apiRequest(`/v1/admin/analytics/cohort${qs}`);
-}
-
-export async function fetchAdminContentEffectiveness(params?: { subtestCode?: string; top?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.subtestCode) qs.set('subtestCode', params.subtestCode);
-  if (params?.top) qs.set('top', String(params.top));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/analytics/content-effectiveness${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminExpertEfficiency(params?: { days?: number }) {
-  const qs = params?.days ? `?days=${encodeURIComponent(String(params.days))}` : '';
-  return apiRequest(`/v1/admin/analytics/expert-efficiency${qs}`);
-}
-
-export async function fetchAdminSubscriptionHealth() {
-  return apiRequest('/v1/admin/analytics/subscription-health');
-}
-
-export async function bulkAdminContentAction(payload: { action: string; contentIds: string[]; dryRun?: boolean }) {
-  return apiRequest('/v1/admin/content/bulk-action', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function fetchAdminContentImpact(contentId: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/impact`);
-}
-
-export async function fetchAdminTaxonomyImpact(professionId: string) {
-  return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}/impact`);
-}
-
-export async function activateAdminAIConfig(configId: string) {
-  return apiRequest(`/v1/admin/ai-config/${encodeURIComponent(configId)}/activate`, { method: 'POST' });
-}
-
-export async function deleteAdminAIConfig(configId: string) {
-  return apiRequest(`/v1/admin/ai-config/${encodeURIComponent(configId)}`, { method: 'DELETE' });
-}
-
-export async function activateAdminFlag(flagId: string) {
-  return apiRequest(`/v1/admin/flags/${encodeURIComponent(flagId)}/activate`, { method: 'POST' });
-}
-
-export async function deactivateAdminFlag(flagId: string) {
-  return apiRequest(`/v1/admin/flags/${encodeURIComponent(flagId)}/deactivate`, { method: 'POST' });
-}
-
-export async function cancelAdminReview(reviewRequestId: string, payload: { reason: string }) {
-  return apiRequest(`/v1/admin/review-ops/${encodeURIComponent(reviewRequestId)}/cancel`, { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function reopenAdminReview(reviewRequestId: string, payload?: { reason?: string }) {
-  return apiRequest(`/v1/admin/review-ops/${encodeURIComponent(reviewRequestId)}/reopen`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
-}
-
-export async function fetchAdminReviewFailures() {
-  return apiRequest('/v1/admin/review-ops/failures');
-}
-
-export async function fetchAdminAuditLogDetail(eventId: string) {
-  return apiRequest(`/v1/admin/audit-logs/${encodeURIComponent(eventId)}`);
-}
-
-export async function fetchFreezeStatus() {
-  return apiRequest('/v1/freeze');
-}
-
-export async function requestFreeze(payload: {
-  startAt?: string | null;
-  endAt?: string | null;
-  reason?: string | null;
-  pauseEntitlementClock?: boolean | null;
-}) {
-  return apiRequest('/v1/freeze/request', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function confirmFreeze(freezeId: string) {
-  return apiRequest(`/v1/freeze/${encodeURIComponent(freezeId)}/confirm`, { method: 'POST' });
-}
-
-export async function cancelFreeze(freezeId: string) {
-  return apiRequest(`/v1/freeze/${encodeURIComponent(freezeId)}/cancel`, { method: 'POST' });
-}
-
-export async function fetchAdminFreezeOverview() {
-  return apiRequest('/v1/admin/freeze/overview');
-}
-
-export async function updateAdminFreezePolicy(payload: FreezePolicy) {
-  return apiRequest('/v1/admin/freeze/policy', {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function createAdminManualFreeze(payload: {
-  userId: string;
-  startAt?: string | null;
-  endAt?: string | null;
-  reason?: string | null;
-  internalNotes?: string | null;
-  pauseEntitlementClock?: boolean | null;
-  overrideEligibility?: boolean | null;
-}) {
-  return apiRequest('/v1/admin/freeze/manual', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function approveAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
-  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/approve`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function rejectAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
-  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/reject`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function endAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
-  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/end`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function forceEndAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
-  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/force-end`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
+export {
+  activateAdminAIConfig,
+  activateAdminFlag,
+  adminApproveSubscriptionFreeze,
+  adminCancelSubscription,
+  adminChangeSubscriptionPlan,
+  adminCreateSubscription,
+  adminExtendSubscription,
+  adminFreezeSubscription,
+  adminReactivateSubscription,
+  adminRejectSubscriptionFreeze,
+  adminResumeSubscription,
+  adminSetSubscriptionStatus,
+  approveAdminFreeze,
+  assignAdminReview,
+  bulkAdminContentAction,
+  cancelAdminReview,
+  cancelFreeze,
+  confirmFreeze,
+  createAdminManualFreeze,
+  deactivateAdminFlag,
+  deleteAdminAIConfig,
+  endAdminFreeze,
+  fetchAdminAuditLogDetail,
+  fetchAdminBillingCouponRedemptions,
+  fetchAdminBillingEntitlementDiagnostics,
+  fetchAdminBillingInvoiceEvidence,
+  fetchAdminBillingInvoices,
+  fetchAdminBillingPaymentTransactions,
+  fetchAdminBillingProviderLifecycleSignals,
+  fetchAdminCohortAnalysis,
+  fetchAdminContentEffectiveness,
+  fetchAdminContentImpact,
+  fetchAdminExpertEfficiency,
+  fetchAdminFreezeOverview,
+  fetchAdminQualityAnalytics,
+  fetchAdminReviewFailures,
+  fetchAdminReviewOpsQueue,
+  fetchAdminReviewOpsSummary,
+  fetchAdminSubscriptionHealth,
+  fetchAdminTaxonomyImpact,
+  fetchFreezeStatus,
+  forceEndAdminFreeze,
+  reopenAdminReview,
+  rejectAdminFreeze,
+  requestFreeze,
+  updateAdminFreezePolicy,
+} from './api/admin-operations';
 
 // ── Gamification ─────────────────────────────────────────────────────────────
-
-export async function fetchXP() {
-  return apiRequest('/v1/gamification/xp');
-}
-
-export async function fetchStreak() {
-  return apiRequest('/v1/gamification/streak');
-}
-
-export async function fetchLearnerFeatureFlag(featureKey: string) {
-  return apiRequest<LearnerFeatureFlag>(`/v1/features/${encodeURIComponent(featureKey)}`);
-}
-
-export async function recordActivity() {
-  return apiRequest('/v1/gamification/streak/activity', { method: 'POST' });
-}
-
-export async function fetchAchievements() {
-  return apiRequest('/v1/gamification/achievements');
-}
-
-export async function fetchLeaderboard(examTypeCode?: string, period = 'weekly') {
-  const params = new URLSearchParams({ period });
-  if (examTypeCode) params.set('examTypeCode', examTypeCode);
-  return apiRequest(`/v1/gamification/leaderboard?${params}`);
-}
-
-export async function fetchMyLeaderboardPosition(examTypeCode?: string, period = 'weekly') {
-  const params = new URLSearchParams({ period });
-  if (examTypeCode) params.set('examTypeCode', examTypeCode);
-  return apiRequest(`/v1/gamification/leaderboard/my-position?${params}`);
-}
-
-export async function setLeaderboardOptIn(optedIn: boolean) {
-  return apiRequest('/v1/gamification/leaderboard/opt-in', {
-    method: 'POST',
-    body: JSON.stringify({ optedIn }),
-  });
-}
+export type { LearnerFeatureFlag } from './api/gamification';
+export {
+  fetchAchievements,
+  fetchLeaderboard,
+  fetchLearnerFeatureFlag,
+  fetchMyLeaderboardPosition,
+  fetchStreak,
+  fetchXP,
+  recordActivity,
+  setLeaderboardOptIn,
+} from './api/gamification';
 
 // ── Spaced Repetition ─────────────────────────────────────────────────────────
-
-export async function fetchReviewSummary() {
-  return apiRequest('/v1/review/summary');
-}
-
-export async function fetchDueReviewItems(limit = 20) {
-  return apiRequest(`/v1/review/due?limit=${limit}`);
-}
-
-export async function createReviewItem(payload: {
-  examTypeCode: string;
-  sourceType: string;
-  sourceId: string;
-  subtestCode?: string;
-  criterionCode?: string;
-  questionJson: string;
-  answerJson: string;
-}) {
-  return apiRequest('/v1/review/items', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function submitReview(itemId: string, quality: number) {
-  return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}/submit`, {
-    method: 'POST',
-    body: JSON.stringify({ quality }),
-  });
-}
-
-export async function deleteReviewItem(itemId: string) {
-  return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
-}
+export {
+  createReviewItem,
+  deleteReviewItem,
+  fetchDueReviewItems,
+  fetchReviewSummary,
+  submitReview,
+} from './api/spaced-repetition';
 
 // ── Recalls (unified vocabulary + spaced-repetition) ─────────────────────────
 // See docs/RECALLS-MODULE-PLAN.md.
-
-export interface RecallsTodayResponse {
-  dueToday: number;
-  mastered: number;
-  total: number;
-  starred: number;
-  vocabDueToday: number;
-  reviewDueToday: number;
-  readinessScore: number;
-  weakTopics: { topic: string; total: number; weakCount: number }[];
-}
-
-export interface RecallsQueueItem {
-  kind: 'vocab' | 'review';
-  id: string;
-  termId: string | null;
-  title: string;
-  subtitle: string | null;
-  dueDate: string | null;
-  starred: boolean;
-  starReason: string | null;
-  mastery: string;
-  ipa: string | null;
-  extraJson: string | null;
-  /** How many times this vocab term has appeared across recall exams (the ×N badge). 0 for 'review' items. */
-  examFrequencyCount?: number;
-  /** Per-recall-set occurrence breakdown behind examFrequencyCount. */
-  recallSetOccurrences?: Record<string, number> | null;
-  /** When the underlying vocab term's content or ×N frequency was last touched. */
-  updatedAt?: string | null;
-}
-
-export type RecallsStarReason = 'spelling' | 'pronunciation' | 'meaning' | 'hearing' | 'confused';
-
-export interface RecallsLibraryItem {
-  cardId: string;
-  termId: string;
-  term: string;
-  definition: string;
-  category: string;
-  mastery: string;
-  starred: boolean;
-  starReason: string | null;
-  lastErrorTypeCode: string | null;
-  intervalDays: number;
-  reviewCount: number;
-  correctCount: number;
-  /** How many times this term has appeared across recall exams (the ×N badge). */
-  examFrequencyCount?: number;
-  /** Per-recall-set occurrence breakdown behind examFrequencyCount. */
-  recallSetOccurrences?: Record<string, number> | null;
-  /** When this term's content or ×N frequency was last touched. */
-  updatedAt?: string | null;
-}
-
-export async function fetchRecallsToday() {
-  return apiRequest<RecallsTodayResponse>('/v1/recalls/today');
-}
-
-export async function fetchRecallsQueue(limit = 20) {
-  return apiRequest<RecallsQueueItem[]>(`/v1/recalls/queue?limit=${limit}`);
-}
-
-export async function starRecall(kind: 'vocab' | 'term' | 'review', id: string, starred: boolean, reason?: RecallsStarReason) {
-  return apiRequest('/v1/recalls/star', {
-    method: 'POST',
-    body: JSON.stringify({ kind, id, starred, reason }),
-  });
-}
-
-export async function fetchRecallsAudio(termId: string, speed: 'normal' | 'slow' | 'sentence' = 'normal') {
-  const path = `/v1/recalls/audio/${encodeURIComponent(termId)}?speed=${speed}`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    headers: await getHeaders(path, undefined, { json: false }),
-  });
-
-  if (!response.ok) {
-    let code = response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : 'unknown_error';
-    let message = `Request failed: ${response.status}`;
-    try {
-      const error = await response.json();
-      code = error.code ?? code;
-      message = error.message ?? error.title ?? message;
-    } catch {
-      // Non-JSON error bodies are mapped through the status code above.
-    }
-    throw new ApiError(response.status, code, message, isRetryable(response.status));
-  }
-
-  const blob = await response.blob();
-  return {
-    url: URL.createObjectURL(blob),
-    provider: response.headers.get('x-recalls-tts-provider') ?? 'stream',
-  };
-}
-
-export async function fetchRecallsLibrary(opts?: { bucket?: 'starred' | 'weak' | 'mastered' | 'new'; topic?: string }) {
-  const p = new URLSearchParams();
-  if (opts?.bucket) p.set('bucket', opts.bucket);
-  if (opts?.topic) p.set('topic', opts.topic);
-  const qs = p.toString();
-  return apiRequest<{ items: RecallsLibraryItem[] }>(`/v1/recalls/library${qs ? `?${qs}` : ''}`);
-}
-
-export interface RecallsBulkUploadRow {
-  term: string;
-  definition: string;
-  exampleSentence?: string;
-  category?: string;
-  difficulty?: string;
-  ipa?: string;
-  americanSpelling?: string;
-  synonymsCsv?: string;
-  examTypeCode?: string;
-  professionId?: string;
-}
-
-export interface RecallsBulkUploadResult {
-  inserted: number;
-  updated: number;
-  skipped: number;
-  errors: string[];
-}
-
-export async function adminBulkUploadRecalls(rows: RecallsBulkUploadRow[]) {
-  return apiRequest<RecallsBulkUploadResult>('/v1/admin/recalls/bulk-upload', {
-    method: 'POST',
-    body: JSON.stringify(rows),
-  });
-}
-
-export interface RecallsWeeklyReport {
-  practisedCount: number;
-  masteredCount: number;
-  spellingAccuracyPct: number;
-  weakestTopic: string | null;
-  mostCommonErrorCode: string | null;
-  mostCommonErrorLabel: string | null;
-  averageReviewsPerCard: number;
-}
-
-export async function fetchRecallsWeeklyReport() {
-  return apiRequest<RecallsWeeklyReport>('/v1/recalls/report/week');
-}
-
-export interface RecallsRevisionPlanResponse {
-  dueToday: number;
-  mastered: number;
-  readinessScore: number;
-  headline: string;
-  steps: string[];
-  aiNarrative: string | null;
-}
-
-export async function fetchRecallsRevisionPlan() {
-  return apiRequest<RecallsRevisionPlanResponse>('/v1/recalls/revision-plan');
-}
+export type {
+  RecallsBulkUploadResult,
+  RecallsBulkUploadRow,
+  RecallsLibraryItem,
+  RecallsQueueItem,
+  RecallsRevisionPlanResponse,
+  RecallsStarReason,
+  RecallsTodayResponse,
+  RecallsWeeklyReport,
+} from './api/recalls';
+export {
+  adminBulkUploadRecalls,
+  fetchRecallsAudio,
+  fetchRecallsLibrary,
+  fetchRecallsQueue,
+  fetchRecallsRevisionPlan,
+  fetchRecallsToday,
+  fetchRecallsWeeklyReport,
+  starRecall,
+} from './api/recalls';
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────
-
-export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; profession?: string; search?: string; recallSet?: string; freePreviewOnly?: boolean; page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
-  if (params?.category) p.set('category', params.category);
-  if (params?.profession) p.set('profession', params.profession);
-  if (params?.search) p.set('search', params.search);
-  if (params?.recallSet) p.set('recallSet', params.recallSet);
-  if (params?.freePreviewOnly) p.set('freePreviewOnly', 'true');
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  return apiRequest(`/v1/vocabulary/terms?${p}`);
-}
-
-export async function fetchVocabularyTerm(termId: string) {
-  return apiRequest(`/v1/vocabulary/terms/${encodeURIComponent(termId)}`);
-}
-
-export async function lookupVocabularyTerm(query: string, examTypeCode = 'oet') {
-  const p = new URLSearchParams({ q: query, examTypeCode });
-  return apiRequest(`/v1/vocabulary/terms/lookup?${p}`);
-}
-
-export async function fetchVocabularyCategories(params?: { examTypeCode?: string; profession?: string }) {
-  const p = new URLSearchParams();
-  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
-  if (params?.profession) p.set('profession', params.profession);
-  const qs = p.toString();
-  return apiRequest(`/v1/vocabulary/categories${qs ? `?${qs}` : ''}`);
-}
-
-/**
- * Recall-set registry (year/source dimension). Returns the canonical 3-set
- * list (`old`, `2023-2025`, `2026`) with live term counts. Stable even when
- * no terms are tagged yet — admin/learner UIs can render the chips eagerly.
- * See `backend/src/OetLearner.Api/Domain/RecallSetCodes.cs`.
- */
-export interface RecallSetSummary {
-  code: string;
-  displayName: string;
-  shortLabel: string;
-  description: string;
-  sortOrder: number;
-  termCount: number;
-}
-export interface RecallSetsResponse {
-  examTypeCode: string;
-  professionId: string | null;
-  sets: RecallSetSummary[];
-  /** Count of admin-flagged free-preview terms — powers the "Free Preview Recalls" chip badge. */
-  freePreviewCount: number;
-}
-export async function fetchVocabularyRecallSets(params?: { examTypeCode?: string; profession?: string }): Promise<RecallSetsResponse> {
-  const p = new URLSearchParams();
-  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
-  if (params?.profession) p.set('profession', params.profession);
-  const qs = p.toString();
-  return apiRequest(`/v1/vocabulary/recall-sets${qs ? `?${qs}` : ''}`) as Promise<RecallSetsResponse>;
-}
-
-export async function fetchVocabularyStats() {
-  return apiRequest('/v1/vocabulary/stats');
-}
-
-export async function fetchVocabularyDailySet(count = 10) {
-  return apiRequest(`/v1/vocabulary/daily-set?count=${count}`);
-}
-
-export async function fetchVocabularyQuizHistory(params?: { page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  p.set('page', String(params?.page ?? 1));
-  p.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/vocabulary/quiz/history?${p}`);
-}
-
-export interface MyVocabularyPageRequest {
-  page: number;
-  pageSize: number;
-  termId?: string;
-}
-
-export function fetchMyVocabulary(mastery?: string): Promise<LearnerVocabulary[]>;
-export function fetchMyVocabulary(
-  mastery: string | undefined,
-  pagination: MyVocabularyPageRequest,
-): Promise<MyVocabularyPageResponse>;
-export async function fetchMyVocabulary(
-  mastery?: string,
-  pagination?: MyVocabularyPageRequest,
-): Promise<LearnerVocabulary[] | MyVocabularyPageResponse> {
-  const p = new URLSearchParams();
-  if (mastery) p.set('mastery', mastery);
-  if (pagination?.termId) p.set('termId', pagination.termId);
-  if (pagination) {
-    p.set('page', String(pagination.page));
-    p.set('pageSize', String(pagination.pageSize));
-  }
-  const qs = p.toString();
-  return apiRequest<LearnerVocabulary[] | MyVocabularyPageResponse>(
-    `/v1/vocabulary/my-list${qs ? `?${qs}` : ''}`,
-  );
-}
-
-export async function addToMyVocabulary(termId: string, opts?: { sourceRef?: string; context?: string }) {
-  return apiRequest(`/v1/vocabulary/my-list/${encodeURIComponent(termId)}`, {
-    method: 'POST',
-    body: JSON.stringify({ sourceRef: opts?.sourceRef, context: opts?.context }),
-  });
-}
-
-export async function removeFromMyVocabulary(termId: string) {
-  return apiRequest(`/v1/vocabulary/my-list/${encodeURIComponent(termId)}`, { method: 'DELETE' });
-}
-
-export async function fetchDueFlashcards(limit = 20) {
-  return apiRequest(`/v1/vocabulary/flashcards/due?limit=${limit}`);
-}
+export type {
+  MyVocabularyPageRequest,
+  RecallSetSummary,
+  RecallSetsResponse,
+} from './api/vocabulary';
+export {
+  addToMyVocabulary,
+  fetchDueFlashcards,
+  fetchMyVocabulary,
+  fetchVocabQuiz,
+  fetchVocabularyCategories,
+  fetchVocabularyDailySet,
+  fetchVocabularyQuizHistory,
+  fetchVocabularyRecallSets,
+  fetchVocabularyStats,
+  fetchVocabularyTerm,
+  fetchVocabularyTerms,
+  lookupVocabularyTerm,
+  removeFromMyVocabulary,
+  submitFlashcardReview,
+  submitVocabQuiz,
+} from './api/vocabulary';
 
 // ── Content Hierarchy: Program Browser (Phase 8) ──
-
-export async function fetchContentPrograms(params?: { type?: string; language?: string; page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  if (params?.type) p.set('type', params.type);
-  if (params?.language) p.set('language', params.language);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/programs${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchContentProgram(programId: string) {
-  return apiRequest(`/v1/programs/${encodeURIComponent(programId)}`);
-}
-
-export async function fetchContentTracks(programId: string) {
-  return apiRequest(`/v1/programs/${encodeURIComponent(programId)}/tracks`);
-}
-
-export async function fetchContentPackages(params?: { type?: string; page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  if (params?.type) p.set('type', params.type);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/packages${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchContentPackage(packageId: string) {
-  return apiRequest(`/v1/packages/${encodeURIComponent(packageId)}`);
-}
-
-export async function fetchFreePreviewAssets() {
-  return apiRequest('/v1/free-previews');
-}
-
-export async function fetchFoundationResources(type?: string) {
-  return apiRequest(`/v1/foundation-resources${type ? `?type=${type}` : ''}`);
-}
-
 // ── Content Browser (access-aware) ──
-
-export async function fetchContentBrowser(params?: {
-  subtest?: string; profession?: string; difficulty?: string; language?: string;
-  provenance?: string; page?: number; pageSize?: number;
-}) {
-  const p = new URLSearchParams();
-  if (params?.subtest) p.set('subtest', params.subtest);
-  if (params?.profession) p.set('profession', params.profession);
-  if (params?.difficulty) p.set('difficulty', params.difficulty);
-  if (params?.language) p.set('language', params.language);
-  if (params?.provenance) p.set('provenance', params.provenance);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/content-browser${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchContentAccess(contentId: string) {
-  return apiRequest(`/v1/content-browser/${encodeURIComponent(contentId)}/access`);
-}
-
-export async function fetchProgramsBrowser(params?: { type?: string; language?: string; page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  if (params?.type) p.set('type', params.type);
-  if (params?.language) p.set('language', params.language);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/programs-browser${qs ? `?${qs}` : ''}`);
-}
+export {
+  fetchContentAccess,
+  fetchContentBrowser,
+  fetchContentPackage,
+  fetchContentPackages,
+  fetchContentProgram,
+  fetchContentPrograms,
+  fetchContentTracks,
+  fetchFoundationResources,
+  fetchFreePreviewAssets,
+  fetchProgramsBrowser,
+} from './api/content-browser';
 
 // ── Phase 6: Readiness & Skill-based Content ──
-
-export async function fetchReadinessScore() {
-  return apiRequest('/v1/readiness');
-}
-
-export async function fetchContentBySkill(subtest: string, skillTag?: string, page?: number, pageSize?: number) {
-  const p = new URLSearchParams({ subtest });
-  if (skillTag) p.set('skillTag', skillTag);
-  if (page) p.set('page', String(page));
-  if (pageSize) p.set('pageSize', String(pageSize));
-  return apiRequest(`/v1/content/by-skill?${p}`);
-}
-
 // ── Phase 9: Search & Recommendations ──
-
-export async function searchContent(params?: {
-  q?: string; subtest?: string; profession?: string; difficulty?: string;
-  language?: string; provenance?: string; contentType?: string;
-  minQuality?: number; mockEligible?: boolean; previewEligible?: boolean;
-  page?: number; pageSize?: number;
-}) {
-  const p = new URLSearchParams();
-  if (params?.q) p.set('q', params.q);
-  if (params?.subtest) p.set('subtest', params.subtest);
-  if (params?.profession) p.set('profession', params.profession);
-  if (params?.difficulty) p.set('difficulty', params.difficulty);
-  if (params?.language) p.set('language', params.language);
-  if (params?.provenance) p.set('provenance', params.provenance);
-  if (params?.contentType) p.set('contentType', params.contentType);
-  if (params?.minQuality) p.set('minQuality', String(params.minQuality));
-  if (params?.mockEligible) p.set('mockEligible', 'true');
-  if (params?.previewEligible) p.set('previewEligible', 'true');
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/search${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchSearchFacets() {
-  return apiRequest('/v1/search/facets');
-}
-
-export async function fetchRecommendations(count?: number) {
-  return apiRequest(`/v1/recommendations${count ? `?count=${count}` : ''}`);
-}
-
 // ── Phase 11: Media Access ──
-
-export async function fetchSignedMediaUrl(assetId: string) {
-  return apiRequest(`/v1/media/${encodeURIComponent(assetId)}/url`);
-}
-
 // ── Media Management ──
-
-export interface UploadedMediaAsset {
-  id: string;
-  originalFilename: string;
-  mimeType: string;
-  format: string;
-  sizeBytes: number;
-  status: string;
-  uploadedBy: string;
-  uploadedAt: string;
-  url: string;
-}
-
-export async function uploadMedia(file: File): Promise<UploadedMediaAsset> {
-  const formData = new FormData();
-  formData.append('file', file);
-  const response = await fetchWithTimeout(resolveApiUrl('/v1/media/upload'), {
-    method: 'POST',
-    headers: await getHeaders('/v1/media/upload', undefined, { json: false }),
-    body: formData,
-  }, 90_000);
-  if (!response.ok) {
-    let code = 'upload_failed';
-    let message = `Upload failed: ${response.status}`;
-    try {
-      const error = await response.json();
-      code = error.code ?? code;
-      message = error.message ?? message;
-    } catch { /* ignore */ }
-    throw new ApiError(response.status, code, message, false);
-  }
-  return response.json();
-}
-
-export async function fetchMediaItem(id: string) {
-  return apiRequest(`/v1/media/${encodeURIComponent(id)}`);
-}
-
-export async function deleteMedia(id: string) {
-  return apiRequest(`/v1/media/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
-
-export async function fetchMyMedia(params?: { page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/media?${qs}`);
-}
-
-export async function submitFlashcardReview(lvId: string, quality: number) {
-  return apiRequest(`/v1/vocabulary/flashcards/${encodeURIComponent(lvId)}/review`, {
-    method: 'POST',
-    body: JSON.stringify({ quality }),
-  });
-}
-
-export async function fetchVocabQuiz(count = 10, format: string = 'definition_match') {
-  return apiRequest(`/v1/vocabulary/quiz?count=${count}&format=${encodeURIComponent(format)}`);
-}
+export type { UploadedMediaAsset } from './api/content-discovery';
+export {
+  deleteMedia,
+  fetchContentBySkill,
+  fetchMediaItem,
+  fetchMyMedia,
+  fetchReadinessScore,
+  fetchRecommendations,
+  fetchSearchFacets,
+  fetchSignedMediaUrl,
+  searchContent,
+  uploadMedia,
+} from './api/content-discovery';
+// uploadMedia is also used by voice-note submitters below in this file.
 
 // ── Admin: Content Hierarchy Management ──
-
-export async function fetchAdminContentPrograms(params?: { type?: string; language?: string; status?: string; page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  if (params?.type) p.set('type', params.type);
-  if (params?.language) p.set('language', params.language);
-  if (params?.status) p.set('status', params.status);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/programs${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchAdminContentPackages(params?: { type?: string; status?: string; page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  if (params?.type) p.set('type', params.type);
-  if (params?.status) p.set('status', params.status);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/packages${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchAdminProgram(programId: string) {
-  return apiRequest(`/v1/admin/programs/${encodeURIComponent(programId)}`);
-}
-
-export async function createAdminProgram(payload: Record<string, unknown>) {
-  return apiRequest('/v1/admin/programs', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateAdminProgram(programId: string, payload: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/programs/${encodeURIComponent(programId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchAdminTracks(programId: string) {
-  return apiRequest(`/v1/admin/programs/${encodeURIComponent(programId)}/tracks`);
-}
-
-export async function createAdminTrack(payload: Record<string, unknown>) {
-  return apiRequest('/v1/admin/tracks', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateAdminTrack(trackId: string, payload: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/tracks/${encodeURIComponent(trackId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchAdminModules(trackId: string) {
-  return apiRequest(`/v1/admin/tracks/${encodeURIComponent(trackId)}/modules`);
-}
-
-export async function createAdminModule(payload: Record<string, unknown>) {
-  return apiRequest('/v1/admin/modules', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateAdminModule(moduleId: string, payload: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/modules/${encodeURIComponent(moduleId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchAdminLessons(moduleId: string) {
-  return apiRequest(`/v1/admin/modules/${encodeURIComponent(moduleId)}/lessons`);
-}
-
-export async function createAdminLesson(payload: Record<string, unknown>) {
-  return apiRequest('/v1/admin/lessons', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateAdminLesson(lessonId: string, payload: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/lessons/${encodeURIComponent(lessonId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchAdminPackage(packageId: string) {
-  return apiRequest(`/v1/admin/packages/${encodeURIComponent(packageId)}`);
-}
-
-export async function createAdminPackage(payload: Record<string, unknown>) {
-  return apiRequest('/v1/admin/packages', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateAdminPackage(packageId: string, payload: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/packages/${encodeURIComponent(packageId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchAdminContentInventory(params?: {
-  subtest?: string; profession?: string; language?: string; provenance?: string;
-  freshness?: string; qaStatus?: string; status?: string; packageId?: string;
-  importBatchId?: string; search?: string; page?: number; pageSize?: number;
-}) {
-  const p = new URLSearchParams();
-  if (params?.subtest) p.set('subtest', params.subtest);
-  if (params?.profession) p.set('profession', params.profession);
-  if (params?.language) p.set('language', params.language);
-  if (params?.provenance) p.set('provenance', params.provenance);
-  if (params?.freshness) p.set('freshness', params.freshness);
-  if (params?.qaStatus) p.set('qaStatus', params.qaStatus);
-  if (params?.status) p.set('status', params.status);
-  if (params?.packageId) p.set('packageId', params.packageId);
-  if (params?.importBatchId) p.set('importBatchId', params.importBatchId);
-  if (params?.search) p.set('search', params.search);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/content/inventory${qs ? `?${qs}` : ''}`);
-}
-
-export async function adminBulkImportContent(batchTitle: string, rows: unknown[]) {
-  return apiRequest('/v1/admin/content/bulk-import', {
-    method: 'POST',
-    body: JSON.stringify({ batchTitle, rows }),
-  });
-}
-
-export async function fetchAdminDedupGroups(page?: number, pageSize?: number) {
-  const p = new URLSearchParams();
-  if (page) p.set('page', String(page));
-  if (pageSize) p.set('pageSize', String(pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/dedup/groups${qs ? `?${qs}` : ''}`);
-}
-
-export async function adminDedupScan() {
-  return apiRequest('/v1/admin/dedup/scan', { method: 'POST' });
-}
-
-export async function adminDesignateCanonical(groupId: string, canonicalItemId: string) {
-  return apiRequest(`/v1/admin/dedup/groups/${encodeURIComponent(groupId)}/designate-canonical`, {
-    method: 'POST',
-    body: JSON.stringify({ canonicalItemId }),
-  });
-}
-
-export async function fetchAdminMediaAssets(params?: { mimeType?: string; status?: string; page?: number; pageSize?: number }) {
-  const p = new URLSearchParams();
-  if (params?.mimeType) p.set('mimeType', params.mimeType);
-  if (params?.status) p.set('status', params.status);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/media-assets${qs ? `?${qs}` : ''}`);
-}
-
-export async function adminProcessMediaAsset(assetId: string) {
-  return apiRequest(`/v1/admin/media/${encodeURIComponent(assetId)}/process`, { method: 'POST' });
-}
-
-export async function fetchAdminMediaAudit() {
-  return apiRequest('/v1/admin/media/audit');
-}
-
-export async function adminAssembleMockExam(professionId?: string, language?: string) {
-  return apiRequest('/v1/admin/mock/assemble', {
-    method: 'POST',
-    body: JSON.stringify({ professionId, language }),
-  });
-}
-
-export async function adminGenerateDiagnostic(professionId?: string) {
-  return apiRequest('/v1/admin/diagnostic/generate', {
-    method: 'POST',
-    body: JSON.stringify({ professionId }),
-  });
-}
-
-export async function adminUpdateContentEligibility(contentId: string, eligibility: { isMockEligible?: boolean; isDiagnosticEligible?: boolean }) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/eligibility`, {
-    method: 'PATCH',
-    body: JSON.stringify(eligibility),
-  });
-}
+export {
+  adminAssembleMockExam,
+  adminBulkImportContent,
+  adminDedupScan,
+  adminDesignateCanonical,
+  adminGenerateDiagnostic,
+  adminProcessMediaAsset,
+  adminUpdateContentEligibility,
+  createAdminLesson,
+  createAdminModule,
+  createAdminPackage,
+  createAdminProgram,
+  createAdminTrack,
+  fetchAdminContentInventory,
+  fetchAdminContentPackages,
+  fetchAdminContentPrograms,
+  fetchAdminDedupGroups,
+  fetchAdminLessons,
+  fetchAdminMediaAssets,
+  fetchAdminMediaAudit,
+  fetchAdminModules,
+  fetchAdminPackage,
+  fetchAdminProgram,
+  fetchAdminTracks,
+  updateAdminLesson,
+  updateAdminModule,
+  updateAdminPackage,
+  updateAdminProgram,
+  updateAdminTrack,
+} from './api/admin-content';
 
 // ── Admin: Vocabulary Management ──────────────────────────────────────
 
 // Wave 3 of docs/SPEAKING-MODULE-PLAN.md - admin CRUD for speaking
 // mock sets. Permissions reuse AdminContent* on the backend.
-export interface AdminSpeakingMockSetRow {
-  mockSetId: string;
-  title: string;
-  description: string;
-  professionId: string;
-  difficulty: string;
-  status: 'draft' | 'published' | 'archived';
-  criteriaFocus: string[];
-  tags: string[];
-  sortOrder: number;
-  rolePlay1: { contentId: string; title: string; isSpeaking: boolean };
-  rolePlay2: { contentId: string; title: string; isSpeaking: boolean };
-  createdAt: string;
-  updatedAt: string;
-  publishedAt: string | null;
-}
-
-function mapAdminMockSetRow(rec: ApiRecord): AdminSpeakingMockSetRow {
-  const r1 = asRecord(rec.rolePlay1);
-  const r2 = asRecord(rec.rolePlay2);
-  const status = rec.status === 'published' || rec.status === 'archived' ? rec.status : 'draft';
-  return {
-    mockSetId: typeof rec.mockSetId === 'string' ? rec.mockSetId : '',
-    title: typeof rec.title === 'string' ? rec.title : '',
-    description: typeof rec.description === 'string' ? rec.description : '',
-    professionId: typeof rec.professionId === 'string' ? rec.professionId : 'nursing',
-    difficulty: typeof rec.difficulty === 'string' ? rec.difficulty : 'core',
-    status,
-    criteriaFocus: toStringArray(rec.criteriaFocus),
-    tags: toStringArray(rec.tags),
-    sortOrder: typeof rec.sortOrder === 'number' ? rec.sortOrder : 0,
-    rolePlay1: {
-      contentId: typeof r1.contentId === 'string' ? r1.contentId : '',
-      title: typeof r1.title === 'string' ? r1.title : '',
-      isSpeaking: r1.isSpeaking === true,
-    },
-    rolePlay2: {
-      contentId: typeof r2.contentId === 'string' ? r2.contentId : '',
-      title: typeof r2.title === 'string' ? r2.title : '',
-      isSpeaking: r2.isSpeaking === true,
-    },
-    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : '',
-    updatedAt: typeof rec.updatedAt === 'string' ? rec.updatedAt : '',
-    publishedAt: typeof rec.publishedAt === 'string' ? rec.publishedAt : null,
-  };
-}
-
-export async function fetchAdminSpeakingMockSets(params?: { status?: string; professionId?: string }): Promise<AdminSpeakingMockSetRow[]> {
-  const p = new URLSearchParams();
-  if (params?.status) p.set('status', params.status);
-  if (params?.professionId) p.set('professionId', params.professionId);
-  const qs = p.toString();
-  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets${qs ? `?${qs}` : ''}`);
-  const list = Array.isArray(json.mockSets) ? json.mockSets.map(asRecord) : [];
-  return list.map(mapAdminMockSetRow);
-}
-
-export async function fetchAdminSpeakingMockSet(mockSetId: string): Promise<AdminSpeakingMockSetRow> {
-  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}`);
-  return mapAdminMockSetRow(json);
-}
-
-export async function createAdminSpeakingMockSet(payload: {
-  title: string;
-  rolePlay1ContentId: string;
-  rolePlay2ContentId: string;
-  professionId?: string;
-  description?: string;
-  difficulty?: string;
-  criteriaFocus?: string;
-  tags?: string;
-  sortOrder?: number;
-}): Promise<AdminSpeakingMockSetRow> {
-  const json = await apiRequest<ApiRecord>('/v1/admin/speaking/mock-sets', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  return mapAdminMockSetRow(json);
-}
-
-export async function updateAdminSpeakingMockSet(mockSetId: string, payload: Record<string, unknown>): Promise<AdminSpeakingMockSetRow> {
-  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-  return mapAdminMockSetRow(json);
-}
-
-export async function publishAdminSpeakingMockSet(mockSetId: string): Promise<AdminSpeakingMockSetRow> {
-  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}/publish`, {
-    method: 'POST',
-  });
-  return mapAdminMockSetRow(json);
-}
-
-/** Permanently deletes an archived speaking mock set + all learner mock sessions. system_admin only. */
-export async function forceDeleteAdminSpeakingMockSet(mockSetId: string): Promise<void> {
-  await apiRequest(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}/force-delete`, { method: 'POST' });
-}
-
-export async function archiveAdminSpeakingMockSet(mockSetId: string): Promise<AdminSpeakingMockSetRow> {
-  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/mock-sets/${encodeURIComponent(mockSetId)}/archive`, {
-    method: 'POST',
-  });
-  return mapAdminMockSetRow(json);
-}
-
-// Admin helper: list all speaking ContentItem rows the curator can pick
-// from when building a mock set. Limited to the existing /v1/admin/content
-// endpoint so permissions and filtering stay in one place.
-export async function fetchAdminSpeakingContentOptions(): Promise<Array<{ id: string; title: string; status: string }>> {
-  const json = await apiRequest<ApiRecord>('/v1/admin/content?subtest=speaking&pageSize=200');
-  const items = Array.isArray(json.items) ? json.items.map(asRecord) : [];
-  return items
-    .filter((it) => typeof it.status === 'string' && it.status.toLowerCase() === 'published')
-    .filter((it) => String(it.subtestCode ?? '').toLowerCase() === 'speaking')
-    .map((it) => ({
-      id: typeof it.id === 'string' ? it.id : '',
-      title: typeof it.title === 'string' ? it.title : '',
-      status: typeof it.status === 'string' ? it.status : 'draft',
-    }));
-}
+export type { AdminSpeakingMockSetRow } from './api/speaking-mock-sets';
+export {
+  archiveAdminSpeakingMockSet,
+  createAdminSpeakingMockSet,
+  fetchAdminSpeakingContentOptions,
+  fetchAdminSpeakingMockSet,
+  fetchAdminSpeakingMockSets,
+  forceDeleteAdminSpeakingMockSet,
+  publishAdminSpeakingMockSet,
+  updateAdminSpeakingMockSet,
+} from './api/speaking-mock-sets';
 
 // ── Wave 4 of docs/SPEAKING-MODULE-PLAN.md - tutor calibration drift +
 // inline transcript comments. Three audiences:
 //   • Admin: CRUD over calibration samples, drift report.
 //   • Expert/tutor: list samples, submit rubric, post inline comments.
 //   • Learner: read inline comments on their attempt.
-
-export interface SpeakingCriterionRubric {
-  intelligibility: number;
-  fluency: number;
-  appropriateness: number;
-  grammarExpression: number;
-  relationshipBuilding: number;
-  patientPerspective: number;
-  structure: number;
-  informationGathering: number;
-  informationGiving: number;
-}
-
-export interface AdminSpeakingCalibrationSampleRow {
-  sampleId: string;
-  title: string;
-  description: string;
-  sourceAttemptId: string;
-  professionId: string;
-  difficulty: string;
-  status: 'draft' | 'published' | 'archived';
-  goldScores: Partial<SpeakingCriterionRubric>;
-  tutorSubmissionCount: number;
-  createdAt: string;
-  publishedAt: string | null;
-}
-
-function mapAdminCalibrationSampleRow(rec: ApiRecord): AdminSpeakingCalibrationSampleRow {
-  const status = (typeof rec.status === 'string' ? rec.status : 'draft') as 'draft' | 'published' | 'archived';
-  const gold = asRecord(rec.goldScores);
-  return {
-    sampleId: typeof rec.sampleId === 'string' ? rec.sampleId : '',
-    title: typeof rec.title === 'string' ? rec.title : '',
-    description: typeof rec.description === 'string' ? rec.description : '',
-    sourceAttemptId: typeof rec.sourceAttemptId === 'string' ? rec.sourceAttemptId : '',
-    professionId: typeof rec.professionId === 'string' ? rec.professionId : 'nursing',
-    difficulty: typeof rec.difficulty === 'string' ? rec.difficulty : 'core',
-    status,
-    goldScores: Object.fromEntries(
-      Object.entries(gold).filter(([, v]) => typeof v === 'number'),
-    ) as Partial<SpeakingCriterionRubric>,
-    tutorSubmissionCount: typeof rec.tutorSubmissionCount === 'number' ? rec.tutorSubmissionCount : 0,
-    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : '',
-    publishedAt: typeof rec.publishedAt === 'string' ? rec.publishedAt : null,
-  };
-}
-
-export async function fetchAdminSpeakingCalibrationSamples(status?: string): Promise<AdminSpeakingCalibrationSampleRow[]> {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/calibration/samples${qs}`);
-  const items = Array.isArray(json.samples) ? json.samples.map(asRecord) : [];
-  return items.map(mapAdminCalibrationSampleRow);
-}
-
-export async function createAdminSpeakingCalibrationSample(payload: {
-  title: string;
-  sourceAttemptId: string;
-  goldScores: SpeakingCriterionRubric;
-  description?: string;
-  professionId?: string;
-  difficulty?: string;
-  calibrationNotes?: string;
-}): Promise<AdminSpeakingCalibrationSampleRow> {
-  const json = await apiRequest<ApiRecord>('/v1/admin/speaking/calibration/samples', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  return mapAdminCalibrationSampleRow(json);
-}
-
-export async function publishAdminSpeakingCalibrationSample(sampleId: string): Promise<AdminSpeakingCalibrationSampleRow> {
-  const json = await apiRequest<ApiRecord>(
-    `/v1/admin/speaking/calibration/samples/${encodeURIComponent(sampleId)}/publish`,
-    { method: 'POST' },
-  );
-  return mapAdminCalibrationSampleRow(json);
-}
-
-export async function archiveAdminSpeakingCalibrationSample(sampleId: string): Promise<AdminSpeakingCalibrationSampleRow> {
-  const json = await apiRequest<ApiRecord>(
-    `/v1/admin/speaking/calibration/samples/${encodeURIComponent(sampleId)}/archive`,
-    { method: 'POST' },
-  );
-  return mapAdminCalibrationSampleRow(json);
-}
-
-export interface AdminSpeakingCalibrationDriftRow {
-  tutorId: string;
-  tutorName: string;
-  submissionCount: number;
-  meanAbsoluteError: number;
-  totalAbsoluteError: number;
-  lastSubmittedAt: string;
-}
-
-export interface AdminSpeakingCalibrationDriftReport {
-  tutors: AdminSpeakingCalibrationDriftRow[];
-  sampleSize: number;
-  samplesPublished: number;
-}
-
-export async function fetchAdminSpeakingCalibrationDrift(minSubmissions = 1): Promise<AdminSpeakingCalibrationDriftReport> {
-  const json = await apiRequest<ApiRecord>(`/v1/admin/speaking/calibration/drift?minSubmissions=${minSubmissions}`);
-  const tutors = Array.isArray(json.tutors) ? json.tutors.map(asRecord) : [];
-  return {
-    tutors: tutors.map((t) => ({
-      tutorId: typeof t.tutorId === 'string' ? t.tutorId : '',
-      tutorName: typeof t.tutorName === 'string' ? t.tutorName : '',
-      submissionCount: typeof t.submissionCount === 'number' ? t.submissionCount : 0,
-      meanAbsoluteError: typeof t.meanAbsoluteError === 'number' ? t.meanAbsoluteError : 0,
-      totalAbsoluteError: typeof t.totalAbsoluteError === 'number' ? t.totalAbsoluteError : 0,
-      lastSubmittedAt: typeof t.lastSubmittedAt === 'string' ? t.lastSubmittedAt : '',
-    })),
-    sampleSize: typeof json.sampleSize === 'number' ? json.sampleSize : 0,
-    samplesPublished: typeof json.samplesPublished === 'number' ? json.samplesPublished : 0,
-  };
-}
-
-// ── Tutor surface ──
-
-export interface TutorSpeakingCalibrationSampleRow {
-  sampleId: string;
-  title: string;
-  description: string;
-  sourceAttemptId: string;
-  professionId: string;
-  difficulty: string;
-  publishedAt: string | null;
-  submitted: boolean;
-  mySubmission: { submittedAt: string; totalAbsoluteError: number } | null;
-}
-
-export async function fetchTutorSpeakingCalibrationSamples(): Promise<TutorSpeakingCalibrationSampleRow[]> {
-  const json = await apiRequest<ApiRecord>('/v1/expert/calibration/speaking/samples');
-  const items = Array.isArray(json.samples) ? json.samples.map(asRecord) : [];
-  return items.map((rec) => {
-    const mine = rec.mySubmission ? asRecord(rec.mySubmission) : null;
-    return {
-      sampleId: typeof rec.sampleId === 'string' ? rec.sampleId : '',
-      title: typeof rec.title === 'string' ? rec.title : '',
-      description: typeof rec.description === 'string' ? rec.description : '',
-      sourceAttemptId: typeof rec.sourceAttemptId === 'string' ? rec.sourceAttemptId : '',
-      professionId: typeof rec.professionId === 'string' ? rec.professionId : 'nursing',
-      difficulty: typeof rec.difficulty === 'string' ? rec.difficulty : 'core',
-      publishedAt: typeof rec.publishedAt === 'string' ? rec.publishedAt : null,
-      submitted: rec.submitted === true,
-      mySubmission: mine
-        ? {
-            submittedAt: typeof mine.submittedAt === 'string' ? mine.submittedAt : '',
-            totalAbsoluteError: typeof mine.totalAbsoluteError === 'number' ? mine.totalAbsoluteError : 0,
-          }
-        : null,
-    };
-  });
-}
-
-export interface TutorCalibrationSubmissionResult {
-  sampleId: string;
-  tutorId: string;
-  submittedAt: string;
-  totalAbsoluteError: number;
-  perCriterionDelta: Partial<SpeakingCriterionRubric>;
-}
-
-export async function submitTutorSpeakingCalibrationScores(
-  sampleId: string,
-  scores: SpeakingCriterionRubric,
-  notes?: string,
-): Promise<TutorCalibrationSubmissionResult> {
-  const json = await apiRequest<ApiRecord>(
-    `/v1/expert/calibration/speaking/samples/${encodeURIComponent(sampleId)}/scores`,
-    { method: 'POST', body: JSON.stringify({ scores, notes }) },
-  );
-  const delta = asRecord(json.perCriterionDelta);
-  return {
-    sampleId: typeof json.sampleId === 'string' ? json.sampleId : sampleId,
-    tutorId: typeof json.tutorId === 'string' ? json.tutorId : '',
-    submittedAt: typeof json.submittedAt === 'string' ? json.submittedAt : '',
-    totalAbsoluteError: typeof json.totalAbsoluteError === 'number' ? json.totalAbsoluteError : 0,
-    perCriterionDelta: Object.fromEntries(
-      Object.entries(delta).filter(([, v]) => typeof v === 'number'),
-    ) as Partial<SpeakingCriterionRubric>,
-  };
-}
+export type {
+  AdminSpeakingCalibrationDriftReport,
+  AdminSpeakingCalibrationDriftRow,
+  AdminSpeakingCalibrationSampleRow,
+  SpeakingCriterionRubric,
+  TutorCalibrationSubmissionResult,
+  TutorSpeakingCalibrationSampleRow,
+} from './api/speaking-calibration';
+export {
+  archiveAdminSpeakingCalibrationSample,
+  createAdminSpeakingCalibrationSample,
+  fetchAdminSpeakingCalibrationDrift,
+  fetchAdminSpeakingCalibrationSamples,
+  fetchTutorSpeakingCalibrationSamples,
+  publishAdminSpeakingCalibrationSample,
+  submitTutorSpeakingCalibrationScores,
+} from './api/speaking-calibration';
 
 // ── Inline transcript comments ──
+export type {
+  SpeakingDrillRow,
+  SpeakingDrillsListResponse,
+  SpeakingSelfPracticeStartResult,
+  SpeakingTranscriptComment,
+} from './api/speaking-practice';
+export {
+  fetchSpeakingDrills,
+  fetchSpeakingTranscriptComments,
+  postExpertSpeakingTranscriptComment,
+  startSpeakingSelfPracticeSession,
+} from './api/speaking-practice';
 
-export interface SpeakingTranscriptComment {
-  commentId: string;
-  attemptId: string;
-  expertId: string;
-  transcriptLineIndex: number;
-  criterionCode: string;
-  body: string;
-  createdAt: string;
-}
-
-function mapTranscriptComment(rec: ApiRecord): SpeakingTranscriptComment {
-  return {
-    commentId: typeof rec.commentId === 'string' ? rec.commentId : '',
-    attemptId: typeof rec.attemptId === 'string' ? rec.attemptId : '',
-    expertId: typeof rec.expertId === 'string' ? rec.expertId : '',
-    transcriptLineIndex: typeof rec.transcriptLineIndex === 'number' ? rec.transcriptLineIndex : 0,
-    criterionCode: typeof rec.criterionCode === 'string' ? rec.criterionCode : 'general',
-    body: typeof rec.body === 'string' ? rec.body : '',
-    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : '',
-  };
-}
-
-export async function fetchSpeakingTranscriptComments(attemptId: string): Promise<SpeakingTranscriptComment[]> {
-  const json = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${encodeURIComponent(attemptId)}/comments`);
-  const items = Array.isArray(json.comments) ? json.comments.map(asRecord) : [];
-  return items.map(mapTranscriptComment);
-}
-
-export async function postExpertSpeakingTranscriptComment(
-  attemptId: string,
-  payload: { transcriptLineIndex: number; body: string; criterionCode?: string },
-): Promise<SpeakingTranscriptComment> {
-  const json = await apiRequest<ApiRecord>(
-    `/v1/expert/speaking/attempts/${encodeURIComponent(attemptId)}/comments`,
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-  return mapTranscriptComment(json);
-}
-
-// Wave 5 of docs/SPEAKING-MODULE-PLAN.md - deep-link from a speaking
-// task into the AI-patient Conversation module. Returns the redirect
-// path the caller should navigate the learner to.
-export interface SpeakingSelfPracticeStartResult {
-  sessionId: string;
-  redirectPath: string;
-  feedbackMessage?: string | null;
-}
-
-export async function startSpeakingSelfPracticeSession(
-  taskId: string,
-): Promise<SpeakingSelfPracticeStartResult> {
-  const json = await apiRequest<ApiRecord>(
-    `/v1/speaking/tasks/${encodeURIComponent(taskId)}/self-practice`,
-    { method: 'POST', body: JSON.stringify({}) },
-  );
-  const session = asRecord(json.session);
-  const sessionId = typeof session.id === 'string' ? session.id : '';
-  const redirectPath = typeof json.redirectPath === 'string' && json.redirectPath
-    ? json.redirectPath
-    : `/conversation/${sessionId}`;
-  const feedbackMessage = typeof json.feedbackMessage === 'string' ? json.feedbackMessage : null;
-  return { sessionId, redirectPath, feedbackMessage };
-}
-
-// Wave 6 of docs/SPEAKING-MODULE-PLAN.md - speaking drills bank.
-export interface SpeakingDrillRow {
-  id: string;
-  drillId: string;
-  title: string;
-  kind: string;
-  difficulty: string;
-  estimatedDurationMinutes: number;
-  professionCode: string | null;
-  criteriaFocus: string[];
-  caseNotes: string | null;
-  completed: boolean;
-}
-
-export interface SpeakingDrillsListResponse {
-  kinds: string[];
-  totalCount: number;
-  completedCount: number;
-  items: SpeakingDrillRow[];
-}
-
-export async function fetchSpeakingDrills(filters?: {
-  kind?: string;
-  profession?: string;
-  criterion?: string;
-}): Promise<SpeakingDrillsListResponse> {
-  const params = new URLSearchParams();
-  if (filters?.kind) params.set('kind', filters.kind);
-  if (filters?.profession) params.set('profession', filters.profession);
-  if (filters?.criterion) params.set('criterion', filters.criterion);
-  const qs = params.toString();
-  const json = await apiRequest<ApiRecord>(`/v1/speaking/drills${qs ? `?${qs}` : ''}`);
-  const items = Array.isArray(json.items) ? json.items.map(asRecord) : [];
-  const kinds = Array.isArray(json.kinds)
-    ? json.kinds.filter((k): k is string => typeof k === 'string')
-    : [];
-  return {
-    kinds,
-    totalCount: typeof json.totalCount === 'number' ? json.totalCount : items.length,
-    completedCount: typeof json.completedCount === 'number' ? json.completedCount : 0,
-    items: items.map((row) => ({
-      id: typeof row.id === 'string' ? row.id : '',
-      drillId: typeof row.drillId === 'string'
-        ? row.drillId
-        : typeof row.id === 'string'
-          ? row.id
-          : '',
-      title: typeof row.title === 'string' ? row.title : '',
-      kind: typeof row.kind === 'string' ? row.kind : 'drill',
-      difficulty: typeof row.difficulty === 'string' ? row.difficulty : 'easy',
-      estimatedDurationMinutes:
-        typeof row.estimatedDurationMinutes === 'number' ? row.estimatedDurationMinutes : 5,
-      professionCode: typeof row.professionCode === 'string' ? row.professionCode : null,
-      criteriaFocus: Array.isArray(row.criteriaFocus)
-        ? row.criteriaFocus.filter((c): c is string => typeof c === 'string')
-        : [],
-      caseNotes: typeof row.caseNotes === 'string' ? row.caseNotes : null,
-      completed: row.completed === true,
-    })),
-  };
-}
-
-export async function fetchAdminVocabularyItems(params?: {
-  profession?: string; category?: string; status?: string; search?: string;
-  recallSet?: string;
-  page?: number; pageSize?: number;
-}) {
-  const p = new URLSearchParams();
-  if (params?.profession) p.set('profession', params.profession);
-  if (params?.category) p.set('category', params.category);
-  if (params?.status) p.set('status', params.status);
-  if (params?.search) p.set('search', params.search);
-  if (params?.recallSet) p.set('recallSet', params.recallSet);
-  if (params?.page) p.set('page', String(params.page));
-  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/vocabulary/items${qs ? `?${qs}` : ''}`);
-}
-
-/**
- * Admin recall-set registry: canonical 3-set list with per-status counts
- * (active / draft / archived / total). See `RecallSetCodes` on the backend.
- */
-export interface AdminRecallSetSummary {
-  code: string;
-  displayName: string;
-  shortLabel: string;
-  description: string;
-  sortOrder: number;
-  active: number;
-  draft: number;
-  archived: number;
-  total: number;
-}
-export async function fetchAdminVocabularyRecallSets(params?: { examTypeCode?: string; professionId?: string }) {
-  const p = new URLSearchParams();
-  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
-  if (params?.professionId) p.set('professionId', params.professionId);
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/vocabulary/recall-sets${qs ? `?${qs}` : ''}`) as Promise<{
-    examTypeCode: string | null;
-    professionId: string | null;
-    sets: AdminRecallSetSummary[];
-  }>;
-}
-
-export async function fetchAdminVocabularyItem(itemId: string) {
-  return apiRequest(`/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`);
-}
-
-export async function createAdminVocabularyItem(payload: Record<string, unknown>) {
-  return apiRequest('/v1/admin/vocabulary/items', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateAdminVocabularyItem(itemId: string, payload: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteAdminVocabularyItem(itemId: string) {
-  return apiRequest(`/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`, {
-    method: 'DELETE',
-  });
-}
-
-export type AdminVocabularyBulkDeleteResponse = {
-  totalRequested: number;
-  deleted: number;
-  archived: number;
-  failed: number;
-  errors: string[];
-};
-
-export async function deleteAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkDeleteResponse> {
-  return apiRequest('/v1/admin/vocabulary/items/bulk-delete', {
-    method: 'POST',
-    body: JSON.stringify({ itemIds }),
-  }) as Promise<AdminVocabularyBulkDeleteResponse>;
-}
-
-export type AdminVocabularyBulkActivateResponse = {
-  totalRequested: number;
-  activated: number;
-  skipped: number;
-  failed: number;
-  errors: string[];
-};
-
-export async function bulkActivateAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkActivateResponse> {
-  return apiRequest('/v1/admin/vocabulary/items/bulk-activate', {
-    method: 'POST',
-    body: JSON.stringify({ itemIds }),
-  }) as Promise<AdminVocabularyBulkActivateResponse>;
-}
-
-export type AdminVocabularyBulkArchiveResponse = {
-  totalRequested: number;
-  archived: number;
-  skipped: number;
-};
-
-export async function bulkArchiveAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkArchiveResponse> {
-  return apiRequest('/v1/admin/vocabulary/items/bulk-archive', {
-    method: 'POST',
-    body: JSON.stringify({ itemIds }),
-  }) as Promise<AdminVocabularyBulkArchiveResponse>;
-}
-
-export type AdminVocabularyBulkDraftResponse = {
-  totalRequested: number;
-  drafted: number;
-  skipped: number;
-};
-
-export async function bulkDraftAdminVocabularyItems(itemIds: string[]): Promise<AdminVocabularyBulkDraftResponse> {
-  return apiRequest('/v1/admin/vocabulary/items/bulk-draft', {
-    method: 'POST',
-    body: JSON.stringify({ itemIds }),
-  }) as Promise<AdminVocabularyBulkDraftResponse>;
-}
-
-export type AdminVocabularyBulkPreviewResponse = {
-  totalRequested: number;
-  updated: number;
-  failed: number;
-  freePreviewTotal: number;
-  errors: string[];
-};
-
-/**
- * Set or clear the free-preview flag on the given vocabulary terms. Free-preview
- * terms are the only Recall Vocabulary Bank terms a non-subscribed learner can
- * access. Admin-curated — no automatic cap.
- */
-export async function setAdminVocabularyFreePreview(
-  itemIds: string[],
-  isFreePreview: boolean,
-): Promise<AdminVocabularyBulkPreviewResponse> {
-  return apiRequest('/v1/admin/vocabulary/items/bulk-free-preview', {
-    method: 'POST',
-    body: JSON.stringify({ itemIds, isFreePreview }),
-  }) as Promise<AdminVocabularyBulkPreviewResponse>;
-}
-
-export type AdminVocabularyAudioProgress = {
-  total: number;
-  withAudio: number;
-  pending: number;
-  percentComplete: number;
-};
-
-export async function fetchAdminVocabularyAudioProgress(): Promise<AdminVocabularyAudioProgress> {
-  // no-store: the progress endpoint must never be served from cache, otherwise
-  // the admin panel can pin to a stale "N pending" snapshot forever.
-  return apiRequest('/v1/admin/vocabulary/audio/progress', { cache: 'no-store' }) as Promise<AdminVocabularyAudioProgress>;
-}
-
-export type AdminVocabularyAudioGenerateResponse = {
-  totalRequested: number;
-  enqueued: number;
-  skipped: number;
-  notFound: number;
-  dryRun: boolean;
-  batchId: string;
-};
-
-/**
- * Enqueue ElevenLabs audio synthesis for a set of vocabulary terms.
- * - `forceRegenerate=false` (default): only terms missing/broken audio are queued;
- *   terms that already have working audio are skipped. Used by the bulk
- *   "Auto-generate missing audios" action.
- * - `forceRegenerate=true`: re-synthesise every term, overwriting existing audio.
- *   Used by the per-row "Regenerate audio" button.
- * - `dryRun=true`: return the counts without enqueuing anything (cost preview).
- *
- * The id list is chunked (≤1000) to stay under the server's per-call cap; the
- * per-chunk counts are summed. `batchId` from the first chunk is returned.
- */
-export async function generateAdminVocabularyAudio(
-  itemIds: string[],
-  opts?: { forceRegenerate?: boolean; dryRun?: boolean },
-): Promise<AdminVocabularyAudioGenerateResponse> {
-  const forceRegenerate = opts?.forceRegenerate ?? false;
-  const dryRun = opts?.dryRun ?? false;
-  const CHUNK = 1000;
-  const agg: AdminVocabularyAudioGenerateResponse = {
-    totalRequested: 0, enqueued: 0, skipped: 0, notFound: 0, dryRun, batchId: '',
-  };
-  for (let i = 0; i < itemIds.length; i += CHUNK) {
-    const chunk = itemIds.slice(i, i + CHUNK);
-    const res = (await apiRequest('/v1/admin/vocabulary/items/audio/generate', {
-      method: 'POST',
-      body: JSON.stringify({ itemIds: chunk, forceRegenerate, dryRun }),
-    })) as AdminVocabularyAudioGenerateResponse;
-    agg.totalRequested += res.totalRequested;
-    agg.enqueued += res.enqueued;
-    agg.skipped += res.skipped;
-    agg.notFound += res.notFound;
-    if (!agg.batchId) agg.batchId = res.batchId;
-  }
-  return agg;
-}
-
-export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: string; professionId?: string }) {
-  const p = new URLSearchParams();
-  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
-  if (params?.professionId) p.set('professionId', params.professionId);
-  const qs = p.toString();
-  return apiRequest(`/v1/admin/vocabulary/categories${qs ? `?${qs}` : ''}`);
-}
-
-export async function previewAdminVocabularyImport(file: File, importBatchId?: string, recallSetCode?: string) {
-  const formData = new FormData();
-  formData.append('file', file);
-  const params = new URLSearchParams();
-  if (importBatchId) params.set('importBatchId', importBatchId);
-  if (recallSetCode) params.set('recallSetCode', recallSetCode);
-  const qs = params.toString();
-  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import/preview${qs ? `?${qs}` : ''}`), {
-    method: 'POST',
-    headers: await getHeaders('/v1/admin/vocabulary/import/preview', undefined, { json: false }),
-    body: formData,
-  }, 60_000);
-  if (!response.ok) {
-    let code = 'preview_failed';
-    let message = `Preview failed: ${response.status}`;
-    try {
-      const err = await response.json();
-      code = err.code ?? err.errorCode ?? code;
-      message = err.message ?? err.error ?? message;
-    } catch { /* ignore */ }
-    throw new ApiError(response.status, code, message, false);
-  }
-  return response.json();
-}
-
-export async function bulkImportAdminVocabulary(file: File, dryRun = true, importBatchId?: string, recallSetCode?: string) {
-  const formData = new FormData();
-  formData.append('file', file);
-  const params = new URLSearchParams({ dryRun: String(dryRun) });
-  if (importBatchId) params.set('importBatchId', importBatchId);
-  if (recallSetCode) params.set('recallSetCode', recallSetCode);
-  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import?${params.toString()}`), {
-    method: 'POST',
-    headers: await getHeaders('/v1/admin/vocabulary/import', undefined, { json: false }),
-    body: formData,
-  }, 120_000);
-  if (!response.ok) {
-    let code = 'import_failed';
-    let message = `Import failed: ${response.status}`;
-    try {
-      const err = await response.json();
-      code = err.code ?? err.errorCode ?? code;
-      message = err.message ?? err.error ?? message;
-    } catch { /* ignore */ }
-    throw new ApiError(response.status, code, message, false);
-  }
-  return response.json();
-}
-
-export async function fetchAdminVocabularyImportBatch(importBatchId: string) {
-  return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}`);
-}
-
-export async function backfillAdminVocabularyAudio(batchId?: string) {
-  const qs = batchId ? `?batchId=${encodeURIComponent(batchId)}` : '';
-  return apiRequest(`/v1/admin/vocabulary/audio/backfill${qs}`, { method: 'POST' });
-}
-
-export async function cancelAdminVocabularyImportAudio(importBatchId: string) {
-  return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/audio/cancel`, {
-    method: 'POST',
-  });
-}
-
-export async function resumeAdminVocabularyAudio() {
-  return apiRequest(`/v1/admin/vocabulary/audio/resume`, { method: 'POST' });
-}
-
-export async function exportAdminVocabularyImportBatchCsv(importBatchId: string) {
-  const path = `/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/export`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    method: 'GET',
-    headers: await getHeaders(path),
-  }, 60_000);
-  if (!response.ok) {
-    throw new ApiError(response.status, 'export_failed', `Export failed: ${response.status}`, false);
-  }
-  return response.blob();
-}
-
-export async function reconcileAdminVocabularyImportBatch(importBatchId: string, file: File) {
-  const formData = new FormData();
-  formData.append('file', file);
-  const path = `/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/reconcile`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    method: 'POST',
-    headers: await getHeaders(path, undefined, { json: false }),
-    body: formData,
-  }, 120_000);
-  if (!response.ok) {
-    let code = 'reconcile_failed';
-    let message = `Reconciliation failed: ${response.status}`;
-    try {
-      const err = await response.json();
-      code = err.code ?? err.errorCode ?? code;
-      message = err.message ?? err.error ?? message;
-    } catch { /* ignore */ }
-    throw new ApiError(response.status, code, message, false);
-  }
-  return response.json();
-}
-
-export async function rollbackAdminVocabularyImportBatch(importBatchId: string, deleteDraftRows = false) {
-  return apiRequest(`/v1/admin/vocabulary/import/batches/${encodeURIComponent(importBatchId)}/rollback`, {
-    method: 'POST',
-    body: JSON.stringify({ deleteDraftRows }),
-  });
-}
-
-export async function requestAdminVocabularyAiDraft(payload: {
-  count: number;
-  examTypeCode: string;
-  professionId?: string | null;
-  category: string;
-  difficulty?: string;
-  seedPrompt?: string;
-}) {
-  return apiRequest('/v1/admin/vocabulary/ai/draft', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function acceptAdminVocabularyAiDrafts(payload: {
-  examTypeCode: string;
-  professionId?: string | null;
-  sourceProvenance: string;
-  drafts: Array<Record<string, unknown>>;
-}) {
-  return apiRequest('/v1/admin/vocabulary/ai/draft/accept', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function submitVocabQuiz(payload: { answers: Array<{ termId: string; correct: boolean; userAnswer?: string }>; durationSeconds: number; format?: string }) {
-  return apiRequest('/v1/vocabulary/quiz/submit', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
+// ── Admin: Vocabulary Management ──
+export type {
+  AdminRecallSetSummary,
+  AdminVocabularyAudioGenerateResponse,
+  AdminVocabularyAudioProgress,
+  AdminVocabularyBulkActivateResponse,
+  AdminVocabularyBulkArchiveResponse,
+  AdminVocabularyBulkDeleteResponse,
+  AdminVocabularyBulkDraftResponse,
+  AdminVocabularyBulkPreviewResponse,
+} from './api/admin-vocabulary';
+export {
+  acceptAdminVocabularyAiDrafts,
+  backfillAdminVocabularyAudio,
+  bulkActivateAdminVocabularyItems,
+  bulkArchiveAdminVocabularyItems,
+  bulkDraftAdminVocabularyItems,
+  bulkImportAdminVocabulary,
+  cancelAdminVocabularyImportAudio,
+  createAdminVocabularyItem,
+  deleteAdminVocabularyItem,
+  deleteAdminVocabularyItems,
+  exportAdminVocabularyImportBatchCsv,
+  fetchAdminVocabularyAudioProgress,
+  fetchAdminVocabularyCategories,
+  fetchAdminVocabularyImportBatch,
+  fetchAdminVocabularyItem,
+  fetchAdminVocabularyItems,
+  fetchAdminVocabularyRecallSets,
+  generateAdminVocabularyAudio,
+  previewAdminVocabularyImport,
+  reconcileAdminVocabularyImportBatch,
+  requestAdminVocabularyAiDraft,
+  resumeAdminVocabularyAudio,
+  rollbackAdminVocabularyImportBatch,
+  setAdminVocabularyFreePreview,
+  updateAdminVocabularyItem,
+} from './api/admin-vocabulary';
 
 // ── Adaptive Difficulty ───────────────────────────────────────────────────────
-
-export async function fetchSkillProfile(examTypeCode?: string) {
-  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
-  return apiRequest(`/v1/adaptive/skill-profile${p}`);
-}
-
-export async function fetchAdaptiveContent(examTypeCode: string, subtestCode: string, count = 5) {
-  return apiRequest(`/v1/adaptive/content?examTypeCode=${examTypeCode}&subtestCode=${subtestCode}&count=${count}`);
-}
-
-// ── Predictions ───────────────────────────────────────────────────────────────
-
-export async function fetchPredictions(examTypeCode?: string) {
-  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
-  return apiRequest(`/v1/predictions${p}`);
-}
-
-export async function fetchPrediction(examTypeCode: string, subtestCode: string) {
-  return apiRequest(`/v1/predictions/${encodeURIComponent(examTypeCode)}/${encodeURIComponent(subtestCode)}`);
-}
-
-export async function requestPredictionComputation(examTypeCode: string, subtestCode: string) {
-  return apiRequest('/v1/predictions/compute', {
-    method: 'POST',
-    body: JSON.stringify({ examTypeCode, subtestCode }),
-  });
-}
-
+// ── Predictions ────────────────────────────────────────────────────────────────
 // ── Community ─────────────────────────────────────────────────────────────────
-
-export async function fetchForumCategories(examTypeCode?: string) {
-  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
-  return apiRequest(`/v1/community/categories${p}`);
-}
-
-export async function fetchForumThreads(categoryId?: string, page = 1, pageSize = 20) {
-  const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  if (categoryId) p.set('categoryId', categoryId);
-  return apiRequest(`/v1/community/threads?${p}`);
-}
-
-export async function fetchAdminCommunityThreads(categoryId?: string, page = 1, pageSize = 20) {
-  const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-  if (categoryId) p.set('categoryId', categoryId);
-  return apiRequest(`/v1/admin/community/threads?${p}`);
-}
-
-export async function fetchForumThread(threadId: string) {
-  return apiRequest(`/v1/community/threads/${encodeURIComponent(threadId)}`);
-}
-
-export async function createForumThread(payload: { categoryId: string; title: string; body: string }) {
-  return apiRequest('/v1/community/threads', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchThreadReplies(threadId: string, page = 1, pageSize = 20) {
-  return apiRequest(`/v1/community/threads/${encodeURIComponent(threadId)}/replies?page=${page}&pageSize=${pageSize}`);
-}
-
-export async function createReply(threadId: string, body: string) {
-  return apiRequest(`/v1/community/threads/${encodeURIComponent(threadId)}/replies`, {
-    method: 'POST',
-    body: JSON.stringify({ body }),
-  });
-}
-
-export async function fetchStudyGroups(examTypeCode?: string) {
-  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
-  return apiRequest(`/v1/community/study-groups${p}`);
-}
-
-export async function createStudyGroup(payload: { name: string; description: string; examTypeCode: string; isPublic: boolean }) {
-  return apiRequest('/v1/community/study-groups', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function joinStudyGroup(groupId: string) {
-  return apiRequest(`/v1/community/study-groups/${encodeURIComponent(groupId)}/join`, { method: 'POST' });
-}
-
 // ── Community Moderation (Admin) ──────────────────────────────────────────────
-
-export async function pinCommunityThread(threadId: string, isPinned: boolean) {
-  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}/pin`, {
-    method: 'PATCH',
-    body: JSON.stringify({ isPinned }),
-  });
-}
-
-export async function lockCommunityThread(threadId: string, isLocked: boolean) {
-  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}/lock`, {
-    method: 'PATCH',
-    body: JSON.stringify({ isLocked }),
-  });
-}
-
-export async function adminDeleteCommunityThread(threadId: string) {
-  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}`, {
-    method: 'DELETE',
-  });
-}
-
-export async function adminDeleteCommunityReply(threadId: string, replyId: string) {
-  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}`, {
-    method: 'DELETE',
-  });
-}
+export {
+  adminDeleteCommunityReply,
+  adminDeleteCommunityThread,
+  createForumThread,
+  createReply,
+  createStudyGroup,
+  fetchAdminCommunityThreads,
+  fetchAdaptiveContent,
+  fetchForumCategories,
+  fetchForumThread,
+  fetchForumThreads,
+  fetchPrediction,
+  fetchPredictions,
+  fetchSkillProfile,
+  fetchStudyGroups,
+  fetchThreadReplies,
+  joinStudyGroup,
+  lockCommunityThread,
+  pinCommunityThread,
+  requestPredictionComputation,
+} from './api/community';
 
 // ── Grammar ───────────────────────────────────────────────────────────────────
 
@@ -9804,1578 +7519,287 @@ export async function generateAdminPronunciationModelAudio(
 }
 
 // ── Certificates ──────────────────────────────────────────────────────────────
-
-export async function fetchMyCertificates() {
-  return apiRequest('/v1/certificates');
-}
-
-export async function verifyCertificate(code: string) {
-  return apiRequest(`/v1/certificates/verify/${encodeURIComponent(code)}`);
-}
-
 // ── Referrals ─────────────────────────────────────────────────────────────────
-
-export async function fetchMyReferralCode() {
-  return apiRequest('/v1/referrals/my-code');
-}
-
-export async function fetchMyReferrals() {
-  return apiRequest('/v1/referrals/my-referrals');
-}
-
-export async function applyReferralCode(code: string) {
-  return apiRequest('/v1/referrals/apply', {
-    method: 'POST',
-    body: JSON.stringify({ code }),
-  });
-}
-
 // ── Exam Booking ──────────────────────────────────────────────────────────────
-
-export async function fetchExamBookings() {
-  return apiRequest('/v1/exam-bookings');
-}
-
-export async function createExamBooking(payload: { examTypeCode: string; examDate: string; bookingReference?: string; externalUrl?: string; testCenter?: string }) {
-  return apiRequest('/v1/exam-bookings', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteExamBooking(bookingId: string) {
-  return apiRequest(`/v1/exam-bookings/${encodeURIComponent(bookingId)}`, { method: 'DELETE' });
-}
-
 // ── Tutoring ──────────────────────────────────────────────────────────────────
-
-export async function fetchTutoringSessions() {
-  return apiRequest('/v1/tutoring/sessions');
-}
-
-export async function bookTutoringSession(payload: { expertUserId: string; examTypeCode: string; subtestFocus?: string; scheduledAt: string; durationMinutes: number; learnerNotes?: string; price: number }) {
-  return apiRequest('/v1/tutoring/sessions', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function rateTutoringSession(sessionId: string, rating: number, feedback?: string) {
-  return apiRequest(`/v1/tutoring/sessions/${encodeURIComponent(sessionId)}/rate`, {
-    method: 'POST',
-    body: JSON.stringify({ rating, feedback }),
-  });
-}
+export {
+  applyReferralCode,
+  bookTutoringSession,
+  createExamBooking,
+  deleteExamBooking,
+  fetchExamBookings,
+  fetchMyCertificates,
+  fetchMyReferralCode,
+  fetchMyReferrals,
+  fetchTutoringSessions,
+  rateTutoringSession,
+  verifyCertificate,
+} from './api/learner-perks';
 
 // ── AI Conversation ─────────────────────────────────────────────────────
-
-export async function createConversation(params: {
-  contentId?: string;
-  examFamilyCode?: string;
-  taskTypeCode: string;
-  profession?: string;
-  difficulty?: string;
-}) {
-  return apiRequest('/v1/conversations', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
-}
-
-export async function getConversation(sessionId: string) {
-  return apiRequest(`/v1/conversations/${encodeURIComponent(sessionId)}`);
-}
-
-export async function resumeConversation(sessionId: string, resumeToken?: string) {
-  return apiClient.post(`/v1/conversations/${encodeURIComponent(sessionId)}/resume`, resumeToken ? { resumeToken } : {});
-}
-
-export function conversationTranscriptExportUrl(sessionId: string, format: 'txt' | 'pdf' = 'txt') {
-  return resolveApiUrl(`/v1/conversations/${encodeURIComponent(sessionId)}/transcript/export?format=${encodeURIComponent(format)}`);
-}
-
-export async function downloadConversationTranscript(sessionId: string, format: 'txt' | 'pdf' = 'txt'): Promise<Blob> {
-  const path = `/v1/conversations/${encodeURIComponent(sessionId)}/transcript/export?format=${encodeURIComponent(format)}`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    method: 'GET',
-    headers: await getHeaders(path, undefined, { json: false }),
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, 'transcript_export_failed', `Transcript export failed: ${response.status}`, isRetryable(response.status));
-  }
-  return response.blob();
-}
-
-export async function completeConversation(sessionId: string) {
-  return apiRequest(`/v1/conversations/${encodeURIComponent(sessionId)}/complete`, {
-    method: 'POST',
-  });
-}
-
-export async function getConversationEvaluation(sessionId: string) {
-  return apiRequest(`/v1/conversations/${encodeURIComponent(sessionId)}/evaluation`);
-}
-
-export async function getConversationHistory(page = 1, pageSize = 10) {
-  return apiRequest(`/v1/conversations/history?page=${page}&pageSize=${pageSize}`);
-}
-
-export async function getConversationTaskTypes() {
-  return apiRequest('/v1/conversations/task-types');
-}
-
-export async function getConversationEntitlement() {
-  return apiRequest('/v1/conversations/entitlement');
-}
-
 // ── Admin: Conversation Templates ──────────────────────────────────────
-
-export async function fetchAdminConversationTemplates(params?: {
-  profession?: string;
-  status?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-}) {
-  const q = new URLSearchParams();
-  if (params?.profession) q.set('profession', params.profession);
-  if (params?.status) q.set('status', params.status);
-  if (params?.search) q.set('search', params.search);
-  if (params?.page) q.set('page', String(params.page));
-  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
-  const qs = q.toString();
-  return apiRequest(`/v1/admin/conversation/templates${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchAdminConversationTemplate(templateId: string) {
-  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}`);
-}
-
-export async function createAdminConversationTemplate(body: Record<string, unknown>) {
-  return apiRequest('/v1/admin/conversation/templates', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function updateAdminConversationTemplate(templateId: string, body: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function publishAdminConversationTemplate(templateId: string) {
-  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/publish`, {
-    method: 'POST',
-  });
-}
-
-export async function archiveAdminConversationTemplate(templateId: string) {
-  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/archive`, {
-    method: 'POST',
-  });
-}
-
-/** Permanently deletes an archived conversation template + all learner sessions. system_admin only. */
-export async function forceDeleteAdminConversationTemplate(templateId: string) {
-  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/force-delete`, {
-    method: 'POST',
-  });
-}
-
-export async function fetchAdminConversationSettings() {
-  return apiRequest('/v1/admin/conversation/settings');
-}
-
-export async function updateAdminConversationSettings(body: Record<string, unknown>) {
-  return apiRequest('/v1/admin/conversation/settings', {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-}
-
-export interface AdminLaunchReadinessSettings {
-  enforceClientVersionGate: boolean;
-  mobileMinSupportedVersion: string;
-  mobileLatestVersion: string;
-  mobileForceUpdate: boolean;
-  iosAppStoreUrl: string | null;
-  androidPlayStoreUrl: string | null;
-  iosBundleId: string | null;
-  appleTeamId: string | null;
-  appleAssociatedDomainStatus: string | null;
-  appleUniversalLinksStatus: string | null;
-  iosSigningProfileReference: string | null;
-  iosIapStatus: string | null;
-  iosPushStatus: string | null;
-  androidPackageName: string | null;
-  androidSha256Fingerprints: string | null;
-  androidSigningKeyReference: string | null;
-  androidAssetLinksStatus: string | null;
-  androidIapStatus: string | null;
-  androidPushStatus: string | null;
-  desktopMinSupportedVersion: string;
-  desktopLatestVersion: string;
-  desktopForceUpdate: boolean;
-  desktopUpdateFeedUrl: string | null;
-  desktopUpdateChannel: string | null;
-  windowsSigningStatus: string | null;
-  macSigningStatus: string | null;
-  linuxSigningStatus: string | null;
-  deviceValidationEvidenceUrl: string | null;
-  deviceValidationNotes: string | null;
-  realtimeLegalApprovalStatus: string | null;
-  realtimePrivacyApprovalStatus: string | null;
-  realtimeProtectedSmokeStatus: string | null;
-  realtimeEvidenceUrl: string | null;
-  realtimeSpendCapApproved: boolean;
-  realtimeTopologyApproved: boolean;
-  releaseOwnerApprovalStatus: string | null;
-  launchNotes: string | null;
-  updatedAt: string;
-  updatedByAdminId: string | null;
-  updatedByAdminName: string | null;
-}
-
-export async function fetchAdminLaunchReadinessSettings(): Promise<AdminLaunchReadinessSettings> {
-  return apiRequest<AdminLaunchReadinessSettings>('/v1/admin/launch-readiness/settings');
-}
-
-export async function updateAdminLaunchReadinessSettings(
-  body: Partial<AdminLaunchReadinessSettings>,
-): Promise<AdminLaunchReadinessSettings> {
-  return apiRequest<AdminLaunchReadinessSettings>('/v1/admin/launch-readiness/settings', {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-}
-
-/** Public server-driven release policy for a given shell platform. */
-export interface AppReleasePolicy {
-  platform: string;
-  minVersion: string;
-  latestVersion: string;
-  forceUpdate: boolean;
-  storeUrl: string | null;
-  updateFeedUrl: string | null;
-  channel: string | null;
-}
-
-/**
- * Reads the anonymous release policy the forced-update gate uses on boot.
- * `platform` is 'android' | 'ios' | 'desktop' (or a synonym the backend maps).
- */
-export async function fetchAppReleasePolicy(platform: string): Promise<AppReleasePolicy> {
-  return apiRequest<AppReleasePolicy>(`/v1/app-release?platform=${encodeURIComponent(platform)}`);
-}
-
-export async function adminConversationTtsPreview(body: { text?: string; voice?: string; locale?: string; modelVariant?: string; instructions?: string }) {
-  return apiBlobRequest('/v1/admin/conversation/tts-preview', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-// A voice from the ElevenLabs catalogue (GET /v1/voices), surfaced so admins
-// can browse, audition, and pick the platform default voice id.
-export interface AdminElevenLabsVoice {
-  voiceId: string;
-  name: string;
-  category?: string | null;
-  previewUrl?: string | null;
-  labels?: Record<string, string> | null;
-}
-
-export async function getElevenLabsVoices(): Promise<{ voices: AdminElevenLabsVoice[] }> {
-  return apiRequest<{ voices: AdminElevenLabsVoice[] }>('/v1/admin/voice-design/elevenlabs/voices');
-}
-
-export async function fetchAdminConversationSessions(params?: {
-  userId?: string;
-  state?: string;
-  taskTypeCode?: string;
-  page?: number;
-  pageSize?: number;
-}) {
-  const q = new URLSearchParams();
-  if (params?.userId) q.set('userId', params.userId);
-  if (params?.state) q.set('state', params.state);
-  if (params?.taskTypeCode) q.set('taskTypeCode', params.taskTypeCode);
-  if (params?.page) q.set('page', String(params.page));
-  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
-  const qs = q.toString();
-  return apiRequest(`/v1/admin/conversation/sessions${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchAdminConversationSessionDetail(sessionId: string) {
-  return apiRequest(`/v1/admin/conversation/sessions/${encodeURIComponent(sessionId)}`);
-}
-
-export async function fetchAdminMockBundles(params?: { status?: string; mockType?: string; subtest?: string }) {
-  const q = new URLSearchParams();
-  if (params?.status) q.set('status', params.status);
-  if (params?.mockType) q.set('mockType', params.mockType);
-  if (params?.subtest) q.set('subtest', params.subtest);
-  const qs = q.toString();
-  return apiRequest(`/v1/admin/mock-bundles${qs ? `?${qs}` : ''}`);
-}
-
-export async function fetchAdminMockBundle(bundleId: string) {
-  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}`);
-}
-
-export async function updateAdminMockBundle(bundleId: string, body: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function reorderAdminMockBundleSections(bundleId: string, sectionIds: string[]) {
-  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/sections/reorder`, {
-    method: 'PUT',
-    body: JSON.stringify({ sectionIds }),
-  });
-}
-
-export async function fetchAdminMockItemAnalysis(params?: { bundleId?: string; paperId?: string }) {
-  const q = new URLSearchParams();
-  if (params?.bundleId) q.set('bundleId', params.bundleId);
-  if (params?.paperId) q.set('paperId', params.paperId);
-  const qs = q.toString();
-  return apiRequest(`/v1/admin/mocks/item-analysis${qs ? `?${qs}` : ''}`);
-}
+export type {
+  AdminElevenLabsVoice,
+  AdminLaunchReadinessSettings,
+  AppReleasePolicy,
+} from './api/conversation';
+export {
+  adminConversationTtsPreview,
+  archiveAdminConversationTemplate,
+  completeConversation,
+  conversationTranscriptExportUrl,
+  createAdminConversationTemplate,
+  createConversation,
+  downloadConversationTranscript,
+  fetchAdminConversationSessionDetail,
+  fetchAdminConversationSessions,
+  fetchAdminConversationSettings,
+  fetchAdminConversationTemplate,
+  fetchAdminConversationTemplates,
+  fetchAdminLaunchReadinessSettings,
+  fetchAppReleasePolicy,
+  forceDeleteAdminConversationTemplate,
+  getConversation,
+  getConversationEntitlement,
+  getConversationEvaluation,
+  getConversationHistory,
+  getConversationTaskTypes,
+  getElevenLabsVoices,
+  publishAdminConversationTemplate,
+  resumeConversation,
+  updateAdminConversationSettings,
+  updateAdminConversationTemplate,
+  updateAdminLaunchReadinessSettings,
+} from './api/conversation';
 
 // ── Mocks Module Phase 6 — admin QC pipeline + item retire ──
-
-/**
- * Canonical review stages mirrored from `MockBundleReviewStages` in the
- * backend domain. Ordered from earliest editorial pass to publish.
- */
-export const MOCK_REVIEW_STAGES = [
-  'academic',
-  'medical',
-  'language',
-  'technical',
-  'pilot',
-  'published',
-] as const;
-
-export type MockReviewStage = (typeof MOCK_REVIEW_STAGES)[number];
-
-/** Single transition row in a bundle's editorial pipeline history. */
-export interface MockBundleReviewStageEntry {
-  id: string;
-  stage: MockReviewStage | string;
-  notes: string;
-  createdAt: string;
-  resolvedAt: string | null;
-  resolvedByAdminId: string | null;
-}
-
-/** Summary payload returned by the review-stage endpoints. */
-export interface MockBundleReviewStageSummary {
-  mockBundleId: string;
-  currentStage: MockReviewStage | string | null;
-  isPublished: boolean;
-  publishedAt: string | null;
-  transitions: MockBundleReviewStageEntry[];
-}
-
-/**
- * GET the editorial review-stage summary for a bundle. Drives the admin
- * Mocks Module Phase 6 "review pipeline" page.
- */
-export async function fetchMockBundleReviewStage(
-  bundleId: string,
-): Promise<MockBundleReviewStageSummary> {
-  return apiRequest<MockBundleReviewStageSummary>(
-    `/v1/admin/mocks/bundles/${encodeURIComponent(bundleId)}/review-stage/summary`,
-  );
-}
-
-/**
- * POST a stage transition. Backend enforces monotonic progression and
- * publishes the bundle when the target stage is `published`.
- */
-export async function advanceMockBundleReviewStage(
-  bundleId: string,
-  body: { targetStage: MockReviewStage | string; notes?: string },
-): Promise<MockBundleReviewStageSummary> {
-  return apiRequest<MockBundleReviewStageSummary>(
-    `/v1/admin/mocks/bundles/${encodeURIComponent(bundleId)}/review-stage/advance`,
-    {
-      method: 'POST',
-      // Backend property name is `nextStage`; the frontend helper exposes
-      // `targetStage` to match the spec wording. We bridge them here.
-      body: JSON.stringify({ nextStage: body.targetStage, notes: body.notes ?? null }),
-    },
-  );
-}
-
-/** Envelope returned by PATCH /v1/admin/mocks/items/{itemId}. */
-export interface MockItemRetireResponse {
-  itemId: string;
-  affectedSnapshots: number;
-  retiredAt: string | null;
-  reason: string | null;
-  retiredByAdminId: string | null;
-}
-
-/**
- * Soft-retire a flagged mock item from the admin item-analysis dashboard.
- * The PATCH is idempotent — repeated calls with the same item id return the
- * cached envelope and do not re-emit audit.
- */
-export async function retireMockItem(
-  itemId: string,
-  options?: { reason?: string; bundleId?: string },
-): Promise<MockItemRetireResponse> {
-  return apiRequest<MockItemRetireResponse>(
-    `/v1/admin/mocks/items/${encodeURIComponent(itemId)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify({
-        retire: true,
-        reason: options?.reason ?? null,
-        bundleId: options?.bundleId ?? null,
-      }),
-    },
-  );
-}
-
-export interface AdminMockBookingRow extends MockBooking {
-  learnerId?: string | null;
-  learnerDisplayName?: string | null;
-  learnerEmail?: string | null;
-  assignedTutorId?: string | null;
-  assignedTutorDisplayName?: string | null;
-  assignedInterlocutorId?: string | null;
-  assignedInterlocutorDisplayName?: string | null;
-  mockBundleTitle?: string | null;
-}
-
-export async function fetchAdminMockBookings(
-  params?: { from?: string; to?: string },
-): Promise<{ items: AdminMockBookingRow[] }> {
-  const q = new URLSearchParams();
-  if (params?.from) q.set('from', params.from);
-  if (params?.to) q.set('to', params.to);
-  const qs = q.toString();
-  const response = await apiRequest<ApiRecord>(`/v1/admin/mocks/bookings${qs ? `?${qs}` : ''}`);
-  const items = asArray(response.items).map((row): AdminMockBookingRow => {
-    const base = mapMockBooking(row);
-    return {
-      ...base,
-      learnerId: typeof row.learnerId === 'string' ? row.learnerId : null,
-      learnerDisplayName: typeof row.learnerDisplayName === 'string' ? row.learnerDisplayName : null,
-      learnerEmail: typeof row.learnerEmail === 'string' ? row.learnerEmail : null,
-      assignedTutorId: typeof row.assignedTutorId === 'string' ? row.assignedTutorId : null,
-      assignedTutorDisplayName: typeof row.assignedTutorDisplayName === 'string' ? row.assignedTutorDisplayName : null,
-      assignedInterlocutorId: typeof row.assignedInterlocutorId === 'string' ? row.assignedInterlocutorId : null,
-      assignedInterlocutorDisplayName: typeof row.assignedInterlocutorDisplayName === 'string' ? row.assignedInterlocutorDisplayName : null,
-      mockBundleTitle: typeof row.mockBundleTitle === 'string' ? row.mockBundleTitle : null,
-    };
-  });
-  return { items };
-}
-
-export async function assignAdminMockBooking(bookingId: string, body: {
-  assignedTutorId?: string | null;
-  assignedInterlocutorId?: string | null;
-  status?: string | null;
-}) {
-  return apiRequest(`/v1/admin/mock-bookings/${encodeURIComponent(bookingId)}/assign`, {
-    method: 'PATCH',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function transitionAdminMockBookingLiveRoomState(
-  bookingId: string,
-  targetState: MockLiveRoomTargetState,
-  options?: MockLiveRoomTransitionOptions,
-): Promise<MockBooking> {
-  return transitionAdminMockBookingLiveRoom(bookingId, targetState, options);
-}
-
-// Mocks Wave 8 — admin leak-report queue.
-export type AdminMockLeakReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
-
-export interface AdminMockLeakReport {
-  id: string;
-  bundleId: string | null;
-  bundleTitle: string | null;
-  attemptId: string | null;
-  severity: string;
-  status: AdminMockLeakReportStatus;
-  reasonCode: string | null;
-  details: string | null;
-  evidenceUrl: string | null;
-  pageOrQuestion: string | null;
-  reportedByUserId: string | null;
-  reportedByUserDisplayName: string | null;
-  createdAt: string;
-  resolvedAt: string | null;
-  resolvedByAdminId: string | null;
-  resolutionNote: string | null;
-}
-
-export async function listAdminMockLeakReports(
-  params?: { status?: AdminMockLeakReportStatus | string; limit?: number },
-): Promise<{ items: AdminMockLeakReport[] }> {
-  const q = new URLSearchParams();
-  if (params?.status) q.set('status', params.status);
-  if (typeof params?.limit === 'number') q.set('limit', String(params.limit));
-  const qs = q.toString();
-  return apiRequest<{ items: AdminMockLeakReport[] }>(
-    `/v1/admin/mocks/leak-reports${qs ? `?${qs}` : ''}`,
-  );
-}
-
-export async function updateAdminMockLeakReport(
-  id: string,
-  body: { status: AdminMockLeakReportStatus | string; resolutionNote?: string },
-): Promise<AdminMockLeakReport> {
-  return apiRequest<AdminMockLeakReport>(
-    `/v1/admin/mocks/leak-reports/${encodeURIComponent(id)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    },
-  );
-}
-
-export type AdminAnswerKeyReportStatus = 'open' | 'investigating' | 'resolved' | 'dismissed';
-export type AdminAnswerKeyReportAssessment = 'reading' | 'listening';
-
-export interface AdminAnswerKeyReport {
-  id: string;
-  assessment: AdminAnswerKeyReportAssessment | string;
-  attemptId: string;
-  paperId: string;
-  paperTitle: string;
-  questionId: string;
-  questionNumber: number;
-  partCode: string;
-  questionStemSnapshot: string;
-  learnerAnswerSnapshot: string;
-  officialAnswerSnapshot: string;
-  reasonCode: string;
-  details: string | null;
-  status: AdminAnswerKeyReportStatus;
-  resolutionNote: string | null;
-  reportedByUserId: string;
-  reportedByUserDisplayName: string;
-  editorUrl: string;
-  scoringSystemUrl: string;
-  resolvedByAdminId: string | null;
-  resolvedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function listAdminAnswerKeyReports(
-  params?: {
-    status?: AdminAnswerKeyReportStatus | string;
-    assessment?: AdminAnswerKeyReportAssessment | string;
-    limit?: number;
-  },
-): Promise<{ items: AdminAnswerKeyReport[] }> {
-  const q = new URLSearchParams();
-  if (params?.status) q.set('status', params.status);
-  if (params?.assessment) q.set('assessment', params.assessment);
-  if (typeof params?.limit === 'number') q.set('limit', String(params.limit));
-  const qs = q.toString();
-  return apiRequest<{ items: AdminAnswerKeyReport[] }>(
-    `/v1/admin/answer-key-reports${qs ? `?${qs}` : ''}`,
-  );
-}
-
-export async function updateAdminAnswerKeyReport(
-  id: string,
-  body: { status: AdminAnswerKeyReportStatus | string; resolutionNote?: string },
-): Promise<AdminAnswerKeyReport> {
-  return apiRequest<AdminAnswerKeyReport>(
-    `/v1/admin/answer-key-reports/${encodeURIComponent(id)}`,
-    {
-      method: 'PATCH',
-      body: JSON.stringify(body),
-    },
-  );
-}
-
-export async function fetchAdminMockAnalytics() {
-  return apiRequest('/v1/admin/mocks/analytics');
-}
-
-export async function fetchAdminMockRiskList() {
-  return apiRequest('/v1/admin/mocks/risk-list');
-}
-
-export async function fetchExpertMockBookings() {
-  const response = await apiRequest<ApiRecord>('/v1/expert/mocks/bookings');
-  return asArray(response.items).map(mapMockBooking);
-}
-
-/**
- * Mocks V2 Wave 6 — fetch a single booking projection from the tutor-side
- * endpoint. Returns the raw API record (instead of the learner-stripped
- * {@link MockBooking} shape) because the expert projection embeds the
- * `speakingContent.interlocutorCard` payload that the learner DTO must never
- * expose. The caller (expert speaking-room page) needs that raw payload to
- * render the cue prompts and patient background.
- */
-export interface ExpertMockBookingDetail extends Omit<MockBooking, 'speakingContent' | 'speakingPaperId'> {
-  assignedTutorId?: string | null;
-  assignedInterlocutorId?: string | null;
-  zoomStartUrl?: string | null;
-  speakingPaperId?: string | null;
-  speakingContent?: ExpertSpeakingContent | null;
-}
-
-export interface ExpertSpeakingInterlocutorCard {
-  background?: string;
-  patientProfile?: string;
-  cuePrompts?: string[];
-  prompts?: string[];
-  objectives?: string[];
-  hiddenInformation?: string;
-  [key: string]: unknown;
-}
-
-export interface ExpertSpeakingContent {
-  candidateCard?: Record<string, unknown>;
-  interlocutorCard?: ExpertSpeakingInterlocutorCard;
-  warmUpQuestions?: string[];
-  prepTimeSeconds?: number;
-  roleplayTimeSeconds?: number;
-  patientEmotion?: string;
-  communicationGoal?: string;
-  clinicalTopic?: string;
-  criteriaFocus?: string[];
-  disclaimer?: string;
-  background?: string;
-  setting?: string;
-  patient?: string;
-  task?: string;
-  role?: string;
-  [key: string]: unknown;
-}
-
-export async function fetchExpertMockBookingDetail(bookingId: string): Promise<ExpertMockBookingDetail> {
-  const response = await apiRequest<ApiRecord>(`/v1/expert/mocks/bookings/${encodeURIComponent(bookingId)}`);
-  const base = mapMockBooking(response);
-  return {
-    ...base,
-    assignedTutorId: typeof response.assignedTutorId === 'string' ? response.assignedTutorId : null,
-    assignedInterlocutorId: typeof response.assignedInterlocutorId === 'string' ? response.assignedInterlocutorId : null,
-    zoomStartUrl: typeof response.zoomStartUrl === 'string' ? response.zoomStartUrl : null,
-    speakingPaperId: typeof response.speakingPaperId === 'string' ? response.speakingPaperId : null,
-    speakingContent: (response.speakingContent as ExpertSpeakingContent | null | undefined) ?? null,
-  };
-}
-
-export async function createAdminMockBundle(body: Record<string, unknown>) {
-  return apiRequest('/v1/admin/mock-bundles', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function addAdminMockBundleSection(bundleId: string, body: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/sections`, {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function publishAdminMockBundle(bundleId: string) {
-  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/publish`, {
-    method: 'POST',
-  });
-}
-
-export async function archiveAdminMockBundle(bundleId: string) {
-  return apiRequest(`/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}`, {
-    method: 'DELETE',
-  });
-}
-
-export type MockBundleBulkAction = 'publish' | 'archive' | 'delete' | 'force-delete';
-
-/**
- * Bulk action over mock bundles. `POST /v1/admin/mock-bundles/bulk`.
- * Backend record is PascalCase `(Action, Ids)`; ASP.NET binds the camelCase
- * JSON below case-insensitively (matches the rest of this file's POST style).
- */
-export async function bulkAdminMockBundles(
-  action: MockBundleBulkAction,
-  ids: string[],
-): Promise<BulkActionResultDto> {
-  return apiRequest<BulkActionResultDto>('/v1/admin/mock-bundles/bulk', {
-    method: 'POST',
-    body: JSON.stringify({ action, ids }),
-  });
-}
-
-// Mocks V2 Wave 3 — item analysis admin endpoints.
-export interface AdminMockItemAnalysisRow {
-  id: string;
-  paperId?: string | null;
-  subtest: string;
-  label?: string | null;
-  totalAttempts: number;
-  correctCount: number;
-  difficulty: number;
-  discriminationIndex?: number | null;
-  distractor: string;
-  flag: string | null;
-  generatedAt: string;
-}
-export interface AdminMockItemAnalysisResponse {
-  bundleId: string;
-  generatedAt: string | null;
-  items: AdminMockItemAnalysisRow[];
-}
-
-export async function fetchAdminMockBundleItemAnalysis(bundleId: string): Promise<AdminMockItemAnalysisResponse> {
-  return apiRequest<AdminMockItemAnalysisResponse>(
-    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/item-analysis`,
-  );
-}
-
-export async function fetchAdminMockBundleListeningItemAnalysis(bundleId: string): Promise<AdminMockItemAnalysisResponse> {
-  return apiRequest<AdminMockItemAnalysisResponse>(
-    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/listening-item-analysis`,
-  );
-}
-
-export async function recomputeAdminMockBundleItemAnalysis(bundleId: string): Promise<AdminMockItemAnalysisResponse> {
-  return apiRequest<AdminMockItemAnalysisResponse>(
-    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/item-analysis/recompute`,
-    { method: 'POST' },
-  );
-}
+export type {
+  AdminAnswerKeyReport,
+  AdminAnswerKeyReportAssessment,
+  AdminAnswerKeyReportStatus,
+  AdminMockItemAnalysisResponse,
+  AdminMockItemAnalysisRow,
+  AdminMockLeakReport,
+  AdminMockLeakReportStatus,
+  MockBundleBulkAction,
+  MockBundleReviewStageEntry,
+  MockBundleReviewStageSummary,
+  MockItemRetireResponse,
+  MockReviewStage,
+} from './api/admin-mocks';
+export {
+  addAdminMockBundleSection,
+  advanceMockBundleReviewStage,
+  archiveAdminMockBundle,
+  assignAdminMockBooking,
+  bulkAdminMockBundles,
+  createAdminMockBundle,
+  fetchAdminMockAnalytics,
+  fetchAdminMockBundle,
+  fetchAdminMockBundleItemAnalysis,
+  fetchAdminMockBundleListeningItemAnalysis,
+  fetchAdminMockBundles,
+  fetchAdminMockItemAnalysis,
+  fetchAdminMockRiskList,
+  fetchMockBundleReviewStage,
+  listAdminAnswerKeyReports,
+  listAdminMockLeakReports,
+  publishAdminMockBundle,
+  recomputeAdminMockBundleItemAnalysis,
+  retireMockItem,
+  reorderAdminMockBundleSections,
+  updateAdminMockBundle,
+  updateAdminMockLeakReport,
+  updateAdminAnswerKeyReport,
+  MOCK_REVIEW_STAGES,
+} from './api/admin-mocks';
+// Booking projections live in ./api/mock-bookings (shared mapMockBooking).
+export type {
+  AdminMockBookingRow,
+  ExpertMockBookingDetail,
+  ExpertSpeakingContent,
+  ExpertSpeakingInterlocutorCard,
+  MockLiveRoomTargetState,
+  MockLiveRoomTransitionOptions,
+} from './api/mock-bookings';
+export {
+  fetchAdminMockBookings,
+  fetchExpertMockBookings,
+  fetchExpertMockBookingDetail,
+  mapMockBooking,
+  normalizeMockDeliveryMode,
+  transitionAdminMockBookingLiveRoom,
+  transitionAdminMockBookingLiveRoomState,
+  transitionExpertMockBookingLiveRoom,
+  transitionMockBookingLiveRoom,
+} from './api/mock-bookings';
 
 // ── Writing Coach ───────────────────────────────────────────────────────
-
-export async function coachCheckText(attemptId: string, currentText: string, cursorPosition?: number) {
-  return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attemptId)}/coach-check`, {
-    method: 'POST',
-    body: JSON.stringify({ currentText, cursorPosition }),
-  });
-}
-
-export async function resolveCoachSuggestion(suggestionId: string, resolution: 'accepted' | 'dismissed') {
-  return apiRequest(`/v1/writing/coach-suggestions/${encodeURIComponent(suggestionId)}/resolve`, {
-    method: 'POST',
-    body: JSON.stringify({ resolution }),
-  });
-}
-
-export async function fetchCoachStats(attemptId: string) {
-  return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attemptId)}/coach-stats`);
-}
-
 // ── Content Generation (Admin) ──────────────────────────────────────────
-
-export async function queueContentGeneration(params: {
-  examTypeCode: string;
-  subtestCode: string;
-  taskTypeId?: string;
-  professionId?: string;
-  difficulty?: string;
-  count: number;
-  customInstructions?: string;
-}) {
-  return apiRequest('/v1/admin/content/generate', {
-    method: 'POST',
-    body: JSON.stringify(params),
-  });
-}
-
-export async function fetchContentGenerationJobs(page = 1, pageSize = 20) {
-  return apiRequest(`/v1/admin/content/generation-jobs?page=${page}&pageSize=${pageSize}`);
-}
-
-export async function fetchContentGenerationJob(jobId: string) {
-  return apiRequest(`/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}`);
-}
-
 // ── Content Marketplace ─────────────────────────────────────────────────
-
-export async function fetchMarketplaceProfile() {
-  return apiRequest('/v1/marketplace/profile');
-}
-
-export async function updateMarketplaceProfile(data: { displayName?: string; bio?: string }) {
-  // FE-026: backend registers PATCH /v1/marketplace/profile (not PUT) → PUT 405s.
-  return apiRequest('/v1/marketplace/profile', {
-    method: 'PATCH',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function createMarketplaceSubmission(data: {
-  examFamilyCode?: string;
-  subtestCode: string;
-  title: string;
-  description?: string;
-  contentPayloadJson?: string;
-  contentType?: string;
-  professionId?: string;
-  difficulty?: string;
-  tags?: string;
-}) {
-  return apiRequest('/v1/marketplace/submissions', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function fetchMyMarketplaceSubmissions(page = 1, pageSize = 20) {
-  return apiRequest(`/v1/marketplace/submissions?page=${page}&pageSize=${pageSize}`);
-}
-
-export async function fetchMarketplaceSubmission(submissionId: string) {
-  return apiRequest(`/v1/marketplace/submissions/${encodeURIComponent(submissionId)}`);
-}
-
-export async function browseMarketplace(params?: { examTypeCode?: string; subtest?: string; search?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.examTypeCode) qs.set('examTypeCode', params.examTypeCode);
-  if (params?.subtest) qs.set('subtest', params.subtest);
-  if (params?.search) qs.set('search', params.search);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/marketplace/browse?${qs}`);
-}
-
-export async function reviewMarketplaceSubmission(submissionId: string, data: { decision: 'approved' | 'rejected'; notes?: string; createContentItem?: boolean }) {
-  return apiRequest(`/v1/admin/marketplace/submissions/${encodeURIComponent(submissionId)}/review`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function fetchPendingMarketplaceSubmissions(page = 1, pageSize = 20) {
-  return apiRequest(`/v1/admin/marketplace/pending?page=${page}&pageSize=${pageSize}`);
-}
+export {
+  browseMarketplace,
+  coachCheckText,
+  createMarketplaceSubmission,
+  fetchCoachStats,
+  fetchContentGenerationJob,
+  fetchContentGenerationJobs,
+  fetchMarketplaceProfile,
+  fetchMarketplaceSubmission,
+  fetchMyMarketplaceSubmissions,
+  fetchPendingMarketplaceSubmissions,
+  queueContentGeneration,
+  resolveCoachSuggestion,
+  reviewMarketplaceSubmission,
+  updateMarketplaceProfile,
+} from './api/content-studio';
 
 // ── Admin Permissions (RBAC) ──────────────────────────
-
-export async function fetchAllPermissions() {
-  return apiRequest('/v1/admin/permissions');
-}
-
-export async function fetchAdminPermissions(userId: string) {
-  return apiRequest(`/v1/admin/permissions/${encodeURIComponent(userId)}`);
-}
-
-export async function updateAdminPermissions(userId: string, permissions: string[]) {
-  return apiRequest(`/v1/admin/permissions/${encodeURIComponent(userId)}`, {
-    method: 'PUT',
-    body: JSON.stringify({ permissions }),
-  });
-}
-
 // ── Permission Templates ──────────────────────────────
-
-export async function fetchPermissionTemplates() {
-  return apiRequest('/v1/admin/permission-templates');
-}
-
-export async function createPermissionTemplate(name: string, description: string, permissions: string[]) {
-  return apiRequest('/v1/admin/permission-templates', {
-    method: 'POST',
-    body: JSON.stringify({ name, description, permissions }),
-  });
-}
-
-export async function deletePermissionTemplate(id: string) {
-  return apiRequest(`/v1/admin/permission-templates/${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  });
-}
-
-export async function applyPermissionTemplate(userId: string, templateId: string) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/apply-template/${encodeURIComponent(templateId)}`, {
-    method: 'POST',
-  });
-}
-
 // ── Content Publishing Workflow ────────────────────────
-
-export async function requestContentPublish(contentId: string, note?: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/request-publish`, {
-    method: 'POST',
-    body: JSON.stringify({ note }),
-  });
-}
-
-export async function submitContentForReview(contentId: string, note?: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/submit-for-review`, {
-    method: 'POST',
-    body: JSON.stringify({ note }),
-  });
-}
-
-export async function editorApproveContent(contentId: string, notes?: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/editor-approve`, {
-    method: 'POST',
-    body: JSON.stringify({ notes }),
-  });
-}
-
-export async function editorRejectContent(contentId: string, reason: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/editor-reject`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  });
-}
-
-export async function publisherApproveContent(contentId: string, notes?: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/publisher-approve`, {
-    method: 'POST',
-    body: JSON.stringify({ notes }),
-  });
-}
-
-export async function publisherRejectContent(contentId: string, reason: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/publisher-reject`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  });
-}
-
-export async function fetchPendingReviewContent(params?: { stage?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.stage) qs.set('stage', params.stage);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/admin/content/pending-review?${qs}`);
-}
-
-export async function fetchPublishRequests(params?: { status?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set('status', params.status);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/admin/publish-requests?${qs}`);
-}
-
-export async function approvePublishRequest(requestId: string, note?: string) {
-  return apiRequest(`/v1/admin/publish-requests/${encodeURIComponent(requestId)}/approve`, {
-    method: 'POST',
-    body: JSON.stringify({ note }),
-  });
-}
-
-export async function rejectPublishRequest(requestId: string, note?: string) {
-  return apiRequest(`/v1/admin/publish-requests/${encodeURIComponent(requestId)}/reject`, {
-    method: 'POST',
-    body: JSON.stringify({ note }),
-  });
-}
-
 // ── Webhook Monitoring ────────────────────────────────
-
-export async function fetchWebhookEvents(params?: { gateway?: string; status?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.gateway) qs.set('gateway', params.gateway);
-  if (params?.status) qs.set('status', params.status);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/admin/webhooks?${qs}`);
-}
-
-export async function fetchWebhookSummary() {
-  return apiRequest('/v1/admin/webhooks/summary');
-}
-
-export async function retryWebhook(eventId: string) {
-  return apiRequest(`/v1/admin/webhooks/${encodeURIComponent(eventId)}/retry`, {
-    method: 'POST',
-  });
-}
+export {
+  applyPermissionTemplate,
+  approvePublishRequest,
+  createPermissionTemplate,
+  deletePermissionTemplate,
+  editorApproveContent,
+  editorRejectContent,
+  fetchAdminPermissions,
+  fetchAllPermissions,
+  fetchPendingReviewContent,
+  fetchPermissionTemplates,
+  fetchPublishRequests,
+  fetchWebhookEvents,
+  fetchWebhookSummary,
+  publisherApproveContent,
+  publisherRejectContent,
+  rejectPublishRequest,
+  requestContentPublish,
+  retryWebhook,
+  submitContentForReview,
+  updateAdminPermissions,
+} from './api/admin-governance';
 
 // ── Review Escalations ────────────────────────────────
-
-export async function fetchReviewEscalations(params?: { status?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set('status', params.status);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/admin/escalations?${qs}`);
-}
-
-export async function assignEscalationReviewer(escalationId: string, secondReviewerId: string) {
-  return apiRequest(`/v1/admin/escalations/${encodeURIComponent(escalationId)}/assign`, {
-    method: 'POST',
-    body: JSON.stringify({ secondReviewerId }),
-  });
-}
-
-export async function resolveEscalation(escalationId: string, finalScore: number, resolutionNote?: string) {
-  return apiRequest(`/v1/admin/escalations/${encodeURIComponent(escalationId)}/resolve`, {
-    method: 'POST',
-    body: JSON.stringify({ finalScore, resolutionNote }),
-  });
-}
-
 // ── Learner Escalations (Disputes) ────────────────────
-
-export async function submitEscalation(submissionId: string, reason: string, details: string) {
-  return apiRequest('/v1/learner/escalations', {
-    method: 'POST',
-    body: JSON.stringify({ submissionId, reason, details }),
-  });
-}
-
-export async function fetchMyEscalations() {
-  const res = await apiRequest('/v1/learner/escalations');
-  return res?.items ?? res;
-}
-
-export async function fetchEscalationDetails(id: string) {
-  return apiRequest(`/v1/learner/escalations/${encodeURIComponent(id)}`);
-}
-
 // ── Score Guarantee (Learner) ─────────────────────────
-
-export async function fetchScoreGuarantee() {
-  return apiRequest('/v1/learner/score-guarantee');
-}
-
-export async function activateScoreGuarantee(baselineScore: number) {
-  return apiRequest('/v1/learner/score-guarantee/activate', {
-    method: 'POST',
-    body: JSON.stringify({ baselineScore }),
-  });
-}
-
-export async function submitScoreGuaranteeClaim(actualScore: number, proofDocumentUrl?: string, note?: string) {
-  return apiRequest('/v1/learner/score-guarantee/claim', {
-    method: 'POST',
-    body: JSON.stringify({ actualScore, proofDocumentUrl, note }),
-  });
-}
-
 // ── Score Equivalences ────────────────────────────────
-
-export async function fetchScoreEquivalences() {
-  return apiRequest('/v1/reference/score-equivalences');
-}
-
 // ── Study Commitment ──────────────────────────────────
-
-export async function fetchStudyCommitment() {
-  return apiRequest('/v1/learner/study-commitment');
-}
-
-export async function setStudyCommitment(dailyMinutes: number) {
-  return apiRequest('/v1/learner/study-commitment', {
-    method: 'POST',
-    body: JSON.stringify({ dailyMinutes }),
-  });
-}
+export {
+  activateScoreGuarantee,
+  assignEscalationReviewer,
+  fetchEscalationDetails,
+  fetchMyEscalations,
+  fetchReviewEscalations,
+  fetchScoreEquivalences,
+  fetchScoreGuarantee,
+  fetchStudyCommitment,
+  resolveEscalation,
+  setStudyCommitment,
+  submitEscalation,
+  submitScoreGuaranteeClaim,
+} from './api/escalations';
 
 // ── Certificates ──────────────────────────────────────
-
-export async function fetchCertificates() {
-  return apiRequest('/v1/learner/certificates');
-}
-
 // ── Referral ──────────────────────────────────────────
-
-export async function fetchReferralInfo() {
-  return apiRequest('/v1/learner/referral');
-}
-
-export async function generateReferralCode() {
-  return apiRequest('/v1/learner/referral/generate', {
-    method: 'POST',
-  });
-}
+export {
+  fetchCertificates,
+  fetchReferralInfo,
+  generateReferralCode,
+} from './api/learner-perks';
 
 // ── Expert Annotation Templates ───────────────────────
-
-export async function fetchAnnotationTemplates(params?: { subtestCode?: string; criterionCode?: string; search?: string }) {
-  const qs = new URLSearchParams();
-  if (params?.subtestCode) qs.set('subtestCode', params.subtestCode);
-  if (params?.criterionCode) qs.set('criterionCode', params.criterionCode);
-  if (params?.search) qs.set('search', params.search);
-  const q = qs.toString();
-  return apiRequest(`/v1/expert/annotation-templates${q ? `?${q}` : ''}`);
-}
-
-export async function createAnnotationTemplate(payload: {
-  subtestCode: string; criterionCode: string; label: string; templateText: string; isShared: boolean;
-}) {
-  return apiRequest('/v1/expert/annotation-templates', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function updateAnnotationTemplate(templateId: string, payload: {
-  subtestCode: string; criterionCode: string; label: string; templateText: string; isShared: boolean;
-}) {
-  return apiRequest(`/v1/expert/annotation-templates/${encodeURIComponent(templateId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteAnnotationTemplate(templateId: string) {
-  return apiRequest(`/v1/expert/annotation-templates/${encodeURIComponent(templateId)}`, {
-    method: 'DELETE',
-  });
-}
-
 // ── Expert Amend Review ──────────────────────────────
-
-export async function fetchAmendEligibility(reviewRequestId: string) {
-  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/amend-eligibility`);
-}
-
-export async function amendReview(reviewRequestId: string, payload: {
-  scores: Record<string, number>;
-  criterionComments: Record<string, string>;
-  finalComment: string;
-}) {
-  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/amend`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
 // ── Expert Rework Chain ──────────────────────────────
-
-export async function fetchReworkChain(reviewRequestId: string) {
-  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/rework-chain`);
-}
-
 // ── Expert Bulk Operations ────────────────────────────
-
-export async function bulkClaimReviews(reviewRequestIds: string[]) {
-  return apiRequest('/v1/expert/queue/bulk-claim', {
-    method: 'POST',
-    body: JSON.stringify({ reviewRequestIds }),
-  });
-}
-
-export async function bulkReleaseReviews(reviewRequestIds: string[]) {
-  return apiRequest('/v1/expert/queue/bulk-release', {
-    method: 'POST',
-    body: JSON.stringify({ reviewRequestIds }),
-  });
-}
-
 // ── Expert Messaging ──────────────────────────────────
-
-export async function fetchExpertMessageThreads() {
-  return apiRequest('/v1/expert/messages');
-}
-
-export async function createExpertMessageThread(payload: {
-  title: string; body: string; linkedReviewRequestId?: string;
-  linkedCalibrationCaseId?: string; linkedLearnerId?: string;
-}) {
-  return apiRequest('/v1/expert/messages', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchExpertMessageThread(threadId: string) {
-  return apiRequest(`/v1/expert/messages/${encodeURIComponent(threadId)}`);
-}
-
-export async function postExpertMessageReply(threadId: string, body: string) {
-  return apiRequest(`/v1/expert/messages/${encodeURIComponent(threadId)}/replies`, {
-    method: 'POST',
-    body: JSON.stringify({ body }),
-  });
-}
-
 // ── Expert Compensation ───────────────────────────────
-
-export async function fetchExpertCompensationSummary() {
-  return apiRequest('/v1/expert/compensation');
-}
-
-export async function fetchExpertEarningsHistory(page?: number, pageSize?: number) {
-  const qs = new URLSearchParams();
-  if (page) qs.set('page', String(page));
-  if (pageSize) qs.set('pageSize', String(pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/expert/compensation/earnings${q ? `?${q}` : ''}`);
-}
-
-export async function fetchExpertPayouts() {
-  return apiRequest('/v1/expert/compensation/payouts');
-}
-
 // ── Admin: Score Guarantee Claims ─────────────────────
-
-export async function fetchAdminScoreGuaranteeClaims(params?: { status?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set('status', params.status);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/admin/score-guarantee-claims?${qs}`);
-}
-
-export async function reviewScoreGuaranteeClaim(pledgeId: string, decision: 'approve' | 'reject', note?: string) {
-  return apiRequest(`/v1/admin/score-guarantee-claims/${encodeURIComponent(pledgeId)}/review`, {
-    method: 'POST',
-    body: JSON.stringify({ decision, note }),
-  });
-}
+export {
+  amendReview,
+  bulkClaimReviews,
+  bulkReleaseReviews,
+  createAnnotationTemplate,
+  createExpertMessageThread,
+  deleteAnnotationTemplate,
+  fetchAdminScoreGuaranteeClaims,
+  fetchAmendEligibility,
+  fetchAnnotationTemplates,
+  fetchExpertCompensationSummary,
+  fetchExpertEarningsHistory,
+  fetchExpertMessageThread,
+  fetchExpertMessageThreads,
+  fetchExpertPayouts,
+  fetchReworkChain,
+  postExpertMessageReply,
+  reviewScoreGuaranteeClaim,
+  updateAnnotationTemplate,
+} from './api/expert-ops';
 
 // ── Private Speaking Sessions ─────────────────────────────
-
-export interface PrivateSpeakingBookingResult {
-  bookingId: string;
-  checkoutSessionId?: string | null;
-  checkoutUrl?: string | null;
-  entitlementUsed: boolean;
-  speakingSessionsRemaining?: number | null;
-}
-
-export interface PrivateSpeakingCalendarStatus {
-  connected: boolean;
-  provider?: string | null;
-  calendarId?: string | null;
-  connectedEmail?: string | null;
-  connectedAt?: string | null;
-  lastCheckedAt?: string | null;
-  lastSyncedAt?: string | null;
-  lastError?: string | null;
-}
-
-export interface PrivateSpeakingCalendarConnectResult {
-  authorizationUrl: string;
-  expiresAt: string;
-}
-
-export async function fetchPrivateSpeakingConfig() {
-  return apiRequest('/v1/private-speaking/config');
-}
-
-export async function fetchPrivateSpeakingTutors() {
-  return apiRequest('/v1/private-speaking/tutors');
-}
-
-export async function fetchPrivateSpeakingSlots(tutorProfileId: string, from: string, to: string) {
-  return apiRequest(`/v1/private-speaking/tutors/${encodeURIComponent(tutorProfileId)}/slots?from=${from}&to=${to}`);
-}
-
-export async function fetchAllPrivateSpeakingSlots(from: string, to: string) {
-  return apiRequest(`/v1/private-speaking/slots?from=${from}&to=${to}`);
-}
-
-export async function createPrivateSpeakingBooking(payload: {
-  tutorProfileId: string;
-  sessionStartUtc: string;
-  durationMinutes: number;
-  learnerTimezone: string;
-  learnerNotes?: string;
-  /** Candidate profession track (Medicine, Nursing, Pharmacy, Dentistry, Other). */
-  professionTrack?: string | null;
-  idempotencyKey: string;
-  /** Speaking module rebuild (2026-06-11): "practice" (default) or "exam". */
-  sessionFormat?: string | null;
-  /** "paypal" pays the catalog price via embedded PayPal; omit/"entitlement" uses a credit. */
-  paymentMethod?: 'paypal' | 'entitlement' | null;
-}): Promise<PrivateSpeakingBookingResult> {
-  return apiRequest<PrivateSpeakingBookingResult>('/v1/private-speaking/bookings', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function reschedulePrivateSpeakingBooking(bookingId: string, payload: {
-  sessionStartUtc: string;
-  learnerTimezone: string;
-  learnerNotes?: string;
-  idempotencyKey: string;
-}): Promise<PrivateSpeakingBookingResult> {
-  return apiRequest<PrivateSpeakingBookingResult>(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/reschedule`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchLearnerPrivateSpeakingBookings(status?: string) {
-  const qs = status ? `?status=${status}` : '';
-  return apiRequest(`/v1/private-speaking/bookings${qs}`);
-}
-
-export async function fetchPrivateSpeakingBookingDetail(bookingId: string) {
-  return apiRequest(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}`);
-}
-
-export async function cancelPrivateSpeakingBooking(bookingId: string, reason?: string) {
-  return apiRequest(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/cancel`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  });
-}
-
-export async function fetchPrivateSpeakingJoinToken(bookingId: string): Promise<LiveClassJoinToken> {
-  return apiRequest<LiveClassJoinToken>(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/join-token`, {
-    method: 'POST',
-  });
-}
-
-export async function downloadPrivateSpeakingCalendarInvite(bookingId: string): Promise<Blob> {
-  const path = `/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/calendar.ics`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    headers: await getHeaders(path, undefined, { json: false }),
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, 'calendar_invite_download_failed', 'Could not download the calendar invite.', false);
-  }
-  return response.blob();
-}
-
-export async function ratePrivateSpeakingSession(bookingId: string, rating: number, feedback?: string) {
-  return apiRequest(`/v1/private-speaking/bookings/${encodeURIComponent(bookingId)}/rate`, {
-    method: 'POST',
-    body: JSON.stringify({ rating, feedback }),
-  });
-}
+// ── Private Speaking: Expert ──────────────────────────────
+// ── Private Speaking: Admin ───────────────────────────────
+export type {
+  LiveClassJoinToken,
+  PrivateSpeakingBookingResult,
+  PrivateSpeakingCalendarConnectResult,
+  PrivateSpeakingCalendarStatus,
+} from './api/private-speaking';
+export {
+  adminEditPrivateSpeakingBooking,
+  adminManualReschedulePrivateSpeaking,
+  adminMarkPrivateSpeakingNoShow,
+  adminOverridePrivateSpeakingRefund,
+  adminUpdatePrivateSpeakingAvailabilityRule,
+  cancelAdminPrivateSpeakingBooking,
+  cancelExpertPrivateSpeakingSession,
+  cancelPrivateSpeakingBooking,
+  completeAdminPrivateSpeakingBooking,
+  connectExpertPrivateSpeakingGoogleCalendar,
+  createAdminPrivateSpeakingAvailabilityRule,
+  createAdminPrivateSpeakingTutor,
+  createPrivateSpeakingBooking,
+  deleteAdminPrivateSpeakingAvailabilityRule,
+  deleteExpertPrivateSpeakingAvailability,
+  disconnectExpertPrivateSpeakingCalendar,
+  downloadAdminPrivateSpeakingBookingsCsv,
+  downloadExpertPrivateSpeakingCalendarInvite,
+  downloadPrivateSpeakingCalendarInvite,
+  fetchAdminPrivateSpeakingAuditLogs,
+  fetchAdminPrivateSpeakingAvailability,
+  fetchAdminPrivateSpeakingBookings,
+  fetchAdminPrivateSpeakingConfig,
+  fetchAdminPrivateSpeakingStats,
+  fetchAdminPrivateSpeakingTutor,
+  fetchAdminPrivateSpeakingTutors,
+  fetchAllPrivateSpeakingSlots,
+  fetchExpertPrivateSpeakingAvailability,
+  fetchExpertPrivateSpeakingCalendarStatus,
+  fetchExpertPrivateSpeakingJoinToken,
+  fetchExpertPrivateSpeakingProfile,
+  fetchExpertPrivateSpeakingSessionDetail,
+  fetchExpertPrivateSpeakingSessions,
+  fetchLearnerPrivateSpeakingBookings,
+  fetchPrivateSpeakingBookingDetail,
+  fetchPrivateSpeakingConfig,
+  fetchPrivateSpeakingJoinToken,
+  fetchPrivateSpeakingSlots,
+  fetchPrivateSpeakingTutors,
+  markExpertPrivateSpeakingNoShow,
+  ratePrivateSpeakingSession,
+  reschedulePrivateSpeakingBooking,
+  retryAdminPrivateSpeakingZoom,
+  updateAdminPrivateSpeakingConfig,
+  updateAdminPrivateSpeakingTutor,
+  updateExpertPrivateSpeakingAvailability,
+  updateExpertPrivateSpeakingAvailabilityRule,
+} from './api/private-speaking';
+import type { LiveClassJoinToken } from './api/private-speaking';
 
 // ── Private Speaking: Expert ──────────────────────────────
 
-export async function fetchExpertPrivateSpeakingProfile() {
-  return apiRequest('/v1/expert/private-speaking/profile');
-}
-
-export async function fetchExpertPrivateSpeakingSessions(status?: string) {
-  const qs = status ? `?status=${status}` : '';
-  return apiRequest(`/v1/expert/private-speaking/sessions${qs}`);
-}
-
-export async function fetchExpertPrivateSpeakingSessionDetail(bookingId: string) {
-  return apiRequest(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}`);
-}
-
-export async function fetchExpertPrivateSpeakingAvailability() {
-  return apiRequest('/v1/expert/private-speaking/availability');
-}
-
-export async function updateExpertPrivateSpeakingAvailability(payload: { dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string; effectiveTo?: string }) {
-  return apiRequest('/v1/expert/private-speaking/availability', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateExpertPrivateSpeakingAvailabilityRule(ruleId: string, payload: { dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string | null; effectiveTo?: string | null; isActive: boolean }) {
-  return apiRequest(`/v1/expert/private-speaking/availability/${encodeURIComponent(ruleId)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function deleteExpertPrivateSpeakingAvailability(ruleId: string) {
-  return apiRequest(`/v1/expert/private-speaking/availability/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
-}
-
-export async function cancelExpertPrivateSpeakingSession(bookingId: string, reason?: string) {
-  return apiRequest(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/cancel`, {
-    method: 'POST',
-    body: JSON.stringify({ reason: reason || null }),
-  });
-}
-
-export async function markExpertPrivateSpeakingNoShow(bookingId: string): Promise<{ noShow: boolean }> {
-  return apiRequest<{ noShow: boolean }>(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/mark-no-show`, {
-    method: 'POST',
-  });
-}
-
-export async function fetchExpertPrivateSpeakingJoinToken(bookingId: string): Promise<LiveClassJoinToken> {
-  return apiRequest<LiveClassJoinToken>(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/join-token`, {
-    method: 'POST',
-  });
-}
-
-export async function downloadExpertPrivateSpeakingCalendarInvite(bookingId: string): Promise<Blob> {
-  const path = `/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/calendar.ics`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    headers: await getHeaders(path, undefined, { json: false }),
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, 'calendar_invite_download_failed', 'Could not download the calendar invite.', false);
-  }
-  return response.blob();
-}
-
-export async function fetchExpertPrivateSpeakingCalendarStatus(): Promise<PrivateSpeakingCalendarStatus> {
-  return apiRequest<PrivateSpeakingCalendarStatus>('/v1/expert/private-speaking/calendar/status');
-}
-
-export async function connectExpertPrivateSpeakingGoogleCalendar(): Promise<PrivateSpeakingCalendarConnectResult> {
-  return apiRequest<PrivateSpeakingCalendarConnectResult>('/v1/expert/private-speaking/calendar/google/connect', {
-    method: 'POST',
-  });
-}
-
-export async function disconnectExpertPrivateSpeakingCalendar(): Promise<{ disconnected: boolean }> {
-  return apiRequest<{ disconnected: boolean }>('/v1/expert/private-speaking/calendar', {
-    method: 'DELETE',
-  });
-}
-
 // ── Private Speaking: Admin ───────────────────────────────
-
-export async function fetchAdminPrivateSpeakingConfig() {
-  return apiRequest('/v1/admin/private-speaking/config');
-}
-
-export async function updateAdminPrivateSpeakingConfig(payload: Record<string, unknown>) {
-  return apiRequest('/v1/admin/private-speaking/config', { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function fetchAdminPrivateSpeakingStats() {
-  return apiRequest('/v1/admin/private-speaking/stats');
-}
-
-export async function fetchAdminPrivateSpeakingTutors(activeOnly?: boolean) {
-  const qs = activeOnly !== undefined ? `?activeOnly=${activeOnly}` : '';
-  return apiRequest(`/v1/admin/private-speaking/tutors${qs}`);
-}
-
-export async function fetchAdminPrivateSpeakingTutor(profileId: string) {
-  return apiRequest(`/v1/admin/private-speaking/tutors/${encodeURIComponent(profileId)}`);
-}
-
-export async function createAdminPrivateSpeakingTutor(payload: {
-  expertUserId: string; displayName: string; timezone: string; bio?: string;
-  priceOverrideMinorUnits?: number; slotDurationOverrideMinutes?: number; specialtiesJson?: string;
-}) {
-  return apiRequest('/v1/admin/private-speaking/tutors', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminPrivateSpeakingTutor(profileId: string, payload: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/private-speaking/tutors/${encodeURIComponent(profileId)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function fetchAdminPrivateSpeakingAvailability(profileId: string) {
-  return apiRequest(`/v1/admin/private-speaking/tutors/${encodeURIComponent(profileId)}/availability`);
-}
-
-export async function createAdminPrivateSpeakingAvailabilityRule(profileId: string, payload: {
-  dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string; effectiveTo?: string;
-}) {
-  return apiRequest(`/v1/admin/private-speaking/tutors/${encodeURIComponent(profileId)}/availability`, {
-    method: 'POST', body: JSON.stringify(payload),
-  });
-}
-
-export async function deleteAdminPrivateSpeakingAvailabilityRule(profileId: string, ruleId: string) {
-  return apiRequest(`/v1/admin/private-speaking/tutors/${encodeURIComponent(profileId)}/availability/${encodeURIComponent(ruleId)}`, {
-    method: 'DELETE',
-  });
-}
-
-export async function fetchAdminPrivateSpeakingBookings(params?: {
-  tutorProfileId?: string; status?: string; learnerId?: string;
-  from?: string; to?: string; page?: number; pageSize?: number;
-}) {
-  const qs = new URLSearchParams();
-  if (params?.tutorProfileId) qs.set('tutorProfileId', params.tutorProfileId);
-  if (params?.status) qs.set('status', params.status);
-  if (params?.learnerId) qs.set('learnerId', params.learnerId);
-  if (params?.from) qs.set('from', params.from);
-  if (params?.to) qs.set('to', params.to);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 20));
-  return apiRequest(`/v1/admin/private-speaking/bookings?${qs}`);
-}
-
-export async function cancelAdminPrivateSpeakingBooking(bookingId: string, reason?: string) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/cancel`, {
-    method: 'POST', body: JSON.stringify({ reason }),
-  });
-}
-
-export async function completeAdminPrivateSpeakingBooking(bookingId: string) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/complete`, { method: 'POST' });
-}
-
-export async function retryAdminPrivateSpeakingZoom(bookingId: string) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/retry-zoom`, { method: 'POST' });
-}
-
-export async function adminOverridePrivateSpeakingRefund(
-  bookingId: string,
-  payload: { amountMinorUnits?: number | null; reason?: string | null },
-) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/override-refund`, {
-    method: 'POST', body: JSON.stringify(payload),
-  });
-}
-
-export async function adminManualReschedulePrivateSpeaking(
-  bookingId: string,
-  payload: { newSessionStartUtc: string; reason?: string | null },
-) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/manual-reschedule`, {
-    method: 'POST', body: JSON.stringify(payload),
-  });
-}
-
-export async function adminEditPrivateSpeakingBooking(
-  bookingId: string,
-  payload: { sessionStartUtc?: string | null; durationMinutes?: number | null; professionTrack?: string | null; tutorNotes?: string | null },
-) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}`, {
-    method: 'PUT', body: JSON.stringify(payload),
-  });
-}
-
-export async function adminMarkPrivateSpeakingNoShow(bookingId: string) {
-  return apiRequest(`/v1/admin/private-speaking/bookings/${encodeURIComponent(bookingId)}/mark-no-show`, { method: 'POST' });
-}
-
-export async function adminUpdatePrivateSpeakingAvailabilityRule(
-  profileId: string,
-  ruleId: string,
-  payload: { dayOfWeek: number; startTime: string; endTime: string; effectiveFrom?: string | null; effectiveTo?: string | null; isActive: boolean },
-) {
-  return apiRequest(`/v1/admin/private-speaking/tutors/${encodeURIComponent(profileId)}/availability/${encodeURIComponent(ruleId)}`, {
-    method: 'PUT', body: JSON.stringify(payload),
-  });
-}
-
-export async function downloadAdminPrivateSpeakingBookingsCsv(params?: {
-  tutorProfileId?: string; status?: string; learnerId?: string; from?: string; to?: string;
-}): Promise<Blob> {
-  const qs = new URLSearchParams();
-  if (params?.tutorProfileId) qs.set('tutorProfileId', params.tutorProfileId);
-  if (params?.status) qs.set('status', params.status);
-  if (params?.learnerId) qs.set('learnerId', params.learnerId);
-  if (params?.from) qs.set('from', params.from);
-  if (params?.to) qs.set('to', params.to);
-  const query = qs.toString();
-  const path = `/v1/admin/private-speaking/bookings/export${query ? `?${query}` : ''}`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    headers: await getHeaders(path, undefined, { json: false }),
-  });
-  if (!response.ok) {
-    throw new ApiError(response.status, 'bookings_export_failed', 'Could not export bookings.', false);
-  }
-  return response.blob();
-}
-
-export async function fetchAdminPrivateSpeakingAuditLogs(params?: { bookingId?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.bookingId) qs.set('bookingId', params.bookingId);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 50));
-  return apiRequest(`/v1/admin/private-speaking/audit-logs?${qs}`);
-}
 
 // ── Zoom Live Classes ───────────────────────────────────
 
@@ -11428,20 +7852,6 @@ export interface LiveClassEnrollment {
   status: string;
   cancelledAt?: string | null;
   cancellationReason?: string | null;
-}
-
-export interface LiveClassJoinToken {
-  provider: 'zoom';
-  sdkKey?: string | null;
-  signature?: string | null;
-  meetingNumber: string;
-  userName: string;
-  userEmail?: string | null;
-  role: number;
-  passWord?: string | null;
-  zak?: string | null;
-  joinUrl?: string | null;
-  expiresAt: string;
 }
 
 export interface LiveClassRecording {
@@ -12409,7 +8819,7 @@ export async function adminDiscardUpload(uploadId: string): Promise<void> {
 /**
  * Convenience wrapper that returns the strongly-typed jobs list. The
  * underlying `fetchContentGenerationJobs(page, pageSize)` helper already
- * exists above and is kept unchanged; this wrapper just narrows the return
+ * exists in ./api/content-studio and is kept unchanged; this wrapper just narrows the return
  * type so the new jobs page can avoid `unknown` casts.
  */
 export async function adminListGenerationJobs(
@@ -12431,7 +8841,7 @@ export async function adminGetGenerationJob(
 
 /**
  * Strongly-typed wrapper around `POST /v1/admin/content/generate`. The
- * existing `queueContentGeneration` helper above accepts the same shape but
+ * existing `queueContentGeneration` helper in ./api/content-studio accepts the same shape but
  * returns `unknown`; this wrapper documents the field set the new launcher
  * UI uses and narrows the return type.
  */

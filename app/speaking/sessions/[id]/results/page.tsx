@@ -30,8 +30,8 @@ import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { DualAssessmentLayout } from '@/components/domain/speaking/DualAssessmentLayout';
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
 import { TranscriptPlayerWithComments, type TranscriptPayload } from '@/components/domain/speaking/TranscriptPlayerWithComments';
+import { ApiError } from '@/lib/api';
 import {
-  SpeakingAssessmentApiError,
   learnerGetDualAssessment,
   type DualAssessmentResponse,
 } from '@/lib/api/speaking-assessments';
@@ -139,7 +139,7 @@ export default function SpeakingSessionResultsPage() {
       setV11TutorOverride(tutorOverrideResponse);
       setTranscript(transcriptResponse?.transcript ?? null);
     } catch (err) {
-      const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to load assessment.';
+      const msg = err instanceof ApiError ? err.message : 'Failed to load assessment.';
       setErrorMsg(msg);
     } finally {
       setLoading(false);

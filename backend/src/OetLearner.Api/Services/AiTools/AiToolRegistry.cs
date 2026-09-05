@@ -54,6 +54,56 @@ public sealed class AiToolRegistry : IAiToolRegistry
         _executors = executors.ToDictionary(e => e.Code, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Feature codes that a learner can reach. Grants for these are additionally
+    /// filtered through <see cref="LearnerSafeToolCodes"/> in code, so a stray or
+    /// mistaken <c>AiFeatureToolGrant</c> row cannot hand a learner a privileged
+    /// developer tool (<c>run_command</c>, <c>deploy</c>, <c>write_file</c>, ...).
+    ///
+    /// The tool categories (Read / Write / ExternalNetwork) deliberately do not
+    /// encode privilege: <c>save_user_note</c> and <c>write_file</c> are both
+    /// Write. So the boundary has to be an explicit allowlist, not a category test.
+    /// </summary>
+    private static readonly HashSet<string> LearnerFacingFeatureCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        AiFeatureCodes.AiAssistantLearner,
+        AiFeatureCodes.CompanionChat,
+        AiFeatureCodes.CompanionRetrieval,
+        AiFeatureCodes.CompanionAction,
+    };
+
+    /// <summary>
+    /// The only tools a learner-facing feature may ever call. Adding to this set
+    /// is a deliberate security decision, and is locked by
+    /// <c>CompanionLearnerToolBoundaryTests</c>.
+    /// </summary>
+    private static readonly HashSet<string> LearnerSafeToolCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "lookup_rulebook_rule",
+        "lookup_vocabulary_term",
+        "get_user_recent_attempts",
+        "search_recall_set",
+        "save_user_note",
+        "bookmark_recall_term",
+        "fetch_dictionary_definition",
+
+        // AI Learning Companion action layer (S1.5). Every one of these resolves
+        // its target server-side and re-checks entitlement at execution time.
+        "companion_find_destination",
+        "companion_open_destination",
+        "companion_continue_last_activity",
+        "companion_show_allowance",
+        "companion_add_plan_item",
+    };
+
+    /// <summary>True when the feature code is reachable by a learner.</summary>
+    public static bool IsLearnerFacingFeature(string featureCode) =>
+        LearnerFacingFeatureCodes.Contains(featureCode);
+
+    /// <summary>True when the tool is safe to expose to a learner-facing feature.</summary>
+    public static bool IsLearnerSafeTool(string toolCode) =>
+        LearnerSafeToolCodes.Contains(toolCode);
+
     public bool IsKnownToolCode(string toolCode) =>
         _executors.ContainsKey(toolCode);
 
@@ -80,8 +130,31 @@ public sealed class AiToolRegistry : IAiToolRegistry
                   .AsNoTracking()
                   .ToListAsync(ct);
 
-        var defs = rows
-            .Where(r => _executors.ContainsKey(r.Code)) // tool must still be in the assembly
+        var permitted = rows.Where(r => _executors.ContainsKey(r.Code)); // tool must still be in the assembly
+
+        // Defence in depth: a learner-facing feature may only ever resolve tools on
+        // the static allowlist, whatever the grant table says. Deny-by-default in
+        // the data model is necessary but not sufficient — one mistaken admin grant
+        // row would otherwise expose a developer tool to every learner.
+        if (LearnerFacingFeatureCodes.Contains(featureCode))
+        {
+            var blocked = rows
+                .Where(r => !LearnerSafeToolCodes.Contains(r.Code))
+                .Select(r => r.Code)
+                .ToList();
+
+            if (blocked.Count > 0)
+            {
+                _logger.LogError(
+                    "Blocked {Count} non-learner-safe tool grant(s) for learner-facing feature {FeatureCode}: {Tools}. " +
+                    "This indicates a misconfigured AiFeatureToolGrant row and should be investigated.",
+                    blocked.Count, featureCode, string.Join(", ", blocked));
+            }
+
+            permitted = permitted.Where(r => LearnerSafeToolCodes.Contains(r.Code));
+        }
+
+        var defs = permitted
             .Select(r => new AiToolDefinition(r.Code, r.Name, r.Description, r.Category, r.JsonSchemaArgs))
             .ToList()
             .AsReadOnly();

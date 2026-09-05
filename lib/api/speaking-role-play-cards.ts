@@ -1,11 +1,9 @@
 /**
  * Typed API client for the OET Speaking role-play card surface.
  *
- * Mirrors `lib/api.ts`'s `apiRequest` pattern (Bearer-token auth via
+ * Uses the shared `apiRequest` pipeline from `./client` (Bearer-token auth via
  * `ensureFreshAccessToken`, CSRF token via the `oet_csrf` cookie, retry
- * on 5xx/408/429) without depending on the main file. This module is
- * intentionally self-contained so the Phase 1 admin builder can ship
- * independently of any refactors to `lib/api.ts`.
+ * on 5xx/408/429) so auth handling stays consistent with the rest of the app.
  *
  * Backend endpoints targeted (see plan section B.1):
  *   POST    /v1/admin/speaking/role-play-cards
@@ -20,129 +18,10 @@
  *   GET     /v1/speaking/role-play-cards/{id}        (learner — no interlocutor)
  */
 
+import { apiRequest } from './client';
 import { fetchProfessionCatalog, professionCatalogOptions } from '@/lib/api/professions';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
 import { professions } from '@/lib/auth/enrollment';
-import { env } from '@/lib/env';
-import { fetchWithTimeout } from '@/lib/network/fetch-with-timeout';
 import type { BulkActionResultDto } from '@/lib/types/admin';
-
-const API_BASE_URL = env.apiBaseUrl;
-
-function resolveApiUrl(pathOrUrl: string): string {
-  if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
-  return `${API_BASE_URL}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
-}
-
-async function buildHeaders(init?: RequestInit): Promise<HeadersInit> {
-  const headers = new Headers(init?.headers);
-  if (!headers.has('Content-Type') && init?.body && typeof init.body === 'string') {
-    headers.set('Content-Type', 'application/json');
-  }
-
-  if (typeof document !== 'undefined') {
-    const csrf = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
-    if (csrf) headers.set('x-csrf-token', csrf[1]);
-  }
-
-  try {
-    const token = await ensureFreshAccessToken();
-    if (token) headers.set('Authorization', `Bearer ${token}`);
-  } catch {
-    // Silent failure — the request will 401 and the caller will redirect.
-  }
-
-  return headers;
-}
-
-const RETRYABLE_STATUS = (status: number) => status >= 500 || status === 408 || status === 429;
-const MAX_RETRIES = 2;
-const RETRY_DELAYS_MS = [1000, 3000];
-
-export class RolePlayCardApiError extends Error {
-  status: number;
-  code: string;
-  retryable: boolean;
-  fieldErrors: Array<{ field: string; code: string; message: string }>;
-
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    retryable: boolean,
-    fieldErrors: Array<{ field: string; code: string; message: string }> = [],
-  ) {
-    super(message);
-    this.name = 'RolePlayCardApiError';
-    this.status = status;
-    this.code = code;
-    this.retryable = retryable;
-    this.fieldErrors = fieldErrors;
-  }
-}
-
-type RequestOptions = {
-  acceptedStatuses?: number[];
-  timeoutMs?: number;
-};
-
-async function request<T>(path: string, init?: RequestInit, opts?: RequestOptions): Promise<T> {
-  let lastError: Error | null = null;
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const response = await fetchWithTimeout(resolveApiUrl(path), {
-        ...init,
-        headers: await buildHeaders(init),
-      }, opts?.timeoutMs);
-
-      const accepted = opts?.acceptedStatuses ?? [];
-      if (!response.ok && accepted.includes(response.status)) {
-        if (response.status === 204) return undefined as T;
-        return (await response.json()) as T;
-      }
-
-      if (!response.ok) {
-        let code = 'unknown_error';
-        let message = `Request failed: ${response.status}`;
-        let retryable = false;
-        let fieldErrors: Array<{ field: string; code: string; message: string }> = [];
-        try {
-          const err = await response.json();
-          code = err.code ?? (response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : code);
-          message = err.message ?? err.title ?? message;
-          retryable = err.retryable ?? RETRYABLE_STATUS(response.status);
-          fieldErrors = Array.isArray(err.fieldErrors) ? err.fieldErrors : [];
-        } catch {
-          retryable = RETRYABLE_STATUS(response.status);
-          if (response.status === 401) code = 'not_authenticated';
-          else if (response.status === 403) code = 'forbidden';
-        }
-
-        const apiError = new RolePlayCardApiError(response.status, code, message, retryable, fieldErrors);
-        if (retryable && attempt < MAX_RETRIES) {
-          lastError = apiError;
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-          continue;
-        }
-        throw apiError;
-      }
-
-      if (response.status === 204) return undefined as T;
-      return (await response.json()) as T;
-    } catch (err) {
-      if (err instanceof RolePlayCardApiError) throw err;
-      if (attempt < MAX_RETRIES) {
-        lastError = err as Error;
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  throw lastError ?? new Error('Request failed after retries');
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — mirrors backend DTOs returned from AdminSpeakingContentEndpoints
@@ -184,7 +63,7 @@ export interface RolePlayCardDetail {
   patientName: string | null;
   patientAge: string | null;
   background: string;
-  /** Up to 5 task bullets. Filtered to non-empty entries. */
+  /** The full ordered task list, any length. Filtered to non-empty entries. */
   tasks: string[];
   allowedNotes: boolean;
   prepTimeSeconds: number;
@@ -352,13 +231,13 @@ export interface SpeakingCardTypeUpsertInput {
 }
 
 export async function adminListSpeakingCardTypes(includeInactive = true): Promise<SpeakingCardTypeDetail[]> {
-  return request<SpeakingCardTypeDetail[]>(
+  return apiRequest<SpeakingCardTypeDetail[]>(
     `/v1/admin/speaking/card-types?includeInactive=${includeInactive ? 'true' : 'false'}`,
   );
 }
 
 export async function adminCreateSpeakingCardType(input: SpeakingCardTypeUpsertInput): Promise<SpeakingCardTypeDetail> {
-  return request<SpeakingCardTypeDetail>('/v1/admin/speaking/card-types', {
+  return apiRequest<SpeakingCardTypeDetail>('/v1/admin/speaking/card-types', {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -368,7 +247,7 @@ export async function adminUpdateSpeakingCardType(
   id: string,
   input: SpeakingCardTypeUpsertInput,
 ): Promise<SpeakingCardTypeDetail> {
-  return request<SpeakingCardTypeDetail>(`/v1/admin/speaking/card-types/${encodeURIComponent(id)}`, {
+  return apiRequest<SpeakingCardTypeDetail>(`/v1/admin/speaking/card-types/${encodeURIComponent(id)}`, {
     method: 'PUT',
     body: JSON.stringify(input),
   });
@@ -377,7 +256,7 @@ export async function adminUpdateSpeakingCardType(
 export async function adminDeleteSpeakingCardType(
   id: string,
 ): Promise<{ id: string; action: string; softDeleted: boolean }> {
-  return request<{ id: string; action: string; softDeleted: boolean }>(
+  return apiRequest<{ id: string; action: string; softDeleted: boolean }>(
     `/v1/admin/speaking/card-types/${encodeURIComponent(id)}`,
     { method: 'DELETE' },
   );
@@ -399,36 +278,36 @@ export async function adminListRolePlayCards(filters: ListRolePlayCardsFilters =
   if (filters.difficulty) qs.set('difficulty', filters.difficulty);
   if (filters.status) qs.set('status', filters.status);
   const query = qs.toString();
-  return request<RolePlayCardSummary[]>(`/v1/admin/speaking/role-play-cards${query ? `?${query}` : ''}`);
+  return apiRequest<RolePlayCardSummary[]>(`/v1/admin/speaking/role-play-cards${query ? `?${query}` : ''}`);
 }
 
 export async function adminCreateRolePlayCard(input: CreateRolePlayCardInput): Promise<RolePlayCardDetail> {
-  return request<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards`, {
+  return apiRequest<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards`, {
     method: 'POST',
     body: JSON.stringify(input),
   });
 }
 
 export async function adminGetRolePlayCard(cardId: string): Promise<RolePlayCardDetail> {
-  return request<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}`);
+  return apiRequest<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}`);
 }
 
 export async function adminPatchRolePlayCard(cardId: string, input: PatchRolePlayCardInput): Promise<RolePlayCardDetail> {
-  return request<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}`, {
+  return apiRequest<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   });
 }
 
 export async function adminPublishRolePlayCard(cardId: string): Promise<RolePlayCardDetail> {
-  return request<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/publish`, {
+  return apiRequest<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/publish`, {
     method: 'POST',
     body: '{}',
   });
 }
 
 export async function adminArchiveRolePlayCard(cardId: string): Promise<RolePlayCardDetail> {
-  return request<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/archive`, {
+  return apiRequest<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/archive`, {
     method: 'POST',
     body: '{}',
   });
@@ -446,21 +325,21 @@ export async function bulkAdminRolePlayCards(
   action: RolePlayCardBulkAction,
   ids: string[],
 ): Promise<BulkActionResultDto> {
-  return request<BulkActionResultDto>('/v1/admin/speaking/role-play-cards/bulk', {
+  return apiRequest<BulkActionResultDto>('/v1/admin/speaking/role-play-cards/bulk', {
     method: 'POST',
     body: JSON.stringify({ action, ids }),
   });
 }
 
 export async function adminDuplicateRolePlayCard(cardId: string): Promise<RolePlayCardDetail> {
-  return request<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/duplicate`, {
+  return apiRequest<RolePlayCardDetail>(`/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/duplicate`, {
     method: 'POST',
     body: '{}',
   });
 }
 
 export async function adminGetInterlocutorScript(cardId: string): Promise<InterlocutorScriptDetail | null> {
-  return request<InterlocutorScriptDetail | null>(
+  return apiRequest<InterlocutorScriptDetail | null>(
     `/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/interlocutor-script`,
     undefined,
     { acceptedStatuses: [404] },
@@ -471,7 +350,7 @@ export async function adminUpsertInterlocutorScript(
   cardId: string,
   input: UpsertInterlocutorScriptInput,
 ): Promise<InterlocutorScriptDetail> {
-  return request<InterlocutorScriptDetail>(
+  return apiRequest<InterlocutorScriptDetail>(
     `/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/interlocutor-script`,
     { method: 'PUT', body: JSON.stringify(input) },
   );
@@ -511,7 +390,7 @@ export interface AdminRolePlayCardAiDraftResponse {
 export async function draftSpeakingRolePlayCard(
   input: AdminRolePlayCardAiDraftInput,
 ): Promise<AdminRolePlayCardAiDraftResponse> {
-  return request<AdminRolePlayCardAiDraftResponse>(
+  return apiRequest<AdminRolePlayCardAiDraftResponse>(
     '/v1/admin/speaking/role-play-cards/ai-draft',
     { method: 'POST', body: JSON.stringify(input) },
   );
@@ -570,10 +449,10 @@ export async function importSpeakingRolePlayCard(input: {
   form.append('professionId', input.professionId);
   if (input.topic) form.append('topic', input.topic);
   form.append('autoDraft', String(input.autoDraft ?? false));
-  return request<SpeakingContentImportResult>(
+  return apiRequest<SpeakingContentImportResult>(
     '/v1/admin/speaking/role-play-cards/import',
     { method: 'POST', body: form },
-    { timeoutMs: 180_000 },
+    { timeoutMs: 180_000, json: false },
   );
 }
 
@@ -582,7 +461,7 @@ export async function importSpeakingRolePlayCard(input: {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function learnerGetRolePlayCard(cardId: string): Promise<RolePlayCardLearnerDetail> {
-  return request<RolePlayCardLearnerDetail>(`/v1/speaking/role-play-cards/${encodeURIComponent(cardId)}`);
+  return apiRequest<RolePlayCardLearnerDetail>(`/v1/speaking/role-play-cards/${encodeURIComponent(cardId)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

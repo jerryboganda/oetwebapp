@@ -32,12 +32,12 @@ import {
   moderationGetCase,
   moderationStatusLabel,
   moderationSubmitSecondMark,
-  SpeakingAssessmentApiError,
   type SpeakingCriterionCode,
   type SpeakingCriterionScorePayload,
   type SpeakingMarkInput,
   type SpeakingModerationCase,
 } from '@/lib/api/speaking-assessments';
+import { ApiError } from '@/lib/api';
 
 const ALL_CRITERIA: SpeakingCriterionCode[] = [...LINGUISTIC_CRITERIA, ...CLINICAL_CRITERIA];
 
@@ -115,7 +115,7 @@ export default function SpeakingModerationCasePage() {
       setModeration(next);
     } catch (err) {
       setErrorMsg(
-        err instanceof SpeakingAssessmentApiError
+        err instanceof ApiError
           ? err.message
           : 'Could not load the moderation case. Please try again.',
       );
@@ -148,7 +148,7 @@ export default function SpeakingModerationCasePage() {
     } catch (err) {
       setToast({
         variant: 'error',
-        message: err instanceof SpeakingAssessmentApiError ? err.message : 'Could not submit the second mark.',
+        message: err instanceof ApiError ? err.message : 'Could not submit the second mark.',
       });
     } finally {
       setSubmitting(false);
@@ -173,7 +173,7 @@ export default function SpeakingModerationCasePage() {
     } catch (err) {
       setToast({
         variant: 'error',
-        message: err instanceof SpeakingAssessmentApiError ? err.message : 'Could not finalise the moderation.',
+        message: err instanceof ApiError ? err.message : 'Could not finalise the moderation.',
       });
     } finally {
       setSubmitting(false);
@@ -192,7 +192,7 @@ export default function SpeakingModerationCasePage() {
     } catch (err) {
       setToast({
         variant: 'error',
-        message: err instanceof SpeakingAssessmentApiError ? err.message : 'Could not request a reattempt.',
+        message: err instanceof ApiError ? err.message : 'Could not request a reattempt.',
       });
     } finally {
       setSubmitting(false);

@@ -30,10 +30,10 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { ApiError } from '@/lib/api';
 import {
   adminGetInterlocutorScript,
   RESISTANCE_LEVEL_OPTIONS,
-  RolePlayCardApiError,
   type InterlocutorScriptDetail,
   type ResistanceLevelCode,
 } from '@/lib/api/speaking-role-play-cards';
@@ -157,7 +157,7 @@ export function TutorCuePanel({
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        if (err instanceof RolePlayCardApiError && err.status === 403) {
+        if (err instanceof ApiError && err.status === 403) {
           setForbidden(true);
         } else {
           const msg = err instanceof Error ? err.message : 'Could not load tutor script.';

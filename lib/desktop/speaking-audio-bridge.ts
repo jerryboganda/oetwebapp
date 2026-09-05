@@ -28,7 +28,7 @@ class ElectronRecorder implements AudioRecorder {
   constructor(private readonly bridge: NonNullable<DesktopBridge['speakingAudio']>) {}
 
   async start(): Promise<void> {
-    this.sessionId = `speaking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    this.sessionId = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? `speaking-${crypto.randomUUID()}` : `speaking-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const result = await this.bridge.start(this.sessionId, this.mimeType);
     if (!result.ok) throw new Error('Desktop speaking audio bridge failed to start.');
     this.mimeType = result.mimeType || this.mimeType;

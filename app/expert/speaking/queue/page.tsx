@@ -21,8 +21,8 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PROFESSION_OPTIONS } from '@/lib/api/speaking-role-play-cards';
+import { ApiError } from '@/lib/api';
 import {
-  SpeakingAssessmentApiError,
   tutorClaimSession,
   tutorListQueue,
   tutorReleaseSession,
@@ -109,7 +109,7 @@ export default function SpeakingQueuePage() {
       setItems(response.items);
       setTotalCount(response.totalCount);
     } catch (err) {
-      const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to load the review queue.';
+      const msg = err instanceof ApiError ? err.message : 'Failed to load the review queue.';
       setErrorMsg(msg);
     } finally {
       setLoading(false);
@@ -167,7 +167,7 @@ export default function SpeakingQueuePage() {
       setToast({ variant: 'success', message: `Claimed session for ${item.learnerDisplayName}.` });
       router.push(`/expert/speaking/sessions/${encodeURIComponent(item.sessionId)}/assess`);
     } catch (err) {
-      const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to claim session.';
+      const msg = err instanceof ApiError ? err.message : 'Failed to claim session.';
       setToast({ variant: 'error', message: msg });
     } finally {
       setPendingId(null);
@@ -181,7 +181,7 @@ export default function SpeakingQueuePage() {
       setToast({ variant: 'info', message: 'Session released.' });
       await load();
     } catch (err) {
-      const msg = err instanceof SpeakingAssessmentApiError ? err.message : 'Failed to release session.';
+      const msg = err instanceof ApiError ? err.message : 'Failed to release session.';
       setToast({ variant: 'error', message: msg });
     } finally {
       setPendingId(null);

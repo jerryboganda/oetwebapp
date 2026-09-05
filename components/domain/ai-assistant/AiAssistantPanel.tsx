@@ -1,37 +1,55 @@
 'use client';
 
 import { useState } from 'react';
-import { X, List } from 'lucide-react';
+import { X, List, AlertCircle, Plus } from 'lucide-react';
 import { AiAssistantMessages } from './AiAssistantMessages';
 import { AiAssistantInput } from './AiAssistantInput';
-import type { AiMessage } from '@/lib/ai-assistant/types';
+import { useAiAssistantContext } from '@/contexts/ai-assistant-context';
 
 export interface AiAssistantPanelProps {
   onClose: () => void;
 }
 
+/**
+ * Chat panel for the AI Learning Companion.
+ *
+ * Until the companion programme this component held its own `useState` message
+ * list and `handleSend` was a no-op comment, so nothing it displayed ever
+ * reached the server. It now consumes {@link useAiAssistantContext}, which
+ * wraps the SignalR streaming state machine in `hooks/use-ai-assistant.ts` —
+ * that hook already handled connect, stream, cancel and thread management and
+ * was simply not wired to any rendered component.
+ *
+ * See docs/ai-learning-companion/.
+ */
 export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
-  const [messages, setMessages] = useState<AiMessage[]>([]);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
+  const {
+    messages,
+    threads,
+    activeThread,
+    isStreaming,
+    streamingContent,
+    isConnected,
+    connectionState,
+    error,
+    clearError,
+    sendMessage,
+    cancelTurn,
+    selectThread,
+    createNewThread,
+  } = useAiAssistantContext();
+
   const [showThreadList, setShowThreadList] = useState(false);
 
   const handleSend = (content: string) => {
-    const msg: AiMessage = {
-      id: `msg-${Date.now()}`,
-      threadId: 'current',
-      role: 'user',
-      content,
-      createdAt: new Date().toISOString(),
-    };
-    setMessages((prev) => [...prev, msg]);
-    setIsStreaming(true);
-    // In real implementation, this would trigger SignalR send
+    // The hook owns optimistic echo, streaming and persistence; fire and forget
+    // here so a send failure surfaces through `error` rather than as an
+    // unhandled rejection.
+    void sendMessage(content);
   };
 
   const handleCancel = () => {
-    setIsStreaming(false);
-    setStreamingContent('');
+    void cancelTurn();
   };
 
   return (
@@ -42,11 +60,24 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
-        <h2 className="text-sm font-semibold">AI Assistant</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">AI Assistant</h2>
+          <span
+            data-testid="connection-state"
+            data-state={connectionState}
+            aria-live="polite"
+            className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500'}`}
+          >
+            <span className="sr-only">
+              {isConnected ? 'Connected' : `Connection ${connectionState}`}
+            </span>
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowThreadList((prev) => !prev)}
             aria-label="Thread list"
+            aria-expanded={showThreadList}
             className="rounded p-1 hover:bg-background-light"
           >
             <List className="h-4 w-4" />
@@ -64,7 +95,51 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
       {/* Thread list */}
       {showThreadList && (
         <div className="border-b border-border p-3" data-testid="thread-list">
-          <p className="text-xs text-muted">Previous conversations</p>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-xs text-muted">Previous conversations</p>
+            <button
+              onClick={() => void createNewThread()}
+              aria-label="New conversation"
+              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs hover:bg-background-light"
+            >
+              <Plus className="h-3 w-3" />
+              New
+            </button>
+          </div>
+          {threads.length === 0 ? (
+            <p className="text-xs text-muted">No previous conversations yet.</p>
+          ) : (
+            <ul className="max-h-40 space-y-1 overflow-y-auto">
+              {threads.map((thread) => (
+                <li key={thread.id}>
+                  <button
+                    onClick={() => void selectThread(thread.id)}
+                    aria-current={activeThread?.id === thread.id}
+                    className={`w-full truncate rounded px-2 py-1 text-left text-xs hover:bg-background-light ${
+                      activeThread?.id === thread.id ? 'bg-background-light font-medium' : ''
+                    }`}
+                  >
+                    {thread.title ?? 'Untitled conversation'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div
+          role="alert"
+          data-testid="assistant-error"
+          className="flex items-start gap-2 border-b border-border bg-red-50 px-4 py-2 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200"
+        >
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button onClick={clearError} aria-label="Dismiss error" className="underline">
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -81,7 +156,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         onSend={handleSend}
         onCancel={handleCancel}
         isStreaming={isStreaming}
-        disabled={false}
+        disabled={!isConnected}
       />
     </div>
   );

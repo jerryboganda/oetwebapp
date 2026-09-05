@@ -13,6 +13,8 @@ import { AuthenticatedNotificationCenter } from '@/components/providers/authenti
 import { Toaster } from '@/components/admin/ui/toaster';
 import { TooltipProvider } from '@/components/admin/ui/tooltip';
 import { RuntimeShellBridges } from '@/components/shell/runtime-shell-bridges';
+import { AiAssistantProvider } from '@/contexts/ai-assistant-context';
+import { CompanionMount } from '@/components/providers/companion-mount';
 import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import { RuntimeConfigProvider } from './providers/RuntimeConfigProvider';
 import { AppVersionGateProvider } from './providers/AppVersionGateProvider';
@@ -110,9 +112,21 @@ export function AppProviders({
                 + shell so the preferences affect everything the learner sees.
               */}
               <AccessibilityProvider>
-                <AuthenticatedNotificationCenter>
-                  {children}
-                </AuthenticatedNotificationCenter>
+                {/*
+                  AI Learning Companion (docs/ai-learning-companion/). Sits inside
+                  AuthProvider because it needs session.accessToken for the SignalR
+                  hub and the role for its permission check. The provider only
+                  opens a connection when the user actually has access, and
+                  CompanionMount additionally gates on the server-owned
+                  `ai_learning_companion` flag — which ships disabled — so this
+                  renders nothing until an operator enables it in /admin/flags.
+                */}
+                <AiAssistantProvider>
+                  <AuthenticatedNotificationCenter>
+                    {children}
+                  </AuthenticatedNotificationCenter>
+                  <CompanionMount />
+                </AiAssistantProvider>
                 {/*
                   Shell-only update UI (returns null on the website): the
                   top-center Reload + Check-for-updates cluster and the

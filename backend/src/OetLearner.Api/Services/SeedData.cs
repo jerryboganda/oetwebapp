@@ -2043,7 +2043,19 @@ public static partial class SeedData
             // ── Phase 4 new feature flags ──
             new FeatureFlag { Id = "flg-023", Name = "Exam Booking", Key = "exam_booking", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable exam booking integration with official booking portals.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-024", Name = "Content Marketplace", Key = "content_marketplace", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable content contributor marketplace.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
-            new FeatureFlag { Id = "flg-025", Name = "Offline Mode", Key = "offline_mode", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable offline practice mode for mobile.", Owner = "Mobile Team", CreatedAt = now, UpdatedAt = now }
+            new FeatureFlag { Id = "flg-025", Name = "Offline Mode", Key = "offline_mode", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable offline practice mode for mobile.", Owner = "Mobile Team", CreatedAt = now, UpdatedAt = now },
+            // ── AI Learning Companion (persona "Jana") — docs/ai-learning-companion/ ──
+            // Independent switches so an incident can disable retrieval, actions or
+            // credit consumption WITHOUT killing the whole surface, and without a
+            // deploy. All default OFF; the owner enables them deliberately.
+            new FeatureFlag { Id = "flg-026", Name = "AI Learning Companion", Key = "ai_learning_companion", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Master switch for the AI Learning Companion learner surface (floating panel + full tutor route).", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-027", Name = "Companion Retrieval", Key = "companion_retrieval", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Kill switch for companion knowledge retrieval. Off = companion answers without grounded sources instead of going down.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-028", Name = "Companion Actions", Key = "companion_actions", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Kill switch for companion typed platform actions (open resource, add to plan, checkout).", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-029", Name = "Companion Credit Consumption", Key = "companion_credits", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Freeze new companion AI Credit consumption during a ledger incident. Balances are preserved; only new charges stop.", Owner = "Finance", CreatedAt = now, UpdatedAt = now },
+            // TO VERIFY TV-006 / TV-007: numeric Writing/Speaking band claims by the
+            // companion stay disabled until approved calibration exists. Criterion
+            // feedback is always allowed. Do not enable without Pedagogy/AI QA sign-off.
+            new FeatureFlag { Id = "flg-030", Name = "Companion Score Display", Key = "companion_score_display", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "GATED (TV-006/TV-007): allow the companion to state numeric Writing/Speaking band estimates. Requires approved calibration.", Owner = "Pedagogy", CreatedAt = now, UpdatedAt = now }
         );
 
         db.AIConfigVersions.AddRange(
