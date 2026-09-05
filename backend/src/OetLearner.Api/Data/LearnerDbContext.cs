@@ -625,6 +625,12 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
             modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
             modelBuilder.Entity<NotificationTemplate>().Property(x => x.MetadataJson).HasColumnType("jsonb");
 
+            // Migration 20260901100000_AddSpeakingSimulationV11PersonaRuntime created
+            // this column as raw `jsonb` but never added the matching mapping, so EF
+            // sent `text` and every InterlocutorScript INSERT failed with Postgres
+            // 42804. Map it here to match the column that already exists.
+            modelBuilder.Entity<InterlocutorScript>().Property(x => x.SecondVisitCarryFactsJson).HasColumnType("jsonb");
+
             // Listening V2 — additive jsonb columns on ListeningAttempt
             // (NavigationStateJson, AudioCueTimelineJson, TechReadinessJson,
             // AnnotationsJson, HumanScoreOverridesJson, LastQuestionVersionMapJson).

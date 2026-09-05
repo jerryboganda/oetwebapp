@@ -504,12 +504,12 @@ async function main() {
       const token = String(row.sourceAttribution ?? "").match(/\[[^\]]+\]$/)?.[0];
       if (token) existing.set(token, { cardId: row.cardId, status: row.status });
     }
-    console.log(`[import] ${rows.length} card(s) already present, ${existing.size} with an import token — those are skipped, not duplicated`);
+    console.log(`[import] ${rows.length} card(s) already present, ${existing.size} with an import token — those are reconciled in place, not duplicated`);
   }
 
   const report = [];
   const counts = {
-    total: slice.length, stitched, created: 0, published: 0, draft: 0, skipped: 0, failed: 0,
+    total: slice.length, stitched, created: 0, published: 0, draft: 0, repaired: 0, failed: 0,
   };
   let bulletsIn = 0;
   let bulletsOut = 0;
@@ -552,28 +552,33 @@ async function main() {
     }
 
     const key = provenanceToken(card, chunkId);
-    if (existing.has(key)) {
-      entry.outcome = "skipped-exists";
-      entry.cardId = existing.get(key).cardId;
-      counts.skipped += 1;
-      report.push(entry);
-      continue;
-    }
+    const already = existing.get(key);
 
     try {
-      const created = await api("POST", "/v1/admin/speaking/role-play-cards", create);
-      entry.cardId = created.cardId;
-      counts.created += 1;
-      existing.set(key, { cardId: created.cardId, status: created.status });
+      let cardId = already?.cardId;
+      if (cardId) {
+        // Resume path. A previous run may have created the card and then died
+        // before the script upsert or the publish. Both of those are idempotent
+        // (PUT is an upsert; publish just re-stamps Published), so replaying
+        // them repairs a half-written card instead of stranding it as a
+        // script-less Draft that no later run would ever revisit.
+        counts.repaired += 1;
+      } else {
+        const created = await api("POST", "/v1/admin/speaking/role-play-cards", create);
+        cardId = created.cardId;
+        counts.created += 1;
+        existing.set(key, { cardId, status: created.status });
+      }
+      entry.cardId = cardId;
 
-      await api("PUT", `/v1/admin/speaking/role-play-cards/${created.cardId}/interlocutor-script`, script);
+      await api("PUT", `/v1/admin/speaking/role-play-cards/${cardId}/interlocutor-script`, script);
 
       if (canPublish) {
-        await api("POST", `/v1/admin/speaking/role-play-cards/${created.cardId}/publish`);
-        entry.outcome = "published";
+        await api("POST", `/v1/admin/speaking/role-play-cards/${cardId}/publish`);
+        entry.outcome = already ? "repaired-published" : "published";
         counts.published += 1;
       } else {
-        entry.outcome = "draft";
+        entry.outcome = already ? "repaired-draft" : "draft";
         counts.draft += 1;
       }
     } catch (err) {
@@ -595,7 +600,7 @@ async function main() {
   console.log(`  publishable      ${counts.published}`);
   console.log(`  draft-only       ${counts.draft}`);
   if (APPLY) console.log(`  created          ${counts.created}`);
-  if (APPLY) console.log(`  skipped (exists) ${counts.skipped}`);
+  if (APPLY) console.log(`  repaired/resumed ${counts.repaired}`);
   console.log(`  failed           ${counts.failed}`);
   console.log(`  task bullets     ${bulletsIn} read → ${bulletsOut} mapped`);
   console.log(`  report           ${OUT}`);

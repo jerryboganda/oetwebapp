@@ -333,3 +333,36 @@ public sealed class SpeakingCorpusImportFidelityTests : IAsyncLifetime
             = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 }
+
+// Regression cover for the production 500 that blocked the corpus import.
+// Migration 20260901100000_AddSpeakingSimulationV11PersonaRuntime created
+// InterlocutorScripts."SecondVisitCarryFactsJson" as raw `jsonb`, but the EF
+// model left it at the default `text`, so EVERY InterlocutorScript INSERT died
+// with Postgres 42804 ("column is of type jsonb but expression is of type
+// text") — i.e. admin script creation was broken in production, not just the
+// import. The SQLite harness the tests above use cannot catch this, because the
+// jsonb mappings are deliberately scoped to `Database.IsNpgsql()`. So this
+// asserts against a model built for the Npgsql provider. No connection is
+// opened — EF builds the model lazily and offline.
+public sealed class InterlocutorScriptJsonbMappingTests
+{
+    [Fact]
+    public void SecondVisitCarryFactsJson_is_mapped_as_jsonb_for_npgsql()
+    {
+        // `UseVector()` mirrors the app's own Npgsql setup (DatabaseConfiguration.cs) —
+        // without it the model fails validation on the pgvector `Embedding` property
+        // before it ever gets to the column types.
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseNpgsql("Host=localhost;Database=model_only;Username=u;Password=p",
+                npgsql => npgsql.UseVector())
+            .Options;
+        using var db = new LearnerDbContext(options);
+
+        var columnType = db.Model
+            .FindEntityType(typeof(InterlocutorScript))!
+            .FindProperty(nameof(InterlocutorScript.SecondVisitCarryFactsJson))!
+            .GetColumnType();
+
+        Assert.Equal("jsonb", columnType);
+    }
+}
