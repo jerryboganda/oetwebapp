@@ -18,6 +18,9 @@ public interface IAiCreditReservationService
     /// <summary>
     /// Hold Writing → Flexible W/S → 2× Shared for one writing grade.
     /// Idempotent on <paramref name="businessReference"/>.
+    /// The funding rule lives in the CreditLedger
+    /// (<see cref="Billing.IAiPackageCreditService"/>); this method holds
+    /// admission policy only, never cost math.
     /// </summary>
     Task<AiCreditReservationTicket> ReserveWritingAsync(
         string userId,
@@ -71,6 +74,11 @@ public sealed class AiCreditReservationService(
                 AlreadyExisted: true);
         }
 
+        // Admission policy (proven codes, kept verbatim): the fundability
+        // rule itself lives in the CreditLedger — snapshot flags are
+        // ledger-computed, and the atomic debit inside InsertForSubtestAsync
+        // re-verifies and decides the funding bucket. This method holds no
+        // cost math: no bucket-pick, no Shared/2.
         var snapshot = await packageCredits.GetSnapshotAsync(userId, 0, ct);
         if (snapshot.ExpiredBecausePassed
             || (snapshot.ExpiresAt is { } expires && expires <= clock.GetUtcNow()))
@@ -83,8 +91,8 @@ public sealed class AiCreditReservationService(
         if (snapshot.WritingUnlimited)
         {
             await EnsureOperationAsync(operationId, userId, businessReference, ct);
-            return await InsertAsync(
-                userId, operationId, businessReference, bucketKind: "writing", units: 0, debit: false, ct);
+            return await InsertRowAsync(
+                userId, operationId, businessReference, bucketKind: "writing", units: 0, ct);
         }
 
         if (!snapshot.HasWritingActivity)
@@ -94,14 +102,8 @@ public sealed class AiCreditReservationService(
                 "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
         }
 
-        var bucket = snapshot.WritingOnlyCredits >= 1
-            ? "writing"
-            : snapshot.FlexibleCredits >= 1
-                ? "flexible_ws"
-                : "shared";
-        var units = bucket == "shared" ? AiGradingCreditCost.SharedWritingOrSpeaking : 1;
         await EnsureOperationAsync(operationId, userId, businessReference, ct);
-        return await InsertAsync(userId, operationId, businessReference, bucket, units, debit: true, ct);
+        return await InsertForSubtestAsync(userId, operationId, businessReference, "writing", ct);
     }
 
     public async Task<AiCreditReservationTicket> ReserveSpeakingAsync(
@@ -127,6 +129,8 @@ public sealed class AiCreditReservationService(
                 AlreadyExisted: true);
         }
 
+        // Admission policy (proven codes, kept verbatim): see ReserveWritingAsync.
+        // This method holds no cost math: no bucket-pick, no Shared/2.
         var snapshot = await packageCredits.GetSnapshotAsync(userId, 0, ct);
         if (snapshot.ExpiredBecausePassed
             || (snapshot.ExpiresAt is { } expires && expires <= clock.GetUtcNow()))
@@ -139,8 +143,8 @@ public sealed class AiCreditReservationService(
         if (snapshot.SpeakingUnlimited)
         {
             await EnsureSpeakingOperationAsync(operationId, userId, businessReference, ct);
-            return await InsertSpeakingAsync(
-                userId, operationId, businessReference, bucketKind: "speaking", units: 0, debit: false, ct);
+            return await InsertRowAsync(
+                userId, operationId, businessReference, bucketKind: "speaking", units: 0, ct);
         }
 
         if (!snapshot.HasSpeakingActivity)
@@ -150,14 +154,8 @@ public sealed class AiCreditReservationService(
                 "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
         }
 
-        var bucket = snapshot.SpeakingOnlyCredits >= 1
-            ? "speaking"
-            : snapshot.FlexibleCredits >= 1
-                ? "flexible_ws"
-                : "shared";
-        var units = bucket == "shared" ? AiGradingCreditCost.SharedWritingOrSpeaking : 1;
         await EnsureSpeakingOperationAsync(operationId, userId, businessReference, ct);
-        return await InsertSpeakingAsync(userId, operationId, businessReference, bucket, units, debit: true, ct);
+        return await InsertForSubtestAsync(userId, operationId, businessReference, "speaking", ct);
     }
 
     public async Task CommitAsync(string reservationId, CancellationToken ct)
@@ -202,28 +200,14 @@ public sealed class AiCreditReservationService(
         await db.SaveChangesAsync(ct);
     }
 
-    private async Task<AiCreditReservationTicket> InsertAsync(
+    private async Task<AiCreditReservationTicket> InsertRowAsync(
         string userId,
         string operationId,
         string businessReference,
         string bucketKind,
         int units,
-        bool debit,
         CancellationToken ct)
     {
-        if (debit)
-        {
-            var debitResult = await packageCredits.DeductGradingCreditAsync(
-                userId, "writing", businessReference, ct);
-            if (!debitResult.Debited && !debitResult.Bypassed)
-            {
-                throw ApiException.PaymentRequired(
-                    debitResult.ErrorCode ?? "ai_credits_insufficient",
-                    debitResult.ErrorMessage
-                    ?? "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
-            }
-        }
-
         var now = clock.GetUtcNow();
         var row = new AiCreditReservation
         {
@@ -292,72 +276,38 @@ public sealed class AiCreditReservationService(
         }
     }
 
-    private Task<AiCreditReservationTicket> InsertSpeakingAsync(
-        string userId,
-        string operationId,
-        string businessReference,
-        string bucketKind,
-        int units,
-        bool debit,
-        CancellationToken ct)
-        => InsertForSubtestAsync(userId, operationId, businessReference, bucketKind, units, debit, "speaking", ct);
-
+    /// <summary>
+    /// Debited insert: the atomic ledger debit decides which pool funded
+    /// the hold, and the row records that outcome (bucket + raw units,
+    /// with a defensive 0→1 floor that no real debit produces).
+    /// Check-then-debit races resolve here — Deduct re-verifies fundability
+    /// atomically and denies with the same caller-visible error.
+    /// </summary>
     private async Task<AiCreditReservationTicket> InsertForSubtestAsync(
         string userId,
         string operationId,
         string businessReference,
-        string bucketKind,
-        int units,
-        bool debit,
         string subtest,
         CancellationToken ct)
     {
-        if (debit)
+        var debitResult = await packageCredits.DeductGradingCreditAsync(
+            userId, subtest, businessReference, ct);
+        if (!debitResult.Debited && !debitResult.Bypassed)
         {
-            var debitResult = await packageCredits.DeductGradingCreditAsync(
-                userId, subtest, businessReference, ct);
-            if (!debitResult.Debited && !debitResult.Bypassed)
-            {
-                throw ApiException.PaymentRequired(
-                    debitResult.ErrorCode ?? "ai_credits_insufficient",
-                    debitResult.ErrorMessage
-                    ?? "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
-            }
+            throw ApiException.PaymentRequired(
+                debitResult.ErrorCode ?? "ai_credits_insufficient",
+                debitResult.ErrorMessage
+                ?? "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
         }
 
-        var now = clock.GetUtcNow();
-        var row = new AiCreditReservation
+        var bucketKind = debitResult.BalanceSource switch
         {
-            Id = Guid.NewGuid().ToString("N"),
-            OperationId = operationId,
-            UserId = userId,
-            BucketKind = bucketKind,
-            Units = units,
-            State = AiCreditReservationState.Reserved,
-            BusinessReference = businessReference,
-            CreatedAt = now,
-            UpdatedAt = now,
+            "flexible_ws" => "flexible_ws",
+            "shared" => "shared",
+            _ => subtest, // dedicated, mixed (unreachable at quantity 1), or sourceless
         };
-        db.AiCreditReservations.Add(row);
-        try
-        {
-            await db.SaveChangesAsync(ct);
-        }
-        catch (DbUpdateException)
-        {
-            db.Entry(row).State = EntityState.Detached;
-            var raced = await db.AiCreditReservations
-                .FirstOrDefaultAsync(x => x.BusinessReference == businessReference, ct);
-            if (raced is not null)
-            {
-                return new AiCreditReservationTicket(
-                    raced.Id, raced.OperationId, raced.BucketKind, raced.Units, raced.State, true);
-            }
-
-            throw;
-        }
-
-        return new AiCreditReservationTicket(row.Id, row.OperationId, row.BucketKind, row.Units, row.State, false);
+        var units = debitResult.CreditsUsed > 0 ? debitResult.CreditsUsed : 1;
+        return await InsertRowAsync(userId, operationId, businessReference, bucketKind, units, ct);
     }
 
     private async Task EnsureSpeakingOperationAsync(

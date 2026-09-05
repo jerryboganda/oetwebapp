@@ -74,9 +74,9 @@ public sealed class SpeakingCreditReserveCommitTests : IAsyncDisposable
         public Task<bool> GrantCourseGiftCreditsAsync(string userId, string planCode, string planName, int credits, string referenceId, DateTimeOffset? expiresAt, CancellationToken ct, string? sourceReferenceId = null, DateTimeOffset? validFrom = null)
             => throw new NotImplementedException();
         public Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, CancellationToken ct)
-            => throw new NotImplementedException();
+            => CheckGradingCreditAsync(userId, subtest, 1, ct);
         public Task<AiPackageDebitResult> CheckGradingCreditAsync(string userId, string subtest, int quantity, CancellationToken ct)
-            => throw new NotImplementedException();
+            => Task.FromResult(new AiPackageDebitResult(true, null, null, null));
         public Task<AiPackageDebitResult> DeductObjectivePracticeAsync(string userId, string subtest, string referenceId, CancellationToken ct)
             => throw new NotImplementedException();
         public Task<AiPackageDebitResult> DeductMockAsync(string userId, string referenceId, CancellationToken ct)

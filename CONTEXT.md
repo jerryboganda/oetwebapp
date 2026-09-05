@@ -60,6 +60,10 @@ _Avoid_: mock.full_grade (feature flag), WritingMock / SpeakingMockSet (content-
 One-time Shared Credits grant per qualifying Full Course enrolment; inherited not doubled inside bundles.
 _Avoid_: Bonus, promo credits
 
+**CreditLedger**:
+The deep module owning Grant / Revoke / Debit / Snapshot and the single funding rule (Dedicated → Flexible → Shared at 2-per-W/S); resolvers and reservation services are read adapters over it, never re-implementing the math.
+_Avoid_: Credit service (bare), allowance checker (as separate owner)
+
 **Course-access expiry**:
 End of the Enrolment's `access_duration_days` window (clamped to 180 days).
 _Avoid_: Expiry (bare), credit expiry
