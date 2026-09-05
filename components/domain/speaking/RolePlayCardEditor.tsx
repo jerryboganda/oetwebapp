@@ -18,6 +18,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
+import { TaskListEditor, normaliseTasks } from '@/components/domain/speaking/TaskListEditor';
 import {
   DEFAULT_DISCLAIMER,
   DIFFICULTY_OPTIONS,
@@ -48,15 +49,6 @@ export interface RolePlayCardEditorProps {
   cardTypes?: SpeakingCardTypeDetail[];
 }
 
-function fillTasks(tasks: string[] | undefined): [string, string, string, string, string] {
-  const out: [string, string, string, string, string] = ['', '', '', '', ''];
-  if (!tasks) return out;
-  for (let i = 0; i < Math.min(5, tasks.length); i++) {
-    out[i] = tasks[i] ?? '';
-  }
-  return out;
-}
-
 function nullableString(value: string | undefined | null): string | undefined {
   if (value == null) return undefined;
   const trimmed = value.trim();
@@ -83,12 +75,10 @@ export function RolePlayCardEditor({
   const [patientName, setPatientName] = useState(initial?.patientName ?? '');
   const [patientAge, setPatientAge] = useState(initial?.patientAge ?? '');
   const [background, setBackground] = useState(initial?.background ?? '');
-  const initialTasks = fillTasks(initial?.tasks);
-  const [task1, setTask1] = useState(initialTasks[0]);
-  const [task2, setTask2] = useState(initialTasks[1]);
-  const [task3, setTask3] = useState(initialTasks[2]);
-  const [task4, setTask4] = useState(initialTasks[3]);
-  const [task5, setTask5] = useState(initialTasks[4]);
+  const [tasks, setTasks] = useState<string[]>(() => {
+    const seeded = initial?.tasks ?? [];
+    return seeded.length > 0 ? [...seeded] : ['', '', ''];
+  });
   const [allowedNotes, setAllowedNotes] = useState<boolean>(initial?.allowedNotes ?? true);
   const [prepTimeSeconds, setPrepTimeSeconds] = useState<number>(initial?.prepTimeSeconds ?? 180);
   const [rolePlayTimeSeconds, setRolePlayTimeSeconds] = useState<number>(initial?.rolePlayTimeSeconds ?? 300);
@@ -100,14 +90,12 @@ export function RolePlayCardEditor({
   const [disclaimer, setDisclaimer] = useState(initial?.disclaimer ?? DEFAULT_DISCLAIMER);
   const [isLiveTutorEligible, setIsLiveTutorEligible] = useState<boolean>(initial?.isLiveTutorEligible ?? false);
 
-  const taskCount = useMemo(
-    () => [task1, task2, task3, task4, task5].filter(t => t.trim().length > 0).length,
-    [task1, task2, task3, task4, task5],
-  );
+  const cleanedTasks = useMemo(() => normaliseTasks(tasks), [tasks]);
+  const taskCount = cleanedTasks.length;
 
   const validationHints = useMemo(() => {
     const hints: string[] = [];
-    if (taskCount < 3) hints.push(`At least 3 tasks required for publish (currently ${taskCount}/5).`);
+    if (taskCount < 3) hints.push(`At least 3 tasks required for publish (currently ${taskCount}).`);
     if (criteriaFocus.length === 0) hints.push('Pick at least one criterion this card stresses.');
     if (!scenarioTitle.trim()) hints.push('Scenario title is required.');
     if (!setting.trim()) hints.push('Setting is required.');
@@ -136,11 +124,7 @@ export function RolePlayCardEditor({
       patientName: nullableString(patientName),
       patientAge: nullableString(patientAge),
       background: background.trim(),
-      task1: nullableString(task1),
-      task2: nullableString(task2),
-      task3: nullableString(task3),
-      task4: nullableString(task4),
-      task5: nullableString(task5),
+      tasks: cleanedTasks,
       allowedNotes,
       prepTimeSeconds,
       rolePlayTimeSeconds,
@@ -282,35 +266,19 @@ export function RolePlayCardEditor({
 
       {/* Section 3: tasks */}
       <section className="space-y-4">
-        <div className="flex items-end justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted">Task bullets</h3>
-            <p className="mt-1 text-xs text-muted">Up to 5 bullet tasks shown on the candidate card. At least 3 are required to publish.</p>
-          </div>
-          <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
-            taskCount >= 3 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-amber-500/10 text-amber-600'
-          }`}>
-            {taskCount}/5 tasks
-          </span>
+        <div>
+          <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted">Task bullets</h3>
+          <p className="mt-1 text-xs text-muted">Every bullet printed on the candidate card, in printed order. At least 3 are required to publish.</p>
         </div>
-        <div className="grid gap-3">
-          {[
-            { label: 'Task 1', value: task1, set: setTask1 },
-            { label: 'Task 2', value: task2, set: setTask2 },
-            { label: 'Task 3', value: task3, set: setTask3 },
-            { label: 'Task 4 (optional)', value: task4, set: setTask4 },
-            { label: 'Task 5 (optional)', value: task5, set: setTask5 },
-          ].map(({ label, value, set }) => (
-            <Input
-              key={label}
-              label={label}
-              value={value}
-              onChange={(e) => set(e.target.value)}
-              placeholder='e.g. "Explain the discharge medication regimen."'
-              maxLength={500}
-            />
-          ))}
-        </div>
+        <TaskListEditor
+          tasks={tasks}
+          onChange={setTasks}
+          addLabel="Add task"
+          itemNoun="Task"
+          placeholder='e.g. "Explain the discharge medication regimen."'
+          emptyHint="No task bullets yet."
+          minRecommended={3}
+        />
       </section>
 
       {/* Section 4: scoring focus + persona */}
@@ -409,6 +377,20 @@ export function RolePlayCardEditor({
           hint="Defaults to the standard practice-estimate disclaimer."
         />
       </section>
+
+      {/* Section 7: source provenance — read-only, admin/tutor only. Never
+          rendered on the learner card face. */}
+      {initial?.sourceAttribution ? (
+        <section className="space-y-2">
+          <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-muted">Source</h3>
+          <p className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-xs text-muted">
+            {initial.sourceAttribution}
+            <span className="mt-1 block opacity-70">
+              Rights notice and page reference from the printed original. Admins and tutors only — learners never see this.
+            </span>
+          </p>
+        </section>
+      ) : null}
 
       {/* Validation hint bar */}
       {validationHints.length > 0 ? (

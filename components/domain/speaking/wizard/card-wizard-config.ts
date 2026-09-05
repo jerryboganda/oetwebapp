@@ -39,18 +39,33 @@ const SEED_VALUES = new Set<string>([
   CARD_DRAFT_SEED_ROLE,
 ]);
 
-export const CARD_DRAFT_SEED: CreateRolePlayCardInput = {
-  professionId: 'nursing',
-  scenarioTitle: CARD_DRAFT_SEED_TITLE,
-  setting: CARD_DRAFT_SEED_SETTING,
-  candidateRole: CARD_DRAFT_SEED_ROLE,
-  background: '',
-  patientEmotion: 'neutral',
-  communicationGoal: 'Inform',
-  clinicalTopic: 'general',
-  criteriaFocus: [],
-  difficulty: 'core',
-};
+/**
+ * Build the provisional draft payload for a brand-new card.
+ *
+ * `professionId` is a REQUIRED argument on purpose. It used to be hard-coded to
+ * `'nursing'` here, which meant an operator authoring (say) Medicine cards who
+ * did not revisit step 1 silently filed them under Nursing — the card looked
+ * perfectly valid, so nothing downstream ever flagged it. The profession is now
+ * chosen up-front, before the draft row exists, so it can never be wrong by
+ * default.
+ */
+export function buildCardDraftSeed(professionId: string): CreateRolePlayCardInput {
+  if (!professionId.trim()) {
+    throw new Error('A profession must be chosen before a draft card is created.');
+  }
+  return {
+    professionId: professionId.trim(),
+    scenarioTitle: CARD_DRAFT_SEED_TITLE,
+    setting: CARD_DRAFT_SEED_SETTING,
+    candidateRole: CARD_DRAFT_SEED_ROLE,
+    background: '',
+    patientEmotion: 'neutral',
+    communicationGoal: 'Inform',
+    clinicalTopic: 'general',
+    criteriaFocus: [],
+    difficulty: 'core',
+  };
+}
 
 /** Blank out a seed placeholder so the field hydrates empty for the operator. */
 export function unseedCardValue(value: string | null | undefined): string {

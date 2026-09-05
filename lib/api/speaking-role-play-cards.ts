@@ -169,6 +169,8 @@ export interface RolePlayCardSummary {
   // Speaking module rebuild (2026-06-11) — hidden card type (admin only).
   cardTypeId?: string | null;
   cardTypeName?: string | null;
+  /** Rights/provenance notice from the printed source. Admin-only. */
+  sourceAttribution?: string | null;
 }
 
 export interface RolePlayCardDetail {
@@ -204,6 +206,13 @@ export interface RolePlayCardDetail {
   cardTypeId?: string | null;
   cardTypeName?: string | null;
   displayCardNumber?: number | null;
+  /**
+   * Verbatim rights/provenance notice printed on the source card this row was
+   * transcribed from. ADMIN-ONLY — deliberately absent from
+   * `RolePlayCardLearnerDetail`, so the learner's card face stays clean while
+   * the record keeps honest provenance. Do not strip it on import.
+   */
+  sourceAttribution?: string | null;
 }
 
 export interface RolePlayCardLearnerDetail {
@@ -258,6 +267,14 @@ export interface CreateRolePlayCardInput {
   patientName?: string | null;
   patientAge?: string | null;
   background: string;
+  /**
+   * PREFERRED: the full ordered task list, any length. Wins over `task1..task5`
+   * when supplied. A card printed with six or more bullets MUST use this — the
+   * five positional fields below cannot represent it and content is lost.
+   * On PATCH this replaces the whole list.
+   */
+  tasks?: string[];
+  /** @deprecated Legacy 5-slot fields; use `tasks`. Kept for older callers. */
   task1?: string | null;
   task2?: string | null;
   task3?: string | null;
@@ -276,6 +293,8 @@ export interface CreateRolePlayCardInput {
   // Speaking module rebuild (2026-06-11) — hidden card type + printed number.
   cardTypeId?: string | null;
   displayCardNumber?: number | null;
+  /** Rights/provenance notice from the printed source. Admin-only. `""` clears it. */
+  sourceAttribution?: string | null;
 }
 
 export type PatchRolePlayCardInput = Partial<CreateRolePlayCardInput>;
@@ -293,6 +312,13 @@ export interface UpsertInterlocutorScriptInput {
   layLanguageTriggers?: string[];
   // Speaking module rebuild (2026-06-11) — printed roleplayer card face.
   patientBackground?: string;
+  /**
+   * PREFERRED: the full ordered roleplayer task list, any length. Replaces the
+   * whole list when supplied; `patientTask1..5` are read only when this is
+   * omitted.
+   */
+  patientTasks?: string[];
+  /** @deprecated Legacy 5-slot fields; use `patientTasks`. */
   patientTask1?: string | null;
   patientTask2?: string | null;
   patientTask3?: string | null;

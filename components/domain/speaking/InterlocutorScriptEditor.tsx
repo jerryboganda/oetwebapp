@@ -18,6 +18,7 @@ import { useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { AlertTriangle, Save, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox, CheckboxGroup, Input, RadioGroup, Textarea } from '@/components/ui/form-controls';
+import { TaskListEditor, normaliseTasks } from '@/components/domain/speaking/TaskListEditor';
 import {
   RESISTANCE_LEVEL_OPTIONS,
   type InterlocutorScriptDetail,
@@ -60,13 +61,10 @@ export function InterlocutorScriptEditor({
   const [layLanguageTriggers, setLayLanguageTriggers] = useState<string[]>(value?.layLanguageTriggers ?? []);
   const [chipDraft, setChipDraft] = useState('');
   // Printed ROLEPLAYER (patient) card face (2026-06-11 rebuild).
-  const patientTasksInit = value?.patientTasks ?? [];
   const [patientBackground, setPatientBackground] = useState(value?.patientBackground ?? '');
-  const [patientTask1, setPatientTask1] = useState(patientTasksInit[0] ?? '');
-  const [patientTask2, setPatientTask2] = useState(patientTasksInit[1] ?? '');
-  const [patientTask3, setPatientTask3] = useState(patientTasksInit[2] ?? '');
-  const [patientTask4, setPatientTask4] = useState(patientTasksInit[3] ?? '');
-  const [patientTask5, setPatientTask5] = useState(patientTasksInit[4] ?? '');
+  const [patientTasks, setPatientTasks] = useState<string[]>(() =>
+    (value?.patientTasks ?? []).filter((t): t is string => typeof t === 'string' && t.trim().length > 0),
+  );
   const [allowsSecondVisit, setAllowsSecondVisit] = useState(value?.allowsSecondVisit ?? false);
   const [secondVisitIndicator, setSecondVisitIndicator] = useState(value?.secondVisitIndicator ?? '');
   const [secondVisitCarryFacts, setSecondVisitCarryFacts] = useState<string[]>(value?.secondVisitCarryFacts ?? []);
@@ -138,11 +136,7 @@ export function InterlocutorScriptEditor({
       professionRoleNotes: professionRoleNotes.trim() || null,
       layLanguageTriggers,
       patientBackground: patientBackground.trim(),
-      patientTask1: patientTask1.trim() || null,
-      patientTask2: patientTask2.trim() || null,
-      patientTask3: patientTask3.trim() || null,
-      patientTask4: patientTask4.trim() || null,
-      patientTask5: patientTask5.trim() || null,
+      patientTasks: normaliseTasks(patientTasks),
       allowsSecondVisit,
       secondVisitIndicator: allowsSecondVisit ? secondVisitIndicator.trim() : null,
       secondVisitCarryFacts: allowsSecondVisit ? secondVisitCarryFacts : [],
@@ -264,39 +258,14 @@ export function InterlocutorScriptEditor({
           maxLength={4000}
           hint={`${patientBackground.length}/4000`}
         />
-        <div className="grid gap-3">
-          <Input
-            label="Patient task 1"
-            value={patientTask1}
-            onChange={(e) => setPatientTask1(e.target.value)}
-            placeholder='e.g. "Explain your current symptoms."'
-            maxLength={500}
-          />
-          <Input
-            label="Patient task 2"
-            value={patientTask2}
-            onChange={(e) => setPatientTask2(e.target.value)}
-            maxLength={500}
-          />
-          <Input
-            label="Patient task 3"
-            value={patientTask3}
-            onChange={(e) => setPatientTask3(e.target.value)}
-            maxLength={500}
-          />
-          <Input
-            label="Patient task 4"
-            value={patientTask4}
-            onChange={(e) => setPatientTask4(e.target.value)}
-            maxLength={500}
-          />
-          <Input
-            label="Patient task 5"
-            value={patientTask5}
-            onChange={(e) => setPatientTask5(e.target.value)}
-            maxLength={500}
-          />
-        </div>
+        <TaskListEditor
+          tasks={patientTasks}
+          onChange={setPatientTasks}
+          addLabel="Add patient task"
+          itemNoun="Patient task"
+          placeholder='e.g. "Explain your current symptoms."'
+          emptyHint="No patient task bullets yet."
+        />
       </section>
 
       {/* Section 2: hidden info + closing */}
