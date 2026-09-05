@@ -30,6 +30,11 @@ export default defineConfig({
       // invalid-hook-call); never collect their test copies in the main run.
       '.claude/worktrees/**',
       '.worktrees/**',
+      // Ad-hoc full-tree duplicates left at repo root by prior sessions — same
+      // duplicate-node_modules hazard, and vitest hangs ~60s per copy trying
+      // to start a worker in each before failing (see writing rulebook PR).
+      'pdf-policy-release/**',
+      'pdf-policy-release2/**',
     ],
   },
   resolve: {

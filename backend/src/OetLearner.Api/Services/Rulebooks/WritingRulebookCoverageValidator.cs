@@ -112,7 +112,7 @@ public sealed class WritingRulebookCoverageValidator(RulebookLoader embeddedLoad
         {
             if (!canonicalById.TryGetValue(candidate.Id, out var canonicalRule))
             {
-                issues.Add($"{candidate.Id}: extra rule outside canonical 172-rule baseline");
+                issues.Add($"{candidate.Id}: extra rule outside canonical embedded baseline");
                 continue;
             }
 

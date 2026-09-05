@@ -1474,8 +1474,12 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine();
         sb.AppendLine("### MAJOR rules (significant feedback items)");
         sb.AppendLine();
-        foreach (var rule in major.Take(60)) sb.AppendLine(FormatRule(rule));
-        if (major.Count > 60) sb.AppendLine($"… and {major.Count - 60} more major rules.");
+        // Every applicable active rule must be visible to the grader — the canonical
+        // registry has no minor/info tier, so silently sampling the first N major
+        // rules would mean scoring against a rulebook the grader never saw in full.
+        // Prompt caching (anthropic-beta prompt-caching-2024-07-31) amortises the
+        // size cost across repeat calls for the same profession/letter type.
+        foreach (var rule in major) sb.AppendLine(FormatRule(rule));
         sb.AppendLine();
     }
 

@@ -580,6 +580,18 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
 
         scenario.SourceProvenance = request.SourceProvenance;
 
+        // Admin-confirmed overrides (see WritingScenario doc-comments): once
+        // set, these take precedence over WritingTaskUnderstandingService's
+        // heuristic at the publish gate. Deliberately STICKY, unlike the
+        // fields above — ApplyUpsert is otherwise a full-replace (any PUT
+        // omitting a field wipes it), which would silently re-expose a task
+        // to the heuristic's guesses the next time anyone edits any other
+        // field. Only set when the request actually carries a value; never
+        // cleared by omission.
+        if (!string.IsNullOrWhiteSpace(request.RecipientRawText)) scenario.RecipientRawText = request.RecipientRawText.Trim();
+        if (!string.IsNullOrWhiteSpace(request.RecipientNormalizedJson)) scenario.RecipientNormalizedJson = request.RecipientNormalizedJson;
+        if (!string.IsNullOrWhiteSpace(request.ConfirmedPurposeText)) scenario.ConfirmedPurposeText = request.ConfirmedPurposeText.Trim();
+
         if (request.IntegrityAcknowledged == true && scenario.IntegrityAcknowledgedAt is null)
         {
             scenario.IntegrityAcknowledgedAt = DateTimeOffset.UtcNow;
@@ -627,6 +639,9 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             StimulusPdfMediaAssetId = pdfId,
             StimulusPdfDownloadPath = string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content",
             AnswerSheetPdfMediaAssetId = scenario.AnswerSheetPdfMediaAssetId,
+            RecipientRawText = scenario.RecipientRawText,
+            RecipientNormalizedJson = scenario.RecipientNormalizedJson,
+            ConfirmedPurposeText = scenario.ConfirmedPurposeText,
             CreatedAt = scenario.CreatedAt,
             UpdatedAt = scenario.UpdatedAt,
         };
@@ -684,8 +699,13 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             scenario.WordGuideMin,
             scenario.WordGuideMax,
             packResolvable: pack is not null,
-            recipientResolved: !string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal),
-            diagnosisPresent: !string.IsNullOrWhiteSpace(understanding.DiagnosisOrPlanEvidence),
+            // An admin-confirmed override always wins over the heuristic — a
+            // task is never blocked (or silently re-guessed) once a human has
+            // confirmed or corrected the recipient/purpose in their own words.
+            recipientResolved: !string.IsNullOrWhiteSpace(scenario.RecipientRawText)
+                || !string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal),
+            diagnosisPresent: !string.IsNullOrWhiteSpace(scenario.ConfirmedPurposeText)
+                || !string.IsNullOrWhiteSpace(understanding.DiagnosisOrPlanEvidence),
             classificationConflicting: understanding.ConflictingEvidence);
 
         return new WritingTaskValidationResult
@@ -1046,6 +1066,9 @@ public sealed record WritingTaskDto
     public string? StimulusPdfMediaAssetId { get; init; }
     public string? StimulusPdfDownloadPath { get; init; }
     public string? AnswerSheetPdfMediaAssetId { get; init; }
+    public string? RecipientRawText { get; init; }
+    public string? RecipientNormalizedJson { get; init; }
+    public string? ConfirmedPurposeText { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
 }
@@ -1073,6 +1096,9 @@ public sealed record WritingTaskUpsertDto
     public bool? IntegrityAcknowledged { get; init; }
     public string? StimulusPdfMediaAssetId { get; init; }
     public string? AnswerSheetPdfMediaAssetId { get; init; }
+    public string? RecipientRawText { get; init; }
+    public string? RecipientNormalizedJson { get; init; }
+    public string? ConfirmedPurposeText { get; init; }
 }
 
 public sealed record WritingTaskValidationIssue

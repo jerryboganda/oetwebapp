@@ -240,7 +240,18 @@ public static class WritingTaskUnderstandingService
         if (!string.IsNullOrWhiteSpace(planSection))
             return planSection.Trim();
 
-        return Regex.IsMatch(task, @"\b(?:request(?:ing)?|refer(?:ring)?|review|assess(?:ment)?|manage(?:ment)?|follow[- ]?up|admit|wound|care|dressing|treatment|discharge|transfer)\b", RegexOptions.IgnoreCase)
+        // Broadened final fallback (root-cause fix for diagnosis_or_request_unresolved):
+        // the earlier vocabulary only covered clinical-referral phrasing and missed
+        // real task prompts written as advice/administrative/non-medical requests
+        // (e.g. "provide advice on...", "arrange a home visit", "explain the
+        // results", "advise on medication management").
+        return Regex.IsMatch(
+                task,
+                @"\b(?:request(?:ing)?|refer(?:ring)?|review|assess(?:ment)?|manage(?:ment)?|follow[- ]?up|admit|wound|care|dressing|treatment|discharge|transfer" +
+                    @"|advis(?:e|ing)|advice|inform(?:ing)?|explain(?:ing)?|arrange(?:ment|ing)?|organis(?:e|ing)|organiz(?:e|ing)|provide|providing|book(?:ing)?|schedul(?:e|ing)" +
+                    @"|investigat(?:e|ing|ion)|monitor(?:ing)?|prescrib(?:e|ing)|dispens(?:e|ing)|counsel(?:l?ing)?|educat(?:e|ing|ion)|support|assist(?:ance|ing)?|coordinat(?:e|ing|ion)" +
+                    @"|recommend(?:ing|ation)?|address(?:ing)?|update|inquir(?:e|y|ing)|clarif(?:y|ying)|escalat(?:e|ing)|liais(?:e|on|ing)|notify|notification)\b",
+                RegexOptions.IgnoreCase)
             ? task
             : string.Empty;
     }

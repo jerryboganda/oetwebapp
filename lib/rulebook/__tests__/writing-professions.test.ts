@@ -18,6 +18,20 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
   'other-allied-health',
 ];
 
+/**
+ * Professions migrated to the canonical `OET_AI_Rules_Master.jsonl` registry
+ * (docs/canonical-rules/README.md). Everything else stays on the legacy
+ * 172-rule baseline until a canonical pack exists for it.
+ */
+const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
+  medicine: 230,
+  nursing: 237,
+  dentistry: 237,
+  pharmacy: 240,
+  physiotherapy: 240,
+  radiography: 237,
+};
+
 describe('writing rulebooks — Phase D coverage', () => {
   it('registers a writing rulebook for every supported profession', () => {
     const registered = listRulebooks()
@@ -43,9 +57,16 @@ describe('writing rulebooks — Phase D coverage', () => {
         expect(book.rules.length).toBeGreaterThan(0);
       });
 
-      it('has the canonical 172-rule baseline (locks against silent deletions)', () => {
-        expect(book.rules.length).toBe(172);
-      });
+      const canonicalCount = CANONICAL_PROFESSION_COUNTS[profession];
+      if (canonicalCount) {
+        it(`has the canonical registry rule count for this profession (${canonicalCount})`, () => {
+          expect(book.rules.length).toBe(canonicalCount);
+        });
+      } else {
+        it('has the legacy 172-rule baseline (locks against silent deletions)', () => {
+          expect(book.rules.length).toBe(172);
+        });
+      }
 
       it('every rule has id, severity, title, and body', () => {
         for (const rule of book.rules) {

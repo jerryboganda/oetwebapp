@@ -22,6 +22,16 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
   'other-allied-health',
 ];
 
+/** Migrated to the canonical registry (docs/canonical-rules/README.md); rest stay on legacy 172. */
+const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
+  medicine: 230,
+  nursing: 237,
+  dentistry: 237,
+  pharmacy: 240,
+  physiotherapy: 240,
+  radiography: 237,
+};
+
 describe('writing rulebook coverage matrix', () => {
   for (const profession of ALL_WRITING_PROFESSIONS) {
     it(`${profession} has a valid coverage row for every canonical rule`, () => {
@@ -30,7 +40,7 @@ describe('writing rulebook coverage matrix', () => {
 
       const book = loadRulebook('writing', profession);
       const matrix = buildWritingRuleCoverageMatrix(profession);
-      expect(matrix).toHaveLength(172);
+      expect(matrix).toHaveLength(CANONICAL_PROFESSION_COUNTS[profession] ?? 172);
       expect(matrix.map((row) => row.ruleId)).toEqual(book.rules.map((rule) => rule.id));
     });
   }

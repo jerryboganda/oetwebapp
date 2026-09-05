@@ -125,6 +125,34 @@ public class WritingScenario
     [MaxLength(64)]
     public string? SourceContentPaperId { get; set; }
 
+    /// <summary>
+    /// Admin-confirmed recipient wording, as it should appear/be understood in
+    /// the letter (e.g. "Dr Helena Vance, Dermatologist"). When set, this
+    /// overrides WritingTaskUnderstandingService's heuristic recipient
+    /// detection at the publish gate — the recipient is never guessed once an
+    /// admin has confirmed or corrected it. See RecipientNormalizedJson for
+    /// the machine-readable form.
+    /// </summary>
+    public string? RecipientRawText { get; set; }
+
+    /// <summary>
+    /// Admin-confirmed recipient, normalised: {"name": "...", "role": "...",
+    /// "category": "..."} where category matches
+    /// WritingTaskUnderstandingResult.RecipientCategory's vocabulary
+    /// (nurse, gp, named_or_unnamed_clinician, etc.). Nullable JSON string.
+    /// </summary>
+    public string? RecipientNormalizedJson { get; set; }
+
+    /// <summary>
+    /// Admin-confirmed purpose/clinical request for this task (e.g. "Refer
+    /// for assessment of severe acne and possible rosacea"). When set,
+    /// overrides WritingTaskUnderstandingService's heuristic diagnosis/plan
+    /// extraction at the publish gate — a task is never blocked on
+    /// diagnosis_or_request_unresolved once an admin has confirmed the
+    /// clinical purpose in their own words.
+    /// </summary>
+    public string? ConfirmedPurposeText { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
 }
 

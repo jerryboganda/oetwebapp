@@ -16,9 +16,13 @@ public partial class LearnerDbContext
         {
             e.HasKey(x => x.Id);
             e.Property(x => x.TopicsJson).HasColumnType("jsonb").HasDefaultValue("[]");
+            e.Property(x => x.RecipientNormalizedJson).HasColumnType("jsonb");
             e.HasIndex(x => new { x.Profession, x.LetterType });
             e.HasIndex(x => x.Status);
             e.HasIndex(x => x.IsDiagnostic);
+            // Unique: a duplicate InternalCode has been observed live (WR-0188
+            // on two rows) — see 20260907090001_AddWritingScenarioRecipientPurposeOverrides.
+            e.HasIndex(x => x.InternalCode).IsUnique();
         });
 
         modelBuilder.Entity<WritingScenarioStructuredSentence>(e =>

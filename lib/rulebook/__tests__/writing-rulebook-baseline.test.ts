@@ -3,32 +3,48 @@ import { loadRulebook } from '../loader';
 import type { ExamProfession } from '../types';
 
 /**
- * Baseline structural lock for the Writing rulebook across all 13
- * professions. Prevents silent rule deletions or section drift.
+ * Baseline structural lock for the Writing rulebook.
  *
- * The canonical ID set is generated programmatically from
- * SECTION_RULE_COUNTS so the test failure message can name exactly
- * which IDs are missing per profession.
+ * As of the canonical-registry migration (docs/canonical-rules/README.md),
+ * scoring truth for the six professions with live Writing content
+ * (medicine, nursing, dentistry, pharmacy, physiotherapy, radiography) comes
+ * from `OET_AI_Rules_Master.jsonl` — NOT the legacy 172-rule `R##.#` set,
+ * which the registry's own deployment contract marks
+ * `never_load_as_scoring_truth`. The remaining seven professions have no
+ * live Writing tasks yet and stay on the legacy 172-rule baseline until a
+ * canonical pack is built for them.
+ *
+ * This file locks both halves: the legacy 172-rule baseline for the
+ * not-yet-migrated professions (unchanged from before), and the canonical
+ * baseline for the six migrated professions (rule counts from the registry,
+ * and — the core regression this migration existed to fix — a hard
+ * assertion that no legacy `R##.#` rule id is ever active for them again).
  */
 
-const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
-  'medicine',
-  'nursing',
-  'dentistry',
-  'physiotherapy',
-  'pharmacy',
+const LEGACY_PROFESSIONS: ExamProfession[] = [
   'dietetics',
   'occupational-therapy',
   'optometry',
   'podiatry',
-  'radiography',
   'speech-pathology',
   'veterinary',
   'other-allied-health',
 ];
 
+/** Per-profession active rule count, from the vendored canonical registry. */
+const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
+  medicine: 230,
+  nursing: 237,
+  dentistry: 237,
+  pharmacy: 240,
+  physiotherapy: 240,
+  radiography: 237,
+};
+
+const CANONICAL_PROFESSIONS = Object.keys(CANONICAL_PROFESSION_COUNTS) as ExamProfession[];
+
 /**
- * Per-section expected rule count.
+ * Per-section expected rule count for the LEGACY set only.
  * Section ID → number of rules (R{section}.1 .. R{section}.N).
  * Sum = 172.
  */
@@ -56,14 +72,7 @@ const TOTAL_RULE_COUNT = Object.values(SECTION_RULE_COUNTS).reduce(
   0,
 );
 
-/**
- * Per-profession expected total rule count. Defaults to
- * TOTAL_RULE_COUNT (172) for every profession; override here if a
- * profession legitimately differs.
- */
-const PROFESSION_BASELINES: Partial<Record<ExamProfession, number>> = {};
-
-function expectedRuleIds(): string[] {
+function expectedLegacyRuleIds(): string[] {
   const ids: string[] = [];
   for (const [section, count] of Object.entries(SECTION_RULE_COUNTS)) {
     for (let i = 1; i <= count; i++) {
@@ -73,27 +82,27 @@ function expectedRuleIds(): string[] {
   return ids;
 }
 
-const CANONICAL_IDS = expectedRuleIds();
+const CANONICAL_LEGACY_IDS = expectedLegacyRuleIds();
 const VALID_SEVERITIES = ['critical', 'major', 'minor', 'info'] as const;
+const LEGACY_ID_PATTERN = /^R\d{2}\.\d+$/;
 
 describe('writing rulebooks — structural baseline lock', () => {
-  it('canonical ID list sums to the documented total (172)', () => {
-    expect(CANONICAL_IDS.length).toBe(TOTAL_RULE_COUNT);
+  it('legacy canonical ID list sums to the documented total (172)', () => {
+    expect(CANONICAL_LEGACY_IDS.length).toBe(TOTAL_RULE_COUNT);
     expect(TOTAL_RULE_COUNT).toBe(172);
   });
 
-  for (const profession of ALL_WRITING_PROFESSIONS) {
-    describe(`writing/${profession}`, () => {
+  for (const profession of LEGACY_PROFESSIONS) {
+    describe(`writing/${profession} (legacy, not yet migrated)`, () => {
       const book = loadRulebook('writing', profession);
-      const expectedTotal = PROFESSION_BASELINES[profession] ?? TOTAL_RULE_COUNT;
 
-      it(`has exactly ${expectedTotal} rules`, () => {
-        expect(book.rules.length).toBe(expectedTotal);
+      it(`has exactly ${TOTAL_RULE_COUNT} rules`, () => {
+        expect(book.rules.length).toBe(TOTAL_RULE_COUNT);
       });
 
       it('contains every canonical rule ID (no silent deletions)', () => {
         const present = new Set(book.rules.map((r) => r.id));
-        const missing = CANONICAL_IDS.filter((id) => !present.has(id));
+        const missing = CANONICAL_LEGACY_IDS.filter((id) => !present.has(id));
         expect(
           missing,
           `Profession "${profession}" is missing ${missing.length} canonical rule ID(s): ${missing.join(', ')}`,
@@ -101,7 +110,7 @@ describe('writing rulebooks — structural baseline lock', () => {
       });
 
       it('does not introduce unexpected rule IDs beyond the canonical set', () => {
-        const canonical = new Set(CANONICAL_IDS);
+        const canonical = new Set(CANONICAL_LEGACY_IDS);
         const unexpected = book.rules
           .map((r) => r.id)
           .filter((id) => !canonical.has(id));
@@ -145,6 +154,55 @@ describe('writing rulebooks — structural baseline lock', () => {
         expect(
           mismatches,
           `Profession "${profession}" has ${mismatches.length} rule(s) with section/id mismatch: ${mismatches.join('; ')}`,
+        ).toEqual([]);
+      });
+    });
+  }
+
+  for (const profession of CANONICAL_PROFESSIONS) {
+    describe(`writing/${profession} (canonical registry)`, () => {
+      const book = loadRulebook('writing', profession);
+      const expectedTotal = CANONICAL_PROFESSION_COUNTS[profession]!;
+
+      it(`has exactly ${expectedTotal} active canonical rules`, () => {
+        expect(book.rules.length).toBe(expectedTotal);
+      });
+
+      it('never loads a legacy R##.# rule id as active scoring truth', () => {
+        const legacyIds = book.rules.map((r) => r.id).filter((id) => LEGACY_ID_PATTERN.test(id));
+        expect(
+          legacyIds,
+          `Profession "${profession}" has ${legacyIds.length} legacy-format rule id(s) active: ${legacyIds.join(', ')}. ` +
+            'The canonical registry deployment contract marks these never_load_as_scoring_truth.',
+        ).toEqual([]);
+      });
+
+      it('rule ids are unique', () => {
+        const ids = book.rules.map((r) => r.id);
+        expect(new Set(ids).size).toBe(ids.length);
+      });
+
+      it('every rule has a non-empty body (>10 chars) and valid severity', () => {
+        const offenders: string[] = [];
+        for (const rule of book.rules) {
+          if (typeof rule.body !== 'string' || rule.body.trim().length <= 10) {
+            offenders.push(`${rule.id} (body too short)`);
+          }
+          if (!VALID_SEVERITIES.includes(rule.severity)) {
+            offenders.push(`${rule.id} (invalid severity: ${String(rule.severity)})`);
+          }
+        }
+        expect(
+          offenders,
+          `Profession "${profession}" has ${offenders.length} rule(s) failing body/severity checks: ${offenders.join('; ')}`,
+        ).toEqual([]);
+      });
+
+      it('only uses critical/major severity (canonical mapping has no minor/info tier)', () => {
+        const offTier = book.rules.filter((r) => r.severity !== 'critical' && r.severity !== 'major');
+        expect(
+          offTier.map((r) => `${r.id} (${r.severity})`),
+          'Every active canonical rule must be surfaced to the grader — see docs/canonical-rules/README.md severity mapping.',
         ).toEqual([]);
       });
     });

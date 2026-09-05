@@ -1,0 +1,89 @@
+{
+  "schema_version": "1.0",
+  "release_date": "2026-08-31",
+  "canonical_registry": "OET_AI_Rules_Master.json",
+  "streaming_registry": "OET_AI_Rules_Master.jsonl",
+  "evidence_corpus": "OET_Transcript_Evidence_Corpus.jsonl",
+  "source_manifest": "OET_AI_Source_Manifest.json",
+  "legacy_audit": "OET_Legacy_Medicine_Rule_Audit.json",
+  "governance_pdf": "OET AI Source of Truth - Master Index and Governance.pdf",
+  "rule_loading": {
+    "required_filter": "active_for_ai == true",
+    "route_by": [
+      "profession",
+      "skill"
+    ],
+    "never_load_as_scoring_truth": [
+      "legacy_audit entries",
+      "LEGACY_INACTIVE provenance"
+    ],
+    "authority_precedence": [
+      "OET_OFFICIAL",
+      "GENERAL_ENGLISH_VALIDATED",
+      "DR_HESHAM_DIRECT",
+      "PROFESSION_RESOURCE",
+      "DR_HESHAM_PREFERENCE",
+      "DERIVED_PROFESSION",
+      "LEGACY_INACTIVE"
+    ]
+  },
+  "ai_behavior_contract": [
+    "Link grading or feedback to rule IDs and the relevant OET criterion.",
+    "Preserve case-note facts, chronology, certainty, medicines, doses, units, laterality and requested action.",
+    "Distinguish official OET requirement, standard-English error, Dr Hesham teaching method, profession evidence and style preference.",
+    "Do not reject a grammatically valid alternative solely because it differs from a teaching template.",
+    "Do not invent clinical facts or turn OET Speaking into a medical-knowledge viva.",
+    "Escalate clinically material factual distortions even when surface grammar is correct.",
+    "For volatile OET operational logistics, verify current official OET information when deploying a future release."
+  ],
+  "registries": {
+    "Medicine": {
+      "Writing": {
+        "active_rules": 230
+      },
+      "Speaking": {
+        "active_rules": 136
+      }
+    },
+    "Nursing": {
+      "Writing": {
+        "active_rules": 237
+      },
+      "Speaking": {
+        "active_rules": 142
+      }
+    },
+    "Pharmacy": {
+      "Writing": {
+        "active_rules": 240
+      },
+      "Speaking": {
+        "active_rules": 145
+      }
+    },
+    "Physiotherapy": {
+      "Writing": {
+        "active_rules": 240
+      },
+      "Speaking": {
+        "active_rules": 144
+      }
+    },
+    "Dentistry": {
+      "Writing": {
+        "active_rules": 237
+      },
+      "Speaking": {
+        "active_rules": 142
+      }
+    },
+    "Radiography": {
+      "Writing": {
+        "active_rules": 237
+      },
+      "Speaking": {
+        "active_rules": 142
+      }
+    }
+  }
+}

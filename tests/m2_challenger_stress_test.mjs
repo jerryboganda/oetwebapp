@@ -183,7 +183,19 @@ const ALL_12_PROFESSIONS = [
   'other-allied-health',
 ];
 
-test('Verify rulebook registration and 172-rule baseline for all 12 professions', () => {
+// Migrated to the canonical OET_AI_Rules_Master.jsonl registry
+// (docs/canonical-rules/README.md); everything else stays on the legacy
+// 172-rule baseline until a canonical pack exists for it.
+const CANONICAL_PROFESSION_COUNTS = {
+  medicine: 230,
+  nursing: 237,
+  dentistry: 237,
+  pharmacy: 240,
+  physiotherapy: 240,
+  radiography: 237,
+};
+
+test('Verify rulebook registration and expected rule baseline for all 12 professions', () => {
   const registered = listRulebooks()
     .filter((b) => b.kind === 'writing')
     .map((b) => b.profession);
@@ -193,7 +205,8 @@ test('Verify rulebook registration and 172-rule baseline for all 12 professions'
     const book = loadRulebook('writing', p);
     assert.equal(book.kind, 'writing');
     assert.equal(book.profession, p);
-    assert.equal(book.rules.length, 172, `Profession ${p} must have canonical 172 rules baseline`);
+    const expected = CANONICAL_PROFESSION_COUNTS[p] ?? 172;
+    assert.equal(book.rules.length, expected, `Profession ${p} must have ${expected} rules baseline`);
     assert.ok(book.sections.length > 0, `Profession ${p} sections must not be empty`);
   }
 });
