@@ -55,11 +55,9 @@ public static class ReadingLearnerEndpoints
         {
             var globalPolicy = await policyService.GetGlobalAsync(ct);
             var paper = await db.ContentPapers.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == paperId
-                    && p.SubtestCode == "reading"
-                    && p.CandidateVisible
-                    && (p.Status == ContentStatus.Published
-                        || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
+                .Where(p => p.Id == paperId && p.SubtestCode == "reading")
+                .WhereAttemptable(globalPolicy.AllowAttemptOnArchivedPaper)
+                .FirstOrDefaultAsync(ct);
             if (paper is null)
                 return Results.NotFound();
 
@@ -1042,11 +1040,9 @@ public static class ReadingLearnerEndpoints
 
             var globalPolicy = await policyService.GetGlobalAsync(ct);
             var paper = await db.ContentPapers.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == paperId
-                    && p.SubtestCode == "reading"
-                    && p.CandidateVisible
-                    && (p.Status == ContentStatus.Published
-                        || (globalPolicy.AllowAttemptOnArchivedPaper && p.Status == ContentStatus.Archived)), ct);
+                .Where(p => p.Id == paperId && p.SubtestCode == "reading")
+                .WhereAttemptable(globalPolicy.AllowAttemptOnArchivedPaper)
+                .FirstOrDefaultAsync(ct);
             if (paper is null || !await CanLearnerSeePaperAsync(db, http, userId, paper, ct))
                 return Results.NotFound();
 

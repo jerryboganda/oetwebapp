@@ -53,9 +53,8 @@ public sealed class ListeningLearnerService(
         var papers = await db.ContentPapers.AsNoTracking()
             .Include(p => p.Assets.Where(a => a.IsPrimary))
                 .ThenInclude(a => a.MediaAsset)
-            .Where(p => p.Status == ContentStatus.Published
-                && p.CandidateVisible
-                && p.SubtestCode == Subtest
+            .WhereCandidateVisible()
+            .Where(p => p.SubtestCode == Subtest
                 && (p.AppliesToAllProfessions
                     || (!string.IsNullOrWhiteSpace(profession) && p.ProfessionId == profession)))
             .OrderByDescending(p => p.Priority)
@@ -2680,7 +2679,7 @@ public sealed class ListeningLearnerService(
             return;
         }
 
-        if (paper.Status != ContentStatus.Published || !paper.CandidateVisible)
+        if (!ContentVisibility.IsCandidateVisible(paper))
         {
             // Hidden test/demo/staging papers are indistinguishable from
             // missing ones: direct URLs and API calls get a 404, never the

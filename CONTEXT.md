@@ -102,6 +102,10 @@ _Avoid_: Upload, blob
 Explicit publish gate on ContentPaper; candidate surfaces show only Published + Visible papers.
 _Avoid_: Published (alone), live, enabled
 
+**ContentVisibility**:
+The deep module owning the fail-closed gate (`IsCandidateVisible` + query extension); every learner surface routes through it, never re-deriving the Published/Visible predicate.
+_Avoid_: Inline status checks, straggler predicates
+
 ### Attempts and Scoring
 
 **Attempt**:
