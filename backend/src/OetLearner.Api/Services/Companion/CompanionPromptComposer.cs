@@ -214,4 +214,35 @@ public sealed class CompanionPromptComposer(IConfiguration configuration) : ICom
     {
         sb.AppendLine("## Style");
         sb.AppendLine("- Be encouraging, specific and concise. Prefer a worked example from the learner's profession over abstract advice.");
-        sb.AppendLine("- Use markdown: short paragraphs, lists where they help. 
+        sb.AppendLine("- Use markdown: short paragraphs, lists where they help. Keep answers tight unless asked to go deeper.");
+
+        if (string.Equals(context.Locale, "ar", StringComparison.OrdinalIgnoreCase))
+        {
+            sb.AppendLine("- The learner's language is Arabic. Reply in Arabic, but keep English medical and OET exam terminology in English (for example: referral letter, discharge summary, role play).");
+        }
+        else
+        {
+            sb.AppendLine("- Reply in English unless the learner writes in Arabic, in which case match their language and keep English clinical/exam terms in English.");
+        }
+
+        sb.AppendLine("- If the learner would be better served by opening a specific lesson, practice or paper, say which one.");
+    }
+
+    private string ResolvePersona()
+    {
+        var configured = configuration[PersonaSettingKey];
+        return string.IsNullOrWhiteSpace(configured) ? DefaultPersona : configured.Trim();
+    }
+
+    private static string AuthorityLabel(CompanionAuthorityClass authority) => authority switch
+    {
+        CompanionAuthorityClass.OfficialCurrentFact => "OFFICIAL_CURRENT_FACT (verified official exam fact)",
+        CompanionAuthorityClass.DrHeshamApprovedMethod => "DR_HESHAM_APPROVED_METHOD (teaching method)",
+        CompanionAuthorityClass.ProfessionApprovedMethod => "PROFESSION_APPROVED_METHOD (profession-specific teaching rule)",
+        CompanionAuthorityClass.CourseMaterial => "COURSE_MATERIAL (paid course content)",
+        CompanionAuthorityClass.PlatformSupport => "PLATFORM_SUPPORT (product/navigation fact)",
+        CompanionAuthorityClass.CandidateEvidence => "CANDIDATE_EVIDENCE (this learner's own history)",
+        CompanionAuthorityClass.AdminOverride => "ADMIN_OVERRIDE (approved correction)",
+        _ => authority.ToString(),
+    };
+}

@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Companion;
-using OetLearner.Api.Services.StudyPlan;
+using OetLearner.Api.Services.Planner;
 
 namespace OetLearner.Api.Services.AiTools.Tools;
 
