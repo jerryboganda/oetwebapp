@@ -34,6 +34,10 @@ _Avoid_: Session (bare), order, transaction
 Manual-approval grant state for Products 1–29; grant occurs only after admin approval, unlike instant grant on confirmed payment (Products 30–47).
 _Avoid_: Pending payment, on hold
 
+**Fulfilment**:
+The deep module turning a paid source (checkout session, gateway order, invoice) into grants exactly once, with paid-only invoice evidence; webhook, manual-proof, and renewal paths are sources feeding it, never parallel grant owners.
+_Avoid_: Fulfillment (as scattered per-source logic), invoicing (as separate concern)
+
 ### Credits and Attempts
 
 **Shared Credits**:

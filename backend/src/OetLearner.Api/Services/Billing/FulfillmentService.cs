@@ -101,6 +101,16 @@ public sealed class FulfillmentService : IFulfillmentService
             return;
         }
 
+        // Idempotent short-circuit, mirroring FulfillCheckoutAsync: a replay
+        // of an already-fulfilled session returns before the grant core.
+        if (string.Equals(checkoutSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "FulfillCartByGatewayOrderAsync: session {OrderId} already fulfilled, skipping.",
+                gatewayOrderId);
+            return;
+        }
+
         await FulfillResolvedCheckoutAsync(checkoutSession, gatewayOrderId, stripeSubscriptionId: null, ct);
     }
 
@@ -285,6 +295,25 @@ public sealed class FulfillmentService : IFulfillmentService
         }
         sub.UpdatedAt = now;
 
+        // Idempotency gate AFTER period resolution: the renewal key derives
+        // from the period, which is only known once Stripe answers (or the
+        // local row is trusted), so pre-Stripe gating would need schema.
+        // A replay of an already-fulfilled period performs no grants, writes
+        // no events, and sends no notifications.
+        var renewalIdem = $"renewal-{stripeSubscriptionId}-{sub.CurrentPeriodStart:yyyyMMdd}";
+        var alreadyFulfilled = await _db.BillingEvents.AsNoTracking()
+            .AnyAsync(e => e.EventType == "subscription.renewed"
+                && e.EntityId == sub.Id.ToString()
+                && e.PayloadJson != null
+                && e.PayloadJson.Contains(renewalIdem), ct);
+        if (alreadyFulfilled)
+        {
+            _logger.LogInformation(
+                "FulfillSubscriptionRenewalAsync: subscription {SubId} already fulfilled for {RenewalKey}, skipping.",
+                stripeSubscriptionId, renewalIdem);
+            return;
+        }
+
         int creditsGranted = 0;
         if (sub.BillingProductId.HasValue)
         {
@@ -293,7 +322,6 @@ public sealed class FulfillmentService : IFulfillmentService
                 .FirstOrDefaultAsync(p => p.Id == sub.BillingProductId.Value, ct);
             if (product is not null)
             {
-                var renewalIdem = $"renewal-{stripeSubscriptionId}-{sub.CurrentPeriodStart:yyyyMMdd}";
                 creditsGranted = await GrantEntitlementsForProductAsync(
                     sub.UserId, product, quantity: 1,
                     sourceType: "subscription_renewal",
@@ -313,7 +341,8 @@ public sealed class FulfillmentService : IFulfillmentService
             {
                 stripeSubscriptionId,
                 creditsGranted,
-                periodEnd = sub.CurrentPeriodEnd
+                periodEnd = sub.CurrentPeriodEnd,
+                renewalIdem,
             });
 
         await _db.SaveChangesAsync(ct);

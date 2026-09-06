@@ -1,5 +1,5 @@
 {
-  "companion.page.title": "تحدّث إلى مرشدك",
+  "companion.page.title": "تحدّث إلى {persona}",
   "companion.page.subtitle": "اسأل عن الامتحان أو خطتك أو أي شيء تواجه صعوبة فيه.",
   "companion.page.eyebrow": "المرشد التعليمي بالذكاء الاصطناعي",
   "companion.disabled.title": "لم يتم تفعيل المرشد بعد",
@@ -23,5 +23,25 @@
   "companion.thread.none": "لا توجد محادثات سابقة بعد.",
   "companion.thread.untitled": "محادثة بدون عنوان",
   "companion.error.dismiss": "إغلاق",
-  "companion.grounding.note": "لا يقدّم المرشد استشارات طبية، ولا يقدّر احتمال نجاحك في الامتحان."
+  "companion.grounding.note": "لا يقدّم المرشد استشارات طبية، ولا يقدّر احتمال نجاحك في الامتحان.",
+  "companion.paywall.title": "المرشد غير مُتضمَّن في باقتك بعد",
+  "companion.paywall.currentPlan": "باقتك الحالية: {plan}",
+  "companion.paywall.cta": "استعراض الباقات",
+  "companion.paywall.reason.ok": "المرشد متاح على حسابك.",
+  "companion.paywall.reason.companionDisabled": "لم يتم تفعيل المرشد على حسابك بعد.",
+  "companion.paywall.reason.aiDisabled": "خصائص الذكاء الاصطناعي معطّلة على حسابك. تواصل مع الدعم إذا كان ذلك غير متوقّع.",
+  "companion.paywall.reason.killSwitch": "خصائص الذكاء الاصطناعي متوقفة مؤقتًا على المنصة. برجاء المحاولة بعد قليل.",
+  "companion.paywall.reason.policyUnavailable": "تعذّرت قراءة بيانات باقتك الآن. برجاء المحاولة بعد لحظات.",
+  "companion.paywall.reason.planExcludes": "باقتك الحالية لا تتضمّن المرشد التعليمي بالذكاء الاصطناعي.",
+  "companion.paywall.reason.monthlyCap": "لقد استهلكت حصّة هذا الشهر من الذكاء الاصطناعي، وتتجدّد مع بداية الشهر القادم.",
+  "companion.paywall.reason.dailyCap": "لقد استهلكت حصّة اليوم من الذكاء الاصطناعي، وتتجدّد غدًا.",
+  "companion.paywall.benefit.grounded": "إجابات مبنية على كتب قواعد OET المعتمدة، مع ذكر المصدر",
+  "companion.paywall.benefit.plan": "إرشاد مرتبط بمحاولاتك ونقاط ضعفك وموعد امتحانك",
+  "companion.paywall.benefit.actions": "يفتح لك الدرس أو التدريب المناسب، ويضيف مهامّ إلى خطتك",
+  "companion.memory.title": "ما حفظه المرشد",
+  "companion.memory.description": "الملاحظات والكلمات التي حفظها المرشد لك. احذف أي شيء لا ترغب في الاحتفاظ به.",
+  "companion.memory.empty": "لا يوجد شيء محفوظ بعد.",
+  "companion.memory.reset": "حذف الكل",
+  "companion.memory.deleteNote": "حذف الملاحظة: {title}",
+  "companion.memory.deleteBookmark": "إزالة الكلمة المحفوظة: {term}"
 }

@@ -1,5 +1,5 @@
 {
-  "companion.page.title": "Talk to your companion",
+  "companion.page.title": "Talk to {persona}",
   "companion.page.subtitle": "Ask about the exam, your plan, or anything you are stuck on.",
   "companion.page.eyebrow": "AI Learning Companion",
   "companion.disabled.title": "The companion is not switched on yet",
@@ -23,5 +23,25 @@
   "companion.thread.none": "No previous conversations yet.",
   "companion.thread.untitled": "Untitled conversation",
   "companion.error.dismiss": "Dismiss",
-  "companion.grounding.note": "The companion cannot give clinical advice, and it will not estimate your chance of passing."
+  "companion.grounding.note": "The companion cannot give clinical advice, and it will not estimate your chance of passing.",
+  "companion.paywall.title": "Your companion is not included yet",
+  "companion.paywall.currentPlan": "Current plan: {plan}",
+  "companion.paywall.cta": "See plans",
+  "companion.paywall.reason.ok": "The companion is available on your account.",
+  "companion.paywall.reason.companionDisabled": "The companion is not switched on for your account yet.",
+  "companion.paywall.reason.aiDisabled": "AI features are disabled on your account. Contact support if you think this is wrong.",
+  "companion.paywall.reason.killSwitch": "AI features are temporarily paused across the platform. Please try again shortly.",
+  "companion.paywall.reason.policyUnavailable": "We could not read your plan just now. Please try again in a moment.",
+  "companion.paywall.reason.planExcludes": "Your current plan does not include the AI Learning Companion.",
+  "companion.paywall.reason.monthlyCap": "You have used this month’s AI allowance. It resets at the start of next month.",
+  "companion.paywall.reason.dailyCap": "You have used today’s AI allowance. It resets tomorrow.",
+  "companion.paywall.benefit.grounded": "Answers grounded in the approved OET rulebooks, with the source named",
+  "companion.paywall.benefit.plan": "Guidance tied to your own attempts, weaknesses and exam date",
+  "companion.paywall.benefit.actions": "Opens the right lesson or practice for you, and adds work to your plan",
+  "companion.memory.title": "What the companion saved",
+  "companion.memory.description": "Notes and words the companion saved for you. Delete anything you do not want kept.",
+  "companion.memory.empty": "Nothing saved yet.",
+  "companion.memory.reset": "Delete all",
+  "companion.memory.deleteNote": "Delete note: {title}",
+  "companion.memory.deleteBookmark": "Remove saved word: {term}"
 }
