@@ -184,10 +184,14 @@ public enum JobType
 
     PrivateSpeakingNoShowSweep,          // Detect/mark no-shows from Zoom attendance data (logically Private Speaking)
 
-    // NOTE: keep this value LAST. JobType is persisted as an int ordinal, so any new value
-    // MUST be appended at the very end to avoid renumbering existing BackgroundJobs rows.
+    // NOTE: keep new values appended at the very end. JobType is persisted
+    // as an int ordinal, so inserting anywhere else renumbers existing
+    // BackgroundJobs rows.
     MockBookingZoomCreate,               // Create the real Zoom meeting for a Full Mock speaking booking
-    MockBookingConfirmation              // Send the booking confirmation after Zoom provisioning
+    MockBookingConfirmation,             // Send the booking confirmation after Zoom provisioning
+
+    // ── Writing exemplar backfill (Option C: background generation) ──
+    WritingModelAnswerGeneration,  // Generate one task's pre-generated Model Answer (idempotent; skips fresh-ready)
 }
 
 public enum ConfidenceBand

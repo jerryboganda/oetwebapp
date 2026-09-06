@@ -36,6 +36,13 @@ public static class WritingTaskModelAnswerAdminEndpoints
         // rate limits are never burst. Never called from candidate submit.
         group.MapPost("/model-answers/generate-missing", GenerateMissingModelAnswers).WithAdminWrite("AdminContentWrite");
 
+        // Option C background generation: enqueue jobs and return
+        // immediately — the worker grinds through long-running max-thinking
+        // calls with no HTTP/proxy timeout pressure. Idempotent, resumable,
+        // restart-safe (stuck-job recovery), bounded retries, and skips
+        // fresh-ready answers with zero provider calls on redelivery.
+        group.MapPost("/model-answers/enqueue-missing", EnqueueMissingModelAnswers).WithAdminWrite("AdminContentWrite");
+
         return app;
     }
 
@@ -90,6 +97,29 @@ public static class WritingTaskModelAnswerAdminEndpoints
         var adminId = GetUserId(user) ?? "system";
         var result = await service.GenerateMissingAsync(adminId, limit, includeStale, ct);
         return Results.Ok(result);
+    }
+
+    private static async Task<IResult> EnqueueMissingModelAnswers(
+        IWritingTaskModelAnswerService service,
+        ClaimsPrincipal user,
+        [FromQuery] int limit = 25,
+        CancellationToken ct = default)
+    {
+        var adminId = GetUserId(user) ?? "system";
+        var result = await service.EnqueueMissingAsync(adminId, limit, ct);
+        return Results.Ok(new
+        {
+            requested = result.Requested,
+            enqueued = result.Enqueued,
+            skipped = result.Skipped,
+            items = result.Items.Select(i => new
+            {
+                scenarioId = i.ScenarioId,
+                title = i.Title,
+                outcome = i.Outcome,
+                holdReason = i.HoldReason,
+            }),
+        });
     }
 
     private static async Task<IResult> ApproveModelAnswer(

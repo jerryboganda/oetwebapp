@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Data;
@@ -720,6 +721,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                     .CompleteEvaluationAsync(job, cancellationToken);
                 await CompleteWritingEvaluationSideEffectsAsync(services, db, notifications, job, cancellationToken);
                 break;
+            case JobType.WritingModelAnswerGeneration:
+                await CompleteWritingModelAnswerGenerationAsync(services, job, cancellationToken);
+                break;
             case JobType.SpeakingTranscription:
                 await services.GetRequiredService<ISpeakingEvaluationPipeline>()
                     .CompleteTranscriptionAsync(job, cancellationToken);
@@ -1160,6 +1164,53 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
 
         record.EntitlementConsumed = true;
+    }
+
+    /// <summary>
+    /// Option C background exemplar worker: generates one task's
+    /// pre-generated Model Answer with no HTTP timeout pressure. The work
+    /// item itself is idempotent (Ready + fresh answers are skipped with zero
+    /// provider calls), so redelivery and stuck-job recovery after a restart
+    /// can never duplicate paid AI work. Transient infrastructure failures
+    /// throw so the standard bounded-retry machinery applies; content/quality
+    /// holds complete the job for human follow-up instead of burning retries.
+    /// </summary>
+    private static async Task CompleteWritingModelAnswerGenerationAsync(
+        IServiceProvider services, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParse(job.ResourceId, out var scenarioId))
+        {
+            throw new InvalidOperationException($"Model-answer job {job.Id} carries an invalid scenario id.");
+        }
+
+        string adminUserId = "system:background-worker";
+        try
+        {
+            using var document = JsonDocument.Parse(job.PayloadJson ?? "{}");
+            if (document.RootElement.TryGetProperty("requestedBy", out var requestedBy)
+                && requestedBy.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(requestedBy.GetString()))
+            {
+                adminUserId = requestedBy.GetString()!;
+            }
+        }
+        catch (JsonException)
+        {
+            // Malformed payload: fall back to the worker identity rather than failing the job.
+        }
+
+        var modelAnswers = services.GetRequiredService<OetLearner.Api.Services.Writing.IWritingTaskModelAnswerService>();
+        var outcome = await modelAnswers.GenerateIfNeededAsync(scenarioId, adminUserId, cancellationToken);
+        job.StatusMessage = $"Model-answer worker outcome for {scenarioId}: {outcome.Outcome}."
+            + (outcome.HoldReason is null ? string.Empty : $" Hold: {outcome.HoldReason}.");
+
+        if (OetLearner.Api.Services.Writing.WritingTaskModelAnswerService.IsTransientHold(outcome.HoldReason)
+            && !string.Equals(outcome.Outcome, "generated", StringComparison.Ordinal)
+            && !string.Equals(outcome.Outcome, "ready-skipped", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException(
+                $"Transient model-answer failure for scenario {scenarioId}: {outcome.HoldReason}.");
+        }
     }
 
     private static async Task CompleteWritingEvaluationSideEffectsAsync(IServiceProvider services, LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)

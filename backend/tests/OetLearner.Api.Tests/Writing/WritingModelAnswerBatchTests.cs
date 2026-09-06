@@ -52,11 +52,72 @@ public sealed class WritingModelAnswerBatchTests
         return id;
     }
 
-    /// <summary>190-word exemplar; every sentence shares facts with the seed case notes.</summary>
+    /// <summary>
+    /// Compliant exemplar: multi-paragraph formal letter, 180-200 BODY words,
+    /// every sentence grounded in the seed case-note fact, zero Critical
+    /// deterministic findings (Dear Doctor pairs with Yours faithfully; Re:
+    /// directly follows the salutation). Mirrors the production gate
+    /// (word-count, grounding, rule lint) the backfill must satisfy.
+    /// </summary>
     private static string ExemplarText()
+        => "Dear Doctor,\n"
+            + "Re: John Jones, respiratory review\n"
+            + "\n"
+            + "I am writing to refer John Jones, a 54 year old man with severe asthma, for respiratory review and ongoing management at City Clinic. John Jones attends City Clinic and needs ongoing management of his severe asthma with regular respiratory review at City Clinic for his severe asthma.\n"
+            + "\n"
+            + "John Jones is a 54 year old man with severe asthma attending City Clinic for respiratory review and ongoing management. His severe asthma requires ongoing management and regular respiratory review at City Clinic. John Jones continues to attend City Clinic where his severe asthma is reviewed and ongoing management is provided. Regular respiratory review at City Clinic supports ongoing management of severe asthma for John Jones. John Jones values regular respiratory review and ongoing management of his severe asthma at City Clinic each visit.\n"
+            + "\n"
+            + "Ongoing management of severe asthma for John Jones at City Clinic includes regular respiratory review at City Clinic. I would be grateful if you would see John Jones for respiratory review and ongoing management of his severe asthma. Thank you for seeing John Jones for ongoing management and respiratory review.\n"
+            + "\n"
+            + "Yours faithfully,";
+
+    // ── Option C background worker: enqueue + idempotent work items ──
+
+    [Fact]
+    public async Task EnqueueMissing_EnqueuesOnce_DuplicateEnqueueCollapses()
     {
-        const string sentence = "Dear Doctor, I am writing about John Jones and his severe asthma for respiratory review at City Clinic today.";
-        return string.Join(" ", Enumerable.Repeat(sentence, 10));
+        await using var db = NewDb();
+        await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
+        var svc = new WritingTaskModelAnswerService(
+            db, new ExemplarGateway(), new WritingRuleEngine(new RulebookLoader()),
+            TimeProvider.System, NullLogger<WritingTaskModelAnswerService>.Instance);
+
+        var first = await svc.EnqueueMissingAsync("admin-1", limit: 10, CancellationToken.None);
+        var second = await svc.EnqueueMissingAsync("admin-1", limit: 10, CancellationToken.None);
+
+        Assert.Equal(1, first.Enqueued);
+        Assert.Equal(0, second.Enqueued);
+        Assert.Equal(1, await db.BackgroundJobs.CountAsync(j =>
+            j.Type == JobType.WritingModelAnswerGeneration));
+    }
+
+    [Fact]
+    public async Task GenerateIfNeeded_SkipsFreshReady_WithZeroProviderCalls()
+    {
+        await using var db = NewDb();
+        var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
+        var gateway = new ExemplarGateway();
+        var svc = new WritingTaskModelAnswerService(
+            db, gateway, new WritingRuleEngine(new RulebookLoader()),
+            TimeProvider.System, NullLogger<WritingTaskModelAnswerService>.Instance);
+
+        var first = await svc.GenerateIfNeededAsync(scenarioId, "admin-1", CancellationToken.None);
+        Assert.Equal("generated", first.Outcome);
+        Assert.Equal(1, gateway.Calls);
+
+        // Redelivery (queue retry / restart recovery) must not spend again.
+        var second = await svc.GenerateIfNeededAsync(scenarioId, "admin-1", CancellationToken.None);
+        Assert.Equal("ready-skipped", second.Outcome);
+        Assert.Equal(1, gateway.Calls);
+    }
+
+    [Fact]
+    public void Transient_hold_classification_only_flags_generation_failures()
+    {
+        Assert.True(WritingTaskModelAnswerService.IsTransientHold("model_answer_generation_failed"));
+        Assert.False(WritingTaskModelAnswerService.IsTransientHold("model_answer_word_count_out_of_range"));
+        Assert.False(WritingTaskModelAnswerService.IsTransientHold("model_answer_unmapped_sentence"));
+        Assert.False(WritingTaskModelAnswerService.IsTransientHold(null));
     }
 
     private sealed class ExemplarGateway : IAiGatewayService

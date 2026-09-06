@@ -227,5 +227,182 @@ public sealed class WritingTaskUnderstandingTests
 
         Assert.Equal("named_or_unnamed_clinician", result.RecipientCategory);
     }
+
+    // ── Production catalogue remediation (44 live tasks, all detector gaps) ──
+
+    [Fact]
+    public void Referral_letter_task_counts_as_request_evidence()
+    {
+        // "write a letter of referral to Dr ..." is the OET staple phrasing;
+        // "referral" must count as clinical purpose evidence.
+        var result = WritingTaskUnderstandingService.Understand(
+            "Using the information in the case notes, write a letter of referral to the endodontist, Dr Patrick O'Malley.",
+            "She requires further endodontic treatment on tooth 37.",
+            "routine_referral");
+
+        Assert.False(string.IsNullOrWhiteSpace(result.DiagnosisOrPlanEvidence));
+        Assert.False(result.ConflictingEvidence);
+    }
+
+    [Fact]
+    public void Inline_diagnosis_in_case_notes_counts_as_evidence()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a referral letter to Dr Green requesting a review.",
+            "Mr Amir Akbari is married.\nHis diagnosis is Guillain-Barré Syndrome (GBS).\nHe lives in a rented house.",
+            "routine_referral");
+
+        Assert.Contains("Guillain", result.DiagnosisOrPlanEvidence, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Admission_diagnosis_line_counts_as_evidence()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a referral letter to Ms Jackson regarding the patient.",
+            "Admission diagnosis: multiple leg injuries and a closed Colles' fracture.",
+            "routine_referral");
+
+        Assert.False(string.IsNullOrWhiteSpace(result.DiagnosisOrPlanEvidence));
+    }
+
+    [Fact]
+    public void Transfer_letter_matching_configured_type_is_not_conflicting()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Using the information in the case notes, write a transfer letter to the Admissions Officer for immediate treatment.",
+            "Reason for transfer: rehabilitation care.",
+            "transfer");
+
+        Assert.False(result.ConflictingEvidence);
+        Assert.Equal("classified", result.Status);
+        Assert.Equal("transfer", result.PrimaryLetterType);
+    }
+
+    [Fact]
+    public void Transferred_to_phrasing_supports_transfer_classification()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter of referral to the Charge Nurse where he will be transferred to for rehabilitation after discharge.",
+            "His diagnosis is Guillain-Barré Syndrome.",
+            "transfer");
+
+        Assert.False(result.ConflictingEvidence);
+        Assert.Equal("transfer", result.PrimaryLetterType);
+    }
+
+    [Fact]
+    public void Social_worker_referral_matching_configured_type_is_not_conflicting()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to the social worker requesting assessment and help with living arrangements after discharge.",
+            "A social worker referral is planned as part of her discharge.",
+            "non_medical_referral");
+
+        Assert.False(result.ConflictingEvidence);
+        Assert.Equal("non_medical_referral", result.PrimaryLetterType);
+    }
+
+    [Fact]
+    public void Genuine_cross_type_conflict_still_requires_review()
+    {
+        // Configured routine with both discharge and urgent signals and no
+        // corroboration for either: still ambiguous, still blocked.
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a discharge letter for urgent admission to the emergency registrar.",
+            "Hospital admission and discharge planning are both mentioned.",
+            "routine_referral");
+
+        Assert.True(result.ConflictingEvidence);
+        Assert.Equal("requires_review", result.Status);
+    }
+
+    [Fact]
+    public void Hospital_director_recipient_resolves_as_health_facility()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to the Director of the Repatriation General Hospital and request that the hospital take over the care.",
+            "Her diagnosis is left lung resection.",
+            "transfer");
+
+        Assert.Equal("health_facility", result.RecipientCategory);
+    }
+
+    [Fact]
+    public void Hospice_recipient_resolves_as_health_facility()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to the Director of Nursing, Glen Haven Palliative Care Hospice, introducing this patient.",
+            "Prognosis: not expected to survive more than 3-4 months.",
+            "transfer");
+
+        Assert.Equal("health_facility", result.RecipientCategory);
+    }
+
+    [Fact]
+    public void Parents_recipient_resolves_as_family()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write to the child's parents with a summary of the injury and care needed.",
+            "X-ray showed a spiral fracture to the right tibia.",
+            "other");
+
+        Assert.Equal("family", result.RecipientCategory);
+    }
+
+    [Fact]
+    public void Foundation_section_recipient_resolves_as_health_facility()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to the Community Information Section of the Heart Foundation on the patient's behalf.",
+            "Diagnosis: obstructive coronary artery disease.",
+            "other");
+
+        Assert.Equal("health_facility", result.RecipientCategory);
+    }
+
+    [Fact]
+    public void Adr_report_task_counts_as_clinical_purpose()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to the Registrar of the Adverse Drug Reactions Data Bank reporting the suspected ADR.",
+            "Mrs Daniels started taking Drug X about two weeks ago and developed a rash.",
+            "other");
+
+        Assert.False(string.IsNullOrWhiteSpace(result.DiagnosisOrPlanEvidence));
+    }
+
+    [Fact]
+    public void Information_request_task_counts_as_purpose()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to Mr Styles, providing information on angina and use of his medication.",
+            "While in hospital, he was diagnosed with angina.",
+            "other");
+
+        Assert.False(string.IsNullOrWhiteSpace(result.DiagnosisOrPlanEvidence));
+    }
+
+    [Fact]
+    public void Daughter_carer_letter_counts_as_purpose()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to the daughter outlining her mother's medication regime and adverse effects.",
+            "On discharge, medication includes Lipitor 20mg every morning.",
+            "other");
+
+        Assert.False(string.IsNullOrWhiteSpace(result.DiagnosisOrPlanEvidence));
+    }
+
+    [Fact]
+    public void Requested_information_task_counts_as_purpose()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Write a letter to the Board. Include a response to each item the Board has requested information about.",
+            "The pharmacist forgot to check the expiry date on the tablets.",
+            "other");
+
+        Assert.False(string.IsNullOrWhiteSpace(result.DiagnosisOrPlanEvidence));
+    }
 }
 

@@ -76,7 +76,46 @@ public interface IWritingTaskModelAnswerService
         int limit,
         bool includeStale,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Single-task worker step for the background exemplar queue (Option C).
+    /// Idempotent: a Ready + fresh answer is returned untouched with outcome
+    /// <c>ready-skipped</c> and ZERO provider calls, so queue redelivery or
+    /// stuck-job recovery after a restart can never trigger a duplicate paid
+    /// AI request. Otherwise generates exactly once via
+    /// <see cref="GenerateAsync"/>.
+    /// </summary>
+    Task<WritingModelAnswerWorkItemResult> GenerateIfNeededAsync(
+        Guid scenarioId,
+        string adminUserId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Enqueues background generation jobs (Option C) for published tasks
+    /// lacking a fresh approved Model Answer. Fast and side-effect free
+    /// beyond the job rows: the worker grinds through them without any HTTP
+    /// timeout pressure. Skips tasks that already have a queued/processing
+    /// job (no duplicate workflows) and tasks already Ready + fresh.
+    /// </summary>
+    Task<WritingModelAnswerEnqueueResult> EnqueueMissingAsync(
+        string adminUserId,
+        int limit,
+        CancellationToken ct = default);
 }
+
+/// <summary>Outcome of one background exemplar work item.</summary>
+public sealed record WritingModelAnswerWorkItemResult(
+    Guid ScenarioId,
+    string Title,
+    string Outcome,
+    string? HoldReason);
+
+/// <summary>Outcome of one background enqueue call.</summary>
+public sealed record WritingModelAnswerEnqueueResult(
+    int Requested,
+    int Enqueued,
+    int Skipped,
+    IReadOnlyList<WritingModelAnswerWorkItemResult> Items);
 
 public sealed class WritingTaskModelAnswerService(
     LearnerDbContext db,
@@ -440,6 +479,185 @@ public sealed class WritingTaskModelAnswerService(
         }
 
         return new WritingModelAnswerBatchResult(items.Count, generated, held, skipped, items);
+    }
+
+    /// <summary>
+    /// Single-task background worker step (Option C). A Ready + fresh answer
+    /// is returned untouched with outcome <c>ready-skipped</c> and zero
+    /// provider calls, so queue redelivery or stuck-job recovery after a
+    /// restart can never trigger a duplicate paid AI request. Awaiting-approval
+    /// answers are likewise left alone. Otherwise generates exactly once.
+    /// </summary>
+    public async Task<WritingModelAnswerWorkItemResult> GenerateIfNeededAsync(
+        Guid scenarioId,
+        string adminUserId,
+        CancellationToken ct = default)
+    {
+        var scenario = await db.WritingScenarios.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
+        if (scenario is null)
+        {
+            return new WritingModelAnswerWorkItemResult(scenarioId, "(task removed)", "skipped", "scenario_not_found");
+        }
+
+        var existing = await db.WritingTaskModelAnswers.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ScenarioId == scenarioId, ct);
+        if (existing is not null && existing.Status == WritingAssessmentModelAnswerStatus.Ready)
+        {
+            var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing.SourceContentHash, ct);
+            if (fresh)
+            {
+                logger.LogInformation(
+                    "Model-answer worker skipped scenario {ScenarioId}: answer already Ready and fresh, no provider call.",
+                    scenarioId);
+                return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "ready-skipped", "already_ready");
+            }
+
+            if (!existing.IsCandidateVisible)
+            {
+                return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "skipped", "awaiting_approval");
+            }
+        }
+
+        WritingTaskModelAnswerDto outcome;
+        try
+        {
+            outcome = await GenerateAsync(scenarioId, adminUserId, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Model-answer worker threw for scenario {ScenarioId}.", scenarioId);
+            return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "held", "model_answer_generation_failed");
+        }
+
+        if (string.Equals(outcome.Status, WritingAssessmentModelAnswerStatus.Ready.ToString(), StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation(
+                "Model-answer worker generated Ready answer for scenario {ScenarioId} ({Title}).",
+                scenarioId, scenario.Title);
+            return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "generated", null);
+        }
+
+        logger.LogWarning(
+            "Model-answer worker held scenario {ScenarioId} ({Title}): {HoldReason}.",
+            scenarioId, scenario.Title, outcome.HoldReason);
+        return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "held", outcome.HoldReason);
+    }
+
+    /// <summary>
+    /// Returns true for hold reasons that indicate a transient infrastructure
+    /// failure (retry with backoff is worthwhile) as opposed to a content or
+    /// quality verdict (retrying is pointless without a content change).
+    /// </summary>
+    internal static bool IsTransientHold(string? holdReason)
+        => string.Equals(holdReason, "model_answer_generation_failed", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Enqueues background generation jobs (Option C) for published tasks
+    /// lacking a fresh approved Model Answer. Returns immediately: the
+    /// worker grinds through jobs with no HTTP timeout pressure. Skips tasks
+    /// with an already queued/processing job (no duplicate workflows) and
+    /// Ready + fresh tasks. Resumable: re-run to continue where it stopped.
+    /// </summary>
+    public async Task<WritingModelAnswerEnqueueResult> EnqueueMissingAsync(
+        string adminUserId,
+        int limit,
+        CancellationToken ct = default)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+        var now = clock.GetUtcNow();
+        var candidateIds = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Status == "published")
+            .OrderBy(s => s.UpdatedAt)
+            .Select(s => s.Id)
+            .Take(500)
+            .ToListAsync(ct);
+        if (candidateIds.Count == 0)
+        {
+            return new WritingModelAnswerEnqueueResult(0, 0, 0, []);
+        }
+
+        var answers = await db.WritingTaskModelAnswers.AsNoTracking()
+            .Where(a => candidateIds.Contains(a.ScenarioId))
+            .ToDictionaryAsync(a => a.ScenarioId, ct);
+        var busyScenarioIds = await db.BackgroundJobs.AsNoTracking()
+            .Where(j => j.Type == JobType.WritingModelAnswerGeneration
+                && (j.State == AsyncState.Queued || j.State == AsyncState.Processing))
+            .Select(j => j.ResourceId)
+            .ToListAsync(ct);
+        var busy = busyScenarioIds.Where(x => x is not null).ToHashSet();
+
+        var items = new List<WritingModelAnswerWorkItemResult>();
+        var enqueued = 0;
+        var skipped = 0;
+        foreach (var scenarioId in candidateIds)
+        {
+            if (enqueued >= limit) break;
+            ct.ThrowIfCancellationRequested();
+
+            var key = scenarioId.ToString("D");
+            if (busy.Contains(key))
+            {
+                skipped++;
+                continue;
+            }
+
+            var scenario = await db.WritingScenarios.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
+            if (scenario is null)
+            {
+                skipped++;
+                continue;
+            }
+
+            if (answers.TryGetValue(scenarioId, out var existing)
+                && existing.Status == WritingAssessmentModelAnswerStatus.Ready)
+            {
+                var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing.SourceContentHash, ct);
+                if (fresh || !existing.IsCandidateVisible)
+                {
+                    skipped++;
+                    continue;
+                }
+            }
+
+            // Deterministic job id (one per task): concurrent enqueuers
+            // collapse onto the same row instead of duplicating paid work.
+            // Saved per row so one duplicate never rolls back the batch.
+            var job = new BackgroundJobItem
+            {
+                Id = $"jb-wr-model-answer-{scenarioId:N}",
+                Type = JobType.WritingModelAnswerGeneration,
+                State = AsyncState.Queued,
+                ResourceId = key,
+                PayloadJson = JsonSerializer.Serialize(new { scenarioId = key, requestedBy = adminUserId, requestedAt = now }),
+                StatusReasonCode = "queued",
+                StatusMessage = $"Model Answer generation queued for '{scenario.Title}'.",
+                CreatedAt = now,
+                AvailableAt = now,
+                LastTransitionAt = now,
+            };
+            db.BackgroundJobs.Add(job);
+            try
+            {
+                await db.SaveChangesAsync(ct);
+            }
+            catch (DbUpdateException)
+            {
+                db.Entry(job).State = EntityState.Detached;
+                skipped++;
+                continue;
+            }
+
+            busy.Add(key);
+            enqueued++;
+            items.Add(new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "enqueued", null));
+        }
+
+        logger.LogInformation(
+            "Model-answer enqueue by {AdminUserId}: {Enqueued} enqueued, {Skipped} skipped.",
+            adminUserId, enqueued, skipped);
+        return new WritingModelAnswerEnqueueResult(candidateIds.Count, enqueued, skipped, items);
     }
 
     private async Task<bool> IsFreshAsync(

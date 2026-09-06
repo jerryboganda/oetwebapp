@@ -56,8 +56,9 @@ SELECT
         'packLetterType', v.letter_type
     ),
     jsonb_build_object(
-        'approvedBy', 'system:canonical-registry-migration',
-        'approvedAt', now(),
+        'approvedBy', 'Dr Ahmed Hesham',
+        'approvalDate', '2026-09-06',
+        'basis', 'Existing approved canonical OET Writing Source of Truth, approved profession-specific Writing Rule Books, and the exact profession x letter-type coverage required by the current 194-task production catalogue. Scope limited to the six approved professions (Medicine, Nursing, Pharmacy, Physiotherapy, Dentistry, Radiography); no additional profession approved. Global Formatting & Sign-Off rules remain system-wide for any future profession.',
         'evidence', 'Canonical OET_AI_Rules_Master.jsonl vendored to docs/canonical-rules/ (SHA-256 verified against HANDOFF_SHA256SUMS.txt); rulebooks/writing/<profession>/rulebook.v1.json rebuilt via scripts/rulebooks/build-canonical-writing-rulebooks.mjs. Source: live catalogue-compatibility export, 2026-09-05.',
         'migration', '20260907090000_ApproveCanonicalWritingAssessmentPacks'
     ),
