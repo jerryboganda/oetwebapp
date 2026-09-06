@@ -78,6 +78,20 @@ public class AiAssistantMessage
     [MaxLength(64)]
     public string? AiUsageRecordId { get; set; }
 
+    /// <summary>
+    /// AI Learning Companion citations for this assistant message: the approved
+    /// sources its answer was grounded in, as JSON. Null for every message that
+    /// was not produced by the companion path — including every admin/expert
+    /// assistant message, which has no retrieval step.
+    ///
+    /// <para>
+    /// Persisted rather than kept for the live turn only, because a citation the
+    /// learner loses on reload is not a citation: the claim "this came from the
+    /// writing rulebook" has to survive as long as the answer does.
+    /// </para>
+    /// </summary>
+    public string? CitationsJson { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public AiAssistantThread Thread { get; set; } = default!;

@@ -121,28 +121,6 @@ export async function adminGetWritingAttemptViolations(
   );
 }
 
-export async function adminFetchGrammarPublishGate(lessonId: string) {
-  return apiRequest<{ canPublish: boolean; errors: string[] }>(`/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/publish-gate`);
-}
-
-export async function adminPublishGrammarLessonV2(lessonId: string) {
-  return apiRequest<{ published: boolean; status: string; errors: string[] }>(`/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/publish`, { method: 'POST' });
-}
-
-export async function adminUnpublishGrammarLessonV2(lessonId: string) {
-  return apiRequest<{ id: string; status: string }>(`/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/unpublish`, { method: 'POST' });
-}
-
-export async function adminFetchGrammarStats(lessonId: string) {
-  return apiRequest<{
-    lessonId: string;
-    attempts: number;
-    uniqueLearners: number;
-    averageMasteryScore: number;
-    reviewItemsCreated: number;
-  }>(`/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/stats`);
-}
-
 export async function fetchStrategyGuides(params?: { examTypeCode?: string; subtestCode?: string; category?: string; q?: string; recommended?: boolean }) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);

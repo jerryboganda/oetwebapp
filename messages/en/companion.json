@@ -43,5 +43,6 @@
   "companion.memory.empty": "Nothing saved yet.",
   "companion.memory.reset": "Delete all",
   "companion.memory.deleteNote": "Delete note: {title}",
-  "companion.memory.deleteBookmark": "Remove saved word: {term}"
+  "companion.memory.deleteBookmark": "Remove saved word: {term}",
+  "companion.memory.export": "Export"
 }

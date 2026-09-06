@@ -106,12 +106,23 @@ public sealed class AiAssistantOrchestrator(
             // static prompt rather than dropping the turn — but the fallback cannot
             // leak protected content, because it carries no retrieved evidence.
             var systemPrompt = systemPromptProvider.GetSystemPrompt(role, userId);
+            IReadOnlyList<AssistantCitation> citations = Array.Empty<AssistantCitation>();
 
             if (!string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(role, "expert", StringComparison.OrdinalIgnoreCase))
             {
-                systemPrompt = await BuildCompanionPromptAsync(
+                var companion = await BuildCompanionPromptAsync(
                     scope.ServiceProvider, userId, userMessage, systemPrompt, turnCts.Token);
+                systemPrompt = companion.Prompt;
+                citations = companion.Citations;
+            }
+
+            // Emitted before the first token so the surface can show what the
+            // answer is grounded in while it is still being written. The client
+            // binds them to the message id that arrives with MessageComplete.
+            if (citations.Count > 0)
+            {
+                yield return new AssistantCitationsResolved(citations);
             }
 
             // Get available tools for role
@@ -159,6 +170,11 @@ public sealed class AiAssistantOrchestrator(
                         ThreadId = threadId,
                         Role = "assistant",
                         Content = responseText.ToString(),
+                        // Bound to the final answer only: the intermediate
+                        // tool-call messages are not what the learner reads.
+                        CitationsJson = citations.Count > 0
+                            ? JsonSerializer.Serialize(citations)
+                            : null,
                         CreatedAt = DateTimeOffset.UtcNow,
                     };
                     db.AiAssistantMessages.Add(assistantMsg);
@@ -256,7 +272,7 @@ public sealed class AiAssistantOrchestrator(
             .Skip(skip).Take(take)
             .Select(m => new AiAssistantMessageDto(
                 m.Id, m.Role, m.Content, m.ToolCallsJson,
-                m.ToolCallId, m.ToolName, m.Model, m.CreatedAt))
+                m.ToolCallId, m.ToolName, m.Model, m.CreatedAt, m.CitationsJson))
             .ToListAsync(ct);
     }
 
@@ -293,7 +309,7 @@ public sealed class AiAssistantOrchestrator(
     /// Builds the grounded companion system prompt for a learner turn.
     /// Resolved from the request scope because the companion services are scoped.
     /// </summary>
-    private async Task<string> BuildCompanionPromptAsync(
+    private async Task<CompanionPromptResult> BuildCompanionPromptAsync(
         IServiceProvider scopedProvider,
         string userId,
         string userMessage,
@@ -305,7 +321,7 @@ public sealed class AiAssistantOrchestrator(
             var flags = scopedProvider.GetRequiredService<ICompanionFeatureFlags>();
             if (!await flags.IsEnabledAsync(ct))
             {
-                return fallbackPrompt;
+                return new CompanionPromptResult(fallbackPrompt, Array.Empty<AssistantCitation>());
             }
 
             var contextResolver = scopedProvider.GetRequiredService<ICompanionContextResolver>();
@@ -319,14 +335,34 @@ public sealed class AiAssistantOrchestrator(
                 "Companion turn for {UserId}: {Evidence} evidence, vector={Vector}, conflict={Conflict}, examMode={ExamMode}",
                 userId, retrieval.Evidence.Count, retrieval.VectorSearchUsed, retrieval.AuthorityConflict, context.ExamMode);
 
-            return await composer.ComposeAsync(context, retrieval, ct);
+            var prompt = await composer.ComposeAsync(context, retrieval, ct);
+
+            // The [S#] labels in the prompt and the ordinals here are the same
+            // sequence, so a learner can match a claim to a source.
+            var citations = retrieval.Evidence
+                .Select((e, index) => new AssistantCitation(
+                    Ordinal: index + 1,
+                    SourceKey: e.SourceKey,
+                    SourceTitle: e.SourceTitle,
+                    Authority: e.Authority.ToString(),
+                    Heading: e.Heading,
+                    PageNumber: e.PageNumber,
+                    TimestampSeconds: e.TimestampSeconds))
+                .ToList();
+
+            return new CompanionPromptResult(prompt, citations);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Companion prompt composition failed for {UserId}; using the static learner prompt.", userId);
-            return fallbackPrompt;
+            return new CompanionPromptResult(fallbackPrompt, Array.Empty<AssistantCitation>());
         }
     }
+
+    /// <summary>Composed prompt plus the sources it was grounded in.</summary>
+    private sealed record CompanionPromptResult(
+        string Prompt,
+        IReadOnlyList<AssistantCitation> Citations);
 
     private static string GetFeatureCode(string role) => role switch
     {

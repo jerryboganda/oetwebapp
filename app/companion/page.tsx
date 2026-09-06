@@ -63,6 +63,7 @@ export default function CompanionPage() {
     activeThread,
     isStreaming,
     streamingContent,
+    citations,
     isConnected,
     connectionState,
     error,
@@ -203,6 +204,7 @@ export default function CompanionPage() {
                   <AiAssistantMessages
                     messages={messages}
                     streamingContent={isStreaming ? streamingContent : undefined}
+                    streamingCitations={isStreaming ? citations : undefined}
                   />
                 )}
               </div>

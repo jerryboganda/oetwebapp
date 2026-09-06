@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { Trash2 } from 'lucide-react';
+import { Download, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   deleteCompanionBookmark,
   deleteCompanionNote,
+  downloadCompanionMemory,
   fetchCompanionMemory,
   resetCompanionMemory,
 } from '@/lib/api/companion';
@@ -39,6 +40,7 @@ export function CompanionMemoryPanel() {
   const removeNote = useMutation({ mutationFn: deleteCompanionNote, onSuccess: invalidate });
   const removeBookmark = useMutation({ mutationFn: deleteCompanionBookmark, onSuccess: invalidate });
   const reset = useMutation({ mutationFn: resetCompanionMemory, onSuccess: invalidate });
+  const download = useMutation({ mutationFn: downloadCompanionMemory });
 
   const noteCount = memory.data?.notes.length ?? 0;
   const bookmarkCount = memory.data?.bookmarks.length ?? 0;
@@ -49,14 +51,25 @@ export function CompanionMemoryPanel() {
       <div className="flex items-start justify-between gap-2">
         <h2 className="text-sm font-semibold text-navy">{t('companion.memory.title')}</h2>
         {!isEmpty && !memory.isLoading && (
-          <button
-            type="button"
-            onClick={() => reset.mutate()}
-            disabled={reset.isPending}
-            className="text-xs text-muted underline transition-colors hover:text-navy disabled:opacity-50"
-          >
-            {t('companion.memory.reset')}
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => download.mutate()}
+              disabled={download.isPending}
+              className="inline-flex items-center gap-1 text-xs text-muted underline transition-colors hover:text-navy disabled:opacity-50"
+            >
+              <Download className="h-3 w-3" aria-hidden="true" />
+              {t('companion.memory.export')}
+            </button>
+            <button
+              type="button"
+              onClick={() => reset.mutate()}
+              disabled={reset.isPending}
+              className="text-xs text-muted underline transition-colors hover:text-danger disabled:opacity-50"
+            >
+              {t('companion.memory.reset')}
+            </button>
+          </div>
         )}
       </div>
 

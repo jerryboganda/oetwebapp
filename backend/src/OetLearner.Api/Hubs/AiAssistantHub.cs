@@ -108,6 +108,12 @@ public class AiAssistantHub(
                             cancellationToken: Context.ConnectionAborted);
                         break;
 
+                    case AssistantCitationsResolved citations:
+                        await Clients.Caller.SendAsync("Citations", threadId,
+                            citations.Citations,
+                            cancellationToken: Context.ConnectionAborted);
+                        break;
+
                     case AssistantTurnComplete complete:
                         await Clients.Caller.SendAsync("MessageComplete", threadId,
                             complete.MessageId, complete.FullContent,
@@ -159,3 +165,26 @@ public sealed record AssistantToolCallStart(string ToolCallId, string ToolName, 
 public sealed record AssistantToolCallResult(string ToolCallId, string ResultJson, bool IsError) : AssistantStreamEvent;
 public sealed record AssistantTurnComplete(string MessageId, string FullContent) : AssistantStreamEvent;
 public sealed record AssistantTurnError(string ErrorCode, string ErrorMessage) : AssistantStreamEvent;
+
+/// <summary>
+/// The approved sources an AI Learning Companion answer is grounded in, emitted
+/// before the first token. Only the companion path produces these; the admin and
+/// expert assistants have no retrieval step, so their turns never send this
+/// event and clients that ignore it are unaffected.
+/// </summary>
+public sealed record AssistantCitationsResolved(IReadOnlyList<AssistantCitation> Citations) : AssistantStreamEvent;
+
+/// <summary>
+/// One cited source. <paramref name="Ordinal"/> matches the <c>[S#]</c> label the
+/// prompt gave the model, so a claim in the answer can be traced to a source.
+/// Carries no source text — a citation names where an answer came from; it is not
+/// a second channel for delivering paid content.
+/// </summary>
+public sealed record AssistantCitation(
+    int Ordinal,
+    string SourceKey,
+    string SourceTitle,
+    string Authority,
+    string? Heading,
+    int? PageNumber,
+    int? TimestampSeconds);

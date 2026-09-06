@@ -43,5 +43,6 @@
   "companion.memory.empty": "لا يوجد شيء محفوظ بعد.",
   "companion.memory.reset": "حذف الكل",
   "companion.memory.deleteNote": "حذف الملاحظة: {title}",
-  "companion.memory.deleteBookmark": "إزالة الكلمة المحفوظة: {term}"
+  "companion.memory.deleteBookmark": "إزالة الكلمة المحفوظة: {term}",
+  "companion.memory.export": "تصدير"
 }

@@ -10,6 +10,7 @@ import {
   isApiError,
   isRetryable,
   maybe,
+  normalizeBillingCode,
   resolveApiUploadUrl,
   resolveApiUrl,
   resolveBrowserApiResourceUrl,
@@ -18,6 +19,7 @@ import {
   type ApiRecord,
 } from './api/client';
 export { ApiError, isApiError } from './api/client';
+import { fetchLearnerReviewResult, fetchLearnerReviewVoiceNotes } from './api/expert';
 import { mapMockBooking, normalizeMockDeliveryMode } from './api/mock-bookings';
 import { uploadMedia } from './api/content-discovery';
 import {
@@ -4401,1250 +4403,173 @@ export async function fetchExpertDashboard(): Promise<ExpertDashboardData> {
 }
 
 // ── Expert Onboarding ─────────────────────────────────────
-
-export async function fetchExpertOnboardingStatus(): Promise<ExpertOnboardingStatus> {
-  return apiRequest<ExpertOnboardingStatus>('/v1/expert/onboarding/status');
-}
-
-export async function saveExpertOnboardingProfile(data: ExpertOnboardingProfile): Promise<ExpertOnboardingProfile> {
-  return apiRequest<ExpertOnboardingProfile>('/v1/expert/onboarding/profile', {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function saveExpertOnboardingQualifications(data: ExpertOnboardingQualifications): Promise<ExpertOnboardingQualifications> {
-  return apiRequest<ExpertOnboardingQualifications>('/v1/expert/onboarding/qualifications', {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function saveExpertOnboardingRates(data: ExpertOnboardingRates): Promise<ExpertOnboardingRates> {
-  return apiRequest<ExpertOnboardingRates>('/v1/expert/onboarding/rates', {
-    method: 'PUT',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function completeExpertOnboarding(): Promise<{ completed: boolean }> {
-  return apiRequest<{ completed: boolean }>('/v1/expert/onboarding/complete', {
-    method: 'PATCH',
-  });
-}
-
-export async function fetchReviewQueue(params?: {
-  search?: string;
-  type?: string[];
-  profession?: string[];
-  priority?: string[];
-  status?: string[];
-  confidence?: string[];
-  assignment?: string[];
-  overdue?: boolean;
-  page?: number;
-  pageSize?: number;
-}): Promise<ReviewQueueResponse> {
-  const queryParams = new URLSearchParams();
-  if (params?.search?.trim()) queryParams.set('search', params.search.trim());
-  if (params?.type?.length) queryParams.set('type', params.type.join(','));
-  if (params?.profession?.length) queryParams.set('profession', params.profession.join(','));
-  if (params?.priority?.length) queryParams.set('priority', params.priority.join(','));
-  if (params?.status?.length) queryParams.set('status', params.status.join(','));
-  if (params?.confidence?.length) queryParams.set('confidence', params.confidence.join(','));
-  if (params?.assignment?.length) queryParams.set('assignment', params.assignment.join(','));
-  if (params?.overdue) queryParams.set('overdue', 'true');
-  if (params?.page) queryParams.set('page', String(params.page));
-  if (params?.pageSize) queryParams.set('pageSize', String(params.pageSize));
-  const query = queryParams.toString();
-  return apiRequest<ReviewQueueResponse>(`/v1/expert/queue${query ? `?${query}` : ''}`);
-}
-
-export async function fetchExpertQueueFilterMetadata(): Promise<ExpertQueueFilterMetadata> {
-  return apiRequest<ExpertQueueFilterMetadata>('/v1/expert/queue/filters/metadata');
-}
-
-export async function fetchExpertMetrics(days?: number): Promise<{ metrics: ExpertMetrics; completionData: { day: string; count: number }[]; days: number; generatedAt: string }> {
-  const query = days ? `?days=${days}` : '';
-  return apiRequest(`/v1/expert/metrics${query}`);
-}
-
-export async function fetchExpertSchedule(): Promise<ExpertSchedule> {
-  return apiRequest<ExpertSchedule>('/v1/expert/schedule');
-}
-
-export async function saveExpertSchedule(schedule: ExpertSchedule): Promise<ExpertSchedule> {
-  return apiRequest<ExpertSchedule>('/v1/expert/schedule', {
-    method: 'PUT',
-    body: JSON.stringify({ timezone: schedule.timezone, days: schedule.days }),
-  });
-}
-
-export async function fetchScheduleExceptions(from?: string, to?: string): Promise<{ exceptions: ScheduleException[] }> {
-  const params = new URLSearchParams();
-  if (from) params.set('from', from);
-  if (to) params.set('to', to);
-  const query = params.toString();
-  return apiRequest<{ exceptions: ScheduleException[] }>(`/v1/expert/schedule/exceptions${query ? `?${query}` : ''}`);
-}
-
-export async function createScheduleException(data: {
-  date: string;
-  isBlocked: boolean;
-  startTime?: string;
-  endTime?: string;
-  reason?: string;
-}): Promise<ScheduleException> {
-  return apiRequest<ScheduleException>('/v1/expert/schedule/exceptions', {
-    method: 'POST',
-    body: JSON.stringify(data),
-  });
-}
-
-export async function deleteScheduleException(exceptionId: string): Promise<{ deleted: boolean }> {
-  return apiRequest<{ deleted: boolean }>(`/v1/expert/schedule/exceptions/${encodeURIComponent(exceptionId)}`, {
-    method: 'DELETE',
-  });
-}
-
-export async function fetchCalibrationCases(): Promise<CalibrationCase[]> {
-  return apiRequest<CalibrationCase[]>('/v1/expert/calibration/cases');
-}
-
-export async function fetchCalibrationCaseDetail(caseId: string): Promise<CalibrationCaseDetail> {
-  return apiRequest<CalibrationCaseDetail>(`/v1/expert/calibration/cases/${encodeURIComponent(caseId)}`);
-}
-
-export async function fetchCalibrationNotes(): Promise<CalibrationNote[]> {
-  return apiRequest<CalibrationNote[]>('/v1/expert/calibration/notes');
-}
-
-export async function fetchExpertLearners(params?: {
-  search?: string;
-  profession?: string;
-  subTest?: string;
-  relevance?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<ExpertLearnerDirectoryResponse> {
-  const queryParams = new URLSearchParams();
-  if (params?.search?.trim()) queryParams.set('search', params.search.trim());
-  if (params?.profession) queryParams.set('profession', params.profession);
-  if (params?.subTest) queryParams.set('subTest', params.subTest);
-  if (params?.relevance) queryParams.set('relevance', params.relevance);
-  if (params?.page) queryParams.set('page', String(params.page));
-  if (params?.pageSize) queryParams.set('pageSize', String(params.pageSize));
-  const query = queryParams.toString();
-  return apiRequest<ExpertLearnerDirectoryResponse>(`/v1/expert/learners${query ? `?${query}` : ''}`);
-}
-
-export async function fetchLearnerProfile(learnerId: string): Promise<LearnerProfileExpanded> {
-  return apiRequest<LearnerProfileExpanded>(`/v1/expert/learners/${encodeURIComponent(learnerId)}`);
-}
-
-export async function fetchExpertLearnerReviewContext(learnerId: string): Promise<ExpertLearnerReviewContext> {
-  return apiRequest<ExpertLearnerReviewContext>(`/v1/expert/learners/${encodeURIComponent(learnerId)}/review-context`);
-}
-
-export async function fetchWritingReviewDetail(reviewRequestId: string): Promise<WritingReviewDetail> {
-  return apiRequest<WritingReviewDetail>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing`);
-}
-
-export async function addWritingReviewVoiceNote(reviewRequestId: string, payload: { mediaAssetId: string; durationSeconds?: number | null; transcriptText?: string; writtenNotes?: string; rubricScores?: Record<string, number>; }): Promise<{ reviewRequestId: string; item: ReviewVoiceNote }> {
-  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing/voice-notes`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function fetchLearnerReviewVoiceNotes(reviewRequestId: string): Promise<{ reviewRequestId: string; items: ReviewVoiceNote[] }> {
-  return apiRequest(`/v1/reviews/requests/${encodeURIComponent(reviewRequestId)}/voice-notes`);
-}
-
-// ── Per-criterion voice notes (Phase 7b — VoiceNoteRecorder) ──
-//
-// The backend voice-note endpoints (writing on ExpertEndpoints, speaking on
-// SpeakingReviewVoiceNoteEndpoints) accept JSON referencing a MediaAsset. To
-// keep the existing schema intact while still recording the *which-criterion*
-// signal, the recorder uploads the audio to /v1/media/upload, then attaches
-// the resulting MediaAsset with the criterion code carried through
-// `writtenNotes` (human-readable tag) and `rubricJson` (machine-readable, for
-// speaking). The shape returned is normalised to a small
-// `{ voiceNoteId, url }` envelope the recorder component can consume.
-export interface ReviewCriterionVoiceNoteResult {
-  voiceNoteId: string;
-  url: string;
-  mediaAssetId: string;
-}
-
-async function uploadReviewCriterionVoiceNote(
-  subtest: 'speaking' | 'writing',
-  reviewRequestId: string,
-  body: { audio: Blob; criterionCode: string; durationMs: number },
-): Promise<ReviewCriterionVoiceNoteResult> {
-  if (!reviewRequestId) {
-    throw new ApiError(400, 'review_request_required', 'Review request id is required.', false);
-  }
-  if (!body.criterionCode) {
-    throw new ApiError(400, 'criterion_required', 'Criterion code is required.', false);
-  }
-  if (!body.audio || body.audio.size === 0) {
-    throw new ApiError(400, 'audio_required', 'A non-empty audio blob is required.', false);
-  }
-
-  const inferredType = body.audio.type || 'audio/webm';
-  const fileExt = inferredType.includes('webm')
-    ? 'webm'
-    : inferredType.includes('mp4') || inferredType.includes('m4a')
-      ? 'm4a'
-      : inferredType.includes('wav')
-        ? 'wav'
-        : inferredType.includes('ogg')
-          ? 'ogg'
-          : 'webm';
-  const fileName = `voice-note-${subtest}-${body.criterionCode}-${Date.now()}.${fileExt}`;
-  const file = body.audio instanceof File ? body.audio : new File([body.audio], fileName, { type: inferredType });
-
-  const uploaded = await uploadMedia(file);
-  const durationSeconds = Math.max(0, Math.round(body.durationMs / 1000));
-  const writtenNotes = `[criterion:${body.criterionCode}] Voice note (${durationSeconds}s)`;
-
-  if (subtest === 'writing') {
-    const response = await addWritingReviewVoiceNote(reviewRequestId, {
-      mediaAssetId: uploaded.id,
-      durationSeconds,
-      writtenNotes,
-      // The criterion scores cannot be intuited here; carry only the criterion
-      // code via writtenNotes. rubricScores is left undefined so we don't
-      // accidentally overwrite the saved draft scores.
-    });
-    return {
-      voiceNoteId: response.item?.id ?? uploaded.id,
-      url: response.item?.url ?? uploaded.url,
-      mediaAssetId: uploaded.id,
-    };
-  }
-
-  // Speaking — POST to SpeakingReviewVoiceNoteEndpoints (JSON body).
-  const speakingResponse = await apiRequest<{ id: string; mediaAssetId?: string; url?: string }>(
-    `/v1/expert/speaking/reviews/${encodeURIComponent(reviewRequestId)}/voice-notes`,
-    {
-      method: 'POST',
-      body: JSON.stringify({
-        mediaAssetId: uploaded.id,
-        durationSeconds,
-        writtenNotes,
-        rubricJson: JSON.stringify({ criterionCode: body.criterionCode }),
-      }),
-    },
-  );
-
-  return {
-    voiceNoteId: speakingResponse.id ?? uploaded.id,
-    url: speakingResponse.url ?? uploaded.url,
-    mediaAssetId: uploaded.id,
-  };
-}
-
-export function uploadSpeakingReviewCriterionVoiceNote(
-  reviewRequestId: string,
-  body: { audio: Blob; criterionCode: string; durationMs: number },
-): Promise<ReviewCriterionVoiceNoteResult> {
-  return uploadReviewCriterionVoiceNote('speaking', reviewRequestId, body);
-}
-
-export function uploadWritingReviewCriterionVoiceNote(
-  reviewRequestId: string,
-  body: { audio: Blob; criterionCode: string; durationMs: number },
-): Promise<ReviewCriterionVoiceNoteResult> {
-  return uploadReviewCriterionVoiceNote('writing', reviewRequestId, body);
-}
-
-// ── Writing V2 marking voice note (System A, submission-keyed) ─────────────────
-// One overall tutor voice note per writing submission (mock + normal). Distinct
-// from uploadWritingReviewCriterionVoiceNote, which posts per-criterion notes to
-// the older ReviewRequest-keyed expert flow. The signature matches the
-// VoiceNoteRecorder `uploader` prop (criterionCode is accepted but ignored — the
-// note is always the overall one).
-export interface WritingMarkingVoiceNote {
-  id: string;
-  submissionId: string;
-  mediaAssetId: string;
-  url: string;
-  durationSeconds: number | null;
-  status: string;
-  createdAt: string;
-}
-
-export async function uploadWritingMarkingVoiceNote(
-  submissionId: string,
-  body: { audio: Blob; criterionCode?: string; durationMs: number },
-): Promise<ReviewCriterionVoiceNoteResult> {
-  if (!submissionId) {
-    throw new ApiError(400, 'submission_required', 'Submission id is required.', false);
-  }
-  if (!body.audio || body.audio.size === 0) {
-    throw new ApiError(400, 'audio_required', 'A non-empty audio blob is required.', false);
-  }
-
-  const inferredType = body.audio.type || 'audio/webm';
-  const fileExt = inferredType.includes('webm')
-    ? 'webm'
-    : inferredType.includes('mp4') || inferredType.includes('m4a')
-      ? 'm4a'
-      : inferredType.includes('wav')
-        ? 'wav'
-        : inferredType.includes('ogg')
-          ? 'ogg'
-          : 'webm';
-  const fileName = `voice-note-writing-overall-${Date.now()}.${fileExt}`;
-  const file = body.audio instanceof File ? body.audio : new File([body.audio], fileName, { type: inferredType });
-
-  const uploaded = await uploadMedia(file);
-  const durationSeconds = Math.max(0, Math.round(body.durationMs / 1000));
-  const response = await apiRequest<WritingMarkingVoiceNote>(
-    `/v1/writing/tutor/reviews/${encodeURIComponent(submissionId)}/voice-note`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ mediaAssetId: uploaded.id, durationSeconds }),
-    },
-  );
-  return {
-    voiceNoteId: response?.id ?? uploaded.id,
-    url: response?.url ?? uploaded.url,
-    mediaAssetId: uploaded.id,
-  };
-}
-
-export async function getWritingSubmissionVoiceNote(
-  submissionId: string,
-): Promise<WritingMarkingVoiceNote | null> {
-  return apiRequest<WritingMarkingVoiceNote | null>(
-    `/v1/writing/submissions/${encodeURIComponent(submissionId)}/voice-note`,
-    { method: 'GET' },
-  );
-}
-
-interface LearnerReviewResultCriterion {
-  code: string;
-  name: string;
-  score: number;
-  maxScore: number;
-  explanation: string;
-}
-
-interface LearnerReviewResultResponse {
-  reviewRequestId: string;
-  attemptId: string;
-  subtest: string;
-  state: string;
-  completedAt?: string | null;
-  submittedAt?: string | null;
-  finalComment: string;
-  scoreLabel?: string;
-  scores: Record<string, number>;
-  criterionComments: Record<string, string>;
-  criteria: LearnerReviewResultCriterion[];
-}
-
-export async function fetchLearnerReviewResult(reviewRequestId: string): Promise<LearnerReviewResultResponse> {
-  return apiRequest(`/v1/reviews/requests/${encodeURIComponent(reviewRequestId)}/result`);
-}
-
-export async function fetchSpeakingReviewDetail(reviewRequestId: string): Promise<SpeakingReviewDetail> {
-  return apiRequest<SpeakingReviewDetail>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/speaking`);
-}
-
-export async function fetchExpertReviewHistory(reviewRequestId: string): Promise<ExpertReviewHistory> {
-  return apiRequest<ExpertReviewHistory>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/history`);
-}
-
-export async function saveDraftReview(draft: ReviewDraft): Promise<ReviewDraft> {
-  const comments = Array.isArray(draft.comments) ? draft.comments : [];
-  const hasTimestampComments = comments.some((comment) => 'timestampStart' in comment);
-  const response = await apiRequest<{
-    version: number;
-    state: string;
-    scores: Record<string, number>;
-    criterionComments: Record<string, string>;
-    finalComment: string;
-    anchoredComments: ReviewDraft['comments'];
-    timestampComments: ReviewDraft['comments'];
-    scratchpad: string;
-    checklistItems: { id: string; label: string; checked: boolean }[];
-    savedAt: string;
-  }>(`/v1/expert/reviews/${encodeURIComponent(draft.reviewRequestId)}/draft`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      scores: draft.scores,
-      criterionComments: draft.criterionComments,
-      finalComment: draft.finalComment,
-      anchoredComments: hasTimestampComments ? undefined : comments,
-      timestampComments: hasTimestampComments ? comments : undefined,
-      scratchpad: draft.scratchpad,
-      checklistItems: draft.checklistItems,
-      version: draft.version,
-    }),
-  });
-
-  return {
-    reviewRequestId: draft.reviewRequestId,
-    scores: response.scores,
-    criterionComments: response.criterionComments,
-    finalComment: response.finalComment,
-    comments: hasTimestampComments ? response.timestampComments : response.anchoredComments,
-    scratchpad: response.scratchpad,
-    checklistItems: response.checklistItems,
-    savedAt: response.savedAt,
-    version: response.version,
-  };
-}
-
-export async function submitExpertWritingReview(reviewRequestId: string, payload: { scores: Record<string, number>; criterionComments: Record<string, string>; finalComment: string; version?: number; }): Promise<{ success: boolean; reviewRequestId: string }> {
-  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing/submit`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function submitExpertSpeakingReview(reviewRequestId: string, payload: { scores: Record<string, number>; criterionComments: Record<string, string>; finalComment: string; version?: number; }): Promise<{ success: boolean; reviewRequestId: string }> {
-  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/speaking/submit`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function claimReview(reviewRequestId: string): Promise<{ claimed: boolean; reviewRequestId: string }> {
-  return apiRequest(`/v1/expert/queue/${encodeURIComponent(reviewRequestId)}/claim`, { method: 'POST' });
-}
-
-export async function releaseReview(reviewRequestId: string): Promise<{ released: boolean; reviewRequestId: string }> {
-  return apiRequest(`/v1/expert/queue/${encodeURIComponent(reviewRequestId)}/release`, { method: 'POST' });
-}
-
-export async function requestRework(reviewRequestId: string, reason: string): Promise<{ success: boolean }> {
-  return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/rework`, {
-    method: 'POST',
-    body: JSON.stringify({ reason }),
-  });
-}
-
-export async function submitCalibrationCase(
-  caseId: string,
-  payload: { scores: Record<string, number>; notes?: string },
-): Promise<{ success: boolean; caseId: string; alignment: number }> {
-  return apiRequest(`/v1/expert/calibration/cases/${encodeURIComponent(caseId)}/submit`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function saveCalibrationDraft(
-  caseId: string,
-  payload: { scores: Record<string, number>; notes?: string },
-): Promise<{ success: boolean; caseId: string; isDraft: boolean; scores: Record<string, number>; notes: string; updatedAt: string | null }> {
-  return apiRequest(`/v1/expert/calibration/cases/${encodeURIComponent(caseId)}/draft`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-// ─── Expert calibration history + alignment (supplement §4.8) ───
-
-export interface ExpertCalibrationHistoryEntry {
-  id: string;
-  caseId: string;
-  caseTitle: string;
-  profession: string;
-  subTest: string;
-  benchmarkScore: number;
-  reviewerScore: number;
-  alignmentScore: number;
-  disagreementSummary: string;
-  submittedAt: string;
-}
-
-export interface ExpertCalibrationHistory {
-  entries: ExpertCalibrationHistoryEntry[];
-  totalCount: number;
-  generatedAt: string;
-}
-
-export interface ExpertCalibrationAlignmentBreakdown {
-  subTest: string;
-  submissionCount: number;
-  averageAlignment: number;
-  latestAlignment: number | null;
-}
-
-export interface ExpertCalibrationAlignmentTrendPoint {
-  submittedAt: string;
-  alignmentScore: number;
-}
-
-export interface ExpertCalibrationAlignment {
-  totalSubmissions: number;
-  overallAverageAlignment: number;
-  latestAlignment: number | null;
-  previousAlignment: number | null;
-  deltaFromPrevious: number | null;
-  perSubTest: ExpertCalibrationAlignmentBreakdown[];
-  trend: ExpertCalibrationAlignmentTrendPoint[];
-  generatedAt: string;
-}
-
-export async function fetchExpertCalibrationHistory(limit?: number): Promise<ExpertCalibrationHistory> {
-  const query = typeof limit === 'number' ? `?limit=${limit}` : '';
-  return apiRequest<ExpertCalibrationHistory>(`/v1/expert/calibration/history${query}`);
-}
-
-export async function fetchExpertCalibrationAlignment(): Promise<ExpertCalibrationAlignment> {
-  return apiRequest<ExpertCalibrationAlignment>('/v1/expert/calibration/alignment');
-}
-
-// ─── Expert availability constraints (supplement: GET /v1/expert/availability/constraints) ───
-
-export interface ExpertAvailabilityConstraints {
-  minNoticeHours: number;
-  maxHoursPerWeek: number;
-  maxExceptionsPerMonth: number;
-  minSlotDuration: string;
-  maxSlotDuration: string;
-  supportedTimezones: string[];
-  dayKeys: string[];
-}
-
-export async function fetchExpertAvailabilityConstraints(): Promise<ExpertAvailabilityConstraints> {
-  return apiRequest<ExpertAvailabilityConstraints>('/v1/expert/availability/constraints');
-}
+export type {
+  CalibrationCase,
+  CalibrationCaseDetail,
+  CalibrationNote,
+  ExpertLearnerDirectoryResponse,
+  ExpertLearnerReviewContext,
+  ExpertMetrics,
+  ExpertOnboardingProfile,
+  ExpertOnboardingQualifications,
+  ExpertOnboardingRates,
+  ExpertOnboardingStatus,
+  ExpertQueueFilterMetadata,
+  ExpertReviewHistory,
+  ExpertSchedule,
+  LearnerProfileExpanded,
+  ReviewDraft,
+  ReviewQueueResponse,
+  ReviewVoiceNote,
+  ScheduleException,
+  SpeakingReviewDetail,
+  WritingReviewDetail,
+} from './types/expert';
+export type {
+  ExpertAvailabilityConstraints,
+  ExpertCalibrationAlignment,
+  ExpertCalibrationAlignmentBreakdown,
+  ExpertCalibrationAlignmentTrendPoint,
+  ExpertCalibrationHistory,
+  ExpertCalibrationHistoryEntry,
+  ReviewCriterionVoiceNoteResult,
+  WritingMarkingVoiceNote,
+} from './api/expert';
+export {
+  addWritingReviewVoiceNote,
+  claimReview,
+  completeExpertOnboarding,
+  createScheduleException,
+  deleteScheduleException,
+  fetchCalibrationCaseDetail,
+  fetchCalibrationCases,
+  fetchCalibrationNotes,
+  fetchExpertAvailabilityConstraints,
+  fetchExpertCalibrationAlignment,
+  fetchExpertCalibrationHistory,
+  fetchExpertLearnerReviewContext,
+  fetchExpertMetrics,
+  fetchExpertOnboardingStatus,
+  fetchExpertQueueFilterMetadata,
+  fetchExpertSchedule,
+  fetchLearnerProfile,
+  fetchExpertLearners,
+  fetchLearnerReviewResult,
+  fetchLearnerReviewVoiceNotes,
+  fetchReviewQueue,
+  fetchScheduleExceptions,
+  fetchSpeakingReviewDetail,
+  fetchExpertReviewHistory,
+  fetchWritingReviewDetail,
+  getWritingSubmissionVoiceNote,
+  releaseReview,
+  requestRework,
+  saveCalibrationDraft,
+  saveDraftReview,
+  saveExpertOnboardingProfile,
+  saveExpertOnboardingQualifications,
+  saveExpertOnboardingRates,
+  saveExpertSchedule,
+  submitCalibrationCase,
+  submitExpertSpeakingReview,
+  submitExpertWritingReview,
+  uploadSpeakingReviewCriterionVoiceNote,
+  uploadWritingMarkingVoiceNote,
+  uploadWritingReviewCriterionVoiceNote,
+} from './api/expert';
 
 // ─── Admin / CMS API ───
 
 // ── Admin Alerts ─────────────────────────────────────
-
-export async function fetchAdminAlerts() {
-  return apiRequest('/v1/admin/alerts');
-}
-
 // ── Admin Content ─────────────────────────────────────
-
-export async function fetchAdminContent(params?: { type?: string; subtest?: string; profession?: string; status?: string; search?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.type) qs.set('type', params.type);
-  if (params?.subtest) qs.set('subtest', params.subtest);
-  if (params?.profession) qs.set('profession', params.profession);
-  if (params?.status) qs.set('status', params.status);
-  if (params?.search) qs.set('search', params.search);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/content${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminDashboard() {
-  return apiRequest('/v1/admin/dashboard');
-}
-
-export async function fetchAdminContentDetail(contentId: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}`);
-}
-
-export async function createAdminContent(payload: { contentType: string; subtestCode: string; professionId: string; title: string; difficulty: string; estimatedDurationMinutes?: number; description?: string; caseNotes?: string; modelAnswer?: string; criteriaFocus?: string; sourceType?: string; qaStatus?: string }) {
-  return apiRequest('/v1/admin/content', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminContent(contentId: string, payload: Record<string, any>) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function publishAdminContent(contentId: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/publish`, { method: 'POST' });
-}
-
-export async function archiveAdminContent(contentId: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/archive`, { method: 'POST' });
-}
-
-export async function fetchAdminContentRevisions(contentId: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/revisions`);
-}
-
-export async function restoreAdminContentRevision(contentId: string, revisionId: string) {
-  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/revisions/${encodeURIComponent(revisionId)}/restore`, { method: 'POST' });
-}
-
-export async function fetchAdminTaxonomy(params?: { type?: string; status?: string }) {
-  const qs = new URLSearchParams();
-  if (params?.type) qs.set('type', params.type);
-  if (params?.status) qs.set('status', params.status);
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/taxonomy${q ? `?${q}` : ''}`);
-}
-
-export async function createAdminTaxonomy(payload: { code: string; label: string }) {
-  return apiRequest('/v1/admin/taxonomy', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminTaxonomy(professionId: string, payload: { label?: string; code?: string; status?: string }) {
-  return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function archiveAdminTaxonomy(professionId: string) {
-  return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}/archive`, { method: 'POST' });
-}
-
-/** Permanently deletes an archived profession/taxonomy node. system_admin only. */
-export async function forceDeleteAdminTaxonomy(professionId: string) {
-  return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}/force-delete`, { method: 'POST' });
-}
-
-export interface AdminSignupExamTypePayload {
-  id: string;
-  code: string;
-  label: string;
-  description?: string;
-  sortOrder?: number;
-  isActive?: boolean;
-}
-
-export interface AdminSignupProfessionPayload {
-  id: string;
-  label: string;
-  description?: string;
-  examTypeIds?: string[];
-  countryTargets?: string[];
-  sortOrder?: number;
-  isActive?: boolean;
-}
-
-export async function fetchAdminSignupCatalog() {
-  return apiRequest('/v1/admin/signup-catalog');
-}
-
-export async function createAdminSignupExamType(payload: AdminSignupExamTypePayload) {
-  return apiRequest('/v1/admin/signup-catalog/exam-types', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminSignupExamType(id: string, payload: AdminSignupExamTypePayload) {
-  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function archiveAdminSignupExamType(id: string) {
-  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/archive`, { method: 'POST' });
-}
-
-/** Permanently deletes a signup exam-type catalog row. system_admin only. */
-export async function forceDeleteAdminSignupExamType(id: string) {
-  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/force-delete`, { method: 'POST' });
-}
-
-export async function activateAdminSignupExamType(id: string) {
-  return apiRequest(`/v1/admin/signup-catalog/exam-types/${encodeURIComponent(id)}/activate`, { method: 'POST' });
-}
-
-export async function createAdminSignupProfession(payload: AdminSignupProfessionPayload) {
-  return apiRequest('/v1/admin/signup-catalog/professions', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminSignupProfession(id: string, payload: AdminSignupProfessionPayload) {
-  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function archiveAdminSignupProfession(id: string) {
-  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}/archive`, { method: 'POST' });
-}
-
-/** Permanently deletes a signup profession catalog row. system_admin only. */
-export async function forceDeleteAdminSignupProfession(id: string) {
-  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}/force-delete`, { method: 'POST' });
-}
-
-export async function activateAdminSignupProfession(id: string) {
-  return apiRequest(`/v1/admin/signup-catalog/professions/${encodeURIComponent(id)}/activate`, { method: 'POST' });
-}
-
-export async function fetchAdminCriteria(params?: { subtest?: string; status?: string }) {
-  const qs = new URLSearchParams();
-  if (params?.subtest) qs.set('subtest', params.subtest);
-  if (params?.status) qs.set('status', params.status);
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/criteria${q ? `?${q}` : ''}`);
-}
-
-export async function createAdminCriterion(payload: { name: string; subtestCode: string; description?: string; weight?: number }) {
-  return apiRequest('/v1/admin/criteria', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminCriterion(criterionId: string, payload: { name?: string; description?: string; weight?: number; status?: string }) {
-  return apiRequest(`/v1/admin/criteria/${encodeURIComponent(criterionId)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function fetchAdminAIConfig(params?: { status?: string }) {
-  const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
-  return apiRequest(`/v1/admin/ai-config${qs}`);
-}
-
-export async function createAdminAIConfig(payload: { model: string; provider: string; taskType: string; status?: string; accuracy: number; confidenceThreshold: number; routingRule?: string; experimentFlag?: string; promptLabel?: string }) {
-  return apiRequest('/v1/admin/ai-config', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminAIConfig(configId: string, payload: Record<string, any>) {
-  return apiRequest(`/v1/admin/ai-config/${encodeURIComponent(configId)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function fetchAdminFlags(params?: { type?: string }) {
-  const qs = params?.type ? `?type=${encodeURIComponent(params.type)}` : '';
-  return apiRequest(`/v1/admin/flags${qs}`);
-}
-
-export async function createAdminFlag(payload: { name: string; key: string; enabled: boolean; flagType?: string; rolloutPercentage?: number; description?: string; owner?: string }) {
-  return apiRequest('/v1/admin/flags', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminFlag(flagId: string, payload: Record<string, any>) {
-  return apiRequest(`/v1/admin/flags/${encodeURIComponent(flagId)}`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function fetchAdminAuditLogs(params?: { action?: string; actor?: string; search?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.action) qs.set('action', params.action);
-  if (params?.actor) qs.set('actor', params.actor);
-  if (params?.search) qs.set('search', params.search);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/audit-logs${q ? `?${q}` : ''}`);
-}
-
-export async function exportAdminAuditLogs(params?: { action?: string; actor?: string; search?: string }) {
-  const qs = new URLSearchParams();
-  if (params?.action) qs.set('action', params.action);
-  if (params?.actor) qs.set('actor', params.actor);
-  if (params?.search) qs.set('search', params.search);
-
-  const path = `/v1/admin/audit-logs/export${qs.toString() ? `?${qs.toString()}` : ''}`;
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    method: 'GET',
-    headers: await getHeaders(path, undefined, { json: false }),
-  });
-
-  if (!response.ok) {
-    throw new ApiError(response.status, 'audit_export_failed', 'Failed to export audit logs.', response.status >= 500);
-  }
-
-  return {
-    blob: await response.blob(),
-    fileName: response.headers.get('content-disposition')?.match(/filename="?([^"]+)"?/)?.[1] ?? 'audit-logs.csv',
-  };
-}
-
-export interface AdminSponsorDto {
-  id: string;
-  name: string;
-  type: string;
-  contactEmail: string;
-  organizationName?: string;
-  status: string;
-  createdAt: string;
-  learnerCount?: number;
-}
-
-export async function fetchAdminSponsors(params?: { status?: string; search?: string; page?: number; pageSize?: number }): Promise<{ items: AdminSponsorDto[]; total?: number; page?: number; pageSize?: number }> {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set('status', params.status);
-  if (params?.search) qs.set('search', params.search);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/sponsors${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminUsers(params?: { role?: string; status?: string; search?: string; page?: number; pageSize?: number }) {
-  const qs = new URLSearchParams();
-  if (params?.role) qs.set('role', params.role);
-  if (params?.status) qs.set('status', params.status);
-  if (params?.search) qs.set('search', params.search);
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  return apiRequest(`/v1/admin/users${q ? `?${q}` : ''}`);
-}
-
-export async function fetchAdminUserDetail(userId: string) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}`);
-}
-
-export async function inviteAdminUser(payload: { name: string; email: string; role: 'learner' | 'expert' | 'admin'; professionId?: string; specialties?: string[] }): Promise<{
-  id: string; email: string; role: string;
-  temporaryPassword?: string | null;
-  invitation?: { purpose: string; deliveryChannel: string; destinationHint: string; expiresAt: string; retryAfterSeconds: number } | null;
-}> {
-  return apiRequest('/v1/admin/users/invite', { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function updateAdminUserStatus(userId: string, payload: { status: string; reason?: string }) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/status`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export interface AdminUserProfileUpdatePayload {
-  displayName?: string;
-  firstName?: string;
-  lastName?: string;
-  mobileNumber?: string;
-  professionId?: string;
-  examTypeId?: string;
-  countryTarget?: string;
-  timezone?: string;
-  locale?: string;
-  marketingOptIn?: boolean;
-  agreeToTerms?: boolean;
-  agreeToPrivacy?: boolean;
-  specialties?: string[];
-  reason?: string;
-}
-
-export async function updateAdminUserProfile(userId: string, payload: AdminUserProfileUpdatePayload) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/profile`, { method: 'PUT', body: JSON.stringify(payload) });
-}
-
-export async function deleteAdminUser(userId: string, payload?: { reason?: string }) {
-  return apiRequest<{ id: string; userId: string; status: string; purgedRows: number; tables: number; detail: Record<string, number> }>(
-    `/v1/admin/users/${encodeURIComponent(userId)}/delete`,
-    { method: 'POST', body: JSON.stringify(payload ?? {}) },
-  );
-}
-
-export async function restoreAdminUser(userId: string, payload?: { reason?: string }) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/restore`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
-}
-
-/**
- * IRREVERSIBLE: permanently purges the user and every row referencing them across
- * the whole schema — including invoices, payments and audit records. system_admin only.
- */
-export async function hardDeleteAdminUser(
-  userId: string,
-  payload?: { reason?: string },
-): Promise<{ id: string; userId: string; status: string; purgedRows: number; tables: number; detail: Record<string, number> }> {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/hard-delete`, {
-    method: 'POST',
-    body: JSON.stringify(payload ?? {}),
-  });
-}
-
-export async function adjustAdminUserCredits(userId: string, payload: { amount: number; reason?: string }) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/credits`, { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function setAdminUserPassword(
-  userId: string,
-  payload: { password: string },
-): Promise<{ userId: string; email: string; revoked: number }> {
-  return apiRequest<{ userId: string; email: string; revoked: number }>(`/v1/admin/users/${encodeURIComponent(userId)}/password`, { method: 'POST', body: JSON.stringify(payload) });
-}
-
-export async function triggerAdminUserPasswordReset(userId: string) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' });
-}
-
-export async function verifyAdminUserEmail(
-  userId: string,
-): Promise<{ userId: string; email: string; alreadyVerified: boolean; emailVerifiedAt: string | null; revokedSessions: number }> {
-  return apiRequest<{
-    userId: string;
-    email: string;
-    alreadyVerified: boolean;
-    emailVerifiedAt: string | null;
-    revokedSessions: number;
-  }>(`/v1/admin/users/${encodeURIComponent(userId)}/verify-email`, { method: 'POST' });
-}
-
-export async function revokeAdminUserSessions(userId: string): Promise<{ id: string; revoked: number }> {
-  return apiRequest<{ id: string; revoked: number }>(`/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke`, { method: 'POST' });
-}
-
-export async function unlockAdminUser(userId: string) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/unlock`, { method: 'POST' });
-}
-
-export async function resendAdminUserInvite(userId: string) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/resend-invite`, { method: 'POST' });
-}
-
-export async function bulkImportUsers(file: File) {
-  const form = new FormData();
-  form.append('file', file);
-  const token = await ensureFreshAccessToken();
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/users/import'), {
-    method: 'POST',
-    headers,
-    body: form,
-  }, 120_000);
-  if (!response.ok) {
-    let code = 'unknown_error';
-    let message = `Import failed: ${response.status}`;
-    try {
-      const error = await response.json();
-      code = error.code ?? code;
-      message = error.message ?? error.title ?? message;
-    } catch { /* ignore parse error */ }
-    throw new ApiError(response.status, code, message, false);
-  }
-  return response.json();
-}
-
-export async function fetchAdminBillingPlans(params?: { status?: string }) {
-  const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
-  return apiRequest(`/v1/admin/billing/plans${qs}`);
-}
-
-export async function fetchAdminBillingPlanVersions(planId: string) {
-  return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}/versions`);
-}
-
-// ── Admin: Wallet Top-Up Tiers (DB-backed CMS) ──
-// Mirrors backend AdminWalletTierService. The GET response includes a
-// `source` discriminator: "database" when at least one row exists, or
-// "appsettings" when the appsettings fallback is being projected.
-
-export interface AdminWalletTierRow {
-  id: string | null;
-  amount: number;
-  credits: number;
-  bonus: number;
-  totalCredits: number;
-  label: string | null;
-  isPopular: boolean;
-  displayOrder: number;
-  isActive: boolean;
-  currency: string;
-}
-
-export interface AdminWalletTiersResponse {
-  source: 'database' | 'appsettings';
-  currency: string;
-  tiers: AdminWalletTierRow[];
-}
-
-export interface AdminWalletTierInput {
-  id?: string | null;
-  amount: number;
-  credits: number;
-  bonus: number;
-  label?: string | null;
-  isPopular: boolean;
-  displayOrder: number;
-  isActive: boolean;
-  currency?: string | null;
-}
-
-export async function fetchAdminWalletTiers(): Promise<AdminWalletTiersResponse> {
-  return apiRequest<AdminWalletTiersResponse>('/v1/admin/billing/wallet-tiers');
-}
-
-export async function replaceAdminWalletTiers(tiers: AdminWalletTierInput[]): Promise<AdminWalletTiersResponse> {
-  return apiRequest<AdminWalletTiersResponse>('/v1/admin/billing/wallet-tiers', {
-    method: 'PUT',
-    body: JSON.stringify({ tiers }),
-  });
-}
-
-
-function normalizeBillingCode(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64) || 'custom-plan';
-}
-
-export interface AdminBillingPlanOet2026Fields {
-  originalPriceGbp?: number | null;
-  accessDurationDays?: number;
-  writingAddonsEnabled?: boolean;
-  speakingAddonsEnabled?: boolean;
-  speakingPracticeAccessEnabled?: boolean;
-  tutorBookDiscountEnabled?: boolean;
-  profession?: string;
-  productCategory?: string;
-  dashboardModulesJson?: string;
-  bundledWritingAssessments?: number;
-  bundledSpeakingSessions?: number;
-  bundledAiCredits?: number;
-  bundledTutorBook?: boolean;
-  bundledBasicEnglish?: boolean;
-  isDraft?: boolean;
-  extensionAllowed?: boolean;
-  recallUpdatesEnabled?: boolean;
-  // "What's included" bullet list — persisted on the linked ContentPackage.
-  comparisonFeaturesJson?: string;
-  // ── Delivery + content scoping (access & payment spec 2026-07-15) ──
-  deliveryMethod?: string;
-  telegramInviteUrl?: string;
-  deliveryInstructions?: string;
-  contentOverridesJson?: string;
-}
-
-export async function createAdminBillingPlan(payload: {
-  code?: string;
-  name: string;
-  description?: string;
-  price: number;
-  currency?: string;
-  interval: string;
-  durationMonths?: number;
-  includedCredits?: number;
-  displayOrder?: number;
-  isVisible?: boolean;
-  isRenewable?: boolean;
-  trialDays?: number;
-  status?: string;
-  includedSubtestsJson?: string;
-  entitlementsJson?: string;
-} & AdminBillingPlanOet2026Fields) {
-  return apiRequest('/v1/admin/billing/plans', {
-    method: 'POST',
-    body: JSON.stringify({
-      code: payload.code ?? normalizeBillingCode(payload.name),
-      name: payload.name,
-      description: payload.description ?? '',
-      price: payload.price,
-      currency: payload.currency ?? 'AUD',
-      interval: payload.interval,
-      durationMonths: payload.durationMonths ?? 1,
-      includedCredits: payload.includedCredits ?? 0,
-      displayOrder: payload.displayOrder ?? 0,
-      isVisible: payload.isVisible ?? true,
-      isRenewable: payload.isRenewable ?? true,
-      trialDays: payload.trialDays ?? 0,
-      status: payload.status ?? 'active',
-      includedSubtestsJson: payload.includedSubtestsJson ?? '[]',
-      entitlementsJson: payload.entitlementsJson ?? '{}',
-      originalPriceGbp: payload.originalPriceGbp ?? null,
-      accessDurationDays: payload.accessDurationDays ?? null,
-      writingAddonsEnabled: payload.writingAddonsEnabled ?? null,
-      speakingAddonsEnabled: payload.speakingAddonsEnabled ?? null,
-      speakingPracticeAccessEnabled: payload.speakingPracticeAccessEnabled ?? null,
-      tutorBookDiscountEnabled: payload.tutorBookDiscountEnabled ?? null,
-      profession: payload.profession ?? null,
-      productCategory: payload.productCategory ?? null,
-      dashboardModulesJson: payload.dashboardModulesJson ?? null,
-      bundledWritingAssessments: payload.bundledWritingAssessments ?? null,
-      bundledSpeakingSessions: payload.bundledSpeakingSessions ?? null,
-      bundledAiCredits: payload.bundledAiCredits ?? null,
-      bundledTutorBook: payload.bundledTutorBook ?? null,
-      bundledBasicEnglish: payload.bundledBasicEnglish ?? null,
-      isDraft: payload.isDraft ?? null,
-      extensionAllowed: payload.extensionAllowed ?? null,
-      recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
-      comparisonFeaturesJson: payload.comparisonFeaturesJson ?? null,
-      deliveryMethod: payload.deliveryMethod ?? null,
-      telegramInviteUrl: payload.telegramInviteUrl ?? null,
-      deliveryInstructions: payload.deliveryInstructions ?? null,
-      contentOverridesJson: payload.contentOverridesJson ?? null,
-    }),
-  });
-}
-
-export async function updateAdminBillingPlan(planId: string, payload: {
-  code: string;
-  name: string;
-  description?: string;
-  price: number;
-  currency?: string;
-  interval: string;
-  durationMonths?: number;
-  includedCredits?: number;
-  displayOrder?: number;
-  isVisible?: boolean;
-  isRenewable?: boolean;
-  trialDays?: number;
-  status?: string;
-  includedSubtestsJson?: string;
-  entitlementsJson?: string;
-} & AdminBillingPlanOet2026Fields) {
-  return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      code: payload.code,
-      name: payload.name,
-      description: payload.description ?? '',
-      price: payload.price,
-      currency: payload.currency ?? 'AUD',
-      interval: payload.interval,
-      durationMonths: payload.durationMonths ?? 1,
-      includedCredits: payload.includedCredits ?? 0,
-      displayOrder: payload.displayOrder ?? 0,
-      isVisible: payload.isVisible ?? true,
-      isRenewable: payload.isRenewable ?? true,
-      trialDays: payload.trialDays ?? 0,
-      status: payload.status ?? 'active',
-      includedSubtestsJson: payload.includedSubtestsJson ?? '[]',
-      entitlementsJson: payload.entitlementsJson ?? '{}',
-      originalPriceGbp: payload.originalPriceGbp ?? null,
-      accessDurationDays: payload.accessDurationDays ?? null,
-      writingAddonsEnabled: payload.writingAddonsEnabled ?? null,
-      speakingAddonsEnabled: payload.speakingAddonsEnabled ?? null,
-      speakingPracticeAccessEnabled: payload.speakingPracticeAccessEnabled ?? null,
-      tutorBookDiscountEnabled: payload.tutorBookDiscountEnabled ?? null,
-      profession: payload.profession ?? null,
-      productCategory: payload.productCategory ?? null,
-      dashboardModulesJson: payload.dashboardModulesJson ?? null,
-      bundledWritingAssessments: payload.bundledWritingAssessments ?? null,
-      bundledSpeakingSessions: payload.bundledSpeakingSessions ?? null,
-      bundledAiCredits: payload.bundledAiCredits ?? null,
-      bundledTutorBook: payload.bundledTutorBook ?? null,
-      bundledBasicEnglish: payload.bundledBasicEnglish ?? null,
-      isDraft: payload.isDraft ?? null,
-      extensionAllowed: payload.extensionAllowed ?? null,
-      recallUpdatesEnabled: payload.recallUpdatesEnabled ?? null,
-      comparisonFeaturesJson: payload.comparisonFeaturesJson ?? null,
-      deliveryMethod: payload.deliveryMethod ?? null,
-      telegramInviteUrl: payload.telegramInviteUrl ?? null,
-      deliveryInstructions: payload.deliveryInstructions ?? null,
-      contentOverridesJson: payload.contentOverridesJson ?? null,
-    }),
-  });
-}
-
-export async function fetchAdminBillingAddOns(params?: { status?: string }) {
-  const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
-  return apiRequest(`/v1/admin/billing/add-ons${qs}`);
-}
-
-export async function fetchAdminBillingAddOnVersions(addOnId: string) {
-  return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}/versions`);
-}
-
-export interface AdminBillingAddOnOet2026Fields {
-  originalPriceGbp?: number | null;
-  addonKind?: string;
-  requiresEligibleParent?: boolean;
-  eligibilityFlag?: string;
-  lettersGranted?: number;
-  sessionsGranted?: number;
-  /** AI grading package storefront group: full|listening|reading|writing|speaking|mock. */
-  aiPackageGroup?: string;
-  /** JSON array of admin-authored AI feature bullet strings. */
-  aiFeaturesJson?: string;
-}
-
-export async function createAdminBillingAddOn(payload: {
-  code?: string;
-  name: string;
-  description?: string;
-  price: number;
-  currency?: string;
-  interval: string;
-  durationDays?: number;
-  grantCredits?: number;
-  displayOrder?: number;
-  isRecurring?: boolean;
-  appliesToAllPlans?: boolean;
-  isStackable?: boolean;
-  quantityStep?: number;
-  maxQuantity?: number | null;
-  status?: string;
-  compatiblePlanCodesJson?: string;
-  grantEntitlementsJson?: string;
-} & AdminBillingAddOnOet2026Fields) {
-  return apiRequest('/v1/admin/billing/add-ons', {
-    method: 'POST',
-    body: JSON.stringify({
-      code: payload.code ?? normalizeBillingCode(payload.name),
-      name: payload.name,
-      description: payload.description ?? '',
-      price: payload.price,
-      currency: payload.currency ?? 'AUD',
-      interval: payload.interval,
-      durationDays: payload.durationDays ?? 0,
-      grantCredits: payload.grantCredits ?? 0,
-      displayOrder: payload.displayOrder ?? 0,
-      isRecurring: payload.isRecurring ?? false,
-      appliesToAllPlans: payload.appliesToAllPlans ?? true,
-      isStackable: payload.isStackable ?? true,
-      quantityStep: payload.quantityStep ?? 1,
-      maxQuantity: payload.maxQuantity ?? null,
-      status: payload.status ?? 'active',
-      compatiblePlanCodesJson: payload.compatiblePlanCodesJson ?? '[]',
-      grantEntitlementsJson: payload.grantEntitlementsJson ?? '{}',
-      originalPriceGbp: payload.originalPriceGbp ?? null,
-      addonKind: payload.addonKind ?? null,
-      requiresEligibleParent: payload.requiresEligibleParent ?? null,
-      eligibilityFlag: payload.eligibilityFlag ?? null,
-      lettersGranted: payload.lettersGranted ?? null,
-      sessionsGranted: payload.sessionsGranted ?? null,
-      aiPackageGroup: payload.aiPackageGroup ?? null,
-      aiFeaturesJson: payload.aiFeaturesJson ?? null,
-    }),
-  });
-}
-
-export async function updateAdminBillingAddOn(addOnId: string, payload: {
-  code: string;
-  name: string;
-  description?: string;
-  price: number;
-  currency?: string;
-  interval: string;
-  durationDays?: number;
-  grantCredits?: number;
-  displayOrder?: number;
-  isRecurring?: boolean;
-  appliesToAllPlans?: boolean;
-  isStackable?: boolean;
-  quantityStep?: number;
-  maxQuantity?: number | null;
-  status?: string;
-  compatiblePlanCodesJson?: string;
-  grantEntitlementsJson?: string;
-} & AdminBillingAddOnOet2026Fields) {
-  return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      code: payload.code,
-      name: payload.name,
-      description: payload.description ?? '',
-      price: payload.price,
-      currency: payload.currency ?? 'AUD',
-      interval: payload.interval,
-      durationDays: payload.durationDays ?? 0,
-      grantCredits: payload.grantCredits ?? 0,
-      displayOrder: payload.displayOrder ?? 0,
-      isRecurring: payload.isRecurring ?? false,
-      appliesToAllPlans: payload.appliesToAllPlans ?? true,
-      isStackable: payload.isStackable ?? true,
-      quantityStep: payload.quantityStep ?? 1,
-      maxQuantity: payload.maxQuantity ?? null,
-      status: payload.status ?? 'active',
-      compatiblePlanCodesJson: payload.compatiblePlanCodesJson ?? '[]',
-      grantEntitlementsJson: payload.grantEntitlementsJson ?? '{}',
-      originalPriceGbp: payload.originalPriceGbp ?? null,
-      addonKind: payload.addonKind ?? null,
-      requiresEligibleParent: payload.requiresEligibleParent ?? null,
-      eligibilityFlag: payload.eligibilityFlag ?? null,
-      lettersGranted: payload.lettersGranted ?? null,
-      sessionsGranted: payload.sessionsGranted ?? null,
-      aiPackageGroup: payload.aiPackageGroup ?? null,
-      aiFeaturesJson: payload.aiFeaturesJson ?? null,
-    }),
-  });
-}
+export type {
+  AdminSignupExamTypePayload,
+  AdminSignupProfessionPayload,
+} from './api/admin-platform';
+export {
+  archiveAdminContent,
+  archiveAdminSignupExamType,
+  archiveAdminSignupProfession,
+  archiveAdminTaxonomy,
+  activateAdminSignupExamType,
+  activateAdminSignupProfession,
+  createAdminAIConfig,
+  createAdminContent,
+  createAdminCriterion,
+  createAdminFlag,
+  createAdminSignupExamType,
+  createAdminSignupProfession,
+  createAdminTaxonomy,
+  exportAdminAuditLogs,
+  fetchAdminAIConfig,
+  fetchAdminAlerts,
+  fetchAdminAuditLogs,
+  fetchAdminContent,
+  fetchAdminContentDetail,
+  fetchAdminContentRevisions,
+  fetchAdminCriteria,
+  fetchAdminDashboard,
+  fetchAdminFlags,
+  fetchAdminSignupCatalog,
+  fetchAdminTaxonomy,
+  forceDeleteAdminSignupExamType,
+  forceDeleteAdminSignupProfession,
+  forceDeleteAdminTaxonomy,
+  publishAdminContent,
+  restoreAdminContentRevision,
+  updateAdminAIConfig,
+  updateAdminContent,
+  updateAdminCriterion,
+  updateAdminFlag,
+  updateAdminSignupExamType,
+  updateAdminSignupProfession,
+  updateAdminTaxonomy,
+} from './api/admin-platform';
+
+export type {
+  AdminBillingAddOnOet2026Fields,
+  AdminBillingPlanOet2026Fields,
+  AdminSponsorDto,
+  AdminUserProfileUpdatePayload,
+  AdminWalletTierInput,
+  AdminWalletTierRow,
+  AdminWalletTiersResponse,
+} from './api/admin-users';
+export {
+  adjustAdminUserCredits,
+  bulkImportUsers,
+  createAdminBillingAddOn,
+  createAdminBillingPlan,
+  deleteAdminBillingAddOn,
+  deleteAdminBillingPlan,
+  deleteAdminUser,
+  fetchAdminBillingAddOnVersions,
+  fetchAdminBillingAddOns,
+  fetchAdminBillingPlanVersions,
+  fetchAdminBillingPlans,
+  fetchAdminSponsors,
+  fetchAdminUserDetail,
+  fetchAdminUsers,
+  fetchAdminWalletTiers,
+  hardDeleteAdminUser,
+  inviteAdminUser,
+  replaceAdminWalletTiers,
+  resendAdminUserInvite,
+  restoreAdminUser,
+  revokeAdminUserSessions,
+  setAdminUserPassword,
+  triggerAdminUserPasswordReset,
+  unlockAdminUser,
+  updateAdminBillingAddOn,
+  updateAdminBillingPlan,
+  updateAdminUserProfile,
+  updateAdminUserStatus,
+  verifyAdminUserEmail,
+} from './api/admin-users';
 
 // ── Hard-delete (404 + 409 handled by caller). Server returns 409 when
 // the plan/add-on still has historical references — caller should fall
 // back to archive (PUT status=archived) in that case.
-
-export async function deleteAdminBillingPlan(planId: string): Promise<{ id: string; code: string; deleted: boolean }> {
-  return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}`, { method: 'DELETE' });
-}
-
-export async function deleteAdminBillingAddOn(addOnId: string): Promise<{ id: string; code: string; deleted: boolean }> {
-  return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}`, { method: 'DELETE' });
-}
 
 // ── Billing page copy (admin-editable learner-page strings) ──────────────
 export type { AdminBillingContentEntry } from './api/billing-content';
@@ -6165,17 +5090,13 @@ export type {
 export {
   adminArchiveStrategyGuide,
   adminCreateStrategyGuide,
-  adminFetchGrammarPublishGate,
-  adminFetchGrammarStats,
   adminForceDeleteStrategyGuide,
   adminGetStrategyGuide,
   adminGetWritingAttemptViolations,
   adminGetWritingOptions,
   adminGetWritingRuleViolationDashboard,
   adminListStrategyGuides,
-  adminPublishGrammarLessonV2,
   adminPublishStrategyGuide,
-  adminUnpublishGrammarLessonV2,
   adminUpdateStrategyGuide,
   adminUpdateWritingOptions,
   adminValidateStrategyGuidePublish,
@@ -6191,255 +5112,35 @@ export {
 //   1. pronunciationInitAttempt(drillId) → { attemptId, uploadUrl, ... }
 //   2. pronunciationUploadAudio(drillId, attemptId, blob, durationMs)
 //   3. fetchPronunciationAssessment(assessmentId) for the result detail page.
-
-export type PronunciationDrillSummary = {
-  id: string;
-  targetPhoneme: string;
-  label: string;
-  profession: string;
-  focus: string;
-  primaryRuleId: string | null;
-  exampleWordsJson: string;
-  minimalPairsJson: string;
-  sentencesJson: string;
-  difficulty: string;
-  audioModelUrl: string | null;
-  audioModelAssetId: string | null;
-  tipsHtml: string;
-};
-
-export type PronunciationProgressItem = {
-  phonemeCode: string;
-  averageScore: number;
-  attemptCount: number;
-  lastPracticedAt: string | null;
-  nextDueAt?: string | null;
-  intervalDays?: number;
-};
-
-export type PronunciationEntitlement = {
-  allowed: boolean;
-  tier: string;
-  remaining: number;
-  limitPerWindow: number;
-  windowDays: number;
-  resetAt: string | null;
-  reason: string;
-};
-
-export type PronunciationAssessmentDetail = {
-  id: string;
-  drillId: string | null;
-  attemptId: string | null;
-  accuracy: number;
-  fluency: number;
-  completeness: number;
-  prosody: number;
-  overall: number;
-  projectedSpeakingScaled: number;
-  projectedSpeakingGrade: string;
-  wordScoresJson: string;
-  problematicPhonemesJson: string;
-  fluencyMarkersJson: string;
-  findingsJson: string;
-  feedbackJson: string;
-  provider: string;
-  rulebookVersion: string;
-  createdAt: string;
-};
-
-export async function fetchPronunciationDrills(params?: {
-  profession?: string;
-  difficulty?: string;
-  focus?: string;
-}) {
-  const q = new URLSearchParams();
-  if (params?.profession) q.set('profession', params.profession);
-  if (params?.difficulty) q.set('difficulty', params.difficulty);
-  if (params?.focus) q.set('focus', params.focus);
-  const suffix = q.toString() ? `?${q.toString()}` : '';
-  return apiRequest(`/v1/pronunciation/drills${suffix}`);
-}
-
-export async function fetchPronunciationDueDrills(limit = 6) {
-  return apiRequest(`/v1/pronunciation/drills/due?limit=${limit}`);
-}
-
-export async function fetchPronunciationDrill(drillId: string) {
-  return apiRequest(`/v1/pronunciation/drills/${encodeURIComponent(drillId)}`);
-}
-
-export async function fetchMyPronunciationProgress() {
-  return apiRequest('/v1/pronunciation/my-progress');
-}
-
-export async function fetchPronunciationProfile() {
-  return apiRequest('/v1/pronunciation/profile');
-}
-
-export async function fetchPronunciationEntitlement() {
-  return apiRequest('/v1/pronunciation/entitlement');
-}
-
-/** Reserve an attempt id + upload slot. Returns entitlement info too. */
-export async function pronunciationInitAttempt(drillId: string) {
-  return apiRequest(`/v1/pronunciation/drills/${encodeURIComponent(drillId)}/attempt/init`, {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-}
-
-/**
- * Upload the recorded audio blob and synchronously receive the scored
- * assessment. The request uses raw-body POST with the audio Content-Type set
- * directly — no multipart wrapper needed. Bypasses the JSON-first apiRequest.
- */
-export async function pronunciationUploadAudio(
-  drillId: string,
-  attemptId: string,
-  blob: Blob,
-  options?: { durationMs?: number; signal?: AbortSignal }
-) {
-  const path = `/v1/pronunciation/drills/${encodeURIComponent(drillId)}/attempt/${encodeURIComponent(attemptId)}/audio`;
-  const headers = new Headers(
-    await getHeaders(path, undefined, { json: false })
-  );
-  headers.set('Content-Type', blob.type || 'application/octet-stream');
-  if (typeof options?.durationMs === 'number') {
-    headers.set('X-Audio-Duration-Ms', String(Math.round(options.durationMs)));
-  }
-  const response = await fetchWithTimeout(resolveApiUrl(path), {
-    method: 'POST',
-    headers,
-    body: blob,
-    signal: options?.signal,
-  }, 120_000);
-  if (!response.ok) {
-    let message = `Upload failed: ${response.status}`;
-    let code = 'upload_failed';
-    try {
-      const err = await response.json();
-      message = err.message ?? err.title ?? message;
-      code = err.code ?? code;
-    } catch {
-      /* non-JSON error */
-    }
-    throw new ApiError(response.status, code, message, false);
-  }
-  return response.json();
-}
-
-export async function fetchPronunciationAssessment(assessmentId: string) {
-  return apiRequest(`/v1/pronunciation/assessment/${encodeURIComponent(assessmentId)}`);
-}
-
-export async function fetchPronunciationSpeakingLinked(limit = 20) {
-  return apiRequest(`/v1/pronunciation/speaking-linked?limit=${limit}`);
-}
-
-export async function submitPronunciationDiscrimination(
-  drillId: string,
-  roundsTotal: number,
-  roundsCorrect: number,
-) {
-  return apiRequest(
-    `/v1/pronunciation/drills/${encodeURIComponent(drillId)}/discrimination`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ roundsTotal, roundsCorrect }),
-    }
-  );
-}
-
-// ── Admin: Pronunciation CMS ───────────────────────────────────────────────
-export async function fetchAdminPronunciationDrills(params?: {
-  profession?: string;
-  difficulty?: string;
-  status?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-}) {
-  const q = new URLSearchParams();
-  if (params?.profession) q.set('profession', params.profession);
-  if (params?.difficulty) q.set('difficulty', params.difficulty);
-  if (params?.status) q.set('status', params.status);
-  if (params?.search) q.set('search', params.search);
-  if (params?.page) q.set('page', String(params.page));
-  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
-  const suffix = q.toString() ? `?${q.toString()}` : '';
-  return apiRequest(`/v1/admin/pronunciation/drills${suffix}`);
-}
-
-export async function fetchAdminPronunciationDrill(drillId: string) {
-  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}`);
-}
-
-export async function createAdminPronunciationDrill(body: Record<string, unknown>) {
-  return apiRequest('/v1/admin/pronunciation/drills', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function updateAdminPronunciationDrill(drillId: string, body: Record<string, unknown>) {
-  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}`, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-}
-
-export async function archiveAdminPronunciationDrill(drillId: string) {
-  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/archive`, {
-    method: 'POST',
-    body: JSON.stringify({}),
-  });
-}
-
-/** Permanently deletes an archived pronunciation drill + all learner attempts/assessments. system_admin only. */
-export async function forceDeleteAdminPronunciationDrill(drillId: string) {
-  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/force-delete`, {
-    method: 'POST',
-  });
-}
-
-export async function adminPronunciationAiDraft(body: {
-  phoneme?: string;
-  focus?: string;
-  profession?: string;
-  difficulty?: string;
-  prompt?: string;
-  primaryRuleId?: string;
-}) {
-  return apiRequest('/v1/admin/pronunciation/drills/ai-draft', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-export type AdminPronunciationGenerateAudioResponse = {
-  mediaAssetId: string;
-  sha256: string;
-  durationMs: number;
-  bytes: number;
-  providerName: string;
-  mimeType: string;
-  storageKey: string;
-  url: string;
-};
-
-export async function generateAdminPronunciationModelAudio(
-  drillId: string,
-  body: { text: string; voiceId?: string },
-): Promise<AdminPronunciationGenerateAudioResponse> {
-  return apiRequest(
-    `/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/generate-model-audio`,
-    {
-      method: 'POST',
-      body: JSON.stringify(body),
-    },
-  ) as Promise<AdminPronunciationGenerateAudioResponse>;
-}
+// ── Admin: Pronunciation CMS ────────────────────────────────────────────────
+export type {
+  AdminPronunciationGenerateAudioResponse,
+  PronunciationAssessmentDetail,
+  PronunciationDrillSummary,
+  PronunciationEntitlement,
+  PronunciationProgressItem,
+} from './api/pronunciation';
+export {
+  adminPronunciationAiDraft,
+  archiveAdminPronunciationDrill,
+  createAdminPronunciationDrill,
+  fetchAdminPronunciationDrill,
+  fetchAdminPronunciationDrills,
+  fetchMyPronunciationProgress,
+  fetchPronunciationAssessment,
+  fetchPronunciationDrill,
+  fetchPronunciationDrills,
+  fetchPronunciationDueDrills,
+  fetchPronunciationEntitlement,
+  fetchPronunciationProfile,
+  fetchPronunciationSpeakingLinked,
+  forceDeleteAdminPronunciationDrill,
+  generateAdminPronunciationModelAudio,
+  pronunciationInitAttempt,
+  pronunciationUploadAudio,
+  submitPronunciationDiscrimination,
+  updateAdminPronunciationDrill,
+} from './api/pronunciation';
 
 // ── Certificates ──────────────────────────────────────────────────────────────
 // ── Referrals ─────────────────────────────────────────────────────────────────

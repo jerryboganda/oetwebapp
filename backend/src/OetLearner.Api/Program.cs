@@ -1244,6 +1244,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionRulebookI
     OetLearner.Api.Services.Companion.CompanionRulebookIndexer>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionDestinationRegistry,
     OetLearner.Api.Services.Companion.CompanionDestinationRegistry>();
+// Bootstraps the knowledge corpus on first boot with the flag on, so grounding
+// does not depend on someone remembering to call the reindex endpoint. No-ops
+// once any chunk exists; never blocks startup.
+builder.Services.AddHostedService<OetLearner.Api.Services.Companion.CompanionCorpusBootstrapHostedService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Admin.UserHardDeleteService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<INotificationCampaignService, NotificationCampaignService>();

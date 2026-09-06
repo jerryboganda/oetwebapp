@@ -50,6 +50,7 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/companion/memory")]
     [InlineData("/v1/companion/memory/notes/{noteId}")]
     [InlineData("/v1/companion/memory/bookmarks/{bookmarkId}")]
+    [InlineData("/v1/companion/memory/export")]
     [InlineData("/v1/admin/listening/analytics")]
     [InlineData("/v1/admin/listening/attempts/{attemptId}/export")]
     [InlineData("/v1/admin/listening/backfill")]

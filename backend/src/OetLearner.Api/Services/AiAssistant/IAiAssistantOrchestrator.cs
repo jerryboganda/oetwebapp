@@ -50,4 +50,9 @@ public sealed record AiAssistantMessageDto(
     string? ToolCallId,
     string? ToolName,
     string? Model,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    /// <summary>
+    /// AI Learning Companion citations, as stored. Null for every message with no
+    /// retrieval behind it, which is every admin/expert assistant message.
+    /// </summary>
+    string? CitationsJson = null);

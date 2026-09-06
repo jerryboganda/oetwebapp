@@ -1,4 +1,6 @@
 export { type AiMessage, type AiThread, type StreamEvent, type AiAssistantAccess } from './types';
 export { isContentDelta, isToolCallStart, isStreamError, isStreamDone, isUserMessage, isAssistantMessage } from './types';
-export { createThread, listThreads, getMessages, archiveThread, sendMessage } from './api';
+// `sendMessage` is gone: there is no POST /threads/{id}/messages route. A learner
+// message is sent over SignalR via `StartTurn`, which is what starts the stream.
+export { createThread, listThreads, getMessages, archiveThread } from './api';
 export { getAiAssistantAccess, canAccessAiAssistant } from './permissions';

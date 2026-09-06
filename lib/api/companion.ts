@@ -87,6 +87,31 @@ export function deleteCompanionBookmark(bookmarkId: string): Promise<void> {
   });
 }
 
+/**
+ * Downloads the learner's companion memory as a JSON file.
+ *
+ * Uses a blob URL rather than a plain link because the endpoint is bearer-authed
+ * — a native anchor cannot send the token, which is the same reason the rest of
+ * this app fetches protected media through `fetchAuthorizedObjectUrl`.
+ */
+export async function downloadCompanionMemory(): Promise<void> {
+  // Reuses the repo's bearer-authed blob fetch — the same helper the app uses
+  // for protected audio and images, for the same reason: a native anchor cannot
+  // carry the access token.
+  const { fetchAuthorizedObjectUrl } = await import('@/lib/api');
+  const url = await fetchAuthorizedObjectUrl('/v1/companion/memory/export');
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'companion-memory.json';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export function resetCompanionMemory(): Promise<{ notesDeleted: number; bookmarksDeleted: number }> {
   return apiRequest<{ notesDeleted: number; bookmarksDeleted: number }>('/v1/companion/memory', {
     method: 'DELETE',

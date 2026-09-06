@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -57,6 +58,7 @@ public static class CompanionLearnerEndpoints
         group.MapDelete("/memory/notes/{noteId}", DeleteNoteAsync);
         group.MapDelete("/memory/bookmarks/{bookmarkId}", DeleteBookmarkAsync);
         group.MapDelete("/memory", ResetMemoryAsync);
+        group.MapGet("/memory/export", ExportMemoryAsync);
 
         return app;
     }
@@ -223,6 +225,68 @@ public static class CompanionLearnerEndpoints
             .ToListAsync(ct);
 
         return Results.Ok(new { notes, bookmarks });
+    }
+
+    /// <summary>
+    /// The same rows as <c>GET /memory</c>, as a downloadable JSON file.
+    /// Separate from the listing endpoint because "show me" and "give me a copy
+    /// I can keep" are different acts: this one is what a learner exercising a
+    /// data-portability request actually needs, and it is served as an
+    /// attachment so it lands as a file rather than a wall of text.
+    /// </summary>
+    private static async Task<IResult> ExportMemoryAsync(
+        HttpContext http,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+        var notes = await db.UserNotes
+            .AsNoTracking()
+            .Where(n => n.UserId == userId
+                        && n.CreatedByFeatureCode != null
+                        && CompanionFeatureCodes.Contains(n.CreatedByFeatureCode))
+            .OrderBy(n => n.CreatedAt)
+            .Select(n => new
+            {
+                id = n.Id,
+                title = n.Title,
+                body = n.BodyMarkdown,
+                createdByFeatureCode = n.CreatedByFeatureCode,
+                createdAt = n.CreatedAt,
+                updatedAt = n.UpdatedAt,
+            })
+            .ToListAsync(ct);
+
+        var bookmarks = await (
+            from b in db.RecallBookmarks.AsNoTracking()
+            join t in db.VocabularyTerms.AsNoTracking() on b.VocabularyTermId equals t.Id into tj
+            from t in tj.DefaultIfEmpty()
+            where b.UserId == userId
+                  && b.CreatedByFeatureCode != null
+                  && CompanionFeatureCodes.Contains(b.CreatedByFeatureCode)
+            orderby b.CreatedAt
+            select new
+            {
+                id = b.Id,
+                term = t != null ? t.Term : b.VocabularyTermId,
+                definition = t != null ? t.Definition : null,
+                createdByFeatureCode = b.CreatedByFeatureCode,
+                createdAt = b.CreatedAt,
+            })
+            .ToListAsync(ct);
+
+        var payload = JsonSerializer.SerializeToUtf8Bytes(new
+        {
+            exportedAt = DateTimeOffset.UtcNow,
+            // No user id, email or name: the learner already knows who they are,
+            // and a file that identifies them is a file that leaks if forwarded.
+            notes,
+            bookmarks,
+        }, new JsonSerializerOptions { WriteIndented = true });
+
+        return Results.File(payload, "application/json", "companion-memory.json");
     }
 
     private static async Task<IResult> DeleteNoteAsync(

@@ -42,6 +42,15 @@ export function toNullableString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+export function normalizeBillingCode(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'custom-plan';
+}
+
 export function resolveApiUrl(pathOrUrl: string): string {
   if (/^https?:\/\//i.test(pathOrUrl)) {
     return pathOrUrl;
