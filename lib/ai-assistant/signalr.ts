@@ -145,6 +145,23 @@ export interface AssistantHubCallbacks {
   onToolCallResult?: (toolCallId: string, result: string, isError: boolean) => void;
   onTurnComplete?: (messageId: string, fullText: string) => void;
   onTurnError?: (code: string, message: string) => void;
+  /** AI Learning Companion: approved sources for the turn being streamed. */
+  onCitations?: (citations: AssistantCitation[]) => void;
+}
+
+/**
+ * One cited source, as sent by `AiAssistantHub`. Carries no source text — a
+ * citation names where an answer came from; it is not a second channel for
+ * delivering paid content.
+ */
+export interface AssistantCitation {
+  ordinal: number;
+  sourceKey: string;
+  sourceTitle: string;
+  authority: string;
+  heading: string | null;
+  pageNumber: number | null;
+  timestampSeconds: number | null;
 }
 
 export function registerHubCallbacks(
@@ -158,36 +175,48 @@ export function registerHubCallbacks(
     handlers.push([method, handler]);
   }
 
+  // Event names and argument order below MUST match AiAssistantHub.StartTurn.
+  // They previously did not: the client listened for `TextDelta`/`TurnComplete`
+  // with no leading threadId while the hub sent `MessageDelta`/`MessageComplete`
+  // with one, so no token ever reached the UI and the tool-call arguments were
+  // shifted by one position.
   if (callbacks.onTextDelta) {
     const cb = callbacks.onTextDelta;
-    on('TextDelta', (text: unknown) => cb(text as string));
+    on('MessageDelta', (_threadId: unknown, chunk: unknown) => cb(chunk as string));
   }
 
   if (callbacks.onToolCallStart) {
     const cb = callbacks.onToolCallStart;
-    on('ToolCallStart', (toolCallId: unknown, toolName: unknown, args: unknown) =>
+    on('ToolCallStart', (_threadId: unknown, toolCallId: unknown, toolName: unknown, args: unknown) =>
       cb(toolCallId as string, toolName as string, args as string),
     );
   }
 
   if (callbacks.onToolCallResult) {
     const cb = callbacks.onToolCallResult;
-    on('ToolCallResult', (toolCallId: unknown, result: unknown, isError: unknown) =>
+    on('ToolCallResult', (_threadId: unknown, toolCallId: unknown, result: unknown, isError: unknown) =>
       cb(toolCallId as string, result as string, isError as boolean),
     );
   }
 
   if (callbacks.onTurnComplete) {
     const cb = callbacks.onTurnComplete;
-    on('TurnComplete', (messageId: unknown, fullText: unknown) =>
+    on('MessageComplete', (_threadId: unknown, messageId: unknown, fullText: unknown) =>
       cb(messageId as string, fullText as string),
     );
   }
 
   if (callbacks.onTurnError) {
     const cb = callbacks.onTurnError;
-    on('TurnError', (code: unknown, message: unknown) =>
+    on('TurnError', (_threadId: unknown, code: unknown, message: unknown) =>
       cb(code as string, message as string),
+    );
+  }
+
+  if (callbacks.onCitations) {
+    const cb = callbacks.onCitations;
+    on('Citations', (_threadId: unknown, citations: unknown) =>
+      cb(Array.isArray(citations) ? (citations as AssistantCitation[]) : []),
     );
   }
 

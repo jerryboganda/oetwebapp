@@ -19,7 +19,23 @@ export interface AiAssistantMessage {
   content: string;
   createdAt: string;
   toolCalls?: ToolCallInfo[];
+  /**
+   * AI Learning Companion: the approved sources this answer was grounded in.
+   * Absent on every message with no retrieval behind it.
+   */
+  citations?: MessageCitation[];
   metadata?: Record<string, unknown>;
+}
+
+/** One cited source. Names where an answer came from; carries no source text. */
+export interface MessageCitation {
+  ordinal: number;
+  sourceKey: string;
+  sourceTitle: string;
+  authority: string;
+  heading: string | null;
+  pageNumber: number | null;
+  timestampSeconds: number | null;
 }
 
 /** Backwards-compatible alias */
@@ -38,9 +54,12 @@ export interface AiAssistantThread {
   title: string | null;
   role: AssistantRole;
   createdAt: string;
-  updatedAt: string;
-  archived: boolean;
-  messageCount: number;
+  // The learner thread endpoints project AiAssistantThreadDto, which carries
+  // id/title/role/createdAt only. These three are optional so the client type
+  // describes what the server actually sends rather than what it might.
+  updatedAt?: string;
+  archived?: boolean;
+  messageCount?: number;
 }
 
 /** Backwards-compatible alias */

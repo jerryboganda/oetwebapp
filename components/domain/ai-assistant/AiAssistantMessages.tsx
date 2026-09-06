@@ -1,14 +1,35 @@
 'use client';
 
 import { MarkdownContent } from '@/components/ui/markdown-content';
-import type { AiMessage } from '@/lib/ai-assistant/types';
+import type { AiMessage, MessageCitation } from '@/lib/ai-assistant/types';
 
 export interface AiAssistantMessagesProps {
   messages: AiMessage[];
   streamingContent?: string;
+  /** Sources for the turn currently streaming. */
+  streamingCitations?: MessageCitation[];
 }
 
-export function AiAssistantMessages({ messages, streamingContent }: AiAssistantMessagesProps) {
+/**
+ * Authority class → the short label a learner can actually act on. An official
+ * exam fact and Dr Hesham's teaching method are different kinds of claim, and
+ * the source specification is explicit that the two must not read alike.
+ */
+const AUTHORITY_LABELS: Record<string, string> = {
+  OfficialCurrentFact: 'Official exam fact',
+  DrHeshamApprovedMethod: 'Dr Hesham’s method',
+  ProfessionApprovedMethod: 'Profession rulebook',
+  CourseMaterial: 'Course material',
+  PlatformSupport: 'Platform',
+  CandidateEvidence: 'Your own work',
+  AdminOverride: 'Correction',
+};
+
+export function AiAssistantMessages({
+  messages,
+  streamingContent,
+  streamingCitations,
+}: AiAssistantMessagesProps) {
   const isStreaming = streamingContent !== undefined;
 
   if (messages.length === 0 && !isStreaming) {
@@ -28,6 +49,7 @@ export function AiAssistantMessages({ messages, streamingContent }: AiAssistantM
         <div className="rounded-lg bg-background-light p-3" data-testid="streaming-message">
           <MarkdownContent markdown={streamingContent} className="prose prose-sm max-w-none" />
           <span className="inline-block h-4 w-1 animate-pulse bg-primary" data-testid="streaming-cursor" />
+          <CitationList citations={streamingCitations} />
         </div>
       )}
     </div>
@@ -66,6 +88,49 @@ function MessageBubble({ message }: { message: AiMessage }) {
       ) : (
         <MarkdownContent markdown={message.content} className="prose prose-sm max-w-none" />
       )}
+      {!isUser && <CitationList citations={message.citations} />}
     </div>
   );
+}
+
+/**
+ * The sources behind an answer, labelled by authority.
+ *
+ * Deliberately shows the source name, rule heading and location only — never the
+ * source text. A citation says where a claim came from; reprinting the passage
+ * here would turn the citation list into a second delivery channel for paid
+ * material, which is exactly what the retriever's verbatim caps exist to prevent.
+ */
+function CitationList({ citations }: { citations?: MessageCitation[] }) {
+  if (!citations || citations.length === 0) return null;
+
+  return (
+    <div className="mt-3 border-t border-border pt-2" data-testid="message-citations">
+      <p className="text-xs font-semibold text-muted">Based on</p>
+      <ul className="mt-1 space-y-1">
+        {citations.map((citation) => (
+          <li key={`${citation.ordinal}:${citation.sourceKey}`} className="text-xs text-muted">
+            <span className="font-medium text-navy">[S{citation.ordinal}]</span>{' '}
+            {citation.sourceTitle}
+            {citation.heading ? ` — ${citation.heading}` : ''}
+            {citation.pageNumber !== null && citation.pageNumber !== undefined
+              ? ` (p.${citation.pageNumber})`
+              : ''}
+            {citation.timestampSeconds !== null && citation.timestampSeconds !== undefined
+              ? ` (${formatTimestamp(citation.timestampSeconds)})`
+              : ''}
+            <span className="ms-1 rounded bg-background-light px-1 py-0.5 text-[10px] uppercase tracking-wide">
+              {AUTHORITY_LABELS[citation.authority] ?? citation.authority}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function formatTimestamp(totalSeconds: number): string {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = Math.floor(totalSeconds % 60);
+  return `${minutes}:${String(seconds).padStart(2, '0')}`;
 }

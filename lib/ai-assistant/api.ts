@@ -4,24 +4,18 @@
  */
 
 import { apiClient } from '@/lib/api';
-import type { AiAssistantMessage, AiAssistantThread, AssistantRole } from './types';
+import type { AiAssistantMessage, AiAssistantThread, AssistantRole, MessageCitation } from './types';
 
 // Re-export legacy aliases for backward compat
 export type { AiAssistantMessage as AiMessage, AiAssistantThread as AiThread } from './types';
 
 // ─── Response Types ─────────────────────────────────────────────────────────
 
-export interface ThreadListResponse {
-  threads: AiAssistantThread[];
-  total: number;
-  page: number;
-  pageSize: number;
-}
-
-export interface MessageListResponse {
-  messages: AiAssistantMessage[];
-  total: number;
-}
+// NOTE: the learner endpoints return BARE ARRAYS and page with `skip`/`take`.
+// This client previously declared `{threads,total,page,pageSize}` and
+// `{messages,total}` wrappers and sent `?page=&pageSize=`, so `result.threads`
+// and `result.messages` were always undefined and paging was ignored. The
+// shapes below match `AiAssistantEndpoints` as deployed.
 
 // ─── Thread API ─────────────────────────────────────────────────────────────
 
@@ -32,10 +26,11 @@ export async function createThread(role?: AssistantRole, title?: string): Promis
   });
 }
 
-export async function listThreads(page = 1, pageSize = 20): Promise<ThreadListResponse> {
-  return apiClient.get<ThreadListResponse>(
-    `/v1/ai-assistant/threads?page=${page}&pageSize=${pageSize}`,
+export async function listThreads(skip = 0, take = 20): Promise<AiAssistantThread[]> {
+  const threads = await apiClient.get<AiAssistantThread[]>(
+    `/v1/ai-assistant/threads?skip=${skip}&take=${take}`,
   );
+  return Array.isArray(threads) ? threads : [];
 }
 
 export async function getThread(threadId: string): Promise<AiAssistantThread> {
@@ -48,15 +43,43 @@ export async function archiveThread(threadId: string): Promise<void> {
 
 // ─── Messages API ───────────────────────────────────────────────────────────
 
-export async function getMessages(threadId: string, before?: string): Promise<MessageListResponse> {
-  const params = before ? `?before=${encodeURIComponent(before)}` : '';
-  return apiClient.get<MessageListResponse>(
-    `/v1/ai-assistant/threads/${threadId}/messages${params}`,
-  );
+/** Raw message row as the server sends it. Citations arrive as a JSON string. */
+interface ApiMessage extends Omit<AiAssistantMessage, 'threadId' | 'citations'> {
+  citationsJson?: string | null;
 }
 
-export async function sendMessage(threadId: string, content: string): Promise<AiAssistantMessage> {
-  return apiClient.post<AiAssistantMessage>(`/v1/ai-assistant/threads/${threadId}/messages`, {
-    content,
-  });
+export async function getMessages(
+  threadId: string,
+  skip = 0,
+  take = 50,
+): Promise<AiAssistantMessage[]> {
+  const rows = await apiClient.get<ApiMessage[]>(
+    `/v1/ai-assistant/threads/${threadId}/messages?skip=${skip}&take=${take}`,
+  );
+  if (!Array.isArray(rows)) return [];
+
+  return rows.map((row) => ({
+    ...row,
+    threadId,
+    citations: parseCitations(row.citationsJson),
+  }));
 }
+
+/**
+ * Companion citations are stored as JSON on the message. A malformed value must
+ * never take the transcript down — an answer without its sources is still an
+ * answer, so this degrades to undefined rather than throwing.
+ */
+function parseCitations(raw?: string | null): MessageCitation[] | undefined {
+  if (!raw) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as MessageCitation[]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// There is no POST /threads/{id}/messages route: a learner message is sent over
+// SignalR via `StartTurn`, which is what starts the streamed turn. A REST
+// `sendMessage` helper here would 404, so it deliberately does not exist.

@@ -106,13 +106,26 @@ public sealed class CompanionKillSwitchTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task NewestRowWins_SoADuplicatedKeyCannotResurrectAKilledSurface()
+    public async Task AKeyCannotBeDuplicated_SoOneFlipIsTheWholeAnswer()
     {
-        var old = DateTimeOffset.UtcNow.AddHours(-1);
-        await SetFlagAsync("ai_learning_companion", enabled: true, updatedAt: old);
-        await SetFlagAsync("ai_learning_companion", enabled: false, updatedAt: DateTimeOffset.UtcNow);
+        // FeatureFlags.Key is UNIQUE. That is what makes a kill switch a switch:
+        // there is exactly one row per key, so an operator flipping it in
+        // /admin/flags cannot leave a second, stale row behind that keeps a
+        // killed surface alive. The read path additionally orders by UpdatedAt,
+        // which is belt-and-braces rather than the load-bearing guarantee.
+        await SetFlagAsync("ai_learning_companion", enabled: true);
 
-        Assert.False(await ReadAsync("ai_learning_companion"));
+        await using var db = new LearnerDbContext(_options);
+        db.FeatureFlags.Add(new FeatureFlag
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Name = "ai_learning_companion",
+            Key = "ai_learning_companion",
+            Enabled = false,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
     }
 
     [Fact]
@@ -144,18 +157,31 @@ public sealed class CompanionKillSwitchTests : IAsyncDisposable
         };
     }
 
+    /// <summary>Upserts, because <c>FeatureFlags.Key</c> is unique — flipping a
+    /// switch updates the one row, exactly as /admin/flags does.</summary>
     private async Task SetFlagAsync(string key, bool enabled, DateTimeOffset? updatedAt = null)
     {
         await using var db = new LearnerDbContext(_options);
-        db.FeatureFlags.Add(new FeatureFlag
+        var existing = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Key == key);
+
+        if (existing is null)
         {
-            Id = Guid.NewGuid().ToString("N"),
-            Name = key,
-            Key = key,
-            Enabled = enabled,
-            Description = "kill-switch drill",
-            UpdatedAt = updatedAt ?? DateTimeOffset.UtcNow,
-        });
+            db.FeatureFlags.Add(new FeatureFlag
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Name = key,
+                Key = key,
+                Enabled = enabled,
+                Description = "kill-switch drill",
+                UpdatedAt = updatedAt ?? DateTimeOffset.UtcNow,
+            });
+        }
+        else
+        {
+            existing.Enabled = enabled;
+            existing.UpdatedAt = updatedAt ?? DateTimeOffset.UtcNow;
+        }
+
         await db.SaveChangesAsync();
     }
 }

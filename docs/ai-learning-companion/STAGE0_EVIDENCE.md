@@ -27,7 +27,10 @@
 | S1.6 companion surface | F-097, F-160, F-167 | `/companion` full-screen page, credit chip, thread list, en/ar bundles |
 | S1.2c corpus operations | F-013, F-026 | `/v1/admin/companion/knowledge` — status + reindex, so the corpus can actually be built |
 | S1.7 commercial legibility | **F-142**, F-135, F-139…F-141 | `GET /v1/companion/session` decides access before the learner types; paywall card replaces the chat |
-| S1.8 memory controls | **F-047** | View / delete / reset companion-saved notes and words, scoped by user *and* authoring feature |
+| S1.8 memory controls | **F-047** | View / delete / reset / **export** companion-saved notes and words, scoped by user *and* authoring feature |
+| S1.6b citations | **F-024, F-025** | Sources persisted on the message and rendered with their authority class, on both surfaces |
+| S1.2d corpus bootstrap | **F-013** | Indexes on first boot when the flag is on and the corpus is empty — grounding no longer depends on a remembered manual step |
+| Streaming contract repair | cross-cutting | The hub and the browser client never agreed on event names; the learner chat streamed into handlers nobody had registered |
 
 **No feature was moved to `EXISTS` on the strength of this work.** The gap analysis statuses reflect what is
 actually delivered, not what is scaffolded.
@@ -98,7 +101,9 @@ degrades to exact scan plus the keyword path.
 | `CompanionRetrievalSecurityTests` | **10/10 pass** |
 | `CompanionDestinationSecurityTests` | **16/16 pass** |
 | `CompanionMemoryIsolationTests` | **4/4 pass** |
-| Companion + eligibility + `EndpointRegistrationTests` | **112/112 pass** |
+| `CompanionKillSwitchTests` (the drill) | **23/23 pass** |
+| `AiAssistantHubContractTests` | **2/2 pass** |
+| Companion + eligibility + endpoint + contract suites | **138/138 pass** |
 | `dotnet build` (API project) | **0 errors** |
 | `pnpm run ship:gate` | **OK** |
 | `tsc --noEmit` | **0 errors in changed files**; 13 pre-existing errors remain in `tests/e2e/writing-v2/**` and `tests/performance/**` (Playwright specs, unmodified at HEAD, untouched by this work) |
@@ -126,7 +131,20 @@ with the same error. No install was attempted because several other sessions wer
    without a matrix row "is a bug caught by `AiFeatureEligibilityTests`". No such test existed, and **35 of 66
    feature codes were undocumented**. The test now exists as a ratchet: the 32 pre-existing gaps are listed
    explicitly and any *new* undocumented code fails the build.
-2. **A missing DI registration would have stopped the API from starting.** `IEmbeddingService` was never
+2. **The learner chat had never actually streamed.** `AiAssistantHub` sends `MessageDelta` and
+   `MessageComplete`, each with a leading `threadId`. `lib/ai-assistant/signalr.ts` listened for `TextDelta`
+   and `TurnComplete` with no `threadId`. Nothing threw, nothing logged: the answer streamed into handlers
+   nobody had registered, and the learner watched an empty panel. `ToolCallStart`/`ToolCallResult` matched by
+   name but had their arguments shifted by one position for the same reason. The REST client was wrong in the
+   same way — it declared `{threads,total,page,pageSize}` and `{messages,total}` wrappers over endpoints that
+   return bare arrays, and sent `?page=&pageSize=` to endpoints that read `skip`/`take`, so `result.messages`
+   was always `undefined`. Its unit tests passed throughout, because they mocked `apiClient` and asserted the
+   client's own invented shape back at itself.
+   **Fixed** by aligning the client to the deployed server contract, and locked by
+   `AiAssistantHubContractTests`, which reads both sources and fails if the event names diverge again. That
+   test is deliberately cross-language: the bug lived in the gap between the two suites, so neither could
+   have caught it alone.
+3. **A missing DI registration would have stopped the API from starting.** `IEmbeddingService` was never
    registered in the container — `CodebaseIndexer` and `CodebaseRetriever` are constructed by hand, so nothing
    had ever asked for it. `CompanionRetriever` and `CompanionRulebookIndexer` resolve it through DI, so once
    they were registered the container failed validation at `WebApplicationBuilder.Build()` and **every**
@@ -135,7 +153,7 @@ with the same error. No install was attempted because several other sessions wer
    `EmbeddingService`, which already degrades to a deterministic local vector when no provider is configured.
    **Lesson recorded:** a companion slice is not verified until `EndpointRegistrationTests` has run, because
    that is the only suite that builds the real service provider.
-3. **The learner tool boundary was data-only.** Tool resolution is driven purely by `AiFeatureToolGrant` rows.
+4. **The learner tool boundary was data-only.** Tool resolution is driven purely by `AiFeatureToolGrant` rows.
    Role derivation is correctly server-side and grants are deny-by-default, but one mistaken admin grant row
    would have exposed `run_command` / `deploy` / `write_file` to every learner. A code-level allowlist now
    filters learner-facing feature codes at the single chokepoint, logs any blocked grant as an error, and
@@ -175,10 +193,10 @@ Nothing is visible to any learner until an operator enables `ai_learning_compani
 |---|---|---|
 | Frontend test runner cannot start (missing jsdom transitive deps) | Medium — blocks unit verification, not the build | Platform |
 | 32 feature codes still undocumented in the policy matrix | Low — ratcheted, cannot grow | Platform |
-| Corpus not yet indexed in any environment | High — companion answers ungrounded until an operator runs it | Operations. `POST /v1/admin/companion/knowledge/reindex` now exists to do it; `GET .../status` reports what landed |
-| Free-tier learners see the paywall rather than a small allowance | Medium — the seeded `free` quota plan lists no companion feature code. Granting it is one row in `AllowedFeaturesCsv` and a pricing decision (DR-002, TV-018), so it is left to the owner | Owner |
-| Memory **export** not built (view/delete/reset are) | Low — F-047 stays `PARTIAL` | This programme |
-| No recorded kill-switch drill, no formal WCAG audit of `/companion` | Medium — the surface uses repo primitives and labelled controls, but has not been run through the a11y suite | This programme (S1.8) |
+| Corpus indexing is automatic but unproven on real data | Medium — `CompanionCorpusBootstrapHostedService` indexes on first boot with the flag on, and `POST /v1/admin/companion/knowledge/reindex` refreshes it, but neither has run against a Postgres database with the real rulebooks | Owner: enable the flag in one environment and check `GET /v1/admin/companion/knowledge/status` |
+| Free-tier allowance is now granted in the seed | Informational — the `free` plan lists the companion feature codes, so free learners get its existing 20k/month, 5k/day caps and then the upgrade card. **Remove the three codes from `AllowedFeaturesCsv` to put the companion fully behind the paywall.** Only affects fresh databases; existing environments change it in `/admin` | Owner |
+| No formal WCAG audit of `/companion` | Medium — the surface uses repo primitives, `aria-live` status, `role="alert"` errors and labelled icon buttons, but has not been run through the a11y suite. The suite needs a running app, which is not available here | This programme |
+| Frontend unit tests still cannot execute in this environment | Medium — vitest workers time out on this machine; `tsc --noEmit` and the cross-language contract test are the gates used instead | Platform |
 | Action tools are granted to `ai_assistant.learner`, not `companion.action.v1` | Low — the boundary allowlist is what enforces safety, but per-feature cost attribution is not yet separated | This programme (S1.7); needs an `AiQuotaPlan` row for the companion feature codes first |
 | Item-level deep links (a specific paper, lesson or video timestamp) resolve to the hub page | Medium — F-099 stays `MISSING` | Stage 2 content ingestion |
 | `/companion` is not in the e2e smoke route table | Low — deliberate: the flag ships off, so the page renders its "not enabled" state and a heading assertion would fail | Add when the flag is enabled in the test environment |

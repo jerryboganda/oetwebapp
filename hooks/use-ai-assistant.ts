@@ -20,6 +20,7 @@ import {
   invokeStartTurn,
   invokeCancelTurn,
   mapHubState,
+  type AssistantCitation,
   type AssistantConnectionState,
 } from '@/lib/ai-assistant/signalr';
 import {
@@ -46,6 +47,8 @@ export interface UseAiAssistantReturn {
   streamingStatus: StreamingStatus;
   streamingText: string;
   activeToolCalls: ToolCallInfo[];
+  /** Sources for the turn currently streaming; empty when idle. */
+  citations: AssistantCitation[];
 
   // Legacy compat
   isStreaming: boolean;
@@ -91,6 +94,9 @@ export function useAiAssistant(
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>('idle');
   const [streamingText, setStreamingText] = useState('');
   const [activeToolCalls, setActiveToolCalls] = useState<ToolCallInfo[]>([]);
+  // Citations for the turn currently streaming. Cleared as soon as they are
+  // bound to the completed message, so one turn's sources never leak into the next.
+  const [citations, setCitations] = useState<AssistantCitation[]>([]);
   const [messages, setMessages] = useState<AiAssistantMessage[]>([]);
   const [threads, setThreads] = useState<AiAssistantThread[]>([]);
   const [activeThread, setActiveThread] = useState<AiAssistantThread | null>(null);
@@ -100,11 +106,13 @@ export function useAiAssistant(
   const unsubRef = useRef<(() => void) | null>(null);
   const activeThreadRef = useRef<AiAssistantThread | null>(null);
   const activeToolCallsRef = useRef<ToolCallInfo[]>([]);
+  const citationsRef = useRef<AssistantCitation[]>([]);
   const connectionAttemptRef = useRef(0);
 
   // Keep refs in sync
   useEffect(() => { activeThreadRef.current = activeThread; }, [activeThread]);
   useEffect(() => { activeToolCallsRef.current = activeToolCalls; }, [activeToolCalls]);
+  useEffect(() => { citationsRef.current = citations; }, [citations]);
 
   const assistantRole: AssistantRole = getAssistantRole(resolvedRole);
 
@@ -178,6 +186,10 @@ export function useAiAssistant(
         );
         setStreamingStatus('streaming');
       },
+      onCitations: (incoming: AssistantCitation[]) => {
+        // Arrive before the first token; bound to the message on completion.
+        setCitations(incoming);
+      },
       onTurnComplete: (messageId: string, fullText: string) => {
         const assistantMsg: AiAssistantMessage = {
           id: messageId,
@@ -188,17 +200,22 @@ export function useAiAssistant(
           toolCalls: activeToolCallsRef.current.length > 0
             ? [...activeToolCallsRef.current]
             : undefined,
+          citations: citationsRef.current.length > 0
+            ? [...citationsRef.current]
+            : undefined,
         };
         setMessages((prev) => [...prev, assistantMsg]);
         setStreamingStatus('idle');
         setStreamingText('');
         setActiveToolCalls([]);
+        setCitations([]);
       },
       onTurnError: (code: string, message: string) => {
         setError(`[${code}] ${message}`);
         setStreamingStatus('idle');
         setStreamingText('');
         setActiveToolCalls([]);
+        setCitations([]);
       },
     });
 
@@ -268,8 +285,7 @@ export function useAiAssistant(
 
   const refreshThreads = useCallback(async () => {
     try {
-      const result = await apiListThreads();
-      setThreads(result.threads);
+      setThreads(await apiListThreads());
     } catch (err) {
       console.error('[AI Assistant] Failed to load threads:', err);
     }
@@ -277,8 +293,7 @@ export function useAiAssistant(
 
   const selectThread = useCallback(async (threadId: string) => {
     try {
-      const result = await apiGetMessages(threadId);
-      setMessages(result.messages);
+      setMessages(await apiGetMessages(threadId));
       setActiveThread((prev: AiAssistantThread | null) => {
         const found = threads.find((t) => t.id === threadId);
         return found ?? prev;
@@ -401,6 +416,7 @@ export function useAiAssistant(
     streamingStatus,
     streamingText,
     activeToolCalls,
+    citations,
     isStreaming,
     streamingContent: streamingText,
     messages,

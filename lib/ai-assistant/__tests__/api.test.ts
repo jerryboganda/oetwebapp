@@ -1,4 +1,13 @@
-import { createThread, listThreads, getMessages, archiveThread, sendMessage } from '../api';
+import { createThread, listThreads, getMessages, archiveThread } from '../api';
+
+/**
+ * These tests previously asserted the client's own invented wrappers
+ * (`{threads,total,page,pageSize}`, `{messages,total}`) against a mocked
+ * apiClient — so they passed while the real endpoints returned bare arrays and
+ * `result.messages` was always undefined. A mock that echoes the shape you
+ * asked for proves nothing. They now assert the shape `AiAssistantEndpoints`
+ * actually returns, including the `skip`/`take` query it actually reads.
+ */
 
 // Mock the apiClient dependency
 const mockGet = vi.fn();
@@ -58,22 +67,25 @@ describe('AI Assistant API client', () => {
   });
 
   describe('listThreads', () => {
-    it('lists threads with default pagination', async () => {
-      const response = { threads: [], total: 0, page: 1, pageSize: 20 };
-      mockGet.mockResolvedValue(response);
+    it('requests skip/take and returns the bare array the server sends', async () => {
+      const threads = [{ id: 't1', title: 'One', role: 'learner', createdAt: '' }];
+      mockGet.mockResolvedValue(threads);
 
       const result = await listThreads();
-      expect(result).toEqual(response);
-      expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/threads?page=1&pageSize=20');
+      expect(result).toEqual(threads);
+      expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/threads?skip=0&take=20');
     });
 
-    it('lists threads with custom pagination', async () => {
-      const response = { threads: [{ id: 't1' }], total: 5, page: 2, pageSize: 10 };
-      mockGet.mockResolvedValue(response);
+    it('passes custom paging through', async () => {
+      mockGet.mockResolvedValue([]);
 
-      const result = await listThreads(2, 10);
-      expect(result.page).toBe(2);
-      expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/threads?page=2&pageSize=10');
+      await listThreads(20, 10);
+      expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/threads?skip=20&take=10');
+    });
+
+    it('degrades to an empty list if the server sends something unexpected', async () => {
+      mockGet.mockResolvedValue(null);
+      await expect(listThreads()).resolves.toEqual([]);
     });
 
     it('propagates server errors', async () => {
@@ -83,29 +95,52 @@ describe('AI Assistant API client', () => {
   });
 
   describe('getMessages', () => {
-    it('fetches messages for a thread', async () => {
-      const response = {
-        messages: [
-          { id: 'm1', threadId: 't1', role: 'user', content: 'Hello', createdAt: '2024-01-01T00:00:00Z' },
-          { id: 'm2', threadId: 't1', role: 'assistant', content: 'Hi!', createdAt: '2024-01-01T00:01:00Z' },
-        ],
-        total: 2,
-      };
-      mockGet.mockResolvedValue(response);
+    it('returns the bare array and stamps the thread id onto each row', async () => {
+      mockGet.mockResolvedValue([
+        { id: 'm1', role: 'user', content: 'Hello', createdAt: '2024-01-01T00:00:00Z' },
+        { id: 'm2', role: 'assistant', content: 'Hi!', createdAt: '2024-01-01T00:01:00Z' },
+      ]);
 
       const result = await getMessages('t1');
-      expect(result.messages).toHaveLength(2);
-      expect(result.total).toBe(2);
-      expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/threads/t1/messages');
+      expect(result).toHaveLength(2);
+      expect(result[0].threadId).toBe('t1');
+      expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/threads/t1/messages?skip=0&take=50');
     });
 
-    it('supports cursor-based pagination with before parameter', async () => {
-      mockGet.mockResolvedValue({ messages: [], total: 0 });
+    it('parses companion citations off the stored JSON', async () => {
+      mockGet.mockResolvedValue([
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Select only relevant case notes [S1].',
+          createdAt: '',
+          citationsJson: JSON.stringify([
+            {
+              ordinal: 1,
+              sourceKey: 'rulebook:writing:medicine',
+              sourceTitle: 'Writing rulebook — Medicine',
+              authority: 'ProfessionApprovedMethod',
+              heading: 'W12 — Relevance',
+              pageNumber: null,
+              timestampSeconds: null,
+            },
+          ]),
+        },
+      ]);
 
-      await getMessages('t1', 'msg-cursor-123');
-      expect(mockGet).toHaveBeenCalledWith(
-        '/v1/ai-assistant/threads/t1/messages?before=msg-cursor-123',
-      );
+      const [message] = await getMessages('t1');
+      expect(message.citations).toHaveLength(1);
+      expect(message.citations?.[0].sourceTitle).toBe('Writing rulebook — Medicine');
+    });
+
+    it('drops malformed citations rather than losing the answer', async () => {
+      mockGet.mockResolvedValue([
+        { id: 'm1', role: 'assistant', content: 'answer', createdAt: '', citationsJson: 'not json' },
+      ]);
+
+      const [message] = await getMessages('t1');
+      expect(message.content).toBe('answer');
+      expect(message.citations).toBeUndefined();
     });
 
     it('propagates 404 errors', async () => {
@@ -128,17 +163,4 @@ describe('AI Assistant API client', () => {
     });
   });
 
-  describe('sendMessage', () => {
-    it('sends a message to a thread', async () => {
-      const mockMsg = { id: 'm1', threadId: 't1', role: 'assistant', content: 'reply', createdAt: '' };
-      mockPost.mockResolvedValue(mockMsg);
-
-      const result = await sendMessage('t1', 'hello');
-      expect(result).toEqual(mockMsg);
-      expect(mockPost).toHaveBeenCalledWith(
-        '/v1/ai-assistant/threads/t1/messages',
-        { content: 'hello' },
-      );
-    });
-  });
 });

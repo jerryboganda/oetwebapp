@@ -29,6 +29,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
     activeThread,
     isStreaming,
     streamingContent,
+    citations,
     isConnected,
     connectionState,
     error,
@@ -148,6 +149,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         <AiAssistantMessages
           messages={messages}
           streamingContent={isStreaming ? streamingContent : undefined}
+          streamingCitations={isStreaming ? citations : undefined}
         />
       </div>
 
