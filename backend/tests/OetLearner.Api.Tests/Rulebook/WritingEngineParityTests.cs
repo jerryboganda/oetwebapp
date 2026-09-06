@@ -8,13 +8,15 @@ namespace OetLearner.Api.Tests.Rulebook;
 /// Cross-engine parity test for the writing rule engine.
 ///
 /// Loads <c>lib/rulebook/__tests__/__fixtures__/writing-engine-parity.json</c>
-/// — the same fixture corpus consumed by the Vitest suite
-/// <c>lib/rulebook/__tests__/writing-rule-fixtures.test.ts</c> — and asserts
-/// that <see cref="WritingRuleEngine.Lint"/> produces the SAME set of
-/// non-info ruleIds for each fixture.
+/// and asserts that <see cref="WritingRuleEngine.Lint"/> produces the locked
+/// set of non-info ruleIds for each fixture.
 ///
-/// Makes the docblock claim ("Behaviour MUST match the TypeScript engine")
-/// in <see cref="WritingRuleEngine"/> mechanically enforceable.
+/// The fixture corpus is .NET-only: the TypeScript engine
+/// (<c>lib/rulebook/writing-rules.ts</c>) was retired, so no Vitest suite
+/// consumes this file anymore. Makes the docblock claim ("Behaviour MUST
+/// match the TypeScript engine") in <see cref="WritingRuleEngine"/>
+/// historically scoped: parity holds against the retired engine's last
+/// locked outputs, now frozen in the JSON (see its $schema-note).
 /// </summary>
 public class WritingEngineParityTests
 {
