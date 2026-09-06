@@ -19,7 +19,8 @@ describe('Speaking Assessment Criteria page', () => {
     expect(SPEAKING_CRITERIA).toHaveLength(9);
 
     for (const c of SPEAKING_CRITERIA) {
-      expect(screen.getByText(c.name, { exact: false })).toBeInTheDocument();
+      // Each name appears twice by design (overview table + accordion title).
+      expect(screen.getAllByText(c.name, { exact: false }).length).toBeGreaterThanOrEqual(2);
     }
     expect(screen.getAllByText('6 points').length).toBeGreaterThanOrEqual(4);
     expect(screen.getAllByText('3 points').length).toBeGreaterThanOrEqual(5);
