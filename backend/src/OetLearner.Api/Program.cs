@@ -1224,6 +1224,14 @@ builder.Services.AddScoped<StrategyGuideService>();
 // AI Learning Companion (docs/ai-learning-companion/). Kill switches read the
 // existing FeatureFlags table so /admin/flags can disable retrieval, actions or
 // credit consumption independently, without a deploy. All fail closed.
+// IEmbeddingService had no registration anywhere in the container — CodebaseIndexer
+// and CodebaseRetriever are constructed by hand, so nothing ever asked for it. The
+// companion retriever and indexer DO resolve it through DI, so without this the
+// container fails validation and the API does not start at all. Registered here
+// rather than made optional because EmbeddingService already degrades on its own:
+// with no embedding provider configured it returns a deterministic local vector.
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.Indexing.IEmbeddingService,
+    OetLearner.Api.Services.AiAssistant.Indexing.EmbeddingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionFeatureFlags,
     OetLearner.Api.Services.Companion.CompanionFeatureFlags>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionContextResolver,
