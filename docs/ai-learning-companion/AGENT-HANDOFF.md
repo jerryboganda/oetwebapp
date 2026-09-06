@@ -78,9 +78,11 @@ Not investigated (other sessions' lanes, were red before this session touched an
 
 ## 3. Every change, and why
 
-All of the below are **already committed** — a peer session's commit `354c91291` swept up this
-session's then-uncommitted files. Verified intact after the fact. Two files carry further
-uncommitted edits (see the ⚠ rows).
+All of the below are **committed**. The Recalls/resolver work landed in a peer session's commit
+`354c91291`, which swept up this session's then-uncommitted files (verified intact afterwards).
+The two performance-test repairs and this document landed in `3ec54a76d`.
+
+**Nothing from this session is unpushed-but-uncommitted. Nothing has been pushed to `origin`.**
 
 ### Production code
 
@@ -112,7 +114,7 @@ from `RecallsEndpoints.cs` makes this test — and only this test — fail. Endp
 (CS1912) left behind by a peer session. It blocked compilation of the entire test project for
 every session. Waited >10 min first; they had moved on.
 
-### ⚠ Uncommitted at handoff
+### Committed in `3ec54a76d`
 
 **`backend/tests/OetLearner.Api.Tests/EffectiveEntitlementResolverPerformanceTests.cs`** — query
 budget ratcheted 6→7 and 5→6, with a comment explaining exactly which lookup was added and why it
