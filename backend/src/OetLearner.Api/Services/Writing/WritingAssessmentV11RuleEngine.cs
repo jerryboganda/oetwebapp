@@ -155,7 +155,8 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             return "genre_style";
         if (value.Contains("address") || value.Contains("salutation") || value.Contains("re_line")
             || value.Contains("blank") || value.Contains("paragraph") || value.Contains("structure")
-            || value.Contains("closure") || value.Contains("yours") || value.Contains("discharge_intro"))
+            || value.Contains("closure") || value.Contains("yours") || value.Contains("discharge_intro")
+            || value.Contains("no_brackets") || value.Contains("signoff") || value.Contains("dob_age"))
             return "organisation_layout";
         if (value.Contains("language") || value.Contains("grammar") || value.Contains("tense")
             || value.Contains("punctuation") || value.Contains("linker_") || value.Contains("latin")
@@ -297,7 +298,8 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
         if (value.Contains("length") || value.Contains("conciseness") || value.Contains("linker_density")) return "irrelevant_excess";
         if (value.Contains("genre") || value.Contains("jargon") || value.Contains("non_medical")) return "register_jargon";
         if (value.Contains("punctuation") || value.StartsWith("r12")) return "punctuation";
-        if (value.Contains("address") || value.Contains("salutation") || value.Contains("layout") || value.Contains("blank")) return "layout_format";
+        if (value.Contains("address") || value.Contains("salutation") || value.Contains("layout") || value.Contains("blank")
+            || value.Contains("no_brackets") || value.Contains("signoff") || value.Contains("dob_age")) return "layout_format";
         return "language";
     }
 }

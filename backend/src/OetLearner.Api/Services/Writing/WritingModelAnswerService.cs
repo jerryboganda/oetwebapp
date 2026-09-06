@@ -52,7 +52,10 @@ public sealed record WritingModelAnswerGenerationResult(bool IsReady, string Hol
 /// gateway and refuses to publish any sentence that cannot be mapped to the
 /// immutable case-note snapshot.
 /// </summary>
-public sealed class WritingModelAnswerService(IAiGatewayService gateway, ILogger<WritingModelAnswerService> logger)
+public sealed class WritingModelAnswerService(
+    IAiGatewayService gateway,
+    WritingRuleEngine ruleEngine,
+    ILogger<WritingModelAnswerService> logger)
 {
     public async Task<WritingModelAnswerGenerationResult> PopulateAsync(
         WritingAssessmentReportV11 report,
@@ -121,6 +124,24 @@ public sealed class WritingModelAnswerService(IAiGatewayService gateway, ILogger
             if (!grounding.IsGrounded)
             {
                 answer.HoldReason = "model_answer_unmapped_sentence";
+                answer.UpdatedAt = DateTimeOffset.UtcNow;
+                return new WritingModelAnswerGenerationResult(false, answer.HoldReason);
+            }
+
+            // Global Model Answer Formatting & Sign-Off Rules (owner addendum,
+            // 2026-09-06): same "zero unresolved violations" gate as the
+            // pre-generated task Model Answer path (WritingTaskModelAnswerService).
+            var lintFindings = ruleEngine.Lint(new WritingLintInput(
+                LetterText: parsed.ModelAnswerText,
+                LetterType: report.LetterType,
+                Profession: profession));
+            var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
+            if (criticalFindings.Count > 0)
+            {
+                logger.LogWarning(
+                    "Model-answer rule violations for report {ReportId}: {Findings}",
+                    report.Id, string.Join(" | ", criticalFindings.Select(f => $"{f.RuleId}: {f.Message}")));
+                answer.HoldReason = "model_answer_rule_violations";
                 answer.UpdatedAt = DateTimeOffset.UtcNow;
                 return new WritingModelAnswerGenerationResult(false, answer.HoldReason);
             }

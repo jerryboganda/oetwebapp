@@ -32,6 +32,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "content_requires_smoking_drinking",
         "date_blank_line_sandwich",
         "date_format_consistent",
+        "dob_age_forbidden_phrase",
         "discharge_admitted_with_past_simple",
         "discharge_intro_no_identity",
         "discharge_intro_template",
@@ -55,12 +56,14 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "no_asap_in_letter",
         "no_contractions",
         "no_date_prefix",
+        "no_brackets_in_letter",
         "non_medical_no_jargon",
         "numerical_values_have_units",
         "re_line_age_dob",
         "salutation_last_name_only",
         "salutation_re_adjacent",
         "sentence_length_guard",
+        "signoff_no_invented_name",
         "since_requires_present_perfect",
         "surgery_past_simple",
         "treatment_for_not_from",
@@ -75,6 +78,79 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "yours_sincerely_vs_faithfully",
     };
 
+    // Severity defaults for the always-on builtin battery below. Values are
+    // taken verbatim from the original (pre-canonical-switch) profession
+    // rulebooks, which carried these CheckIds with real severities — kept as
+    // the historical default so restoring the fallback (see Lint() below)
+    // does not change any existing detector's blocking behaviour. The three
+    // new global formatting/sign-off CheckIds (owner addendum, 2026-09-06)
+    // are absolute layout rules and are always Critical.
+    private static readonly Dictionary<string, RuleSeverity> BuiltInSeverityByCheckId = new(StringComparer.Ordinal)
+    {
+        ["cancer_suspected_flagged_urgent"] = RuleSeverity.Critical,
+        ["content_requires_smoking_drinking"] = RuleSeverity.Critical,
+        ["content_requires_allergy_for_atopic"] = RuleSeverity.Critical,
+        ["letter_body_length"] = RuleSeverity.Major,
+        ["letter_paragraph_count"] = RuleSeverity.Major,
+        ["letter_structure_order"] = RuleSeverity.Major,
+        ["salutation_re_adjacent"] = RuleSeverity.Critical,
+        ["blank_line_between_paragraphs"] = RuleSeverity.Major,
+        ["address_punctuation"] = RuleSeverity.Critical,
+        ["date_format_consistent"] = RuleSeverity.Major,
+        ["year_not_abbreviated"] = RuleSeverity.Major,
+        ["no_date_prefix"] = RuleSeverity.Critical,
+        ["date_blank_line_sandwich"] = RuleSeverity.Major,
+        ["salutation_last_name_only"] = RuleSeverity.Critical,
+        ["body_uses_last_name_only"] = RuleSeverity.Critical,
+        ["re_line_age_dob"] = RuleSeverity.Major,
+        ["minor_naming_convention"] = RuleSeverity.Critical,
+        ["yours_sincerely_vs_faithfully"] = RuleSeverity.Critical,
+        ["yours_sincerely_capitalisation"] = RuleSeverity.Minor,
+        ["intro_sentence_count"] = RuleSeverity.Major,
+        ["intro_contains_purpose"] = RuleSeverity.Critical,
+        ["urgent_intro_contains_urgent"] = RuleSeverity.Critical,
+        ["discharge_intro_no_identity"] = RuleSeverity.Critical,
+        ["min_body_paragraphs"] = RuleSeverity.Critical,
+        ["visit_paragraphization_check"] = RuleSeverity.Critical,
+        ["urgent_body_starts_today"] = RuleSeverity.Critical,
+        ["body_forbidden_phrase_next_visit"] = RuleSeverity.Critical,
+        ["body_no_todays_date"] = RuleSeverity.Critical,
+        ["body_forbidden_phrase_yesterday"] = RuleSeverity.Major,
+        ["body_forbidden_phrase_the_patient"] = RuleSeverity.Critical,
+        ["urgent_closure_phrase"] = RuleSeverity.Critical,
+        ["urgent_token_not_repeated"] = RuleSeverity.Major,
+        ["closure_mentions_review_if_required"] = RuleSeverity.Critical,
+        ["enclosure_results_phrase"] = RuleSeverity.Major,
+        ["closure_mentions_patient_request_if_flagged"] = RuleSeverity.Major,
+        ["closure_mentions_consent_if_flagged"] = RuleSeverity.Major,
+        ["blank_before_closing_phrase"] = RuleSeverity.Major,
+        ["visit_content_tense_basic_check"] = RuleSeverity.Critical,
+        ["since_requires_present_perfect"] = RuleSeverity.Critical,
+        ["for_duration_requires_present_perfect"] = RuleSeverity.Critical,
+        ["surgery_past_simple"] = RuleSeverity.Critical,
+        ["ago_requires_past_simple"] = RuleSeverity.Critical,
+        ["latin_abbreviations_translated"] = RuleSeverity.Critical,
+        ["numerical_values_have_units"] = RuleSeverity.Critical,
+        ["no_contractions"] = RuleSeverity.Critical,
+        ["conditions_lowercase"] = RuleSeverity.Critical,
+        ["linker_however_punctuation"] = RuleSeverity.Critical,
+        ["linker_therefore_punctuation"] = RuleSeverity.Major,
+        ["linker_in_addition_punctuation"] = RuleSeverity.Major,
+        ["sentence_length_guard"] = RuleSeverity.Major,
+        ["linker_density"] = RuleSeverity.Major,
+        ["no_asap_in_letter"] = RuleSeverity.Critical,
+        ["discharge_intro_template"] = RuleSeverity.Critical,
+        ["discharge_omits_knownto_gp"] = RuleSeverity.Critical,
+        ["discharge_admitted_with_past_simple"] = RuleSeverity.Critical,
+        ["discharge_plan_present"] = RuleSeverity.Critical,
+        ["discharge_all_investigations_listed"] = RuleSeverity.Critical,
+        ["treatment_for_not_from"] = RuleSeverity.Critical,
+        ["non_medical_no_jargon"] = RuleSeverity.Critical,
+        ["no_brackets_in_letter"] = RuleSeverity.Critical,
+        ["dob_age_forbidden_phrase"] = RuleSeverity.Critical,
+        ["signoff_no_invented_name"] = RuleSeverity.Critical,
+    };
+
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
 
     public static bool IsSupportedCheckId(string? checkId)
@@ -87,10 +163,12 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         var applicable = RulesApplicableTo(book, input.LetterType);
 
         var findings = new List<LintFinding>();
+        var handledCheckIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var rule in applicable)
         {
             if (!string.IsNullOrWhiteSpace(rule.CheckId))
             {
+                handledCheckIds.Add(rule.CheckId!);
                 var det = DetectorFor(rule.CheckId!);
                 if (det is not null) findings.AddRange(det(rule, input, structure));
             }
@@ -98,6 +176,31 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
             {
                 findings.AddRange(RunForbiddenPatterns(rule, input.LetterText));
             }
+        }
+
+        // Always-on baseline: any supported detector whose CheckId is not
+        // already wired via a rulebook-JSON rule still runs, using the
+        // BuiltInSeverityByCheckId default. Root-cause fix — the vendored
+        // canonical rule records (docs/canonical-rules/README.md) carry no
+        // CheckId/ForbiddenPatterns by design, which otherwise silently
+        // drops this entire deterministic detector battery for every
+        // canonical profession. Legacy professions are unaffected: their
+        // rulebook-JSON rules already populate handledCheckIds above, so
+        // this loop only fills the gap, never double-fires.
+        foreach (var checkId in SupportedCheckIdSet)
+        {
+            if (handledCheckIds.Contains(checkId)) continue;
+            var det = DetectorFor(checkId);
+            if (det is null) continue;
+            var builtIn = new OetRule
+            {
+                Id = $"BUILTIN.{checkId}",
+                Title = checkId,
+                CheckId = checkId,
+                Enforcement = RuleEnforcement.Deterministic,
+                Severity = BuiltInSeverityByCheckId.GetValueOrDefault(checkId, RuleSeverity.Major),
+            };
+            findings.AddRange(det(builtIn, input, structure));
         }
 
         // Dedup
@@ -273,6 +376,9 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "visit_content_tense_basic_check" => DetectVisitContentTense,
         "numerical_values_have_units" => DetectNumericalValuesHaveUnits,
         "discharge_all_investigations_listed" => DetectMarkerDependentNoop,
+        "no_brackets_in_letter" => DetectNoBrackets,
+        "dob_age_forbidden_phrase" => DetectDobAgeForbiddenPhrase,
+        "signoff_no_invented_name" => DetectSignoffNoInventedName,
         _ => null,
     };
 
@@ -929,25 +1035,130 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     }
 
     // R05.5 — date format consistency. Distinguishes DD/MM/YYYY (slash-numeric),
-    // "1 January 2024" (day-first long), and "January 1, 2024" (month-first long).
-    // If two or more distinct styles appear in the same letter, flag major.
+    // DD.MM.YYYY (dot-numeric), "1 January 2024" (day-first long), and
+    // "January 1, 2024" (month-first long). Global Model Answer Formatting &
+    // Sign-Off addendum (owner, 2026-09-06), §2: one consistent style per
+    // letter; date/address ordering is unaffected. If two or more distinct
+    // styles appear in the same letter, flag major.
     private static IEnumerable<LintFinding> DetectDateFormatConsistent(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var re = new Regex(
-            @"\b(\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})\b");
+            @"\b(\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})\b");
         var hasSlash = false;
+        var hasDot = false;
         var hasDayFirstLong = false;
         var hasMonthFirstLong = false;
         foreach (Match m in re.Matches(input.LetterText))
         {
             if (m.Value.Contains('/')) hasSlash = true;
+            else if (m.Value.Contains('.')) hasDot = true;
             else if (char.IsDigit(m.Value[0])) hasDayFirstLong = true;
             else hasMonthFirstLong = true;
         }
-        var styles = (hasSlash ? 1 : 0) + (hasDayFirstLong ? 1 : 0) + (hasMonthFirstLong ? 1 : 0);
+        var styles = (hasSlash ? 1 : 0) + (hasDot ? 1 : 0) + (hasDayFirstLong ? 1 : 0) + (hasMonthFirstLong ? 1 : 0);
         if (styles > 1)
             yield return new LintFinding(rule.Id, RuleSeverity.Major,
-                "Date format must be consistent throughout the letter.");
+                "Date format must be consistent throughout the letter. Pick ONE style (fully written, slash, or dot) and use it for every date.");
+    }
+
+    // ---------------------------------------------------------------------
+    // Global Model Answer Formatting & Sign-Off Rules (owner addendum,
+    // 2026-09-06). Mandatory, system-wide; supersedes any conflicting
+    // generated output or earlier implementation behaviour. Applied via the
+    // always-on builtin battery in Lint() above, so these three checks run
+    // for every profession/letter-type without any rulebook-JSON change.
+    // ---------------------------------------------------------------------
+
+    // §1 — no round/square brackets or placeholder brackets anywhere in the
+    // final letter (e.g. "[Name]", "(Medical Practitioner)"). Zero tolerance.
+    private static IEnumerable<LintFinding> DetectNoBrackets(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var count = 0;
+        foreach (Match m in Regex.Matches(input.LetterText, @"[()\[\]]"))
+        {
+            var start = Math.Max(0, m.Index - 20);
+            var end = Math.Min(input.LetterText.Length, m.Index + 20);
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "No brackets, parentheses, or placeholder brackets are allowed anywhere in the final letter. Rewrite the bracketed content naturally.",
+                Quote: input.LetterText[start..end].Trim(), Start: m.Index, End: m.Index + m.Length);
+            if (++count >= 5) yield break;
+        }
+    }
+
+    // §3 — never write "DOB not provided"/"age not given" etc. Omit entirely
+    // if unavailable; never present it as a hedge phrase.
+    private static IEnumerable<LintFinding> DetectDobAgeForbiddenPhrase(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var m = Regex.Match(input.LetterText,
+            @"\b(DOB|date of birth|age)\s*(is\s+)?(not\s+(provided|given|available|stated|known)|unknown)\b",
+            RegexOptions.IgnoreCase);
+        if (m.Success)
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Do not write hedge phrases like 'DOB not provided'. Omit DOB entirely if unavailable, or state the age naturally without brackets.",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+    }
+
+    private static readonly Regex SignoffTitleNamePattern = new(@"\b(Dr|Mr|Mrs|Ms|Miss)\.?\s+[A-Z][a-zA-Z'-]+");
+    private static readonly HashSet<string> SignoffRoleWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "doctor", "nurse", "charge", "staff", "registered", "pharmacist", "physiotherapist", "dentist",
+        "radiographer", "podiatrist", "dietitian", "occupational", "therapist", "optometrist", "speech",
+        "pathologist", "language", "veterinarian", "veterinary", "surgeon", "practitioner", "general",
+        "medical", "midwife", "clinician", "consultant", "specialist", "paramedic", "technician", "officer",
+        "assistant", "associate", "senior", "junior",
+    };
+    private static readonly Regex SignoffOrgOrContactPattern = new(
+        @"\b(hospital|clinic|centre|center|unit|department|ward|surgery|health\s?care|nhs|street|road|avenue|lane|drive)\b" +
+        @"|[\w.+-]+@[\w-]+\.[\w.-]+|\b\d{3,}[\s-]?\d{3,}\b",
+        RegexOptions.IgnoreCase);
+
+    // §4 — the sign-off after "Yours sincerely/faithfully," must be the
+    // professional designation ONLY: no invented writer name, no fabricated
+    // surname, no hospital/department/address/phone/email beneath it.
+    private static IEnumerable<LintFinding> DetectSignoffNoInventedName(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.YoursIndex is null) yield break;
+        var sigLines = s.Lines.Skip(s.YoursIndex.Value + 1)
+            .Select(l => l.Trim())
+            .Where(l => l.Length > 0)
+            .ToList();
+        if (sigLines.Count == 0) yield break;
+
+        var sigBlock = string.Join(" | ", sigLines);
+        var titleName = SignoffTitleNamePattern.Match(sigBlock);
+        if (titleName.Success)
+        {
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Sign-off must not include an invented writer name or title (e.g. 'Dr Reynolds'). Use the professional designation only (e.g. 'Doctor'), unless the case notes explicitly give the writer's real name.",
+                Quote: titleName.Value);
+            yield break;
+        }
+
+        foreach (var line in sigLines)
+        {
+            var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var looksLikeBareName = words.Length is 2 or 3
+                && words.All(w => Regex.IsMatch(w, @"^[A-Z][a-zA-Z'-]*$"))
+                && !words.Any(w => SignoffRoleWords.Contains(w));
+            if (looksLikeBareName)
+            {
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    "Sign-off looks like an invented personal name. Use the professional designation only (e.g. 'Doctor', 'Charge Nurse'), not a name.",
+                    Quote: line);
+                yield break;
+            }
+        }
+
+        foreach (var line in sigLines)
+        {
+            if (SignoffOrgOrContactPattern.IsMatch(line))
+            {
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    "Do not add the hospital, clinic, department, unit, organisation, address, phone number, or email beneath the sign-off. The default signature line is the professional designation only.",
+                    Quote: line);
+                yield break;
+            }
+        }
     }
 
     // R05.6 — year not abbreviated (e.g. 01/01/'24)

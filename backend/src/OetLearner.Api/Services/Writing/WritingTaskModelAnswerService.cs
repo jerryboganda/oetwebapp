@@ -49,6 +49,16 @@ public interface IWritingTaskModelAnswerService
     Task<WritingTaskModelAnswerDto?> GetAsync(Guid scenarioId, CancellationToken ct = default);
     Task<(IReadOnlyList<WritingTaskModelAnswerDto> Items, int Total)> ListAsync(string? status, int page, int pageSize, CancellationToken ct = default);
     Task<WritingTaskModelAnswerDto> GenerateAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Certifies an offline-drafted Model Answer (the "platform validate" half
+    /// of the hybrid generation route: draft outside the platform at no
+    /// provider spend, then run it through the SAME grounding + word-count +
+    /// deterministic-rule gate as <see cref="GenerateAsync"/> before it can
+    /// ever be marked Ready). Never bypasses any check GenerateAsync applies.
+    /// </summary>
+    Task<WritingTaskModelAnswerDto> ImportAsync(Guid scenarioId, string letterText, string adminUserId, CancellationToken ct = default);
+
     Task<WritingTaskModelAnswerDto?> ApproveAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
     Task<WritingTaskModelAnswerDto?> RejectAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
 
@@ -71,6 +81,7 @@ public interface IWritingTaskModelAnswerService
 public sealed class WritingTaskModelAnswerService(
     LearnerDbContext db,
     IAiGatewayService gateway,
+    WritingRuleEngine ruleEngine,
     TimeProvider clock,
     ILogger<WritingTaskModelAnswerService> logger) : IWritingTaskModelAnswerService
 {
@@ -223,6 +234,24 @@ public sealed class WritingTaskModelAnswerService(
                 return Hold(row, "model_answer_unmapped_sentence");
             }
 
+            // Global Model Answer Formatting & Sign-Off Rules (owner addendum,
+            // 2026-09-06): "VERIFIED must mean zero unresolved violations" —
+            // a Model Answer must never be marked Ready while any Critical
+            // deterministic finding (brackets, invented sign-off name, date
+            // format, structural rules, etc.) remains. Never force Ready.
+            var lintFindings = ruleEngine.Lint(new WritingLintInput(
+                LetterText: parsed.ModelAnswerText,
+                LetterType: scenario.LetterType,
+                Profession: profession));
+            var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
+            if (criticalFindings.Count > 0)
+            {
+                logger.LogWarning(
+                    "Model-answer rule violations for scenario {ScenarioId}: {Findings}",
+                    scenarioId, string.Join(" | ", criticalFindings.Select(f => $"{f.RuleId}: {f.Message}")));
+                return Hold(row, "model_answer_rule_violations");
+            }
+
             row.Status = WritingAssessmentModelAnswerStatus.Ready;
             row.IsCandidateVisible = false; // still needs an explicit admin approve
             row.ModelAnswerText = parsed.ModelAnswerText.Trim();
@@ -243,6 +272,85 @@ public sealed class WritingTaskModelAnswerService(
             logger.LogWarning(ex, "Model-answer pregeneration failed for scenario {ScenarioId}", scenarioId);
             return Hold(row, "model_answer_generation_failed");
         }
+    }
+
+    public async Task<WritingTaskModelAnswerDto> ImportAsync(Guid scenarioId, string letterText, string adminUserId, CancellationToken ct = default)
+    {
+        var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct)
+            ?? throw ApiException.NotFound("writing_scenario_not_found", "Writing task was not found.");
+
+        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .Where(s => s.ScenarioId == scenarioId)
+            .OrderBy(s => s.Ordinal)
+            .ToListAsync(ct);
+
+        var row = await db.WritingTaskModelAnswers.FirstOrDefaultAsync(x => x.ScenarioId == scenarioId, ct);
+        var now = clock.GetUtcNow();
+        if (row is null)
+        {
+            row = new WritingTaskModelAnswer { Id = Guid.NewGuid(), ScenarioId = scenarioId, CreatedAt = now };
+            db.WritingTaskModelAnswers.Add(row);
+        }
+
+        var taskSnapshot = scenario.TaskPromptMarkdown ?? string.Empty;
+        var caseNotesText = BuildCaseNotesText(sentences.Select(s => (s.SentenceText, s.RelevanceLabel)));
+        var allFacts = sentences.Select(s => s.SentenceText).ToArray();
+        row.SourceContentHash = ComputeSourceContentHash(taskSnapshot, caseNotesText);
+        row.UpdatedAt = now;
+
+        if (sentences.Count == 0)
+        {
+            return Hold(row, "model_answer_case_notes_unavailable");
+        }
+        if (!RulebookProfessionParser.TryParse(scenario.Profession, out var profession))
+        {
+            return Hold(row, "model_answer_profession_pack_unavailable");
+        }
+        if (string.IsNullOrWhiteSpace(letterText))
+        {
+            return Hold(row, "model_answer_unreadable");
+        }
+
+        var trimmedLetter = letterText.Trim();
+        var words = Regex.Matches(trimmedLetter, @"\b[\p{L}\p{N}’'-]+\b").Count;
+        if (words < 180 || words > 200)
+        {
+            return Hold(row, "model_answer_word_count_out_of_range");
+        }
+
+        var grounding = WritingModelAnswerGroundingValidator.Validate(trimmedLetter, allFacts);
+        if (!grounding.IsGrounded)
+        {
+            return Hold(row, "model_answer_unmapped_sentence");
+        }
+
+        var lintFindings = ruleEngine.Lint(new WritingLintInput(
+            LetterText: trimmedLetter,
+            LetterType: scenario.LetterType,
+            Profession: profession));
+        var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
+        if (criticalFindings.Count > 0)
+        {
+            logger.LogWarning(
+                "Imported model-answer rule violations for scenario {ScenarioId}: {Findings}",
+                scenarioId, string.Join(" | ", criticalFindings.Select(f => $"{f.RuleId}: {f.Message}")));
+            return Hold(row, "model_answer_rule_violations");
+        }
+
+        row.Status = WritingAssessmentModelAnswerStatus.Ready;
+        row.IsCandidateVisible = false; // still needs an explicit admin approve
+        row.ModelAnswerText = trimmedLetter;
+        row.GroundedFactReferencesJson = "[]";
+        row.HoldReason = null;
+        row.RulebookVersion = null;
+        row.PromptVersion = "writing.model-answer.offline-import.v1";
+        row.ModelUsed = "offline-import:claude-code";
+        row.GeneratedAt = now;
+        row.ApprovedByUserId = null;
+        row.ApprovedAt = null;
+
+        await db.SaveChangesAsync(ct);
+        return ToDto(row, scenario);
     }
 
     public async Task<WritingModelAnswerBatchResult> GenerateMissingAsync(

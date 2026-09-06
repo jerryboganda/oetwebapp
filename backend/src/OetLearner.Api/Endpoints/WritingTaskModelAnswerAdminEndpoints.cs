@@ -23,6 +23,10 @@ public static class WritingTaskModelAnswerAdminEndpoints
         group.MapGet("/model-answers", ListModelAnswers).WithAdminRead("AdminContentRead");
         group.MapGet("/tasks/{id:guid}/model-answer", GetModelAnswer).WithAdminRead("AdminContentRead");
         group.MapPost("/tasks/{id:guid}/model-answer/generate", GenerateModelAnswer).WithAdminWrite("AdminContentWrite");
+        // Hybrid generation route: certifies an offline-drafted letter through
+        // the SAME grounding/word-count/rule gate as /generate. Never marks
+        // Ready on say-so alone — see WritingTaskModelAnswerService.ImportAsync.
+        group.MapPost("/tasks/{id:guid}/model-answer/import", ImportModelAnswer).WithAdminWrite("AdminContentWrite");
         group.MapPost("/tasks/{id:guid}/model-answer/approve", ApproveModelAnswer).WithAdminWrite("AdminContentPublish");
         group.MapPost("/tasks/{id:guid}/model-answer/reject", RejectModelAnswer).WithAdminWrite("AdminContentWrite");
         // Preparation-time backfill: generate the ONE reusable Model Answer
@@ -64,6 +68,18 @@ public static class WritingTaskModelAnswerAdminEndpoints
         return Results.Ok(answer);
     }
 
+    private static async Task<IResult> ImportModelAnswer(
+        IWritingTaskModelAnswerService service,
+        ClaimsPrincipal user,
+        Guid id,
+        ImportModelAnswerRequest body,
+        CancellationToken ct)
+    {
+        var adminId = GetUserId(user) ?? "system";
+        var answer = await service.ImportAsync(id, body.LetterText, adminId, ct);
+        return Results.Ok(answer);
+    }
+
     private static async Task<IResult> GenerateMissingModelAnswers(
         IWritingTaskModelAnswerService service,
         ClaimsPrincipal user,
@@ -101,6 +117,8 @@ public static class WritingTaskModelAnswerAdminEndpoints
             ? Results.NotFound(new { error = "No model answer has been generated for this task yet." })
             : Results.Ok(answer);
     }
+
+    public sealed record ImportModelAnswerRequest(string LetterText);
 
     private static string? GetUserId(ClaimsPrincipal user)
     {
