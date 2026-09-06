@@ -105,8 +105,8 @@ public sealed class FulfillmentGateTests
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        var periodStart = new DateTime(now.AddDays(-30).UtcDateTime, DateTimeKind.Utc);
-        var periodEnd = new DateTime(now.AddDays(-1).UtcDateTime, DateTimeKind.Utc);
+        var periodStart = DateTime.SpecifyKind(now.AddDays(-30).UtcDateTime, DateTimeKind.Utc);
+        var periodEnd = DateTime.SpecifyKind(now.AddDays(-1).UtcDateTime, DateTimeKind.Utc);
         var stripe = new CountingStripeService { PeriodStart = periodStart, PeriodEnd = periodEnd };
         var svc = NewService(db, stripe);
 
@@ -152,14 +152,14 @@ public sealed class FulfillmentGateTests
 
         var stripe = new CountingStripeService
         {
-            PeriodStart = new DateTime(now.AddDays(-60).UtcDateTime, DateTimeKind.Utc),
-            PeriodEnd = new DateTime(now.AddDays(-31).UtcDateTime, DateTimeKind.Utc),
+            PeriodStart = DateTime.SpecifyKind(now.AddDays(-60).UtcDateTime, DateTimeKind.Utc),
+            PeriodEnd = DateTime.SpecifyKind(now.AddDays(-31).UtcDateTime, DateTimeKind.Utc),
         };
         var svc = NewService(db, stripe);
         await svc.FulfillSubscriptionRenewalAsync("sub_renew2", CancellationToken.None);
 
-        stripe.PeriodStart = new DateTime(now.AddDays(-30).UtcDateTime, DateTimeKind.Utc);
-        stripe.PeriodEnd = new DateTime(now.AddDays(-1).UtcDateTime, DateTimeKind.Utc);
+        stripe.PeriodStart = DateTime.SpecifyKind(now.AddDays(-30).UtcDateTime, DateTimeKind.Utc);
+        stripe.PeriodEnd = DateTime.SpecifyKind(now.AddDays(-1).UtcDateTime, DateTimeKind.Utc);
         await svc.FulfillSubscriptionRenewalAsync("sub_renew2", CancellationToken.None);
 
         Assert.Equal(2, await db.BillingEvents.CountAsync(e => e.EventType == "subscription.renewed"));
