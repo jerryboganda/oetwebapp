@@ -41,13 +41,37 @@ describe('Speaking selection page', () => {
     ]);
   });
 
-  it('shows speaking rulebook entry points on the selection surface', async () => {
+  it('shows the two native candidate resources (criteria + intro questions)', async () => {
     render(<SpeakingTaskSelection />);
 
-    // Wait for the LearnerSurfaceCard heading to render. Use a heading role
-    // matcher so we don't catch substrings inside meta items / description.
-    await screen.findByRole('heading', { level: 3, name: /speaking feedback/i });
-    expect(screen.getByRole('link', { name: /Speaking rules/i })).toHaveAttribute('href', '/speaking/rulebook');
-    expect(screen.getByRole('link', { name: /Breaking bad news/i })).toHaveAttribute('href', '/speaking/rulebook/RULE_44');
+    expect(await screen.findByText('Prepare for your OET Speaking')).toBeInTheDocument();
+    expect(
+      screen.getByText('Review the assessment criteria and the common introductory questions used across professions.'),
+    ).toBeInTheDocument();
+
+    expect(screen.getByText('Speaking Assessment Criteria')).toBeInTheDocument();
+    expect(screen.getByText('Speaking Intro Questions')).toBeInTheDocument();
+
+    expect(screen.getByRole('link', { name: /Open Assessment Criteria/i })).toHaveAttribute(
+      'href',
+      '/speaking/assessment-criteria',
+    );
+    expect(screen.getByRole('link', { name: /Open Intro Questions/i })).toHaveAttribute(
+      'href',
+      '/speaking/intro-questions',
+    );
+  });
+
+  it('exposes no internal rulebook surface in the resource block', async () => {
+    render(<SpeakingTaskSelection />);
+
+    await screen.findByText('Prepare for your OET Speaking');
+
+    expect(screen.queryByText(/rulebook/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Open Speaking Rules')).not.toBeInTheDocument();
+    expect(screen.queryByText('Breaking Bad News')).not.toBeInTheDocument();
+    expect(screen.queryByText('See the exact rules behind your speaking feedback')).not.toBeInTheDocument();
+    expect(screen.queryByText('Speaking criteria')).not.toBeInTheDocument();
+    expect(screen.queryByText('Breaking bad news')).not.toBeInTheDocument();
   });
 });

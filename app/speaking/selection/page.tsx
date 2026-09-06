@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
-import { BookOpen, FileText, Heart } from 'lucide-react';
+import { ClipboardList, MessageCircleQuestion } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { TaskCard } from '@/components/domain/task-card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
@@ -68,30 +68,52 @@ export default function SpeakingTaskSelection() {
     <LearnerDashboardShell pageTitle="Select Speaking Task">
       <div className="space-y-6">
         <MotionSection>
-          <LearnerSurfaceCard
-            card={{
-              kind: 'navigation',
-              sourceType: 'frontend_navigation',
-              accent: 'indigo',
-              eyebrow: 'Rulebook',
-              eyebrowIcon: BookOpen,
-              title: 'See the exact rules behind your speaking feedback',
-              description: 'Open the criteria that shape every audit, from conversational flow to the protocol for breaking bad news.',
-              metaItems: [
-                { icon: FileText, label: 'Speaking criteria' },
-                { icon: Heart, label: 'Breaking bad news' },
-              ],
-              primaryAction: {
-                label: 'Open Speaking Rules',
-                href: '/speaking/rulebook',
-              },
-              secondaryAction: {
-                label: 'Breaking Bad News',
-                href: '/speaking/rulebook/RULE_44',
-                variant: 'outline',
-              },
-            }}
-          />
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-navy sm:text-xl">Prepare for your OET Speaking</h2>
+            <p className="text-[13px] text-muted sm:text-sm">
+              Review the assessment criteria and the common introductory questions used across professions.
+            </p>
+          </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <LearnerSurfaceCard
+              card={{
+                kind: 'navigation',
+                sourceType: 'frontend_navigation',
+                accent: 'purple',
+                eyebrow: 'Reference',
+                eyebrowIcon: ClipboardList,
+                title: 'Speaking Assessment Criteria',
+                description: 'The 9 criteria your role-plays are assessed against, with weights and what to do well. Same for all professions.',
+                metaItems: [
+                  { icon: ClipboardList, label: '9 sections' },
+                  { icon: ClipboardList, label: '42 points' },
+                ],
+                primaryAction: {
+                  label: 'Open Assessment Criteria',
+                  href: '/speaking/assessment-criteria',
+                },
+              }}
+            />
+            <LearnerSurfaceCard
+              card={{
+                kind: 'navigation',
+                sourceType: 'frontend_navigation',
+                accent: 'purple',
+                eyebrow: 'Reference',
+                eyebrowIcon: MessageCircleQuestion,
+                title: 'Speaking Intro Questions',
+                description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
+                metaItems: [
+                  { icon: MessageCircleQuestion, label: '12 questions' },
+                  { icon: MessageCircleQuestion, label: 'All professions' },
+                ],
+                primaryAction: {
+                  label: 'Open Intro Questions',
+                  href: '/speaking/intro-questions',
+                },
+              }}
+            />
+          </div>
         </MotionSection>
 
         <FilterBar
