@@ -1206,8 +1206,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
             // and retryable so the learner can re-run rather than receive a
             // fake "all 3s" score.
             logger.LogWarning(
-                "Writing rubric AI returned an incomplete or unreadable scoring contract for submission {SubmissionId}; refusing to fabricate a grade.",
-                submission.Id);
+                "Writing rubric AI returned an incomplete or unreadable scoring contract for submission {SubmissionId} ({Completion}); refusing to fabricate a grade.",
+                submission.Id, DescribeCompletion(result.Completion));
             submission.Status = "failed";
             await db.SaveChangesAsync(ct);
             throw ApiException.ServiceUnavailable(
@@ -1313,14 +1313,24 @@ public sealed class WritingSubmissionEvaluationPipeline(
         response = new RubricAiResponse();
         if (string.IsNullOrWhiteSpace(completion)) return false;
 
-        var start = completion.IndexOf('{');
-        var end = completion.LastIndexOf('}');
-        if (start < 0 || end <= start) return false;
-
-        try
+        // The model sometimes wraps the contract in analysis prose (or emits
+        // more than one brace span). Try every balanced top-level JSON object
+        // span, longest first — the first COMPLETE scoring contract wins.
+        // A span that parses but carries an incomplete contract does not
+        // poison later spans.
+        foreach (var span in ExtractJsonObjectSpans(completion))
         {
-            var parsed = JsonSerializer.Deserialize<RubricAiResponse>(completion[start..(end + 1)], RubricParseOptions);
-            if (parsed is null || !HasCompleteScoringContract(parsed)) return false;
+            RubricAiResponse? parsed;
+            try
+            {
+                parsed = JsonSerializer.Deserialize<RubricAiResponse>(span, RubricParseOptions);
+            }
+            catch (JsonException)
+            {
+                continue;
+            }
+
+            if (parsed is null || !HasCompleteScoringContract(parsed)) continue;
 
             // Grounding invariant: the AI must not cite rule IDs that are not in
             // the active rulebook. Drop any that are not in the applied set.
@@ -1339,10 +1349,87 @@ public sealed class WritingSubmissionEvaluationPipeline(
             response = parsed;
             return true;
         }
-        catch (JsonException)
+
+        return false;
+    }
+
+    /// <summary>
+    /// Yields every balanced top-level <c>{...}</c> span in model output,
+    /// longest first, honouring JSON string literals and escapes so braces
+    /// inside quoted finding text do not corrupt span boundaries.
+    /// </summary>
+    internal static IReadOnlyList<string> ExtractJsonObjectSpans(string completion)
+    {
+        var spans = new List<(int Start, int End)>();
+        var i = 0;
+        while (i < completion.Length)
         {
-            return false;
+            if (completion[i] != '{')
+            {
+                i++;
+                continue;
+            }
+
+            var depth = 0;
+            var inString = false;
+            var escaped = false;
+            var j = i;
+            for (; j < completion.Length; j++)
+            {
+                var c = completion[j];
+                if (inString)
+                {
+                    if (escaped) escaped = false;
+                    else if (c == '\\') escaped = true;
+                    else if (c == '"') inString = false;
+                }
+                else if (c == '"')
+                {
+                    inString = true;
+                }
+                else if (c == '{')
+                {
+                    depth++;
+                }
+                else if (c == '}')
+                {
+                    depth--;
+                    if (depth == 0) break;
+                }
+            }
+
+            if (depth == 0 && j < completion.Length)
+            {
+                spans.Add((i, j));
+                i = j + 1;
+            }
+            else
+            {
+                // Unbalanced from here (truncated output): no later span can
+                // start inside this one, but scanning continues after it.
+                i++;
+            }
         }
+
+        return spans
+            .OrderByDescending(s => s.End - s.Start)
+            .Select(s => completion.Substring(s.Start, s.End - s.Start + 1))
+            .ToList();
+    }
+
+    /// <summary>
+    /// One-line diagnostic footprint for unparseable completions: length,
+    /// brace balance, and a short head excerpt. Logged server-side only —
+    /// never exposed to candidates.
+    /// </summary>
+    internal static string DescribeCompletion(string? completion)
+    {
+        if (string.IsNullOrEmpty(completion)) return "empty";
+        var flat = completion.Replace('\r', ' ').Replace('\n', ' ');
+        var head = flat.Length > 200 ? flat[..200] : flat;
+        var opens = completion.Count(c => c == '{');
+        var closes = completion.Count(c => c == '}');
+        return $"len={completion.Length} braces={opens}/{closes} head={head}";
     }
 
     private static bool HasCompleteScoringContract(RubricAiResponse parsed)

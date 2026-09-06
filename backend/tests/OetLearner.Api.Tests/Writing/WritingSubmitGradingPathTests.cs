@@ -177,6 +177,57 @@ public sealed class WritingSubmitGradingPathTests : IAsyncDisposable
         Assert.DoesNotContain("letter_type_pack_not_approved", ex.Message);
     }
 
+    [Fact]
+    public async Task Prose_wrapped_contract_grades_without_fabrication()
+    {
+        // The model sometimes wraps the contract in analysis prose. The
+        // parser must find the complete contract inside it — never fail a
+        // valid grading, never fabricate one.
+        var scenarioId = await SeedGradableScenarioAsync(withPregeneratedAnswer: false);
+        var wrapped = "Here is my assessment of the letter:\n"
+            + CanonicalCompletion
+            + "\nI hope this detailed analysis helps the candidate improve.";
+        var gateway = new QueueGateway([wrapped, "{}"]);
+        var pipeline = BuildPipeline(gateway, new CountingReservations());
+
+        var submissionId = await pipeline.CreateSubmissionAsync(SampleContext(scenarioId, "wrapped-1", NormalLetter), default);
+        var outcome = await pipeline.EvaluateAsync(submissionId, default);
+
+        Assert.False(outcome.IdempotentReuse);
+        var grade = await _db.WritingGrades.AsNoTracking().SingleAsync(g => g.SubmissionId == submissionId);
+        Assert.Equal(31, grade.RawTotal);
+        Assert.Equal("B", grade.BandLabel);
+    }
+
+    [Fact]
+    public void ExtractJsonObjectSpans_FindsBalancedSpan_AroundProse()
+    {
+        var spans = WritingSubmissionEvaluationPipeline.ExtractJsonObjectSpans(
+            "noise {\"a\":1} middle {\"b\":{\"c\":2}} tail");
+
+        Assert.Equal(2, spans.Count);
+        Assert.Contains("{\"b\":{\"c\":2}}", spans);
+    }
+
+    [Fact]
+    public void ExtractJsonObjectSpans_IgnoresBraces_InsideStrings_And_Truncation()
+    {
+        var spans = WritingSubmissionEvaluationPipeline.ExtractJsonObjectSpans(
+            "{\"quote\":\"a } b { c\"} trailing {\"truncated\":");
+
+        Assert.Single(spans);
+        Assert.Equal("{\"quote\":\"a } b { c\"}", spans[0]);
+    }
+
+    [Fact]
+    public void DescribeCompletion_Summarizes_Without_Dumping_Body()
+    {
+        var summary = WritingSubmissionEvaluationPipeline.DescribeCompletion(new string('x', 500));
+
+        Assert.StartsWith("len=500 ", summary);
+        Assert.True(summary.Length < 300);
+    }
+
     private async Task<Guid> SeedGradableScenarioAsync(bool withPregeneratedAnswer)
     {
         var scenarioId = Guid.NewGuid();
