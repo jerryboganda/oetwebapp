@@ -1493,7 +1493,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
     {
         sb.AppendLine("## Guardrails (STRICT)");
         sb.AppendLine();
-        sb.AppendLine("1. Cite rule IDs explicitly in every feedback finding (e.g. \"R03.4\", \"RULE_27\").");
+        sb.AppendLine("1. Cite rule IDs explicitly in every feedback finding (e.g. \"OW-001\", \"RULE_27\").");
         sb.AppendLine("2. Do NOT invent, rename, or extend rules. If a concern falls outside the rulebook, say so plainly.");
         sb.AppendLine("3. Do NOT produce a numeric grade that contradicts the country-aware scoring table above.");
         sb.AppendLine("4. Do NOT replace expert grading — your output is advisory. Mark it clearly as AI-generated.");
@@ -1527,7 +1527,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("Return a SINGLE JSON object:");
                 sb.AppendLine("```json");
                 sb.AppendLine("{");
-                sb.AppendLine("  \"findings\": [ { \"ruleId\": \"R03.4\", \"severity\": \"critical\", \"quote\": \"...\", \"message\": \"...\", \"fixSuggestion\": \"...\" } ],");
+                sb.AppendLine("  \"findings\": [ { \"ruleId\": \"OW-001\", \"severity\": \"critical\", \"quote\": \"...\", \"message\": \"...\", \"fixSuggestion\": \"...\" } ],");
                 sb.AppendLine("  \"criteriaScores\": { \"purpose\": 0, \"content\": 0, \"conciseness_clarity\": 0, \"genre_style\": 0, \"organisation_layout\": 0, \"language\": 0 },");
                 sb.AppendLine("  \"estimatedScaledScore\": 0,");
                 sb.AppendLine("  \"estimatedGrade\": \"B\",");
@@ -1549,12 +1549,12 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 break;
             case AiTaskMode.GenerateFeedback:
                 sb.AppendLine("```json");
-                sb.AppendLine("{ \"sections\": [ { \"title\": \"...\", \"bullets\": [\"...\"] } ], \"ruleCitations\": [\"R03.4\"] }");
+                sb.AppendLine("{ \"sections\": [ { \"title\": \"...\", \"bullets\": [\"...\"] } ], \"ruleCitations\": [\"OW-001\"] }");
                 sb.AppendLine("```");
                 break;
             case AiTaskMode.GenerateContent:
                 sb.AppendLine("```json");
-                sb.AppendLine("{ \"content\": \"...\", \"appliedRuleIds\": [\"R03.4\"], \"selfCheckNotes\": \"...\" }");
+                sb.AppendLine("{ \"content\": \"...\", \"appliedRuleIds\": [\"OW-001\"], \"selfCheckNotes\": \"...\" }");
                 sb.AppendLine("```");
                 break;
             case AiTaskMode.GenerateGrammarLesson:

@@ -156,6 +156,16 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     public static bool IsSupportedCheckId(string? checkId)
         => !string.IsNullOrWhiteSpace(checkId) && SupportedCheckIdSet.Contains(checkId);
 
+    /// <summary>
+    /// Default params for battery detectors that require them. Migrated
+    /// verbatim from the retired R11.1 rule (FINAL MASTER 2026-08-31
+    /// content): the latin detector needs its abbreviation map, which no
+    /// current canonical rule carries.
+    /// </summary>
+    private static readonly System.Text.Json.JsonElement DefaultLatinParams =
+        System.Text.Json.JsonDocument.Parse(
+            """{"map":{"od":"once a day","om":"once a day","bd":"twice a day","bid":"twice a day","tds":"three times a day","tid":"three times a day","qds":"four times a day","qid":"four times a day","stat":"immediately","prn":"as needed"}}""").RootElement;
+
     public IReadOnlyList<LintFinding> Lint(WritingLintInput input)
     {
         var book = loader.Load(RuleKind.Writing, input.Profession);
@@ -199,6 +209,9 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 CheckId = checkId,
                 Enforcement = RuleEnforcement.Deterministic,
                 Severity = BuiltInSeverityByCheckId.GetValueOrDefault(checkId, RuleSeverity.Major),
+                Params = string.Equals(checkId, "latin_abbreviations_translated", StringComparison.Ordinal)
+                    ? DefaultLatinParams
+                    : null,
             };
             findings.AddRange(det(builtIn, input, structure));
         }

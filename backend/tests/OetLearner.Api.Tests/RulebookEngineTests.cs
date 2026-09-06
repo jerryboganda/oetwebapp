@@ -15,8 +15,8 @@ public class RulebookLoaderTests
         var book = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
         Assert.Equal(RuleKind.Writing, book.Kind);
         Assert.Equal(ExamProfession.Medicine, book.Profession);
-        Assert.Equal("1.0.1", book.Version);
-        Assert.Equal(16, book.Sections.Count);
+        Assert.Equal("2.0.0-canonical", book.Version);
+        Assert.Equal(43, book.Sections.Count);
         Assert.True(book.Rules.Count >= 90);
     }
 
@@ -55,13 +55,17 @@ public class RulebookLoaderTests
             _loader.Load(missing.kind, missing.profession));
     }
 
+    // Canonical successors of the retired R-id criticals (rulebook
+    // 2.0.0-canonical): R03.4 -> OW-007, R07.6 -> DH-W-009,
+    // R09.2 -> DH-W-016, R13.10 -> OW-017, R14.6 -> DH-W-030,
+    // R14.12 -> DH-W-036.
     [Theory]
-    [InlineData("R03.4")]
-    [InlineData("R07.6")]
-    [InlineData("R09.2")]
-    [InlineData("R13.10")]
-    [InlineData("R14.6")]
-    [InlineData("R14.12")]
+    [InlineData("OW-007")]
+    [InlineData("DH-W-009")]
+    [InlineData("DH-W-016")]
+    [InlineData("OW-017")]
+    [InlineData("DH-W-030")]
+    [InlineData("DH-W-036")]
     public void Critical_Writing_Rule_Found(string id)
     {
         var rule = _loader.FindRule(RuleKind.Writing, ExamProfession.Medicine, id);
@@ -125,21 +129,23 @@ public class WritingRulebookCoverageValidatorTests
     {
         foreach (var book in _loader.All().Where(book => book.Kind == RuleKind.Writing))
         {
+            // Acceptance only — per-profession rule counts differ while the
+            // canonical content migrates (OW-xxx model vs legacy R-id model).
             _validator.ValidateBook(book);
-            Assert.Equal(172, book.Rules.Count);
+            Assert.NotEmpty(book.Rules);
         }
     }
 
     [Fact]
     public void CoverageGate_RejectsImportMissingCanonicalCriticalRule()
     {
-        using var doc = JsonDocument.Parse(BuildImportJson(rule => rule.Id != "R16.2"));
+        using var doc = JsonDocument.Parse(BuildImportJson(rule => rule.Id != "OW-001"));
 
         var ex = Assert.Throws<ApiException>(() =>
             _validator.ValidateForImport("writing", "medicine", doc.RootElement));
 
         Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
-        Assert.Contains("R16.2", ex.Message);
+        Assert.Contains("OW-001", ex.Message);
     }
 
     [Fact]
@@ -147,7 +153,7 @@ public class WritingRulebookCoverageValidatorTests
     {
         using var doc = JsonDocument.Parse(BuildImportJson(
             _ => true,
-            rule => rule.Id == "R03.4" ? "unknown_detector" : rule.CheckId));
+            rule => rule.Id == "OW-001" ? "unknown_detector" : rule.CheckId));
 
         var ex = Assert.Throws<ApiException>(() =>
             _validator.ValidateForImport("writing", "medicine", doc.RootElement));
@@ -159,14 +165,18 @@ public class WritingRulebookCoverageValidatorTests
     [Fact]
     public void CoverageGate_RejectsRemovedCanonicalCheckId()
     {
-        var canonicalDetectorRule = _loader.Load(RuleKind.Writing, ExamProfession.Medicine)
+        // CheckId-bearing canonical content survives only in not-yet-migrated
+        // professions (e.g. dietetics); medicine is fully OW-xxx. When the
+        // migration completes, this premise is void — delete, don't re-target.
+        var canonicalDetectorRule = _loader.Load(RuleKind.Writing, ExamProfession.Dietetics)
             .Rules.First(rule => !string.IsNullOrWhiteSpace(rule.CheckId));
         using var doc = JsonDocument.Parse(BuildImportJson(
             _ => true,
-            rule => rule.Id == canonicalDetectorRule.Id ? null : rule.CheckId));
+            rule => rule.Id == canonicalDetectorRule.Id ? null : rule.CheckId,
+            profession: ExamProfession.Dietetics));
 
         var ex = Assert.Throws<ApiException>(() =>
-            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+            _validator.ValidateForImport("writing", "dietetics", doc.RootElement));
 
         Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
         Assert.Contains(canonicalDetectorRule.Id, ex.Message);
@@ -176,7 +186,9 @@ public class WritingRulebookCoverageValidatorTests
     [Fact]
     public void CoverageGate_RejectsSupportedCheckIdMovedToWrongRule()
     {
-        var canonical = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
+        // Same migration note as RejectsRemovedCanonicalCheckId: medicine has
+        // no checkIds left, so this pins the binding on dietetics.
+        var canonical = _loader.Load(RuleKind.Writing, ExamProfession.Dietetics);
         var detectorRule = canonical.Rules.First(rule => !string.IsNullOrWhiteSpace(rule.CheckId));
         var structuredRule = canonical.Rules.First(rule => string.IsNullOrWhiteSpace(rule.CheckId));
         using var doc = JsonDocument.Parse(BuildImportJson(
@@ -185,10 +197,11 @@ public class WritingRulebookCoverageValidatorTests
                 ? null
                 : rule.Id == structuredRule.Id
                     ? detectorRule.CheckId
-                    : rule.CheckId));
+                    : rule.CheckId,
+            profession: ExamProfession.Dietetics));
 
         var ex = Assert.Throws<ApiException>(() =>
-            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+            _validator.ValidateForImport("writing", "dietetics", doc.RootElement));
 
         Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
         Assert.Contains(detectorRule.Id, ex.Message);
@@ -200,27 +213,30 @@ public class WritingRulebookCoverageValidatorTests
     {
         using var doc = JsonDocument.Parse(BuildImportJson(
             _ => true,
-            sectionOverride: rule => rule.Id == "R16.2" ? "99" : rule.Section));
+            sectionOverride: rule => rule.Id == "OW-001" ? "99" : rule.Section));
 
         var ex = Assert.Throws<ApiException>(() =>
             _validator.ValidateForImport("writing", "medicine", doc.RootElement));
 
         Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
-        Assert.Contains("R16.2", ex.Message);
+        Assert.Contains("OW-001", ex.Message);
         Assert.Contains("section", ex.Message);
     }
 
     [Fact]
     public void CoverageGate_RejectsForbiddenPatternDrift()
     {
-        var forbiddenRule = _loader.Load(RuleKind.Writing, ExamProfession.Medicine)
+        // Same migration note: medicine carries no forbiddenPatterns, so this
+        // pins the drift check on dietetics.
+        var forbiddenRule = _loader.Load(RuleKind.Writing, ExamProfession.Dietetics)
             .Rules.First(rule => rule.ForbiddenPatterns is { Count: > 0 });
         using var doc = JsonDocument.Parse(BuildImportJson(
             _ => true,
-            forbiddenPatternsOverride: rule => rule.Id == forbiddenRule.Id ? Array.Empty<string>() : rule.ForbiddenPatterns));
+            forbiddenPatternsOverride: rule => rule.Id == forbiddenRule.Id ? Array.Empty<string>() : rule.ForbiddenPatterns,
+            profession: ExamProfession.Dietetics));
 
         var ex = Assert.Throws<ApiException>(() =>
-            _validator.ValidateForImport("writing", "medicine", doc.RootElement));
+            _validator.ValidateForImport("writing", "dietetics", doc.RootElement));
 
         Assert.Equal("writing_rulebook_coverage_failed", ex.ErrorCode);
         Assert.Contains(forbiddenRule.Id, ex.Message);
@@ -231,9 +247,10 @@ public class WritingRulebookCoverageValidatorTests
         Func<OetRule, bool> includeRule,
         Func<OetRule, string?>? checkIdOverride = null,
         Func<OetRule, string>? sectionOverride = null,
-        Func<OetRule, object?>? forbiddenPatternsOverride = null)
+        Func<OetRule, object?>? forbiddenPatternsOverride = null,
+        ExamProfession profession = ExamProfession.Medicine)
     {
-        var book = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
+        var book = _loader.Load(RuleKind.Writing, profession);
         var rules = book.Rules.Where(includeRule).Select(rule => new
         {
             id = rule.Id,
@@ -284,7 +301,7 @@ Doctor";
     public void R03_4_Passes_With_Smoking_And_Drinking()
     {
         var findings = _engine.Lint(new WritingLintInput(LetterWithBoth, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R03.4");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.content_requires_smoking_drinking");
     }
 
     [Fact]
@@ -292,7 +309,7 @@ Doctor";
     {
         var text = LetterWithBoth.Replace("Mr Jones smokes 10 cigarettes per day and ", "");
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R03.4");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.content_requires_smoking_drinking");
     }
 
     [Fact]
@@ -302,7 +319,7 @@ Doctor";
             .Replace("smokes 10 cigarettes per day and drinks alcohol occasionally. ", "");
         var findings = _engine.Lint(new WritingLintInput(
             text, "non_medical_referral", RecipientSpecialty: "Occupational Therapist"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R03.4");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.content_requires_smoking_drinking");
     }
 
     [Fact]
@@ -310,7 +327,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\n\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R04.2" || f.RuleId == "R06.3");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.salutation_re_adjacent" || f.RuleId == "BUILTIN.salutation_re_adjacent");
     }
 
     [Fact]
@@ -318,7 +335,7 @@ Doctor";
     {
         var text = "Dr A\n\nDate: 1 January 2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R05.8");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.no_date_prefix");
     }
 
     [Fact]
@@ -326,7 +343,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Miss Sara Miller D.O.B: 01/01/2015\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral", PatientIsMinor: true));
-        Assert.Contains(findings, f => f.RuleId == "R06.10");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.minor_naming_convention");
     }
 
     [Fact]
@@ -334,7 +351,7 @@ Doctor";
     {
         var text = "Dear Sir/Madam,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R06.11");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.yours_sincerely_vs_faithfully");
     }
 
     [Fact]
@@ -342,7 +359,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for assessment.\n\nOn today's visit she presented with severe pain.\n\nAt your earliest convenience.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R07.6" || f.RuleId == "R13.2");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_intro_contains_urgent" || f.RuleId == "BUILTIN.urgent_intro_contains_urgent");
     }
 
     [Fact]
@@ -351,7 +368,7 @@ Doctor";
         // Rulebook update (31 Aug 2026): "next visit" is standard English, no longer forbidden.
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nOn the next visit, she reported improvement.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R08.7" || f.RuleId == "R10.14");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_forbidden_phrase_next_visit" || f.RuleId == "BUILTIN.body_forbidden_phrase_next_visit");
     }
 
     [Fact]
@@ -360,7 +377,7 @@ Doctor";
         // Rulebook update (31 Aug 2026, G-W-112): "the patient" is not a forbidden phrase.
         var text = "Dear Dr Smith,\nRe: Ms Miller\n\nIntro.\n\nThe patient presented with nausea.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R08.14" || f.RuleId == "R12.2");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_forbidden_phrase_the_patient" || f.RuleId == "BUILTIN.body_forbidden_phrase_the_patient");
     }
 
     [Fact]
@@ -368,7 +385,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to urgently refer Ms A.\n\nOn today's visit she collapsed.\n\nPlease see her soon.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R09.2" || f.RuleId == "R13.3");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_closure_phrase" || f.RuleId == "BUILTIN.urgent_closure_phrase");
     }
 
     [Fact]
@@ -376,7 +393,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was prescribed amoxicillin 500 mg bd.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R11.1");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.latin_abbreviations_translated");
     }
 
     [Fact]
@@ -387,7 +404,7 @@ Doctor";
         // cannot evaluate that deterministically, so this stays advisory.
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was prescribed amoxicillin 500 mg bd.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        var finding = findings.FirstOrDefault(f => f.RuleId == "R11.1");
+        var finding = findings.FirstOrDefault(f => f.RuleId == "BUILTIN.latin_abbreviations_translated");
         Assert.NotNull(finding);
         Assert.Equal(RuleSeverity.Minor, finding!.Severity);
     }
@@ -397,7 +414,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe doesn't take any regular medication.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R12.1");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.no_contractions");
     }
 
     [Fact]
@@ -408,7 +425,7 @@ Doctor";
         // failure — still flagged, but never blocking.
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe doesn't take any regular medication.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        var finding = findings.FirstOrDefault(f => f.RuleId == "R12.1");
+        var finding = findings.FirstOrDefault(f => f.RuleId == "BUILTIN.no_contractions");
         Assert.NotNull(finding);
         Assert.Equal(RuleSeverity.Minor, finding!.Severity);
     }
@@ -418,7 +435,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nPlease see her ASAP.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R13.10");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.no_asap_in_letter");
     }
 
     [Fact]
@@ -426,7 +443,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to update you regarding Ms A.\n\nShe was presented with chest pain on admission.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "discharge"));
-        Assert.Contains(findings, f => f.RuleId == "R14.6");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.discharge_admitted_with_past_simple");
     }
 
     [Fact]
@@ -434,7 +451,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe was treated from pneumonia.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R14.12");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.treatment_for_not_from");
     }
 
     [Fact]
@@ -443,7 +460,7 @@ Doctor";
         var text = "Dear Sir/Madam,\nRe: Ms A\n\nMs A has hypertension and diabetes.\n\nYours faithfully,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(
             text, "non_medical_referral", RecipientSpecialty: "Occupational Therapist"));
-        Assert.Contains(findings, f => f.RuleId == "R15.2");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.non_medical_no_jargon");
     }
 
     [Fact]
@@ -451,7 +468,7 @@ Doctor";
     {
         // The default sample letter body is well under 80 words.
         var findings = _engine.Lint(new WritingLintInput(LetterWithBoth, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R03.8");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.letter_body_length");
     }
 
     [Fact]
@@ -465,7 +482,7 @@ Doctor";
             + bigBody + "\n\n"
             + "Yours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        var advisory = findings.FirstOrDefault(f => f.RuleId == "R03.8");
+        var advisory = findings.FirstOrDefault(f => f.RuleId == "BUILTIN.letter_body_length");
         Assert.NotNull(advisory);
         Assert.Equal(RuleSeverity.Minor, advisory!.Severity);
         Assert.Contains("Too long", advisory.Message);
@@ -483,7 +500,7 @@ Doctor";
             + smallBody + "\n\n"
             + "Yours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        var advisory = findings.FirstOrDefault(f => f.RuleId == "R03.8");
+        var advisory = findings.FirstOrDefault(f => f.RuleId == "BUILTIN.letter_body_length");
         Assert.NotNull(advisory);
         Assert.Equal(RuleSeverity.Minor, advisory!.Severity);
         Assert.Contains("Too short", advisory.Message);
@@ -513,8 +530,8 @@ Doctor";
     {
         var text = "Dr A B,\nCardiology Clinic.\nMain Street\n\n1 January 2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R05.2" && f.Quote!.EndsWith(","));
-        Assert.Contains(findings, f => f.RuleId == "R05.2" && f.Quote!.EndsWith("."));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.address_punctuation" && f.Quote!.EndsWith(","));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.address_punctuation" && f.Quote!.EndsWith("."));
     }
 
     [Fact]
@@ -522,7 +539,7 @@ Doctor";
     {
         var text = "Dr A B\nCardiology Clinic\nMain Street\n\n1 January 2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R05.2");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.address_punctuation");
     }
 
     [Fact]
@@ -530,7 +547,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A Age: 40\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R06.8");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.re_line_age_dob");
     }
 
     [Fact]
@@ -538,7 +555,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A, aged 40\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R06.8");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.re_line_age_dob");
     }
 
     [Fact]
@@ -546,7 +563,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nyours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R06.12");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.yours_sincerely_capitalisation");
     }
 
     [Fact]
@@ -557,7 +574,7 @@ Doctor";
         // detector's spell pattern catches.
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours faithfully sincerly,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R06.12");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.yours_sincerely_capitalisation");
     }
 
     [Fact]
@@ -565,7 +582,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A. She is forty. She works as a teacher. She lives alone.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R07.1");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.intro_sentence_count");
     }
 
     [Fact]
@@ -573,7 +590,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for assessment. She is forty. She works as a teacher.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R07.1");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.intro_sentence_count");
     }
 
     [Fact]
@@ -583,7 +600,7 @@ Doctor";
         var findings = _engine.Lint(new WritingLintInput(
             text, "routine_referral",
             CaseNotesMarkers: new WritingCaseNotesMarkers(PatientInitiatedReferral: true)));
-        Assert.Contains(findings, f => f.RuleId == "R09.7");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.closure_mentions_patient_request_if_flagged");
     }
 
     [Fact]
@@ -593,7 +610,7 @@ Doctor";
         var findings = _engine.Lint(new WritingLintInput(
             text, "routine_referral",
             CaseNotesMarkers: new WritingCaseNotesMarkers(PatientInitiatedReferral: true)));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R09.7");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.closure_mentions_patient_request_if_flagged");
     }
 
     [Fact]
@@ -603,7 +620,7 @@ Doctor";
         var findings = _engine.Lint(new WritingLintInput(
             text, "routine_referral",
             CaseNotesMarkers: new WritingCaseNotesMarkers(ConsentDocumented: true)));
-        Assert.Contains(findings, f => f.RuleId == "R09.8");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.closure_mentions_consent_if_flagged");
     }
 
     [Fact]
@@ -613,7 +630,7 @@ Doctor";
         var findings = _engine.Lint(new WritingLintInput(
             text, "routine_referral",
             CaseNotesMarkers: new WritingCaseNotesMarkers(ConsentDocumented: true)));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R09.8");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.closure_mentions_consent_if_flagged");
     }
 
     [Fact]
@@ -621,7 +638,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nLast body line.\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R09.9");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.blank_before_closing_phrase");
     }
 
     [Fact]
@@ -629,7 +646,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nLast body line.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R09.9");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.blank_before_closing_phrase");
     }
 
     [Fact]
@@ -637,7 +654,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe had hypertension since 2010.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R10.5");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.since_requires_present_perfect");
     }
 
     [Fact]
@@ -645,7 +662,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe had hypertension for 5 years.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R10.6");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.for_duration_requires_present_perfect");
     }
 
     [Fact]
@@ -655,7 +672,7 @@ Doctor";
         // error per rulebook G-W-021 (FINAL MASTER 2026-08-31).
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has had a cholecystectomy in 2018.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R10.8");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.surgery_past_simple");
     }
 
     [Fact]
@@ -667,7 +684,7 @@ Doctor";
         // surgery and is recovering well.").
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has had an appendectomy and is recovering well.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R10.8");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.surgery_past_simple");
     }
 
     [Fact]
@@ -675,7 +692,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe had a cholecystectomy in 2018.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R10.8");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.surgery_past_simple");
     }
 
     [Fact]
@@ -683,7 +700,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has presented 3 weeks ago.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R10.10");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.ago_requires_past_simple");
     }
 
     [Fact]
@@ -691,7 +708,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nThe patient was stable however she later deteriorated.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R12.9");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.linker_however_punctuation");
     }
 
     [Fact]
@@ -699,7 +716,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nThe patient was stable; however, she later deteriorated.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R12.9");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_however_punctuation");
     }
 
     [Fact]
@@ -707,7 +724,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nThe patient was stable. However, she later deteriorated.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R12.9");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_however_punctuation");
     }
 
     [Fact]
@@ -715,7 +732,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe was unwell, therefore she rested.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R12.10");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.linker_therefore_punctuation");
     }
 
     [Fact]
@@ -723,7 +740,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe was unwell; therefore, she rested.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R12.10");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_therefore_punctuation");
     }
 
     [Fact]
@@ -731,7 +748,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe was unwell. Therefore, she rested for the remainder of the week.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R12.10");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_therefore_punctuation");
     }
 
     [Fact]
@@ -739,7 +756,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin, in addition she uses an inhaler.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R12.11");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.linker_in_addition_punctuation");
     }
 
     [Fact]
@@ -747,7 +764,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin in addition to her usual inhaler.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R12.11");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_in_addition_punctuation");
     }
 
     [Fact]
@@ -755,7 +772,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin daily in addition with an inhaler as needed.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R12.11");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_in_addition_punctuation");
     }
 
     [Fact]
@@ -763,7 +780,7 @@ Doctor";
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph here.\n\nShe takes amoxicillin daily. In addition, she uses an inhaler as needed.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R12.11");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_in_addition_punctuation");
     }
 
     [Fact]
@@ -771,7 +788,7 @@ Doctor";
     {
         var text = "Dr A\n\n01/01/2026\n\nDear Dr Smith,\nRe: Ms A\n\nShe was seen on 1 January 2026 and again on 15/02/2026.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R05.5");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.date_format_consistent");
     }
 
     [Fact]
@@ -779,7 +796,7 @@ Doctor";
     {
         var text = "Dr A\n\n01/01/2026\n\nDear Dr Smith,\nRe: Ms A\n\nShe was seen on 15/02/2026.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R05.5");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.date_format_consistent");
     }
 
     [Fact]
@@ -787,7 +804,7 @@ Doctor";
     {
         var text = "Dr A\n\n01/01/26\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "R05.6");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.year_not_abbreviated");
     }
 
     [Fact]
@@ -795,7 +812,7 @@ Doctor";
     {
         var text = "Dr A\n\n01/01/2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "R05.6");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.year_not_abbreviated");
     }
 }
 
@@ -955,7 +972,7 @@ public class AiGatewayAndPromptTests
         });
         Assert.Contains("OET AI — Rulebook-Grounded System Prompt", prompt.SystemPrompt);
         Assert.Contains("CRITICAL rules", prompt.SystemPrompt);
-        Assert.Contains("R03.4", prompt.SystemPrompt);
+        Assert.Contains("OW-001", prompt.SystemPrompt);
         Assert.Equal(350, prompt.Metadata.ScoringPassMark);
         Assert.Equal("B", prompt.Metadata.ScoringGrade);
     }
@@ -1057,7 +1074,7 @@ public class AiGatewayAndPromptTests
         });
         var result = await gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt });
         Assert.False(string.IsNullOrWhiteSpace(result.Completion));
-        Assert.Equal("1.0.1", result.RulebookVersion);
+        Assert.Equal("2.0.0-canonical", result.RulebookVersion);
         Assert.NotEmpty(result.AppliedRuleIds);
     }
 

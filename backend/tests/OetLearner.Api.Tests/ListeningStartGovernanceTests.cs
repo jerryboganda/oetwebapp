@@ -126,6 +126,19 @@ public sealed class ListeningStartGovernanceTests
             CreatedAt = now,
             LastActiveAt = now,
         });
+        // Combined paper MP3: satisfies the exam-mode complete-audio gate.
+        var deadlineMedia = new MediaAsset
+        {
+            Id = "media-deadline-audio",
+            OriginalFilename = "deadline-paper.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            StoragePath = "content/deadline-paper.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+        };
+        db.MediaAssets.Add(deadlineMedia);
         db.ContentPapers.Add(new ContentPaper
         {
             Id = "deadline-listening-paper",
@@ -136,6 +149,18 @@ public sealed class ListeningStartGovernanceTests
             Difficulty = "standard",
             EstimatedDurationMinutes = 45,
             Status = ContentStatus.Published,
+            Assets =
+            [
+                new ContentPaperAsset
+                {
+                    Id = "asset-deadline-audio",
+                    PaperId = "deadline-listening-paper",
+                    Role = PaperAssetRole.Audio,
+                    MediaAssetId = deadlineMedia.Id,
+                    MediaAsset = deadlineMedia,
+                    IsPrimary = true,
+                },
+            ],
             ExtractedTextJson = """
                 {
                   "listeningQuestions": [
@@ -146,6 +171,17 @@ public sealed class ListeningStartGovernanceTests
             CreatedAt = now,
             UpdatedAt = now,
             PublishedAt = now,
+        });
+        // Server-owned strict-start gate: exam mode requires a fresh sound check.
+        db.LearnerListeningProfiles.Add(new LearnerListeningProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = "deadline-learner",
+            TargetBand = "B",
+            Profession = "medicine",
+            OnboardingCompletedAt = now,
+            AudioCheckPassedAt = now,
+            UpdatedAt = now,
         });
         db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
         {
@@ -194,7 +230,9 @@ public sealed class ListeningStartGovernanceTests
             attempt.Id,
             new Dictionary<string, string?> { ["q-deadline"] = "five" },
             CancellationToken.None);
-        Assert.Contains("\"rawScore\":0", JsonSerializer.Serialize(review));
+        // Timed-out submit grades nothing (late write rejected above, final
+        // answers skipped) → zero score. ListeningReviewDto is PascalCase.
+        Assert.Contains("\"RawScore\":0", JsonSerializer.Serialize(review));
     }
 
     [Fact]
@@ -216,6 +254,19 @@ public sealed class ListeningStartGovernanceTests
             CreatedAt = now,
             LastActiveAt = now,
         });
+        // Combined paper MP3: satisfies the exam-mode complete-audio gate.
+        var extraTimeMedia = new MediaAsset
+        {
+            Id = "media-extra-time-audio",
+            OriginalFilename = "extra-time-paper.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 1024,
+            StoragePath = "content/extra-time-paper.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+        };
+        db.MediaAssets.Add(extraTimeMedia);
         db.ContentPapers.Add(new ContentPaper
         {
             Id = "extra-time-listening-paper",
@@ -226,6 +277,18 @@ public sealed class ListeningStartGovernanceTests
             Difficulty = "standard",
             EstimatedDurationMinutes = 45,
             Status = ContentStatus.Published,
+            Assets =
+            [
+                new ContentPaperAsset
+                {
+                    Id = "asset-extra-time-audio",
+                    PaperId = "extra-time-listening-paper",
+                    Role = PaperAssetRole.Audio,
+                    MediaAssetId = extraTimeMedia.Id,
+                    MediaAsset = extraTimeMedia,
+                    IsPrimary = true,
+                },
+            ],
             ExtractedTextJson = """
                 {
                   "listeningQuestions": [
@@ -236,6 +299,17 @@ public sealed class ListeningStartGovernanceTests
             CreatedAt = now,
             UpdatedAt = now,
             PublishedAt = now,
+        });
+        // Server-owned strict-start gate: exam mode requires a fresh sound check.
+        db.LearnerListeningProfiles.Add(new LearnerListeningProfile
+        {
+            Id = Guid.NewGuid(),
+            UserId = "extra-time-learner",
+            TargetBand = "B",
+            Profession = "medicine",
+            OnboardingCompletedAt = now,
+            AudioCheckPassedAt = now,
+            UpdatedAt = now,
         });
         db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
         {

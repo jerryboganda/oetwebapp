@@ -1,5 +1,12 @@
 # Agent State (local)
 
+## Current task — Rulebook R-a BUILTIN migration + listening strict-start seeds — VERIFIED, READY TO SHIP 2026-09-07
+- **Decision (owner)**: `BUILTIN.<checkId>` is canonical; retired R-id content, not tests. Engine battery is the runtime for migrated professions.
+- **Fix**: `RulebookEngineTests.cs` (62 R-id literals → BUILTIN; loader version 1.0.1→2.0.0-canonical, sections 16→43, criticals → OW-007/DH-W-009/DH-W-016/OW-017/DH-W-030/DH-W-036; gateway R03.4→OW-001, RulebookVersion); `WritingRuleEngine.cs` battery + retired-R11.1 latin map as default params (verbatim, commented); `AiGatewayService.cs` 4 prompt examples R03.4→OW-001; fixture `writing-engine-parity.json` (15 remapped, R12.3 dropped, +signoff_no_invented_name on all 5 — battery detector the retired JSON lacked); `ListeningStartGovernanceTests.cs` sound-check profile + combined-MP3 seeds (fresh AudioCheckPassedAt, 24h TTL).
+- **Validation**: rulebook 95/95 (loader/engine/parity/validator/gateway); batch-6 46/46; `pnpm run ship:gate` OK.
+- **Stage ONLY**: the 5 files above + this state file. Do NOT stage companion WIP (`lib/api.ts`, `lib/api/*`, `artifacts/*`, `docs/ai-learning-companion/*`).
+- **Next**: push HEAD→main (fast-forward; 2 companion commits on branch are test+docs only), watch Build & Deploy, confirm live health, repo private.
+
 ## Current task — lib/api.ts modularization (ponytail full-stack pass) — SLICES 1-5 LANDED, GATE GREEN, NOT COMMITTED
 - **State**: api.ts monolith reduced 245KB→213KB (−929 lines). All `@/lib/api` consumer imports keep working via re-exports (established pattern from prior slices like subscriptions.ts).
 - **New slices (uncommitted)**: `lib/api/learner-profile.ts` (profile/onboarding/tours/diagnostic/engagement), `lib/api/billing-checkout.ts` (wallet top-up/payment-gateways/PayPal capture/safePaymentRedirect/DashboardHome), `lib/api/sessions.ts` (active sessions/trusted device/avatar), `lib/api/settings.ts` (settings sections/exam families), `lib/api/study-plan.ts` (plan tasks/swap), `lib/api/learner-home.ts` + `learner-home-types.ts` (R/L/W/S/mocks home + updateUserProfile/setActiveProfession/device-check), `lib/api/route-normalizer.ts` (shared legacy-route rewriting used by ~15 remaining api.ts call sites), `lib/api/task-mappers.ts` (mapWritingTask/mapSpeakingTask/toSubTest/normalizeCriterionName shared mappers).
@@ -242,3 +249,11 @@ Named volumes `oetwebsite_oet_*` are independent of containers. Compose pins the
 - Live VPS feed backfilled: android current.json now serves versionCode 5 (same APK bytes, digest c52b…fb6c verified before re-upload) — downgrade gate effective immediately.
 - Full postmortem: docs/incidents/2026-09-04-update-and-otp-storms-postmortem.md (all 3 defects + never-again inventory + open items).
 - CI: new route tests pass (no new failures vs pre-existing baseline); Mobile CI skipped by paths-filter (correct); Build&Deploy redeploys web with the route change (feed versionCode live = proof).
+
+## Writing Submit-for-Grading � SHIPPED (354c91291, origin/main, repo PRIVATE, 2026-09-06 ~21:25Z)
+- Canon clamp (500col) + writing_canon_failed(retryable) + fail-soft grade events + guard ExecuteUpdate+release+sync; tests CanonFailure_MarksFailed + Clamp test. Submit-scope suites 133/133 green.
+- Live E2E on SHA: 2x fresh 201 graded(express); same-key retry identical id (no dup); retry-grade recovered gradeId 23dcad2b; /grade 404 = governed CandidateReady gate (by design); lock + rate-limit correct.
+- Catalogue rescan: 194 published / 82 READY / 112 blocked, SOLE blocker model_answer_not_approved (exemplar grind continues). Evidence: artifacts/writing-submit-p0-acceptance/live-catalogue-2026-09-06.json + live-e2e-2026-09-06.json.
+- KNOWN NON-MINE: 19 full-Writing failures = parallel session dirty WritingRuleEngine.cs/tests; ship:gate red on untracked lib/api/writing-attempts.ts (theirs). Do not touch.
+- NEXT: exemplar grind to clear 112 model_answer_not_approved, then re-run catalogue-compatibility to releaseBlocked=false.
+
