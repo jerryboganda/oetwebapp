@@ -6,12 +6,17 @@ import Link from 'next/link';
 import { AlertCircle, Coins, Lock, Plus, Sparkles } from 'lucide-react';
 import { AiAssistantInput, AiAssistantMessages } from '@/components/domain/ai-assistant';
 import { CompanionMemoryPanel } from '@/components/domain/companion/CompanionMemoryPanel';
+import { CompanionPreferencesPanel } from '@/components/domain/companion/CompanionPreferencesPanel';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAiAssistantContext } from '@/contexts/ai-assistant-context';
+import { buildSurfaceContext } from '@/lib/ai-assistant/surface-context';
 import { fetchCompanionSession, type CompanionAccessReason } from '@/lib/api/companion';
+
+// Static: this page is always the same surface, so there is nothing to derive.
+const COMPANION_SURFACE = buildSurfaceContext('/companion');
 
 const SUGGESTION_KEYS = [
   'companion.suggestion.writing',
@@ -190,7 +195,7 @@ export default function CompanionPage() {
                         <li key={key}>
                           <button
                             type="button"
-                            onClick={() => void sendMessage(t(key))}
+                            onClick={() => void sendMessage(t(key), COMPANION_SURFACE)}
                             disabled={!isConnected}
                             className="w-full rounded-lg border border-border px-3 py-2 text-sm text-navy transition-colors hover:bg-background-light disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                           >
@@ -210,7 +215,7 @@ export default function CompanionPage() {
               </div>
 
               <AiAssistantInput
-                onSend={(content) => void sendMessage(content)}
+                onSend={(content) => void sendMessage(content, COMPANION_SURFACE)}
                 onCancel={() => void cancelTurn()}
                 isStreaming={isStreaming}
                 disabled={!isConnected}
@@ -270,6 +275,8 @@ export default function CompanionPage() {
                 )}
               </Card>
             )}
+
+            {canChat && <CompanionPreferencesPanel />}
 
             <CompanionMemoryPanel />
 

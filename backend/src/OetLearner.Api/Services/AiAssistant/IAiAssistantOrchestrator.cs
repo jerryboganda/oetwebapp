@@ -1,5 +1,7 @@
 using OetLearner.Api.Hubs;
 
+using OetLearner.Api.Services.Companion;
+
 namespace OetLearner.Api.Services.AiAssistant;
 
 /// <summary>
@@ -23,8 +25,16 @@ public interface IAiAssistantOrchestrator
     /// Runs a single turn of the assistant: processes the user message through
     /// the ReAct loop and yields streaming events.
     /// </summary>
+    /// <param name="context">
+    /// Optional bounded surface hint from the client (identifiers, never content):
+    /// which page, resource, question or video position the learner is looking at.
+    /// It biases retrieval and lets the companion answer "this question" — it can
+    /// never widen entitlement, and exam mode is resolved from the database
+    /// regardless of what it says.
+    /// </param>
     IAsyncEnumerable<AssistantStreamEvent> RunTurnAsync(
         string threadId, string userId, string role, string userMessage,
+        CompanionContextEnvelope? context,
         CancellationToken ct);
 
     /// <summary>Cancels a running turn for the given thread.</summary>

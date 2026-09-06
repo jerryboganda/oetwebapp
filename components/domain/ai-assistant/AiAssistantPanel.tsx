@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { X, List, AlertCircle, Plus } from 'lucide-react';
 import { AiAssistantMessages } from './AiAssistantMessages';
 import { AiAssistantInput } from './AiAssistantInput';
 import { useAiAssistantContext } from '@/contexts/ai-assistant-context';
+import { buildSurfaceContext } from '@/lib/ai-assistant/surface-context';
 
 export interface AiAssistantPanelProps {
   onClose: () => void;
@@ -41,12 +43,15 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
   } = useAiAssistantContext();
 
   const [showThreadList, setShowThreadList] = useState(false);
+  const pathname = usePathname();
 
   const handleSend = (content: string) => {
     // The hook owns optimistic echo, streaming and persistence; fire and forget
     // here so a send failure surfaces through `error` rather than as an
     // unhandled rejection.
-    void sendMessage(content);
+    // The floating panel opens on top of whatever the learner is doing, so the
+    // route is the single most useful thing we can tell the companion.
+    void sendMessage(content, buildSurfaceContext(pathname));
   };
 
   const handleCancel = () => {

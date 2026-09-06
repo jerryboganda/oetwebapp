@@ -3,6 +3,7 @@
  * Connects to /v1/ai-assistant/hub with auto-reconnect and exponential backoff.
  */
 
+import type { CompanionSurfaceContext } from './surface-context';
 import type { HubConnection, HubConnectionState } from '@microsoft/signalr';
 import { env } from '@/lib/env';
 
@@ -126,8 +127,10 @@ export async function invokeStartTurn(
   connection: HubConnection,
   threadId: string,
   message: string,
+  context?: CompanionSurfaceContext,
 ): Promise<void> {
-  return connection.invoke('StartTurn', threadId, message);
+  // The third argument is optional on the hub, so older clients keep working.
+  return connection.invoke('StartTurn', threadId, message, context ?? null);
 }
 
 export async function invokeCancelTurn(

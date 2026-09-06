@@ -59,6 +59,8 @@ public static class CompanionLearnerEndpoints
         group.MapDelete("/memory/bookmarks/{bookmarkId}", DeleteBookmarkAsync);
         group.MapDelete("/memory", ResetMemoryAsync);
         group.MapGet("/memory/export", ExportMemoryAsync);
+        group.MapGet("/preferences", GetPreferencesAsync);
+        group.MapPut("/preferences", SavePreferencesAsync);
 
         return app;
     }
@@ -182,6 +184,72 @@ public static class CompanionLearnerEndpoints
 
         return new CompanionAccess(true, "ok", policy.PlanCode, policy.PlanName);
     }
+
+    /// <summary>
+    /// How this learner wants to be taught (F-011, F-050, F-052, F-055).
+    /// Returns defaults rather than 404 when no row exists — "I have not chosen"
+    /// and "the defaults apply" are the same state, and a 404 would make every
+    /// caller special-case it.
+    /// </summary>
+    private static async Task<IResult> GetPreferencesAsync(
+        HttpContext http,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+        var row = await db.CompanionPreferences.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == userId, ct)
+            ?? new CompanionPreference { UserId = userId };
+
+        return Results.Ok(Project(row));
+    }
+
+    private static async Task<IResult> SavePreferencesAsync(
+        CompanionPreferenceRequest request,
+        HttpContext http,
+        LearnerDbContext db,
+        CancellationToken ct)
+    {
+        var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+        if (!Enum.TryParse<CompanionTeachingStyle>(request.TeachingStyle, ignoreCase: true, out var style))
+        {
+            return Results.BadRequest(new { error = "unknown_teaching_style", value = request.TeachingStyle });
+        }
+
+        if (!Enum.TryParse<CompanionExplanationDepth>(request.Depth, ignoreCase: true, out var depth))
+        {
+            return Results.BadRequest(new { error = "unknown_depth", value = request.Depth });
+        }
+
+        var row = await db.CompanionPreferences.FirstOrDefaultAsync(p => p.UserId == userId, ct);
+        if (row is null)
+        {
+            row = new CompanionPreference { UserId = userId };
+            db.CompanionPreferences.Add(row);
+        }
+
+        row.TeachingStyle = style;
+        row.Depth = depth;
+        row.EnglishOnly = request.EnglishOnly;
+        row.PreferWorkedExamples = request.PreferWorkedExamples;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        return Results.Ok(Project(row));
+    }
+
+    private static object Project(CompanionPreference row) => new
+    {
+        teachingStyle = row.TeachingStyle.ToString(),
+        depth = row.Depth.ToString(),
+        englishOnly = row.EnglishOnly,
+        preferWorkedExamples = row.PreferWorkedExamples,
+        updatedAt = row.UpdatedAt,
+    };
 
     private static async Task<IResult> GetMemoryAsync(
         HttpContext http,
@@ -362,3 +430,11 @@ public static class CompanionLearnerEndpoints
 
     private sealed record CompanionAccess(bool CanChat, string Reason, string? PlanCode, string? PlanName);
 }
+
+/// <summary>Teaching-style update. Enum names are sent as strings so the wire
+/// format survives a reordering of the enum.</summary>
+public sealed record CompanionPreferenceRequest(
+    string TeachingStyle,
+    string Depth,
+    bool EnglishOnly,
+    bool PreferWorkedExamples);

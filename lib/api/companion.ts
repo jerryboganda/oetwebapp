@@ -65,6 +65,32 @@ export interface CompanionMemory {
   bookmarks: CompanionMemoryBookmark[];
 }
 
+/** F-011 / F-050 / F-052 — how the learner wants to be taught. */
+export type CompanionTeachingStyle = 'Direct' | 'Socratic' | 'Coaching';
+export type CompanionExplanationDepth = 'Brief' | 'Standard' | 'Deep';
+
+export interface CompanionPreferences {
+  teachingStyle: CompanionTeachingStyle;
+  depth: CompanionExplanationDepth;
+  /** F-055 — reply in English even to an Arabic message. Opt-in immersion. */
+  englishOnly: boolean;
+  preferWorkedExamples: boolean;
+  updatedAt: string;
+}
+
+export function fetchCompanionPreferences(): Promise<CompanionPreferences> {
+  return apiRequest<CompanionPreferences>('/v1/companion/preferences');
+}
+
+export function saveCompanionPreferences(
+  preferences: Omit<CompanionPreferences, 'updatedAt'>,
+): Promise<CompanionPreferences> {
+  return apiRequest<CompanionPreferences>('/v1/companion/preferences', {
+    method: 'PUT',
+    body: JSON.stringify(preferences),
+  });
+}
+
 /** Capability snapshot for the current learner. Drives the paywall and the chip. */
 export function fetchCompanionSession(): Promise<CompanionSession> {
   return apiRequest<CompanionSession>('/v1/companion/session');

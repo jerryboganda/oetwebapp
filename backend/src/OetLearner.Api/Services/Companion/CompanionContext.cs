@@ -1,3 +1,4 @@
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Companion;
@@ -66,6 +67,12 @@ public sealed record CompanionTurnContext
 
     /// <summary>Preferred locale, e.g. `en` or `ar`. Drives language and RTL.</summary>
     public string Locale { get; init; } = "en";
+
+    /// <summary>
+    /// How this learner wants to be taught (F-011, F-050, F-052, F-055).
+    /// Never null — an absent row means every default.
+    /// </summary>
+    public CompanionPreference Preferences { get; init; } = new() { UserId = string.Empty };
 
     /// <summary>Bounded surface context. Never expands entitlement.</summary>
     public CompanionContextEnvelope Envelope { get; init; } = new();

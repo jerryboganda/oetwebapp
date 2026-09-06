@@ -40,9 +40,12 @@ public interface ICompanionContextResolver
 public sealed class CompanionContextResolver(
     LearnerDbContext db,
     IEffectiveEntitlementResolver entitlements,
-    IAiPackageCreditService credits,
     ICompanionFeatureFlags flags,
-    ILogger<CompanionContextResolver> logger) : ICompanionContextResolver
+    ILogger<CompanionContextResolver> logger,
+    // Optional on purpose: the credit balance only decorates the prompt with the
+    // learner's remaining allowance. A turn must still work without it, and the
+    // charge path enforces the balance for real — so nothing here depends on it.
+    IAiPackageCreditService? credits = null) : ICompanionContextResolver
 {
     public async Task<CompanionTurnContext> ResolveAsync(
         string userId,
@@ -62,6 +65,13 @@ public sealed class CompanionContextResolver(
             .FirstOrDefaultAsync(ct);
 
         var snapshot = await entitlements.ResolveAsync(userId, ct);
+
+        // Absent row = defaults. A learner who never opened the settings still
+        // gets a working companion, so this is never required to exist.
+        var preferences = await db.CompanionPreferences
+            .AsNoTracking()
+            .FirstOrDefaultAsync(p => p.UserId == userId, ct)
+            ?? new CompanionPreference { UserId = userId };
 
         var professionId = goal?.ProfessionId ?? user?.ActiveProfessionId;
         var profession = ParseProfession(professionId);
@@ -98,6 +108,7 @@ public sealed class CompanionContextResolver(
             HasEligibleSubscription = snapshot.HasEligibleSubscription,
             AiCreditsRemaining = creditBalance,
             Locale = NormaliseLocale(user?.Locale),
+            Preferences = preferences,
             // The client-sent ExamMode is discarded; only the server value survives.
             Envelope = safeEnvelope with { ExamMode = examMode },
             ExamMode = examMode,
@@ -136,6 +147,8 @@ public sealed class CompanionContextResolver(
         EffectiveEntitlementSnapshot snapshot,
         CancellationToken ct)
     {
+        if (credits is null) return snapshot.AiCreditsRemaining;
+
         try
         {
             var creditSnapshot = await credits.GetSnapshotAsync(userId, 0, ct);
@@ -151,31 +164,58 @@ public sealed class CompanionContextResolver(
     }
 
     /// <summary>
-    /// True when the learner has an attempt in flight that forbids assistance.
-    /// Resolved from persisted attempt state, so omitting the client flag cannot
-    /// unlock hints.
+    /// True when the learner has any attempt in flight that forbids assistance.
+    ///
+    /// <para>
+    /// <b>This does not consult the envelope at all.</b> An earlier version keyed
+    /// off <c>envelope.AttemptId</c>, which made the whole guard trivially
+    /// bypassable — and, worse, dead: nothing on the wire ever populated the
+    /// envelope, so exam mode was permanently false in production. The question
+    /// "is this learner sitting an attempt right now?" is answerable from the
+    /// database alone, so it is answered there, and the client cannot influence
+    /// it by omission or by lying.
+    /// </para>
+    ///
+    /// <para>
+    /// The scan is bounded to attempts started recently: an <c>InProgress</c> row
+    /// abandoned months ago is stale data, not a live exam, and letting it pin a
+    /// learner into permanent refusal would be its own bug.
+    /// </para>
     /// </summary>
     private async Task<bool> ResolveExamModeAsync(
         string userId,
         CompanionContextEnvelope envelope,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(envelope.AttemptId)) return false;
+        var since = DateTimeOffset.UtcNow - MaxLiveAttemptAge;
 
         try
         {
-            // Fail closed: if an attempt id was supplied and we cannot prove it is
-            // finished, treat the learner as being inside a protected attempt.
+            var hasLiveAttempt = await db.Attempts
+                .AsNoTracking()
+                .AnyAsync(
+                    a => a.UserId == userId
+                         && a.StartedAt >= since
+                         && (a.State == AttemptState.InProgress
+                             || a.State == AttemptState.Paused
+                             || a.State == AttemptState.NotStarted),
+                    ct);
+
+            if (hasLiveAttempt) return true;
+
+            // A client-supplied attempt id can only ever ADD protection: if the
+            // surface says the learner is on an attempt page, honour it even when
+            // the row does not look live, and fail closed on an id we cannot find.
+            if (string.IsNullOrWhiteSpace(envelope.AttemptId)) return false;
+
             var state = await db.Attempts
                 .AsNoTracking()
                 .Where(a => a.Id == envelope.AttemptId && a.UserId == userId)
                 .Select(a => (AttemptState?)a.State)
                 .FirstOrDefaultAsync(ct);
 
-            // Unknown attempt id -> fail closed rather than assume it is finished.
             if (state is null) return true;
 
-            // Assistance is only safe once the attempt can no longer be changed.
             return state is not (AttemptState.Submitted
                 or AttemptState.Evaluating
                 or AttemptState.Completed
@@ -186,11 +226,18 @@ public sealed class CompanionContextResolver(
         {
             logger.LogWarning(
                 ex,
-                "Companion could not resolve exam mode for attempt {AttemptId}; failing closed.",
-                envelope.AttemptId);
+                "Companion could not resolve exam mode for {UserId}; failing closed.",
+                userId);
             return true;
         }
     }
+
+    /// <summary>
+    /// How long an unfinished attempt still counts as "in progress". Longer than
+    /// any real sitting, short enough that an abandoned row does not lock the
+    /// companion out forever.
+    /// </summary>
+    private static readonly TimeSpan MaxLiveAttemptAge = TimeSpan.FromHours(8);
 
     private static ExamProfession ParseProfession(string? professionId)
     {

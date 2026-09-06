@@ -44,5 +44,19 @@
   "companion.memory.reset": "Delete all",
   "companion.memory.deleteNote": "Delete note: {title}",
   "companion.memory.deleteBookmark": "Remove saved word: {term}",
-  "companion.memory.export": "Export"
+  "companion.memory.export": "Export",
+  "companion.style.title": "How should I teach you?",
+  "companion.style.direct": "Straight answer",
+  "companion.style.direct.hint": "Answer first, then the reason. Fastest when you are short on time.",
+  "companion.style.socratic": "Make me think",
+  "companion.style.socratic.hint": "A question first, so you work it out. The answer follows if you get stuck.",
+  "companion.style.coaching": "Coach me",
+  "companion.style.coaching.hint": "What is working, the one thing to change, and a next step.",
+  "companion.style.englishOnly": "English only",
+  "companion.style.englishOnly.hint": "Reply in English even when I write in Arabic.",
+  "companion.style.workedExamples": "Prefer worked examples from my profession",
+  "companion.depth.title": "How much detail?",
+  "companion.depth.brief": "Brief",
+  "companion.depth.standard": "Standard",
+  "companion.depth.deep": "In depth"
 }

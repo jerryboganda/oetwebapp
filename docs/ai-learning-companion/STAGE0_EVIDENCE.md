@@ -31,6 +31,10 @@
 | S1.6b citations | **F-024, F-025** | Sources persisted on the message and rendered with their authority class, on both surfaces |
 | S1.2d corpus bootstrap | **F-013** | Indexes on first boot when the flag is on and the corpus is empty — grounding no longer depends on a remembered manual step |
 | Streaming contract repair | cross-cutting | The hub and the browser client never agreed on event names; the learner chat streamed into handlers nobody had registered |
+| Exam-mode repair | **F-155** | The guard was unreachable: nothing on the wire populated the envelope it keyed off. Now resolved from attempt state in the database |
+| Surface awareness | **F-091…F-094** | `StartTurn` carries a bounded envelope; route → surface/resource/question/video, derived client-side, resolved server-side |
+| Teaching styles | **F-011, F-050, F-052, F-055** | `CompanionPreference` + panel: direct / Socratic / coach, depth, English-only immersion |
+| Sensitive-data boundary | **F-156** | Warns on real patient data or document scans, does not repeat it back, does not save it |
 
 **No feature was moved to `EXISTS` on the strength of this work.** The gap analysis statuses reflect what is
 actually delivered, not what is scaffolded.
@@ -103,7 +107,8 @@ degrades to exact scan plus the keyword path.
 | `CompanionMemoryIsolationTests` | **4/4 pass** |
 | `CompanionKillSwitchTests` (the drill) | **23/23 pass** |
 | `AiAssistantHubContractTests` | **2/2 pass** |
-| Companion + eligibility + endpoint + contract suites | **138/138 pass** |
+| `CompanionExamModeTests` | **10/10 pass** |
+| Companion + eligibility + endpoint + contract suites | **154/154 pass** |
 | `dotnet build` (API project) | **0 errors** |
 | `pnpm run ship:gate` | **OK** |
 | `tsc --noEmit` | **0 errors in changed files**; 13 pre-existing errors remain in `tests/e2e/writing-v2/**` and `tests/performance/**` (Playwright specs, unmodified at HEAD, untouched by this work) |
@@ -153,7 +158,16 @@ with the same error. No install was attempted because several other sessions wer
    `EmbeddingService`, which already degrades to a deterministic local vector when no provider is configured.
    **Lesson recorded:** a companion slice is not verified until `EndpointRegistrationTests` has run, because
    that is the only suite that builds the real service provider.
-4. **The learner tool boundary was data-only.** Tool resolution is driven purely by `AiFeatureToolGrant` rows.
+4. **Exam-mode protection was unreachable in the live path.** `ResolveExamModeAsync` keyed off
+   `CompanionContextEnvelope.AttemptId`, but `StartTurn(threadId, userMessage)` had no parameter for an
+   envelope, so `BuildCompanionPromptAsync` passed `null` on every real turn. Exam mode was therefore
+   permanently false in production. Even once the envelope existed, a client that simply omitted the attempt
+   id would have unlocked hints mid-exam — the guard trusted the party it was guarding against.
+   **Fixed** by resolving exam mode from live attempt state in the database, ignoring the client entirely; the
+   envelope may now only ever ADD protection. Bounded to attempts started within 8 hours so an abandoned row
+   cannot lock a learner out forever. `CompanionExamModeTests` covers all 8 attempt states, cross-learner
+   isolation, a forged `ExamMode: false`, and an unknown attempt id (fails closed).
+5. **The learner tool boundary was data-only.** Tool resolution is driven purely by `AiFeatureToolGrant` rows.
    Role derivation is correctly server-side and grants are deny-by-default, but one mistaken admin grant row
    would have exposed `run_command` / `deploy` / `write_file` to every learner. A code-level allowlist now
    filters learner-facing feature codes at the single chokepoint, logs any blocked grant as an error, and

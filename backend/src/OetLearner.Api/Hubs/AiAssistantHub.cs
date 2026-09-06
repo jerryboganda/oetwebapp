@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using OetLearner.Api.Services.AiAssistant;
 
+using OetLearner.Api.Services.Companion;
+
 namespace OetLearner.Api.Hubs;
 
 /// <summary>
@@ -11,7 +13,7 @@ namespace OetLearner.Api.Hubs;
 /// with role-scoped tool availability and system prompts.
 ///
 /// Client → Server methods:
-///   StartTurn(threadId, userMessage) — begins an assistant turn with streaming response
+///   StartTurn(threadId, userMessage, context?) — begins an assistant turn with streaming response
 ///   CancelTurn(threadId) — cancels a running turn
 ///   CreateThread(title?) — creates a new thread
 ///   ListThreads(skip, take) — lists user's threads
@@ -77,7 +79,13 @@ public class AiAssistantHub(
     /// Starts an assistant turn: sends user message, triggers the ReAct loop,
     /// and streams response chunks back via MessageDelta events.
     /// </summary>
-    public async Task StartTurn(string threadId, string userMessage)
+    /// <param name="context">
+    /// Optional surface hint: identifiers only (route, resource, question, video
+    /// position), never page content. The server resolves what they mean and
+    /// whether the learner may see them; exam mode is decided from the database
+    /// and ignores this entirely.
+    /// </param>
+    public async Task StartTurn(string threadId, string userMessage, CompanionContextEnvelope? context = null)
     {
         var userId = GetUserId(Context);
         if (string.IsNullOrWhiteSpace(userId)) return;
@@ -87,7 +95,7 @@ public class AiAssistantHub(
         try
         {
             await foreach (var evt in orchestrator.RunTurnAsync(
-                threadId, userId, role, userMessage, Context.ConnectionAborted))
+                threadId, userId, role, userMessage, context, Context.ConnectionAborted))
             {
                 switch (evt)
                 {

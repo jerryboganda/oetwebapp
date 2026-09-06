@@ -44,5 +44,19 @@
   "companion.memory.reset": "حذف الكل",
   "companion.memory.deleteNote": "حذف الملاحظة: {title}",
   "companion.memory.deleteBookmark": "إزالة الكلمة المحفوظة: {term}",
-  "companion.memory.export": "تصدير"
+  "companion.memory.export": "تصدير",
+  "companion.style.title": "كيف تُحبّ أن أشرح لك؟",
+  "companion.style.direct": "إجابة مباشرة",
+  "companion.style.direct.hint": "الإجابة أولاً ثم السبب. الأسرع عندما يكون وقتك ضيقًا.",
+  "companion.style.socratic": "اجعلني أفكّر",
+  "companion.style.socratic.hint": "سؤال أولاً لتصل بنفسك، والإجابة تأتي إن تعثّرت.",
+  "companion.style.coaching": "درِّبني",
+  "companion.style.coaching.hint": "ما الذي يسير جيدًا، وأهم تغيير واحد، وخطوة تالية.",
+  "companion.style.englishOnly": "الإنجليزية فقط",
+  "companion.style.englishOnly.hint": "أجب بالإنجليزية حتى لو كتبتُ بالعربية.",
+  "companion.style.workedExamples": "فضِّل أمثلة تطبيقية من تخصّصي",
+  "companion.depth.title": "ما مقدار التفصيل؟",
+  "companion.depth.brief": "مختصر",
+  "companion.depth.standard": "متوسط",
+  "companion.depth.deep": "مفصّل"
 }

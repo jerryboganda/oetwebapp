@@ -11,9 +11,19 @@ public partial class LearnerDbContext
     public DbSet<CompanionSource> CompanionSources => Set<CompanionSource>();
     public DbSet<CompanionChunk> CompanionChunks => Set<CompanionChunk>();
     public DbSet<CompanionKnowledgeRelease> CompanionKnowledgeReleases => Set<CompanionKnowledgeRelease>();
+    public DbSet<CompanionPreference> CompanionPreferences => Set<CompanionPreference>();
 
     partial void OnModelCreatingCompanion(ModelBuilder modelBuilder)
     {
+        // One row per learner, keyed by user id — no surrogate key, because
+        // "this learner's preferences" is exactly one thing.
+        modelBuilder.Entity<CompanionPreference>(e =>
+        {
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.TeachingStyle).HasConversion<int>();
+            e.Property(x => x.Depth).HasConversion<int>();
+        });
+
         modelBuilder.Entity<CompanionSource>(e =>
         {
             e.HasKey(x => x.Id);

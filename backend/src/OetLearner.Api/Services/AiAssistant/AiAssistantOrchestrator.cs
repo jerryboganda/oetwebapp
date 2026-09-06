@@ -50,6 +50,7 @@ public sealed class AiAssistantOrchestrator(
 
     public async IAsyncEnumerable<AssistantStreamEvent> RunTurnAsync(
         string threadId, string userId, string role, string userMessage,
+        CompanionContextEnvelope? context,
         [EnumeratorCancellation] CancellationToken ct)
     {
         using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -112,7 +113,7 @@ public sealed class AiAssistantOrchestrator(
                 !string.Equals(role, "expert", StringComparison.OrdinalIgnoreCase))
             {
                 var companion = await BuildCompanionPromptAsync(
-                    scope.ServiceProvider, userId, userMessage, systemPrompt, turnCts.Token);
+                    scope.ServiceProvider, userId, userMessage, systemPrompt, context, turnCts.Token);
                 systemPrompt = companion.Prompt;
                 citations = companion.Citations;
             }
@@ -314,6 +315,7 @@ public sealed class AiAssistantOrchestrator(
         string userId,
         string userMessage,
         string fallbackPrompt,
+        CompanionContextEnvelope? envelope,
         CancellationToken ct)
     {
         try
@@ -328,7 +330,7 @@ public sealed class AiAssistantOrchestrator(
             var retriever = scopedProvider.GetRequiredService<ICompanionRetriever>();
             var composer = scopedProvider.GetRequiredService<ICompanionPromptComposer>();
 
-            var context = await contextResolver.ResolveAsync(userId, envelope: null, ct);
+            var context = await contextResolver.ResolveAsync(userId, envelope, ct);
             var retrieval = await retriever.RetrieveAsync(userMessage, context, maxResults: 8, ct);
 
             logger.LogDebug(

@@ -23,6 +23,7 @@ import {
   type AssistantCitation,
   type AssistantConnectionState,
 } from '@/lib/ai-assistant/signalr';
+import type { CompanionSurfaceContext } from '@/lib/ai-assistant/surface-context';
 import {
   createThread as apiCreateThread,
   listThreads as apiListThreads,
@@ -62,7 +63,12 @@ export interface UseAiAssistantReturn {
   thread: AiAssistantThread | null;
 
   // Actions
-  sendMessage: (content: string) => Promise<void>;
+  /**
+   * Sends a turn. `context` is a bounded surface hint (route, resource,
+   * question, video position) that lets the companion answer "this question".
+   * Identifiers only — the server resolves meaning and entitlement.
+   */
+  sendMessage: (content: string, context?: CompanionSurfaceContext) => Promise<void>;
   cancelTurn: () => Promise<void>;
   /** @deprecated Use cancelTurn */
   cancelStream: () => void;
@@ -327,7 +333,7 @@ export function useAiAssistant(
   }, [assistantRole]);
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, context?: CompanionSurfaceContext) => {
       const connection = connectionRef.current;
       if (!connection || mapHubState(connection.state) !== 'connected') {
         setError('Not connected to assistant');
@@ -364,7 +370,7 @@ export function useAiAssistant(
       setError(null);
 
       try {
-        await invokeStartTurn(connection, threadId, content);
+        await invokeStartTurn(connection, threadId, content, context);
       } catch (err) {
         console.error('[AI Assistant] Failed to start turn:', err);
         setError('Failed to send message');
