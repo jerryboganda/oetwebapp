@@ -716,37 +716,56 @@ public sealed class WritingSubmissionEvaluationPipeline(
         return true;
     }
 
+    /// <summary>
+    /// Resource-version steps tried in order when the AI control plane
+    /// reports a resource-slot conflict. The first attempt reuses the
+    /// caller's natural version; later steps move to fresh slots. Bounded:
+    /// concurrent grading of one submission is already excluded by the
+    /// claim, so an exhausted walk means genuine contention — fail rather
+    /// than loop.
+    /// </summary>
+    private static readonly int?[] GradeResourceVersionSteps = [null, 2, 3];
+
     private async Task<(RubricResult Rubric, string? ReservationId)> GradeWithReservationAsync(
         WritingSubmission submission,
         WritingScenario? scenario,
         string caseNotesSnapshot,
         CancellationToken ct)
     {
-        try
+        for (var step = 0; step < GradeResourceVersionSteps.Length; step++)
         {
-            return await GradeWithReservationInnerAsync(submission, scenario, caseNotesSnapshot, ct);
+            try
+            {
+                return await GradeWithReservationInnerAsync(
+                    submission, scenario, caseNotesSnapshot, GradeResourceVersionSteps[step], ct);
+            }
+            catch (OetLearner.Api.Services.Ai.AiOperationConflictException conflictEx) when (step + 1 < GradeResourceVersionSteps.Length)
+            {
+                // The slot is owned by an earlier request shape (e.g. a resume
+                // after a prompt/token-budget change, or a stale operation id
+                // from a previous attempt): step to a fresh resource version
+                // and retry. Same logical grading, new slot — never a second
+                // concurrent grading (the claim excludes that). The credit
+                // reservation stays pinned to businessReference, so no
+                // duplicate debit can occur.
+                logger.LogWarning(
+                    conflictEx,
+                    "Writing grade resource-slot conflict for submission {SubmissionId}; retrying with resource version {ResourceVersion}.",
+                    submission.Id, GradeResourceVersionSteps[step + 1]);
+                submission.GradeOperationId = Guid.NewGuid().ToString("N");
+                await db.SaveChangesAsync(ct);
+            }
         }
-        catch (OetLearner.Api.Services.Ai.AiOperationConflictException conflictEx)
-        {
-            // Resume carries a stale operation id bound to an earlier request
-            // shape (e.g. a request built before a prompt/token-budget change):
-            // mint a fresh operation and retry once. The credit reservation
-            // stays pinned to businessReference, so no duplicate debit can
-            // occur; the stale operation is abandoned, never re-driven.
-            logger.LogWarning(
-                conflictEx,
-                "Writing grade operation conflict for submission {SubmissionId}; retrying once with a fresh operation id.",
-                submission.Id);
-            submission.GradeOperationId = Guid.NewGuid().ToString("N");
-            await db.SaveChangesAsync(ct);
-            return await GradeWithReservationInnerAsync(submission, scenario, caseNotesSnapshot, ct);
-        }
+
+        throw new InvalidOperationException(
+            $"Writing grade resource slot for submission {submission.Id} stayed contested after bounded retries.");
     }
 
     private async Task<(RubricResult Rubric, string? ReservationId)> GradeWithReservationInnerAsync(
         WritingSubmission submission,
         WritingScenario? scenario,
         string caseNotesSnapshot,
+        int? resourceVersion,
         CancellationToken ct)
     {
         string? reservationId = null;
@@ -768,7 +787,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 return (persisted, reservationId);
             }
 
-            var rubric = await CallRubricAsync(submission, scenario, caseNotesSnapshot, reservationId, ct);
+            var rubric = await CallRubricAsync(submission, scenario, caseNotesSnapshot, reservationId, resourceVersion, ct);
             submission.ProviderResultJson = JsonSerializer.Serialize(new PersistedProviderResult(
                 rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
                 rubric.EstimatedBand, rubric.EstimatedScaledScore,
@@ -1063,6 +1082,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         WritingScenario? scenario,
         string caseNotesSnapshot,
         string? creditReservationId,
+        int? resourceVersion,
         CancellationToken ct)
     {
         // Fail closed on missing scenario metadata: ParseProfession throws a
@@ -1101,6 +1121,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 // contract and fails the whole grading. Size headroom so a
                 // finding-rich letter never truncates into a retryable 503.
                 MaxTokens = 6000,
+                // Retries after a resource-slot conflict step this version so
+                // the control plane treats the resume as a new slot rather
+                // than a divergent payload on an occupied one.
+                ResourceVersion = resourceVersion,
                 FeatureCode = AiFeatureCodes.WritingGrade,
                 PromptTemplateId = "writing.score.v1",
                 UserId = submission.UserId,
