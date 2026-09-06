@@ -649,18 +649,39 @@ public static class BillingExpansionEndpoints
                 : $"Marked {subscription.PlanId} fulfilled for {subscription.UserId}; access released.")
                       + (string.IsNullOrWhiteSpace(request.Notes) ? string.Empty : $" Notes: {request.Notes}"),
         });
+        // Flush proof linkage first: the evidence verdict below reads the
+        // store, and must see proofs linked/paid by this fulfilment
+        // (mirrors ManualPaymentService.ApproveAsync flush-first). Same
+        // ambient transaction — the concurrency catch below still rolls
+        // everything back together.
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException) when (transaction is not null)
+        {
+            return await HandleMarkFulfilledConcurrencyAsync(db, transaction, id, ct);
+        }
+
         // Paid-only invoice gate: releasing web access promotes any Pending
-        // invoice for this order to Paid exactly once. External-only hand-overs
+        // invoice for this order to Paid exactly once — but only when payment
+        // evidence exists (gateway payment or approved proof, per
+        // InvoiceEvidenceResolver). A pure admin grant with no evidence keeps
+        // its invoices Pending: nothing was paid. External-only hand-overs
         // (no platform access) leave invoices untouched. Failed/pending orders
         // never reach here (guarded by the fulfilment-state checks above).
         if (!externalOnly && subscription.Status == SubscriptionStatus.Active)
         {
-            var pendingInvoices = await db.Invoices
-                .Where(i => i.SubscriptionId == subscription.Id && i.Status == "Pending")
-                .ToListAsync(ct);
-            foreach (var pending in pendingInvoices)
+            var evidence = await InvoiceEvidenceResolver.ResolveAsync(db, subscription, ct);
+            if (!string.Equals(evidence.Source, InvoiceSources.AdminGrant, StringComparison.OrdinalIgnoreCase))
             {
-                pending.Status = "Paid";
+                var pendingInvoices = await db.Invoices
+                    .Where(i => i.SubscriptionId == subscription.Id && i.Status == "Pending")
+                    .ToListAsync(ct);
+                foreach (var pending in pendingInvoices)
+                {
+                    pending.Status = "Paid";
+                }
             }
         }
         try
@@ -669,20 +690,7 @@ public static class BillingExpansionEndpoints
         }
         catch (DbUpdateConcurrencyException) when (transaction is not null)
         {
-            // Genuine race: something else touched this exact row between our claim
-            // and this save. The claim above makes that essentially impossible for
-            // two concurrent "mark fulfilled" clicks, but stay defensive — the
-            // action must be idempotent rather than surface a blocking error when
-            // the other writer already finished the same fulfilment.
-            await transaction.RollbackAsync(ct);
-            var current = await db.Subscriptions.AsNoTracking()
-                .FirstOrDefaultAsync(row => row.Id == id, ct);
-            if (current?.FulfilmentStatus == FulfilmentStatuses.Fulfilled)
-            {
-                return TypedResults.Ok(await BuildPendingFulfilmentResultAsync(
-                    current, db, webAccessReleased: current.Status == SubscriptionStatus.Active, ct));
-            }
-            throw;
+            return await HandleMarkFulfilledConcurrencyAsync(db, transaction, id, ct);
         }
         if (transaction is not null)
         {
@@ -704,6 +712,28 @@ public static class BillingExpansionEndpoints
         }
 
         return TypedResults.Ok(await BuildPendingFulfilmentResultAsync(subscription, db, !externalOnly, ct));
+    }
+
+    private static async Task<Ok<PendingFulfilmentDto>> HandleMarkFulfilledConcurrencyAsync(
+        LearnerDbContext db,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction? transaction,
+        string id,
+        CancellationToken ct)
+    {
+        // Genuine race: something else touched this exact row between our claim
+        // and our save. The claim makes that essentially impossible for two
+        // concurrent "mark fulfilled" clicks, but stay defensive — the action
+        // must be idempotent rather than surface a blocking error when the
+        // other writer already finished the same fulfilment.
+        await transaction!.RollbackAsync(ct);
+        var current = await db.Subscriptions.AsNoTracking()
+            .FirstOrDefaultAsync(row => row.Id == id, ct);
+        if (current?.FulfilmentStatus == FulfilmentStatuses.Fulfilled)
+        {
+            return TypedResults.Ok(await BuildPendingFulfilmentResultAsync(
+                current, db, webAccessReleased: current.Status == SubscriptionStatus.Active, ct));
+        }
+        throw new DbUpdateConcurrencyException("Mark-fulfilled lost a concurrent update race.");
     }
 
     private static async Task<PendingFulfilmentDto> BuildPendingFulfilmentResultAsync(

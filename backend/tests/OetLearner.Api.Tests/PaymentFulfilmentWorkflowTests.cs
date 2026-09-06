@@ -202,6 +202,182 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
         Assert.True(await assertDb.ManualPaymentRequests.AnyAsync(item => item.Id == receiptId));
     }
 
+    [Fact]
+    public async Task MarkFulfilled_WithGatewayEvidence_PromotesPendingInvoice()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var userId = $"fulfil-gw-{suffix}";
+        var planCode = $"fulfil-gw-plan-{suffix}";
+        var subscriptionId = $"fulfil-gw-sub-{suffix}";
+        var quoteId = $"fulfil-gw-quote-{suffix}";
+        var paymentId = Guid.NewGuid();
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", "Gateway Candidate");
+
+        await using (var seedScope = _factory.Services.CreateAsyncScope())
+        {
+            var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            db.BillingPlans.Add(new BillingPlan
+            {
+                Id = planCode,
+                Code = planCode,
+                Name = "Gateway Package",
+                Price = 120m,
+                Currency = "GBP",
+                Interval = "one_time",
+                DurationMonths = 6,
+                AccessDurationDays = 180,
+                DeliveryMethod = DeliveryMethods.AutomaticWeb,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            db.Subscriptions.Add(new Subscription
+            {
+                Id = subscriptionId,
+                UserId = userId,
+                PlanId = planCode,
+                Status = SubscriptionStatus.Active,
+                FulfilmentStatus = FulfilmentStatuses.PendingVerification,
+                StartedAt = now.AddDays(-1),
+                ChangedAt = now,
+                NextRenewalAt = now.AddMonths(6),
+                PriceAmount = 120m,
+                Currency = "GBP",
+                Interval = "one_time",
+            });
+            db.BillingQuotes.Add(new BillingQuote
+            {
+                Id = quoteId,
+                UserId = userId,
+                SubscriptionId = subscriptionId,
+                PlanCode = planCode,
+                Currency = "GBP",
+                SubtotalAmount = 120m,
+                TotalAmount = 120m,
+                Status = BillingQuoteStatus.Applied,
+                CreatedAt = now,
+                ExpiresAt = now.AddHours(1),
+                SnapshotJson = "{}",
+            });
+            db.PaymentTransactions.Add(new PaymentTransaction
+            {
+                Id = paymentId,
+                LearnerUserId = userId,
+                Gateway = "stripe",
+                GatewayTransactionId = $"pi_{suffix}",
+                TransactionType = "subscription_payment",
+                Status = "completed",
+                Amount = 120m,
+                Currency = "GBP",
+                ProductType = "plan",
+                ProductId = planCode,
+                QuoteId = quoteId,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            db.Invoices.Add(new Invoice
+            {
+                Id = $"inv-gw-{suffix}",
+                UserId = userId,
+                Amount = 120m,
+                Currency = "GBP",
+                Status = "Pending",
+                Description = "Gateway order, awaiting fulfilment",
+                SubscriptionId = subscriptionId,
+                QuoteId = quoteId,
+                IssuedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var admin = _factory.CreateClient();
+        admin.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        admin.DefaultRequestHeaders.Add("X-Debug-UserId", $"admin-{suffix}");
+        admin.DefaultRequestHeaders.Add("X-Debug-Email", $"admin-{suffix}@example.test");
+        admin.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+
+        using var response = await admin.PostAsJsonAsync(
+            $"/v1/admin/billing/fulfilment/subscriptions/{subscriptionId}/mark-fulfilled",
+            new { notes = "Gateway payment verified." });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var assertScope = _factory.Services.CreateAsyncScope();
+        var assertDb = assertScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal("Paid", (await assertDb.Invoices.SingleAsync(i => i.Id == $"inv-gw-{suffix}")).Status);
+    }
+
+    [Fact]
+    public async Task MarkFulfilled_PureGrantWithoutEvidence_LeavesInvoicePending()
+    {
+        var suffix = Guid.NewGuid().ToString("N");
+        var userId = $"fulfil-grant-{suffix}";
+        var planCode = $"fulfil-grant-plan-{suffix}";
+        var subscriptionId = $"fulfil-grant-sub-{suffix}";
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", "Grant Candidate");
+
+        await using (var seedScope = _factory.Services.CreateAsyncScope())
+        {
+            var db = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            db.BillingPlans.Add(new BillingPlan
+            {
+                Id = planCode,
+                Code = planCode,
+                Name = "Grant Package",
+                Price = 120m,
+                Currency = "GBP",
+                Interval = "one_time",
+                DurationMonths = 6,
+                AccessDurationDays = 180,
+                DeliveryMethod = DeliveryMethods.AutomaticWeb,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            db.Subscriptions.Add(new Subscription
+            {
+                Id = subscriptionId,
+                UserId = userId,
+                PlanId = planCode,
+                Status = SubscriptionStatus.Active,
+                FulfilmentStatus = FulfilmentStatuses.PendingVerification,
+                StartedAt = now.AddDays(-1),
+                ChangedAt = now,
+                NextRenewalAt = now.AddMonths(6),
+                PriceAmount = 120m,
+                Currency = "GBP",
+                Interval = "one_time",
+            });
+            db.Invoices.Add(new Invoice
+            {
+                Id = $"inv-grant-{suffix}",
+                UserId = userId,
+                Amount = 120m,
+                Currency = "GBP",
+                Status = "Pending",
+                Description = "Admin grant, no payment evidence",
+                SubscriptionId = subscriptionId,
+                IssuedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using var admin = _factory.CreateClient();
+        admin.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
+        admin.DefaultRequestHeaders.Add("X-Debug-UserId", $"admin-{suffix}");
+        admin.DefaultRequestHeaders.Add("X-Debug-Email", $"admin-{suffix}@example.test");
+        admin.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+
+        using var response = await admin.PostAsJsonAsync(
+            $"/v1/admin/billing/fulfilment/subscriptions/{subscriptionId}/mark-fulfilled",
+            new { notes = "Admin grant fulfilment." });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var assertScope = _factory.Services.CreateAsyncScope();
+        var assertDb = assertScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(SubscriptionStatus.Active, (await assertDb.Subscriptions.SingleAsync(s => s.Id == subscriptionId)).Status);
+        Assert.Equal("Pending", (await assertDb.Invoices.SingleAsync(i => i.Id == $"inv-grant-{suffix}")).Status);
+    }
+
     private static BillingQuote Quote(
         string id,
         string subscriptionId,

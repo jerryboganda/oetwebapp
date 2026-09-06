@@ -543,21 +543,32 @@ public sealed class ManualPaymentService : IManualPaymentService
         row.UpdatedAt = now;
         row.AccessGrantedSubscriptionId = subscription.Id;
 
-        // Paid-only invoice gate: promoting the order to paid/Active releases the
-        // candidate invoice exactly once. Pending checkout rows stay Pending until
-        // this approval; failed/rejected paths never reach here.
+        // Flush the approval first: the evidence verdict below reads the
+        // paid proof row from the store, and must see this approval.
+        await _db.SaveChangesAsync(ct);
+
+        // Paid-only invoice gate, routed through the single evidence verdict
+        // (InvoiceEvidenceResolver): a ManualProof or Gateway payment promotes
+        // the order's Pending invoices exactly once, while an unevidenced
+        // admin grant leaves them Pending. Pending checkout rows stay Pending
+        // until this approval; failed/rejected paths never reach here.
         if (subscription.Status == SubscriptionStatus.Active)
         {
-            var pendingInvoices = await _db.Invoices
-                .Where(i => i.SubscriptionId == subscription.Id && i.Status == "Pending")
-                .ToListAsync(ct);
-            foreach (var pending in pendingInvoices)
+            var evidence = await InvoiceEvidenceResolver.ResolveAsync(_db, subscription, ct);
+            if (!string.Equals(evidence.Source, InvoiceSources.AdminGrant, StringComparison.OrdinalIgnoreCase))
             {
-                pending.Status = "Paid";
+                var pendingInvoices = await _db.Invoices
+                    .Where(i => i.SubscriptionId == subscription.Id && i.Status == "Pending")
+                    .ToListAsync(ct);
+                foreach (var pending in pendingInvoices)
+                {
+                    pending.Status = "Paid";
+                }
+
+                await _db.SaveChangesAsync(ct);
             }
         }
 
-        await _db.SaveChangesAsync(ct);
         if (transaction is not null)
         {
             await transaction.CommitAsync(ct);

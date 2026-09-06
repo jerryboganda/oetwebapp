@@ -11636,6 +11636,10 @@ public partial class LearnerService(
             ct);
 
         var invoiceId = TruncateIdentifier($"inv-topup-{transaction.GatewayTransactionId}");
+        // NOTE: intentionally flow-local, not via InvoiceEvidenceResolver — wallet
+        // top-ups carry no subscription scope (the resolver is per-subscription),
+        // and this path only runs for completed payments. See
+        // ManualPaymentService.ApproveAsync for the resolver-routed promotion.
         var existingInvoice = await db.Invoices.FirstOrDefaultAsync(x => x.Id == invoiceId, ct);
         if (existingInvoice is null)
         {
@@ -12214,6 +12218,11 @@ public partial class LearnerService(
         // hand-over) mint a Pending invoice row for internal tracking only — the
         // learner surface filters to Paid, so failed/pending payments never expose
         // a downloadable invoice or trigger invoice notifications.
+        // NOTE: intentionally flow-local, not via InvoiceEvidenceResolver — this
+        // path derives the verdict from live fulfilment state (including rows
+        // assembled above that are not yet persisted), while the resolver reads
+        // committed evidence. See ManualPaymentService.ApproveAsync for the
+        // resolver-routed promotion once evidence is persisted.
         var invoiceStatus = subscription.Status == SubscriptionStatus.Active ? "Paid" : "Pending";
         var existingInvoice = await db.Invoices.FirstOrDefaultAsync(x => x.Id == invoiceId, ct);
         if (existingInvoice is null)
