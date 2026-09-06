@@ -54,6 +54,13 @@ public sealed class WritingSubmissionService(
     IWritingAttemptEventService? attemptEvents = null) : IWritingSubmissionService
 {
     private const string EmptyHighlights = "{}";
+
+    /// <summary>
+    /// Claim-lease age after which a row stuck in <c>grading</c> is presumed
+    /// orphaned (worker died mid-grade) and becomes resumable via retry-grade.
+    /// Mirrors the background-job stuck threshold so both systems agree.
+    /// </summary>
+    internal static readonly TimeSpan StuckClaimLease = TimeSpan.FromMinutes(30);
     public async Task<WritingSubmissionResponse> CreateSubmissionAsync(string userId, WritingSubmissionCreateRequest request, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -160,7 +167,21 @@ public sealed class WritingSubmissionService(
             }
         }
 
-        if (submission.Status is WritingSubmissionStatuses.Queued
+        // Claim-lease recovery: a row wedged in grading whose claim is older
+        // than the stuck-job threshold is demoted to failed so the shared
+        // reset below resumes the SAME attempt instead of refusing forever.
+        // Fresh claims still get the controlled in-progress response.
+        if (submission.Status == WritingSubmissionStatuses.Grading
+            && submission.ClaimedAt is { } claimedAt
+            && claimedAt <= DateTimeOffset.UtcNow - StuckClaimLease)
+        {
+            logger.LogWarning(
+                "Writing grade retry recovered stuck submission {SubmissionId} (claim age {ClaimAge}); resuming same attempt.",
+                submission.Id, DateTimeOffset.UtcNow - claimedAt);
+            submission.Status = WritingSubmissionStatuses.Failed;
+            await db.SaveChangesAsync(ct);
+        }
+        else if (submission.Status is WritingSubmissionStatuses.Queued
             or WritingSubmissionStatuses.Preflight
             or WritingSubmissionStatuses.Grading)
         {

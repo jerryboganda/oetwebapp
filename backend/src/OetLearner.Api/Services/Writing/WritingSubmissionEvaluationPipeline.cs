@@ -324,6 +324,25 @@ public sealed class WritingSubmissionEvaluationPipeline(
             }
         }
 
+        try
+        {
+            return await EvaluateClaimedAsync(submission, ct);
+        }
+        catch (Exception ex)
+        {
+            await MarkFailedIfGradeMissingAsync(submission, ex, ct);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Post-claim grading work. Invoked only after winning the compare-and-swap
+    /// claim (or when resuming an unclaimed retryable row); every failure path
+    /// below either persists its own terminal state or is caught by the
+    /// stuck-proofing guard in <see cref="EvaluateAsync"/>.
+    /// </summary>
+    private async Task<WritingSubmissionGradeOutcome> EvaluateClaimedAsync(WritingSubmission submission, CancellationToken ct)
+    {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == submission.ScenarioId, ct);
         submission.ReuseKeyHash = BuildReuseKeyHash(submission, scenario, await settingsProvider.GetAsync(ct));
         var reused = await TryReuseExistingGradeAsync(submission, ct);
@@ -521,6 +540,40 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
 
         return new WritingSubmissionGradeOutcome(submission.Id, grade.Id, grade.RawTotal, grade.BandLabel, false);
+    }
+
+    /// <summary>
+    /// Stuck-proofing guard: any failure after a successful claim that leaves
+    /// no persisted grade transitions the row to <c>failed</c> (best effort,
+    /// never throwing) so the attempt stays recoverable via retry-grade
+    /// instead of wedging in <c>grading</c> forever. Rows that already carry
+    /// a grade, or already reached a terminal state, are left untouched.
+    /// </summary>
+    private async Task MarkFailedIfGradeMissingAsync(WritingSubmission submission, Exception ex, CancellationToken ct)
+    {
+        _ = ct;
+        try
+        {
+            var graded = await db.WritingGrades.AsNoTracking()
+                .AnyAsync(g => g.SubmissionId == submission.Id, CancellationToken.None);
+            if (graded) return;
+            logger.LogWarning(
+                ex,
+                "Writing grading failed for submission {SubmissionId} without a persisted grade; marking failed so it stays retryable.",
+                submission.Id);
+            var row = await db.WritingSubmissions
+                .FirstOrDefaultAsync(s => s.Id == submission.Id, CancellationToken.None);
+            if (row is null || row.Status == WritingSubmissionStatuses.Failed) return;
+            row.Status = WritingSubmissionStatuses.Failed;
+            await db.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception markEx)
+        {
+            logger.LogWarning(
+                markEx,
+                "Failed to mark submission {SubmissionId} as failed after grading error.",
+                submission.Id);
+        }
     }
 
     private static WritingAssessmentReportBuildResult BuildAssessmentReport(
@@ -1015,6 +1068,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 Prompt = prompt,
                 UserInput = BuildRubricInput(submission, scenario, caseNotesSnapshot),
                 Temperature = 0.2,
+                // The grounded reply contract (findings + six criteria +
+                // scores + advisory) is far larger than the provider default
+                // (1024 tokens): a truncated reply parses as an incomplete
+                // contract and fails the whole grading. Size headroom so a
+                // finding-rich letter never truncates into a retryable 503.
+                MaxTokens = 6000,
                 FeatureCode = AiFeatureCodes.WritingGrade,
                 PromptTemplateId = "writing.score.v1",
                 UserId = submission.UserId,

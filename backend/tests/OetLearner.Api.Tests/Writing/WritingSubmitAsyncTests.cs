@@ -406,12 +406,40 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         Assert.Equal("writing_rubric_failed", ex.Code);
         Assert.True(ex.Retryable);
         Assert.Equal(503, ex.StatusCode);
-        // Pinned: generic rubric failures intentionally leave Status alone
-        // (no failed-row write) so the learner can retry the same attempt.
-        Assert.NotEqual("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        // Stuck-proofing invariant: a failure with no persisted grade MUST
+        // land in failed (never wedge in grading), otherwise neither re-POST
+        // (409 already-in-progress) nor retry-grade could ever resume it.
+        Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
         Assert.Equal(1, credits.ReserveCalls);
         Assert.Equal(1, credits.ReleaseCalls);
         Assert.Equal(0, await _db.WritingGrades.CountAsync());
+    }
+
+    [Fact]
+    public async Task FailedAttempt_ResumesToGraded_OnRetryGrade_WithoutDuplicateDebit()
+    {
+        var gateway = new FlakyGateway(CanonicalCompletion);
+        var credits = new CountingReservations();
+        var pipeline = BuildRealPreflightPipeline(gateway, credits);
+        var submit = await pipeline.SubmitAsync(
+            SampleAttempt("matrix-resume-1", LetterA, scenarioId: ScenarioReadyId), default);
+
+        // First attempt: provider blows up mid-grade. No grade, failed row.
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => pipeline.EvaluateAsync(submit.SubmissionId, default));
+        Assert.Equal("writing_rubric_failed", ex.Code);
+        Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+
+        // Resume grades the SAME attempt to completion: exactly one grade,
+        // and the rubric request carries a sized token budget so finding-rich
+        // letters cannot truncate into an unreadable contract.
+        var outcome = await pipeline.EvaluateAsync(submit.SubmissionId, default);
+        Assert.False(outcome.IdempotentReuse);
+        Assert.Equal("graded", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        Assert.Equal(1, await _db.WritingGrades.CountAsync(g => g.SubmissionId == submit.SubmissionId));
+        Assert.Equal(2, gateway.Calls);
+        Assert.NotNull(gateway.LastMaxTokens);
+        Assert.True(gateway.LastMaxTokens >= 4000);
     }
 
     [Fact]
@@ -529,6 +557,32 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
           "estimatedGrade": "B"
         }
         """;
+
+    /// <summary>Throws once (transient provider failure), then serves the canonical contract.</summary>
+    private sealed class FlakyGateway(string completion) : IAiGatewayService
+    {
+        public int Calls { get; private set; }
+        public int? LastMaxTokens { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "score",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            Calls++;
+            LastMaxTokens = request.MaxTokens;
+            if (Calls == 1) throw new InvalidOperationException("transient provider failure");
+            return Task.FromResult(new AiGatewayResult
+            {
+                Completion = completion,
+                ResolvedModel = "claude-sonnet-5",
+            });
+        }
+    }
 
     private sealed class CountingGateway(string completion) : IAiGatewayService
     {
