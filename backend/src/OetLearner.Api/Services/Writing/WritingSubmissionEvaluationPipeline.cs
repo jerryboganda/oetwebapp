@@ -719,12 +719,16 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// <summary>
     /// Resource-version steps tried in order when the AI control plane
     /// reports a resource-slot conflict. The first attempt reuses the
-    /// caller's natural version; later steps move to fresh slots. Bounded:
-    /// concurrent grading of one submission is already excluded by the
-    /// claim, so an exhausted walk means genuine contention — fail rather
-    /// than loop.
+    /// caller's natural version; later steps move to fresh slots. Each
+    /// failed parse permanently occupies its slot version (terminal
+    /// operations are never evicted), so the walk must extend past every
+    /// version consumed by earlier attempts of the same submission — conflict
+    /// checks themselves never reach a provider, so only the first FREE
+    /// version spends a call. Bounded: concurrent grading of one submission
+    /// is already excluded by the claim, so an exhausted walk means genuine
+    /// contention — fail rather than loop.
     /// </summary>
-    private static readonly int?[] GradeResourceVersionSteps = [null, 2, 3];
+    private static readonly int?[] GradeResourceVersionSteps = [null, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
     private async Task<(RubricResult Rubric, string? ReservationId)> GradeWithReservationAsync(
         WritingSubmission submission,
