@@ -90,7 +90,8 @@ degrades to exact scan plus the keyword path.
 | `CompanionLearnerToolBoundaryTests` | **15/15 pass** |
 | Combined re-run after guard restore | **19/19 pass** |
 | `CompanionRetrievalSecurityTests` | **10/10 pass** |
-| Full companion + eligibility suite | **29/29 pass** |
+| `CompanionDestinationSecurityTests` | **16/16 pass** |
+| Companion + eligibility + `EndpointRegistrationTests` | **104/104 pass** |
 | `dotnet build` (API project) | **0 errors** |
 | `pnpm run ship:gate` | **OK** |
 | `tsc --noEmit` | **0 errors in changed files**; 13 pre-existing errors remain in `tests/e2e/writing-v2/**` and `tests/performance/**` (Playwright specs, unmodified at HEAD, untouched by this work) |
@@ -118,7 +119,16 @@ with the same error. No install was attempted because several other sessions wer
    without a matrix row "is a bug caught by `AiFeatureEligibilityTests`". No such test existed, and **35 of 66
    feature codes were undocumented**. The test now exists as a ratchet: the 32 pre-existing gaps are listed
    explicitly and any *new* undocumented code fails the build.
-2. **The learner tool boundary was data-only.** Tool resolution is driven purely by `AiFeatureToolGrant` rows.
+2. **A missing DI registration would have stopped the API from starting.** `IEmbeddingService` was never
+   registered in the container — `CodebaseIndexer` and `CodebaseRetriever` are constructed by hand, so nothing
+   had ever asked for it. `CompanionRetriever` and `CompanionRulebookIndexer` resolve it through DI, so once
+   they were registered the container failed validation at `WebApplicationBuilder.Build()` and **every**
+   endpoint test failed, not just the companion ones. The companion unit tests never caught it because they
+   construct the retriever directly; only booting the real host does. Fixed by registering
+   `EmbeddingService`, which already degrades to a deterministic local vector when no provider is configured.
+   **Lesson recorded:** a companion slice is not verified until `EndpointRegistrationTests` has run, because
+   that is the only suite that builds the real service provider.
+3. **The learner tool boundary was data-only.** Tool resolution is driven purely by `AiFeatureToolGrant` rows.
    Role derivation is correctly server-side and grants are deny-by-default, but one mistaken admin grant row
    would have exposed `run_command` / `deploy` / `write_file` to every learner. A code-level allowlist now
    filters learner-facing feature codes at the single chokepoint, logs any blocked grant as an error, and
