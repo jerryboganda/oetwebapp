@@ -36,7 +36,7 @@ These invariants come from `AGENTS.md` and the linked domain specs. They are not
 
 ### 1.3 AI Gateway
 
-- Every AI invocation must use `buildAiGroundedPrompt()` (TS) or `AiGatewayService.BuildGroundedPrompt()` + `CompleteAsync()` (.NET).
+- Every AI invocation must use `AiGatewayService.BuildGroundedPrompt()` + `CompleteAsync()` (.NET — sole runtime since R-a retired the TS builder).
 - The .NET gateway physically refuses ungrounded prompts at runtime by throwing `PromptNotGroundedException`. Grounding is enforced, not advisory.
 - Adding a provider means implementing `IAiModelProvider`; grounding code is never modified.
 - Every AI call (success, provider error, refusal) writes exactly one `AiUsageRecord` row through `IAiUsageRecorder`. Quota and billing correctness depends on this one-call/one-row guarantee.

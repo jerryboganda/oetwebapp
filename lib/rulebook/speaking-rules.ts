@@ -248,7 +248,7 @@ function runForbiddenPatterns(rule: Rule, input: SpeakingAuditInput): LintFindin
 
 /**
  * The set of speaking rule check-ids that have a backing deterministic detector.
- * Mirrors `SUPPORTED_WRITING_CHECK_IDS` in writing-rules.ts so the conformance
+ * Mirrors the frozen `SUPPORTED_WRITING_CHECK_IDS` in check-ids.ts so the conformance
  * gate can prove every deterministic speaking rule is actually enforced.
  */
 export const SUPPORTED_SPEAKING_CHECK_IDS = Object.freeze(Object.keys(DETECTORS).sort());

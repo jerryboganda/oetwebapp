@@ -184,7 +184,7 @@ Emitted via `lib/analytics.ts`:
 
 | Path | Purpose |
 | ---- | ------- |
-| `lib/rulebook/types.ts` / `loader.ts` / `ai-prompt.ts` | `RuleKind = 'writing' \| 'speaking' \| 'grammar'` |
+| `lib/rulebook/types.ts` / `loader.ts` | `RuleKind = 'writing' \| 'speaking' \| 'grammar'` |
 | `lib/grammar/types.ts` | Learner + authoring types |
 | `lib/api.ts` | `adminGenerateGrammarAiDraft`, `fetchGrammarEntitlement`, admin publish/stats helpers |
 | `lib/analytics.ts` | Grammar events |

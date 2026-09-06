@@ -25,13 +25,80 @@
  */
 
 import type { RuleKind } from './types';
-import { SUPPORTED_WRITING_CHECK_IDS } from './writing-rules';
 import { SUPPORTED_SPEAKING_CHECK_IDS } from './speaking-rules';
 import { SUPPORTED_LISTENING_CHECK_IDS } from './listening-rules';
 import { SUPPORTED_READING_CHECK_IDS } from './reading-rules';
 import { LISTENING_EXAM_MODE_ENFORCERS, READING_EXAM_MODE_ENFORCERS } from './exam-mode-rules';
 
-/** Writing rules with a deterministic detector in `writing-rules.ts`. */
+/**
+ * Frozen review truth: the writing check-ids that had a deterministic
+ * detector when the TypeScript writing engine was retired (R-a). The .NET
+ * engine is the sole runtime now; the parity fixtures pin its behavior.
+ * Any change here must land in WritingRuleEngine.SupportedCheckIdSet too.
+ */
+const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
+  'address_punctuation',
+  'ago_requires_past_simple',
+  'blank_before_closing_phrase',
+  'blank_line_between_paragraphs',
+  'body_forbidden_phrase_next_visit',
+  'body_forbidden_phrase_the_patient',
+  'body_forbidden_phrase_yesterday',
+  'body_no_todays_date',
+  'body_uses_last_name_only',
+  'cancer_suspected_flagged_urgent',
+  'closure_mentions_consent_if_flagged',
+  'closure_mentions_patient_request_if_flagged',
+  'closure_mentions_review_if_required',
+  'conditions_lowercase',
+  'content_requires_allergy_for_atopic',
+  'content_requires_smoking_drinking',
+  'date_blank_line_sandwich',
+  'date_format_consistent',
+  'discharge_admitted_with_past_simple',
+  'discharge_all_investigations_listed',
+  'discharge_intro_no_identity',
+  'discharge_intro_template',
+  'discharge_omits_knownto_gp',
+  'discharge_plan_present',
+  'enclosure_results_phrase',
+  'for_duration_requires_present_perfect',
+  'intro_contains_purpose',
+  'intro_sentence_count',
+  'latin_abbreviations_translated',
+  'letter_body_length',
+  'letter_paragraph_count',
+  'letter_structure_order',
+  'linker_density',
+  'linker_however_punctuation',
+  'linker_in_addition_punctuation',
+  'linker_therefore_punctuation',
+  'min_body_paragraphs',
+  'minor_naming_convention',
+  'no_asap_in_letter',
+  'no_contractions',
+  'no_date_prefix',
+  'non_medical_no_jargon',
+  'numerical_values_have_units',
+  're_line_age_dob',
+  'salutation_last_name_only',
+  'salutation_re_adjacent',
+  'sentence_length_guard',
+  'since_requires_present_perfect',
+  'surgery_past_simple',
+  'treatment_for_not_from',
+  'urgent_body_starts_today',
+  'urgent_closure_phrase',
+  'urgent_intro_contains_urgent',
+  'urgent_token_not_repeated',
+  'visit_content_tense_basic_check',
+  'visit_paragraphization_check',
+  'year_not_abbreviated',
+  'yours_sincerely_capitalisation',
+  'yours_sincerely_vs_faithfully',
+]);
+
+/** Writing rules with a deterministic detector (frozen, see above). */
 export const WRITING_CHECK_IDS: ReadonlySet<string> = new Set(SUPPORTED_WRITING_CHECK_IDS);
 
 /** Speaking rules with a deterministic detector in `speaking-rules.ts`. */

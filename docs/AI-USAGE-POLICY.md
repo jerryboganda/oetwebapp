@@ -12,8 +12,9 @@
 ## 0. Design principles
 
 1. **Grounding is non-negotiable.** Every AI call routes through
-   the coordinator (`IAiGatewayService` / `IDirectAiCallRecorder`) and
-   `buildAiGroundedPrompt()` (TS). The gateway physically refuses ungrounded
+   the coordinator (`IAiGatewayService` / `IDirectAiCallRecorder`) with a
+   rulebook-grounded prompt built server-side (R-a retired the TS
+   `buildAiGroundedPrompt()`; no production caller remains). The gateway physically refuses ungrounded
    prompts. No policy below may weaken this.
 2. **Scoring integrity over convenience.** Any feature whose output materially
    affects a learner's OET score prediction is treated as *scoring-critical*

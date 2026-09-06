@@ -43,7 +43,7 @@ Versioned ("v1.0.0"). New professions drop in as
 
 ## 3. Rule engines
 
-Both runtimes ship identical, deterministic detectors.
+The .NET runtime ships the deterministic detectors (single runtime since R-a retired the TS writing engine).
 
 ### TypeScript — `lib/rulebook/*`
 
@@ -51,10 +51,11 @@ Both runtimes ship identical, deterministic detectors.
 |---|---|
 | `types.ts` | Canonical types (Rule, Rulebook, LintFinding, SpeakingTurn, AiGroundingContext, AiGroundedPrompt). Mirror of the JSON schema. |
 | `loader.ts` | Static import of JSON rulebooks. `loadRulebook(kind, profession)` / `findRule(...)` / `rulesApplicableTo(...)`. Throws `RulebookNotFoundError` for unregistered professions. |
-| `writing-rules.ts` | `lintWritingLetter(input)` — 40+ deterministic detectors keyed by `checkId`. Returns severity-sorted `LintFinding[]` plus a `writingCoverageSummary()`. |
 | `speaking-rules.ts` | `auditSpeakingTranscript(input)` — jargon, monologue, weight-sensitivity, smoking-ladder order, over-diagnosis, stage coverage, and Breaking Bad News 7-step protocol detectors. |
-| `ai-prompt.ts` | **`buildAiGroundedPrompt(ctx)`** — the only supported way to generate an AI system prompt (see §4). |
+| `check-ids.ts` | Frozen writing check-id registry (59 ids) + live speaking/listening/reading sets. |
 | `index.ts` | Barrel: `import { ... } from '@/lib/rulebook'`. |
+
+> Retired (R-a): the TS writing engine (`writing-rules.ts`: `lintWritingLetter` + `writingCoverageSummary`) and the TS prompt builder (`ai-prompt.ts`: `buildAiGroundedPrompt`) had no production callers — writing lint and prompt grounding run server-side. The .NET engine below is the sole runtime; parity fixtures are frozen reviewed truth.
 
 Tests: `lib/rulebook/*.test.ts` — **152 assertions**, all green.
 
@@ -63,7 +64,7 @@ Tests: `lib/rulebook/*.test.ts` — **152 assertions**, all green.
 | File | Responsibility |
 |---|---|
 | `RulebookLoader.cs` | `IRulebookLoader` — loads JSON from embedded resources (assembly-internal; no filesystem dependency on the server). |
-| `WritingRuleEngine.cs` | Mirror of `writing-rules.ts`. |
+| `WritingRuleEngine.cs` | Deterministic writing detectors (sole runtime; check-ids pinned in `lib/rulebook/check-ids.ts`). |
 | `SpeakingRuleEngine.cs` | Mirror of `speaking-rules.ts`. |
 | `AiGatewayService.cs` | **The only path to any AI model.** Holds `RulebookPromptBuilder`, the grounded-prompt contract, provider registry, and the refusal logic that blocks ungrounded prompts. |
 
@@ -80,7 +81,7 @@ so accidental raw-prompt calls are impossible.
 
 ### System prompt anatomy
 
-Built by `buildAiGroundedPrompt(ctx)` (TS) / `AiGatewayService.BuildGroundedPrompt(ctx)` (.NET). Each prompt contains:
+Built by `AiGatewayService.BuildGroundedPrompt(ctx)` (.NET — the sole runtime since R-a retired the TS builder). Each prompt contains:
 
 1. **Header** — rulebook kind + profession + version + task + candidate country + applied pass mark.
 2. **Canonical OET Scoring section** — the full country-aware scoring spec from `lib/scoring.ts` / `OetScoring.cs`.
@@ -241,30 +242,17 @@ All inputs / outputs are JSON and version-stamped.
 ```ts
 import {
   loadRulebook,
-  lintWritingLetter,
   auditSpeakingTranscript,
-  buildAiGroundedPrompt,
 } from '@/lib/rulebook';
-
-// Writing lint
-const findings = lintWritingLetter({
-  letterText, letterType: 'urgent_referral', profession: 'medicine',
-  patientAge: 45, recipientSpecialty: 'Cardiologist',
-});
 
 // Speaking audit
 const issues = auditSpeakingTranscript({
   transcript, cardType: 'breaking_bad_news', profession: 'medicine',
   silenceAfterDiagnosisMs: 4000,
 });
-
-// Grounded AI prompt
-const prompt = buildAiGroundedPrompt({
-  kind: 'writing', profession: 'medicine', task: 'score',
-  candidateCountry: 'UK', letterType: 'routine_referral',
-});
-// Pass `prompt.system` and `prompt.taskInstruction` to any AI SDK call.
 ```
+
+> Retired (R-a): `lintWritingLetter` / `buildAiGroundedPrompt` had no production callers. Writing lint runs via `POST /v1/writing/lint`; prompts are built server-side (see §11).
 
 ---
 

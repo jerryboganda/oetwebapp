@@ -7,14 +7,15 @@ import {
   supportedCheckIds,
   isSupportedCheckId,
 } from '../check-ids';
-import { SUPPORTED_WRITING_CHECK_IDS } from '../writing-rules';
 import { SUPPORTED_SPEAKING_CHECK_IDS } from '../speaking-rules';
 import { LISTENING_EXAM_MODE_ENFORCERS, READING_EXAM_MODE_ENFORCERS } from '../exam-mode-rules';
 
 describe('rulebook check-id registry', () => {
-  it('re-exports the writing detector check-ids verbatim', () => {
-    expect([...WRITING_CHECK_IDS].sort()).toEqual([...SUPPORTED_WRITING_CHECK_IDS].sort());
-    expect(WRITING_CHECK_IDS.size).toBeGreaterThan(0);
+  it('pins the frozen writing detector check-ids (R-a reviewed truth)', () => {
+    expect(WRITING_CHECK_IDS.size).toBe(59);
+    expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
+    expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
+    expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
   });
 
   it('exposes the speaking detector check-ids', () => {

@@ -28,7 +28,7 @@ OET scoring/rulebook safety. Other instruction files summarize and point here.
 
 ## AI grounding (mandatory)
 
-- All AI invocations go through the grounded gateway: TypeScript `buildAiGroundedPrompt()` or backend
+- All AI invocations go through the grounded gateway: backend
   `IAiGatewayService.BuildGroundedPrompt()` + `CompleteAsync()`. Never add ungrounded prompts or direct
   provider calls.
 - Every AI call records exactly one `AiUsageRecord`: success, provider error, and refusal must each
