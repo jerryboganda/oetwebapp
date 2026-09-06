@@ -525,7 +525,11 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         if (s.SalutationIndex is null) yield break;
         var line = s.Lines[s.SalutationIndex.Value];
         if (Regex.IsMatch(line, @"^Dear\s+(Dr\.?|Mr\.?|Ms\.?|Mrs\.?|Miss)\s+\w+\s+\w+", RegexOptions.IgnoreCase)
-            && !Regex.IsMatch(line, @"Sir/?Madam", RegexOptions.IgnoreCase))
+            && !Regex.IsMatch(line, @"Sir/?Madam", RegexOptions.IgnoreCase)
+            // "Dear Mr and Mrs Murray," addresses a couple by one shared
+            // surname, not a first+last name — the second \w+ that matched
+            // is the joining word "and", not a first name.
+            && !Regex.IsMatch(line, @"^Dear\s+(Dr\.?|Mr\.?|Ms\.?|Mrs\.?|Miss)\s+and\s+(Dr\.?|Mr\.?|Ms\.?|Mrs\.?|Miss)\s+\w+", RegexOptions.IgnoreCase))
         {
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Salutation should use LAST name only (e.g. 'Dear Dr Smith,'), not first+last.", Quote: line.Trim());
