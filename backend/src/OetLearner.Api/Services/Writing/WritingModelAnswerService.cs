@@ -14,16 +14,54 @@ public static class WritingModelAnswerGroundingValidator
     private static readonly string[] ClinicalTerms =
     ["asthma", "eczema", "hay fever", "diabetes", "cancer", "stroke", "allergy", "inhaler", "medicine", "dose", "mg", "surgery", "admission"];
 
+    // A model answer legitimately GENERALISES specific case-note wording into
+    // standard clinical vocabulary (e.g. "coronary artery bypass" -> "surgery",
+    // "hospitalised" -> "admission", "beta blockers increased" -> "dose
+    // increased") -- that is faithful paraphrase, not an invented fact, and
+    // the term-presence check below must accept it. Evidenced against real
+    // held letters (2026-09-06): "admission"/"hospitalised", "surgery"/
+    // {arthroscopy, bypass, operation}, "dose"/"dosage" all fired as false
+    // positives before this map existed.
+    private static readonly Dictionary<string, string[]> TermSynonyms = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["admission"] = ["admission", "admit", "admitted", "hospitalised", "hospitalized"],
+        ["surgery"] = ["surgery", "surgical", "operation", "arthroscopy", "bypass", "procedure"],
+        ["dose"] = ["dose", "dosage", "dosing"],
+        ["allergy"] = ["allergy", "allergies", "allergic"],
+        ["diabetes"] = ["diabetes", "diabetic"],
+    };
+
+    private static bool SourceSupportsTerm(string term, string source)
+        => TermSynonyms.TryGetValue(term, out var synonyms)
+            ? synonyms.Any(s => source.Contains(s, StringComparison.OrdinalIgnoreCase))
+            : source.Contains(term, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Root-cause fix (2026-09-06): this validator used to split the WHOLE
+    /// letter into "sentences" and demand every one map to a case-note fact —
+    /// including the address block, date, salutation, and sign-off, which
+    /// are never case-note claims and can never map to one. A courtesy
+    /// closing fragment like "Yours faithfully, Doctor" was guaranteed to be
+    /// flagged unmapped on every single letter. Now scans the BODY only
+    /// (same boundary as <see cref="WritingModelAnswerWordCounter"/>), and
+    /// skips the fact-overlap heuristic for very short fragments (fewer than
+    /// 3 meaningful words) — a generic courtesy sentence like "I would be
+    /// grateful for his admission" legitimately shares only one content word
+    /// with any single case-note bullet once it combines a polite request
+    /// with an already-established fact; the ClinicalTerms check below still
+    /// catches a genuinely invented clinical claim regardless of length.
+    /// </summary>
     public static WritingModelAnswerGroundingResult Validate(string modelAnswer, IReadOnlyList<string> caseNoteFacts)
     {
         var source = string.Join(" ", caseNoteFacts ?? Array.Empty<string>());
+        var body = WritingModelAnswerWordCounter.ExtractBody(modelAnswer);
         var unmapped = new List<string>();
-        foreach (var sentence in Regex.Split(modelAnswer ?? string.Empty, @"(?<=[.!?])\s+"))
+        foreach (var sentence in Regex.Split(body, @"(?<=[.!?])\s+"))
         {
             var value = sentence.Trim();
             if (value.Length == 0) continue;
             var terms = ClinicalTerms.Where(term => value.Contains(term, StringComparison.OrdinalIgnoreCase)).ToArray();
-            if (terms.Any(term => !source.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            if (terms.Any(term => !SourceSupportsTerm(term, source)))
             {
                 unmapped.Add(value);
                 continue;
@@ -31,10 +69,12 @@ public static class WritingModelAnswerGroundingValidator
 
             var meaningful = Regex.Matches(value.ToLowerInvariant(), @"[a-z]{4,}")
                 .Select(match => match.Value)
-                .Where(word => word is not ("please" or "patient" or "review" or "write" or "your" or "this"))
+                .Where(word => word is not ("please" or "patient" or "review" or "write" or "your" or "this"
+                    or "would" or "grateful" or "could" or "should" or "thank" or "further" or "assistance"
+                    or "information" or "contact" or "require" or "should" or "kindly" or "advice"))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
-            if (meaningful.Length > 0
+            if (meaningful.Length >= 3
                 && !caseNoteFacts.Any(fact => meaningful.Count(word => fact.Contains(word, StringComparison.OrdinalIgnoreCase)) >= Math.Min(2, meaningful.Length)))
             {
                 unmapped.Add(value);
@@ -60,8 +100,18 @@ public static class WritingModelAnswerWordCounter
     private static readonly Regex ClosingLine = new(@"^\s*Yours\s+(sincerely|faithfully)\b", RegexOptions.IgnoreCase | RegexOptions.Multiline);
 
     public static int CountBodyWords(string? letterText)
+        => WordPattern.Matches(ExtractBody(letterText)).Count;
+
+    /// <summary>
+    /// The letter BODY: everything between the Re:/Dear line and the
+    /// "Yours sincerely/faithfully" closing. Shared by the word counter and
+    /// <see cref="WritingModelAnswerGroundingValidator"/> — the address
+    /// block, date, salutation, Re: line and sign-off are boilerplate, never
+    /// case-note claims, and must never be run through either check.
+    /// </summary>
+    public static string ExtractBody(string? letterText)
     {
-        if (string.IsNullOrWhiteSpace(letterText)) return 0;
+        if (string.IsNullOrWhiteSpace(letterText)) return string.Empty;
         var lines = letterText.Replace("\r\n", "\n").Split('\n');
         int FindLine(Regex re)
         {
@@ -81,11 +131,10 @@ public static class WritingModelAnswerWordCounter
         {
             // Structure not detected (e.g. an in-progress draft) — fall back
             // to the whole text rather than under-counting to zero.
-            return WordPattern.Matches(letterText).Count;
+            return letterText;
         }
 
-        var body = string.Join('\n', lines[start..end]);
-        return WordPattern.Matches(body).Count;
+        return string.Join('\n', lines[start..end]);
     }
 }
 
