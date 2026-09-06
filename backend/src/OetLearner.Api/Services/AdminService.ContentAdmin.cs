@@ -1058,7 +1058,7 @@ public partial class AdminService
                     if (RecallSetCodesContains(existing.RecallSetCodesJson, normalisedRecallSetCode))
                     {
                         alreadyInSet++;
-                        err = $"existing word in the '{normalisedRecallSetCode}' set — its ×N frequency will be incremented on commit.";
+                        err = $"existing word in the '{normalisedRecallSetCode}' set — this upload replaces its ×N count for that set on commit.";
                     }
                     else
                     {
@@ -1104,7 +1104,7 @@ public partial class AdminService
         if (valid > 0)
             warnings.Add($"{valid} brand-new word(s) will be created and tagged '{normalisedRecallSetCode}'.");
         if (alreadyInSet > 0)
-            warnings.Add($"{alreadyInSet} word(s) are already in the '{normalisedRecallSetCode}' set — their ×N frequency will still be incremented on commit.");
+            warnings.Add($"{alreadyInSet} word(s) are already in the '{normalisedRecallSetCode}' set — this upload replaces their ×N count for that set on commit.");
         if (valid == 0 && existingToTag == 0 && alreadyInSet == 0 && rows.Count > 0 && invalid == 0)
             warnings.Add("Nothing to do: no valid rows found.");
         if (invalid > 0)
@@ -1257,13 +1257,10 @@ public partial class AdminService
         // Record this import's recall-set occurrence count on pre-existing DB
         // terms. Applied here — after the already-committed guard above — so it
         // lands exactly once per committed batch (idempotent on retry). The map
-        // ADDS this CSV's occurrence count to this set's running total, so a
-        // repeated word — whether it's joining a brand-new set or reappearing
-        // in a set it's already tagged with — always grows ×N by that many;
-        // re-uploading a word is never a silent no-op. Every matched
-        // pre-existing term is treated as touched (for TTS-backfill, which
-        // self-filters to rows still missing audio) since its frequency always
-        // changes on a match.
+        // REPLACES this set's count with this CSV's occurrence count: joining a
+        // brand-new set grows ×N, re-uploading the same set is a no-op (never
+        // inflating). Every matched pre-existing term is treated as touched
+        // (for TTS-backfill, which self-filters to rows still missing audio).
         var existingRetagged = 0;
         foreach (var (key, existing) in existingDbByKey)
         {
@@ -1859,13 +1856,14 @@ public partial class AdminService
     }
 
     /// <summary>
-    /// SOURCE-OF-TRUTH mutation for the recall ×N badge. ADDS <paramref
-    /// name="occurrences"/> to this set's existing occurrence count — every
-    /// completed import that contains the word (a brand-new recall set OR a
-    /// re-upload of one already on file) grows ×N by that many, so a repeated
-    /// word is never silently ignored — then re-derives the two cached fields:
-    /// <see cref="VocabularyTerm.ExamFrequencyCount"/> = sum of the map's values,
-    /// and <see cref="VocabularyTerm.RecallSetCodesJson"/> = sorted map keys.
+    /// SOURCE-OF-TRUTH mutation for the recall ×N badge. REPLACES this set's
+    /// occurrence count with <paramref name="occurrences"/> — an identical
+    /// re-upload is a no-op, never inflating — then re-derives the two cached
+    /// fields: <see cref="VocabularyTerm.ExamFrequencyCount"/> = sum of the
+    /// map's values, and <see cref="VocabularyTerm.RecallSetCodesJson"/> =
+    /// sorted map keys. Joining a brand-new set still grows ×N (the sum gains
+    /// a new entry). Pinned by AdminVocabularyImport_ReimportSameSet… (replace,
+    /// not 1+3) and …_ExistingWord… (identical re-upload leaves ×N unchanged).
     /// </summary>
     private static void ApplyRecallSetOccurrence(VocabularyTerm term, string setCode, int occurrences)
     {
@@ -1878,17 +1876,21 @@ public partial class AdminService
         // without this, touching just ONE set's count here would silently evict
         // the term from every OTHER set it's tagged with. Seed orphaned codes
         // with a conservative occurrence of 1 so membership survives an
-        // incremental, one-set-at-a-time rebuild.
+        // incremental, one-set-at-a-time rebuild. The set being imported is
+        // skipped: its count is replaced below, and seeding it first would
+        // double-count on creation (a brand-new term already carries the set
+        // code in RecallSetCodesJson with an empty map, so it seeded 1+ N).
         try
         {
             var existingCodes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(term.RecallSetCodesJson ?? "[]") ?? new();
             foreach (var orphanCode in existingCodes)
             {
-                if (!map.ContainsKey(orphanCode)) map[orphanCode] = 1;
+                if (!orphanCode.Equals(setCode, StringComparison.OrdinalIgnoreCase)
+                    && !map.ContainsKey(orphanCode)) map[orphanCode] = 1;
             }
         }
         catch { /* malformed legacy JSON — nothing to preserve */ }
-        map[setCode] = map.GetValueOrDefault(setCode) + occurrences;
+        map[setCode] = occurrences;
         var clean = map.Where(kv => kv.Value > 0)
             .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase);
         var keys = clean.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray();

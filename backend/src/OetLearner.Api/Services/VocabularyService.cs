@@ -507,35 +507,46 @@ public class VocabularyService(
     {
         // Consecutive-day streak from today back, where each day has at least one
         // flashcard review OR a completed quiz. All service writes use UTC
-        // timestamps, so Date preserves the prior UtcDateTime.Date outcome while
-        // allowing relational providers to deduplicate dates in SQL. The exact
-        // scan cap is 3,660 calendar days (ten years plus leap-day headroom).
-        var firstDay = today.AddDays(-(StreakDateScanCap - 1))
-            .ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        var lastDay = today.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+        // timestamps, so UtcDateTime preserves the prior UtcDateTime.Date outcome.
+        // The day truncation happens client-side: no relational provider translates
+        // DateTimeOffset.Date (SQLite translates no DateTimeOffset member at all),
+        // so projecting .Date before the Concat makes the whole set operation
+        // untranslatable. Comparing + ordering raw instants IS translatable on
+        // both SQLite and Npgsql, keeping this to ONE statement (UNION + DISTINCT
+        // + LIMIT) inside the 3-command GetStatsAsync budget.
+        // ponytail: Take() bounds distinct instants, not distinct days, so a user
+        // with >3,660 activity events could truncate an older streak day. Raise
+        // the Take alongside StreakDateScanCap if that ever matters.
+        var firstInstant = new DateTimeOffset(
+            today.AddDays(-(StreakDateScanCap - 1)).ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        var lastInstant = new DateTimeOffset(
+            today.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc));
 
-        var reviewDays = db.LearnerVocabularies
+        var reviewInstants = db.LearnerVocabularies
             .AsNoTracking()
-            .Where(lv => lv.UserId == userId && lv.LastReviewedAt != null)
-            .Select(lv => lv.LastReviewedAt!.Value.Date);
-        var quizDays = db.VocabularyQuizResults
+            .Where(lv => lv.UserId == userId && lv.LastReviewedAt != null
+                && lv.LastReviewedAt >= firstInstant && lv.LastReviewedAt <= lastInstant)
+            .Select(lv => lv.LastReviewedAt!.Value);
+        var quizInstants = db.VocabularyQuizResults
             .AsNoTracking()
-            .Where(r => r.UserId == userId)
-            .Select(r => r.CompletedAt.Date);
+            .Where(r => r.UserId == userId
+                && r.CompletedAt >= firstInstant && r.CompletedAt <= lastInstant)
+            .Select(r => r.CompletedAt);
 
-        var activeDays = await reviewDays
-            .Concat(quizDays)
-            .Where(day => day >= firstDay && day <= lastDay)
+        var instants = await reviewInstants
+            .Concat(quizInstants)
             .Distinct()
-            .OrderByDescending(day => day)
+            .OrderByDescending(instant => instant)
             .Take(StreakDateScanCap)
             .ToListAsync(ct);
 
-        var activeDaySet = activeDays.ToHashSet();
+        var activeDaySet = instants
+            .Select(instant => DateOnly.FromDateTime(instant.UtcDateTime))
+            .ToHashSet();
 
         var streak = 0;
         var cursor = today;
-        while (activeDaySet.Contains(cursor.ToDateTime(TimeOnly.MinValue)))
+        while (activeDaySet.Contains(cursor))
         {
             streak++;
             cursor = cursor.AddDays(-1);

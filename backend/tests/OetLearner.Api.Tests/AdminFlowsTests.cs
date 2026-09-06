@@ -1434,7 +1434,7 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
             // The word is already in the 'old' set, so the preview reports it as
             // an unchanged existing-in-set row (no longer a generic db duplicate).
             Assert.Equal(1, conflictJson.RootElement.GetProperty("alreadyInSetRows").GetInt32());
-            Assert.Contains("already in the 'old' set", conflictJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
+            Assert.Contains("existing word in the 'old' set", conflictJson.RootElement.GetProperty("rows")[0].GetProperty("error").GetString());
         }
 
         using (var conflictDryRunContent = CsvContent(conflictCsv, "recalls-conflict.csv"))
