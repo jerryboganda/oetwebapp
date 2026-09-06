@@ -268,7 +268,15 @@ public sealed class EffectiveEntitlementResolverPerformanceTests : IAsyncLifetim
         Assert.Equal(
             JsonSerializer.Serialize(expectedGolden),
             JsonSerializer.Serialize(actualGolden));
-        Assert.Equal(6, initialCommandCount);
+        // Query budget: 7 constant round trips — user routing fields, subscriptions,
+        // plans, the legacy-plan fallback, plan versions, subscription items, and the
+        // freeze/module-override union. It rose from 6 when the subtest x profession
+        // content model added a Users read for ProfessionId + CurrentPlanId. That read is
+        // constant, not per-subscription, which is what
+        // ResolveAsync_CommandCount_IsIndependentOfSubscriptionCount actually protects.
+        // Raise this ONLY alongside a genuinely new constant lookup; a number that grows
+        // with the learner's data is an N+1 and must be fixed, not ratcheted.
+        Assert.Equal(7, initialCommandCount);
         Assert.DoesNotContain(
             commands.CommandTexts,
             sql => sql.Contains("lower(", StringComparison.OrdinalIgnoreCase));
@@ -291,7 +299,7 @@ public sealed class EffectiveEntitlementResolverPerformanceTests : IAsyncLifetim
         var afterMutation = await resolver.ResolveAsync("perf-golden-user", default);
 
         Assert.Equal(14, afterMutation.WritingAssessmentsRemaining);
-        Assert.Equal(6, commands.Count);
+        Assert.Equal(7, commands.Count);
     }
 
     [Fact]
@@ -313,7 +321,10 @@ public sealed class EffectiveEntitlementResolverPerformanceTests : IAsyncLifetim
         var manyCount = await ResolveAndCountCommandsAsync("perf-many");
 
         Assert.Equal(singleCount, manyCount);
-        Assert.Equal(5, manyCount);
+        // Same budget as above, minus the legacy-plan fallback this fixture does not hit.
+        // The assertion that matters is the one above it: the count does not grow with
+        // the 16 extra subscriptions.
+        Assert.Equal(6, manyCount);
     }
 
     [Fact]

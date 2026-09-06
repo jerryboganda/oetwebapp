@@ -171,6 +171,10 @@ public sealed class VocabularyRecallsPerformanceTests : IAsyncLifetime
         first.IsFreePreview = true;
         var second = Term("term-2", "bravo", "medical");
         second.RecallSetCodesJson = "[\"set-a\",\"set-b\"]";
+        // Explicit, because Term() defaults IsFreePreview to true. Without this the
+        // test's own "first and third are previews" setup means nothing and
+        // FreePreviewCount is 3 — a mix of preview and non-preview is the point.
+        second.IsFreePreview = false;
         var third = Term("term-3", "charlie", "medical");
         third.IsFreePreview = true;
         db.VocabularyTerms.AddRange(first, second, third);
