@@ -26,6 +26,8 @@
 | S1.5 action layer | F-098, F-100, F-101, F-102, F-103, **F-104** | 5 new learner-safe tools + 2 existing ones granted; entitlement re-checked at execution |
 | S1.6 companion surface | F-097, F-160, F-167 | `/companion` full-screen page, credit chip, thread list, en/ar bundles |
 | S1.2c corpus operations | F-013, F-026 | `/v1/admin/companion/knowledge` — status + reindex, so the corpus can actually be built |
+| S1.7 commercial legibility | **F-142**, F-135, F-139…F-141 | `GET /v1/companion/session` decides access before the learner types; paywall card replaces the chat |
+| S1.8 memory controls | **F-047** | View / delete / reset companion-saved notes and words, scoped by user *and* authoring feature |
 
 **No feature was moved to `EXISTS` on the strength of this work.** The gap analysis statuses reflect what is
 actually delivered, not what is scaffolded.
@@ -47,6 +49,7 @@ actually delivered, not what is scaffolded.
 - `Services/AiTools/Tools/CompanionActionTools.cs` *(new)* — 5 typed action tools
 - `Services/AiTools/AiToolCatalogSeederHostedService.cs` — idempotent companion tool grants
 - `Endpoints/CompanionKnowledgeAdminEndpoints.cs` *(new)* — corpus status + reindex (`AdminAiConfig`)
+- `Endpoints/CompanionLearnerEndpoints.cs` *(new)* — session capability + memory controls (`LearnerOnly`)
 - `Program.cs` — DI registration and endpoint mapping
 
 **Frontend**
@@ -57,12 +60,15 @@ actually delivered, not what is scaffolded.
 - `app/companion/page.tsx` *(new)* — full-screen companion surface, flag-gated, fails closed
 - `messages/{en,ar}/companion.json` *(new)* + `i18n.ts` — companion message module
 - `components/layout/learner-dashboard-route-policy.ts` — `/companion` registered as a learner workspace route
+- `components/domain/companion/CompanionMemoryPanel.tsx` *(new)* — F-047 view/delete UI
+- `lib/api/companion.ts` *(new)* — companion wire shapes, kept out of the in-flight `lib/api.ts` split
 
 **Tests**
 - `backend/tests/.../AiFeatureEligibilityTests.cs` *(new)* — 4 tests
 - `backend/tests/.../CompanionLearnerToolBoundaryTests.cs` *(new)* — 15 tests
 - `backend/tests/.../CompanionRetrievalSecurityTests.cs` *(new)* — 10 tests
 - `backend/tests/.../CompanionDestinationSecurityTests.cs` *(new)* — 16 tests
+- `backend/tests/.../CompanionMemoryIsolationTests.cs` *(new)* — 4 tests
 - `backend/tests/.../EndpointRegistrationTests.cs` — the two new admin routes
 - `tests/companion/golden/oet-core.golden.json` + `tests/companion/golden-set.test.ts` *(new)*
 - `components/domain/ai-assistant/__tests__/AiAssistantPanel.test.tsx` — rewritten against the real contract
@@ -91,7 +97,8 @@ degrades to exact scan plus the keyword path.
 | Combined re-run after guard restore | **19/19 pass** |
 | `CompanionRetrievalSecurityTests` | **10/10 pass** |
 | `CompanionDestinationSecurityTests` | **16/16 pass** |
-| Companion + eligibility + `EndpointRegistrationTests` | **104/104 pass** |
+| `CompanionMemoryIsolationTests` | **4/4 pass** |
+| Companion + eligibility + `EndpointRegistrationTests` | **112/112 pass** |
 | `dotnet build` (API project) | **0 errors** |
 | `pnpm run ship:gate` | **OK** |
 | `tsc --noEmit` | **0 errors in changed files**; 13 pre-existing errors remain in `tests/e2e/writing-v2/**` and `tests/performance/**` (Playwright specs, unmodified at HEAD, untouched by this work) |
@@ -169,7 +176,9 @@ Nothing is visible to any learner until an operator enables `ai_learning_compani
 | Frontend test runner cannot start (missing jsdom transitive deps) | Medium — blocks unit verification, not the build | Platform |
 | 32 feature codes still undocumented in the policy matrix | Low — ratcheted, cannot grow | Platform |
 | Corpus not yet indexed in any environment | High — companion answers ungrounded until an operator runs it | Operations. `POST /v1/admin/companion/knowledge/reindex` now exists to do it; `GET .../status` reports what landed |
-| Companion credit metering and the contextual paywall not yet implemented | Expected — Stage 1 remainder | This programme (S1.7) |
+| Free-tier learners see the paywall rather than a small allowance | Medium — the seeded `free` quota plan lists no companion feature code. Granting it is one row in `AllowedFeaturesCsv` and a pricing decision (DR-002, TV-018), so it is left to the owner | Owner |
+| Memory **export** not built (view/delete/reset are) | Low — F-047 stays `PARTIAL` | This programme |
+| No recorded kill-switch drill, no formal WCAG audit of `/companion` | Medium — the surface uses repo primitives and labelled controls, but has not been run through the a11y suite | This programme (S1.8) |
 | Action tools are granted to `ai_assistant.learner`, not `companion.action.v1` | Low — the boundary allowlist is what enforces safety, but per-feature cost attribution is not yet separated | This programme (S1.7); needs an `AiQuotaPlan` row for the companion feature codes first |
 | Item-level deep links (a specific paper, lesson or video timestamp) resolve to the hub page | Medium — F-099 stays `MISSING` | Stage 2 content ingestion |
 | `/companion` is not in the e2e smoke route table | Low — deliberate: the flag ships off, so the page renders its "not enabled" state and a heading assertion would fail | Add when the flag is enabled in the test environment |

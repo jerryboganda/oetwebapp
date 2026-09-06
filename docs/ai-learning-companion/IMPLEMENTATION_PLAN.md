@@ -203,7 +203,7 @@ S1.7, and citations depend on the retrieval trace being surfaced over SignalR, w
 yet. `/companion` is deliberately absent from `tests/e2e/learner/learner-smoke.spec.ts`: while the flag ships
 off the page renders its "not enabled" state, so a heading assertion would fail.
 
-### S1.7 Commercial core
+### S1.7 Commercial core — **DONE for metering and paywall; no chargeable companion action exists to wrap**
 Allowance and counter through `IAiQuotaService.TryReserveAsync/CommitAsync` with a companion `AiQuotaPlan`
 row (`rolling_30d` is already supported — that is exactly the source's Free cap shape).
 Chargeable actions through `IAiPackageCreditService`, wrapped in `IAiCreditReservationService`
@@ -212,11 +212,40 @@ before the action runs. Paywall returns capability, reason, price and benefits f
 **No new wallet, no new sellable product** (DR-001, DR-002).
 **Serves:** F-135, F-139, F-140, F-141, F-142, F-149, F-151.
 
-### S1.8 Trust and operations
+**What was actually needed.** `AiAssistantGateway` already reserved and committed through `IAiQuotaService`
+around every learner turn, so metering was not missing — *legibility* was. A quota refusal reached the learner
+as a sentence in the transcript, which is the wrong shape for a paywall. `GET /v1/companion/session` now
+answers "may this learner chat, why not, and where do they go" **before** they type, and
+`app/companion/page.tsx` renders an upgrade card instead of an input box that would fail on the first message.
+The access check is read-only by construction — it calls `GetUserPolicyAsync`, never `TryReserveAsync`, so
+looking at the page cannot consume allowance.
+
+**No `IAiCreditReservationService` wrapping was added, deliberately.** None of the five companion actions costs
+a credit: they resolve links, read a balance and write a plan item. Reserve → commit / release exists to stop a
+*failed chargeable operation* from consuming credit; wrapping free actions in it would be ceremony. Making a
+companion action chargeable is a pricing decision (DR-002, TV-018) and is not one to make in code.
+
+**Free tier.** The seeded `free` `AiQuotaPlan` lists specific feature codes and none of them is the learner
+assistant, so a free-tier learner sees the paywall rather than a small allowance. Granting free-tier access is
+a one-row change to `AllowedFeaturesCsv` — left for the owner, because it is a commercial decision, not a bug.
+
+### S1.8 Trust and operations — **PARTIAL**
 Prompt-injection boundary; exfiltration caps and canary monitoring before any paid corpus is indexed;
 **exam-mode awareness (F-155) — the companion must refuse hints during a protected attempt**; companion
 memory controls (view / correct / delete / reset, F-047); `AiInteractive` rate limiting; audit on every
 action and credit movement; WCAG 2.2 AA pass on the new surface; kill-switch drill evidence.
+
+**Done:** prompt-injection boundary (evidence blocks are labelled data, not policy, in
+`CompanionPromptComposer`); per-source verbatim and volume caps in `CompanionRetriever`; exam-mode refusal
+(F-155); memory **view / delete / reset** via `/v1/companion/memory`, with the delete predicate scoped by user
+id *and* by authoring feature code so the companion can never delete a note the learner wrote themselves
+(`CompanionMemoryIsolationTests`); audit and invocation rows on every tool call, already provided by
+`AiToolInvoker`; rate limiting via the `PerUser` policy on both companion route groups.
+
+**Not done:** memory **export**; exfiltration canary monitoring (needs a paid corpus indexed first, so it is
+correctly ordered after the reindex); a recorded kill-switch drill; a formal WCAG 2.2 AA audit of
+`/companion` — the surface uses the repo primitives, `aria-live` on connection state, `role="alert"` on
+errors and labelled icon buttons, but it has not been run through the a11y suite.
 
 ---
 
