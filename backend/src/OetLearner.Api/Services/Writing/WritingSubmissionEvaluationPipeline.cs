@@ -1206,8 +1206,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
             // and retryable so the learner can re-run rather than receive a
             // fake "all 3s" score.
             logger.LogWarning(
-                "Writing rubric AI returned an incomplete or unreadable scoring contract for submission {SubmissionId} ({Completion}); refusing to fabricate a grade.",
-                submission.Id, DescribeCompletion(result.Completion));
+                "Writing rubric AI returned an incomplete or unreadable scoring contract for submission {SubmissionId} ({Completion} outTokens={OutputTokens}); refusing to fabricate a grade.",
+                submission.Id, DescribeCompletion(result.Completion), result.Usage?.CompletionTokens);
             submission.Status = "failed";
             await db.SaveChangesAsync(ct);
             throw ApiException.ServiceUnavailable(
