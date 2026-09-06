@@ -93,7 +93,8 @@ public sealed class WritingModelAnswerBatchTests
         await using var db = NewDb();
         var gateway = new ExemplarGateway();
         var svc = new WritingTaskModelAnswerService(
-            db, gateway, TimeProvider.System, NullLogger<WritingTaskModelAnswerService>.Instance);
+            db, gateway, new WritingRuleEngine(new RulebookLoader()), TimeProvider.System,
+            NullLogger<WritingTaskModelAnswerService>.Instance);
 
         var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
 
@@ -129,7 +130,8 @@ public sealed class WritingModelAnswerBatchTests
         await using var db = NewDb();
         var gateway = new ExemplarGateway();
         var svc = new WritingTaskModelAnswerService(
-            db, gateway, TimeProvider.System, NullLogger<WritingTaskModelAnswerService>.Instance);
+            db, gateway, new WritingRuleEngine(new RulebookLoader()), TimeProvider.System,
+            NullLogger<WritingTaskModelAnswerService>.Instance);
 
         var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
         await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);

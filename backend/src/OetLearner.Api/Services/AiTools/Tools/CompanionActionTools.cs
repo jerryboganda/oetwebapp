@@ -22,6 +22,14 @@ namespace OetLearner.Api.Services.AiTools.Tools;
 //
 // Tool codes added here MUST also be added to AiToolRegistry.LearnerSafeToolCodes,
 // or the learner tool boundary will (correctly) refuse to expose them.
+//
+// EXAM MODE. AiToolContext carries no context envelope, so these tools cannot see
+// the attempt the learner is sitting in; exam-mode refusal is enforced in the
+// prompt, which IS built with the envelope. That is safe here only because none
+// of these tools can reveal exam content: they return navigation links, a credit
+// balance and a plan item. Any future tool that could surface question content,
+// transcripts or feedback must NOT be added to this file without plumbing the
+// envelope through to tool execution first.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// <summary>
@@ -77,6 +85,10 @@ public sealed class CompanionFindDestinationTool(
         // so accepting it from the model is safe.
         var context = await contexts.ResolveAsync(
             ctx.UserId!, new CompanionContextEnvelope(SubtestCode: subtest), ct);
+
+        // Discovery is gated with the rest of the action layer: a kill switch that
+        // still hands out links is not a kill switch.
+        if (!context.ActionsEnabled) return CompanionToolGuards.ActionsOff();
 
         var matches = await destinations.SearchAsync(query, context, limit, ct);
 

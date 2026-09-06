@@ -11,6 +11,8 @@
  * `lib/scoring.ts`. Helpers here are for cosmetic formatting / light parsing.
  */
 
+import type { ExamFamilyCode } from '../mock-data';
+
 /**
  * Title-case a loosely-cased string: handles snake_case, kebab-case, and
  * space-separated inputs. Returns an empty string for null/undefined/empty.
@@ -178,4 +180,16 @@ export function scoreToGrade(score: number): string {
   if (score >= 3) return 'C+';
   if (score >= 2) return 'C';
   return 'D';
+}
+
+export function toExamFamilyCode(value: unknown): ExamFamilyCode {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'ielts' || normalized === 'pte') {
+    return normalized;
+  }
+
+  if (normalized !== 'oet' && normalized !== '') {
+    console.warn('[API] Unknown exam family code:', value);
+  }
+  return 'oet';
 }

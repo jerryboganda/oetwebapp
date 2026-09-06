@@ -38,6 +38,10 @@ export function toStringArray(value: unknown): string[] {
     .filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
+export function toNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
 export function resolveApiUrl(pathOrUrl: string): string {
   if (/^https?:\/\//i.test(pathOrUrl)) {
     return pathOrUrl;
