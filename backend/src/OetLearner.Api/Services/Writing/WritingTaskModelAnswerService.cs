@@ -222,7 +222,7 @@ public sealed class WritingTaskModelAnswerService(
                 return Hold(row, "model_answer_unreadable");
             }
 
-            var words = Regex.Matches(parsed.ModelAnswerText, @"\b[\p{L}\p{N}’'-]+\b").Count;
+            var words = WritingModelAnswerWordCounter.CountBodyWords(parsed.ModelAnswerText);
             if (words < 180 || words > 200)
             {
                 return Hold(row, "model_answer_word_count_out_of_range");
@@ -312,7 +312,7 @@ public sealed class WritingTaskModelAnswerService(
         }
 
         var trimmedLetter = letterText.Trim();
-        var words = Regex.Matches(trimmedLetter, @"\b[\p{L}\p{N}’'-]+\b").Count;
+        var words = WritingModelAnswerWordCounter.CountBodyWords(trimmedLetter);
         if (words < 180 || words > 200)
         {
             return Hold(row, "model_answer_word_count_out_of_range");

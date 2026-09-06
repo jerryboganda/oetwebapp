@@ -45,6 +45,50 @@ public static class WritingModelAnswerGroundingValidator
     }
 }
 
+/// <summary>
+/// OET convention counts the LETTER BODY only for the 180-200-word target —
+/// address, date, salutation, Re: line and sign-off are excluded. Counting
+/// the whole letter text (as both model-answer generation paths did before
+/// this fix) rejects perfectly well-formed full letters purely for including
+/// their own formatting, which is not what the 180-200 target measures.
+/// </summary>
+public static class WritingModelAnswerWordCounter
+{
+    private static readonly Regex WordPattern = new(@"\b[\p{L}\p{N}’'-]+\b");
+    private static readonly Regex SalutationLine = new(@"^\s*Dear\b", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+    private static readonly Regex ReLine = new(@"^\s*Re\s*:", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+    private static readonly Regex ClosingLine = new(@"^\s*Yours\s+(sincerely|faithfully)\b", RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+    public static int CountBodyWords(string? letterText)
+    {
+        if (string.IsNullOrWhiteSpace(letterText)) return 0;
+        var lines = letterText.Replace("\r\n", "\n").Split('\n');
+        int FindLine(Regex re)
+        {
+            for (var i = 0; i < lines.Length; i++)
+            {
+                if (re.IsMatch(lines[i])) return i;
+            }
+            return -1;
+        }
+
+        var salutationIdx = FindLine(SalutationLine);
+        var reIdx = FindLine(ReLine);
+        var closingIdx = FindLine(ClosingLine);
+        var start = Math.Max(salutationIdx, reIdx) + 1;
+        var end = closingIdx == -1 ? lines.Length : closingIdx;
+        if (end <= start)
+        {
+            // Structure not detected (e.g. an in-progress draft) — fall back
+            // to the whole text rather than under-counting to zero.
+            return WordPattern.Matches(letterText).Count;
+        }
+
+        var body = string.Join('\n', lines[start..end]);
+        return WordPattern.Matches(body).Count;
+    }
+}
+
 public sealed record WritingModelAnswerGenerationResult(bool IsReady, string HoldReason);
 
 /// <summary>
@@ -114,7 +158,7 @@ public sealed class WritingModelAnswerService(
             if (parsed is null || string.IsNullOrWhiteSpace(parsed.ModelAnswerText))
                 return Hold(answer, "model_answer_unreadable");
 
-            var words = Regex.Matches(parsed.ModelAnswerText, @"\b[\p{L}\p{N}’'-]+\b").Count;
+            var words = WritingModelAnswerWordCounter.CountBodyWords(parsed.ModelAnswerText);
             if (words < 180 || words > 200)
                 return Hold(answer, "model_answer_word_count_out_of_range");
 
