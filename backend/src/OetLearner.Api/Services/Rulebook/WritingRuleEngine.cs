@@ -618,12 +618,26 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         yield break;
     }
 
+    // Root-cause fix (2026-09-06): this used to match ANY date-like substring
+    // anywhere in the body, flagging every letter that cites a past visit,
+    // admission, or investigation date — which is essential, expected
+    // content in a clinical letter, not a violation. The rule's own message
+    // ("never write TODAY'S date") means: don't redundantly repeat the
+    // letter's own header date inside the body — narrate it as "today" or
+    // "on today's visit" instead. Now compares body dates against the
+    // header date specifically, rather than flagging any date at all.
     private static IEnumerable<LintFinding> DetectTodaysDateInBody(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var m = Regex.Match(s.Body, @"\b\d{1,2}[\/\-\s](\d{1,2}|[A-Za-z]+)[\/\-\s]\d{2,4}\b");
+        if (s.DateIndex is null) yield break;
+        var headerLine = s.Lines[s.DateIndex.Value];
+        var headerMatch = Regex.Match(headerLine, @"\d{1,2}[\/\.\-\s](\d{1,2}|[A-Za-z]+)[\/\.\-\s]\d{2,4}");
+        if (!headerMatch.Success) yield break;
+        var headerDateText = headerMatch.Value.Trim();
+
+        var m = Regex.Match(s.Body, Regex.Escape(headerDateText), RegexOptions.IgnoreCase);
         if (m.Success)
             yield return new LintFinding(rule.Id, rule.Severity,
-                "Never write today's date in the body. Use 'On today's visit' or 'On today's presentation'.",
+                "Never repeat today's date (the letter's own header date) in the body. Use 'today' or 'on today's visit/presentation' instead.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
@@ -1215,7 +1229,11 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
             "potassium",
             "creatinine"
         };
-        var unitRe = new Regex(@"(mmol\/l|mg\/dl|kg|g|cm|mm|mmHg|bpm|\u00b0c|celsius|mmol|%)", RegexOptions.IgnoreCase);
+        // /min (pulse/respiratory rate) and a bare X/Y ratio (blood pressure,
+        // conventionally never needs "mmHg" spelled out) each already carry
+        // their own implicit unit \u2014 added 2026-09-06 after this flagged
+        // "pulse 66/min" and "blood pressure 120/60" as missing a unit.
+        var unitRe = new Regex(@"(mmol\/l|mg\/dl|kg|g|cm|mm|mmHg|bpm|\/min|\u00b0c|celsius|mmol|%|\d+\s*\/\s*\d+)", RegexOptions.IgnoreCase);
         var findings = 0;
         foreach (var keyword in keywords)
         {
