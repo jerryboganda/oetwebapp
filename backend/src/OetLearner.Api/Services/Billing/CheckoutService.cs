@@ -107,6 +107,7 @@ public sealed class CheckoutService : ICheckoutService
             // Map BillingPriceId → StripePriceId
             var priceIds = cart.Items.Select(i => i.BillingPriceId).ToList();
             var billingPrices = await _db.BillingPrices
+                .Include(p => p.BillingProduct)
                 .Where(p => priceIds.Contains(p.Id))
                 .AsNoTracking()
                 .ToListAsync(ct);

@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -211,6 +212,10 @@ public class RecallsContentEntitlementTests(TestWebApplicationFactory factory)
                     Code = planCode,
                     Name = "Premium monthly (recalls content test)",
                     EntitlementsJson = "{}",
+                    // Real plans carry an explicit module list (migration 20260725090000
+                    // back-filled every existing plan). Recalls is opt-in and never fails
+                    // open, so omitting this would paywall a paid subscriber.
+                    DashboardModulesJson = $"[\"{ModuleKeys.Recalls}\",\"{ModuleKeys.MaterialsLibrary}\",\"{ModuleKeys.VideoLibrary}\"]",
                     IncludedSubtestsJson = "[]",
                     Status = BillingPlanStatus.Active,
                     CreatedAt = now,

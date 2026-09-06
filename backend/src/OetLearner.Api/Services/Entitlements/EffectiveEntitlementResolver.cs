@@ -282,8 +282,7 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         var subscription = courseSubscriptions.Count > 0 ? courseSubscriptions[0] : null;
         var overlays = await LoadResolverOverlaysAsync(userId, ct);
         var isFrozen = ResolveIsFrozen(overlays, now);
-        var professionId = await LoadActiveProfessionIdAsync(userId, ct);
-        var currentPlanId = await LoadCurrentPlanIdAsync(userId, ct);
+        var (professionId, currentPlanId) = await LoadUserRoutingFieldsAsync(userId, ct);
 
         if (subscription is null)
         {
@@ -929,20 +928,26 @@ public sealed class EffectiveEntitlementResolver : IEffectiveEntitlementResolver
         return list;
     }
 
-    private async Task<string?> LoadActiveProfessionIdAsync(string userId, CancellationToken ct)
+    /// <summary>
+    /// Both routing fields come off the SAME <c>Users</c> row, so they are read in ONE
+    /// query. They used to be two single-column reads, which cost this resolver an extra
+    /// round trip on every single call — caught by the query-count budget in
+    /// <c>EffectiveEntitlementResolverPerformanceTests</c>.
+    /// </summary>
+    private async Task<(string? ProfessionId, string? CurrentPlanId)> LoadUserRoutingFieldsAsync(
+        string userId, CancellationToken ct)
     {
-        var profession = await db.Users.AsNoTracking()
+        var row = await db.Users.AsNoTracking()
             .Where(user => user.Id == userId)
-            .Select(user => user.ActiveProfessionId)
+            .Select(user => new { user.ActiveProfessionId, user.CurrentPlanId })
             .FirstOrDefaultAsync(ct);
-        return string.IsNullOrWhiteSpace(profession) ? null : profession.Trim().ToLowerInvariant();
+        if (row is null) return (null, null);
+        return (
+            string.IsNullOrWhiteSpace(row.ActiveProfessionId)
+                ? null
+                : row.ActiveProfessionId.Trim().ToLowerInvariant(),
+            row.CurrentPlanId);
     }
-
-    private Task<string?> LoadCurrentPlanIdAsync(string userId, CancellationToken ct)
-        => db.Users.AsNoTracking()
-            .Where(user => user.Id == userId)
-            .Select(user => user.CurrentPlanId)
-            .FirstOrDefaultAsync(ct);
 
     private static bool IsValidJsonObject(string json)
     {

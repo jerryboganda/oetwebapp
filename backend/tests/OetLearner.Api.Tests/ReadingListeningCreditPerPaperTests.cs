@@ -90,6 +90,94 @@ public sealed class ReadingListeningCreditPerPaperTests
     private static string PartScope(string partCode)
         => $$"""{"kind":"part-practice","partCode":"{{partCode}}","questionIds":["q-{{partCode}}"]}""";
 
+    /// <summary>
+    /// Authors a fully valid 20/6/16 structure (parts + texts + published
+    /// questions with rationale/evidence) via the structure service, so
+    /// full-exam starts pass Gate 5. Mirrors the authoring-test helper;
+    /// credit tests only care about billing, not content.
+    /// </summary>
+    private static async Task AuthorFullStructureAsync(LearnerDbContext db, string paperId)
+    {
+        var structure = new ReadingStructureService(db);
+        await structure.EnsureCanonicalPartsAsync(paperId, default);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var part in new[] { "A", "B", "C" })
+        {
+            var mediaId = $"{paperId}-pdf-{part}";
+            db.MediaAssets.Add(new MediaAsset
+            {
+                Id = mediaId,
+                OriginalFilename = $"reading-part-{part}.pdf",
+                MimeType = "application/pdf",
+                Format = "pdf",
+                SizeBytes = 10,
+                StoragePath = $"reading/{paperId}/part-{part}.pdf",
+                Status = MediaAssetStatus.Ready,
+                UploadedBy = "admin",
+            });
+            db.ContentPaperAssets.Add(new ContentPaperAsset
+            {
+                Id = $"{paperId}-asset-{part}",
+                PaperId = paperId,
+                Role = PaperAssetRole.QuestionPaper,
+                Part = part,
+                MediaAssetId = mediaId,
+                Title = $"Part {part} PDF",
+                DisplayOrder = part == "A" ? 0 : part == "B" ? 1 : 2,
+                IsPrimary = true,
+                CreatedAt = now,
+            });
+        }
+        await db.SaveChangesAsync();
+        var parts = await db.ReadingParts.Where(p => p.PaperId == paperId).ToListAsync();
+        var partA = parts.Single(p => p.PartCode == ReadingPartCode.A);
+        var partB = parts.Single(p => p.PartCode == ReadingPartCode.B);
+        var partC = parts.Single(p => p.PartCode == ReadingPartCode.C);
+
+        var textsA = new List<ReadingText>();
+        for (var i = 1; i <= 4; i++)
+            textsA.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partA.Id, i, $"Text A{i}", "BMJ", "<p>text</p>", 10, null), "admin", default));
+        var textsB = new List<ReadingText>();
+        for (var i = 1; i <= 6; i++)
+            textsB.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partB.Id, i, $"Extract B{i}", "NHS", "<p>text</p>", 20, null), "admin", default));
+        var textsC = new List<ReadingText>();
+        for (var i = 1; i <= 2; i++)
+            textsC.Add(await structure.UpsertTextAsync(new ReadingTextUpsert(
+                null, partC.Id, i, $"Text C{i}", "Lancet", "<p>text</p>", 300, null), "admin", default));
+
+        for (var i = 1; i <= 7; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.MatchingTextReference,
+                $"PA-Q{i}", "[]", $"\"{((char)('A' + ((i - 1) % 4)))}\"", null, false, null, null), "admin", default);
+        for (var i = 8; i <= 14; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.ShortAnswer,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        for (var i = 15; i <= 20; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textsA[(i - 1) % textsA.Count].Id, i, 1, ReadingQuestionType.SentenceCompletion,
+                $"PA-Q{i}", "[]", $"\"ans{i}\"", null, false, null, null), "admin", default);
+        for (var i = 1; i <= 6; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partB.Id, textsB[i - 1].Id, i, 1, ReadingQuestionType.MultipleChoice3,
+                $"PB-Q{i}", "[\"a\",\"b\",\"c\"]", "\"B\"", null, false, null, null), "admin", default);
+        for (var i = 1; i <= 16; i++)
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partC.Id, textsC[(i - 1) / 8].Id, i, 1, ReadingQuestionType.MultipleChoice4,
+                $"PC-Q{i}", "[\"a\",\"b\",\"c\",\"d\"]", "\"C\"", null, false, null, null), "admin", default);
+
+        var partIds = parts.Select(p => p.Id).ToList();
+        foreach (var q in await db.ReadingQuestions.Where(q => partIds.Contains(q.ReadingPartId)).ToListAsync())
+        {
+            q.ReviewState = ReadingReviewState.Published;
+            q.ExplanationMarkdown ??= "The correct answer is supported by the text.";
+            q.EvidenceSentence ??= "As stated in the passage...";
+        }
+        await db.SaveChangesAsync();
+    }
+
     [Fact]
     public async Task PartAThenPartB_OnSamePaper_ConsumeOneCredit()
     {
@@ -125,6 +213,7 @@ public sealed class ReadingListeningCreditPerPaperTests
     {
         var (db, attempt, credit) = Build();
         await SeedFreePaperAsync(db, "rp-1");
+        await AuthorFullStructureAsync(db, "rp-1");
         await GrantReadingTestsAsync(credit, "u1", 5);
 
         // isMockSection: the mock is billed via the mock credit, so the per-paper
@@ -140,6 +229,7 @@ public sealed class ReadingListeningCreditPerPaperTests
     {
         var (db, attempt, credit) = Build();
         await SeedFreePaperAsync(db, "rp-1");
+        await AuthorFullStructureAsync(db, "rp-1");
         await GrantReadingTestsAsync(credit, "u1", 5);
 
         // Mock section first (no debit), then standalone part practice on the same

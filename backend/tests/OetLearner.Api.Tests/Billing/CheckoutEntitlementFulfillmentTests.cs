@@ -4,6 +4,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Tests.Infrastructure;
 using Xunit;
 
@@ -74,6 +75,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
         }
 
         await DriveCompletionAsync(ctx);
+        await ApproveGatewayReceiptAsync(ctx);
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
@@ -250,8 +252,11 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             await db.Database.EnsureCreatedAsync();
 
             SeedLearnerWithSubscription(db, ctx, now);
-            SeedAddOn(db, ctx, lettersGranted: 0, sessionsGranted: 0, addonKind: "tutor_book", grantCredits: 0, now: now);
-            SeedQuote(db, ctx, addOnItems: new[] { AddOnLineItem(ctx) }, planCode: null, now: now);
+            // Tutor-book logic keys off the canonical storefront code, not the
+            // add-on kind alone — seed it canonically like production sells it.
+            SeedAddOn(db, ctx, lettersGranted: 0, sessionsGranted: 0, addonKind: "tutor_book", grantCredits: 0, now: now, codeOverride: "tutor-book-addon");
+            SeedQuote(db, ctx, addOnItems: new[] { AddOnLineItem(ctx, "tutor-book-addon") }, planCode: null, now: now,
+                addOnVersionMap: new Dictionary<string, string> { ["tutor-book-addon"] = ctx.AddOnVersionId });
             SeedSubscriptionPaymentTransaction(db, ctx, now);
             SeedVerifiedCompletedWebhookEvent(db, ctx, now);
 
@@ -423,8 +428,10 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             await db.SaveChangesAsync();
         }
 
-        // First completion provisions the bundle.
+        // First completion provisions the bundle (parked at PendingVerification)
+        // and writes the gateway receipt; approval releases access and grants.
         await DriveCompletionAsync(ctx);
+        await ApproveGatewayReceiptAsync(ctx);
         // Second completion (quote already Completed) must early-return with no effect.
         await DriveCompletionAsync(ctx, eventId: secondEventId);
 
@@ -554,6 +561,19 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
         Assert.Equal("completed", result.ProcessingStatus);
     }
 
+    // Master Catalogue Flow A: a plan purchase parks at PendingVerification on
+    // webhook completion; an admin verifies the gateway receipt to release
+    // access and grants. Tests asserting the post-approval bundle call this
+    // after DriveCompletionAsync.
+    private async Task ApproveGatewayReceiptAsync(FulfillmentContext ctx)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var receipt = await db.ManualPaymentRequests.SingleAsync(r => r.QuoteId == ctx.QuoteId);
+        var svc = new ManualPaymentService(db, new MemoryFileStorage());
+        await svc.ApproveAsync(receipt.Id, "admin_1", "Verified", CancellationToken.None);
+    }
+
     // ── Seed helpers ────────────────────────────────────────────────────────────
 
     private static void SeedLearnerWithSubscription(
@@ -655,12 +675,14 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
         string addonKind,
         int grantCredits,
         DateTimeOffset now,
-        int extensionDays = 0)
+        int extensionDays = 0,
+        string? codeOverride = null)
     {
+        var code = codeOverride ?? ctx.AddOnCode;
         db.BillingAddOns.Add(new BillingAddOn
         {
             Id = ctx.AddOnId,
-            Code = ctx.AddOnCode,
+            Code = code,
             Name = "Add-on Pack",
             Price = 29m,
             Currency = "AUD",
@@ -684,7 +706,7 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             Id = ctx.AddOnVersionId,
             AddOnId = ctx.AddOnId,
             VersionNumber = 1,
-            Code = ctx.AddOnCode,
+            Code = code,
             Name = "Add-on Pack",
             Price = 29m,
             Currency = "AUD",
@@ -702,22 +724,24 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
         });
     }
 
-    private static BillingQuoteLineItem AddOnLineItem(FulfillmentContext ctx)
-        => new("addon", ctx.AddOnCode, "Add-on Pack", 29m, "AUD", 1);
+    private static BillingQuoteLineItem AddOnLineItem(FulfillmentContext ctx, string? codeOverride = null)
+        => new("addon", codeOverride ?? ctx.AddOnCode, "Add-on Pack", 29m, "AUD", 1);
 
     private static void SeedQuote(
         LearnerDbContext db,
         FulfillmentContext ctx,
         IReadOnlyList<BillingQuoteLineItem> addOnItems,
         DateTimeOffset now,
-        string? planCode = "__use_default__")
+        string? planCode = "__use_default__",
+        Dictionary<string, string>? addOnVersionMap = null)
     {
         var effectivePlanCode = planCode == "__use_default__" ? ctx.PlanCode : planCode;
         var hasPlan = !string.IsNullOrWhiteSpace(effectivePlanCode);
 
-        var addOnVersionIds = addOnItems.Count == 0
-            ? new Dictionary<string, string>()
-            : new Dictionary<string, string> { [ctx.AddOnCode] = ctx.AddOnVersionId };
+        var addOnVersionIds = addOnVersionMap
+            ?? (addOnItems.Count == 0
+                ? new Dictionary<string, string>()
+                : new Dictionary<string, string> { [ctx.AddOnCode] = ctx.AddOnVersionId });
 
         // SnapshotJson drives DeserializeQuoteResponse: the add-on loop iterates
         // its "items" filtered to kind == "addon". Serialize via JsonSupport so the

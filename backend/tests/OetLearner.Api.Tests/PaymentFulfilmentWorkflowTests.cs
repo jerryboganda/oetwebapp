@@ -143,7 +143,6 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
                 Reference = $"pi_{suffix}",
                 CandidateFullName = "Paid Candidate",
                 CandidateEmail = $"{userId}@example.test",
-                CourseName = "Verified OET Package",
                 CourseId = planCode,
                 PaymentCategory = "international",
                 Status = "paid",
@@ -192,8 +191,10 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
         Assert.Equal(SubscriptionStatus.Active, subscription.Status);
         Assert.Equal(FulfilmentStatuses.Fulfilled, subscription.FulfilmentStatus);
         Assert.Equal(4, wallet.CreditBalance);
+        // Included-credit grants are idempotent per subscription (not per receipt):
+        // ApproveAsync records ReferenceId = subscription id (ff2b61407 scheme).
         Assert.Single(await assertDb.WalletTransactions
-            .Where(item => item.WalletId == wallet.Id && item.ReferenceId == receiptId)
+            .Where(item => item.WalletId == wallet.Id && item.ReferenceId == subscriptionId)
             .ToListAsync());
         Assert.Single(await assertDb.AuditEvents
             .Where(item => item.ResourceId == subscriptionId && item.Action == "subscription.mark_fulfilled")
@@ -221,13 +222,13 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
             {
                 Id = planCode,
                 Code = planCode,
-                Name = "Gateway Package",
+                Name = "Verified OET Package",
                 Price = 120m,
                 Currency = "GBP",
                 Interval = "one_time",
                 DurationMonths = 6,
                 AccessDurationDays = 180,
-                DeliveryMethod = DeliveryMethods.AutomaticWeb,
+                IncludedCredits = 4,
                 CreatedAt = now,
                 UpdatedAt = now,
             });

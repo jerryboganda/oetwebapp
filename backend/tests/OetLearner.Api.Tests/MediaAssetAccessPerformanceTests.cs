@@ -46,7 +46,7 @@ public sealed class MediaAssetAccessPerformanceTests : IAsyncLifetime
     [InlineData(AccessScenario.RulebookMatchingProfession, true, 3)]
     [InlineData(AccessScenario.RulebookWrongProfession, false, 3)]
     [InlineData(AccessScenario.SpeakingSharedResource, true, 3)]
-    [InlineData(AccessScenario.MaterialRootFile, true, 4)]
+    [InlineData(AccessScenario.MaterialRootFile, true, 5)]
     [InlineData(AccessScenario.VideoThumbnail, true, 3)]
     [InlineData(AccessScenario.VideoAttachmentAllowed, true, 3)]
     [InlineData(AccessScenario.VideoAttachmentDenied, false, 3)]
@@ -93,7 +93,12 @@ public sealed class MediaAssetAccessPerformanceTests : IAsyncLifetime
         var service = new MediaAssetAccessService(
             db,
             contentEntitlements,
-            new MaterialAccessService(db, new MediaPerformanceEffectiveEntitlementResolver()),
+            new MaterialAccessService(db, new MediaPerformanceEffectiveEntitlementResolver
+            {
+                // Root material files require an eligible subscription
+                // (proof-of-payment gate); other scenarios stay ineligible.
+                HasEligibleSubscription = scenario == AccessScenario.MaterialRootFile,
+            }),
             videoEntitlements);
 
         var actual = await service.CanAccessAsync(principal, mediaId, CancellationToken.None);
@@ -763,10 +768,13 @@ internal sealed class MediaPerformanceVideoEntitlementService : IVideoEntitlemen
 
 internal sealed class MediaPerformanceEffectiveEntitlementResolver : IEffectiveEntitlementResolver
 {
+    /// <summary>Scenarios modelling a subscribed learner set this true.</summary>
+    public bool HasEligibleSubscription { get; set; }
+
     public Task<EffectiveEntitlementSnapshot> ResolveAsync(string? userId, CancellationToken ct)
         => Task.FromResult(new EffectiveEntitlementSnapshot(
             UserId: userId,
-            HasEligibleSubscription: false,
+            HasEligibleSubscription: HasEligibleSubscription,
             IsTrial: false,
             Tier: "free",
             SubscriptionId: null,

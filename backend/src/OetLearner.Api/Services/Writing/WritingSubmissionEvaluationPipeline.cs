@@ -415,10 +415,27 @@ public sealed class WritingSubmissionEvaluationPipeline(
 
         // Canon scoping uses the preflight-resolved profession (already
         // validated as supported) — never a silent fallback profession.
-        var canon = await canonEngine.DetectViolationsAsync(
-            new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
-                assessmentPreflightResult.LetterType,
-                assessmentPreflightResult.Profession), ct);
+        // An unexpected detector failure must surface as a controlled,
+        // retryable error (the stuck-proofing guard then marks the row
+        // failed) — never as a raw exception leaking provider internals.
+        WritingCanonDetectionResult canon;
+        try
+        {
+            canon = await canonEngine.DetectViolationsAsync(
+                new WritingCanonDetectionRequest(submission.UserId, submission.Id, submission.LetterContent,
+                    assessmentPreflightResult.LetterType,
+                    assessmentPreflightResult.Profession), ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Writing canon detection failed for submission {SubmissionId}", submission.Id);
+            throw ApiException.ServiceUnavailable(
+                "writing_canon_failed",
+                "Writing grading hit a processing error. Please retry.",
+                retryable: true);
+        }
+
+        ClampCanonViolationFields(canon.Violations);
 
         // Candidate-facing grade letter MUST come from the canonical 0-500
         // scaled score, never a linear conversion of the raw /38 total (the
@@ -530,24 +547,57 @@ public sealed class WritingSubmissionEvaluationPipeline(
             logger.LogWarning(ex, "Mistake stat update failed for submission {SubmissionId}", submission.Id);
         }
 
-        await events.PublishAsync(new WritingGradeReady(
-            submission.UserId, submission.Id, grade.Id, grade.RawTotal, grade.EstimatedBand, grade.BandLabel, clock.GetUtcNow()), ct);
-
-        foreach (var v in canon.Violations)
+        // Post-grade notifications are fail-soft (same policy as mistake-stat
+        // updates above): the assessment is already durably persisted, so a
+        // bus outage must never turn a completed grading into a failure.
+        try
         {
-            await events.PublishAsync(new WritingCanonViolationDetected(
-                submission.UserId, submission.Id, v.Id, v.RuleId, v.Severity, v.DetectedAt), ct);
+            await events.PublishAsync(new WritingGradeReady(
+                submission.UserId, submission.Id, grade.Id, grade.RawTotal, grade.EstimatedBand, grade.BandLabel, clock.GetUtcNow()), ct);
+
+            foreach (var v in canon.Violations)
+            {
+                await events.PublishAsync(new WritingCanonViolationDetected(
+                    submission.UserId, submission.Id, v.Id, v.RuleId, v.Severity, v.DetectedAt), ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Grade-ready event publish failed for submission {SubmissionId}", submission.Id);
         }
 
         return new WritingSubmissionGradeOutcome(submission.Id, grade.Id, grade.RawTotal, grade.BandLabel, false);
     }
 
     /// <summary>
+    /// Detector output is free text: clamp evidence fields to their column
+    /// limits before anything is tracked for insert. An over-long snippet or
+    /// suggested fix must trim — never fail (and void) an otherwise valid
+    /// grading.
+    /// </summary>
+    internal static void ClampCanonViolationFields(IEnumerable<WritingCanonViolation> violations)
+    {
+        const int Limit = 500;
+        foreach (var violation in violations)
+        {
+            if (violation.Snippet is { Length: > Limit })
+                violation.Snippet = violation.Snippet[..Limit];
+            if (violation.SuggestedFix is { Length: > Limit })
+                violation.SuggestedFix = violation.SuggestedFix[..Limit];
+            if (violation.DisputeResolution is { Length: > Limit })
+                violation.DisputeResolution = violation.DisputeResolution[..Limit];
+        }
+    }
+
+    /// <summary>
     /// Stuck-proofing guard: any failure after a successful claim that leaves
-    /// no persisted grade transitions the row to <c>failed</c> (best effort,
-    /// never throwing) so the attempt stays recoverable via retry-grade
-    /// instead of wedging in <c>grading</c> forever. Rows that already carry
-    /// a grade, or already reached a terminal state, are left untouched.
+    /// no persisted grade transitions the row to <c>failed</c> and releases
+    /// any uncommitted credit reservation (best effort, never throwing) so
+    /// the attempt stays recoverable via retry-grade — and no credit is left
+    /// held forever — instead of wedging in <c>grading</c>. Rows that already
+    /// carry a grade, or already reached a terminal state, are left untouched.
+    /// Uses a set-based update (never the tracked instance) so a poisoned
+    /// entity that caused the failure cannot break the marking itself.
     /// </summary>
     private async Task MarkFailedIfGradeMissingAsync(WritingSubmission submission, Exception ex, CancellationToken ct)
     {
@@ -561,17 +611,61 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 ex,
                 "Writing grading failed for submission {SubmissionId} without a persisted grade; marking failed so it stays retryable.",
                 submission.Id);
-            var row = await db.WritingSubmissions
-                .FirstOrDefaultAsync(s => s.Id == submission.Id, CancellationToken.None);
-            if (row is null || row.Status == WritingSubmissionStatuses.Failed) return;
-            row.Status = WritingSubmissionStatuses.Failed;
-            await db.SaveChangesAsync(CancellationToken.None);
+            if (!db.Database.IsInMemory())
+            {
+                await db.WritingSubmissions
+                    .Where(s => s.Id == submission.Id)
+                    .ExecuteUpdateAsync(
+                        set => set.SetProperty(s => s.Status, WritingSubmissionStatuses.Failed),
+                        CancellationToken.None);
+            }
+            else
+            {
+                var row = await db.WritingSubmissions
+                    .FirstOrDefaultAsync(s => s.Id == submission.Id, CancellationToken.None);
+                if (row is null || row.Status == WritingSubmissionStatuses.Failed) return;
+                row.Status = WritingSubmissionStatuses.Failed;
+                await db.SaveChangesAsync(CancellationToken.None);
+            }
+
+            // ExecuteUpdate bypasses change tracking: sync the in-hand
+            // instance too so same-scope readers never see a stale status.
+            submission.Status = WritingSubmissionStatuses.Failed;
+
+            await ReleaseReservationForSubmissionAsync(submission, CancellationToken.None);
         }
         catch (Exception markEx)
         {
             logger.LogWarning(
                 markEx,
                 "Failed to mark submission {SubmissionId} as failed after grading error.",
+                submission.Id);
+        }
+    }
+
+    /// <summary>
+    /// Best-effort release of this attempt's credit reservation when grading
+    /// never reached commit (rubric-phase failures release inside
+    /// <see cref="GradeWithReservationAsync"/>; this covers everything after:
+    /// canon, report build, persistence, side effects). Idempotent: already
+    /// committed or released reservations are no-ops.
+    /// </summary>
+    private async Task ReleaseReservationForSubmissionAsync(WritingSubmission submission, CancellationToken ct)
+    {
+        if (creditReservations is null) return;
+        try
+        {
+            var businessReference = $"writing-grade:{submission.Id:N}";
+            var existing = await db.AiCreditReservations.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.BusinessReference == businessReference, ct);
+            if (existing is null) return;
+            await creditReservations.ReleaseAsync(existing.Id, ct);
+        }
+        catch (Exception releaseEx)
+        {
+            logger.LogWarning(
+                releaseEx,
+                "Failed to release writing credit reservation for submission {SubmissionId}.",
                 submission.Id);
         }
     }

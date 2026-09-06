@@ -65,7 +65,11 @@ public sealed class VocabularyRecallsPerformanceTests : IAsyncLifetime
         Assert.Equal(39, result.ReadinessScore);
         var weak = Assert.Single(result.WeakTopics);
         Assert.Equal(("respiratory", 2, 1), (weak.Topic, weak.Total, weak.WeakCount));
-        Assert.Equal(2, commands.Items.Count(sql => sql.Contains("COUNT", StringComparison.OrdinalIgnoreCase)));
+        // Match the aggregate "COUNT(", not the bare word: the third statement projects
+        // the columns ReviewCount and CorrectCount, whose NAMES contain "count", so a
+        // substring match counts a plain SELECT as an aggregate and reports a regression
+        // that never happened. The genuine budget is the Assert.Equal(3, ...) above.
+        Assert.Equal(2, commands.Items.Count(sql => sql.Contains("COUNT(", StringComparison.OrdinalIgnoreCase)));
         Assert.Contains(commands.Items, sql =>
             sql.Contains("JOIN", StringComparison.OrdinalIgnoreCase)
             && sql.Contains("LIMIT", StringComparison.OrdinalIgnoreCase));

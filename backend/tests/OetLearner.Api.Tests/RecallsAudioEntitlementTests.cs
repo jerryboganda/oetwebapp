@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -202,6 +203,28 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Audio_returns_402_when_the_plan_has_the_Recalls_module_switched_off()
+    {
+        // The per-plan Enable/Disable toggle (#110) is a real gate, not just a nav
+        // filter: an otherwise-valid, unfrozen, active subscriber on a plan whose
+        // Recalls module is OFF must still be refused audio.
+        //
+        // Nothing pinned this before, which is how the fixture above was able to
+        // drift out of date silently — it seeded a plan with no module list at all
+        // and every "active subscriber" assertion in this class quietly inverted.
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedLearnerAsync(learnerId, hasActiveSubscription: true, recallsModuleEnabled: false);
+        var termId = await SeedVocabularyCardAsync(learnerId);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/recalls/audio/{termId}");
+
+        Assert.Equal(HttpStatusCode.PaymentRequired, response.StatusCode);
+        var payload = await response.Content.ReadAsStringAsync();
+        Assert.Contains("subscription_required", payload, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Queue_exposes_term_id_but_never_cached_audio_urls()
     {
         var learnerId = $"learner-{Guid.NewGuid():N}";
@@ -262,7 +285,18 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
         return client;
     }
 
-    private async Task SeedLearnerAsync(string learnerId, bool hasActiveSubscription, bool isFrozen = false)
+    /// <param name="recallsModuleEnabled">
+    /// Whether the seeded plan lists <see cref="ModuleKeys.Recalls"/> in its
+    /// DashboardModulesJson. Real plans all do — migration 20260725090000 back-filled
+    /// every existing plan with all four modules ON — and new plans opt in from the
+    /// admin pricing editor. Recalls is deliberately NOT part of the legacy fail-open
+    /// path, so a plan with no module list at all grants no Recalls access.
+    /// </param>
+    private async Task SeedLearnerAsync(
+        string learnerId,
+        bool hasActiveSubscription,
+        bool isFrozen = false,
+        bool recallsModuleEnabled = true)
     {
         await using var scope = factory.Services.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -284,16 +318,26 @@ public class RecallsAudioEntitlementTests(TestWebApplicationFactory factory)
 
         if (hasActiveSubscription)
         {
-            const string planCode = "premium-monthly-recalls-test";
+            var planCode = recallsModuleEnabled
+                ? "premium-monthly-recalls-test"
+                : "premium-monthly-recalls-off-test";
             if (!db.BillingPlans.Any(plan => plan.Id == planCode || plan.Code == planCode))
             {
                 db.BillingPlans.Add(new BillingPlan
                 {
                     Id = planCode,
                     Code = planCode,
-                    Name = "Premium monthly (recalls audio test)",
+                    Name = recallsModuleEnabled
+                        ? "Premium monthly (recalls audio test)"
+                        : "Premium monthly, Recalls disabled (recalls audio test)",
                     EntitlementsJson = "{}",
                     IncludedSubtestsJson = "[]",
+                    // The per-plan Enable/Disable toggle (#110). An explicit list is
+                    // what a real plan carries; omitting it entirely would leave the
+                    // learner without Recalls, since Recalls never fails open.
+                    DashboardModulesJson = recallsModuleEnabled
+                        ? $"[\"{ModuleKeys.Recalls}\",\"{ModuleKeys.MaterialsLibrary}\",\"{ModuleKeys.VideoLibrary}\"]"
+                        : $"[\"{ModuleKeys.MaterialsLibrary}\",\"{ModuleKeys.VideoLibrary}\"]",
                     Status = BillingPlanStatus.Active,
                     CreatedAt = now,
                     UpdatedAt = now

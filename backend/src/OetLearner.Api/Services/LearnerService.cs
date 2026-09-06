@@ -5003,7 +5003,8 @@ public partial class LearnerService(
             .Where(x => x.UserId == userId
                 && (x.Status == SubscriptionStatus.Active
                     || x.Status == SubscriptionStatus.Trial
-                    || x.Status == SubscriptionStatus.FreezeRequested))
+                    || x.Status == SubscriptionStatus.FreezeRequested
+                    || x.Status == SubscriptionStatus.Frozen))
             .OrderByDescending(x => x.ChangedAt)
             .ThenByDescending(x => x.StartedAt)
             .ThenByDescending(x => x.Id)
@@ -5430,7 +5431,10 @@ public partial class LearnerService(
         // Verification flow: a Pending order (awaiting admin approval/hand-over)
         // is paid at the gateway but not yet verified — do not release the
         // candidate invoice until Approve/MarkFulfilled flips it Active.
-        if (subscription.Status != SubscriptionStatus.Active)
+        // Frozen is a paid, paused subscription — not an unverified order —
+        // so it keeps invoice access like Active.
+        if (subscription.Status != SubscriptionStatus.Active
+            && subscription.Status != SubscriptionStatus.Frozen)
         {
             return false;
         }

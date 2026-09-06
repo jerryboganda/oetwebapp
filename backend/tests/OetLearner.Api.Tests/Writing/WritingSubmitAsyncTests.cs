@@ -600,6 +600,92 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         }
     }
 
+    [Fact]
+    public async Task CanonFailure_MarksFailed_ReleasesReservation_Retryable()
+    {
+        var credits = new CountingReservations();
+        var pipeline = BuildRealPreflightPipeline(new CountingGateway(CanonicalCompletion), credits);
+        // Swap in a canon engine that explodes AFTER a successful rubric call:
+        // the grade must not persist half-built, the row must land in failed
+        // (never wedge in grading), and the uncommitted reservation releases.
+        var throwingPipeline = BuildThrowingCanonPipeline(new CountingGateway(CanonicalCompletion), credits);
+        var submit = await throwingPipeline.SubmitAsync(
+            SampleAttempt("matrix-canon-1", LetterA, scenarioId: ScenarioReadyId), default);
+        // Mirror the durable rows the real credit service persists on reserve,
+        // so the guard's release-by-reference has a row to find.
+        _db.AiOperations.Add(new AiOperation
+        {
+            Id = "op-canon-1",
+            Module = "writing",
+            FeatureCode = "writing.score.v1",
+            UserId = "learner-1",
+            IdempotencyKey = "idem-canon-1",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        var reservation = new AiCreditReservation
+        {
+            Id = "res-canon-1",
+            OperationId = "op-canon-1",
+            UserId = "learner-1",
+            BucketKind = "writing",
+            Units = 1,
+            State = AiCreditReservationState.Reserved,
+            BusinessReference = $"writing-grade:{submit.SubmissionId:N}",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        _db.AiCreditReservations.Add(reservation);
+        await _db.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<ApiException>(
+            () => throwingPipeline.EvaluateAsync(submit.SubmissionId, default));
+
+        Assert.Equal("writing_canon_failed", ex.Code);
+        Assert.True(ex.Retryable);
+        Assert.Equal("failed", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+        Assert.Equal(1, credits.ReserveCalls);
+        Assert.Equal(1, credits.ReleaseCalls);
+        Assert.Equal(0, await _db.WritingGrades.CountAsync(g => g.SubmissionId == submit.SubmissionId));
+    }
+
+    [Fact]
+    public void ClampCanonViolationFields_Truncates_Overlong_Evidence()
+    {
+        var violations = new[]
+        {
+            new WritingCanonViolation { Id = Guid.NewGuid(), SubmissionId = Guid.NewGuid(), RuleId = "R01.1", Snippet = new string('x', 600), SuggestedFix = new string('y', 501) },
+        };
+
+        WritingSubmissionEvaluationPipeline.ClampCanonViolationFields(violations);
+
+        Assert.Equal(500, violations[0].Snippet!.Length);
+        Assert.Equal(500, violations[0].SuggestedFix!.Length);
+    }
+
+    private WritingSubmissionEvaluationPipeline BuildThrowingCanonPipeline(
+        IAiGatewayService gateway, CountingReservations credits)
+        => new(
+            _db,
+            gateway,
+            new ThrowingCanonEngine(),
+            mistakeService: null!,
+            events: new NoopWritingEventBus(),
+            TimeProvider.System,
+            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
+            NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
+            assessmentPreflight: new WritingAssessmentPreflightService(_db),
+            creditReservations: credits);
+
+    private sealed class ThrowingCanonEngine : IWritingCanonEngine
+    {
+        public Task<WritingCanonDetectionResult> DetectViolationsAsync(WritingCanonDetectionRequest request, CancellationToken ct)
+            => throw new InvalidOperationException("canon exploded");
+
+        public Task<WritingCanonRuleTestResponse?> TestRuleAsync(string adminUserId, string ruleId, WritingCanonRuleTestRequest request, CancellationToken ct)
+            => throw new NotImplementedException();
+    }
+
     /// <summary>Throws once (transient provider failure), then serves the canonical contract.</summary>
     private sealed class FlakyGateway(string completion) : IAiGatewayService
     {
@@ -653,6 +739,7 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         public int ReserveCalls { get; private set; }
         public int CommitCalls { get; private set; }
         public int ReleaseCalls { get; private set; }
+        private readonly HashSet<string> _released = new(StringComparer.Ordinal);
 
         public Task<AiCreditReservationTicket> ReserveWritingAsync(
             string userId, string operationId, string businessReference, CancellationToken ct)
@@ -677,7 +764,9 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
 
         public Task ReleaseAsync(string reservationId, CancellationToken ct)
         {
-            ReleaseCalls++;
+            // Mirrors production: repeat releases of the same reservation are
+            // no-ops, so guard-level releases never double-count.
+            if (_released.Add(reservationId ?? string.Empty)) ReleaseCalls++;
             return Task.CompletedTask;
         }
     }
