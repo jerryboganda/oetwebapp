@@ -722,6 +722,33 @@ public sealed class WritingSubmissionEvaluationPipeline(
         string caseNotesSnapshot,
         CancellationToken ct)
     {
+        try
+        {
+            return await GradeWithReservationInnerAsync(submission, scenario, caseNotesSnapshot, ct);
+        }
+        catch (OetLearner.Api.Services.Ai.AiOperationConflictException conflictEx)
+        {
+            // Resume carries a stale operation id bound to an earlier request
+            // shape (e.g. a request built before a prompt/token-budget change):
+            // mint a fresh operation and retry once. The credit reservation
+            // stays pinned to businessReference, so no duplicate debit can
+            // occur; the stale operation is abandoned, never re-driven.
+            logger.LogWarning(
+                conflictEx,
+                "Writing grade operation conflict for submission {SubmissionId}; retrying once with a fresh operation id.",
+                submission.Id);
+            submission.GradeOperationId = Guid.NewGuid().ToString("N");
+            await db.SaveChangesAsync(ct);
+            return await GradeWithReservationInnerAsync(submission, scenario, caseNotesSnapshot, ct);
+        }
+    }
+
+    private async Task<(RubricResult Rubric, string? ReservationId)> GradeWithReservationInnerAsync(
+        WritingSubmission submission,
+        WritingScenario? scenario,
+        string caseNotesSnapshot,
+        CancellationToken ct)
+    {
         string? reservationId = null;
         var businessReference = $"writing-grade:{submission.Id:N}";
         var operationId = submission.GradeOperationId ?? Guid.NewGuid().ToString("N");
@@ -1133,6 +1160,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 "ai_platform_budget_exhausted",
                 "AI grading is temporarily unavailable — the platform's AI budget has been reached. Please try again later.",
                 retryable: true);
+        }
+        catch (OetLearner.Api.Services.Ai.AiOperationConflictException)
+        {
+            // Stale operation id bound to an earlier request shape: bubble to
+            // GradeWithReservationAsync, which mints a fresh operation id and
+            // retries once. Must not be masked as a generic rubric failure.
+            throw;
         }
         catch (Exception ex)
         {

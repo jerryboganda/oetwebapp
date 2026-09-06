@@ -558,6 +558,48 @@ public sealed class WritingSubmitAsyncTests : IAsyncDisposable
         }
         """;
 
+    [Fact]
+    public async Task StaleOperationConflict_RetriesOnceWithFreshOperation_SingleGrade()
+    {
+        var gateway = new ConflictOnceGateway(CanonicalCompletion);
+        var credits = new CountingReservations();
+        var pipeline = BuildRealPreflightPipeline(gateway, credits);
+        var submit = await pipeline.SubmitAsync(
+            SampleAttempt("matrix-conflict-1", LetterA, scenarioId: ScenarioReadyId), default);
+
+        var outcome = await pipeline.EvaluateAsync(submit.SubmissionId, default);
+
+        Assert.False(outcome.IdempotentReuse);
+        Assert.Equal(2, gateway.Calls);
+        Assert.Equal(1, await _db.WritingGrades.CountAsync(g => g.SubmissionId == submit.SubmissionId));
+        Assert.Equal("graded", (await _db.WritingSubmissions.FindAsync(submit.SubmissionId))?.Status);
+    }
+
+    /// <summary>First call raises a stale-operation conflict; the pipeline must
+    /// mint a fresh operation id and succeed instead of wedging the attempt.</summary>
+    private sealed class ConflictOnceGateway(string completion) : IAiGatewayService
+    {
+        public int Calls { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "score",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            Calls++;
+            if (Calls == 1) throw new AiOperationConflictException("stale-operation-key");
+            return Task.FromResult(new AiGatewayResult
+            {
+                Completion = completion,
+                ResolvedModel = "claude-sonnet-5",
+            });
+        }
+    }
+
     /// <summary>Throws once (transient provider failure), then serves the canonical contract.</summary>
     private sealed class FlakyGateway(string completion) : IAiGatewayService
     {
