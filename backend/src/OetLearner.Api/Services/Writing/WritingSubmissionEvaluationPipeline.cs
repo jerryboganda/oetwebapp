@@ -1324,7 +1324,11 @@ public sealed class WritingSubmissionEvaluationPipeline(
             RubricAiResponse? parsed;
             try
             {
-                parsed = JsonSerializer.Deserialize<RubricAiResponse>(span, RubricParseOptions);
+                // Finding quotes routinely contain literal newlines/tabs, which
+                // strict JSON rejects inside strings (observed live: a valid,
+                // complete contract failing on raw control characters). Escape
+                // them before parsing; semantics are unchanged.
+                parsed = JsonSerializer.Deserialize<RubricAiResponse>(EscapeControlCharsInStrings(span), RubricParseOptions);
             }
             catch (JsonException)
             {
@@ -1419,6 +1423,69 @@ public sealed class WritingSubmissionEvaluationPipeline(
     }
 
     /// <summary>
+    /// Escapes literal control characters (CR/LF/TAB/others) inside JSON
+    /// string literals so strict parsing accepts model output that embeds
+    /// raw newlines in finding quotes. Operates only within quoted spans;
+    /// structural characters outside strings pass through untouched.
+    /// </summary>
+    internal static string EscapeControlCharsInStrings(string span)
+    {
+        if (string.IsNullOrEmpty(span)) return span;
+        var sb = new StringBuilder(span.Length);
+        var inString = false;
+        var escaped = false;
+        foreach (var c in span)
+        {
+            if (inString)
+            {
+                if (escaped)
+                {
+                    sb.Append(c);
+                    escaped = false;
+                }
+                else if (c == '\\')
+                {
+                    sb.Append(c);
+                    escaped = true;
+                }
+                else if (c == '"')
+                {
+                    sb.Append(c);
+                    inString = false;
+                }
+                else if (c == '\r')
+                {
+                    sb.Append("\\r");
+                }
+                else if (c == '\n')
+                {
+                    sb.Append("\\n");
+                }
+                else if (c == '\t')
+                {
+                    sb.Append("\\t");
+                }
+                else if (char.IsControl(c))
+                {
+                    sb.Append("\\u");
+                    sb.Append(((int)c).ToString("x4"));
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            else
+            {
+                sb.Append(c);
+                if (c == '"') inString = true;
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
     /// One-line diagnostic footprint for unparseable completions: length,
     /// brace balance, and a short head excerpt. Logged server-side only —
     /// never exposed to candidates.
@@ -1428,9 +1495,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
         if (string.IsNullOrEmpty(completion)) return "empty";
         var flat = completion.Replace('\r', ' ').Replace('\n', ' ');
         var head = flat.Length > 200 ? flat[..200] : flat;
+        var tail = flat.Length > 200 ? flat[^200..] : flat;
         var opens = completion.Count(c => c == '{');
         var closes = completion.Count(c => c == '}');
-        return $"len={completion.Length} braces={opens}/{closes} head={head}";
+        var spans = 0;
+        try { spans = ExtractJsonObjectSpans(completion).Count; }
+        catch { spans = -1; }
+        return $"len={completion.Length} braces={opens}/{closes} balancedSpans={spans} head={head} tail={tail}";
     }
 
     private static bool HasCompleteScoringContract(RubricAiResponse parsed)

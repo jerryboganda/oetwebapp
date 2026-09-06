@@ -225,7 +225,41 @@ public sealed class WritingSubmitGradingPathTests : IAsyncDisposable
         var summary = WritingSubmissionEvaluationPipeline.DescribeCompletion(new string('x', 500));
 
         Assert.StartsWith("len=500 ", summary);
-        Assert.True(summary.Length < 300);
+        Assert.True(summary.Length < 600);
+    }
+
+    [Fact]
+    public void ControlChars_Inside_Finding_Quotes_Still_Parse()
+    {
+        var contract = CanonicalCompletion.Replace(
+            "\"findings\": []",
+            "\"findings\": [{ \"ruleId\": \"R03.4\", \"severity\": \"critical\", \"quote\": \"line one\nline two\ttabbed\", \"message\": \"m\", \"fixSuggestion\": \"f\", \"criterionCode\": \"content\" }]");
+        var spans = WritingSubmissionEvaluationPipeline.ExtractJsonObjectSpans(contract);
+
+        Assert.Single(spans);
+        var escaped = WritingSubmissionEvaluationPipeline.EscapeControlCharsInStrings(spans[0]);
+        Assert.Contains("\\n", escaped);
+        Assert.Contains("\\t", escaped);
+    }
+
+    [Fact]
+    public async Task Multiline_Finding_Quotes_Grade_Without_Fabrication()
+    {
+        // Finding quotes with literal newlines/tabs must not sink the whole
+        // grading: the parser escapes them and scores the complete contract.
+        var scenarioId = await SeedGradableScenarioAsync(withPregeneratedAnswer: false);
+        var multiline = CanonicalCompletion.Replace(
+            "\"findings\": []",
+            "\"findings\": [{ \"ruleId\": \"R03.4\", \"severity\": \"critical\", \"quote\": \"first line\nsecond line\", \"message\": \"m\", \"fixSuggestion\": \"f\", \"criterionCode\": \"content\" }]");
+        var gateway = new QueueGateway([multiline, "{}"]);
+        var pipeline = BuildPipeline(gateway, new CountingReservations());
+
+        var submissionId = await pipeline.CreateSubmissionAsync(SampleContext(scenarioId, "multiline-1", NormalLetter), default);
+        var outcome = await pipeline.EvaluateAsync(submissionId, default);
+
+        Assert.False(outcome.IdempotentReuse);
+        var grade = await _db.WritingGrades.AsNoTracking().SingleAsync(g => g.SubmissionId == submissionId);
+        Assert.Equal(31, grade.RawTotal);
     }
 
     private async Task<Guid> SeedGradableScenarioAsync(bool withPregeneratedAnswer)
