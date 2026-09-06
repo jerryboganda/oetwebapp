@@ -1116,11 +1116,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 UserInput = BuildRubricInput(submission, scenario, caseNotesSnapshot),
                 Temperature = 0.2,
                 // The grounded reply contract (findings + six criteria +
-                // scores + advisory) is far larger than the provider default
-                // (1024 tokens): a truncated reply parses as an incomplete
-                // contract and fails the whole grading. Size headroom so a
-                // finding-rich letter never truncates into a retryable 503.
-                MaxTokens = 6000,
+                // scores + advisory) dwarfs the provider default (1024
+                // tokens): with a 230-rule grounded prompt a finding-rich
+                // letter fills even 6000 output tokens and truncates mid-JSON
+                // (observed live: outTokens=6000, braces 13/11). Size generously
+                // so output exhaustion can never fail a valid grading.
+                MaxTokens = 16000,
                 // Retries after a resource-slot conflict step this version so
                 // the control plane treats the resume as a new slot rather
                 // than a divergent payload on an occupied one.
