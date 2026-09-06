@@ -265,6 +265,8 @@ public sealed class CompanionDestinationRegistry(
         new() { Id = "conversation.practice", Title = "AI conversation", Path = "/conversation", Kind = CompanionDestinationKind.Practice, SubtestCode = "speaking", Description = "Live spoken practice with the AI conversation partner.", Keywords = "voice talk speak partner" },
         new() { Id = "mock.exams", Title = "Mock exams", Path = "/mocks", Kind = CompanionDestinationKind.Practice, RequiredModuleKey = ModuleKeys.Mocks, Description = "Full-length timed mock exams under test conditions.", Keywords = "full test simulation timed" },
 
+        new() { Id = "companion", Title = "AI Learning Companion", Path = "/companion", Kind = CompanionDestinationKind.Learning, RequiredFeatureFlag = "ai_learning_companion", Description = "The full-screen study conversation, with previous threads and credit balance.", Keywords = "companion chat assistant tutor jana ask" },
+
         new() { Id = "study.plan", Title = "Study plan", Path = "/study-plan", Kind = CompanionDestinationKind.Learning, Description = "The personalised weekly plan built from the exam date and goals.", Keywords = "schedule weekly timetable" },
         new() { Id = "next.actions", Title = "Next best actions", Path = "/next-actions", Kind = CompanionDestinationKind.Learning, Description = "What to do next, ranked by impact on the score.", Keywords = "recommended todo priority" },
         new() { Id = "learning.paths", Title = "Learning paths", Path = "/learning-paths", Kind = CompanionDestinationKind.Learning, Description = "Structured course paths from foundation to exam level.", Keywords = "course curriculum track" },

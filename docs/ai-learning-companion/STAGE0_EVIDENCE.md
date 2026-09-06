@@ -22,6 +22,10 @@
 | S1.2 entitlement-safe retriever | **F-154**, F-026, F-029 | Prefilter before search; authority precedence; verbatim caps |
 | S1.2b rulebook indexer | F-013 | 115 rulebooks indexable, one chunk per rule, idempotent re-index |
 | S1.3 prompt composer | F-048, F-049, F-053, F-152, F-153 | Grounded companion prompt replaces the generic tutor string |
+| S1.4 destination registry | **F-023**, F-098, F-100 | Closed route vocabulary; the model names an id, the server builds the URL |
+| S1.5 action layer | F-098, F-100, F-101, F-102, F-103, **F-104** | 5 new learner-safe tools + 2 existing ones granted; entitlement re-checked at execution |
+| S1.6 companion surface | F-097, F-160, F-167 | `/companion` full-screen page, credit chip, thread list, en/ar bundles |
+| S1.2c corpus operations | F-013, F-026 | `/v1/admin/companion/knowledge` — status + reindex, so the corpus can actually be built |
 
 **No feature was moved to `EXISTS` on the strength of this work.** The gap analysis statuses reflect what is
 actually delivered, not what is scaffolded.
@@ -38,17 +42,28 @@ actually delivered, not what is scaffolded.
 - `Services/AiTools/AiToolRegistry.cs` — learner tool-boundary guard
 - `Services/SeedData.cs` — `flg-026`…`flg-030`
 - `Endpoints/LearningContentEndpoints.cs` — learner-visible flag
-- `Program.cs` — DI registration
+- `Services/Companion/CompanionContextResolver.cs`, `CompanionRetriever.cs`, `CompanionRulebookIndexer.cs`, `CompanionPromptComposer.cs` *(new)*
+- `Services/Companion/CompanionDestinationRegistry.cs` *(new)* — closed destination catalog + server-side resolution
+- `Services/AiTools/Tools/CompanionActionTools.cs` *(new)* — 5 typed action tools
+- `Services/AiTools/AiToolCatalogSeederHostedService.cs` — idempotent companion tool grants
+- `Endpoints/CompanionKnowledgeAdminEndpoints.cs` *(new)* — corpus status + reindex (`AdminAiConfig`)
+- `Program.cs` — DI registration and endpoint mapping
 
 **Frontend**
 - `components/domain/ai-assistant/AiAssistantPanel.tsx` — de-stubbed, consumes the context
 - `components/domain/ai-assistant/AiAssistantMessages.tsx` — markdown for assistant output
 - `components/providers/companion-mount.tsx` *(new)* — flag-gated mount
 - `app/providers.tsx` — `AiAssistantProvider` + `CompanionMount`
+- `app/companion/page.tsx` *(new)* — full-screen companion surface, flag-gated, fails closed
+- `messages/{en,ar}/companion.json` *(new)* + `i18n.ts` — companion message module
+- `components/layout/learner-dashboard-route-policy.ts` — `/companion` registered as a learner workspace route
 
 **Tests**
 - `backend/tests/.../AiFeatureEligibilityTests.cs` *(new)* — 4 tests
 - `backend/tests/.../CompanionLearnerToolBoundaryTests.cs` *(new)* — 15 tests
+- `backend/tests/.../CompanionRetrievalSecurityTests.cs` *(new)* — 10 tests
+- `backend/tests/.../CompanionDestinationSecurityTests.cs` *(new)* — 16 tests
+- `backend/tests/.../EndpointRegistrationTests.cs` — the two new admin routes
 - `tests/companion/golden/oet-core.golden.json` + `tests/companion/golden-set.test.ts` *(new)*
 - `components/domain/ai-assistant/__tests__/AiAssistantPanel.test.tsx` — rewritten against the real contract
 
@@ -143,10 +158,23 @@ Nothing is visible to any learner until an operator enables `ai_learning_compani
 |---|---|---|
 | Frontend test runner cannot start (missing jsdom transitive deps) | Medium — blocks unit verification, not the build | Platform |
 | 32 feature codes still undocumented in the policy matrix | Low — ratcheted, cannot grow | Platform |
-| Corpus not yet indexed in any environment — the indexer exists but has not been run | High — companion answers ungrounded until it runs | This programme |
-| Action layer (F-098…F-104) and companion credit metering not yet implemented | Expected — Stage 1 remainder | This programme (S1.4, S1.5, S1.7) |
+| Corpus not yet indexed in any environment | High — companion answers ungrounded until an operator runs it | Operations. `POST /v1/admin/companion/knowledge/reindex` now exists to do it; `GET .../status` reports what landed |
+| Companion credit metering and the contextual paywall not yet implemented | Expected — Stage 1 remainder | This programme (S1.7) |
+| Action tools are granted to `ai_assistant.learner`, not `companion.action.v1` | Low — the boundary allowlist is what enforces safety, but per-feature cost attribution is not yet separated | This programme (S1.7); needs an `AiQuotaPlan` row for the companion feature codes first |
+| Item-level deep links (a specific paper, lesson or video timestamp) resolve to the hub page | Medium — F-099 stays `MISSING` | Stage 2 content ingestion |
+| `/companion` is not in the e2e smoke route table | Low — deliberate: the flag ships off, so the page renders its "not enabled" state and a heading assertion would fail | Add when the flag is enabled in the test environment |
 
-**S1.1–S1.3 have now landed.** Grounding, the entitlement prefilter (F-154) and exam-mode awareness (F-155) are
-implemented and tested. The remaining blocker before enabling the flag is operational rather than structural:
-the rulebook corpus must actually be indexed in the target environment, otherwise retrieval returns nothing and
-the companion correctly — but unhelpfully — says it has no verified information.
+**S1.1–S1.6 have now landed.** Grounding, the entitlement prefilter (F-154), exam-mode awareness (F-155), the
+server-resolved destination registry (F-023) and the typed action layer (F-098…F-104) are implemented and
+tested, and the companion has a full-screen surface at `/companion`.
+
+The remaining blocker before enabling the flag is operational rather than structural: an operator must call
+`POST /v1/admin/companion/knowledge/reindex` in the target environment. Until then retrieval returns nothing
+and the companion correctly — but unhelpfully — says it has no verified information. `GET
+/v1/admin/companion/knowledge/status` reports source counts, chunk counts and how many chunks carry an
+embedding, so the state of the corpus is observable rather than guessed at.
+
+**What is deliberately not built.** `CREATE_SUPPORT_REQUEST` from the specification has no learner-facing
+ticket store in this repository — `CustomerSupportCase` is an admin-opened access grant, not a candidate
+ticket. Rather than invent a table, the companion routes to the existing `/support` surface through the
+destination registry. Building a learner ticketing system is a product decision, not a companion one.

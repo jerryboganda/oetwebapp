@@ -169,6 +169,17 @@ export function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
 }
 
+export async function maybe<T>(promise: Promise<T>, fallback: T | null = null): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 501)) {
+      return fallback;
+    }
+    throw err;
+  }
+}
+
 export async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean; acceptedStatuses?: number[]; timeoutMs?: number }): Promise<T> {
   let lastError: Error | null = null;
 

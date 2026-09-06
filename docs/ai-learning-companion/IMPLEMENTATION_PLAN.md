@@ -114,7 +114,7 @@ guessed number. Critical entitlement/payment fabrication is the one **zero-toler
 
 ## Stage 1 — Monetisable OET Core
 
-### S1.1 Companion context resolver
+### S1.1 Companion context resolver — **DONE**
 **New:** `backend/src/OetLearner.Api/Services/Companion/CompanionContextResolver.cs`.
 Server-trusted envelope assembled from: `ClaimTypes.NameIdentifier` → `IEffectiveEntitlementResolver.ResolveAsync`
 → `LearnerUser` + `LearnerGoal` (profession, exam type, exam date, targets, country) → `IAiQuotaService`
@@ -122,7 +122,7 @@ allowance → `IAiPackageCreditService.GetSnapshotAsync` projection → surface 
 Client-supplied tier/entitlement/profession fields are **hints only** and are always reloaded server-side.
 **Serves:** F-003…F-006, F-010, F-143; prerequisite for everything below.
 
-### S1.2 Entitlement-safe retriever
+### S1.2 Entitlement-safe retriever — **DONE**
 **New:** `Services/Companion/CompanionRetriever.cs`, modelled on the proven
 `Services/AiAssistant/Indexing/CodebaseRetriever.cs` (vector 0.7 + keyword, graceful keyword-only fallback
 when pgvector is unavailable).
@@ -137,13 +137,13 @@ Pipeline order is **mandatory** and testable:
 5. evidence packing with per-source verbatim-span caps and rolling per-user retrieval-volume caps;
 6. recheck `IContentEntitlementService.AllowAccessAsync` before returning any protected location.
 
-### S1.2b Stage-1 corpus indexer
+### S1.2b Stage-1 corpus indexer — **DONE (not yet run in any environment)**
 Index the **115 versioned rulebooks** through `DbBackedRulebookLoader` (so admin edits and versions flow
 through rather than reading raw JSON), plus the destination registry (S1.4) and a minimal support/FAQ set.
 Scoped to **one approved profession** pending TV-002. Course PDFs, videos and workshops are Stage 2.
 **Serves:** F-013, F-023, F-024.
 
-### S1.3 Prompt composer — replaces the generic learner prompt
+### S1.3 Prompt composer — replaces the generic learner prompt — **DONE**
 **Changes:** `Services/AiAssistant/SystemPrompts/SystemPromptProvider.cs` gains an async companion path;
 `AiAssistantOrchestrator` uses it for the learner branch.
 Composes: persona (`Companion:PersonaName`, default `Jana`) + authority-labelled evidence + bounded learner
@@ -153,13 +153,13 @@ probability), no numeric band while `companion.score_display.enabled` is OFF, re
 policy**, and "say you don't know" when evidence is insufficient.
 **Serves:** F-048, F-049, F-053, F-152, F-153; the persona config keeps TV-030 open.
 
-### S1.4 Destination registry
+### S1.4 Destination registry — **DONE**
 **New:** `Services/Companion/CompanionDestinationRegistry.cs`. Structured records: route id, title, type,
 profession/exam visibility, required entitlement, resolver, mobile/web support, retired/renamed state.
 Resolution goes through the existing `PlatformLinkService.BuildWebUrl`.
 **Serves:** F-023; unblocks F-098…F-101.
 
-### S1.5 Action layer — grants, not a new subsystem
+### S1.5 Action layer — grants, not a new subsystem — **DONE, with two deviations**
 Register typed actions as `AiTool` rows granted **only** to `companion.action.v1`:
 `OPEN_RESOURCE`, `START_PRACTICE`, `CONTINUE_LAST_ACTIVITY`, `SAVE_NOTE`, `SAVE_VOCABULARY`,
 `ADD_PLAN_ITEM`, `SHOW_ALLOWANCE`, `OPEN_UPGRADE`, `CREATE_SUPPORT_REQUEST`.
@@ -170,7 +170,22 @@ one `AiToolInvocation` row plus one `AuditEvent` per call — that is the source
 already implemented. **The server resolves every target; a model-produced URL is never followed.**
 **Serves:** F-098, F-100…F-104, F-110, F-111.
 
-### S1.6 Frontend — finish what is already built
+**Deviation 1 — grant target.** The grants are attached to `ai_assistant.learner`, not `companion.action.v1`,
+because that is the feature code `AiAssistantOrchestrator.GetFeatureCode` actually resolves for a learner turn.
+Moving the learner branch onto the companion codes is real work — it needs `AiQuotaPlan` rows for
+`companion.chat.v1` first — and belongs with S1.7 cost attribution. Safety does not depend on which of the two
+codes is used: both are in `AiToolRegistry.LearnerFacingFeatureCodes`, so both are filtered through
+`LearnerSafeToolCodes`.
+
+**Deviation 2 — `CREATE_SUPPORT_REQUEST` not built.** There is no learner-facing ticket store in this
+repository; `CustomerSupportCase` is an admin-opened access grant. The companion routes to `/support` through
+the destination registry instead. Inventing a ticketing table to satisfy one action would be the wrong call.
+
+**Also added, not in the original plan:** `Endpoints/CompanionKnowledgeAdminEndpoints.cs` — the indexer had no
+caller, so the corpus could never be built. `GET /v1/admin/companion/knowledge/status` and
+`POST .../reindex`, both under `AdminAiConfig`.
+
+### S1.6 Frontend — finish what is already built — **DONE except citations UI and paywall card**
 1. Mount `AiAssistantProvider` in `app/providers.tsx` inside `AuthProvider` (needs `session.accessToken` and
    role), beside `AuthenticatedNotificationCenter`.
 2. Rewrite `components/domain/ai-assistant/AiAssistantPanel.tsx` to consume `useAiAssistantContext()`,
@@ -182,6 +197,11 @@ already implemented. **The server resolves every target; a model-produced URL is
 6. i18n: `messages/{en,ar}/companion.json` (flat dotted keys) + `MESSAGE_MODULES` in `i18n.ts`.
    RTL already works via `app/layout.tsx` `<html dir>`.
 **Serves:** F-097, F-141, F-142, F-160, F-161, F-167.
+
+**Not yet done in this slice:** citations UI (item 4) and the contextual paywall card — the paywall depends on
+S1.7, and citations depend on the retrieval trace being surfaced over SignalR, which the hub does not carry
+yet. `/companion` is deliberately absent from `tests/e2e/learner/learner-smoke.spec.ts`: while the flag ships
+off the page renders its "not enabled" state, so a heading assertion would fail.
 
 ### S1.7 Commercial core
 Allowance and counter through `IAiQuotaService.TryReserveAsync/CommitAsync` with a companion `AiQuotaPlan`

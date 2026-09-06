@@ -12,7 +12,9 @@
 import { cookies, headers } from 'next/headers';
 import type { AbstractIntlMessages } from 'next-intl';
 import { getRequestConfig } from 'next-intl/server';
+import arCompanionMessages from './messages/ar/companion.json';
 import arWritingMessages from './messages/ar/writing.json';
+import enCompanionMessages from './messages/en/companion.json';
 import enWritingMessages from './messages/en/writing.json';
 
 export const SUPPORTED_LOCALES = ['en', 'ar'] as const;
@@ -20,15 +22,17 @@ export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 export const DEFAULT_LOCALE: SupportedLocale = 'en';
 
 const LOCALE_COOKIE = 'lang';
-const MESSAGE_MODULES = ['writing'] as const;
+const MESSAGE_MODULES = ['writing', 'companion'] as const;
 type MessageModule = (typeof MESSAGE_MODULES)[number];
 
 const MESSAGE_BUNDLES = {
   en: {
     writing: enWritingMessages,
+    companion: enCompanionMessages,
   },
   ar: {
     writing: arWritingMessages,
+    companion: arCompanionMessages,
   },
 } satisfies Record<SupportedLocale, Record<MessageModule, Record<string, string>>>;
 

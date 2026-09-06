@@ -44,6 +44,8 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/admin/content/staleness")]
     [InlineData("/v1/admin/ai-config/escalation-stats")]
     [InlineData("/v1/admin/rulebooks")]
+    [InlineData("/v1/admin/companion/knowledge/status")]
+    [InlineData("/v1/admin/companion/knowledge/reindex")]
     [InlineData("/v1/admin/listening/analytics")]
     [InlineData("/v1/admin/listening/attempts/{attemptId}/export")]
     [InlineData("/v1/admin/listening/backfill")]

@@ -9,6 +9,7 @@ import {
   getHeaders,
   isApiError,
   isRetryable,
+  maybe,
   resolveApiUploadUrl,
   resolveApiUrl,
   resolveBrowserApiResourceUrl,
@@ -7887,945 +7888,111 @@ export {
 } from './api/misc';
 
 // -- Admin: Rulebook Management ------------------------------------------
-export interface AdminRulebookSummary {
-  id: string;
-  kind: string;
-  profession: string;
-  version: string;
-  status: string;
-  authoritySource: string;
-  referencePdfAssetId: string | null;
-  sectionCount: number;
-  ruleCount: number;
-  updatedByUserId: string | null;
-  createdAt: string;
-  updatedAt: string;
-  publishedAt: string | null;
-}
-export interface AdminRulebookSection { id: string; code: string; title: string; orderIndex: number; }
-export interface AdminRulebookRule {
-  id: string; code: string; sectionCode: string; title: string; body: string; severity: string;
-  appliesToJson: string; turnStage: string | null;
-  exemplarPhrasesJson: string | null; forbiddenPatternsJson: string | null;
-  checkId: string | null; paramsJson: string | null; examplesJson: string | null;
-  orderIndex: number;
-}
-export interface AdminRulebookDetail extends Omit<AdminRulebookSummary, 'sectionCount' | 'ruleCount' | 'updatedByUserId'> {
-  sections: AdminRulebookSection[];
-  rules: AdminRulebookRule[];
-}
-
-export async function adminListRulebooks(filter?: { kind?: string; profession?: string }) {
-  const p = new URLSearchParams();
-  if (filter?.kind) p.set('kind', filter.kind);
-  if (filter?.profession) p.set('profession', filter.profession);
-  const qs = p.toString();
-  return apiRequest<AdminRulebookSummary[]>(`/v1/admin/rulebooks${qs ? `?${qs}` : ''}`);
-}
-export async function adminGetRulebook(id: string) {
-  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}`);
-}
-export async function adminUpdateRulebookMeta(id: string, body: { version?: string | null; authoritySource?: string | null }) {
-  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}`, {
-    method: 'PUT', body: JSON.stringify(body),
-  });
-}
-export async function adminPublishRulebook(id: string, versionLabel?: string | null) {
-  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/publish`, {
-    method: 'POST', body: JSON.stringify({ versionLabel: versionLabel ?? null }),
-  });
-}
-export async function adminCreateRulebookSection(id: string, body: { code: string; title: string; orderIndex?: number | null }) {
-  return apiRequest<AdminRulebookSection>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/sections`, {
-    method: 'POST', body: JSON.stringify(body),
-  });
-}
-export async function adminUpdateRulebookSection(id: string, sectionId: string, body: { title?: string | null; orderIndex?: number | null }) {
-  return apiRequest<AdminRulebookSection>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/sections/${encodeURIComponent(sectionId)}`, {
-    method: 'PUT', body: JSON.stringify(body),
-  });
-}
-export async function adminDeleteRulebookSection(id: string, sectionId: string) {
-  return apiRequest(`/v1/admin/rulebooks/${encodeURIComponent(id)}/sections/${encodeURIComponent(sectionId)}`, { method: 'DELETE' });
-}
-export async function adminCreateRulebookRule(id: string, body: {
-  code: string; sectionCode: string; title: string; body: string; severity: string;
-  appliesToJson?: string | null; turnStage?: string | null;
-  exemplarPhrasesJson?: string | null; forbiddenPatternsJson?: string | null;
-  checkId?: string | null; paramsJson?: string | null; examplesJson?: string | null;
-  orderIndex?: number | null;
-}) {
-  return apiRequest<AdminRulebookRule>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/rules`, {
-    method: 'POST', body: JSON.stringify(body),
-  });
-}
-export async function adminUpdateRulebookRule(id: string, ruleId: string, body: Partial<{
-  sectionCode: string; title: string; body: string; severity: string;
-  appliesToJson: string | null; turnStage: string | null;
-  exemplarPhrasesJson: string | null; forbiddenPatternsJson: string | null;
-  checkId: string | null; paramsJson: string | null; examplesJson: string | null;
-  orderIndex: number | null;
-}>) {
-  return apiRequest<AdminRulebookRule>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, {
-    method: 'PUT', body: JSON.stringify(body),
-  });
-}
-export async function adminDeleteRulebookRule(id: string, ruleId: string) {
-  return apiRequest(`/v1/admin/rulebooks/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
-}
-export interface AdminRulebookMetadata { kinds: string[]; professions: string[]; severities: string[]; statuses: string[]; }
-
-export async function adminGetRulebookMetadata() {
-  return apiRequest<AdminRulebookMetadata>('/v1/admin/rulebooks/_metadata');
-}
-export async function adminCreateRulebook(body: { kind: string; profession: string; version: string; authoritySource?: string | null }) {
-  return apiRequest<AdminRulebookDetail>('/v1/admin/rulebooks', { method: 'POST', body: JSON.stringify(body) });
-}
-export async function adminCloneRulebook(id: string, body: { version?: string | null; kind?: string | null; profession?: string | null; authoritySource?: string | null }) {
-  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/clone`, {
-    method: 'POST', body: JSON.stringify(body),
-  });
-}
-export async function adminUnpublishRulebook(id: string) {
-  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/unpublish`, { method: 'POST' });
-}
-export async function adminDeleteRulebook(id: string) {
-  return apiRequest(`/v1/admin/rulebooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
-export async function adminExportRulebook(id: string) {
-  return apiRequest<unknown>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/export`);
-}
-export async function adminImportRulebook(json: string, mode: 'create' | 'replace') {
-  return apiRequest<AdminRulebookDetail>('/v1/admin/rulebooks/import', {
-    method: 'POST', body: JSON.stringify({ json, mode }),
-  });
-}
-
 // === SUBAGENT_BACKEND: admin-content-management START ===
-// Wrappers for the soft-publish + unarchive + bulk endpoints added so the
-// admin web UI can manage every content type without server-side gate
-// restrictions. Publish endpoints now always succeed and surface any
-// rulebook/structural problems as `warnings` instead of throwing.
-
-export interface AdminPublishWithWarningsResponse {
-  published: boolean;
-  status?: string;
-  warnings?: string[];
-}
-
-export interface AdminBulkPaperPublishResult {
-  paperId: string;
-  ok: boolean;
-  warnings?: string[];
-  error?: string;
-}
-
-export interface AdminBulkPaperStatusResult {
-  paperId: string;
-  ok: boolean;
-  status?: string;
-  error?: string;
-}
-
-export async function adminPublishPaperWithWarnings(paperId: string) {
-  return apiRequest<AdminPublishWithWarningsResponse>(
-    `/v1/admin/papers/${encodeURIComponent(paperId)}/publish`,
-    { method: 'POST' },
-  );
-}
-
-export async function adminUnarchivePaper(paperId: string) {
-  return apiRequest<{ id: string; status: string }>(
-    `/v1/admin/papers/${encodeURIComponent(paperId)}/unarchive`,
-    { method: 'POST' },
-  );
-}
-
-export async function adminUnarchiveMockBundle(bundleId: string) {
-  return apiRequest<{ id: string; status: string }>(
-    `/v1/admin/mock-bundles/${encodeURIComponent(bundleId)}/unarchive`,
-    { method: 'POST' },
-  );
-}
-
-export async function adminUnarchiveGrammarLesson(lessonId: string) {
-  return apiRequest<{ id: string; status: string }>(
-    `/v1/admin/grammar/lessons/${encodeURIComponent(lessonId)}/unarchive`,
-    { method: 'POST' },
-  );
-}
-
-export async function adminUnarchiveConversationTemplate(templateId: string) {
-  return apiRequest<{ id: string; status: string }>(
-    `/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/unarchive`,
-    { method: 'POST' },
-  );
-}
-
-export async function adminUnarchivePronunciationDrill(drillId: string) {
-  return apiRequest<{ id: string; status: string }>(
-    `/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/unarchive`,
-    { method: 'POST' },
-  );
-}
-
-export async function adminBulkPublishPapers(paperIds: string[]) {
-  return apiRequest<{ results: AdminBulkPaperPublishResult[] }>(
-    `/v1/admin/papers/bulk-publish`,
-    { method: 'POST', body: JSON.stringify({ paperIds }) },
-  );
-}
-
-export async function adminBulkSetPaperStatus(
-  paperIds: string[],
-  targetStatus: 'Draft' | 'Published' | 'Archived',
-) {
-  return apiRequest<{ results: AdminBulkPaperStatusResult[] }>(
-    `/v1/admin/papers/bulk-status`,
-    { method: 'POST', body: JSON.stringify({ paperIds, targetStatus }) },
-  );
-}
-
-export interface AdminConversationAiDraftPayload {
-  profession: string;
-  topic?: string;
-  scenario?: string;
-  durationSeconds?: number;
-  taskType?: 'oet-roleplay' | 'oet-handover';
-}
-
-export interface AdminConversationAiDraftResult {
-  title: string;
-  taskTypeCode: string;
-  profession: string;
-  scenario: string;
-  roleDescription: string;
-  patientContext: string;
-  expectedOutcomes: string;
-  difficulty: string;
-  estimatedDurationSeconds: number;
-  objectives: string[];
-  expectedRedFlags: string[];
-  keyVocabulary: string[];
-  warning?: string | null;
-}
-
-export async function adminConversationAiDraft(payload: AdminConversationAiDraftPayload) {
-  return apiRequest<AdminConversationAiDraftResult>(
-    `/v1/admin/conversation/templates/ai-draft`,
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-}
 // === SUBAGENT_BACKEND: admin-content-management END ===
+export type {
+  AdminBulkPaperPublishResult,
+  AdminBulkPaperStatusResult,
+  AdminConversationAiDraftPayload,
+  AdminConversationAiDraftResult,
+  AdminPublishWithWarningsResponse,
+  AdminRulebookDetail,
+  AdminRulebookMetadata,
+  AdminRulebookRule,
+  AdminRulebookSection,
+  AdminRulebookSummary,
+} from './api/admin-rulebooks';
+export {
+  adminBulkPublishPapers,
+  adminBulkSetPaperStatus,
+  adminCloneRulebook,
+  adminConversationAiDraft,
+  adminCreateRulebook,
+  adminCreateRulebookRule,
+  adminCreateRulebookSection,
+  adminDeleteRulebook,
+  adminDeleteRulebookRule,
+  adminDeleteRulebookSection,
+  adminExportRulebook,
+  adminGetRulebook,
+  adminGetRulebookMetadata,
+  adminImportRulebook,
+  adminListRulebooks,
+  adminPublishPaperWithWarnings,
+  adminPublishRulebook,
+  adminUnarchiveConversationTemplate,
+  adminUnarchiveGrammarLesson,
+  adminUnarchiveMockBundle,
+  adminUnarchivePaper,
+  adminUnarchivePronunciationDrill,
+  adminUnpublishRulebook,
+  adminUpdateRulebookMeta,
+  adminUpdateRulebookRule,
+  adminUpdateRulebookSection,
+} from './api/admin-rulebooks';
 
 // === SUBAGENT_B: listening-authoring START ===
-// Typed wrappers for the Listening authoring workspace.
-// Mirrors backend routes in:
-//   - Endpoints/ListeningAuthoringAdminEndpoints.cs
-//   - Endpoints/ListeningAdminAnalyticsEndpoints.cs
-// Canonical paper shape: A1=12, A2=12, B=6, C1=6, C2=6 → 42 items.
-
-import type {
-  ListeningAuthoredExtract,
-  ListeningAuthoredQuestion,
-  ListeningAuthoredQuestionList,
-  ListeningBackfillAllResponse,
-  ListeningExtractPatch,
-  ListeningExtractsResponse,
-  ListeningQuestionPatch,
-  ListeningValidationReport,
-} from '@/lib/types/admin/listening-authoring';
-
-const lap = (paperId: string) =>
-  `/v1/admin/papers/${encodeURIComponent(paperId)}/listening`;
-
-// ── Validate ────────────────────────────────────────────────────────────
-export async function adminListeningValidate(paperId: string) {
-  return apiRequest<ListeningValidationReport>(`${lap(paperId)}/validate`);
-}
-
-// ── Structure (42 items) ────────────────────────────────────────────────
-export async function adminListeningGetStructure(paperId: string) {
-  return apiRequest<ListeningAuthoredQuestionList>(`${lap(paperId)}/structure`);
-}
-
-export async function adminListeningReplaceStructure(
-  paperId: string,
-  questions: ListeningAuthoredQuestion[],
-) {
-  return apiRequest<ListeningAuthoredQuestionList>(`${lap(paperId)}/structure`, {
-    method: 'PUT',
-    body: JSON.stringify({ questions }),
-  });
-}
-
-export async function adminListeningPatchQuestion(
-  paperId: string,
-  questionId: string,
-  patch: ListeningQuestionPatch,
-) {
-  return apiRequest<ListeningAuthoredQuestionList>(
-    `${lap(paperId)}/structure/${encodeURIComponent(questionId)}`,
-    { method: 'PATCH', body: JSON.stringify(patch) },
-  );
-}
-
-// ── Extracts (5 per paper) ──────────────────────────────────────────────
-export async function adminListeningGetExtracts(paperId: string) {
-  return apiRequest<ListeningExtractsResponse>(`${lap(paperId)}/extracts`);
-}
-
-export async function adminListeningReplaceExtracts(
-  paperId: string,
-  extracts: ListeningAuthoredExtract[],
-) {
-  return apiRequest<ListeningExtractsResponse>(`${lap(paperId)}/extracts`, {
-    method: 'PUT',
-    body: JSON.stringify({ extracts }),
-  });
-}
-
-export async function adminListeningPatchExtract(
-  paperId: string,
-  extractCode: string,
-  patch: ListeningExtractPatch,
-) {
-  return apiRequest<ListeningExtractsResponse>(
-    `${lap(paperId)}/extracts/${encodeURIComponent(extractCode)}`,
-    { method: 'PATCH', body: JSON.stringify(patch) },
-  );
-}
-
-// ── System-wide listening admin endpoints ───────────────────────────────
-export async function adminListeningBackfillAll() {
-  return apiRequest<ListeningBackfillAllResponse>(`/v1/admin/listening/backfill`, {
-    method: 'POST',
-  });
-}
-
-export async function adminListeningGetAnalytics(days?: number) {
-  const qs = typeof days === 'number' ? `?days=${days}` : '';
-  return apiRequest<unknown>(`/v1/admin/listening/analytics${qs}`);
-}
-
-export async function adminListeningExportAttempt(attemptId: string) {
-  return apiRequest<unknown>(
-    `/v1/admin/listening/attempts/${encodeURIComponent(attemptId)}/export`,
-  );
-}
 // === SUBAGENT_B: listening-authoring END ===
+export {
+  adminListeningBackfillAll,
+  adminListeningExportAttempt,
+  adminListeningGetAnalytics,
+  adminListeningGetExtracts,
+  adminListeningGetStructure,
+  adminListeningPatchExtract,
+  adminListeningPatchQuestion,
+  adminListeningReplaceExtracts,
+  adminListeningReplaceStructure,
+  adminListeningValidate,
+} from './api/listening-authoring';
 
 // === SUBAGENT_C: bulk-import-and-generation START ===
-// Typed wrappers for the bulk-import (ZIP), rulebook-import, and
-// content-generation orchestration endpoints used by the Wave-2 admin UI
-// (`/admin/content/papers/import-zip`, `/admin/rulebooks/import`,
-// `/admin/content/generation/jobs`). Rulebook list/publish/import helpers
-// already exist above (`adminListRulebooks`, `adminImportRulebook`,
-// `adminPublishRulebook`) and are re-used by the new pages without
-// duplication.
-import type {
-  BulkImportApprovalInput,
-  BulkImportCommitResult,
-  BulkImportSessionResponse,
-  GenerationJobListResponse,
-  GenerationJobSummary,
-  QueueGenerationInput,
-} from '@/lib/types/admin/bulk-import';
-
-/**
- * Stage a ZIP payload for bulk content import. The backend accepts a single
- * `multipart/form-data` field named `file`; we drop the JSON Content-Type so
- * the browser produces the correct boundary. Returns the parsed session +
- * manifest so the UI can render an approval table before commit.
- */
-export async function adminStartZipImport(
-  file: File,
-): Promise<BulkImportSessionResponse> {
-  const form = new FormData();
-  form.append('file', file, file.name);
-  return apiRequest<BulkImportSessionResponse>(
-    '/v1/admin/imports/zip',
-    { method: 'POST', body: form },
-    { json: false },
-  );
-}
-
-/**
- * Commit a previously-staged ZIP import session with the admin's per-paper
- * approval decisions. `approvals` MUST include one entry per proposalId
- * returned by `adminStartZipImport`; the backend treats unknown ids as
- * skipped and refuses unknown sessions / cross-admin commits.
- */
-export async function adminCommitZipImport(
-  sessionId: string,
-  approvals: BulkImportApprovalInput[],
-): Promise<BulkImportCommitResult> {
-  return apiRequest<BulkImportCommitResult>(
-    `/v1/admin/imports/zip/${encodeURIComponent(sessionId)}/commit`,
-    { method: 'POST', body: JSON.stringify(approvals) },
-  );
-}
-
-/**
- * Abort an in-flight chunked upload session. The dedicated ZIP-import flow
- * does not use chunked uploads (the `/imports/zip` endpoint takes a single
- * multipart payload directly), but this wrapper is exported so the UI can
- * discard orphaned upload sessions if a different flow staged them.
- */
-export async function adminDiscardUpload(uploadId: string): Promise<void> {
-  await apiRequest<void>(
-    `/v1/admin/uploads/${encodeURIComponent(uploadId)}`,
-    { method: 'DELETE' },
-  );
-}
-
-/**
- * Convenience wrapper that returns the strongly-typed jobs list. The
- * underlying `fetchContentGenerationJobs(page, pageSize)` helper already
- * exists in ./api/content-studio and is kept unchanged; this wrapper just narrows the return
- * type so the new jobs page can avoid `unknown` casts.
- */
-export async function adminListGenerationJobs(
-  page = 1,
-  pageSize = 20,
-): Promise<GenerationJobListResponse> {
-  return apiRequest<GenerationJobListResponse>(
-    `/v1/admin/content/generation-jobs?page=${page}&pageSize=${pageSize}`,
-  );
-}
-
-export async function adminGetGenerationJob(
-  jobId: string,
-): Promise<GenerationJobSummary> {
-  return apiRequest<GenerationJobSummary>(
-    `/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}`,
-  );
-}
-
-/**
- * Strongly-typed wrapper around `POST /v1/admin/content/generate`. The
- * existing `queueContentGeneration` helper in ./api/content-studio accepts the same shape but
- * returns `unknown`; this wrapper documents the field set the new launcher
- * UI uses and narrows the return type.
- */
-export async function adminQueueContentGeneration(
-  payload: QueueGenerationInput,
-): Promise<{ jobId?: string } & Record<string, unknown>> {
-  return apiRequest<{ jobId?: string } & Record<string, unknown>>(
-    '/v1/admin/content/generate',
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-}
 // === SUBAGENT_C: bulk-import-and-generation END ===
+export {
+  adminCommitZipImport,
+  adminDiscardUpload,
+  adminGetGenerationJob,
+  adminListGenerationJobs,
+  adminQueueContentGeneration,
+  adminStartZipImport,
+} from './api/bulk-import';
 
 // === SUBAGENT_E: bulk-ops START ===
-// Typed helpers used by the Wave-2 bulk admin pages:
-//   - app/admin/content/mocks/bulk/page.tsx
-//   - app/admin/content/vocabulary/publish-batch/page.tsx
-//   - app/admin/content/papers/republish-drafts/page.tsx
-// These are thin re-exports / wrappers around endpoints that already exist
-// on the backend. They live behind the SUBAGENT_E marker so future merges
-// stay non-overlapping with SUBAGENT_B/C/D blocks.
-
-/** Minimal projection of /v1/admin/papers list rows used by the bulk pages. */
-export interface AdminBulkPaperRow {
-  id: string;
-  title: string;
-  subtestCode: string;
-  status: 'Draft' | 'InReview' | 'Published' | 'Archived';
-  professionId: string | null;
-  appliesToAllProfessions: boolean;
-  difficulty?: string | null;
-  sourceProvenance?: string | null;
-  updatedAt?: string | null;
-}
-
-/** Lightweight draft vocab row used by the publish-batch UI. */
-export interface AdminBulkVocabRow {
-  id: string;
-  term: string;
-  definition: string | null;
-  category: string;
-  professionId: string | null;
-  difficulty?: string | null;
-  exampleSentence: string | null;
-  status: 'draft' | 'active' | 'archived';
-}
-
-/** Full vocab item detail (subset of fields the publish-batch UI consumes). */
-export interface AdminBulkVocabDetail extends AdminBulkVocabRow {
-  ipaPronunciation: string | null;
-  audioUrl: string | null;
-  contextNotes: string | null;
-  sourceProvenance: string | null;
-}
-
-/** Minimal mock-bundle row used by the bulk page to count existing bundles. */
-export interface AdminBulkMockBundleRow {
-  id: string;
-  title: string;
-  mockType: string;
-  status: string;
-  professionId: string | null;
-}
-
-/** Bulk list papers (admin). Returns flat array — backend does not paginate. */
-export async function adminBulkListPapers(query: {
-  subtest?: string;
-  profession?: string;
-  status?: 'Draft' | 'Published' | 'Archived' | 'InReview';
-  pageSize?: number;
-}): Promise<AdminBulkPaperRow[]> {
-  const qs = new URLSearchParams();
-  if (query.subtest) qs.set('subtest', query.subtest);
-  if (query.profession) qs.set('profession', query.profession);
-  if (query.status) qs.set('status', query.status);
-  if (query.pageSize) qs.set('pageSize', String(query.pageSize));
-  const suffix = qs.toString();
-  return apiRequest<AdminBulkPaperRow[]>(
-    `/v1/admin/papers${suffix ? `?${suffix}` : ''}`,
-  );
-}
-
-/** Bulk list draft vocab items (paginated). */
-export async function adminBulkListDraftVocab(params: {
-  page?: number;
-  pageSize?: number;
-  profession?: string;
-  category?: string;
-  search?: string;
-}): Promise<{ total: number; page: number; pageSize: number; items: AdminBulkVocabRow[] }> {
-  const qs = new URLSearchParams();
-  qs.set('status', 'draft');
-  if (params.page) qs.set('page', String(params.page));
-  if (params.pageSize) qs.set('pageSize', String(params.pageSize));
-  if (params.profession) qs.set('profession', params.profession);
-  if (params.category) qs.set('category', params.category);
-  if (params.search) qs.set('search', params.search);
-  return apiRequest(`/v1/admin/vocabulary/items?${qs.toString()}`);
-}
-
-/** Get one vocab item with full detail (includes IPA / provenance / audio). */
-export async function adminBulkGetVocabItem(itemId: string) {
-  return apiRequest<AdminBulkVocabDetail>(
-    `/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`,
-  );
-}
-
-/**
- * Update one vocab item. Pass `{ status: 'active' }` to publish; the backend's
- * EnforceVocabularyPublishGate validates required fields and may 4xx.
- */
-export async function adminBulkUpdateVocabItem(
-  itemId: string,
-  body: Record<string, unknown>,
-) {
-  return apiRequest<AdminBulkVocabDetail>(
-    `/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`,
-    { method: 'PUT', body: JSON.stringify(body) },
-  );
-}
-
-/** List mock bundles (used by the bulk-mocks page to count existing rows). */
-export async function adminBulkListMockBundles(query: {
-  mockType?: string;
-  status?: string;
-} = {}) {
-  const qs = new URLSearchParams();
-  if (query.mockType) qs.set('mockType', query.mockType);
-  if (query.status) qs.set('status', query.status);
-  const suffix = qs.toString();
-  return apiRequest<AdminBulkMockBundleRow[]>(
-    `/v1/admin/mock-bundles${suffix ? `?${suffix}` : ''}`,
-  );
-}
 // === SUBAGENT_E: bulk-ops END ===
+// (Wave-2 bulk pages were never built — helpers removed 2026-09-06 as dead
+// code. Backend routes are untouched; re-scaffold from OpenAPI if needed.)
 
 // === SUBAGENT_D: speaking-conv-pron START ===
-// Typed helpers for the Wave-2 SUBAGENT D admin UI:
-//   - Speaking workspace + create + backfill pages
-//   - Conversation AI-draft + bulk-runner
-//   - Pronunciation bulk-runner + analytics
-//
-// Backend status notes (verified against backend/src/OetLearner.Api):
-//   * Speaking list / paper CRUD / chunked uploads / publish / unarchive
-//     are already exposed via /v1/admin/papers/* and consumed via the
-//     `lib/content-upload-api.ts` helpers. We re-export thin wrappers here
-//     so the new pages can stay self-contained.
-//   * `POST /v1/admin/conversation/templates/ai-draft` was added by
-//     SUBAGENT_BACKEND (see `adminConversationAiDraft` above).
-//   * `POST /v1/admin/pronunciation/drills/ai-draft` exists (see
-//     `adminPronunciationAiDraft` above).
-//   * NO speaking asset-backfill endpoint exists (the
-//     `scripts/admin/generate-speaking-assets.mjs` Node script is the
-//     only mechanism). Surface as "missing backend endpoint" in the UI.
-//   * NO pronunciation analytics endpoint exists. Surface the same way.
-
-export interface AdminSpeakingPaperRow {
-  id: string;
-  subtestCode: string;
-  title: string;
-  slug: string;
-  professionId: string | null;
-  appliesToAllProfessions: boolean;
-  difficulty: string;
-  status: 'Draft' | 'InReview' | 'Published' | 'Archived';
-  cardType: string | null;
-  tagsCsv: string;
-  updatedAt: string;
-  publishedAt: string | null;
-}
-
-export interface AdminSpeakingListResult {
-  items: AdminSpeakingPaperRow[];
-}
-
-export async function adminListSpeakingPapers(params?: {
-  status?: string;
-  profession?: string;
-  search?: string;
-  page?: number;
-  pageSize?: number;
-}): Promise<AdminSpeakingListResult> {
-  const qs = new URLSearchParams();
-  qs.set('subtest', 'speaking');
-  if (params?.status) qs.set('status', params.status);
-  if (params?.profession) qs.set('profession', params.profession);
-  if (params?.search) qs.set('search', params.search);
-  qs.set('page', String(params?.page ?? 1));
-  qs.set('pageSize', String(params?.pageSize ?? 100));
-  const data = await apiRequest<AdminSpeakingPaperRow[] | AdminSpeakingListResult>(
-    `/v1/admin/papers?${qs.toString()}`,
-  );
-  if (Array.isArray(data)) return { items: data };
-  return data;
-}
-
-export interface AdminSpeakingCreatePayload {
-  title: string;
-  professionId?: string | null;
-  appliesToAllProfessions?: boolean;
-  difficulty?: string;
-  examCode?: string | null;
-  estimatedDurationMinutes?: number;
-  sourceProvenance?: string;
-}
-
-export async function adminCreateSpeakingPaper(body: AdminSpeakingCreatePayload) {
-  const payload = {
-    subtestCode: 'speaking',
-    title: body.title,
-    professionId: body.appliesToAllProfessions === false ? body.professionId ?? null : null,
-    appliesToAllProfessions: body.appliesToAllProfessions ?? true,
-    difficulty: body.difficulty ?? 'standard',
-    estimatedDurationMinutes: body.estimatedDurationMinutes ?? 12,
-    priority: 0,
-    tagsCsv: body.examCode ? `exam:${body.examCode}` : null,
-    sourceProvenance:
-      body.sourceProvenance ?? 'admin-authored:speaking-workspace',
-  };
-  return apiRequest<{ id: string; title: string; slug: string }>(
-    '/v1/admin/papers',
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-}
-
-export interface AdminSpeakingStructure {
-  candidateCard?: Record<string, unknown> | null;
-  interlocutorCard?: Record<string, unknown> | null;
-  warmUpQuestions?: string[];
-  prepTimeSeconds?: number;
-  roleplayTimeSeconds?: number;
-  patientEmotion?: string;
-  communicationGoal?: string;
-  clinicalTopic?: string;
-  criteriaFocus?: string[];
-  complianceNotes?: string;
-}
-
-export interface AdminSpeakingStructureResponse {
-  paperId: string;
-  structure: AdminSpeakingStructure;
-  validation?: {
-    isPublishReady?: boolean;
-    isValid?: boolean;
-    issues?: Array<{ code: string; severity: string; message: string }>;
-  };
-  updatedAt?: string;
-}
-
-export async function adminGetSpeakingStructure(paperId: string) {
-  return apiRequest<AdminSpeakingStructureResponse>(
-    `/v1/admin/papers/${encodeURIComponent(paperId)}/speaking-structure`,
-  );
-}
-
-export async function adminUpdateSpeakingStructure(
-  paperId: string,
-  structure: AdminSpeakingStructure,
-) {
-  return apiRequest<AdminSpeakingStructureResponse>(
-    `/v1/admin/papers/${encodeURIComponent(paperId)}/speaking-structure`,
-    { method: 'PUT', body: JSON.stringify({ structure }) },
-  );
-}
-
-export async function adminArchiveSpeakingPaper(paperId: string) {
-  return apiRequest<void>(
-    `/v1/admin/papers/${encodeURIComponent(paperId)}`,
-    { method: 'DELETE' },
-  );
-}
-
-// Conversation bulk runner uses existing helpers. Re-export a small
-// typed orchestrator that the bulk page imports.
-
-export interface ConversationBulkCellInput {
-  profession: string;
-  taskType: 'oet-roleplay' | 'oet-handover';
-}
-
-// Pronunciation bulk runner orchestration result type (page-local helper).
-export interface PronunciationBulkResultRow {
-  topic: string;
-  profession: string;
-  ok: boolean;
-  drillId?: string;
-  status?: string;
-  error?: string;
-  warning?: string | null;
-}
-
-// Pronunciation analytics — endpoint NOT implemented yet on the backend.
-// The analytics page will catch the 404 and render TBD-state. We still
-// expose a typed helper so the call-site is small and easy to migrate
-// the moment the endpoint lands.
-export interface AdminPronunciationAnalytics {
-  totalAttempts: number;
-  averageScore: number | null;
-  topPhonemes: Array<{ phoneme: string; attempts: number; averageScore: number | null }>;
-  weakestPhonemes: Array<{ phoneme: string; attempts: number; averageScore: number | null }>;
-  source?: 'live' | 'tbd';
-}
-
-export async function adminFetchPronunciationAnalytics(params?: {
-  windowDays?: number;
-  profession?: string;
-}): Promise<AdminPronunciationAnalytics> {
-  const qs = new URLSearchParams();
-  if (params?.windowDays) qs.set('windowDays', String(params.windowDays));
-  if (params?.profession) qs.set('profession', params.profession);
-  const suffix = qs.toString() ? `?${qs.toString()}` : '';
-  return apiRequest<AdminPronunciationAnalytics>(
-    `/v1/admin/pronunciation/analytics${suffix}`,
-  );
-}
 // === SUBAGENT_D: speaking-conv-pron END ===
+// (Wave-2 workspace/create/backfill/analytics pages were never built —
+// helpers removed 2026-09-06 as dead code. Backend routes are untouched;
+// re-scaffold from OpenAPI if needed.)
 
 // === SUBAGENT_A: reading-authoring START ===
-// Typed wrappers for the Reading Authoring admin surface backed by
-// `ReadingAuthoringAdminEndpoints` under `/v1/admin/papers/{paperId}/reading`.
-// All correct-answer / explanation / synonym fields here are intentionally
-// included — these helpers MUST only be called from admin UI behind
-// `AdminContentWrite`.
-import type {
-  ReadingDistractorsPayload,
-  ReadingExtractionDraft,
-  ReadingPartUpsertDto,
-  ReadingPartView,
-  ReadingQuestionDto,
-  ReadingQuestionReviewLogEntry,
-  ReadingQuestionUpsertDto,
-  ReadingReviewTransitionPayload,
-  ReadingStructure,
-  ReadingStructureImportResult,
-  ReadingStructureManifest,
-  ReadingStructureManifestImportPayload,
-  ReadingTextDto,
-  ReadingTextUpsertDto,
-  ReadingValidationReport,
-  ReorderDto,
-} from './types/admin/reading-authoring';
-
-const readingAdminBase = (paperId: string) =>
-  `/v1/admin/papers/${encodeURIComponent(paperId)}/reading`;
-
-export async function adminReadingGetStructure(paperId: string): Promise<ReadingStructure> {
-  return apiRequest<ReadingStructure>(`${readingAdminBase(paperId)}/structure`);
-}
-
-export async function adminReadingGetManifest(paperId: string): Promise<ReadingStructureManifest> {
-  return apiRequest<ReadingStructureManifest>(`${readingAdminBase(paperId)}/manifest`);
-}
-
-export async function adminReadingImportManifest(
-  paperId: string,
-  payload: ReadingStructureManifestImportPayload,
-): Promise<ReadingStructureImportResult> {
-  return apiRequest<ReadingStructureImportResult>(`${readingAdminBase(paperId)}/manifest`, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function adminReadingEnsureCanonical(paperId: string): Promise<void> {
-  await apiRequest<void>(`${readingAdminBase(paperId)}/ensure-canonical`, {
-    method: 'POST',
-  });
-}
-
-export async function adminReadingUpsertPart(
-  paperId: string,
-  partCode: 'A' | 'B' | 'C',
-  dto: ReadingPartUpsertDto,
-): Promise<ReadingPartView> {
-  return apiRequest<ReadingPartView>(
-    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partCode)}`,
-    { method: 'PUT', body: JSON.stringify(dto) },
-  );
-}
-
-export async function adminReadingUpsertText(
-  paperId: string,
-  dto: ReadingTextUpsertDto,
-): Promise<ReadingTextDto> {
-  return apiRequest<ReadingTextDto>(`${readingAdminBase(paperId)}/texts`, {
-    method: 'POST',
-    body: JSON.stringify(dto),
-  });
-}
-
-export async function adminReadingDeleteText(paperId: string, textId: string): Promise<void> {
-  await apiRequest<void>(
-    `${readingAdminBase(paperId)}/texts/${encodeURIComponent(textId)}`,
-    { method: 'DELETE' },
-  );
-}
-
-export async function adminReadingUpsertQuestion(
-  paperId: string,
-  dto: ReadingQuestionUpsertDto,
-): Promise<ReadingQuestionDto> {
-  return apiRequest<ReadingQuestionDto>(`${readingAdminBase(paperId)}/questions`, {
-    method: 'POST',
-    body: JSON.stringify(dto),
-  });
-}
-
-export async function adminReadingDeleteQuestion(paperId: string, questionId: string): Promise<void> {
-  await apiRequest<void>(
-    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}`,
-    { method: 'DELETE' },
-  );
-}
-
-export async function adminReadingReorderTexts(
-  paperId: string,
-  partId: string,
-  orderedIds: string[],
-): Promise<void> {
-  const body: ReorderDto = { orderedIds };
-  await apiRequest<void>(
-    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partId)}/reorder-texts`,
-    { method: 'POST', body: JSON.stringify(body) },
-  );
-}
-
-export async function adminReadingReorderQuestions(
-  paperId: string,
-  partId: string,
-  orderedIds: string[],
-): Promise<void> {
-  const body: ReorderDto = { orderedIds };
-  await apiRequest<void>(
-    `${readingAdminBase(paperId)}/parts/${encodeURIComponent(partId)}/reorder-questions`,
-    { method: 'POST', body: JSON.stringify(body) },
-  );
-}
-
-export async function adminReadingValidate(paperId: string): Promise<ReadingValidationReport> {
-  return apiRequest<ReadingValidationReport>(`${readingAdminBase(paperId)}/validate`);
-}
-
-export async function adminReadingSetDistractors(
-  paperId: string,
-  questionId: string,
-  payload: ReadingDistractorsPayload,
-): Promise<{ id: string; optionDistractorsJson: string | null }> {
-  return apiRequest<{ id: string; optionDistractorsJson: string | null }>(
-    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/distractors`,
-    { method: 'PUT', body: JSON.stringify(payload) },
-  );
-}
-
-export async function adminReadingGetReviewHistory(
-  paperId: string,
-  questionId: string,
-): Promise<ReadingQuestionReviewLogEntry[]> {
-  return apiRequest<ReadingQuestionReviewLogEntry[]>(
-    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/review-history`,
-  );
-}
-
-export async function adminReadingTransitionReview(
-  paperId: string,
-  questionId: string,
-  payload: ReadingReviewTransitionPayload,
-): Promise<unknown> {
-  return apiRequest<unknown>(
-    `${readingAdminBase(paperId)}/questions/${encodeURIComponent(questionId)}/review-transition`,
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-}
-
-export async function adminReadingGetAnalytics(paperId: string): Promise<unknown> {
-  return apiRequest<unknown>(`${readingAdminBase(paperId)}/analytics`);
-}
-
-export async function adminReadingCreateExtraction(
-  paperId: string,
-  mediaAssetId?: string | null,
-): Promise<ReadingExtractionDraft> {
-  return apiRequest<ReadingExtractionDraft>(
-    `${readingAdminBase(paperId)}/extractions`,
-    { method: 'POST', body: JSON.stringify({ mediaAssetId: mediaAssetId ?? null }) },
-  );
-}
-
-export async function adminReadingListExtractions(paperId: string): Promise<ReadingExtractionDraft[]> {
-  return apiRequest<ReadingExtractionDraft[]>(`${readingAdminBase(paperId)}/extractions`);
-}
-
-export async function adminReadingGetExtraction(
-  paperId: string,
-  draftId: string,
-): Promise<ReadingExtractionDraft> {
-  return apiRequest<ReadingExtractionDraft>(
-    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}`,
-  );
-}
-
-export async function adminReadingApproveExtraction(
-  paperId: string,
-  draftId: string,
-): Promise<ReadingExtractionDraft> {
-  return apiRequest<ReadingExtractionDraft>(
-    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}/approve`,
-    { method: 'POST' },
-  );
-}
-
-export async function adminReadingRejectExtraction(
-  paperId: string,
-  draftId: string,
-  reason?: string,
-): Promise<ReadingExtractionDraft> {
-  return apiRequest<ReadingExtractionDraft>(
-    `${readingAdminBase(paperId)}/extractions/${encodeURIComponent(draftId)}/reject`,
-    { method: 'POST', body: JSON.stringify({ reason: reason ?? null }) },
-  );
-}
 // === SUBAGENT_A: reading-authoring END ===
+export {
+  adminReadingApproveExtraction,
+  adminReadingCreateExtraction,
+  adminReadingDeleteQuestion,
+  adminReadingDeleteText,
+  adminReadingEnsureCanonical,
+  adminReadingGetAnalytics,
+  adminReadingGetExtraction,
+  adminReadingGetManifest,
+  adminReadingGetReviewHistory,
+  adminReadingGetStructure,
+  adminReadingImportManifest,
+  adminReadingListExtractions,
+  adminReadingRejectExtraction,
+  adminReadingReorderQuestions,
+  adminReadingReorderTexts,
+  adminReadingSetDistractors,
+  adminReadingTransitionReview,
+  adminReadingUpsertPart,
+  adminReadingUpsertQuestion,
+  adminReadingUpsertText,
+  adminReadingValidate,
+} from './api/reading-authoring';
 
 // -----------------------------------------------------------------------------
 // Scoring Policy (admin singleton document + learner read)
@@ -9318,687 +8485,70 @@ export async function downloadMediaAssetContent(assetId: string): Promise<Blob> 
 }
 
 // ── Admin mocks analytics (Phase 3) ─────────────────────────────────────
-
-export interface AdminMocksAnalyticsRevenueRow {
-  packageCode: string;
-  packageName: string;
-  totalRevenue: number;
-  currency: string;
-}
-
-export interface AdminMocksAnalyticsTutorWorkloadRow {
-  tutorId: string;
-  tutorName: string;
-  pendingBookings: number;
-  completedThisWeek: number;
-}
-
-export interface AdminMocksAnalyticsLowQualityRow {
-  bundleId: string;
-  bundleTitle: string;
-  itemCount: number;
-  flags: string[];
-}
-
-export interface AdminMocksAnalyticsWindow {
-  start: string;
-  end: string;
-}
-
-export interface AdminMocksAnalyticsAttemptsCompletion {
-  started: number;
-  completed: number;
-  completionRate: number;
-  window: AdminMocksAnalyticsWindow;
-}
-
-export interface AdminMocksAnalyticsReadinessDistribution {
-  red: number;
-  amber: number;
-  green: number;
-  darkGreen: number;
-}
-
-export interface AdminMocksAnalyticsAverageReadiness {
-  sampleSize: number;
-  averageScore: number | null;
-  distribution: AdminMocksAnalyticsReadinessDistribution;
-  window: AdminMocksAnalyticsWindow;
-}
-
-export interface AdminMocksAnalyticsPassPredictionProfessionRow {
-  profession: string;
-  sampleSize: number;
-  predictedPassRate: number;
-}
-
-export interface AdminMocksAnalyticsPassPrediction {
-  sampleSize: number;
-  predictedPassRate: number | null;
-  byProfession: AdminMocksAnalyticsPassPredictionProfessionRow[];
-  window: AdminMocksAnalyticsWindow;
-}
-
-export interface AdminMocksAnalyticsMarkingDelayRow {
-  subtest: 'writing' | 'speaking';
-  sampleSize: number;
-  avgDelayHours: number;
-  p95DelayHours: number;
-}
-
-export interface AdminMocksAnalyticsMarkingDelay {
-  perSubtest: AdminMocksAnalyticsMarkingDelayRow[];
-  window: AdminMocksAnalyticsWindow;
-}
-
-/**
- * Phase 2 closure — Reading subtest aggregate across mock sessions.
- * Backend computes this from `MockSectionAttempt` rows with
- * `SubtestCode == "reading"`. Surfaced on the mocks analytics dashboard
- * so operators see Reading-in-mocks performance without drilling into
- * `/admin/analytics/reading`. Every field is nullable because the mock
- * pipeline may not yet have written any Reading sections.
- */
-export interface AdminMocksAnalyticsReadingSection {
-  started: number;
-  submitted: number;
-  completionRatePercent: number | null;
-  averageRawScore: number | null;
-  averageScaledScore: number | null;
-  averageCompletionSeconds: number | null;
-}
-
-export interface AdminMocksAnalyticsResponse {
-  revenueByPackage: AdminMocksAnalyticsRevenueRow[];
-  tutorWorkload: AdminMocksAnalyticsTutorWorkloadRow[];
-  lowQualityFlags: AdminMocksAnalyticsLowQualityRow[];
-  readingSection: AdminMocksAnalyticsReadingSection;
-  attemptsCompletion: AdminMocksAnalyticsAttemptsCompletion;
-  averageReadiness: AdminMocksAnalyticsAverageReadiness;
-  passPrediction: AdminMocksAnalyticsPassPrediction;
-  markingDelay: AdminMocksAnalyticsMarkingDelay;
-}
-
-interface AdminMocksAnalyticsRootPayload {
-  revenueByPackage?: AdminMocksAnalyticsRevenueRow[];
-  tutorWorkload?: AdminMocksAnalyticsTutorWorkloadRow[];
-  lowQualityFlags?: AdminMocksAnalyticsLowQualityRow[];
-  readingSection?: AdminMocksAnalyticsReadingSection;
-}
-
-function emptyReadingSection(): AdminMocksAnalyticsReadingSection {
-  return {
-    started: 0,
-    submitted: 0,
-    completionRatePercent: null,
-    averageRawScore: null,
-    averageScaledScore: null,
-    averageCompletionSeconds: null,
-  };
-}
-
-function emptyAdminMocksAnalyticsWindow(): AdminMocksAnalyticsWindow {
-  const now = new Date().toISOString();
-  return { start: now, end: now };
-}
-
-function emptyAttemptsCompletion(): AdminMocksAnalyticsAttemptsCompletion {
-  return { started: 0, completed: 0, completionRate: 0, window: emptyAdminMocksAnalyticsWindow() };
-}
-
-function emptyAverageReadiness(): AdminMocksAnalyticsAverageReadiness {
-  return {
-    sampleSize: 0,
-    averageScore: null,
-    distribution: { red: 0, amber: 0, green: 0, darkGreen: 0 },
-    window: emptyAdminMocksAnalyticsWindow(),
-  };
-}
-
-function emptyPassPrediction(): AdminMocksAnalyticsPassPrediction {
-  return {
-    sampleSize: 0,
-    predictedPassRate: null,
-    byProfession: [],
-    window: emptyAdminMocksAnalyticsWindow(),
-  };
-}
-
-function emptyMarkingDelay(): AdminMocksAnalyticsMarkingDelay {
-  return { perSubtest: [], window: emptyAdminMocksAnalyticsWindow() };
-}
-
-async function fetchAdminMocksAnalyticsSubroute<T>(path: string, fallback: T): Promise<T> {
-  try {
-    return await apiRequest<T>(path);
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      return fallback;
-    }
-    throw err;
-  }
-}
-
-/**
- * GET /v1/admin/analytics/mocks (root) + 4 Phase 8a sub-routes fetched in parallel.
- *
- * Root returns revenue-by-package, tutor workload, and low-quality flagged
- * bundles. The four Phase 8a sub-routes layer on attempts-completion, average-
- * readiness, pass-prediction, and marking-delay aggregations. Tolerates 404 on
- * any individual route (endpoint not yet deployed) by substituting an empty
- * skeleton so the page can render its empty states.
- */
-export async function fetchAdminMocksAnalytics(): Promise<AdminMocksAnalyticsResponse> {
-  const rootPromise: Promise<AdminMocksAnalyticsRootPayload> = (async () => {
-    try {
-      return await apiRequest<AdminMocksAnalyticsRootPayload>('/v1/admin/analytics/mocks');
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 404) {
-        return {};
-      }
-      throw err;
-    }
-  })();
-
-  const [root, attemptsCompletion, averageReadiness, passPrediction, markingDelay] = await Promise.all([
-    rootPromise,
-    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsAttemptsCompletion>(
-      '/v1/admin/analytics/mocks/attempts-completion',
-      emptyAttemptsCompletion(),
-    ),
-    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsAverageReadiness>(
-      '/v1/admin/analytics/mocks/average-readiness',
-      emptyAverageReadiness(),
-    ),
-    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsPassPrediction>(
-      '/v1/admin/analytics/mocks/pass-prediction',
-      emptyPassPrediction(),
-    ),
-    fetchAdminMocksAnalyticsSubroute<AdminMocksAnalyticsMarkingDelay>(
-      '/v1/admin/analytics/mocks/marking-delay',
-      emptyMarkingDelay(),
-    ),
-  ]);
-
-  return {
-    revenueByPackage: root.revenueByPackage ?? [],
-    tutorWorkload: root.tutorWorkload ?? [],
-    lowQualityFlags: root.lowQualityFlags ?? [],
-    readingSection: root.readingSection ?? emptyReadingSection(),
-    attemptsCompletion,
-    averageReadiness,
-    passPrediction,
-    markingDelay,
-  };
-}
+export type {
+  AdminMocksAnalyticsAttemptsCompletion,
+  AdminMocksAnalyticsAverageReadiness,
+  AdminMocksAnalyticsMarkingDelay,
+  AdminMocksAnalyticsMarkingDelayRow,
+  AdminMocksAnalyticsPassPrediction,
+  AdminMocksAnalyticsPassPredictionProfessionRow,
+  AdminMocksAnalyticsReadinessDistribution,
+  AdminMocksAnalyticsResponse,
+  AdminMocksAnalyticsRevenueRow,
+  AdminMocksAnalyticsTutorWorkloadRow,
+  AdminMocksAnalyticsLowQualityRow,
+  AdminMocksAnalyticsReadingSection,
+  AdminMocksAnalyticsWindow,
+} from './api/admin-quality';
+export {
+  fetchAdminMocksAnalytics,
+} from './api/admin-quality';
 
 // ── Admin speaking calibration (Phase 7a) ───────────────────────────────
-//
-// Backed by `AdminEndpoints.cs` → `AdminService.SpeakingCalibration.cs`:
-//   GET /v1/admin/speaking/calibration/samples       (list of calibration sets)
-//   GET /v1/admin/speaking/calibration/drift         (per-tutor drift report)
-//
-// The backend stores per-tutor mean absolute error (MAE) across the 9 rubric
-// criteria. We surface it as the σ-style drift signal the calibration page
-// renders. Lower = closer to gold scores. The legacy admin nomenclature
-// ("sigma") reads MAE in our case.
-
-export interface SpeakingCalibrationDriftTutorRow {
-  tutorId: string;
-  tutorName: string;
-  submissionCount: number;
-  meanAbsoluteError: number;
-  totalAbsoluteError: number;
-  lastSubmittedAt: string;
-}
-
-export interface SpeakingCalibrationDriftSummary {
-  tutors: SpeakingCalibrationDriftTutorRow[];
-  sampleSize: number;
-  samplesPublished: number;
-}
-
-export interface SpeakingCalibrationSampleSummaryRow {
-  sampleId: string;
-  title: string;
-  description: string;
-  sourceAttemptId: string;
-  professionId: string;
-  difficulty: string;
-  status: string;
-  goldScores: Record<string, number>;
-  tutorSubmissionCount: number;
-  createdAt: string;
-  publishedAt: string | null;
-}
-
-export interface SpeakingCalibrationSamplesResponse {
-  samples: SpeakingCalibrationSampleSummaryRow[];
-}
-
-/**
- * GET /v1/admin/speaking/calibration/drift?minSubmissions=1
- *
- * Drift report — for each tutor that has submitted ≥1 calibration rubric,
- * returns the mean absolute error vs the gold rubric across all 9 criteria.
- * Tolerates 404 (endpoint not yet wired) by returning empty arrays so the
- * page renders its empty state cleanly.
- */
-export async function fetchSpeakingCalibrationSummary(
-  minSubmissions: number = 1,
-): Promise<SpeakingCalibrationDriftSummary> {
-  const qs = `?minSubmissions=${encodeURIComponent(String(Math.max(1, minSubmissions)))}`;
-  try {
-    return await apiRequest<SpeakingCalibrationDriftSummary>(
-      `/v1/admin/speaking/calibration/drift${qs}`,
-    );
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      return { tutors: [], sampleSize: 0, samplesPublished: 0 };
-    }
-    throw err;
-  }
-}
-
-/**
- * GET /v1/admin/speaking/calibration/samples
- *
- * Returns the curated calibration sample set ("sets" in the calibration UI).
- * Each row carries the profession, status, and how many tutors have already
- * submitted rubric scores for that sample.
- */
-export async function fetchSpeakingCalibrationSets(
-  status?: string,
-): Promise<SpeakingCalibrationSampleSummaryRow[]> {
-  const qs = status ? `?status=${encodeURIComponent(status)}` : '';
-  try {
-    const response = await apiRequest<SpeakingCalibrationSamplesResponse>(
-      `/v1/admin/speaking/calibration/samples${qs}`,
-    );
-    return Array.isArray(response?.samples) ? response.samples : [];
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      return [];
-    }
-    throw err;
-  }
-}
-
 // ── Admin interlocutor onboarding (Phase 7a) ────────────────────────────
-//
-// Backed by `InterlocutorTrainingEndpoints.cs` →
-// `InterlocutorTrainingService.cs`:
-//   GET /v1/admin/speaking/interlocutor-training/modules
-//
-// The admin onboarding page consolidates two signals to derive a "trainee"
-// view: every tutor that has appeared in the calibration drift report (i.e.
-// has started submitting calibration rubrics) is treated as a trainee, and
-// the published-vs-required modules drive their training status.
-//
-// Mark-trained and start-practice helpers tolerate 404s so the UI degrades
-// gracefully if the backend has not yet wired the admin-side completion
-// shortcut.
-
-export type InterlocutorTrainingStatusLabel = 'In Progress' | 'Trained' | 'Failed';
-
-export interface InterlocutorTraineeRow {
-  traineeId: string;
-  traineeName: string;
-  startedAt: string | null;
-  rolePlaysCompleted: number;
-  calibrationSigma: number | null;
-  status: InterlocutorTrainingStatusLabel;
-  lastActivityAt: string | null;
-}
-
-export interface InterlocutorTraineesResponse {
-  trainees: InterlocutorTraineeRow[];
-  totalInOnboarding: number;
-  totalTrained: number;
-  totalDroppedOff: number;
-}
-
-interface AdminInterlocutorModuleRaw {
-  id: string;
-  title: string;
-  orderIndex: number;
-  contentMarkdown: string;
-  requiredForCalibration: boolean;
-  stage: string;
-  status: string;
-  createdAt: string;
-  updatedAt: string;
-  publishedAt: string | null;
-}
-
-function classifyTrainingStatus(
-  sigma: number | null,
-  rolePlays: number,
-): InterlocutorTrainingStatusLabel {
-  if (sigma === null) return 'In Progress';
-  if (sigma <= 0.5 && rolePlays >= 1) return 'Trained';
-  if (sigma > 1.0 && rolePlays >= 3) return 'Failed';
-  return 'In Progress';
-}
-
-/**
- * GET /v1/admin/speaking/interlocutor-training/modules (+ drift report)
- *
- * Synthesises the admin-side trainee queue from the two signals the
- * backend currently exposes: published training modules and the per-tutor
- * calibration drift report. Each tutor with at least one calibration
- * submission is treated as a trainee in the onboarding pipeline.
- */
-export async function fetchInterlocutorTrainees(): Promise<InterlocutorTraineesResponse> {
-  // Modules are fetched purely to confirm onboarding pipeline state; the
-  // synthesised trainee rows are derived from the drift report below.
-  try {
-    await apiRequest<AdminInterlocutorModuleRaw[]>(
-      '/v1/admin/speaking/interlocutor-training/modules',
-    );
-  } catch (err) {
-    if (!(err instanceof ApiError) || err.status !== 404) throw err;
-  }
-
-  const drift = await fetchSpeakingCalibrationSummary(1);
-
-  const trainees: InterlocutorTraineeRow[] = drift.tutors.map((tutor) => {
-    const sigma = Number.isFinite(tutor.meanAbsoluteError) ? tutor.meanAbsoluteError : null;
-    const status = classifyTrainingStatus(sigma, tutor.submissionCount);
-    return {
-      traineeId: tutor.tutorId,
-      traineeName: tutor.tutorName,
-      startedAt: tutor.lastSubmittedAt ?? null,
-      rolePlaysCompleted: tutor.submissionCount,
-      calibrationSigma: sigma,
-      status,
-      lastActivityAt: tutor.lastSubmittedAt ?? null,
-    };
-  });
-
-  const totalTrained = trainees.filter((t) => t.status === 'Trained').length;
-  const totalDroppedOff = trainees.filter((t) => t.status === 'Failed').length;
-  const totalInOnboarding = trainees.length - totalTrained - totalDroppedOff;
-
-  return {
-    trainees,
-    totalInOnboarding: Math.max(0, totalInOnboarding),
-    totalTrained,
-    totalDroppedOff,
-  };
-}
-
-export interface MarkInterlocutorTrainedResult {
-  traineeId: string;
-  status: InterlocutorTrainingStatusLabel;
-  acknowledgedAt: string;
-}
-
-/**
- * POST /v1/admin/speaking/interlocutor-training/trainees/{id}/mark-trained
- *
- * Admin-side shortcut to mark a trainee as Trained. Tolerates 404 so the
- * UI can still surface the action even before the backend wires the
- * dedicated route — in that case the helper returns a synthetic
- * acknowledgement that the caller can use to optimistically update local
- * state.
- */
-export async function markInterlocutorTrained(
-  traineeId: string,
-): Promise<MarkInterlocutorTrainedResult> {
-  try {
-    return await apiRequest<MarkInterlocutorTrainedResult>(
-      `/v1/admin/speaking/interlocutor-training/trainees/${encodeURIComponent(traineeId)}/mark-trained`,
-      { method: 'POST', body: JSON.stringify({}) },
-      { json: true },
-    );
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      return {
-        traineeId,
-        status: 'Trained',
-        acknowledgedAt: new Date().toISOString(),
-      };
-    }
-    throw err;
-  }
-}
-
-export interface InterlocutorPracticeSessionStart {
-  sessionId: string;
-  prepHref: string;
-}
-
-/**
- * POST /v1/admin/speaking/interlocutor-training/trainees/{id}/practice-session
- *
- * Creates (or resumes) a practice role-play session for an interlocutor
- * trainee and returns the session id + the prep-page URL the admin should
- * route to. Tolerates 404 by returning a placeholder route the page can
- * surface as a disabled state.
- */
-export async function startInterlocutorPracticeSession(
-  traineeId: string,
-): Promise<InterlocutorPracticeSessionStart> {
-  try {
-    return await apiRequest<InterlocutorPracticeSessionStart>(
-      `/v1/admin/speaking/interlocutor-training/trainees/${encodeURIComponent(traineeId)}/practice-session`,
-      { method: 'POST', body: JSON.stringify({}) },
-      { json: true },
-    );
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      return {
-        sessionId: '',
-        prepHref: '/speaking/select-profession',
-      };
-    }
-    throw err;
-  }
-}
-
-// ── Phase 7a spec-named helper aliases ──────────────────────────────────
-//
-// The Phase 7a admin calibration + interlocutor pages spec asks for these
-// helper names. They are thin re-exports / wrappers over the helpers above
-// so the admin pages can opt into the spec naming without duplicating the
-// underlying network logic.
-
-/**
- * Phase 7a alias for {@link fetchSpeakingCalibrationSummary}.
- *
- * Returns the per-tutor calibration drift overview surfaced on the admin
- * speaking calibration page.
- */
-export async function fetchSpeakingCalibrationOverview(
-  minSubmissions: number = 1,
-): Promise<SpeakingCalibrationDriftSummary> {
-  return fetchSpeakingCalibrationSummary(minSubmissions);
-}
-
-/**
- * Phase 7a alias for {@link fetchInterlocutorTrainees}.
- *
- * Returns the synthesised interlocutor trainee table for the admin
- * onboarding page.
- */
-export async function fetchInterlocutorTraineeList(): Promise<InterlocutorTraineesResponse> {
-  return fetchInterlocutorTrainees();
-}
-
-/**
- * Practice queue row — pending interlocutor practice recording under
- * review by the calibration team.
- */
-export interface InterlocutorPracticeQueueRow {
-  recordingId: string;
-  traineeId: string;
-  traineeName: string;
-  submittedAt: string;
-  durationSeconds: number;
-  status: 'Pending' | 'UnderReview' | 'Returned';
-}
-
-export interface InterlocutorPracticeQueueResponse {
-  recordings: InterlocutorPracticeQueueRow[];
-  totalPending: number;
-}
-
-/**
- * GET /v1/admin/speaking/interlocutor-training/practice-queue
- *
- * Backend gap (Phase 7a): the dedicated practice queue endpoint is not
- * wired yet. The helper tolerates 404 by returning an empty queue so the
- * admin onboarding page renders the empty state instead of erroring.
- *
- * When the backend ships the endpoint this helper will start surfacing
- * real rows without UI changes.
- */
-export async function fetchInterlocutorPracticeQueue(): Promise<InterlocutorPracticeQueueResponse> {
-  try {
-    return await apiRequest<InterlocutorPracticeQueueResponse>(
-      '/v1/admin/speaking/interlocutor-training/practice-queue',
-    );
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      return { recordings: [], totalPending: 0 };
-    }
-    throw err;
-  }
-}
+export type {
+  InterlocutorPracticeQueueResponse,
+  InterlocutorPracticeQueueRow,
+  InterlocutorPracticeSessionStart,
+  InterlocutorTraineeRow,
+  InterlocutorTraineesResponse,
+  InterlocutorTrainingStatusLabel,
+  MarkInterlocutorTrainedResult,
+  SpeakingCalibrationDriftSummary,
+  SpeakingCalibrationDriftTutorRow,
+  SpeakingCalibrationSampleSummaryRow,
+  SpeakingCalibrationSamplesResponse,
+} from './api/admin-quality';
+export {
+  fetchInterlocutorPracticeQueue,
+  fetchInterlocutorTraineeList,
+  fetchInterlocutorTrainees,
+  fetchSpeakingCalibrationOverview,
+  fetchSpeakingCalibrationSets,
+  fetchSpeakingCalibrationSummary,
+  markInterlocutorTrained,
+  startInterlocutorPracticeSession,
+} from './api/admin-quality';
 
 // ── Voice Design Studio API ─────────────────────────────────────────
-
-/** Preview an ElevenLabs voice (returns an MP3 Blob). */
-export async function previewAdminVoiceDesign(body: {
-  voiceId?: string;
-  text: string;
-  locale?: string;
-}): Promise<Blob> {
-  return apiBlobRequest('/v1/admin/voice-design/preview', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-/** Bulk regenerate audio across the platform with specified voice config */
-export interface AdminAudioRegenerateRequest {
-  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation' | 'recalls';
-  scope: 'all' | 'missing' | 'different-voice';
-  modelVariant?: 'flash' | 'voicedesign' | string;
-  voiceId?: string;
-  instructions?: string;
-  speed?: number;
-  pitch?: number;
-  emotion?: string;
-  providerName?: string;
-  forceRegenerate?: boolean;
-  dryRun?: boolean;
-}
-
-export interface AdminAudioRegenerateBatchResult {
-  batchId: string;
-  audioType: string;
-  scope: string;
-  totalItems: number;
-  dryRun: boolean;
-  modelVariant: string;
-  voiceId?: string;
-  providerName?: string | null;
-}
-
-export async function regenerateAllAudio(
-  body: AdminAudioRegenerateRequest
-): Promise<AdminAudioRegenerateBatchResult> {
-  return apiRequest<AdminAudioRegenerateBatchResult>('/v1/admin/voice-design/regenerate', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  });
-}
-
-/** Get active/completed audio regeneration batches */
-export interface AdminAudioBatch {
-  batchId: string;
-  audioType: 'all' | 'listening' | 'vocabulary' | 'conversation' | 'recalls';
-  scope: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled';
-  totalItems: number;
-  completedItems: number;
-  failedItems: number;
-  voiceId: string;
-  modelVariant: string;
-  providerName: string;
-  speed: number;
-  pitch: number;
-  emotion: string;
-  startedAt: string;
-  completedAt: string | null;
-  requestedBy: string;
-}
-
-export async function getAudioRegenerationBatches(): Promise<{ batches: AdminAudioBatch[] }> {
-  return apiRequest<{ batches: AdminAudioBatch[] }>('/v1/admin/voice-design/batches');
-}
-
-/** Get progress details for a specific batch */
-export async function getAudioRegenerationBatchProgress(batchId: string): Promise<AdminAudioBatch> {
-  return apiRequest<AdminAudioBatch>(`/v1/admin/voice-design/batches/${encodeURIComponent(batchId)}`);
-}
-
-/** Cancel an in-progress batch */
-export async function cancelAudioRegenerationBatch(batchId: string): Promise<{ cancelled: boolean }> {
-  return apiRequest<{ cancelled: boolean }>(`/v1/admin/voice-design/batches/${encodeURIComponent(batchId)}/cancel`, {
-    method: 'POST',
-  });
-}
-
-/** Retry failed or incomplete recall audio jobs in a batch */
-export async function retryAudioRegenerationBatch(batchId: string): Promise<AdminAudioBatch> {
-  return apiRequest<AdminAudioBatch>(`/v1/admin/voice-design/batches/${encodeURIComponent(batchId)}/retry`, {
-    method: 'POST',
-  });
-}
-
-/** Get the current globally configured voice settings */
-export interface AdminVoiceDesignConfig {
-  elevenLabsTtsBaseUrl: string;
-  elevenLabsDefaultVoiceId: string;
-  elevenLabsModel: string;
-  elevenLabsOutputFormat: string;
-  elevenLabsPronunciationDictionaryId: string | null;
-  elevenLabsPronunciationDictionaryVersionId: string | null;
-  elevenLabsStability: number;
-  elevenLabsSimilarityBoost: number;
-  elevenLabsStyle: number;
-  elevenLabsUseSpeakerBoost: boolean;
-  elevenLabsApiKeyPresent: boolean;
-  lastUpdatedAt: string | null;
-  lastUpdatedBy: string | null;
-}
-
-export async function getAdminVoiceDesignConfig(): Promise<AdminVoiceDesignConfig> {
-  return apiRequest<AdminVoiceDesignConfig>('/v1/admin/voice-design/config');
-}
-
-/** Save voice design configuration globally */
-export async function saveAdminVoiceDesignConfig(body: {
-  elevenLabsApiKey?: string;
-  elevenLabsTtsBaseUrl?: string;
-  elevenLabsDefaultVoiceId?: string;
-  elevenLabsModel?: string;
-  elevenLabsOutputFormat?: string;
-  elevenLabsPronunciationDictionaryId?: string;
-  elevenLabsPronunciationDictionaryVersionId?: string;
-  elevenLabsStability?: number;
-  elevenLabsSimilarityBoost?: number;
-  elevenLabsStyle?: number;
-  elevenLabsUseSpeakerBoost?: boolean;
-}): Promise<{ saved: boolean }> {
-  return apiRequest<{ saved: boolean }>('/v1/admin/voice-design/config', {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  });
-}
+export type {
+  AdminAudioBatch,
+  AdminAudioRegenerateBatchResult,
+  AdminAudioRegenerateRequest,
+  AdminVoiceDesignConfig,
+} from './api/voice-design';
+export {
+  cancelAudioRegenerationBatch,
+  getAdminRecallsAudioBatchProgress,
+  getAdminVoiceDesignConfig,
+  getAudioRegenerationBatchProgress,
+  getAudioRegenerationBatches,
+  previewAdminVoiceDesign,
+  regenerateAllAudio,
+  retryAudioRegenerationBatch,
+  saveAdminVoiceDesignConfig,
+  startAdminRecallsAudioBackfill,
+} from './api/voice-design';
 
 export async function uploadElevenLabsPronunciationDictionary(
   file: File,
@@ -10012,19 +8562,6 @@ export async function uploadElevenLabsPronunciationDictionary(
     '/v1/admin/voice-design/elevenlabs/dictionary',
     form,
   );
-}
-
-export async function startAdminRecallsAudioBackfill(
-  body: Omit<AdminAudioRegenerateRequest, 'audioType'>,
-): Promise<AdminAudioRegenerateBatchResult> {
-  return apiRequest<AdminAudioRegenerateBatchResult>('/v1/admin/recalls/audio/backfill', {
-    method: 'POST',
-    body: JSON.stringify({ ...body, audioType: 'recalls', providerName: body.providerName ?? 'elevenlabs' }),
-  });
-}
-
-export async function getAdminRecallsAudioBatchProgress(batchId: string): Promise<AdminAudioBatch> {
-  return apiRequest<AdminAudioBatch>(`/v1/admin/recalls/audio/batches/${encodeURIComponent(batchId)}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -10047,522 +8584,42 @@ export * from './api/ai-analytics';
 // ─────────────────────────────────────────────────────────────────────────────
 // Listening Policy Admin
 // ─────────────────────────────────────────────────────────────────────────────
-
-export interface ListeningPolicyDto {
-  id: string;
-  // §1 Retry
-  attemptsPerPaperPerUser: number;
-  attemptCooldownMinutes: number;
-  bestScoreDisplay: string;
-  showPastAttempts: boolean;
-  // §2 Timer
-  fullPaperTimerMinutes: number;
-  gracePeriodSeconds: number;
-  onExpirySubmitPolicy: string;
-  countdownWarningsJson: string;
-  // §3 Audio replay
-  examReplayAllowed: boolean;
-  learningReplayAllowed: boolean;
-  learningEvidenceLoopEnabled: boolean;
-  // §4 Grading
-  shortAnswerNormalisation: string;
-  shortAnswerAcceptSynonyms: boolean;
-  // §5 AI extraction
-  aiExtractionEnabled: boolean;
-  aiExtractionRequireHumanApproval: boolean;
-  aiExtractionMaxRetriesPerPaper: number;
-  // §6 Review
-  showExplanationsAfterSubmit: boolean;
-  showExplanationsOnlyIfWrong: boolean;
-  showCorrectAnswerOnReview: boolean;
-  // §7 Accessibility
-  defaultExtraTimePct: number;
-  screenReaderOptimised: boolean;
-  // §8 Lifecycle
-  autoExpireWorkerEnabled: boolean;
-  autoExpireAfterMinutes: number;
-  allowResumeAfterExpiry: boolean;
-  // §9 Retention
-  retainAnswerRowsDays: number;
-  retainAttemptHeadersDays: number;
-  anonymiseOnAccountDelete: boolean;
-  // Listening V2 fields (nullable)
-  previewWindowMsA1?: number | null;
-  previewWindowMsA2?: number | null;
-  previewWindowMsC1?: number | null;
-  previewWindowMsC2?: number | null;
-  reviewWindowMsA1?: number | null;
-  reviewWindowMsA2?: number | null;
-  reviewWindowMsC1?: number | null;
-  reviewWindowMsC2FinalCbt?: number | null;
-  reviewWindowMsC2FinalPaper?: number | null;
-  betweenSectionTransitionMs?: number | null;
-  partBQuestionWindowMs?: number | null;
-  oneWayLocksEnabled?: boolean | null;
-  confirmDialogRequired?: boolean | null;
-  unansweredWarningRequired?: boolean | null;
-  confirmTokenTtlMs?: number | null;
-  highlightingEnabledPartA?: boolean | null;
-  highlightingEnabledPartBC?: boolean | null;
-  optionStrikethroughEnabled?: boolean | null;
-  inAppZoomEnabled?: boolean | null;
-  ctrlZoomBlocked?: boolean | null;
-  annotationsPersistOnAdvance?: boolean | null;
-  techReadinessRequired?: boolean | null;
-  techReadinessTtlMs?: number | null;
-  finalReviewAllPartsMsPaper?: number | null;
-  rowVersion: number;
-  updatedAt: string;
-  updatedByAdminId?: string | null;
-}
-
-export interface ListeningUserPolicyOverrideDto {
-  userId: string;
-  extraTimeEntitlementPct: number;
-  blockAttempts: boolean;
-  accessibilityModeEnabled: boolean;
-  reason?: string | null;
-  grantedByAdminId?: string | null;
-  createdAt: string;
-  updatedAt: string;
-  expiresAt?: string | null;
-}
-
-export async function adminGetListeningPolicy(): Promise<ListeningPolicyDto> {
-  return apiRequest<ListeningPolicyDto>('/v1/admin/listening-policy');
-}
-
-export async function adminUpsertListeningPolicy(payload: ListeningPolicyDto): Promise<ListeningPolicyDto> {
-  return apiRequest<ListeningPolicyDto>('/v1/admin/listening-policy', {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-}
-
-export async function adminGetListeningUserPolicyOverride(userId: string): Promise<ListeningUserPolicyOverrideDto | null> {
-  return apiRequest<ListeningUserPolicyOverrideDto | null>(
-    `/v1/admin/listening-policy/users/${encodeURIComponent(userId)}`
-  );
-}
-
-export async function adminUpsertListeningUserPolicyOverride(
-  userId: string,
-  payload: Omit<ListeningUserPolicyOverrideDto, 'userId' | 'createdAt' | 'updatedAt' | 'grantedByAdminId'>
-): Promise<ListeningUserPolicyOverrideDto> {
-  return apiRequest<ListeningUserPolicyOverrideDto>(
-    `/v1/admin/listening-policy/users/${encodeURIComponent(userId)}`,
-    { method: 'PUT', body: JSON.stringify({ ...payload, userId }) }
-  );
-}
+export type {
+  ListeningPolicyDto,
+  ListeningUserPolicyOverrideDto,
+} from './api/listening-policy';
+export {
+  adminGetListeningPolicy,
+  adminGetListeningUserPolicyOverride,
+  adminUpsertListeningPolicy,
+  adminUpsertListeningUserPolicyOverride,
+} from './api/listening-policy';
 
 // ── Wave B2: Cart / Checkout / Subscription self-service / Admin products & coupons ──
 //
-// All endpoints here align with the plan in OET_BILLING_SUBSCRIPTION_PLAN.md §5/§7/§22.
-// When the backend route is not yet ready (e.g. analytics + refunds), the helper still
-// resolves so the page can degrade to a graceful "not yet available" message instead
-// of a hard 500. We surface 404 by returning `null`.
+// (Server-cart wrappers removed 2026-09-06 as dead code: the live cart is
+// client state (`lib/cart/cart-store`) + Stripe, and zero callers used these
+// helpers. Backend routes are untouched; re-scaffold from OpenAPI if needed.)
 
-export interface CartLineItem {
-  itemId: string;
-  productCode: string;
-  productName: string;
-  description?: string | null;
-  quantity: number;
-  unitAmount: number;
-  totalAmount: number;
-  currency: string;
-  productType?: string | null;
-  /** Billing interval ("one_time", "month", "year"...). Recurring items can't be paid via PayPal. */
-  interval?: string | null;
-  imageUrl?: string | null;
-}
-
-export interface CartPromoCode {
-  code: string;
-  discountAmount: number;
-  description?: string | null;
-}
-
-export interface Cart {
-  cartId: string;
-  currency: string;
-  items: CartLineItem[];
-  promoCodes: CartPromoCode[];
-  subtotalAmount: number;
-  discountAmount: number;
-  taxAmount: number;
-  totalAmount: number;
-  updatedAt: string;
-}
-
-function emptyCart(): Cart {
-  return {
-    cartId: '',
-    currency: 'AUD',
-    items: [],
-    promoCodes: [],
-    subtotalAmount: 0,
-    discountAmount: 0,
-    taxAmount: 0,
-    totalAmount: 0,
-    updatedAt: new Date().toISOString(),
-  };
-}
-
-// FE-017: the backend serialises CartDto/CartItemDto in camelCase with different
-// field names than the FE `Cart` shape the UI consumes (id↔cartId, subtotal↔
-// subtotalAmount, unitPrice↔unitAmount, appliedPromoCodes:string[]↔promoCodes).
-// Map at the API boundary so the cart renders real numbers (not 0/undefined) and
-// the UI components stay untouched.
-interface BackendCartItemDto {
-  id: string;
-  productCode: string;
-  productName: string;
-  productType: string;
-  billingPriceId: string;
-  unitPrice: number;
-  currency: string;
-  interval?: string | null;
-  quantity: number;
-  lineTotal: number;
-}
-interface BackendCartDto {
-  id: string;
-  status: string;
-  items: BackendCartItemDto[];
-  appliedPromoCodes: string[];
-  subtotal: number;
-  discount: number;
-  total: number;
-  currency: string;
-  expiresAt: string;
-}
-function mapCart(dto: BackendCartDto): Cart {
-  return {
-    cartId: dto.id,
-    currency: dto.currency,
-    items: (dto.items ?? []).map((it) => ({
-      itemId: it.id,
-      productCode: it.productCode,
-      productName: it.productName,
-      description: null,
-      quantity: it.quantity,
-      unitAmount: it.unitPrice,
-      totalAmount: it.lineTotal,
-      currency: it.currency,
-      productType: it.productType,
-      interval: it.interval ?? null,
-      imageUrl: null,
-    })),
-    promoCodes: (dto.appliedPromoCodes ?? []).map((code) => ({ code, discountAmount: 0 })),
-    subtotalAmount: dto.subtotal,
-    discountAmount: dto.discount,
-    taxAmount: 0,
-    totalAmount: dto.total,
-    updatedAt: dto.expiresAt,
-  };
-}
-
-async function maybe<T>(promise: Promise<T>, fallback: T | null = null): Promise<T | null> {
-  try {
-    return await promise;
-  } catch (err) {
-    if (err instanceof ApiError && (err.status === 404 || err.status === 501)) {
-      return fallback;
-    }
-    throw err;
-  }
-}
-
-export async function fetchCart(): Promise<Cart> {
-  try {
-    return mapCart(await apiRequest<BackendCartDto>('/v1/cart'));
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) {
-      return emptyCart();
-    }
-    throw err;
-  }
-}
-
-export async function createCart(): Promise<Cart> {
-  return mapCart(await apiRequest<BackendCartDto>('/v1/cart', { method: 'POST' }));
-}
-
-export async function addCartItem(payload: {
-  productCode: string;
-  billingPriceId: string;
-  quantity?: number;
-}): Promise<Cart> {
-  // FE-017: backend AddCartItemRequest requires billingPriceId (Guid).
-  return mapCart(await apiRequest<BackendCartDto>('/v1/cart/items', {
-    method: 'POST',
-    body: JSON.stringify({
-      productCode: payload.productCode,
-      billingPriceId: payload.billingPriceId,
-      quantity: payload.quantity ?? 1,
-    }),
-  }));
-}
-
-// FE-017: the backend cart-item / promo mutation endpoints require the owning
-// cart id as a query param (object-level authorization); thread it from callers.
-export async function updateCartItem(cartId: string, itemId: string, quantity: number): Promise<Cart> {
-  return mapCart(await apiRequest<BackendCartDto>(
-    `/v1/cart/items/${encodeURIComponent(itemId)}?cartId=${encodeURIComponent(cartId)}`,
-    { method: 'PATCH', body: JSON.stringify({ quantity }) },
-  ));
-}
-
-export async function removeCartItem(cartId: string, itemId: string): Promise<Cart> {
-  return mapCart(await apiRequest<BackendCartDto>(
-    `/v1/cart/items/${encodeURIComponent(itemId)}?cartId=${encodeURIComponent(cartId)}`,
-    { method: 'DELETE' },
-  ));
-}
-
-export async function applyCartPromoCode(cartId: string, code: string): Promise<Cart> {
-  return mapCart(await apiRequest<BackendCartDto>(
-    `/v1/cart/promo-codes?cartId=${encodeURIComponent(cartId)}`,
-    { method: 'POST', body: JSON.stringify({ code }) },
-  ));
-}
-
-export async function removeCartPromoCode(cartId: string, code: string): Promise<Cart> {
-  return mapCart(await apiRequest<BackendCartDto>(
-    `/v1/cart/promo-codes/${encodeURIComponent(code)}?cartId=${encodeURIComponent(cartId)}`,
-    { method: 'DELETE' },
-  ));
-}
-
-export interface CheckoutSessionResponse {
-  sessionId: string;
-  url: string;
-}
-
-export async function createCheckoutSession(payload?: {
-  successUrl?: string;
-  cancelUrl?: string;
-  cartId?: string | null;
-}): Promise<CheckoutSessionResponse> {
-  const response = await apiRequest<ApiRecord>('/v1/checkout/sessions', {
-    method: 'POST',
-    body: JSON.stringify({
-      successUrl: payload?.successUrl ?? null,
-      cancelUrl: payload?.cancelUrl ?? null,
-      cartId: payload?.cartId ?? null,
-    }),
-  });
-  return {
-    sessionId: String(response.sessionId ?? response.stripeSessionId ?? response.id ?? ''),
-    url: String(response.url ?? ''),
-  };
-}
-
-export interface PayPalCartOrder {
-  orderId: string;
-  checkoutSessionId: string;
-  totalAmount: number;
-  currency: string;
-}
-
-/**
- * Creates a PayPal (embedded) order for the cart. The returned order id is fed to the
- * embedded PayPal SDK's createOrder; onApprove captures it via captureBillingCheckout.
- * Rejects with a 400 ("paypal_recurring_unsupported") for carts containing subscriptions.
- */
-export async function createCartPaypalOrder(cartId: string): Promise<PayPalCartOrder> {
-  const response = await apiRequest<ApiRecord>('/v1/checkout/sessions/paypal', {
-    method: 'POST',
-    body: JSON.stringify({ cartId }),
-  });
-  return {
-    orderId: String(response.orderId ?? ''),
-    checkoutSessionId: String(response.checkoutSessionId ?? ''),
-    totalAmount: Number(response.totalAmount ?? 0),
-    currency: String(response.currency ?? 'AUD'),
-  };
-}
-
-export interface CheckoutSessionStatusItem {
-  productCode: string;
-  productName: string;
-  quantity: number;
-  description?: string | null;
-}
-
-export interface CheckoutSessionStatus {
-  sessionId: string;
-  status: 'pending' | 'fulfilled' | 'failed' | 'expired' | string;
-  totalAmount?: number;
-  currency?: string;
-  items?: CheckoutSessionStatusItem[];
-  failureReason?: string | null;
-  fulfilledAt?: string | null;
-  /**
-   * How the purchased package is handed over — `automatic_web` | `manual_web` |
-   * `whatsapp` | `manual_material`. `status: 'fulfilled'` only means the PAYMENT
-   * cleared; for anything other than `automatic_web` access is NOT live, because the
-   * subscription stays Pending until an admin marks it fulfilled (spec 2026-07-15
-   * §2/§6.6). The success page must branch on this before claiming access was added.
-   */
-  deliveryMethod?: string | null;
-  /**
-   * `auto` | `pending_manual` | `fulfilled` for the subscription this order opened.
-   * Null when the order granted no course subscription, and also null on cart-pipeline
-   * orders that never created a domain Subscription — so treat `deliveryMethod` as the
-   * load-bearing signal and this as best-effort enrichment.
-   */
-  fulfilmentStatus?: string | null;
-  /** Server-confirmed external-only delivery. Undefined/null means unknown, never false. */
-  externalOnly?: boolean | null;
-}
-
-export async function fetchCheckoutSessionStatus(sessionId: string): Promise<CheckoutSessionStatus> {
-  return apiRequest<CheckoutSessionStatus>(`/v1/checkout/sessions/${encodeURIComponent(sessionId)}/status`);
-}
-
-export interface CatalogRecommendation {
-  productCode: string;
-  name: string;
-  description?: string | null;
-  price: number;
-  currency: string;
-  imageUrl?: string | null;
-}
-
-export async function fetchCatalogRecommendations(): Promise<CatalogRecommendation[]> {
-  const result = await maybe<{ items: CatalogRecommendation[] } | CatalogRecommendation[]>(
-    apiRequest('/v1/catalog/recommendations'),
-    [],
-  );
-  if (!result) return [];
-  if (Array.isArray(result)) return result;
-  return result.items ?? [];
-}
 
 // ── Subscription self-service ───────────────────────────────────────
-
-export interface SubscriptionMe {
-  subscriptionId: string;
-  status: string;
-  planCode: string;
-  planName: string;
-  price: number;
-  currency: string;
-  interval: string;
-  startedAt: string | null;
-  nextRenewalAt: string | null;
-  cancelledAt: string | null;
-  pausedUntil: string | null;
-  cancelAtPeriodEnd: boolean;
-  trialEndsAt: string | null;
-  walletBalance?: number;
-  walletCurrency?: string;
-  productCategory?: string | null;
-  startDate?: string | null;
-  endDate?: string | null;
-  durationDays?: number;
-  remainingDays?: number;
-  expiringSoon?: boolean;
-  totalFreezeDaysUsed?: number;
-  maxFreezeDays?: number;
-  freezeAllowanceRemaining?: number;
-  preservedRemainingDays?: number | null;
-  pendingFreezeRequestDate?: string | null;
-  frozenSince?: string | null;
-}
-
-export async function fetchSubscriptionMe(): Promise<SubscriptionMe | null> {
-  return maybe<SubscriptionMe>(apiRequest<SubscriptionMe>('/v1/subscriptions/me'));
-}
-
-export interface SubscriptionMeListItem extends SubscriptionMe {
-  productCategory?: string | null;
-}
-
-export async function fetchSubscriptionsMe(): Promise<SubscriptionMeListItem[]> {
-  const result = await maybe<{ items: SubscriptionMeListItem[] } | SubscriptionMeListItem[]>(
-    apiRequest('/v1/subscriptions/me/list'),
-    [],
-  );
-  if (!result) {
-    const one = await fetchSubscriptionMe();
-    return one ? [one] : [];
-  }
-  if (Array.isArray(result)) return result;
-  return result.items ?? [];
-}
-
-export async function createSubscriptionPortalSession(returnUrl?: string): Promise<{ url: string }> {
-  return apiRequest<{ url: string }>('/v1/subscriptions/me/portal-session', {
-    method: 'POST',
-    body: JSON.stringify({ returnUrl: returnUrl ?? null }),
-  });
-}
-
-export async function cancelSubscription(reason?: string): Promise<SubscriptionMe> {
-  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/cancel', {
-    method: 'POST',
-    body: JSON.stringify({ reason: reason ?? null }),
-  });
-}
-
-export async function pauseSubscriptionSelf(days?: number, reason?: string): Promise<SubscriptionMe> {
-  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/pause', {
-    method: 'POST',
-    body: JSON.stringify({ days: days ?? null, reason: reason ?? null }),
-  });
-}
-
-export async function resumeSubscriptionSelf(): Promise<SubscriptionMe> {
-  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/resume', { method: 'POST' });
-}
-
-export async function requestSubscriptionFreeze(subscriptionId: string): Promise<SubscriptionMe> {
-  return apiRequest<SubscriptionMe>(`/v1/subscriptions/${encodeURIComponent(subscriptionId)}/request-freeze`, {
-    method: 'POST',
-  });
-}
-
-export async function resumeSubscriptionById(subscriptionId: string): Promise<SubscriptionMe> {
-  return apiRequest<SubscriptionMe>(`/v1/subscriptions/${encodeURIComponent(subscriptionId)}/resume`, {
-    method: 'POST',
-  });
-}
-
-export async function changeSubscriptionPlanSelf(planCode: string, prorate?: boolean): Promise<SubscriptionMe> {
-  return apiRequest<SubscriptionMe>('/v1/subscriptions/me/change-plan', {
-    method: 'POST',
-    body: JSON.stringify({ planCode, prorate: prorate ?? true }),
-  });
-}
-
-export interface SubscriptionInvoice {
-  invoiceId: string;
-  number?: string | null;
-  date: string;
-  amount: number;
-  currency: string;
-  status: string;
-  description?: string | null;
-  pdfUrl?: string | null;
-  hostedInvoiceUrl?: string | null;
-}
-
-export async function fetchSubscriptionInvoices(params?: { page?: number; pageSize?: number }): Promise<{ items: SubscriptionInvoice[]; total: number; page: number; pageSize: number }> {
-  const qs = new URLSearchParams();
-  if (params?.page) qs.set('page', String(params.page));
-  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
-  const q = qs.toString();
-  const result = await maybe<{ items: SubscriptionInvoice[]; total: number; page?: number; pageSize?: number } | SubscriptionInvoice[]>(
-    apiRequest(`/v1/subscriptions/me/invoices${q ? `?${q}` : ''}`),
-    null,
-  );
-  if (result == null) return { items: [], total: 0, page: params?.page ?? 1, pageSize: params?.pageSize ?? 20 };
-  if (Array.isArray(result)) return { items: result, total: result.length, page: params?.page ?? 1, pageSize: params?.pageSize ?? 20 };
-  return { items: result.items ?? [], total: result.total ?? (result.items ?? []).length, page: result.page ?? params?.page ?? 1, pageSize: result.pageSize ?? params?.pageSize ?? 20 };
-}
+export type {
+  SubscriptionInvoice,
+  SubscriptionMe,
+  SubscriptionMeListItem,
+} from './api/subscriptions';
+export {
+  cancelSubscription,
+  changeSubscriptionPlanSelf,
+  createSubscriptionPortalSession,
+  fetchSubscriptionInvoices,
+  fetchSubscriptionMe,
+  fetchSubscriptionsMe,
+  pauseSubscriptionSelf,
+  requestSubscriptionFreeze,
+  resumeSubscriptionById,
+  resumeSubscriptionSelf,
+} from './api/subscriptions';
 
 // ── Admin: Billing products (catalog) — Wave B2 thin CRUD ───────────
 

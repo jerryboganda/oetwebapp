@@ -2720,6 +2720,7 @@ app.MapAiUsageAdminEndpoints();
 app.MapAiOperationsAdminEndpoints();
 app.MapAiEscalationAdminEndpoints();
 app.MapAiToolsAdminEndpoints();
+app.MapCompanionKnowledgeAdminEndpoints();
 app.MapAiMeEndpoints();
 OetLearner.Api.Endpoints.AiAssistantEndpoints.MapAiAssistantEndpoints(app);
 app.MapContentPapersAdminEndpoints();
