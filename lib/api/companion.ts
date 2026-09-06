@@ -14,6 +14,7 @@ export type CompanionAccessReason =
   | 'ai_disabled'
   | 'kill_switch'
   | 'policy_unavailable'
+  | 'package_required'
   | 'plan_excludes_companion'
   | 'monthly_cap_reached'
   | 'daily_cap_reached';

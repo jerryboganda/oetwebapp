@@ -58,5 +58,6 @@
   "companion.depth.title": "ما مقدار التفصيل؟",
   "companion.depth.brief": "مختصر",
   "companion.depth.standard": "متوسط",
-  "companion.depth.deep": "مفصّل"
+  "companion.depth.deep": "مفصّل",
+  "companion.paywall.reason.packageRequired": "المرشد التعليمي بالذكاء الاصطناعي غير مُتضمَّن في باقتك الحالية، وهو متاح ضمن الباقات المُعدّة له."
 }

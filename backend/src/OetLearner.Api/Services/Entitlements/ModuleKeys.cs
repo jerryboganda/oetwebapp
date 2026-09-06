@@ -34,4 +34,15 @@ public static class ModuleKeys
     /// Basic English materials tree (course-materials diagram, owner directive 2026-07-18).
     /// </summary>
     public const string BasicEnglish = "BasicEnglish";
+
+    /// <summary>
+    /// AI Learning Companion access (docs/ai-learning-companion/). Owner directive:
+    /// the companion is reached through the packages created for it, not granted to
+    /// every account — so this is <b>opt-in</b> like <see cref="Mocks"/> and
+    /// <see cref="Recalls"/>, and never inherits the legacy fail-open path in
+    /// <c>EffectiveEntitlementSnapshot.IsModuleEnabled</c>. A plan that predates the
+    /// companion grants no companion access, which is the correct default: access
+    /// has to be a deliberate commercial act.
+    /// </summary>
+    public const string AiCompanion = "AiCompanion";
 }

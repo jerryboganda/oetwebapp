@@ -58,5 +58,6 @@
   "companion.depth.title": "How much detail?",
   "companion.depth.brief": "Brief",
   "companion.depth.standard": "Standard",
-  "companion.depth.deep": "In depth"
+  "companion.depth.deep": "In depth",
+  "companion.paywall.reason.packageRequired": "The AI Learning Companion is not part of your current package. It is included with the packages built around it."
 }

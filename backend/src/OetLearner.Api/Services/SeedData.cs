@@ -3964,15 +3964,13 @@ public static partial class SeedData
                     AiFeatureCodes.PronunciationFeedback,
                     AiFeatureCodes.VocabularyGloss,
                     AiFeatureCodes.SummarisePassage,
-                    // F-135 — the AI Learning Companion's free-tier allowance.
-                    // The allowance is the plan's existing token caps above
-                    // (20k/month, 5k/day), which is what "a small number of
-                    // messages, then an upgrade prompt" means here; no new
-                    // product and no new wallet (DR-001, DR-002). Remove this
-                    // one entry to put the companion fully behind the paywall —
-                    // GET /v1/companion/session then reports
-                    // `plan_excludes_companion` and the surface shows the
-                    // upgrade card instead of the chat.
+                    // F-135 — the companion's token allowance once a package has
+                    // granted access. This list is the METER, not the gate: access
+                    // itself is ModuleKeys.AiCompanion, which only the packages
+                    // created for the companion enable (owner directive). Listing
+                    // the codes here means a learner whose package grants the
+                    // module gets this plan's 20k/month, 5k/day and then the
+                    // upgrade card — it does not, on its own, let anyone in.
                     AiFeatureCodes.AiAssistantLearner,
                     AiFeatureCodes.CompanionChat,
                     AiFeatureCodes.CompanionAction),

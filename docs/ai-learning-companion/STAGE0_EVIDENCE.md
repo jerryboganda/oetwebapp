@@ -35,6 +35,8 @@
 | Surface awareness | **F-091…F-094** | `StartTurn` carries a bounded envelope; route → surface/resource/question/video, derived client-side, resolved server-side |
 | Teaching styles | **F-011, F-050, F-052, F-055** | `CompanionPreference` + panel: direct / Socratic / coach, depth, English-only immersion |
 | Sensitive-data boundary | **F-156** | Warns on real patient data or document scans, does not repeat it back, does not save it |
+| Package access gate | owner directive | `ModuleKeys.AiCompanion` — opt-in, never fail-open. Only the packages created for the companion open it |
+| Multi-student isolation | owner directive | 7 tests incl. 20 concurrent learners; no cross-learner bleed in retrieval, context, preferences, exam mode or saved data |
 
 **No feature was moved to `EXISTS` on the strength of this work.** The gap analysis statuses reflect what is
 actually delivered, not what is scaffolded.
@@ -108,7 +110,9 @@ degrades to exact scan plus the keyword path.
 | `CompanionKillSwitchTests` (the drill) | **23/23 pass** |
 | `AiAssistantHubContractTests` | **2/2 pass** |
 | `CompanionExamModeTests` | **10/10 pass** |
-| Companion + eligibility + endpoint + contract suites | **154/154 pass** |
+| `CompanionMultiLearnerIsolationTests` | **7/7 pass** |
+| `CompanionPackageAccessTests` | **6/6 pass** |
+| Companion + eligibility + endpoint + contract suites | **167/167 pass** |
 | `dotnet build` (API project) | **0 errors** |
 | `pnpm run ship:gate` | **OK** |
 | `tsc --noEmit` | **0 errors in changed files**; 13 pre-existing errors remain in `tests/e2e/writing-v2/**` and `tests/performance/**` (Playwright specs, unmodified at HEAD, untouched by this work) |
@@ -208,7 +212,8 @@ Nothing is visible to any learner until an operator enables `ai_learning_compani
 | Frontend test runner cannot start (missing jsdom transitive deps) | Medium — blocks unit verification, not the build | Platform |
 | 32 feature codes still undocumented in the policy matrix | Low — ratcheted, cannot grow | Platform |
 | Corpus indexing is automatic but unproven on real data | Medium — `CompanionCorpusBootstrapHostedService` indexes on first boot with the flag on, and `POST /v1/admin/companion/knowledge/reindex` refreshes it, but neither has run against a Postgres database with the real rulebooks | Owner: enable the flag in one environment and check `GET /v1/admin/companion/knowledge/status` |
-| Free-tier allowance is now granted in the seed | Informational — the `free` plan lists the companion feature codes, so free learners get its existing 20k/month, 5k/day caps and then the upgrade card. **Remove the three codes from `AllowedFeaturesCsv` to put the companion fully behind the paywall.** Only affects fresh databases; existing environments change it in `/admin` | Owner |
+| **Access requires `ModuleKeys.AiCompanion` on a package** | Owner directive: the companion is reached through the packages created for it, using the platform's own auth. The module is opt-in and never inherits the legacy fail-open path, so a plan predating the companion grants nothing. The `free` quota plan lists the companion feature codes as the **meter** (20k/month, 5k/day once a package has granted access) — it is not a gate on its own. **Action needed:** add `AiCompanion` to the module list of the packages that should include it | Owner |
+| B2B multi-tenancy (F-174…F-176) and SSO (F-180) removed from scope | Owner decision: single project, single brand, platform auth only. Marked `NOT_APPLICABLE_WITH_REASON`, not silently dropped | — |
 | No formal WCAG audit of `/companion` | Medium — the surface uses repo primitives, `aria-live` status, `role="alert"` errors and labelled icon buttons, but has not been run through the a11y suite. The suite needs a running app, which is not available here | This programme |
 | Frontend unit tests still cannot execute in this environment | Medium — vitest workers time out on this machine; `tsc --noEmit` and the cross-language contract test are the gates used instead | Platform |
 | Action tools are granted to `ai_assistant.learner`, not `companion.action.v1` | Low — the boundary allowlist is what enforces safety, but per-feature cost attribution is not yet separated | This programme (S1.7); needs an `AiQuotaPlan` row for the companion feature codes first |

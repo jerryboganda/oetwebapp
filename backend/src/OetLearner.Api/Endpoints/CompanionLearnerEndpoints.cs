@@ -5,6 +5,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
 using OetLearner.Api.Services.Companion;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -71,6 +72,7 @@ public static class CompanionLearnerEndpoints
         ICompanionFeatureFlags flags,
         ICompanionContextResolver contexts,
         ICompanionDestinationRegistry destinations,
+        IEffectiveEntitlementResolver entitlements,
         IAiQuotaService quota,
         IConfiguration configuration,
         CancellationToken ct)
@@ -82,7 +84,7 @@ public static class CompanionLearnerEndpoints
         var context = await contexts.ResolveAsync(userId, null, ct);
 
         var access = enabled
-            ? await ResolveAccessAsync(userId, db, quota, ct)
+            ? await ResolveAccessAsync(userId, db, entitlements, quota, ct)
             : new CompanionAccess(false, "companion_disabled", null, null);
 
         // The upgrade route is resolved through the registry like every other
@@ -129,9 +131,20 @@ public static class CompanionLearnerEndpoints
     private static async Task<CompanionAccess> ResolveAccessAsync(
         string userId,
         LearnerDbContext db,
+        IEffectiveEntitlementResolver entitlements,
         IAiQuotaService quota,
         CancellationToken ct)
     {
+        // THE access gate (owner directive): the companion is reached through the
+        // packages created for it. AiCompanion is an opt-in module, so a plan that
+        // never granted it grants nothing — access is always a deliberate
+        // commercial act, never an accident of an old plan predating the feature.
+        var snapshot = await entitlements.ResolveAsync(userId, ct);
+        if (!snapshot.IsModuleEnabled(ModuleKeys.AiCompanion))
+        {
+            return new CompanionAccess(false, "package_required", snapshot.PlanCode, null);
+        }
+
         AiUserPolicySnapshot policy;
         try
         {

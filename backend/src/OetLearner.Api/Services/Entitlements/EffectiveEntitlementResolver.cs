@@ -175,10 +175,13 @@ public sealed record EffectiveEntitlementSnapshot(
 
         if (HasNoExplicitModuleConfig)
         {
-            // Mocks are separate-purchase only and Recalls are pricing-list opt-in.
-            // Neither may inherit the legacy fail-open behavior used for Materials/Videos.
+            // Mocks are separate-purchase only, Recalls are pricing-list opt-in, and
+            // the AI Learning Companion is reached through the packages created for
+            // it (owner directive). None may inherit the legacy fail-open behavior
+            // used for Materials/Videos.
             return !string.Equals(moduleKey, ModuleKeys.Mocks, StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(moduleKey, ModuleKeys.Recalls, StringComparison.OrdinalIgnoreCase);
+                && !string.Equals(moduleKey, ModuleKeys.Recalls, StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(moduleKey, ModuleKeys.AiCompanion, StringComparison.OrdinalIgnoreCase);
         }
         foreach (var enabled in EnabledModules)
         {

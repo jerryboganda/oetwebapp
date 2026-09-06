@@ -34,6 +34,7 @@ const REASON_KEYS: Record<CompanionAccessReason, string> = {
   ai_disabled: 'companion.paywall.reason.aiDisabled',
   kill_switch: 'companion.paywall.reason.killSwitch',
   policy_unavailable: 'companion.paywall.reason.policyUnavailable',
+  package_required: 'companion.paywall.reason.packageRequired',
   plan_excludes_companion: 'companion.paywall.reason.planExcludes',
   monthly_cap_reached: 'companion.paywall.reason.monthlyCap',
   daily_cap_reached: 'companion.paywall.reason.dailyCap',
