@@ -281,6 +281,19 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             Assert.Equal("canonical_speaking_required", root.GetProperty("statusReasonCode").GetString());
         }
 
+        // The fail-closed legacy attempt never reaches Completed on its own,
+        // but the expert-review legs below require a completed attempt.
+        // Mirror the canonical outcome (the pipeline marks canonically-graded
+        // attempts Completed) so the review request, wallet debit, claim, and
+        // audio streaming exercise real prod paths.
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var attempt = await db.Attempts.SingleAsync(x => x.Id == attemptId);
+            attempt.State = AttemptState.Completed;
+            await db.SaveChangesAsync();
+        }
+
         await SetWalletCreditsAsync("audio-owner", 1);
 
         var reviewResponse = await learner.PostAsJsonAsync("/v1/reviews/requests", new

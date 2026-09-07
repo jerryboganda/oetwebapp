@@ -57,14 +57,18 @@ describe('useFeatureFlagMap', () => {
     mocks.fetchLearnerFeatureFlag.mockRejectedValue(new Error('temporary failure'));
 
     const first = renderHook(() => useFeatureFlagMap(['alpha'], true));
-    await waitFor(() => expect(first.result.current).toEqual({ alpha: false }));
+    // Fail-closed resolution needs all 3 fetch attempts (400ms + 1200ms
+    // backoff), so allow beyond waitFor's 1s default.
+    await waitFor(() => expect(first.result.current).toEqual({ alpha: false }), { timeout: 5000 });
     first.unmount();
 
     mocks.fetchLearnerFeatureFlag.mockResolvedValueOnce({ key: 'alpha', enabled: true });
     const retry = renderHook(() => useFeatureFlagMap(['alpha'], true));
 
     await waitFor(() => expect(retry.result.current).toEqual({ alpha: true }));
-    expect(mocks.fetchLearnerFeatureFlag).toHaveBeenCalledTimes(2);
+    // 3 exhausted attempts on the failed mount + 1 fresh fetch on retry —
+    // the failure itself was never cached.
+    expect(mocks.fetchLearnerFeatureFlag).toHaveBeenCalledTimes(4);
   });
 
   it('isolates users and clears the session cache across logout', async () => {

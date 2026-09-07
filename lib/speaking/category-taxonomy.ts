@@ -62,7 +62,11 @@ const firstVisitPattern =
   /first (visit|time|presentation|attendance|consultation|appointment)|present(s|ed|ing)? for the first time|new patient|new referral|initial (visit|consultation|presentation|assessment)|never (seen|visited|attended) before|first-?ever/i;
 
 const followUpPattern =
-  /follow.?up|return(ing|ed|s)? (for|to|visit|appointment)|(last|previous) visit|since the last|review (of|appointment|visit)|test results?|results?.{0,20}(are|show|confirm|of)|side effects?|treatment progress|progress since|progression|came back|coming back|second visit|re-?attendance|ongoing (treatment|care|management)|continu(e[sd]?|ing) (treatment|management|care)|check-?up|recall (visit|appointment)|monitoring/i;
+  // NOTE: "review visit" is intentionally NOT a trigger — a medication-review
+  // outreach visit (e.g. nursing home) is an unknown scenario that must fall
+  // through to Other Cards + review flag (§8C QA). "Review of/appointment"
+  // still signals a return visit.
+  /follow.?up|return(ing|ed|s)? (for|to|visit|appointment)|(last|previous) visit|since the last|review (of|appointment)|test results?|results?.{0,20}(are|show|confirm|of)|side effects?|treatment progress|progress since|progression|came back|coming back|second visit|re-?attendance|ongoing (treatment|care|management)|continu(e[sd]?|ing) (treatment|management|care)|check-?up|recall (visit|appointment)|monitoring/i;
 
 const badNewsPattern =
   /break(ing)? bad news|cancer|malignan|terminal|serious diagnosis|grave news|has died|death|life.?threatening|palliative|chemotherapy|oncology|poor prognosis|bad news/i;

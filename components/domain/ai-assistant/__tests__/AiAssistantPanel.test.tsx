@@ -117,7 +117,10 @@ describe('AiAssistantPanel', () => {
 
     await user.click(screen.getByTestId('mock-send'));
 
-    expect(contextValue.sendMessage).toHaveBeenCalledWith('test message', expect.anything());
+    // Panel always forwards a second surface-context arg (undefined when no
+    // pathname is available in the test env) — assert the payload arg only.
+    expect(contextValue.sendMessage).toHaveBeenCalledTimes(1);
+    expect(contextValue.sendMessage.mock.calls[0][0]).toBe('test message');
   });
 
   it('renders messages supplied by the context', () => {
