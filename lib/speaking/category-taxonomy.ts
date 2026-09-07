@@ -39,6 +39,7 @@ export interface SpeakingCardClassifiable {
   patientName?: string | null;
   candidateRole?: string | null;
   interlocutorRole?: string | null;
+  communicationGoal?: string | null;
 }
 
 export interface SpeakingCardClassification {
