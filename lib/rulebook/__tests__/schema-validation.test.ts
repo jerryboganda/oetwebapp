@@ -48,9 +48,14 @@ describe('rulebook schema validation', () => {
 
   it('every rule references a section that exists', () => {
     for (const d of discovered) {
-      const sectionIds = new Set(d.rulebook.sections.map((s) => s.id));
+      // Canonical rulebooks key rule.section by section title; legacy books
+      // key by section id — accept either.
+      const sectionKeys = new Set([
+        ...d.rulebook.sections.map((s) => s.id),
+        ...d.rulebook.sections.map((s) => (s as { title?: string }).title),
+      ]);
       for (const rule of d.rulebook.rules) {
-        expect(sectionIds.has(rule.section), `${d.relativePath} rule ${rule.id} → unknown section "${rule.section}"`).toBe(true);
+        expect(sectionKeys.has(rule.section), `${d.relativePath} rule ${rule.id} → unknown section "${rule.section}"`).toBe(true);
       }
     }
   });

@@ -78,7 +78,7 @@ describe('TechReadinessCheck', () => {
     // single slow fetch while part practice (1 asset) succeeds.
     expect(onReady).toHaveBeenCalledWith(expect.objectContaining({ audioOk: true }));
     expect(screen.getByRole('status')).toHaveTextContent('Audio confirmed');
-    expect(screen.getByRole('note')).toHaveTextContent('A scored audio asset failed its readiness check');
+    expect(screen.getByRole('note')).toHaveTextContent(/Failed to pre-buffer audio chunk/);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });

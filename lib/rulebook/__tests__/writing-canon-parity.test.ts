@@ -11,7 +11,9 @@ import type { ExamProfession } from '../types';
  * WritingCanonRule table.
  *
  * Strategy: this test asserts every Writing rule ID across every profession
- * starts with "R" (the rulebook namespace). The legacy SC-* namespace is
+ * lives in a known rulebook namespace — legacy "R" IDs for professions still
+ * on the 1.x baseline, or the canonical namespaces (OW-, DH-W-, G-W-,
+ * <PROF>-W-) for migrated professions. The legacy SC-* namespace is
  * disjoint by construction. The CI gate catches any future authoring that
  * accidentally re-uses an SC-* ID or strays into another namespace.
  */
@@ -26,12 +28,12 @@ const IN_SCOPE_PROFESSIONS: ExamProfession[] = [
 ];
 
 describe('Writing canon parity — rulebook IDs vs legacy SC-* namespace', () => {
-  it('every rule across every in-scope profession uses an R-prefixed ID', () => {
+  it('every rule across every in-scope profession uses a known rulebook namespace', () => {
     const offenders: Array<{ profession: ExamProfession; id: string }> = [];
     for (const profession of IN_SCOPE_PROFESSIONS) {
       const book = loadRulebook('writing', profession);
       for (const rule of book.rules) {
-        if (!/^R\d/.test(rule.id)) {
+        if (!/^(R\d|OW-|DH-W-|G-W-|[A-Z]+-W-)/.test(rule.id)) {
           offenders.push({ profession, id: rule.id });
         }
       }

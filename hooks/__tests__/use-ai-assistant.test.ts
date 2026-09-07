@@ -36,13 +36,10 @@ vi.mock('@/lib/ai-assistant/api', () => ({
     archived: false,
     messageCount: 0,
   }),
-  listThreads: vi.fn().mockResolvedValue({ threads: [], total: 0, page: 1, pageSize: 20 }),
-  getMessages: vi.fn().mockResolvedValue({
-    messages: [
-      { id: 'm1', threadId: 't1', role: 'user', content: 'Hello', createdAt: '2024-01-01T00:00:00Z' },
-    ],
-    total: 1,
-  }),
+  listThreads: vi.fn().mockResolvedValue([]),
+  getMessages: vi.fn().mockResolvedValue([
+    { id: 'm1', threadId: 't1', role: 'user', content: 'Hello', createdAt: '2024-01-01T00:00:00Z' },
+  ]),
   archiveThread: vi.fn().mockResolvedValue(undefined),
 }));
 

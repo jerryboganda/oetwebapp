@@ -28,6 +28,10 @@ vi.mock('@/components/domain', () => ({
   ProfessionSelector: () => <div />,
 }));
 
+vi.mock('@/components/domain/learner-skill-switcher', () => ({
+  LearnerSkillSwitcher: () => <div data-testid="skill-switcher" />,
+}));
+
 import GoalsPage from './page';
 
 describe('Goals setup page', () => {

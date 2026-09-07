@@ -42,6 +42,7 @@ describe('listening-api', () => {
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       '/v1/listening-papers/papers/paper%201/attempts',
       expect.objectContaining({ method: 'POST' }),
+      undefined,
     );
     const init = mockFetchWithTimeout.mock.calls[0][1] as RequestInit;
     expect(JSON.parse(String(init.body))).toEqual({
@@ -66,6 +67,7 @@ describe('listening-api', () => {
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       '/v1/listening-papers/papers/paper%201/session?mode=practice&pathwayStage=foundation_partA',
       expect.any(Object),
+      undefined,
     );
   });
 
@@ -75,6 +77,7 @@ describe('listening-api', () => {
     expect(mockFetchWithTimeout).toHaveBeenCalledWith(
       '/v1/listening-papers/papers/paper%201/practice/parts/B',
       expect.objectContaining({ method: 'POST' }),
+      undefined,
     );
   });
 });

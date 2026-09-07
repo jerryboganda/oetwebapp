@@ -23,8 +23,8 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     const book = loadRulebook('writing', 'medicine');
     expect(book.kind).toBe('writing');
     expect(book.profession).toBe('medicine');
-    expect(book.version).toBe('1.0.1');
-    expect(book.sections.length).toBe(16);
+    expect(book.version).toBe('2.0.0-canonical');
+    expect(book.sections.length).toBe(43);
     expect(book.rules.length).toBeGreaterThan(90);
   });
 
@@ -43,10 +43,10 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
   });
 
   it('finds a specific rule by id', () => {
-    const r = findRule('writing', 'medicine', 'R03.4');
+    const r = findRule('writing', 'medicine', 'OW-001');
     expect(r).toBeDefined();
     expect(r!.severity).toBe('critical');
-    expect(r!.title).toMatch(/smoking/i);
+    expect(r!.title).toMatch(/Six Writing criteria/i);
   });
 
   it('returns undefined when rule id does not exist', () => {
@@ -66,39 +66,49 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
   });
 
   it('rulesApplicableTo filters on appliesTo context', () => {
+    // Canonical writing book: every rule appliesTo "all", so any context
+    // returns the full set.
     const book = loadRulebook('writing', 'medicine');
-    const urgentRules = rulesApplicableTo(book, 'urgent_referral');
-    // Urgent-only rules exist
-    expect(urgentRules.find((r) => r.id === 'R13.3')).toBeDefined();
-    // Applies-to-all rules are included
-    expect(urgentRules.find((r) => r.id === 'R03.4')).toBeDefined();
-    // Discharge-only rules are excluded
-    expect(urgentRules.find((r) => r.id === 'R14.2')).toBeUndefined();
+    expect(rulesApplicableTo(book, 'urgent_referral')).toHaveLength(book.rules.length);
+
+    // Exercise the array branch with a synthetic book.
+    const mixed = {
+      kind: 'writing',
+      profession: 'medicine',
+      version: 'test',
+      sections: [],
+      rules: [
+        { id: 'T1', section: 's', severity: 'critical', title: 't', body: 'b', appliesTo: 'all' },
+        { id: 'T2', section: 's', severity: 'major', title: 't', body: 'b', appliesTo: ['urgent_referral'] },
+        { id: 'T3', section: 's', severity: 'major', title: 't', body: 'b', appliesTo: ['discharge'] },
+      ],
+    } as unknown as Parameters<typeof rulesApplicableTo>[0];
+    const urgent = rulesApplicableTo(mixed, 'urgent_referral').map((r) => r.id);
+    expect(urgent).toContain('T1');
+    expect(urgent).toContain('T2');
+    expect(urgent).not.toContain('T3');
   });
 });
 
-describe('rulebook — critical rule coverage (all present & correctly flagged)', () => {
+describe('rulebook — critical rule coverage (canonical writing book)', () => {
   const book = loadRulebook('writing', 'medicine');
-  const criticalIds = [
-    'R01.5', 'R02.2', 'R03.2', 'R03.4', 'R03.6',
-    'R04.2', 'R05.2', 'R05.8',
-    'R06.1', 'R06.3', 'R06.7', 'R06.10', 'R06.11',
-    'R07.3', 'R07.6', 'R07.7',
-    'R08.1', 'R08.3', 'R08.5', 'R08.7', 'R08.8', 'R08.14',
-    'R09.2', 'R09.4', 'R09.5',
-    'R10.2', 'R10.5', 'R10.6', 'R10.8', 'R10.10', 'R10.14',
-    'R11.1', 'R11.8',
-    'R12.1', 'R12.2', 'R12.5', 'R12.9',
-    'R13.2', 'R13.3', 'R13.4', 'R13.6', 'R13.10',
-    'R14.2', 'R14.3', 'R14.4', 'R14.6', 'R14.7', 'R14.9', 'R14.10', 'R14.12',
-    'R15.2', 'R15.7',
-    'R16.2', 'R16.3', 'R16.5', 'R16.7',
-  ];
 
-  it.each(criticalIds)('%s exists and is severity=critical', (id) => {
+  it('has the canonical critical-rule count', () => {
+    expect(criticalRules(book)).toHaveLength(59);
+  });
+
+  it.each(['OW-001', 'DH-W-001'])('%s exists and is severity=critical', (id) => {
     const r = book.rules.find((x) => x.id === id);
     expect(r, `Rule ${id} missing`).toBeDefined();
     expect(r!.severity).toBe('critical');
+  });
+
+  it('every critical rule has section, title, and body', () => {
+    for (const r of criticalRules(book)) {
+      expect(r.section).toBeTruthy();
+      expect(r.title).toBeTruthy();
+      expect(r.body).toBeTruthy();
+    }
   });
 });
 

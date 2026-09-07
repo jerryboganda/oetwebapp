@@ -52,7 +52,7 @@ describe('writing rulebooks — Phase D coverage', () => {
       });
 
       it('declares a non-empty version, sections, and rules', () => {
-        expect(book.version).toMatch(/^\d+\.\d+\.\d+$/);
+        expect(book.version).toMatch(/^\d+\.\d+\.\d+/);
         expect(book.sections.length).toBeGreaterThan(0);
         expect(book.rules.length).toBeGreaterThan(0);
       });

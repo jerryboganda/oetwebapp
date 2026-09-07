@@ -117,7 +117,7 @@ describe('AiAssistantPanel', () => {
 
     await user.click(screen.getByTestId('mock-send'));
 
-    expect(contextValue.sendMessage).toHaveBeenCalledWith('test message');
+    expect(contextValue.sendMessage).toHaveBeenCalledWith('test message', expect.anything());
   });
 
   it('renders messages supplied by the context', () => {

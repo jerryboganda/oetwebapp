@@ -6,12 +6,11 @@ using OetLearner.Api.Services.Speaking;
 namespace OetLearner.Api.Endpoints;
 
 /// <summary>
-/// Full Mock Speaking 7-day AI/tutor gate (2026-07-22 owner rule). Exposes
-/// the policy the Mock Speaking Gateway page reads before offering the
-/// candidate an AI-only or AI-vs-tutor choice: under 7 days to the
-/// candidate's <see cref="Domain.LearnerGoal.TargetExamDate"/>, only the AI
-/// exam is allowed (a live-tutor booking can't reliably be arranged in
-/// time); 7+ days out, either is offered.
+/// Mock Speaking access info (W8 result-release contract). Exposes the
+/// candidate's <see cref="Domain.LearnerGoal.TargetExamDate"/> countdown
+/// alongside the AI-only policy flag: human tutor review is optional
+/// escalation, never a result-release dependency, so requiresAiOnly is
+/// always false. The field is kept so existing clients keep parsing it.
 /// </summary>
 public static class MockSpeakingGatewayEndpoints
 {

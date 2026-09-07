@@ -112,8 +112,11 @@ public class LearnerGoalExamDateTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task SpeakingAccess_ReturnsRequiresAiOnlyTrue_WhenExamUnder7Days()
+    public async Task SpeakingAccess_ReturnsRequiresAiOnlyFalse_EvenWhenExamUnder7Days()
     {
+        // W8 result-release contract: human tutor review is optional
+        // escalation, never a result-release dependency — requiresAiOnly is
+        // always false. daysUntilExam is still reported accurately.
         var userId = "examdate-speaking-access-soon";
         await SeedLearnerWithRegistrationProfileAsync(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(2)));
 
@@ -123,13 +126,15 @@ public class LearnerGoalExamDateTests : IClassFixture<TestWebApplicationFactory>
         var response = await client.GetAsync("/v1/mocks/speaking-access");
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-        Assert.True(json.RootElement.GetProperty("requiresAiOnly").GetBoolean());
+        Assert.False(json.RootElement.GetProperty("requiresAiOnly").GetBoolean());
+        Assert.Equal(2, json.RootElement.GetProperty("daysUntilExam").GetInt32());
     }
 
     [Fact]
     public async Task SpeakingAccess_ReturnsRequiresAiOnlyFalse_AtExactly7Days()
     {
-        // Boundary: the rule is "< 7", so exactly 7 days out still allows a tutor.
+        // Boundary (W8 contract): requiresAiOnly is false at every distance;
+        // daysUntilExam is still reported accurately.
         var userId = "examdate-speaking-access-boundary";
         await SeedLearnerWithRegistrationProfileAsync(userId, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(7)));
 

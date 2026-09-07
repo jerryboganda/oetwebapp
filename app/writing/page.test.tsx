@@ -19,6 +19,10 @@ vi.mock('@/components/layout/learner-dashboard-shell', () => ({
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
 
+vi.mock('@/components/domain/learner-skill-switcher', () => ({
+  LearnerSkillSwitcher: () => <div data-testid="skill-switcher" />,
+}));
+
 import WritingHome from './page';
 
 describe('Writing landing page', () => {

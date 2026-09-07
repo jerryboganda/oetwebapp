@@ -42,6 +42,10 @@ vi.mock('@/hooks/use-analytics', () => ({
   }),
 }));
 
+vi.mock('@/components/domain/learner-skill-switcher', () => ({
+  LearnerSkillSwitcher: () => <div data-testid="skill-switcher" />,
+}));
+
 vi.mock('@/lib/api', () => ({
   fetchStudyPlan: mockFetchStudyPlan,
   fetchReadiness: mockFetchReadiness,

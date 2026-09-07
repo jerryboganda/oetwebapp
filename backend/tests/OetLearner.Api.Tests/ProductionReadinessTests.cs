@@ -253,71 +253,32 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         // The hosted background-job loop is stripped from the test host, so the
         // queued speaking evaluation never advances on its own. Drive it
         // deterministically (the eval can chain transcription -> evaluation ->
-        // side-effects, so allow extra passes) before polling for completion.
+        // side-effects, so allow extra passes) before asserting the outcome.
         await _factory.DrainBackgroundJobsAsync(passes: 5);
 
+        // W7: legacy attempt-based Speaking grading is fail-closed. Submitting
+        // an attempt still stores the binary and yields an evaluation row, but
+        // the queued evaluation lands in Failed with
+        // canonical_speaking_required — candidates grade through the typed
+        // Speaking session flow instead. Guard that contract explicitly:
+        // never silently resurrect legacy grading, never fail open.
         await WaitForAsync(
             async () =>
             {
                 await _factory.DrainBackgroundJobsAsync();
                 var response = await learner.GetAsync($"/v1/speaking/evaluations/{evaluationId}/summary");
                 using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-                var state = json.RootElement.GetProperty("state").GetString();
-                if (string.Equals(state, "failed", StringComparison.OrdinalIgnoreCase))
-                {
-                    await using var scope = _factory.Services.CreateAsyncScope();
-                    var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-                    var evaluation = await db.Evaluations.AsNoTracking().SingleAsync(x => x.Id == evaluationId);
-                    var attempt = await db.Attempts.AsNoTracking().SingleAsync(x => x.Id == evaluation.AttemptId);
-                    var balance = await scope.ServiceProvider
-                        .GetRequiredService<OetLearner.Api.Services.AiManagement.IAiCreditService>()
-                        .GetBalanceAsync(attempt.UserId, CancellationToken.None);
-                    var usage = await db.AiUsageRecords.AsNoTracking()
-                        .OrderByDescending(x => x.CreatedAt)
-                        .Select(x => new { x.FeatureCode, x.ErrorCode, x.PolicyTrace })
-                        .FirstOrDefaultAsync();
-                    throw new InvalidOperationException(
-                        $"Speaking evaluation failed: {json.RootElement.GetProperty("statusReasonCode").GetString()} user={attempt.UserId} availableCredits={balance.TokensAvailable} feature={usage?.FeatureCode} error={usage?.ErrorCode} trace={usage?.PolicyTrace}");
-                }
-
-                return string.Equals(state, "completed", StringComparison.OrdinalIgnoreCase);
+                return string.Equals(json.RootElement.GetProperty("state").GetString(), "failed", StringComparison.OrdinalIgnoreCase);
             },
-            "speaking evaluation to complete");
+            "speaking evaluation to fail closed");
 
-        // Wave 1 regression (docs/SPEAKING-MODULE-PLAN.md §3): the summary
-        // payload must carry the stable 9-key criterion contract and the
-        // advisory readiness band so the results page can render its new
-        // criterion-by-criterion card without re-deriving projections.
         var summaryResponse = await learner.GetAsync($"/v1/speaking/evaluations/{evaluationId}/summary");
         summaryResponse.EnsureSuccessStatusCode();
         using (var summaryJson = JsonDocument.Parse(await summaryResponse.Content.ReadAsStringAsync()))
         {
             var root = summaryJson.RootElement;
-            Assert.Equal(350, root.GetProperty("passThreshold").GetInt32());
-            Assert.Equal(39, root.GetProperty("rubricMax").GetInt32());
-
-            var readiness = root.GetProperty("readinessBand").GetString();
-            Assert.Contains(readiness, new[] { "not_ready", "developing", "borderline", "exam_ready", "strong" });
-            Assert.False(string.IsNullOrWhiteSpace(root.GetProperty("readinessBandLabel").GetString()));
-
-            var criteria = root.GetProperty("criteria");
-            Assert.Equal(JsonValueKind.Array, criteria.ValueKind);
-            Assert.Equal(9, criteria.GetArrayLength());
-            var seenCodes = new HashSet<string>();
-            foreach (var entry in criteria.EnumerateArray())
-            {
-                var code = entry.GetProperty("criterionCode").GetString();
-                Assert.False(string.IsNullOrWhiteSpace(code));
-                Assert.True(seenCodes.Add(code!), $"duplicate criterionCode {code}");
-                var family = entry.GetProperty("family").GetString();
-                Assert.True(family == "linguistic" || family == "clinical");
-                var max = entry.GetProperty("max").GetInt32();
-                Assert.True(family == "linguistic" ? max == 6 : max == 3);
-                var score = entry.GetProperty("score").GetInt32();
-                Assert.InRange(score, 0, max);
-            }
-            Assert.Contains("intelligibility", seenCodes);
-            Assert.Contains("structure", seenCodes);
+            Assert.True(string.Equals(root.GetProperty("state").GetString(), "failed", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal("canonical_speaking_required", root.GetProperty("statusReasonCode").GetString());
         }
 
         await SetWalletCreditsAsync("audio-owner", 1);

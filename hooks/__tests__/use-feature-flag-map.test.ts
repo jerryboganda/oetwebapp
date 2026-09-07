@@ -52,7 +52,9 @@ describe('useFeatureFlagMap', () => {
   });
 
   it('does not cache a rejected fetch so a later mount can retry', async () => {
-    mocks.fetchLearnerFeatureFlag.mockRejectedValueOnce(new Error('temporary failure'));
+    // Persistent rejection: every retry attempt must fail so the hook stays
+    // fail-closed (a Once would leak into the leftover base implementation).
+    mocks.fetchLearnerFeatureFlag.mockRejectedValue(new Error('temporary failure'));
 
     const first = renderHook(() => useFeatureFlagMap(['alpha'], true));
     await waitFor(() => expect(first.result.current).toEqual({ alpha: false }));

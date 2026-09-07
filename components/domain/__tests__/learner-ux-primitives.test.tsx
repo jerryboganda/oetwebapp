@@ -7,6 +7,14 @@ import { LearnerFreshnessIndicator } from '../learner-freshness-indicator';
 import { LearnerSkillSwitcher } from '../learner-skill-switcher';
 import { LearnerSkeleton } from '../learner-skeletons';
 
+vi.mock('@/hooks/use-enabled-modules', () => ({
+  useEnabledModules: () => ({
+    loaded: true,
+    modules: [] as string[],
+    isModuleEnabled: () => true,
+  }),
+}));
+
 describe('LearnerEmptyState', () => {
   it('renders an accessible recovery state with primary and secondary actions', () => {
     render(
