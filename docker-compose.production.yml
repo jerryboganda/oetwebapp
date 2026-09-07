@@ -95,6 +95,14 @@ x-learner-api-slot: &learner-api-slot
     AI__DefaultTemperature: ${AI__DEFAULTTEMPERATURE:-0.2}
     ANTIGRAVITY_GATEWAY_ROUTES_ENABLED: ${ANTIGRAVITY_GATEWAY_ROUTES_ENABLED:-false}
     AGENTGATEWAY_INTERNAL_SERVICE_TOKEN: ${AGENTGATEWAY_INTERNAL_SERVICE_TOKEN:-}
+    # UBAG OpenAI facade (private compose network). UBAG_OET_PAT seeds the
+    # encrypted key on the seeded `ubag` provider row (or paste it in
+    # /admin/ai-providers); OET_INTERNAL_AI_HOSTS lets the SSRF guard
+    # accept the container-DNS http URL. Do NOT add oet-agent-gateway here
+    # without verifying the antigravity routes first — allowlisting makes
+    # that dormant row callable through the guarded path.
+    UBAG_OET_PAT: ${UBAG_OET_PAT:-}
+    OET_INTERNAL_AI_HOSTS: ${OET_INTERNAL_AI_HOSTS:-ubag-vps-gateway-1}
     Pronunciation__Provider: ${PRONUNCIATION__PROVIDER:-}
     Pronunciation__AzureSpeechKey: ${PRONUNCIATION__AZURESPEECHKEY:-}
     Pronunciation__AzureSpeechRegion: ${PRONUNCIATION__AZURESPEECHREGION:-}
