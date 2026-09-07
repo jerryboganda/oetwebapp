@@ -97,6 +97,63 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.Equal(AiProviderTestStatuses.Unknown, persisted.LastTestStatus);
     }
 
+    [Theory]
+    [InlineData("http://ubag-vps-gateway-1:8080/v1/openai")]
+    [InlineData("http://oet-agent-gateway:8305/v1")]
+    public async Task InternalAiHost_AllowsConfiguredHttpContainerPeer(string baseUrl)
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-agent-gateway,ubag-vps-gateway-1");
+        try
+        {
+            await using var db = new LearnerDbContext(_options);
+            await SeedProviderAsync(db, "secret-key-1234567890", baseUrl);
+            var called = false;
+            var tester = NewTester(db, _ =>
+            {
+                called = true;
+                return Task.FromResult(BuildResponse(HttpStatusCode.OK));
+            });
+
+            var result = await tester.TestProviderAsync("copilot", default);
+
+            Assert.True(called);
+            Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Theory]
+    [InlineData("http://ubag-vps-gateway-1.evil.example/v1/openai")]
+    [InlineData("http://not-allowlisted:8080/v1")]
+    [InlineData("http://172.28.0.5:8080/v1/openai")]
+    public async Task InternalAiHost_StillBlocksNonAllowlistedHosts(string baseUrl)
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-agent-gateway,ubag-vps-gateway-1");
+        try
+        {
+            await using var db = new LearnerDbContext(_options);
+            await SeedProviderAsync(db, "secret-key-1234567890", baseUrl);
+            var called = false;
+            var tester = NewTester(db, _ =>
+            {
+                called = true;
+                return Task.FromResult(BuildResponse(HttpStatusCode.OK));
+            });
+
+            var result = await tester.TestProviderAsync("copilot", default);
+
+            Assert.Equal(AiProviderTestStatuses.Unknown, result.Status);
+            Assert.False(called);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
     [Fact]
     public async Task ProviderProbe_DoesNotMutateProviderConfigurationFields()
     {

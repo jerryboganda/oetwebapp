@@ -291,6 +291,30 @@ public sealed class AiProviderConnectionTester(
         return result;
     }
 
+    /// <summary>
+    /// Exact hostnames allowed to serve provider traffic over plain HTTP on the
+    /// internal compose network (e.g. UBAG gateway, agent-gateway). Configured
+    /// via <c>OET_INTERNAL_AI_HOSTS</c> (comma-separated, e.g.
+    /// <c>"oet-agent-gateway,ubag-vps-gateway-1"</c>). Exact match only — no
+    /// suffixes, no IP literals. Read per call (cheap) so container env changes
+    /// apply without a restart. Empty/unset = no exception, prior behaviour.
+    /// NOTE: allowlisting a host also makes any existing row pointing at it
+    /// (e.g. the seeded <c>antigravity-gateway</c> row) callable through this
+    /// guarded path for the first time — verify its routes deliberately.
+    /// </summary>
+    internal static bool IsInternalAiHost(string? host)
+    {
+        if (string.IsNullOrWhiteSpace(host))
+            return false;
+        var configured = Environment.GetEnvironmentVariable("OET_INTERNAL_AI_HOSTS");
+        if (string.IsNullOrWhiteSpace(configured))
+            return false;
+        var candidate = host.Trim().TrimEnd('.');
+        return configured
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(h => h.Equals(candidate, StringComparison.OrdinalIgnoreCase));
+    }
+
     internal static string? GetUnsafeBaseUrlReason(string? baseUrl)
     {
         if (string.IsNullOrWhiteSpace(baseUrl))
@@ -299,13 +323,20 @@ public sealed class AiProviderConnectionTester(
         if (!Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
             return "Provider BaseUrl must be an absolute https:// URL.";
 
+        var host = (uri.Host ?? string.Empty).Trim().TrimEnd('.');
         if (uri.Scheme != Uri.UriSchemeHttps)
+        {
+            // Trusted container-network peer: skip the public-internet checks
+            // below (scheme, IP-literal, and DNS-resolution rules) for this
+            // exact configured hostname only.
+            if (uri.Scheme == Uri.UriSchemeHttp && IsInternalAiHost(host))
+                return null;
             return "Provider BaseUrl must use https://.";
+        }
 
         if (string.IsNullOrWhiteSpace(uri.Host))
             return "Provider BaseUrl host is required.";
 
-        var host = uri.Host.Trim().TrimEnd('.');
         if (uri.IsLoopback
             || host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
             || host.Equals("metadata.google.internal", StringComparison.OrdinalIgnoreCase)

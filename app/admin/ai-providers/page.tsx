@@ -291,6 +291,30 @@ const PRESETS: Record<string, Partial<AiProviderRow & { apiKey?: string }>> = {
     failoverPriority: 130,
     isActive: false,
   },
+  ubag: {
+    code: 'ubag',
+    name: 'UBAG (browser AI providers)',
+    dialect: 'OpenAiCompatible',
+    // UBAG OpenAI facade over the private compose network. The registry
+    // appends /chat/completions per call; the admin "Test connection" probe
+    // runs a fast mock job because DefaultModel is mock — per-feature Model
+    // overrides carry the real browser targets (see /admin/ai-providers/ubag).
+    // Requires OET_INTERNAL_AI_HOSTS to list ubag-vps-gateway-1 on oet-api,
+    // otherwise the SSRF guard rejects this URL.
+    baseUrl: 'http://ubag-vps-gateway-1:8080/v1/openai',
+    defaultModel: 'mock',
+    // Browser-session cost model (no per-token billing): usage figures are
+    // character-based estimates from the facade.
+    pricePer1kPromptTokens: 0,
+    pricePer1kCompletionTokens: 0,
+    retryCount: 2,
+    circuitBreakerThreshold: 5,
+    circuitBreakerWindowSeconds: 30,
+    failoverPriority: 70,
+    // Default to inactive — admin must paste the tenant PAT and verify
+    // before flipping live (or set UBAG_OET_PAT so the seeder keys the row).
+    isActive: false,
+  },
 };
 
 export default function AiProvidersPage() {
@@ -458,7 +482,7 @@ export default function AiProvidersPage() {
   }
 
   const registerButton = (
-    <Button variant="primary" onClick={() => {
+    <Button key="register-provider" variant="primary" onClick={() => {
       setCreating(true);
       setEditing({
         id: '', code: '', name: '', dialect: 'OpenAiCompatible', category: 'TextChat',
@@ -480,11 +504,16 @@ export default function AiProvidersPage() {
       <AdminTableLayout
         title="AI Providers"
         description="Register, rotate, and manage platform AI provider credentials. OpenAI-compatible endpoints (NVIDIA NIM, Groq, DeepSeek, Together, OpenRouter, Azure, …) are supported via the same dialect."
+        actions={[
+          <Button key="ubag-board" variant="outline" size="sm" onClick={() => window.open('/admin/ai-providers/ubag', '_blank')}>
+            UBAG toggle board
+          </Button>,
+          registerButton,
+        ]}
         breadcrumbs={[
           { label: 'Admin', href: '/admin' },
           { label: 'AI Providers' },
         ]}
-        actions={registerButton}
         banner={
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs text-admin-fg-muted">Filter by category:</span>

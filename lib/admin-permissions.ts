@@ -162,6 +162,7 @@ export const adminRoutePermissionMap: Record<string, string[]> = {
   '/admin/ai-assistant/threads/:param': [AdminPermission.AiConfig],
   '/admin/ai-config': [AdminPermission.AiConfig],
   '/admin/ai-providers': [AdminPermission.AiConfig],
+  '/admin/ai-providers/ubag': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
   '/admin/audit-logs': [AdminPermission.AuditLogs],
   '/admin/billing': [AdminPermission.BillingRead],
