@@ -3442,7 +3442,7 @@ export default function BillingPage() {
                 <Checkbox label="TB £32: Discounted Tutor Book add-on" checked={planForm.tutorBookDiscountEnabled} onChange={(event) => setPlanForm((current) => ({ ...current, tutorBookDiscountEnabled: event.target.checked }))} />
               </div>
               <p className="mt-2 text-[11px] text-admin-text-secondary">
-                &ldquo;Human Tutor Speaking&rdquo; (bookable live-tutor sessions) and AI Speaking Credits (self-practice + full mock exam, sold separately as AI Packages) are distinct quotas — see the AI Packages editor for the latter. Speaking Practice Card Access gates ai_self_practice for this plan; disabling it blocks self-practice regardless of any AI credit balance the learner holds.
+                &ldquo;Human Tutor Speaking&rdquo; (bookable live-tutor sessions) and AI Speaking Credits (self-practice + full mock exam, sold separately as AI Packages) are distinct quotas — see the AI Packages editor for the latter. Speaking Practice Card Access gates ai_self_practice for this plan; disabling it blocks self-practice regardless of any AI credit balance the learner holds. Plans without the Human Tutor Speaking flag cannot book live-tutor sessions at all (server-enforced); AI-credit ownership alone never grants access.
               </p>
             </div>
             <div className="mt-4">

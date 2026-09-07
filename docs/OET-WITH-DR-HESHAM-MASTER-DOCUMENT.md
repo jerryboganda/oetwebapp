@@ -1006,7 +1006,7 @@ Access is resolved from four independent sources, checked server-side on every g
 
 1. **Subscription** — an active plan with an expiry date, granting module access (`dashboardModules` per SKU: Listening, Reading, Writing, Speaking, Materials Library, Writing Assessments, Speaking Session, AI Practice, Recalls, Tutor Book, Audio Scripts, Updates, Basic English, Vocabulary, Grammar, Listening Foundations, Study Plan, Booklet, Add-ons, Model Letters, Writing Rules, Speaking Cards, Useful Phrases, Role-Play Practice).
 2. **Countable units** — Writing letter assessments, private Speaking sessions, mock entitlements.
-3. **AI credits** — a metered ledger with expiry, consumed per grading call (Writing exam = 2, Speaking card = 1, full Speaking exam = 2).
+3. **AI credits** — a metered ledger with expiry, consumed per grading call (Writing exam = 2, Speaking card = 2, full Speaking exam = 4).
 4. **Free-tier quotas** — rolling-window allowances (Conversation 3/7 days, Pronunciation 20 attempts/7 days), DB-overridable at runtime.
 
 Supporting mechanics: **freeze** (pause the clock with approval), **extra time** entitlement (0–100% for accommodations), **score guarantee** claims, **wallet tiers**, **scholarships** and **regional pricing**.

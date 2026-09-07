@@ -403,6 +403,7 @@ public sealed class PrivateSpeakingRescheduleTests
             zoomService: null!,
             calendarService: calendarService,
             entitlementResolver: null!,
+            addonEligibility: new AddonEligibilityService(db),
             stripeService: stripe,
             paymentGateways: null!,
             platformLinks: platformLinks,

@@ -45,7 +45,7 @@ Universal candidate-facing allowance pool; Reading/Listening cost 1, Writing/Spe
 _Avoid_: Tokens, points
 
 **Flexible W/S Credits**:
-Restricted pool spendable only on Quick Check / Exam Prep Pro, exactly 1 per graded submission.
+Restricted pool spendable only on Quick Check / Exam Prep Pro, exactly 2 per graded submission (1 letter/card = 2 credits; 5 attempts = 10, 15 attempts = 30).
 _Avoid_: Shared Credits, bonus credits
 
 **Subtest Credits**:

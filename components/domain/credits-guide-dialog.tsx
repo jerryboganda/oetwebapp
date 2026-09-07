@@ -18,10 +18,10 @@ import { Modal } from '@/components/ui/modal';
 // A single, friendly "How credits work" button that opens a popup explaining the
 // whole credit system across all five surfaces (Reading, Listening, Writing,
 // Speaking, Mocks). Drop <CreditsGuideButton /> anywhere a learner is about to
-// spend credits. The numbers here mirror the live billing rules:
+// spend credits. The numbers here mirror the live billing rules (FINAL 2026-09-06):
 //   Reading / Listening — 1 credit per PAPER (parts + re-tries free)
-//   Writing / Speaking  — 2 credits per exam (no parts)
-//   Speaking practice   — 1 credit per single card
+//   Writing             — 2 credits per letter (no parts)
+//   Speaking            — 2 credits per card; full two-card exam = 4 credits
 //   Mock                — 1 mock credit; Writing/Speaking are tutor-marked
 
 type Accent = 'blue' | 'violet' | 'amber' | 'emerald' | 'rose';
@@ -92,7 +92,7 @@ const ROWS: CreditRow[] = [
     name: 'Speaking',
     cost: '2 credits',
     detail:
-      'Charged per exam — the full AI role-play. A single practice card on its own is just 1 credit.',
+      'A single Speaking card uses 2 AI credits. A full Speaking exam contains two cards and uses 4 AI credits in total.',
   },
   {
     icon: ClipboardCheck,

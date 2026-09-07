@@ -16,7 +16,7 @@ public sealed record AiCreditReservationTicket(
 public interface IAiCreditReservationService
 {
     /// <summary>
-    /// Hold Writing → Flexible W/S → 2× Shared for one writing grade.
+    /// Hold 2 AI credits (Writing → Flexible W/S → Shared) for one writing grade.
     /// Idempotent on <paramref name="businessReference"/>.
     /// The funding rule lives in the CreditLedger
     /// (<see cref="Billing.IAiPackageCreditService"/>); this method holds

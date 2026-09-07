@@ -27,7 +27,7 @@
         "productCategory":  "full_course",
         "profession":  "medicine",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  5,
@@ -76,7 +76,7 @@
         "productCategory":  "full_course_bundle",
         "profession":  "medicine",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  false,
         "bundled":  {
                         "writingAssessments":  5,
@@ -131,7 +131,7 @@
         "productCategory":  "full_course",
         "profession":  "nursing",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  0,
@@ -175,7 +175,7 @@
         "productCategory":  "full_course_bundle",
         "profession":  "nursing",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  5,
@@ -218,7 +218,7 @@
         "productCategory":  "full_course_bundle",
         "profession":  "nursing",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  5,
@@ -264,7 +264,7 @@
         "productCategory":  "full_course",
         "profession":  "pharmacy",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  0,
@@ -308,7 +308,7 @@
         "productCategory":  "full_course",
         "profession":  "physiotherapy",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  false,
         "bundled":  {
                         "writingAssessments":  5,
@@ -355,7 +355,7 @@
         "productCategory":  "full_course",
         "profession":  "other-allied-health",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  false,
         "bundled":  {
                         "writingAssessments":  5,
@@ -446,7 +446,7 @@
         "productCategory":  "crash_course",
         "profession":  "all",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  0,
@@ -489,7 +489,7 @@
         "productCategory":  "crash_course_bundle",
         "profession":  "all",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  3,
@@ -533,7 +533,7 @@
         "productCategory":  "crash_course_bundle",
         "profession":  "all",
         "writingAddons":  true,
-        "speakingAddons":  false,
+        "speakingAddons":  true,
         "tutorBookDiscount":  true,
         "bundled":  {
                         "writingAssessments":  5,
@@ -1207,7 +1207,7 @@
     {
         "code":  "pkg_quick_check",
         "name":  "Quick Check",
-        "description":  "A targeted one-off readiness package for candidates who want instant AI feedback on Writing or Speaking together with a small Listening and Reading practice allowance. This package includes 5 flexible AI grading credits for Writing letters or Speaking cards, plus 3 Listening exams and 3 Reading exams for focused practice.",
+        "description":  "A targeted readiness package with 5 flexible AI practice attempts that can be used for Writing letters, Speaking cards, or any mix of both, plus 3 Listening and 3 Reading practice exams.",
         "price":  15,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1225,18 +1225,18 @@
         "displayOrder":  80,
         "aiPackageGroup":  "full",
         "aiFeatures":  [
-                           "5 flexible AI grading credits for Writing or Speaking",
+                           "5 flexible AI practice attempts for Writing or Speaking",
                            "3 Listening practice exams",
                            "3 Reading practice exams",
                            "AI feedback reports for graded Writing or Speaking submissions",
                            "30-day validity"
                        ],
-        "flexibleCredits":  5
+        "flexibleCredits":  10
     },
     {
         "code":  "pkg_exam_prep_pro",
         "name":  "Exam Prep Pro",
-        "description":  "A larger one-off exam preparation package for candidates who need repeated AI grading and more Listening and Reading practice before the exam. It includes 15 flexible AI grading credits for Writing letters or Speaking cards, plus 6 Listening exams and 6 Reading exams.",
+        "description":  "A larger exam-preparation package with 15 flexible AI practice attempts that can be used for Writing letters, Speaking cards, or any mix of both, plus 6 Listening and 6 Reading practice exams.",
         "price":  32,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1254,13 +1254,13 @@
         "displayOrder":  90,
         "aiPackageGroup":  "full",
         "aiFeatures":  [
-                           "15 flexible AI grading credits for Writing or Speaking",
+                           "15 flexible AI practice attempts for Writing or Speaking",
                            "6 Listening practice exams",
                            "6 Reading practice exams",
                            "AI feedback reports for graded Writing or Speaking submissions",
                            "90-day validity"
                        ],
-        "flexibleCredits":  15
+        "flexibleCredits":  30
     },
     {
         "code":  "pkg_oet_mastery",
@@ -1461,7 +1461,7 @@
     {
         "code":  "pkg_writing_starter",
         "name":  "Writing Starter",
-        "description":  "A starter Writing AI grading package sized for focused practice. It includes 3 AI-graded Writing letters with instant Claude feedback and detailed criterion-based comments.",
+        "description":  "A focused Writing practice package with 3 complete AI-graded OET Writing letters, each with instant, highly specialised feedback and detailed criterion-based comments.",
         "price":  9,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1480,17 +1480,17 @@
         "aiPackageGroup":  "writing",
         "aiFeatures":  [
                            "3 AI-graded Writing letters",
-                           "Instant Claude feedback on every letter",
+                           "Instant specialised feedback on every letter",
                            "Detailed per-criterion feedback",
                            "30-day validity"
                        ],
-        "writingOnlyCredits":  3,
+        "writingOnlyCredits":  6,
         "writingItems":  3
     },
     {
         "code":  "pkg_writing_standard",
         "name":  "Writing Standard",
-        "description":  "A standard Writing AI grading package for candidates who want more letter practice. It includes 8 AI-graded Writing letters with instant Claude feedback and detailed criterion-based comments.",
+        "description":  "A Writing practice package for candidates who want more repetition, with 8 complete AI-graded OET Writing letters, each with instant, highly specialised feedback and detailed criterion-based comments.",
         "price":  19,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1509,17 +1509,17 @@
         "aiPackageGroup":  "writing",
         "aiFeatures":  [
                            "8 AI-graded Writing letters",
-                           "Instant Claude feedback on every letter",
+                           "Instant specialised feedback on every letter",
                            "Detailed per-criterion feedback",
                            "90-day validity"
                        ],
-        "writingOnlyCredits":  8,
+        "writingOnlyCredits":  16,
         "writingItems":  8
     },
     {
         "code":  "pkg_writing_pro",
         "name":  "Writing Pro",
-        "description":  "A larger Writing AI grading package for candidates who want intensive letter practice. It includes 15 AI-graded Writing letters with instant Claude feedback and detailed criterion-based comments.",
+        "description":  "An intensive Writing practice package with 15 complete AI-graded OET Writing letters, each with instant, highly specialised feedback and detailed criterion-based comments.",
         "price":  32,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1538,17 +1538,17 @@
         "aiPackageGroup":  "writing",
         "aiFeatures":  [
                            "15 AI-graded Writing letters",
-                           "Instant Claude feedback on every letter",
+                           "Instant specialised feedback on every letter",
                            "Detailed per-criterion feedback",
                            "6-month validity"
                        ],
-        "writingOnlyCredits":  15,
+        "writingOnlyCredits":  30,
         "writingItems":  15
     },
     {
         "code":  "pkg_speaking_starter",
         "name":  "Speaking Starter",
-        "description":  "A starter Speaking AI grading package sized for focused practice. It includes 3 AI-graded Speaking cards using Whisper transcription and Claude assessment with rule-cited transcript markers.",
+        "description":  "A focused Speaking practice package with 3 complete AI-graded OET Speaking cards, each with instant, highly specialised feedback and detailed transcript-based comments aligned with OET Speaking criteria.",
         "price":  12,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1567,17 +1567,17 @@
         "aiPackageGroup":  "speaking",
         "aiFeatures":  [
                            "3 AI-graded Speaking cards",
-                           "Whisper transcription plus Claude assessment",
-                           "Rule-cited transcript markers",
+                           "Instant specialised feedback on every card",
+                           "Detailed transcript-based feedback aligned with OET Speaking criteria",
                            "30-day validity"
                        ],
-        "speakingOnlyCredits":  3,
+        "speakingOnlyCredits":  6,
         "speakingItems":  3
     },
     {
         "code":  "pkg_speaking_standard",
         "name":  "Speaking Standard",
-        "description":  "A standard Speaking AI grading package for candidates who want more role-play practice. It includes 8 AI-graded Speaking cards using Whisper transcription and Claude assessment with rule-cited transcript markers.",
+        "description":  "A Speaking practice package for candidates who want more role-play repetition, with 8 complete AI-graded OET Speaking cards, each with instant, highly specialised feedback and detailed transcript-based comments aligned with OET Speaking criteria.",
         "price":  24,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1596,17 +1596,17 @@
         "aiPackageGroup":  "speaking",
         "aiFeatures":  [
                            "8 AI-graded Speaking cards",
-                           "Whisper transcription plus Claude assessment",
-                           "Rule-cited transcript markers",
+                           "Instant specialised feedback on every card",
+                           "Detailed transcript-based feedback aligned with OET Speaking criteria",
                            "90-day validity"
                        ],
-        "speakingOnlyCredits":  8,
+        "speakingOnlyCredits":  16,
         "speakingItems":  8
     },
     {
         "code":  "pkg_speaking_pro",
         "name":  "Speaking Pro",
-        "description":  "A larger Speaking AI grading package for candidates who want intensive role-play practice. It includes 15 AI-graded Speaking cards using Whisper transcription and Claude assessment with rule-cited transcript markers.",
+        "description":  "An intensive Speaking practice package with 15 complete AI-graded OET Speaking cards, each with instant, highly specialised feedback and detailed transcript-based comments aligned with OET Speaking criteria.",
         "price":  42,
         "originalPrice":  null,
         "addonKind":  "ai_package",
@@ -1625,11 +1625,11 @@
         "aiPackageGroup":  "speaking",
         "aiFeatures":  [
                            "15 AI-graded Speaking cards",
-                           "Whisper transcription plus Claude assessment",
-                           "Rule-cited transcript markers",
+                           "Instant specialised feedback on every card",
+                           "Detailed transcript-based feedback aligned with OET Speaking criteria",
                            "6-month validity"
                        ],
-        "speakingOnlyCredits":  15,
+        "speakingOnlyCredits":  30,
         "speakingItems":  15
     },
     {

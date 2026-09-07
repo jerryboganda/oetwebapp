@@ -14,7 +14,8 @@ namespace OetLearner.Api.Tests.Services;
 
 /// <summary>
 /// Funding-rule vectors for the CreditLedger unification (TA, #193).
-/// The Dedicated → Flexible → Shared-at-2 rule must live in exactly one
+/// The Dedicated → Flexible → Shared priority (2 AI credits per activity
+/// from any pool, FINAL 2026-09-06) must live in exactly one
 /// place (the ledger); these lock the reservation service's observable
 /// behavior across the refactor.
 /// </summary>
@@ -53,12 +54,12 @@ public sealed class AiCreditReservationFundingTests
         => new(db, ledger, TimeProvider.System);
 
     [Fact]
-    public async Task ReserveWriting_DedicatedPool_RecordsWritingBucket_OneUnit()
+    public async Task ReserveWriting_DedicatedPool_RecordsWritingBucket_TwoUnits()
     {
         await using var db = NewContext();
         var ledger = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
         await ledger.GrantPackageAsync("learner-1",
-            AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""),
+            AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":2}"""),
             1, "cs-w", null, CancellationToken.None);
 
         var ticket = await NewReservations(db, ledger)
@@ -66,7 +67,7 @@ public sealed class AiCreditReservationFundingTests
 
         Assert.False(ticket.AlreadyExisted);
         Assert.Equal("writing", ticket.BucketKind);
-        Assert.Equal(1, ticket.Units);
+        Assert.Equal(2, ticket.Units);
     }
 
     [Fact]
@@ -86,19 +87,19 @@ public sealed class AiCreditReservationFundingTests
     }
 
     [Fact]
-    public async Task ReserveWriting_FlexibleOnlyPool_RecordsFlexibleBucket_OneUnit()
+    public async Task ReserveWriting_FlexibleOnlyPool_RecordsFlexibleBucket_TwoUnits()
     {
         await using var db = NewContext();
         var ledger = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
         await ledger.GrantPackageAsync("learner-1",
-            AddOn("pkg_flex_one", 30, 1, """{"package_type":"full","flexible_credits":1}"""),
+            AddOn("pkg_flex_one", 30, 1, """{"package_type":"full","flexible_credits":2}"""),
             1, "cs-flex", null, CancellationToken.None);
 
         var ticket = await NewReservations(db, ledger)
             .ReserveWritingAsync("learner-1", "op-1", "biz-1", CancellationToken.None);
 
         Assert.Equal("flexible_ws", ticket.BucketKind);
-        Assert.Equal(1, ticket.Units);
+        Assert.Equal(2, ticket.Units);
     }
 
     [Fact]
@@ -107,7 +108,7 @@ public sealed class AiCreditReservationFundingTests
         await using var db = NewContext();
         var ledger = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
         await ledger.GrantPackageAsync("learner-1",
-            AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""),
+            AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":2}"""),
             1, "cs-w", null, CancellationToken.None);
         await ledger.GrantPackageAsync("learner-1",
             AddOn("pkg_shared_one", 30, 1, """{"package_type":"full","shared_credits":2}"""),
@@ -117,7 +118,7 @@ public sealed class AiCreditReservationFundingTests
             .ReserveWritingAsync("learner-1", "op-1", "biz-1", CancellationToken.None);
 
         Assert.Equal("writing", ticket.BucketKind);
-        Assert.Equal(1, ticket.Units);
+        Assert.Equal(2, ticket.Units);
     }
 
     [Fact]
@@ -139,7 +140,7 @@ public sealed class AiCreditReservationFundingTests
         await using var db = NewContext();
         var ledger = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
         await ledger.GrantPackageAsync("learner-1",
-            AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":1}"""),
+            AddOn("pkg_writing_single", 30, 1, """{"package_type":"writing","writing_only_credits":2}"""),
             1, "cs-w", null, CancellationToken.None);
         var svc = NewReservations(db, ledger);
 
@@ -154,12 +155,12 @@ public sealed class AiCreditReservationFundingTests
     }
 
     [Fact]
-    public async Task ReserveSpeaking_DedicatedPool_RecordsSpeakingBucket_OneUnit()
+    public async Task ReserveSpeaking_DedicatedPool_RecordsSpeakingBucket_TwoUnits()
     {
         await using var db = NewContext();
         var ledger = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
         await ledger.GrantPackageAsync("learner-1",
-            AddOn("pkg_speaking_single", 30, 1, """{"package_type":"speaking","speaking_only_credits":1}"""),
+            AddOn("pkg_speaking_single", 30, 1, """{"package_type":"speaking","speaking_only_credits":2}"""),
             1, "cs-s", null, CancellationToken.None);
 
         var ticket = await NewReservations(db, ledger)
@@ -167,6 +168,6 @@ public sealed class AiCreditReservationFundingTests
 
         Assert.False(ticket.AlreadyExisted);
         Assert.Equal("speaking", ticket.BucketKind);
-        Assert.Equal(1, ticket.Units);
+        Assert.Equal(2, ticket.Units);
     }
 }

@@ -151,6 +151,7 @@ public sealed class PrivateSpeakingZoomCreationTests
                 NullLogger<ZoomMeetingService>.Instance),
             calendarService: null!,
             entitlementResolver: null!,
+            addonEligibility: null!,
             stripeService: null!,
             paymentGateways: null!,
             platformLinks: null!,

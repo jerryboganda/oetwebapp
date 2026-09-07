@@ -95,6 +95,9 @@ public partial class AdminService
                     UpdatedAt: r.UpdatedAt,
                     PublishedAt: r.PublishedAt,
                     ArchivedAt: r.ArchivedAt,
+                    PrimaryCategory: string.IsNullOrWhiteSpace(r.PrimaryCategory) ? "Other Cards" : r.PrimaryCategory,
+                    SecondaryTags: DeserializeSecondaryTags(r.SecondaryTagsJson),
+                    CategoryNeedsReview: r.CategoryNeedsReview,
                     CardTypeId: r.CardTypeId,
                     CardTypeName: r.CardTypeId is not null && typeNames.TryGetValue(r.CardTypeId, out var tn) ? tn : null,
                     SourceAttribution: r.SourceAttribution))
@@ -197,6 +200,9 @@ public partial class AdminService
                 : req.Disclaimer.Trim(),
             Status = ContentStatus.Draft,
             IsLiveTutorEligible = req.IsLiveTutorEligible ?? false,
+            PrimaryCategory = NormalisePrimaryCategory(req.PrimaryCategory),
+            SecondaryTagsJson = SerializeSecondaryTags(req.SecondaryTags),
+            CategoryNeedsReview = req.CategoryNeedsReview ?? string.IsNullOrWhiteSpace(req.PrimaryCategory),
             CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim(),
             DisplayCardNumber = req.DisplayCardNumber,
             SourceAttribution = NormaliseSourceAttribution(req.SourceAttribution),
@@ -297,6 +303,14 @@ public partial class AdminService
         if (req.Disclaimer is not null && !string.IsNullOrWhiteSpace(req.Disclaimer))
             card.Disclaimer = req.Disclaimer.Trim();
         if (req.IsLiveTutorEligible.HasValue) card.IsLiveTutorEligible = req.IsLiveTutorEligible.Value;
+        // FINAL 2026-09-06 candidate-visible taxonomy: a non-blank value
+        // sets (normalised to the nine brief categories); null leaves it
+        // unchanged. SecondaryTags replaces the whole tag list when supplied.
+        if (req.PrimaryCategory is not null && !string.IsNullOrWhiteSpace(req.PrimaryCategory))
+            card.PrimaryCategory = NormalisePrimaryCategory(req.PrimaryCategory);
+        if (req.SecondaryTags is not null)
+            card.SecondaryTagsJson = SerializeSecondaryTags(req.SecondaryTags);
+        if (req.CategoryNeedsReview.HasValue) card.CategoryNeedsReview = req.CategoryNeedsReview.Value;
         // CardTypeId: "" clears the type; a non-blank value sets it; null leaves
         // it unchanged.
         if (req.CardTypeId is not null)
@@ -494,6 +508,9 @@ public partial class AdminService
             Disclaimer = source.Disclaimer,
             Status = ContentStatus.Draft,
             IsLiveTutorEligible = source.IsLiveTutorEligible,
+            PrimaryCategory = source.PrimaryCategory,
+            SecondaryTagsJson = source.SecondaryTagsJson,
+            CategoryNeedsReview = source.CategoryNeedsReview,
             CardTypeId = source.CardTypeId,
             DisplayCardNumber = source.DisplayCardNumber,
             // A duplicate is derived from the same printed source, so the
@@ -842,6 +859,61 @@ public partial class AdminService
         };
     }
 
+    /// <summary>
+    /// FINAL 2026-09-06 — normalise the candidate-visible primary category
+    /// to the nine brief categories. Unknown/blank input falls back to
+    /// Other Cards (visible + review-flagged by the caller) rather than a
+    /// forced wrong category.
+    /// </summary>
+    internal static string NormalisePrimaryCategory(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "Other Cards";
+        var v = raw.Trim().ToLowerInvariant();
+        return v switch
+        {
+            "first visit" => "First Visit",
+            "second visit / follow-up" or "second visit" or "follow-up" or "followup" => "Second Visit / Follow-up",
+            "already known patient" or "already known" => "Already Known Patient",
+            "examination card" or "examination" => "Examination Card",
+            "emergency / emergency department" or "emergency" or "emergency department" or "emergency / ed" => "Emergency / Emergency Department",
+            "breaking bad news" => "Breaking Bad News",
+            "angry patient" or "angry" => "Angry Patient",
+            "reluctant patient" or "reluctant" => "Reluctant Patient",
+            "other cards" or "other" => "Other Cards",
+            _ => "Other Cards",
+        };
+    }
+
+    internal static string SerializeSecondaryTags(string[]? tags)
+    {
+        if (tags is null || tags.Length == 0) return "[]";
+        var clean = tags
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Select(t => t.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return JsonSerializer.Serialize(clean);
+    }
+
+    internal static string[] DeserializeSecondaryTags(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Array) return Array.Empty<string>();
+            return doc.RootElement.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString()!)
+                .Where(text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
     private static int ComputeEstimatedMinutes(int? prep, int? roleplay)
     {
         var total = (prep ?? 180) + (roleplay ?? 300);
@@ -940,6 +1012,9 @@ public partial class AdminService
             InterlocutorScript: interlocutorScript is null
                 ? null
                 : ProjectInterlocutorScript(interlocutorScript),
+            PrimaryCategory: string.IsNullOrWhiteSpace(card.PrimaryCategory) ? "Other Cards" : card.PrimaryCategory,
+            SecondaryTags: DeserializeSecondaryTags(card.SecondaryTagsJson),
+            CategoryNeedsReview: card.CategoryNeedsReview,
             CardTypeId: card.CardTypeId,
             CardTypeName: cardTypeName,
             DisplayCardNumber: card.DisplayCardNumber,
@@ -1143,6 +1218,12 @@ public partial class AdminService
             Disclaimer = "Practice estimate only. This is not an official OET score or result.",
             Status = ContentStatus.Draft,
             IsLiveTutorEligible = false,
+            // FINAL 2026-09-06: AI drafts land unclassified (visible Other
+            // Cards + review flag) — an admin confirms the category in the
+            // classification step before publishing.
+            PrimaryCategory = "Other Cards",
+            SecondaryTagsJson = "[]",
+            CategoryNeedsReview = true,
             CreatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,

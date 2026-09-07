@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { ClipboardList, MessageCircleQuestion } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -9,60 +9,100 @@ import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
 import { LearnerSurfaceCard } from '@/components/domain';
-import { fetchSpeakingTasks } from '@/lib/api';
+import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
-import type { SpeakingTask } from '@/lib/mock-data';
+import { WRITING_PROFESSIONS, WRITING_PROFESSION_LABELS } from '@/lib/writing/types';
+import {
+  speakingCategoryFilterOptions,
+  type SpeakingPrimaryCategory,
+} from '@/lib/speaking/category-taxonomy';
+import {
+  listLearnerRolePlayCards,
+  type LearnerRolePlayCardSummary,
+} from '@/lib/api/speaking-role-play-cards';
 
+// FINAL 2026-09-06 — one shared profession master list (Writing parity, no
+// separate hard-coded Speaking list) + the candidate-visible card taxonomy
+// as the main category filter. Difficulty is removed completely.
 const FILTER_GROUPS: FilterGroup[] = [
   {
     id: 'profession',
     label: 'Profession',
-    options: [
-      { id: 'Nursing', label: 'Nursing' },
-      { id: 'Medicine', label: 'Medicine' },
-      { id: 'Pharmacy', label: 'Pharmacy' },
-      { id: 'Physiotherapy', label: 'Physiotherapy' },
-    ],
+    options: WRITING_PROFESSIONS.map((id) => ({ id, label: WRITING_PROFESSION_LABELS[id] })),
   },
   {
-    id: 'difficulty',
-    label: 'Difficulty',
-    options: [
-      { id: 'Easy', label: 'Easy' },
-      { id: 'Medium', label: 'Medium' },
-      { id: 'Hard', label: 'Hard' },
-    ],
+    id: 'category',
+    label: 'Card type',
+    options: speakingCategoryFilterOptions(),
   },
 ];
 
-export default function SpeakingTaskSelection() {
-  const [tasks, setTasks] = useState<SpeakingTask[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Record<string, string[]>>({});
+type Selection = Record<string, string[]>;
 
-  useEffect(() => {
-    fetchSpeakingTasks()
-      .then(setTasks)
-      .finally(() => setLoading(false));
+const EMPTY_SELECTION: Selection = {};
+
+function single(group: Selection, groupId: string): string | undefined {
+  return group[groupId]?.[0];
+}
+
+export default function SpeakingTaskSelection() {
+  // `draft` is the pending picker state; `applied` is what the server last
+  // rendered. Results + count update together only after Apply.
+  const [draft, setDraft] = useState<Selection>(EMPTY_SELECTION);
+  const [applied, setApplied] = useState<Selection>(EMPTY_SELECTION);
+  const [cards, setCards] = useState<LearnerRolePlayCardSummary[]>([]);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [appliedProfessionLabel, setAppliedProfessionLabel] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchCards = useCallback(async (selection: Selection) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const professionId = single(selection, 'profession');
+      const primaryCategory = single(selection, 'category') as SpeakingPrimaryCategory | undefined;
+      const response = await listLearnerRolePlayCards({ professionId, primaryCategory });
+      setCards(response.rolePlayCards);
+      // The count is server-derived from the same filters that populate the
+      // list — display it verbatim, never compute it on the client.
+      setTotalCount(response.totalCount);
+      const professionLabel = response.appliedProfessionId
+        ? (WRITING_PROFESSION_LABELS[response.appliedProfessionId as keyof typeof WRITING_PROFESSION_LABELS]
+          ?? response.appliedProfessionId)
+        : null;
+      setAppliedProfessionLabel(professionLabel);
+    } catch {
+      setError('Could not load speaking cards. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  const filtered = tasks.filter((t) => {
-    const profFilter = selected.profession;
-    const diffFilter = selected.difficulty;
-    if (profFilter?.length && !profFilter.includes(t.profession)) return false;
-    if (diffFilter?.length && !diffFilter.includes(t.difficulty)) return false;
-    return true;
-  });
+  useEffect(() => {
+    fetchCards(applied);
+  }, [applied, fetchCards]);
 
-  const handleFilterChange = (groupId: string, optionId: string) => {
-    setSelected(prev => {
+  // Both groups are single-select (Writing parity): picking an option
+  // replaces the group; picking it again clears the group.
+  const handleDraftChange = (groupId: string, optionId: string) => {
+    setDraft((prev) => {
       const current = prev[groupId] ?? [];
-      const next = current.includes(optionId)
-        ? current.filter(id => id !== optionId)
-        : [...current, optionId];
+      const next = current.includes(optionId) ? [] : [optionId];
       return { ...prev, [groupId]: next };
     });
   };
+
+  const handleApply = () => setApplied(draft);
+
+  const handleClear = () => {
+    setDraft(EMPTY_SELECTION);
+    setApplied(EMPTY_SELECTION);
+  };
+
+  const draftTotal = Object.values(draft).reduce((sum, arr) => sum + arr.length, 0);
+  const appliedTotal = Object.values(applied).reduce((sum, arr) => sum + arr.length, 0);
+  const isDirty = JSON.stringify(draft) !== JSON.stringify(applied);
 
   return (
     <LearnerDashboardShell pageTitle="Select Speaking Task">
@@ -118,10 +158,31 @@ export default function SpeakingTaskSelection() {
 
         <FilterBar
           groups={FILTER_GROUPS}
-          selected={selected}
-          onChange={handleFilterChange}
-          onClear={() => setSelected({})}
+          selected={draft}
+          onChange={handleDraftChange}
+          onClear={handleClear}
         />
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleApply}
+            disabled={!isDirty}
+            className="pressable inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-40 dark:bg-violet-700 dark:hover:bg-violet-600"
+          >
+            Apply filters{draftTotal > 0 ? ` (${draftTotal})` : ''}
+          </button>
+          {appliedTotal > 0 && (
+            <button
+              type="button"
+              onClick={handleClear}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
+            >
+              Clear all filters
+            </button>
+          )}
+        </div>
+
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         {loading ? (
           <div className="grid grid-cols-1 gap-4">
@@ -129,36 +190,46 @@ export default function SpeakingTaskSelection() {
               <Skeleton key={i} className="h-28 w-full rounded-xl" />
             ))}
           </div>
-        ) : filtered.length === 0 ? (
+        ) : cards.length === 0 ? (
           <EmptyState
-            title="No tasks found"
-            description="Try adjusting your filters."
-            action={{ label: 'Clear Filters', onClick: () => setSelected({}) }}
+            title={appliedTotal > 0 ? 'No cards available for these filters' : 'No speaking cards available'}
+            description={
+              appliedTotal > 0
+                ? 'No published cards match this profession and card type yet. Clear the filters to browse everything.'
+                : 'Speaking role plays will appear here once they are published.'
+            }
+            action={appliedTotal > 0 ? { label: 'Clear all filters', onClick: handleClear } : undefined}
           />
         ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {filtered.map((task, i) => (
-              <MotionItem
-                key={task.id}
-                delayIndex={i}
-              >
-                <TaskCard
-                  id={task.id}
-                  title={task.title}
-                  subtest="Speaking"
-                  profession={task.profession}
-                  duration={task.duration}
-                  difficulty={task.difficulty}
-                  description={`Focus: ${task.criteriaFocus}`}
-                  tags={[task.scenarioType]}
-                  onStart={() => {
-                    analytics.track('task_started', { taskId: task.id, subtest: 'speaking' });
-                    window.location.href = `/speaking/roleplay/${encodeURIComponent(task.id)}`;
-                  }}
-                />
-              </MotionItem>
-            ))}
-          </div>
+          <>
+            <p className="text-sm text-muted" data-testid="speaking-available-count" aria-live="polite">
+              <span className="font-bold text-navy">{totalCount ?? cards.length}</span>
+              {' '}available Speaking card{(totalCount ?? cards.length) === 1 ? '' : 's'}
+              {appliedProfessionLabel ? ` for ${appliedProfessionLabel}` : ''}
+              {single(applied, 'category') ? ` · ${single(applied, 'category')}` : ''}.
+              {' '}Each card uses 2 AI credits.
+            </p>
+            <div className="grid grid-cols-1 gap-4">
+              {cards.map((card, i) => (
+                <MotionItem
+                  key={card.cardId}
+                  delayIndex={i}
+                >
+                  <TaskCard
+                    id={card.cardId}
+                    title={card.scenarioTitle}
+                    subtest="Speaking"
+                    profession={card.professionId}
+                    description={`Focus: ${(card.criteriaFocus ?? []).join(', ') || 'speaking control'} · ${card.primaryCategory ?? 'Other Cards'} · Uses 2 AI credits`}
+                    onStart={() => {
+                      analytics.track('task_started', { taskId: card.cardId, subtest: 'speaking' });
+                      window.location.href = `/speaking/roleplay/${encodeURIComponent(card.cardId)}`;
+                    }}
+                  />
+                </MotionItem>
+              ))}
+            </div>
+          </>
         )}
       </div>
     </LearnerDashboardShell>

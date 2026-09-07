@@ -62,6 +62,11 @@ function WritingLandingCardItem({ card }: { card: WritingLandingCard }) {
           </span>
           <h3 className="mt-3 text-base font-bold text-navy">{t(card.titleKey)}</h3>
           <p className="mt-1 flex-1 text-sm leading-snug text-muted">{t(card.descriptionKey)}</p>
+          {card.key === 'practice' ? (
+            <p className="mt-2 text-xs font-semibold text-muted" data-testid="writing-credit-cost-note">
+              {t('writing.hub.cards.practice.creditNote')}
+            </p>
+          ) : null}
           <Link
             href={card.href}
             className="mt-4 inline-flex items-center gap-1.5 text-sm font-bold text-primary transition-colors hover:text-primary/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded"

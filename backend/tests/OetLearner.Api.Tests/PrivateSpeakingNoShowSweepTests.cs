@@ -349,6 +349,7 @@ public sealed class PrivateSpeakingNoShowSweepTests
             zoomService: null!,
             calendarService: calendarService,
             entitlementResolver: null!,
+            addonEligibility: new AddonEligibilityService(db),
             stripeService: new FakeStripeService(),
             paymentGateways: null!,
             platformLinks: platformLinks,

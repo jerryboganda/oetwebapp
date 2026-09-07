@@ -1,8 +1,8 @@
 import { Gift, PlayCircle, Repeat, Ticket } from 'lucide-react';
 
-// Learner-facing explainer for how Reading / Listening test credits are spent.
+// Learner-facing explainer for how Reading / Listening credits are spent.
 // Billing rule (backend: paper is the unit — one credit per sample): opening any
-// part (A/B/C) OR the full paper of a sample uses ONE test; the other parts, the
+// part (A/B/C) OR the full paper of a sample uses ONE credit; the other parts, the
 // full paper, and repeat attempts of that same sample are then free. Shown on the
 // Reading and Listening hubs so learners understand the rule before they choose.
 
@@ -53,7 +53,7 @@ export function CreditUsageInfoCard({
     {
       icon: PlayCircle,
       title: 'Open any part or the full paper',
-      detail: `Uses just 1 ${unit} test for that whole sample.`,
+      detail: `Uses just 1 ${unit} credit for that whole sample.`,
     },
     {
       icon: Gift,
@@ -70,7 +70,7 @@ export function CreditUsageInfoCard({
   return (
     <section
       data-testid={`${module}-credit-usage-info`}
-      aria-label={`How ${unit} test credits are used`}
+      aria-label={`How ${unit} credits are used`}
       className={`rounded-2xl border p-5 shadow-sm sm:p-6 ${theme.container} ${className}`}
     >
       <div className="flex items-start gap-4">
@@ -85,11 +85,11 @@ export function CreditUsageInfoCard({
             How your credits work
           </p>
           <h3 className="mt-0.5 text-base font-bold text-navy">
-            One {unit} test unlocks the whole sample
+            One {unit} credit unlocks the whole sample
           </h3>
           <p className="mt-1 text-sm text-muted">
             You&apos;re only charged once per sample. The first time you open any part or the full
-            paper, it uses a single {unit} test — everything else in that sample is then free.
+            paper, it uses a single {unit} credit — everything else in that sample is then free.
           </p>
         </div>
       </div>

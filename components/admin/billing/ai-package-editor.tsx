@@ -454,9 +454,9 @@ export function AiPackageEditor({ canWrite = true }: AiPackageEditorProps) {
             <p className="mb-3 text-sm font-semibold text-navy">Entitlements granted on purchase</p>
             <div className="grid gap-4 sm:grid-cols-3">
               <Input label="Shared credits" inputMode="numeric" value={form.sharedCredits} onChange={(e) => setField('sharedCredits', e.target.value)} hint="Any sub-test. Writing/Speaking cost 2 Shared." />
-              <Input label="Flexible W/S credits" inputMode="numeric" value={form.flexibleCredits} onChange={(e) => setField('flexibleCredits', e.target.value)} hint="Writing or Speaking only. Cannot fund Listening/Reading." />
-              <Input label="Writing credits" inputMode="numeric" value={form.writingCredits} onChange={(e) => setField('writingCredits', e.target.value)} />
-              <Input label="AI Speaking Credits (practice)" inputMode="numeric" value={form.speakingCredits} onChange={(e) => setField('speakingCredits', e.target.value)} hint="Self-practice cards + exam fallback; 1 credit per card" />
+              <Input label="Flexible W/S credits" inputMode="numeric" value={form.flexibleCredits} onChange={(e) => setField('flexibleCredits', e.target.value)} hint="Writing or Speaking only. 1 letter/card = 2 credits. Cannot fund Listening/Reading." />
+              <Input label="Writing credits" inputMode="numeric" value={form.writingCredits} onChange={(e) => setField('writingCredits', e.target.value)} hint="1 letter = 2 credits (e.g. 6 credits = 3 letters)" />
+              <Input label="AI Speaking Credits (practice)" inputMode="numeric" value={form.speakingCredits} onChange={(e) => setField('speakingCredits', e.target.value)} hint="Self-practice cards + exam fallback; 1 card = 2 credits, full two-card exam = 4" />
               <Input label="Full Mock Exam Credits" inputMode="numeric" value={form.mocks} onChange={(e) => setField('mocks', e.target.value)} hint="For Speaking: 1 credit = 1 whole two-card exam (Card A + B), separate from AI Speaking Credits above" />
               <Input label="Listening tests" inputMode="numeric" value={form.listeningTests} onChange={(e) => setField('listeningTests', e.target.value)} hint="Blank = none. Use Unlimited Listening instead of a blank count." disabled={form.unlimitedListening} />
               <Input label="Reading tests" inputMode="numeric" value={form.readingTests} onChange={(e) => setField('readingTests', e.target.value)} hint="Blank = none. Use Unlimited Reading instead of a blank count." disabled={form.unlimitedReading} />

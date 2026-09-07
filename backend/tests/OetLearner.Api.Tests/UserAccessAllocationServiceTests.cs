@@ -470,7 +470,7 @@ public class UserAccessAllocationServiceTests
             Status = BillingAddOnStatus.Active,
             AddonKind = "ai_package",
             GrantCredits = 3,
-            GrantEntitlementsJson = """{"package_type":"writing","writing_only_credits":3}""",
+            GrantEntitlementsJson = """{"package_type":"writing","writing_only_credits":6}""",
             DurationDays = 30,
             CreatedAt = now,
             UpdatedAt = now,
@@ -492,8 +492,8 @@ public class UserAccessAllocationServiceTests
         Assert.True(idem.Key.Length <= 128);
         Assert.True((tx.StripeSessionId ?? string.Empty).Length <= 128);
         Assert.True((tx.ReferenceId ?? string.Empty).Length <= 128);
-        Assert.Equal(3, snapshot.WritingOnlyCredits);
-        Assert.Equal(3, snapshot.CreditsRemaining);
+        Assert.Equal(6, snapshot.WritingOnlyCredits);
+        Assert.Equal(6, snapshot.CreditsRemaining);
     }
 
     [Fact]
@@ -566,7 +566,7 @@ public class UserAccessAllocationServiceTests
                 AddonKind = "ai_package",
                 RequiresEligibleParent = false,
                 GrantCredits = 3,
-                GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":3,"listening_tests":0,"reading_tests":0}""",
+                GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":6,"listening_tests":0,"reading_tests":0}""",
                 DurationDays = 30,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -589,7 +589,7 @@ public class UserAccessAllocationServiceTests
         Assert.Equal(6, afterWriting.WritingOnlyCredits);
         Assert.Equal(0, afterWriting.SpeakingOnlyCredits);
         Assert.Equal(6, afterSpeaking.WritingOnlyCredits);
-        Assert.Equal(3, afterSpeaking.SpeakingOnlyCredits);
+        Assert.Equal(6, afterSpeaking.SpeakingOnlyCredits);
         Assert.Equal(0, afterSpeaking.FlexibleCredits);
     }
 
@@ -737,7 +737,7 @@ public class UserAccessAllocationServiceTests
                 AddonKind = "ai_package",
                 RequiresEligibleParent = false,
                 GrantCredits = 3,
-                GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":3,"listening_tests":0,"reading_tests":0}""",
+                GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":6,"listening_tests":0,"reading_tests":0}""",
                 DurationDays = 30,
                 CreatedAt = now,
                 UpdatedAt = now,
@@ -754,7 +754,7 @@ public class UserAccessAllocationServiceTests
         var snapshot = await credits.GetSnapshotAsync(userId, 20, default);
 
         Assert.Equal(0, snapshot.WritingOnlyCredits);
-        Assert.Equal(3, snapshot.SpeakingOnlyCredits);
+        Assert.Equal(6, snapshot.SpeakingOnlyCredits);
         Assert.Equal(0, snapshot.FlexibleCredits);
         Assert.DoesNotContain((await service.GetAccessAsync(userId, default)).AddOns, addOn => addOn.Code == "pkg_writing_starter");
         Assert.Contains((await service.GetAccessAsync(userId, default)).AddOns, addOn => addOn.Code == "pkg_speaking_starter");
@@ -814,8 +814,8 @@ public class UserAccessAllocationServiceTests
             Status = BillingAddOnStatus.Active,
             AddonKind = "ai_package",
             RequiresEligibleParent = false,
-            GrantCredits = 5,
-            GrantEntitlementsJson = """{"package_type":"full","shared_credits":5,"listening_tests":3,"reading_tests":3}""",
+            GrantCredits = 0,
+            GrantEntitlementsJson = """{"package_type":"full","flexible_credits":10,"listening_tests":3,"reading_tests":3}""",
             DurationDays = 30,
             CreatedAt = now,
             UpdatedAt = now,

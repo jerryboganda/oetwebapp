@@ -63,7 +63,9 @@ export function buildCardDraftSeed(professionId: string): CreateRolePlayCardInpu
     communicationGoal: 'Inform',
     clinicalTopic: 'general',
     criteriaFocus: [],
-    difficulty: 'core',
+    primaryCategory: 'Other Cards',
+    secondaryTags: [],
+    categoryNeedsReview: true,
   };
 }
 

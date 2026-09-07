@@ -21,14 +21,17 @@ import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls
 import { TaskListEditor, normaliseTasks } from '@/components/domain/speaking/TaskListEditor';
 import {
   DEFAULT_DISCLAIMER,
-  DIFFICULTY_OPTIONS,
   PROFESSION_OPTIONS,
   SPEAKING_CRITERIA_OPTIONS,
   type CreateRolePlayCardInput,
   type RolePlayCardDetail,
-  type RolePlayCardDifficulty,
   type SpeakingCardTypeDetail,
 } from '@/lib/api/speaking-role-play-cards';
+import {
+  SPEAKING_BEHAVIOURAL_TAGS,
+  SPEAKING_PRIMARY_CATEGORIES,
+  classifySpeakingCard,
+} from '@/lib/speaking/category-taxonomy';
 
 export type RolePlayCardEditorMode = 'create' | 'edit';
 
@@ -85,7 +88,12 @@ export function RolePlayCardEditor({
   const [patientEmotion, setPatientEmotion] = useState(initial?.patientEmotion ?? 'worried');
   const [communicationGoal, setCommunicationGoal] = useState(initial?.communicationGoal ?? 'Reassure');
   const [clinicalTopic, setClinicalTopic] = useState(initial?.clinicalTopic ?? '');
-  const [difficulty, setDifficulty] = useState<RolePlayCardDifficulty | string>(initial?.difficulty ?? 'core');
+  // FINAL 2026-09-06 — Difficulty is removed from the Speaking UI entirely.
+  // The candidate-visible primary category + behavioural tags drive the
+  // catalogue filter instead.
+  const [primaryCategory, setPrimaryCategory] = useState<string>(initial?.primaryCategory ?? 'Other Cards');
+  const [secondaryTags, setSecondaryTags] = useState<string[]>(initial?.secondaryTags ?? []);
+  const [categoryNeedsReview, setCategoryNeedsReview] = useState<boolean>(initial?.categoryNeedsReview ?? true);
   const [criteriaFocus, setCriteriaFocus] = useState<string[]>(initial?.criteriaFocus ?? []);
   const [disclaimer, setDisclaimer] = useState(initial?.disclaimer ?? DEFAULT_DISCLAIMER);
   const [isLiveTutorEligible, setIsLiveTutorEligible] = useState<boolean>(initial?.isLiveTutorEligible ?? false);
@@ -131,7 +139,9 @@ export function RolePlayCardEditor({
       patientEmotion: patientEmotion.trim() || 'neutral',
       communicationGoal: communicationGoal.trim() || 'Inform',
       clinicalTopic: clinicalTopic.trim() || 'general',
-      difficulty,
+      primaryCategory,
+      secondaryTags,
+      categoryNeedsReview,
       criteriaFocus,
       disclaimer: disclaimer.trim() || DEFAULT_DISCLAIMER,
       isLiveTutorEligible,
@@ -156,12 +166,58 @@ export function RolePlayCardEditor({
             options={PROFESSION_OPTIONS}
             required
           />
-          <Select
-            label="Difficulty"
-            value={difficulty}
-            onChange={(e) => setDifficulty(e.target.value)}
-            options={DIFFICULTY_OPTIONS}
-            required
+          <div className="flex items-end gap-2">
+            <div className="flex-1">
+              <Select
+                label="Primary category (visible to learners)"
+                value={primaryCategory}
+                onChange={(e) => {
+                  setPrimaryCategory(e.target.value);
+                  setCategoryNeedsReview(false);
+                }}
+                options={SPEAKING_PRIMARY_CATEGORIES.map((category) => ({ value: category, label: category }))}
+                required
+              />
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                const suggestion = classifySpeakingCard({
+                  scenarioTitle,
+                  setting,
+                  background,
+                  tasks: cleanedTasks,
+                  clinicalTopic,
+                  patientEmotion,
+                });
+                setPrimaryCategory(suggestion.primary);
+                setSecondaryTags(suggestion.secondaryTags);
+                setCategoryNeedsReview(suggestion.needsReview);
+              }}
+            >
+              Suggest
+            </Button>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="text-sm font-medium text-navy">Behavioural tags:</span>
+          {SPEAKING_BEHAVIOURAL_TAGS.map((tag) => (
+            <Checkbox
+              key={tag}
+              label={tag}
+              checked={secondaryTags.includes(tag)}
+              onChange={(e) =>
+                setSecondaryTags((prev) =>
+                  e.target.checked ? [...prev, tag] : prev.filter((t) => t !== tag),
+                )
+              }
+            />
+          ))}
+          <Checkbox
+            label="Needs category review"
+            checked={categoryNeedsReview}
+            onChange={(e) => setCategoryNeedsReview(e.target.checked)}
           />
         </div>
         <div className="grid gap-4 md:grid-cols-2">

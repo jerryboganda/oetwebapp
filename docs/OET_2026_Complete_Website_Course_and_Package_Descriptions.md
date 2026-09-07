@@ -678,13 +678,13 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** AI grading and practice starter package
 
-**Website description:** A targeted one-off readiness package for candidates who want instant AI feedback on Writing or Speaking together with a small Listening and Reading practice allowance. This package includes 5 flexible AI grading credits for Writing letters or Speaking cards, plus 3 Listening exams and 3 Reading exams for focused practice.
+**Website description:** A targeted readiness package with 5 flexible AI practice attempts that can be used for Writing letters, Speaking cards, or any mix of both, plus 3 Listening and 3 Reading practice exams.
 
 **Access:** 30 days from purchase | **Format:** AI feedback reports plus Listening and Reading practice exams
 
 #### Included components
 
-- 5 flexible AI grading credits for Writing or Speaking
+- 5 flexible AI practice attempts for Writing or Speaking
 - 3 Listening practice exams
 - 3 Reading practice exams
 - AI feedback reports for graded Writing or Speaking submissions
@@ -698,13 +698,13 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** AI grading and exam preparation package
 
-**Website description:** A larger one-off exam preparation package for candidates who need repeated AI grading and more Listening and Reading practice before the exam. It includes 15 flexible AI grading credits for Writing letters or Speaking cards, plus 6 Listening exams and 6 Reading exams.
+**Website description:** A larger exam-preparation package with 15 flexible AI practice attempts that can be used for Writing letters, Speaking cards, or any mix of both, plus 6 Listening and 6 Reading practice exams.
 
 **Access:** 90 days from purchase | **Format:** AI feedback reports plus Listening and Reading practice exams
 
 #### Included components
 
-- 15 flexible AI grading credits for Writing or Speaking
+- 15 flexible AI practice attempts for Writing or Speaking
 - 6 Listening practice exams
 - 6 Reading practice exams
 - AI feedback reports for graded Writing or Speaking submissions
@@ -859,14 +859,14 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** Separate Writing AI grading package
 
-**Website description:** A starter Writing AI grading package sized for focused practice. It includes 3 AI-graded Writing letters with instant Claude feedback and detailed criterion-based comments.
+**Website description:** A focused Writing practice package with 3 complete AI-graded OET Writing letters, each with instant, highly specialised feedback and detailed criterion-based comments.
 
 **Access:** 30 days from purchase | **Format:** AI-graded Writing letters
 
 #### Included components
 
 - 3 AI-graded Writing letters
-- Instant Claude feedback on every letter
+- Instant specialised feedback on every letter
 - Detailed per-criterion feedback
 - 30-day validity
 
@@ -878,14 +878,14 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** Separate Writing AI grading package
 
-**Website description:** A standard Writing AI grading package for candidates who want more letter practice. It includes 8 AI-graded Writing letters with instant Claude feedback and detailed criterion-based comments.
+**Website description:** A Writing practice package for candidates who want more repetition, with 8 complete AI-graded OET Writing letters, each with instant, highly specialised feedback and detailed criterion-based comments.
 
 **Access:** 90 days from purchase | **Format:** AI-graded Writing letters
 
 #### Included components
 
 - 8 AI-graded Writing letters
-- Instant Claude feedback on every letter
+- Instant specialised feedback on every letter
 - Detailed per-criterion feedback
 - 90-day validity
 
@@ -897,14 +897,14 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** Separate Writing AI grading package
 
-**Website description:** A larger Writing AI grading package for candidates who want intensive letter practice. It includes 15 AI-graded Writing letters with instant Claude feedback and detailed criterion-based comments.
+**Website description:** An intensive Writing practice package with 15 complete AI-graded OET Writing letters, each with instant, highly specialised feedback and detailed criterion-based comments.
 
 **Access:** 6 months from purchase | **Format:** AI-graded Writing letters
 
 #### Included components
 
 - 15 AI-graded Writing letters
-- Instant Claude feedback on every letter
+- Instant specialised feedback on every letter
 - Detailed per-criterion feedback
 - 6-month validity
 
@@ -918,15 +918,15 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** Separate Speaking AI grading package
 
-**Website description:** A starter Speaking AI grading package sized for focused practice. It includes 3 AI-graded Speaking cards using Whisper transcription and Claude assessment with rule-cited transcript markers.
+**Website description:** A focused Speaking practice package with 3 complete AI-graded OET Speaking cards, each with instant, highly specialised feedback and detailed transcript-based comments aligned with OET Speaking criteria.
 
 **Access:** 30 days from purchase | **Format:** AI-graded Speaking cards with transcription
 
 #### Included components
 
 - 3 AI-graded Speaking cards
-- Whisper transcription plus Claude assessment
-- Rule-cited transcript markers
+- Instant specialised feedback on every card
+- Detailed transcript-based feedback aligned with OET Speaking criteria
 - 30-day validity
 
 **Best for:** Candidates who want a small number of instant Speaking assessments.
@@ -937,15 +937,15 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** Separate Speaking AI grading package
 
-**Website description:** A standard Speaking AI grading package for candidates who want more role-play practice. It includes 8 AI-graded Speaking cards using Whisper transcription and Claude assessment with rule-cited transcript markers.
+**Website description:** A Speaking practice package for candidates who want more role-play repetition, with 8 complete AI-graded OET Speaking cards, each with instant, highly specialised feedback and detailed transcript-based comments aligned with OET Speaking criteria.
 
 **Access:** 90 days from purchase | **Format:** AI-graded Speaking cards with transcription
 
 #### Included components
 
 - 8 AI-graded Speaking cards
-- Whisper transcription plus Claude assessment
-- Rule-cited transcript markers
+- Instant specialised feedback on every card
+- Detailed transcript-based feedback aligned with OET Speaking criteria
 - 90-day validity
 
 **Best for:** Candidates who want repeated Speaking practice with instant transcript-based feedback.
@@ -956,15 +956,15 @@ This addendum contains the website descriptions for the AI grading packages, ful
 
 **Profession:** All disciplines | **Category:** Separate Speaking AI grading package
 
-**Website description:** A larger Speaking AI grading package for candidates who want intensive role-play practice. It includes 15 AI-graded Speaking cards using Whisper transcription and Claude assessment with rule-cited transcript markers.
+**Website description:** An intensive Speaking practice package with 15 complete AI-graded OET Speaking cards, each with instant, highly specialised feedback and detailed transcript-based comments aligned with OET Speaking criteria.
 
 **Access:** 6 months from purchase | **Format:** AI-graded Speaking cards with transcription
 
 #### Included components
 
 - 15 AI-graded Speaking cards
-- Whisper transcription plus Claude assessment
-- Rule-cited transcript markers
+- Instant specialised feedback on every card
+- Detailed transcript-based feedback aligned with OET Speaking criteria
 - 6-month validity
 
 **Best for:** Candidates who want an intensive Speaking-only AI grading option.

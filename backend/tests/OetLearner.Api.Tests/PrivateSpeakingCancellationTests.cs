@@ -306,6 +306,7 @@ public sealed class PrivateSpeakingCancellationTests
             zoomService: null!,
             calendarService: null!,
             entitlementResolver: null!,
+            addonEligibility: new AddonEligibilityService(db),
             stripeService: stripe,
             paymentGateways: null!,
             platformLinks: platformLinks,

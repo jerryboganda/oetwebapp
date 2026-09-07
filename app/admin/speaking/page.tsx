@@ -223,6 +223,18 @@ export default function AdminSpeakingPage() {
     },
     { key: 'profession', header: 'Profession', render: (row) => <span className="text-sm capitalize">{row.professionId}</span> },
     {
+      key: 'category',
+      header: 'Category',
+      render: (row) => (
+        <div className="flex flex-col gap-1">
+          <Badge variant={row.categoryNeedsReview ? 'warning' : 'muted'}>{row.primaryCategory ?? 'Other Cards'}</Badge>
+          {(row.secondaryTags ?? []).length > 0 ? (
+            <span className="text-xs text-muted">{(row.secondaryTags ?? []).join(', ')}</span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
       key: 'script',
       header: 'Script',
       render: (row) =>

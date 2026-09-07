@@ -24,6 +24,7 @@ public sealed class PrivateSpeakingService(
     ZoomMeetingService zoomService,
     PrivateSpeakingCalendarService calendarService,
     IEffectiveEntitlementResolver entitlementResolver,
+    IAddonEligibilityService addonEligibility,
     IStripeService stripeService,
     PaymentGatewayService paymentGateways,
     PlatformLinkService platformLinks,
@@ -547,6 +548,22 @@ public sealed class PrivateSpeakingService(
             return BookingCheckoutResult.Fail("Private Speaking Sessions are currently disabled.");
         if (!IsUsableIdempotencyKey(idempotencyKey))
             return BookingCheckoutResult.Fail("A valid booking idempotency key is required.");
+
+        // FINAL 2026-09-06: Live Tutor ("Book a tutor as your patient") is NOT
+        // a general feature. Only candidates holding an eligible main
+        // course/package or the Speaking Crash Course may book — on EITHER
+        // payment path. The product entitlement flag
+        // (BillingPlan.SpeakingAddonsEnabled, resolved server-side here — never
+        // UI package-name matching) is the single source of truth, so a direct
+        // URL/API bypass cannot create a booking. AI-credit ownership alone
+        // never grants access.
+        var tutorEligibility = await addonEligibility.ResolveAsync(learnerUserId, "addon-speaking-1session", ct);
+        if (!tutorEligibility.Eligible)
+        {
+            throw ApiException.Forbidden(
+                "live_tutor_not_eligible",
+                "You are not eligible to book a session with a tutor.");
+        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
         var idempotencyScope = BuildIdempotencyScopeKey("book", learnerUserId, idempotencyKey);
@@ -2431,7 +2448,7 @@ public sealed class PrivateSpeakingService(
         if (value[0] is '=' or '+' or '-' or '@' or '\t' or '\r')
             value = "'" + value;
         if (value.IndexOfAny([',', '"', '\n', '\r']) < 0) return value;
-        return $"\"{value.Replace("\"", "\"\"")}\"";
+        return "\"" + value.Replace("\"", "\"\"") + "\"";
     }
 
     public async Task RateSessionAsync(

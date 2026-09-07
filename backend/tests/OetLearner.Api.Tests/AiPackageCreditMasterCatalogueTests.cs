@@ -49,16 +49,16 @@ public sealed class AiPackageCreditMasterCatalogueTests
         };
 
     private const string QuickCheckJson =
-        """{"package_type":"full","flexible_credits":5,"listening_tests":3,"reading_tests":3}""";
+        """{"package_type":"full","flexible_credits":10,"listening_tests":3,"reading_tests":3}""";
 
     private const string ReadingStarterJson =
         """{"package_type":"reading","reading_tests":3}""";
 
     private const string WritingStarterJson =
-        """{"package_type":"writing","writing_only_credits":3,"writing_items":3}""";
+        """{"package_type":"writing","writing_only_credits":6,"writing_items":3}""";
 
     private const string SpeakingStarterJson =
-        """{"package_type":"speaking","speaking_only_credits":3,"speaking_items":3}""";
+        """{"package_type":"speaking","speaking_only_credits":6,"speaking_items":3}""";
 
     // ── A10/A11: Full Course gift lands in the universal Shared pool ──
 
@@ -108,7 +108,7 @@ public sealed class AiPackageCreditMasterCatalogueTests
         Assert.Equal("no_reading_tests", sixth.ErrorCode);
     }
 
-    // ── A02: Writing costs 2 Shared credits and the message says so ──
+    // ── A02: one Writing letter costs 2 Shared credits and the message says so ──
 
     [Fact]
     public async Task SharedCredits_WritingConsumesTwo_WithExplicitFeedbackMessage()
@@ -119,11 +119,12 @@ public sealed class AiPackageCreditMasterCatalogueTests
             "learner-1", "crash-course", "Full Crash Course", 5,
             "plan:q3:crash-course", null, CancellationToken.None);
 
-        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-a02", 2, CancellationToken.None);
+        var debit = await service.DeductGradingCreditAsync("learner-1", "writing", "we-a02", 1, CancellationToken.None);
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
 
         Assert.True(debit.Debited);
         Assert.Equal("shared", debit.BalanceSource);
+        Assert.Equal(2, debit.CreditsUsed);
         Assert.Contains("Shared Credit", debit.FeedbackMessage);
         Assert.Contains("Writing", debit.FeedbackMessage);
         Assert.Equal(3, snapshot.SharedCredits);
@@ -147,7 +148,7 @@ public sealed class AiPackageCreditMasterCatalogueTests
             Assert.Equal("reading", debit.BalanceSource);
         }
 
-        // The 4th must block even though 5 Flexible W/S credits remain.
+        // The 4th must block even though 10 Flexible W/S credits remain.
         var fourth = await service.DeductObjectivePracticeAsync(
             "learner-1", "reading", "objective:reading:learner-1:rpaper-4", CancellationToken.None);
         Assert.False(fourth.Debited);
@@ -155,7 +156,7 @@ public sealed class AiPackageCreditMasterCatalogueTests
 
         // And the Flexible W/S pool is still intact afterwards.
         var snapshot = await service.GetSnapshotAsync("learner-1", 20, CancellationToken.None);
-        Assert.Equal(5, snapshot.FlexibleCredits);
+        Assert.Equal(10, snapshot.FlexibleCredits);
         Assert.Equal(0, snapshot.SharedCredits);
     }
 

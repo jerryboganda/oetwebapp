@@ -7,7 +7,7 @@
     {
       "code": "pkg_quick_check",
       "name": "Quick Check",
-      "description": "5 AI grading credits, 30-day validity",
+      "description": "5 flexible AI practice attempts for Writing or Speaking, 30-day validity",
       "category": "package",
       "prices": [
         { "unitAmount": 1900, "currency": "usd", "interval": null, "intervalCount": null }
@@ -16,7 +16,7 @@
     {
       "code": "pkg_exam_prep_pro",
       "name": "Exam Prep Pro",
-      "description": "15 AI grading credits + 2 Full Mocks, 90-day validity",
+      "description": "15 flexible AI practice attempts for Writing or Speaking, 90-day validity",
       "category": "package",
       "prices": [
         { "unitAmount": 4200, "currency": "usd", "interval": null, "intervalCount": null }

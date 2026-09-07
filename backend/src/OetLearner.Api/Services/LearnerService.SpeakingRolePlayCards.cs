@@ -31,19 +31,27 @@ namespace OetLearner.Api.Services;
 public partial class LearnerService
 {
     /// <summary>
-    /// Returns the published / archived role-play cards visible to a
-    /// learner, filtered by their <see cref="LearnerUser.ActiveProfessionId"/>
-    /// and the universal-profession flag on <see cref="ContentItem"/>.
+    /// Returns the published role-play cards visible to a learner.
+    /// FINAL 2026-09-06: server-side profession + primary-category filters
+    /// (Writing parity). An explicit <paramref name="professionId"/> selects
+    /// that profession from the shared Writing/Speaking master list; when
+    /// omitted, the caller's <see cref="LearnerUser.ActiveProfessionId"/> is
+    /// used. Universal-profession cards are always included. Difficulty was
+    /// removed: it is neither accepted nor affects results.
     /// </summary>
     public async Task<object> ListSpeakingRolePlayCardsForLearnerAsync(
         string userId,
-        string? difficulty,
+        string? professionId,
+        string? primaryCategory,
         CancellationToken ct)
     {
         var user = await EnsureLearnerProfileAsync(userId, ct);
         var activeProfession = (user.ActiveProfessionId ?? string.Empty).Trim().ToLowerInvariant();
+        var requestedProfession = (professionId ?? string.Empty).Trim().ToLowerInvariant();
+        var effectiveProfession = string.IsNullOrWhiteSpace(requestedProfession) ? activeProfession : requestedProfession;
+        var requestedCategory = (primaryCategory ?? string.Empty).Trim();
 
-        // Load cards that match the learner's profession or are flagged
+        // Load cards that match the effective profession or are flagged
         // universal at the ContentItem level (ProfessionId == null). We
         // intentionally do NOT call `.Include(c => c.ContentItem)` — the
         // ContentItem join below is a left-join via key equality so we
@@ -55,7 +63,7 @@ public partial class LearnerService
                 on card.ContentItemId equals item.Id into joined
             from item in joined.DefaultIfEmpty()
             where card.Status == ContentStatus.Published
-                && (card.ProfessionId == activeProfession
+                && (card.ProfessionId.ToLower() == effectiveProfession
                     || item == null
                     || item.ProfessionId == null)
             select new
@@ -83,7 +91,8 @@ public partial class LearnerService
                 card.PatientEmotion,
                 card.CommunicationGoal,
                 card.ClinicalTopic,
-                card.Difficulty,
+                card.PrimaryCategory,
+                card.SecondaryTagsJson,
                 card.CriteriaFocusJson,
                 card.Disclaimer,
                 card.UpdatedAt,
@@ -93,10 +102,10 @@ public partial class LearnerService
             .ToListAsync(ct);
 
         var filtered = rows.AsEnumerable();
-        if (!string.IsNullOrWhiteSpace(difficulty))
+        if (!string.IsNullOrWhiteSpace(requestedCategory))
         {
-            var normalised = difficulty.Trim().ToLowerInvariant();
-            filtered = filtered.Where(r => string.Equals(r.Difficulty, normalised, StringComparison.OrdinalIgnoreCase));
+            filtered = filtered.Where(r => string.Equals(
+                r.PrimaryCategory ?? string.Empty, requestedCategory, StringComparison.OrdinalIgnoreCase));
         }
 
         var summaries = filtered.Select(r =>
@@ -124,7 +133,8 @@ public partial class LearnerService
                 patientEmotion = r.PatientEmotion,
                 communicationGoal = r.CommunicationGoal,
                 clinicalTopic = r.ClinicalTopic,
-                difficulty = r.Difficulty,
+                primaryCategory = string.IsNullOrWhiteSpace(r.PrimaryCategory) ? "Other Cards" : r.PrimaryCategory,
+                secondaryTags = DeserializeSecondaryTags(r.SecondaryTagsJson),
                 criteriaFocus,
                 disclaimer = r.Disclaimer,
             };
@@ -134,7 +144,32 @@ public partial class LearnerService
         {
             rolePlayCards = summaries,
             activeProfessionId = string.IsNullOrWhiteSpace(activeProfession) ? null : activeProfession,
+            // Server-derived count of the same filtered set that populates
+            // the list — the client must display this, never compute its own.
+            totalCount = summaries.Length,
+            appliedProfessionId = string.IsNullOrWhiteSpace(effectiveProfession) ? null : effectiveProfession,
+            appliedPrimaryCategory = string.IsNullOrWhiteSpace(requestedCategory) ? null : requestedCategory,
         };
+    }
+
+    private static IReadOnlyList<string> DeserializeSecondaryTags(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != System.Text.Json.JsonValueKind.Array)
+                return Array.Empty<string>();
+            return doc.RootElement.EnumerateArray()
+                .Where(item => item.ValueKind == System.Text.Json.JsonValueKind.String)
+                .Select(item => item.GetString()!)
+                .Where(text => !string.IsNullOrWhiteSpace(text))
+                .ToArray();
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return Array.Empty<string>();
+        }
     }
 
     public async Task<object> GetSpeakingRolePlayCardForLearnerAsync(
@@ -230,7 +265,8 @@ public partial class LearnerService
             patientEmotion = card.PatientEmotion,
             communicationGoal = card.CommunicationGoal,
             clinicalTopic = card.ClinicalTopic,
-            difficulty = card.Difficulty,
+            primaryCategory = string.IsNullOrWhiteSpace(card.PrimaryCategory) ? "Other Cards" : card.PrimaryCategory,
+            secondaryTags = DeserializeSecondaryTags(card.SecondaryTagsJson),
             criteriaFocus,
             disclaimer = card.Disclaimer,
         };

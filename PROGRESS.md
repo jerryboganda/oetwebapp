@@ -1,6 +1,10 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-08-25
+Last updated: 2026-09-07
+
+## Current Checkpoint - FINAL Speaking + other-subtest brief (2026-09-06) implemented
+
+- Uniform 2-credit model (1 letter/card = 2, full exam = 4) across ledger, gates, and every UI surface; package grants doubled (W/S 6/16/30, flexible 10/30) with ledger-conserving migration; benefit-led catalogue copy (vendor terms removed candidate-side); Speaking landing reordered, Writing-master profession filter + 9-category taxonomy + Apply/Clear + server counts, Difficulty removed; deterministic classifier (33 checks green); Live Tutor server-side eligibility gate + ineligible UI. Backend suites green (265 across credit/manifest/exam/tutor/allocation/flows/admin-speaking), tsc clean, ship:gate OK. Only known reds are 2 pre-existing Speaking-suite failures (proven on pristine tree) and the host-broken vitest store.
 
 ## Current Checkpoint - AI Packages spec 100% conformance sweep (spec of record 2026-08-23)
 

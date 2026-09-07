@@ -92,7 +92,7 @@ export default function SpeakingHome() {
     description: 'A short unscored intro, then Card A and Card B — 3 minutes to prepare and 5 minutes to speak on each. The AI plays the patient and marks your result.',
     metaItems: [
       { icon: Mic, label: 'Card A + Card B' },
-      { icon: Star, label: '2 AI credits' },
+      { icon: Star, label: '4 AI credits' },
     ],
     primaryAction: { label: 'Start Speaking Exam', href: '/speaking/exam' },
   };
@@ -120,7 +120,7 @@ export default function SpeakingHome() {
           icon={Mic}
           accent="purple"
           title="Get assessed by AI or book a live tutor"
-          description="Take a full two-card Speaking exam marked by AI, practise any role-play card on the platform, or book a tutor to play your patient."
+          description="Practise any role-play card on the platform, take a full two-card Speaking exam marked by AI, or book a tutor to play your patient."
           highlights={[
             { icon: Star, label: 'AI credits', value: `${credits} available` },
             { icon: Mic, label: 'Practice cards', value: practiceCards.length > 0 ? `${practiceCards.length} ready` : 'Browse library' },
@@ -132,39 +132,9 @@ export default function SpeakingHome() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {/* AI Speaking exam + live tutor — the two ways to get assessed. */}
-        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <MotionSection>
-            <LearnerSurfaceCard card={examCard} />
-          </MotionSection>
-          <MotionSection delayIndex={1}>
-            <LearnerSurfaceCard card={tutorCard} />
-          </MotionSection>
-        </section>
-
-        {/* Resume in-progress role play — necessary for progress; backend
-            surfaces pastAttempts[].state='in_progress'. */}
-        {resumeAttempt ? (
-          <MotionSection>
-            <LearnerSurfaceCard card={{
-              kind: 'task',
-              sourceType: 'backend_task',
-              accent: 'indigo',
-              eyebrow: 'Resume Attempt',
-              eyebrowIcon: RefreshCw,
-              title: 'Continue your in-progress role play',
-              description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
-              metaItems: [
-                { icon: Clock, label: 'Paused' },
-                { icon: RefreshCw, label: 'In progress' },
-              ],
-              primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
-              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
-            }} />
-          </MotionSection>
-        ) : null}
-
-        {/* Practice speaking cards available on the platform (AI Assessment). */}
+        {/* 1 — Practice speaking cards (AI Assessment). FINAL 2026-09-06:
+            the library comes first so candidates browse/select cards before
+            committing AI credits. */}
         <section>
           <LearnerSurfaceSectionHeader
             eyebrow="AI Assessment"
@@ -203,20 +173,16 @@ export default function SpeakingHome() {
                               {isRecommended ? (
                                 <Badge variant="success" size="sm">Recommended</Badge>
                               ) : null}
-                              {task.difficulty ? (
-                                <Badge
-                                  variant={String(task.difficulty).toLowerCase() === 'hard' ? 'danger' : String(task.difficulty).toLowerCase() === 'medium' ? 'warning' : 'success'}
-                                  size="sm"
-                                >
-                                  {task.difficulty}
-                                </Badge>
-                              ) : null}
                             </div>
                             <h3 className="mt-2 text-base font-bold text-navy">{task.title}</h3>
                             <p className="mt-1 text-sm text-muted">Focus: {focusLabel}</p>
                             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                               <span>{scenarioLabel}</span>
                               <span>{durationLabel}</span>
+                              <span className="inline-flex items-center gap-1 font-semibold">
+                                <Star className="h-3 w-3" aria-hidden />
+                                2 AI credits
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -237,6 +203,40 @@ export default function SpeakingHome() {
               })}
             </div>
           )}
+        </section>
+
+        {/* Resume in-progress role play — necessary for progress; backend
+            surfaces pastAttempts[].state='in_progress'. */}
+        {resumeAttempt ? (
+          <MotionSection>
+            <LearnerSurfaceCard card={{
+              kind: 'task',
+              sourceType: 'backend_task',
+              accent: 'indigo',
+              eyebrow: 'Resume Attempt',
+              eyebrowIcon: RefreshCw,
+              title: 'Continue your in-progress role play',
+              description: 'Your speaking attempt is saved. Pick up exactly where you stopped. No credits are spent until you submit for review.',
+              metaItems: [
+                { icon: Clock, label: 'Paused' },
+                { icon: RefreshCw, label: 'In progress' },
+              ],
+              primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
+              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'secondary' },
+            }} />
+          </MotionSection>
+        ) : null}
+
+        {/* 2 + 3 — AI Speaking exam + live tutor. Kept below the library:
+            the exam is the higher-commitment assessment mode and tutor
+            booking stays discoverable but entitlement-controlled. */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <MotionSection>
+            <LearnerSurfaceCard card={examCard} />
+          </MotionSection>
+          <MotionSection delayIndex={1}>
+            <LearnerSurfaceCard card={tutorCard} />
+          </MotionSection>
         </section>
       </div>
     </LearnerDashboardShell>

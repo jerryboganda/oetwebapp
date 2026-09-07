@@ -4003,8 +4003,8 @@ public partial class LearnerService(
         var credits = extras.SharedCredits
             ?? extras.FlexibleCredits
             ?? x.GrantCredits;
-        // Writing/Speaking activities cost 1 dedicated or Flexible unit.
-        // Shared AI credits cost 2 per Writing/Speaking activity.
+        // FINAL 2026-09-06: Writing/Speaking activities cost 2 AI credits
+        // each from any pool (dedicated, Flexible W/S, or Shared).
         var writingCredits = extras.WritingItems ?? extras.WritingCredits ?? x.LettersGranted;
         var speakingCredits = extras.SpeakingItems ?? extras.SpeakingCredits ?? x.SessionsGranted;
         if (group == "writing" && writingCredits == 0) writingCredits = credits;
@@ -4013,6 +4013,7 @@ public partial class LearnerService(
         var features = ReadAiFeatures(x.AiFeaturesJson) ?? BuildAiPackageFeatures(
             group,
             credits,
+            extras.FlexibleCredits ?? 0,
             writingCredits,
             speakingCredits,
             extras.Mocks,
@@ -4041,6 +4042,7 @@ public partial class LearnerService(
     private static IReadOnlyList<string> BuildAiPackageFeatures(
         string group,
         int credits,
+        int flexibleCredits,
         int writingCredits,
         int speakingCredits,
         int mocks,
@@ -4054,27 +4056,37 @@ public partial class LearnerService(
         switch (group)
         {
             case "full":
-                features.Add(credits > 0
-                    ? $"{credits} Shared AI credits (Writing, Speaking, Listening or Reading)"
-                    : "Unlimited AI assessment for Writing and Speaking");
+                // FINAL 2026-09-06: candidates count attempts, not credits.
+                // One attempt (1 letter OR 1 card) costs 2 AI credits.
+                var attempts = flexibleCredits / AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+                if (attempts > 0)
+                    features.Add($"{attempts} flexible AI practice attempts for Writing or Speaking");
+                else if (credits > 0)
+                    features.Add($"{credits} Shared AI credits (Writing, Speaking, Listening or Reading)");
+                else
+                    features.Add("Unlimited AI assessment for Writing and Speaking");
                 if (mocks > 0) features.Add($"{mocks} full mock exam{(mocks == 1 ? string.Empty : "s")} included");
                 // Only advertise unlimited L&R when the package actually grants it (both allowances null = unlimited).
                 if (listeningTests is null && readingTests is null)
                     features.Add("Unlimited Listening & Reading practice");
+                if (listeningTests is not null)
+                    features.Add($"{listeningTests} Listening practice exam{(listeningTests == 1 ? string.Empty : "s")}");
+                if (readingTests is not null)
+                    features.Add($"{readingTests} Reading practice exam{(readingTests == 1 ? string.Empty : "s")}");
                 features.Add("AI feedback reports");
                 if (priorityQueue) features.Add("Priority grading queue");
                 features.Add(validity);
                 break;
             case "writing":
                 features.Add($"{writingCredits} AI-graded Writing letters");
-                features.Add("Instant Claude feedback on every letter");
+                features.Add("Instant specialised feedback on every letter");
                 features.Add("Detailed per-criterion feedback");
                 features.Add(validity);
                 break;
             case "speaking":
                 features.Add($"{speakingCredits} AI-graded Speaking cards");
-                features.Add("Whisper transcription + Claude assessment");
-                features.Add("Rule-cited transcript markers");
+                features.Add("Instant specialised feedback on every card");
+                features.Add("Detailed transcript-based feedback aligned with OET Speaking criteria");
                 features.Add(validity);
                 break;
             case "listening":

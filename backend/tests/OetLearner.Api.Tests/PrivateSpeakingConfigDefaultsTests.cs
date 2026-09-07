@@ -107,6 +107,7 @@ public sealed class PrivateSpeakingConfigDefaultsTests
             zoomService: null!,
             calendarService: null!,
             entitlementResolver: null!,
+            addonEligibility: null!,
             stripeService: null!,
             paymentGateways: null!,
             platformLinks: null!,

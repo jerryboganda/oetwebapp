@@ -45,6 +45,10 @@ export interface RolePlayCardSummary {
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
+  // FINAL 2026-09-06 — candidate-visible taxonomy (main catalogue filter).
+  primaryCategory?: string | null;
+  secondaryTags?: string[];
+  categoryNeedsReview?: boolean;
   // Speaking module rebuild (2026-06-11) — hidden card type (admin only).
   cardTypeId?: string | null;
   cardTypeName?: string | null;
@@ -81,6 +85,10 @@ export interface RolePlayCardDetail {
   updatedAt: string;
   publishedAt: string | null;
   archivedAt: string | null;
+  // FINAL 2026-09-06 — candidate-visible taxonomy (main catalogue filter).
+  primaryCategory?: string | null;
+  secondaryTags?: string[];
+  categoryNeedsReview?: boolean;
   // Speaking module rebuild (2026-06-11) — hidden card type + printed number.
   cardTypeId?: string | null;
   cardTypeName?: string | null;
@@ -114,6 +122,9 @@ export interface RolePlayCardLearnerDetail {
   difficulty: RolePlayCardDifficulty | string;
   criteriaFocus: string[];
   disclaimer: string;
+  // FINAL 2026-09-06 — candidate-visible taxonomy (main catalogue filter).
+  primaryCategory?: string | null;
+  secondaryTags?: string[];
 }
 
 export interface InterlocutorScriptDetail {
@@ -169,6 +180,10 @@ export interface CreateRolePlayCardInput {
   criteriaFocus: string[];
   disclaimer?: string;
   isLiveTutorEligible?: boolean;
+  // FINAL 2026-09-06 — candidate-visible taxonomy (main catalogue filter).
+  primaryCategory?: string | null;
+  secondaryTags?: string[];
+  categoryNeedsReview?: boolean;
   // Speaking module rebuild (2026-06-11) — hidden card type + printed number.
   cardTypeId?: string | null;
   displayCardNumber?: number | null;
@@ -264,7 +279,7 @@ export async function adminDeleteSpeakingCardType(
 
 export interface ListRolePlayCardsFilters {
   professionId?: string;
-  difficulty?: string;
+  primaryCategory?: string;
   status?: string;
 }
 
@@ -275,7 +290,7 @@ export interface ListRolePlayCardsFilters {
 export async function adminListRolePlayCards(filters: ListRolePlayCardsFilters = {}): Promise<RolePlayCardSummary[]> {
   const qs = new URLSearchParams();
   if (filters.professionId) qs.set('professionId', filters.professionId);
-  if (filters.difficulty) qs.set('difficulty', filters.difficulty);
+  if (filters.primaryCategory) qs.set('primaryCategory', filters.primaryCategory);
   if (filters.status) qs.set('status', filters.status);
   const query = qs.toString();
   return apiRequest<RolePlayCardSummary[]>(`/v1/admin/speaking/role-play-cards${query ? `?${query}` : ''}`);
@@ -353,6 +368,67 @@ export async function adminUpsertInterlocutorScript(
   return apiRequest<InterlocutorScriptDetail>(
     `/v1/admin/speaking/role-play-cards/${encodeURIComponent(cardId)}/interlocutor-script`,
     { method: 'PUT', body: JSON.stringify(input) },
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Learner functions — FINAL 2026-09-06: server-side profession +
+// primary-category filters with a server-derived totalCount.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface LearnerRolePlayCardSummary {
+  cardId: string;
+  professionId: string;
+  appliesToAllProfessions?: boolean;
+  scenarioTitle: string;
+  setting: string;
+  candidateRole: string;
+  interlocutorRole: string;
+  patientName: string | null;
+  patientAge: string | null;
+  background: string;
+  tasks: string[];
+  allowedNotes: boolean;
+  prepTimeSeconds: number;
+  rolePlayTimeSeconds: number;
+  patientEmotion: string;
+  communicationGoal: string;
+  clinicalTopic: string;
+  primaryCategory?: string | null;
+  secondaryTags?: string[];
+  criteriaFocus: string[];
+  disclaimer: string;
+}
+
+export interface LearnerRolePlayCardListResponse {
+  rolePlayCards: LearnerRolePlayCardSummary[];
+  activeProfessionId?: string | null;
+  /** Server-derived count of the same filtered set — display, never recompute. */
+  totalCount: number;
+  appliedProfessionId?: string | null;
+  appliedPrimaryCategory?: string | null;
+}
+
+export interface LearnerRolePlayCardListFilters {
+  professionId?: string;
+  primaryCategory?: string;
+}
+
+/**
+ * Learner catalogue: `GET /v1/speaking/role-play-cards`. Browsing and
+ * filtering consume no credits. Omit both filters to use the caller's
+ * active profession (Writing parity: explicit professionId selects any
+ * profession from the shared master list).
+ */
+export async function listLearnerRolePlayCards(
+  filters: LearnerRolePlayCardListFilters = {},
+): Promise<LearnerRolePlayCardListResponse> {
+  const qs = new URLSearchParams();
+  if (filters.professionId) qs.set('professionId', filters.professionId);
+  if (filters.primaryCategory) qs.set('primaryCategory', filters.primaryCategory);
+  const query = qs.toString();
+  return apiRequest<LearnerRolePlayCardListResponse>(
+    `/v1/speaking/role-play-cards${query ? `?${query}` : ''}`,
   );
 }
 

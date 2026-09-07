@@ -3,10 +3,11 @@
 /**
  * Card wizard — step 1: classification.
  *
- * Profession, difficulty, scenario title, clinical topic, hidden card type
- * (with inline create), and the optional printed card number. The standalone
- * card-types admin page is retired in favour of the inline "New type" control
- * here.
+ * Profession, candidate-visible primary category, scenario title, clinical
+ * topic, hidden card type (with inline create), and the optional printed
+ * card number. Difficulty was removed from the Speaking UI (FINAL
+ * 2026-09-06). The standalone card-types admin page is retired in favour
+ * of the inline "New type" control here.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -20,11 +21,11 @@ import {
   adminCreateSpeakingCardType,
   adminListSpeakingCardTypes,
   adminPatchRolePlayCard,
-  DIFFICULTY_OPTIONS,
   PROFESSION_OPTIONS,
   type RolePlayCardDetail,
   type SpeakingCardTypeDetail,
 } from '@/lib/api/speaking-role-play-cards';
+import { SPEAKING_PRIMARY_CATEGORIES } from '@/lib/speaking/category-taxonomy';
 import { unseedCardValue } from './card-wizard-config';
 
 export function StepClassification() {
@@ -32,7 +33,7 @@ export function StepClassification() {
   const card = wizard.entity;
 
   const [professionId, setProfessionId] = useState(card.professionId ?? 'nursing');
-  const [difficulty, setDifficulty] = useState<string>(card.difficulty ?? 'core');
+  const [primaryCategory, setPrimaryCategory] = useState<string>(card.primaryCategory ?? 'Other Cards');
   const [scenarioTitle, setScenarioTitle] = useState(unseedCardValue(card.scenarioTitle));
   const [clinicalTopic, setClinicalTopic] = useState(card.clinicalTopic === 'general' ? '' : card.clinicalTopic ?? '');
   const [cardTypeId, setCardTypeId] = useState<string>(card.cardTypeId ?? '');
@@ -63,14 +64,14 @@ export function StepClassification() {
     setError(null);
     await adminPatchRolePlayCard(card.cardId, {
       professionId,
-      difficulty,
+      primaryCategory,
       scenarioTitle: scenarioTitle.trim(),
       clinicalTopic: clinicalTopic.trim(),
       cardTypeId,
       displayCardNumber: displayCardNumber.trim() === '' ? null : Number(displayCardNumber),
     });
     await wizard.refresh();
-  }, [card.cardId, professionId, difficulty, scenarioTitle, clinicalTopic, cardTypeId, displayCardNumber, wizard]);
+  }, [card.cardId, professionId, primaryCategory, scenarioTitle, clinicalTopic, cardTypeId, displayCardNumber, wizard]);
 
   useStepRegistration('classification', { canAdvance, submit });
 
@@ -119,7 +120,13 @@ export function StepClassification() {
 
       <div className="grid gap-4 md:grid-cols-2">
         <Select label="Profession" value={professionId} onChange={(e) => setProfessionId(e.target.value)} options={PROFESSION_OPTIONS} required />
-        <Select label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} options={DIFFICULTY_OPTIONS} required />
+        <Select
+          label="Primary category (visible to learners)"
+          value={primaryCategory}
+          onChange={(e) => setPrimaryCategory(e.target.value)}
+          options={SPEAKING_PRIMARY_CATEGORIES.map((category) => ({ value: category, label: category }))}
+          required
+        />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -198,17 +198,58 @@ public sealed record AiPackageCreditSnapshot(
     AiPackageCreditBucketSnapshot? Mocks = null,
     IReadOnlyList<AiPackageOpenedActivityDto>? Activities = null)
 {
+    // FINAL 2026-09-06: one Writing letter / one Speaking card costs 2 AI
+    // credits from ANY pool. A lone single credit can never fund an
+    // activity on its own (shared funds whole activities only), so
+    // fundability is simulated with the same greedy order the debit uses:
+    // dedicated first, then Flexible W/S, then Shared.
     public bool HasWritingActivity =>
-        WritingUnlimited || WritingOnlyCredits >= 1 || FlexibleCredits >= 1 || SharedCredits >= AiGradingCreditCost.SharedWritingOrSpeaking;
+        WritingUnlimited || FundableWritingOrSpeakingActivities(WritingOnlyCredits, FlexibleCredits, SharedCredits) >= 1;
 
     public bool HasSpeakingActivity =>
-        SpeakingUnlimited || SpeakingOnlyCredits >= 1 || FlexibleCredits >= 1 || SharedCredits >= AiGradingCreditCost.SharedWritingOrSpeaking;
+        SpeakingUnlimited || FundableWritingOrSpeakingActivities(SpeakingOnlyCredits, FlexibleCredits, SharedCredits) >= 1;
 
     public int AvailableWritingActivities =>
-        WritingUnlimited ? int.MaxValue : WritingOnlyCredits + FlexibleCredits + (SharedCredits / AiGradingCreditCost.SharedWritingOrSpeaking);
+        WritingUnlimited ? int.MaxValue : FundableWritingOrSpeakingActivities(WritingOnlyCredits, FlexibleCredits, SharedCredits);
 
     public int AvailableSpeakingActivities =>
-        SpeakingUnlimited ? int.MaxValue : SpeakingOnlyCredits + FlexibleCredits + (SharedCredits / AiGradingCreditCost.SharedWritingOrSpeaking);
+        SpeakingUnlimited ? int.MaxValue : FundableWritingOrSpeakingActivities(SpeakingOnlyCredits, FlexibleCredits, SharedCredits);
+
+    /// <summary>
+    /// Complete Writing/Speaking activities fundable from raw pool balances.
+    /// Mirrors <c>SpendWritingOrSpeaking</c> exactly (dedicated, then
+    /// Flexible W/S, then whole Shared activities) so gates and debits agree.
+    /// </summary>
+    public static int FundableWritingOrSpeakingActivities(int dedicated, int flexible, int shared)
+    {
+        var units = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+        var remainingDedicated = dedicated;
+        var remainingFlexible = flexible;
+        var remainingShared = shared;
+        var activities = 0;
+        while (true)
+        {
+            var need = units;
+            var takeDedicated = Math.Min(remainingDedicated, need);
+            need -= takeDedicated;
+            var takeFlexible = Math.Min(remainingFlexible, need);
+            need -= takeFlexible;
+            if (need == 0)
+            {
+                remainingDedicated -= takeDedicated;
+                remainingFlexible -= takeFlexible;
+                activities++;
+                continue;
+            }
+            if (need == units && remainingShared >= units)
+            {
+                remainingShared -= units;
+                activities++;
+                continue;
+            }
+            return activities;
+        }
+    }
 }
 
 /// <summary>
@@ -750,6 +791,17 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
 
         var spend = SpendWritingOrSpeaking(account, normalized, quantity);
+        // FINAL 2026-09-06: one letter/card costs exactly 2 AI credits. If the
+        // spend could not fund every requested activity in full (e.g. a lone
+        // stranded credit), refuse BEFORE persisting anything so the candidate
+        // is never partially charged. No SaveChanges has run yet, so the
+        // tracked lot mutations are discarded with the transaction.
+        var expectedUnits = quantity * AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+        if (spend.CreditsUsed != expectedUnits)
+        {
+            return new(false, "no_ai_package_credits", NoCreditsMessage, null);
+        }
+
         account.UpdatedAt = DateTimeOffset.UtcNow;
         AddTransaction(account, new AiPackageCreditTransaction
         {
@@ -763,9 +815,7 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             Reason = AiPackageCreditReason.GradingDeduct,
             ReferenceId = referenceId,
             JobId = referenceId,
-            Description = quantity == 1
-                ? $"{normalized} AI grading credit deducted"
-                : $"{normalized} AI grading credits deducted ({quantity})",
+            Description = $"{normalized} AI grading credits deducted ({spend.CreditsUsed})",
             CreatedAt = DateTimeOffset.UtcNow
         });
 
@@ -2374,30 +2424,32 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
     private static int ResolveGradingActivities(AiPackageCreditAccount account, string subtest, int quantity)
     {
-        var requested = Math.Max(1, quantity);
-        var dedicated = subtest == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
-        // Callers historically pass the Shared W/S rate (2) for one activity
-        // when only Shared can fund. Dedicated/Flexible quantity stays as
-        // activity count so two-credit dedicated checks still work.
-        if (dedicated + account.FlexibleCredits == 0 && requested == AiGradingCreditCost.SharedWritingOrSpeaking)
-        {
-            return 1;
-        }
-
-        return requested;
+        // FINAL 2026-09-06: quantity is always a count of complete activities
+        // (1 letter / 1 card). Every pool costs 2 AI credits per activity, so
+        // no denomination conversion happens here — just a floor of 1.
+        _ = account;
+        _ = subtest;
+        return Math.Max(1, quantity);
     }
 
     private bool CanFundWritingOrSpeaking(AiPackageCreditAccount account, string subtest, int quantity)
     {
+        // FINAL 2026-09-06: 2 AI credits per letter/card from any pool.
+        // Uses the exact greedy simulation the debit uses so gates and
+        // debits can never disagree.
         var dedicated = subtest == "writing" ? account.WritingOnlyCredits : account.SpeakingOnlyCredits;
-        var remaining = quantity - dedicated - account.FlexibleCredits;
-        if (remaining <= 0) return true;
-        return account.SharedCredits >= remaining * AiGradingCreditCost.SharedWritingOrSpeaking;
+        return AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(dedicated, account.FlexibleCredits, account.SharedCredits) >= quantity;
     }
 
     private SpendResult SpendWritingOrSpeaking(AiPackageCreditAccount account, string subtest, int quantity)
     {
-        var remaining = quantity;
+        // FINAL 2026-09-06: every pool is denominated in AI credits and one
+        // activity (one Writing letter / one Speaking card) costs exactly 2
+        // from whichever pool funds it. Priority is unchanged: dedicated
+        // pool first, then Flexible W/S, then Shared (whole activities only —
+        // a lone stranded credit can never pair with Shared).
+        var unitsPerActivity = AiGradingCreditCost.CreditsPerWritingOrSpeakingActivity;
+        var remainingUnits = quantity * unitsPerActivity;
         var writing = 0;
         var speaking = 0;
         var flexible = 0;
@@ -2411,9 +2463,9 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
 
         foreach (var lot in LiveLots(account))
         {
-            if (remaining <= 0) break;
+            if (remainingUnits <= 0) break;
             var dedicated = subtest == "writing" ? lot.WritingOnlyCredits : lot.SpeakingOnlyCredits;
-            var takeDedicated = Math.Min(dedicated, remaining);
+            var takeDedicated = Math.Min(dedicated, remainingUnits);
             if (takeDedicated <= 0) continue;
             if (subtest == "writing")
             {
@@ -2427,34 +2479,34 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
                 speaking += takeDedicated;
                 allocations[lot.Id] = Track(lot) with { Speaking = Track(lot).Speaking + takeDedicated };
             }
-            remaining -= takeDedicated;
+            remainingUnits -= takeDedicated;
         }
 
         foreach (var lot in LiveLots(account))
         {
-            if (remaining <= 0) break;
-            var takeFlexible = Math.Min(lot.FlexibleCredits, remaining);
+            if (remainingUnits <= 0) break;
+            var takeFlexible = Math.Min(lot.FlexibleCredits, remainingUnits);
             if (takeFlexible <= 0) continue;
             lot.FlexibleCredits -= takeFlexible;
-            remaining -= takeFlexible;
+            remainingUnits -= takeFlexible;
             flexible += takeFlexible;
             allocations[lot.Id] = Track(lot) with { Flexible = Track(lot).Flexible + takeFlexible };
         }
 
         foreach (var lot in LiveLots(account))
         {
-            if (remaining <= 0) break;
-            var takeSharedActivities = Math.Min(remaining, lot.SharedCredits / AiGradingCreditCost.SharedWritingOrSpeaking);
+            if (remainingUnits <= 0) break;
+            var takeSharedActivities = Math.Min(remainingUnits / unitsPerActivity, lot.SharedCredits / unitsPerActivity);
             if (takeSharedActivities <= 0) continue;
-            var sharedUnitsTaken = takeSharedActivities * AiGradingCreditCost.SharedWritingOrSpeaking;
+            var sharedUnitsTaken = takeSharedActivities * unitsPerActivity;
             lot.SharedCredits -= sharedUnitsTaken;
-            remaining -= takeSharedActivities;
+            remainingUnits -= sharedUnitsTaken;
             sharedActivities += takeSharedActivities;
             allocations[lot.Id] = Track(lot) with { Shared = Track(lot).Shared + sharedUnitsTaken };
         }
 
         RebuildAccountFromLots(account);
-        var sharedUnits = sharedActivities * AiGradingCreditCost.SharedWritingOrSpeaking;
+        var sharedUnits = sharedActivities * unitsPerActivity;
         var label = subtest == "writing" ? "Writing" : "Speaking";
         string feedback;
         string balanceSource;
@@ -2475,7 +2527,8 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         }
         else
         {
-            feedback = FormatUsedRemaining($"{label} Credit", quantity, RemainingAfterSpend(account, subtest));
+            var unitsSpent = writing + speaking + flexible + sharedUnits;
+            feedback = FormatUsedRemaining($"{label} Credit", unitsSpent, RemainingAfterSpend(account, subtest));
             balanceSource = "mixed";
         }
 
@@ -2491,9 +2544,10 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
     }
 
     private static int RemainingAfterSpend(AiPackageCreditAccount account, string subtest)
+        // Complete activities still fundable — same simulation as the gates.
         => subtest == "writing"
-            ? account.WritingOnlyCredits + account.FlexibleCredits + (account.SharedCredits / AiGradingCreditCost.SharedWritingOrSpeaking)
-            : account.SpeakingOnlyCredits + account.FlexibleCredits + (account.SharedCredits / AiGradingCreditCost.SharedWritingOrSpeaking);
+            ? AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(account.WritingOnlyCredits, account.FlexibleCredits, account.SharedCredits)
+            : AiPackageCreditSnapshot.FundableWritingOrSpeakingActivities(account.SpeakingOnlyCredits, account.FlexibleCredits, account.SharedCredits);
 
     private List<LotAllocation> SpendDedicatedObjective(AiPackageCreditAccount account, string subtest, int quantity)
     {

@@ -205,7 +205,7 @@ public sealed class SpeakingSessionService(
         }
 
         // Speaking module rebuild (2026-06-11): AI self-practice charges exactly
-        // ONE speaking package credit per card, taken here at CARD REVEAL (prep
+        // 2 AI credits per card (FINAL 2026-09-06: 1 card = 2 credits), taken here at CARD REVEAL (prep
         // start, right after warm-up). Idempotent on the session reference, so a
         // retried finish-warmup never double-charges. Live-tutor practice is
         // pay-per-session (no credit) and AI-exam cards are charged by

@@ -26,17 +26,20 @@ public static class LearnerSpeakingRolePlayCardEndpoints
             .RequireRateLimiting("PerUser")
             .WithTags("Speaking Role-Play Cards (Learner)");
 
-        // Plan P2.1 — list endpoint. Filters by the caller's active
-        // profession + universal cards. Difficulty is the only supported
-        // query filter today; adding scenario tag / criteria filter is
-        // tracked under plan §2.3 on the frontend.
+        // Plan P2.1 → FINAL 2026-09-06 — list endpoint. Server-side filters
+        // by explicit profession (shared Writing/Speaking master list) and
+        // primary card category, defaulting to the caller's active
+        // profession. Returns the server-derived totalCount of the same set.
+        // Difficulty was removed: no query parameter remains and it never
+        // affects results.
         group.MapGet("", async (
             LearnerService service,
             HttpContext http,
             CancellationToken ct,
-            [FromQuery] string? difficulty) =>
+            [FromQuery] string? professionId,
+            [FromQuery] string? primaryCategory) =>
             Results.Ok(await service.ListSpeakingRolePlayCardsForLearnerAsync(
-                LearnerId(http), difficulty, ct)));
+                LearnerId(http), professionId, primaryCategory, ct)));
 
         group.MapGet("/{id}", async (
             string id,

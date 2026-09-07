@@ -174,6 +174,25 @@ describe('Speaking page', () => {
     expect(screen.queryByText('Breaking Bad News')).not.toBeInTheDocument();
   });
 
+  it('shows the full exam as 4 AI credits with 2 AI credits per practice card', async () => {
+    render(<SpeakingPage />);
+
+    expect(await screen.findByText('4 AI credits')).toBeInTheDocument();
+    expect(screen.getAllByText('2 AI credits').length).toBeGreaterThan(0);
+  });
+
+  it('lists the practice library above the full exam and tutor booking', async () => {
+    render(<SpeakingPage />);
+
+    const library = await screen.findByText('Practise any speaking card on the platform');
+    const exam = screen.getByText('Start Speaking Exam');
+    const tutor = screen.getByText('Book a Tutor');
+    // eslint-disable-next-line no-bitwise
+    expect(library.compareDocumentPosition(exam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // eslint-disable-next-line no-bitwise
+    expect(library.compareDocumentPosition(tutor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('links Book a Tutor to the private-speaking booking page', async () => {
     render(<SpeakingPage />);
 

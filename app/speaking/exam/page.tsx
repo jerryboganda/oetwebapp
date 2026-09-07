@@ -87,7 +87,7 @@ export default function SpeakingExamLauncherPage() {
           <div>
             <h2 className="font-semibold text-foreground">AI examiner</h2>
             <p className="text-sm text-muted">
-              The AI plays the patient and marks your result. Uses 2 AI credits per exam.
+              The AI plays the patient and marks your result. Uses 4 AI credits per exam (2 per card).
             </p>
           </div>
         </div>

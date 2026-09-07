@@ -328,7 +328,7 @@ export function deriveDefaultBullets(plan: PublicCatalogPlanRow): string[] {
   }
   if (plan.bundledAiCredits > 0) {
     bullets.push(
-      `${plan.bundledAiCredits} AI credit${plan.bundledAiCredits === 1 ? '' : 's'} for AI-marked Speaking & Writing (AI Speaking exam: 2 credits — 1 per card)`,
+      `${plan.bundledAiCredits} AI credit${plan.bundledAiCredits === 1 ? '' : 's'} for AI-marked Speaking & Writing (1 letter or card = 2 credits; full two-card Speaking exam = 4 credits)`,
     );
   }
   if (plan.bundledTutorBook) {

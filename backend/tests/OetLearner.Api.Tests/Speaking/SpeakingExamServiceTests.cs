@@ -13,8 +13,8 @@ namespace OetLearner.Api.Tests.Speaking;
 // Speaking module rebuild (2026-06-11 spec). Pins the two-card exam invariants:
 //   * State machine: intro → prep_a → active_a → prep_b → active_b → completed,
 //     with server-authoritative auto-advance and NO bridge step.
-//   * Credits: an AI exam debits exactly two speaking credits (one per card at
-//     reveal), idempotent on the exam+slot reference.
+//   * Credits: an AI exam debits exactly four AI credits (two per card at
+//     reveal, FINAL 2026-09-06), idempotent on the exam+slot reference.
 //   * Leakage (MISSION CRITICAL): the learner exam projection never serializes
 //     the roleplayer (patient) card, the hidden card type, or any interlocutor
 //     field — in any phase.
@@ -65,7 +65,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task FinishIntro_RevealsCardA_AndDebitsOneCredit()
+    public async Task FinishIntro_RevealsCardA_AndDebitsTwoCredits()
     {
         await SeedWalletAsync(speakingCredits: 5);
         await SeedTwoPublishedCardsAsync();
@@ -77,11 +77,11 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         Assert.Equal(1, afterIntro.CurrentCardNumber);
         Assert.NotNull(afterIntro.CurrentCard);
         Assert.NotNull(afterIntro.CurrentSessionId);
-        Assert.Equal(4, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+        Assert.Equal(3, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
     }
 
     [Fact]
-    public async Task AutoAdvance_ClosesCardA_RevealsCardB_NoBridge_AndDebitsSecondCredit()
+    public async Task AutoAdvance_ClosesCardA_RevealsCardB_NoBridge_AndDebitsCardB()
     {
         await SeedWalletAsync(speakingCredits: 5);
         await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
@@ -99,14 +99,14 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         // No bridge state — we land directly on Card B's prep.
         Assert.Equal(SpeakingExamState.PrepB, tracked.State);
         Assert.NotNull(tracked.SessionBId);
-        // Both cards debited → exactly 2 credits gone.
-        Assert.Equal(3, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+        // Both cards debited → exactly 4 AI credits gone (2 per card).
+        Assert.Equal(1, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
         Assert.NotNull(tracked.CreditARefId);
         Assert.NotNull(tracked.CreditBRefId);
     }
 
     [Fact]
-    public async Task AutoAdvance_FromIntroToCompleted_DebitsExactlyTwoCredits()
+    public async Task AutoAdvance_FromIntroToCompleted_DebitsExactlyFourCredits()
     {
         await SeedWalletAsync(speakingCredits: 5);
         await SeedTwoPublishedCardsAsync(prepSeconds: 180, discussionSeconds: 300);
@@ -121,8 +121,8 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
 
         Assert.Equal(SpeakingExamState.Completed, tracked.State);
         Assert.NotNull(tracked.CompletedAt);
-        // Exactly two speaking credits consumed across the whole exam.
-        Assert.Equal(3, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+        // Exactly four AI credits consumed across the whole exam (2 per card).
+        Assert.Equal(1, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         await _exams.AdvanceAsync(tracked, later, default);
         await _db.SaveChangesAsync();
 
-        Assert.Equal(3, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
+        Assert.Equal(1, (await _credits.GetSnapshotAsync(UserId, 0, default)).SpeakingOnlyCredits);
     }
 
     // ── "Full Mock Speaking Exam Access" (requirements gap audit 2026-07-01) ──
@@ -195,7 +195,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
         await SeedWalletAsync(speakingCredits: 0, mockExams: 1);
         await SeedTwoPublishedCardsAsync();
 
-        // Would throw PaymentRequired under the old gate (0 < 2 speaking credits);
+        // Would throw PaymentRequired under the wallet gate (0 < 4 AI credits for a full exam);
         // the mock-exam allowance alone must satisfy the pre-flight check.
         var exam = await _exams.CreateExamAsync(UserId, new CreateSpeakingExamRequest("ai", ProfessionId: "medicine"), default);
         Assert.Equal("intro", exam.State);
@@ -269,7 +269,7 @@ public sealed class SpeakingExamServiceTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CreateExam_RefusesWhenWalletShortOfTwoCredits()
+    public async Task CreateExam_RefusesWhenWalletShortOfFourCredits()
     {
         await SeedWalletAsync(speakingCredits: 1);
         await SeedTwoPublishedCardsAsync();

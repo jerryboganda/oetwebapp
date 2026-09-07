@@ -29,13 +29,6 @@ const CRITERION_FILTERS: Array<{ value: string; label: string }> = [
   { value: 'information_gathering', label: 'Information gathering' },
 ];
 
-function difficultyVariant(d: string): 'success' | 'warning' | 'danger' | 'muted' {
-  if (d === 'easy') return 'success';
-  if (d === 'medium') return 'warning';
-  if (d === 'hard') return 'danger';
-  return 'muted';
-}
-
 function kindLabel(kind: string): string {
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
@@ -159,7 +152,6 @@ function DrillCard({ drill }: { drill: SpeakingDrillRow }) {
             </p>
             <h3 className="text-base font-black leading-tight text-navy">{drill.title}</h3>
           </div>
-          <Badge variant={difficultyVariant(drill.difficulty)}>{drill.difficulty}</Badge>
         </div>
 
         {drill.caseNotes ? (

@@ -39,6 +39,15 @@ public record AdminRolePlayCardCreateRequest(
     string[]? CriteriaFocus,
     string? Disclaimer,
     bool? IsLiveTutorEligible,
+    // FINAL 2026-09-06 — candidate-visible card taxonomy (main catalogue
+    // filter). PrimaryCategory is one of: First Visit, Second Visit /
+    // Follow-up, Already Known Patient, Examination Card, Emergency /
+    // Emergency Department, Breaking Bad News, Angry Patient, Reluctant
+    // Patient, Other Cards. SecondaryTags holds behavioural tags (Angry,
+    // Reluctant, Breaking Bad News) as a string array.
+    string? PrimaryCategory = null,
+    string[]? SecondaryTags = null,
+    bool? CategoryNeedsReview = null,
     // Speaking module rebuild (2026-06-11). Hidden card type + printed card no.
     string? CardTypeId = null,
     int? DisplayCardNumber = null,
@@ -87,6 +96,10 @@ public record AdminRolePlayCardUpdateRequest(
     string[]? CriteriaFocus = null,
     string? Disclaimer = null,
     bool? IsLiveTutorEligible = null,
+    // FINAL 2026-09-06 — candidate-visible card taxonomy (see create DTO).
+    string? PrimaryCategory = null,
+    string[]? SecondaryTags = null,
+    bool? CategoryNeedsReview = null,
     // Speaking module rebuild (2026-06-11). Hidden card type + printed card no.
     // Sentinel "" on CardTypeId clears the type; null leaves it unchanged.
     string? CardTypeId = null,
@@ -156,6 +169,10 @@ public record AdminRolePlayCardSummary(
     DateTimeOffset UpdatedAt,
     DateTimeOffset? PublishedAt,
     DateTimeOffset? ArchivedAt,
+    // FINAL 2026-09-06 — candidate-visible taxonomy (main catalogue filter).
+    string PrimaryCategory = "Other Cards",
+    string[]? SecondaryTags = null,
+    bool CategoryNeedsReview = false,
     // Speaking module rebuild (2026-06-11). Hidden card type (admin/tutor only).
     string? CardTypeId = null,
     string? CardTypeName = null,
@@ -196,6 +213,10 @@ public record AdminRolePlayCardDetail(
     DateTimeOffset? PublishedAt,
     DateTimeOffset? ArchivedAt,
     AdminInterlocutorScriptDetail? InterlocutorScript,
+    // FINAL 2026-09-06 — candidate-visible taxonomy (main catalogue filter).
+    string PrimaryCategory = "Other Cards",
+    string[]? SecondaryTags = null,
+    bool CategoryNeedsReview = false,
     // Speaking module rebuild (2026-06-11). Hidden card type metadata (admin/
     // tutor only) + printed card number.
     string? CardTypeId = null,

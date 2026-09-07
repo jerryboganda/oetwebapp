@@ -45,7 +45,7 @@ export function StepCardReview() {
   const summary: Array<{ label: string; value: string }> = [
     { label: 'Scenario', value: card.scenarioTitle || '—' },
     { label: 'Profession', value: card.professionId || '—' },
-    { label: 'Difficulty', value: card.difficulty || '—' },
+    { label: 'Category', value: card.primaryCategory || 'Other Cards' },
     { label: 'Setting', value: card.setting || '—' },
     { label: 'Tasks', value: String((card.tasks ?? []).filter((t) => t.trim()).length) },
     { label: 'Criteria', value: String((card.criteriaFocus ?? []).length) },

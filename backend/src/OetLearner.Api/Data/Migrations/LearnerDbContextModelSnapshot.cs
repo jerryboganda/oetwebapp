@@ -19426,6 +19426,9 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<bool>("CategoryNeedsReview")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("ClinicalTopic")
                         .IsRequired()
                         .HasMaxLength(256)
@@ -19489,6 +19492,11 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("PrepTimeSeconds")
                         .HasColumnType("integer");
 
+                    b.Property<string>("PrimaryCategory")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("ProfessionId")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -19504,6 +19512,10 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
+
+                    b.Property<string>("SecondaryTagsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Setting")
                         .IsRequired()

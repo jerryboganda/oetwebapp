@@ -223,6 +223,10 @@ export default function PrivateSpeakingPage() {
   const [cancelInProgress, setCancelInProgress] = useState(false);
   const [rescheduleConfirmOpen, setRescheduleConfirmOpen] = useState(false);
   const [entitlementRemaining, setEntitlementRemaining] = useState<number | null>(null);
+  // FINAL 2026-09-06: Live Tutor booking is entitlement-gated. Only holders of
+  // an eligible main course/package or the Speaking Crash Course
+  // (plan flag SpeakingAddonsEnabled, resolved server-side) may book.
+  const [liveTutorEligible, setLiveTutorEligible] = useState<boolean | null>(null);
   const [joiningBookingId, setJoiningBookingId] = useState<string | null>(null);
   const [activeMeeting, setActiveMeeting] = useState<ActiveMeeting | null>(null);
   const [ratingSession, setRatingSession] = useState<string | null>(null);
@@ -248,12 +252,18 @@ export default function PrivateSpeakingPage() {
       setTutors(tut as Tutor[]);
       setBookings(bk as Booking[]);
       setEntitlementRemaining(entitlement.speakingSessionsRemaining);
+      setLiveTutorEligible(entitlement.speakingAddonsEnabled === true);
       setLoading(false);
     }).catch(() => {
       setError('Could not load private speaking sessions.');
       setLoading(false);
     });
   }, []);
+
+  // Ineligible learners land on My Bookings (slot browsing is hidden for them).
+  useEffect(() => {
+    if (liveTutorEligible === false) setViewMode('bookings');
+  }, [liveTutorEligible]);
 
   // Load slots when week or tutor changes
   const loadSlots = useCallback(async () => {
@@ -657,6 +667,29 @@ export default function PrivateSpeakingPage() {
       </div>
 
       <div className="mb-6 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        {liveTutorEligible === false ? (
+          <div data-testid="live-tutor-ineligible">
+            <p className="text-sm font-semibold text-navy">You are not eligible to book a session with a tutor.</p>
+            <p className="mt-1 text-xs text-muted">
+              Live tutor sessions are available only with an eligible course or package, or the Speaking Crash Course.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <Link
+                href="/catalog"
+                className="inline-flex w-fit items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-primary/90 dark:bg-violet-700 dark:hover:bg-violet-600"
+              >
+                View eligible courses
+              </Link>
+              <Link
+                href="/marketplace"
+                className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/5"
+              >
+                Go to course catalogue
+              </Link>
+            </div>
+          </div>
+        ) : (
+        <>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-semibold text-navy">Speaking session credits</p>
@@ -681,22 +714,27 @@ export default function PrivateSpeakingPage() {
             </Link>
           </div>
         )}
+        </>
+        )}
       </div>
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} aria-label="Dismiss error" className="ml-2"><X className="w-4 h-4 inline" aria-hidden /></button></InlineAlert>}
 
-      {/* View mode toggle */}
+      {/* View mode toggle — slot browsing is hidden while ineligible (the
+          server also blocks direct booking attempts). Past bookings stay visible. */}
       <div className="flex gap-2 mb-6">
+        {liveTutorEligible !== false && (
         <button onClick={() => setViewMode('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted hover:bg-border'}`}>
           Browse Slots
         </button>
+        )}
         <button onClick={() => setViewMode('bookings')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-primary text-white dark:bg-violet-700' : 'bg-background-light text-muted hover:bg-border'}`}>
           My Bookings {bookings.length > 0 && <span className="ml-1 bg-white/20 px-1.5 rounded-full text-xs">{bookings.length}</span>}
         </button>
       </div>
 
       {/* ── Browse Slots ──────────────────────────────── */}
-      {viewMode === 'browse' && (
+      {viewMode === 'browse' && liveTutorEligible !== false && (
         <>
           {/* Week navigation + tutor filter */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
@@ -889,12 +927,12 @@ export default function PrivateSpeakingPage() {
                 </div>
               ) : (
                 <>
-                  <button onClick={handleBook} disabled={bookingInProgress || (entitlementRemaining ?? 0) <= 0}
+                  <button onClick={handleBook} disabled={bookingInProgress || (entitlementRemaining ?? 0) <= 0 || liveTutorEligible === false}
                     className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-[color,background-color,transform] duration-200">
                     {bookingInProgress ? 'Processing...' : 'Use Session Credit & Book'}
                   </button>
                   {selectedSlot && selectedSlot.priceMinorUnits > 0 ? (
-                    <button onClick={handleBookWithPaypal} disabled={bookingInProgress}
+                    <button onClick={handleBookWithPaypal} disabled={bookingInProgress || liveTutorEligible === false}
                       className="mt-2 w-full px-5 py-2.5 rounded-lg border border-border bg-surface text-navy text-sm font-medium hover:border-emerald-300 disabled:opacity-50 transition-colors">
                       Pay {formatSlotPrice(selectedSlot)} with PayPal
                     </button>

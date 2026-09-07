@@ -259,6 +259,9 @@ export default function RoleCardPreview() {
               <Button fullWidth size="lg" onClick={handleStartTask}>
                 <Play className="w-5 h-5 fill-current" /> Start Speaking Task
               </Button>
+              <p className="text-center text-xs font-semibold text-muted" data-testid="speaking-card-credit-cost">
+                Uses 2 AI credits · Browsing is free
+              </p>
             </Card>
 
             <Card className="border-primary/15 bg-primary/5 p-5">

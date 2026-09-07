@@ -356,6 +356,9 @@ public sealed class PrivateSpeakingAdminActionsTests
 
         SeedTutorWithMondayAvailability(db);
         SeedLearnerUser(db);
+        // Live-tutor gate: the booking learner holds an eligible course.
+        SeedEligiblePlan(db, "plan-1");
+        SeedSessionAddOn(db);
         await db.SaveChangesAsync();
 
         var result = await service.CreateBookingAndCheckoutAsync(
@@ -473,6 +476,47 @@ public sealed class PrivateSpeakingAdminActionsTests
         });
     }
 
+    private static void SeedEligiblePlan(LearnerDbContext db, string code)
+    {
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = $"plan-{code}",
+            Code = code,
+            Name = code,
+            Status = BillingPlanStatus.Active,
+            Price = 60m,
+            Currency = "GBP",
+            Interval = "one_time",
+            AccessDurationDays = 180,
+            SpeakingAddonsEnabled = true,
+            IsVisible = true,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        });
+    }
+
+    private static void SeedSessionAddOn(LearnerDbContext db)
+    {
+        db.BillingAddOns.Add(new BillingAddOn
+        {
+            Id = "addon-speaking-1session",
+            Code = "addon-speaking-1session",
+            Name = "1 Private Speaking Assessment Session",
+            Status = BillingAddOnStatus.Active,
+            Price = 18m,
+            Currency = "GBP",
+            Interval = "one_time",
+            AddonKind = "speaking_sessions",
+            EligibilityFlag = "speaking_addons",
+            RequiresEligibleParent = true,
+            AppliesToAllPlans = true,
+            IsStackable = true,
+            QuantityStep = 1,
+            CreatedAt = Now,
+            UpdatedAt = Now,
+        });
+    }
+
     private static PrivateSpeakingBooking SeedConfirmedBooking(
         LearnerDbContext db, DateTimeOffset sessionStartUtc,
         Action<PrivateSpeakingBooking>? configure = null)
@@ -566,6 +610,7 @@ public sealed class PrivateSpeakingAdminActionsTests
             zoomService: null!,
             calendarService: calendarService,
             entitlementResolver: resolver!,
+            addonEligibility: new AddonEligibilityService(db),
             stripeService: stripe,
             paymentGateways: null!,
             platformLinks: platformLinks,

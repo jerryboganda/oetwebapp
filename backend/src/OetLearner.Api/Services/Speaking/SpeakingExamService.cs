@@ -77,8 +77,8 @@ public sealed class SpeakingExamService(
         var (cardA, cardB, professionId) = await ResolveCardsAsync(req, ct);
 
         // AI exams pre-check the wallet so the candidate is never stranded
-        // after Card A with no credit for Card B. Two speaking credits needed
-        // — UNLESS the account has a "Full Mock Speaking Exam Access" unit
+        // after Card A with no credit for Card B. Four AI credits needed
+        // (2 per card) — UNLESS the account has a "Full Mock Speaking Exam Access" unit
         // (MockExamsRemaining), which alone funds the whole exam (see
         // DebitCardAsync). This mirrors the fallback order used at debit time.
         if (mode == SpeakingExamMode.Ai && creditService is not null && !isMockLaunch)
@@ -764,7 +764,8 @@ public sealed class SpeakingExamService(
 
     /// <summary>Debits credit for a card at reveal, idempotent on the
     /// exam+slot reference. AI mode only. Stores the ref on the exam so a
-    /// retried transition never double-charges.
+    /// retried transition never double-charges. FINAL 2026-09-06: 2 AI
+    /// credits per card, 4 total across Card A + Card B.
     ///
     /// Card A first tries to fund the WHOLE exam from the account's "Full
     /// Mock Speaking Exam Access" allowance (<c>MockExamsRemaining</c>, one

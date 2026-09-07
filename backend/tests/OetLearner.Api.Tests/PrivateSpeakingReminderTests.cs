@@ -207,6 +207,7 @@ public sealed class PrivateSpeakingReminderTests
             zoomService: null!,
             calendarService: calendarService,
             entitlementResolver: null!,
+            addonEligibility: new AddonEligibilityService(db),
             stripeService: null!,
             paymentGateways: null!,
             platformLinks: platformLinks,

@@ -112,9 +112,12 @@ public static class SpeakingRolePlayCardSeed
                 RolePlayTimeSeconds = 300,
                 PatientEmotion = card.PatientEmotion,
                 CommunicationGoal = card.CommunicationGoal,
-                ClinicalTopic = card.ClinicalTopic,
-                Difficulty = card.Difficulty,
-                CriteriaFocusJson = JsonSupport.Serialize(card.CriteriaFocus),
+            ClinicalTopic = card.ClinicalTopic,
+            Difficulty = card.Difficulty,
+            PrimaryCategory = card.PrimaryCategory,
+            SecondaryTagsJson = JsonSupport.Serialize(card.SecondaryTags),
+            CategoryNeedsReview = card.CategoryNeedsReview,
+            CriteriaFocusJson = JsonSupport.Serialize(card.CriteriaFocus),
                 Disclaimer = "Practice estimate only. This is not an official OET score or result.",
                 Status = ContentStatus.Published,
                 IsLiveTutorEligible = true,
@@ -202,6 +205,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Advise",
             ClinicalTopic: "post-operative recovery",
             Difficulty: "core",
+            PrimaryCategory: "Already Known Patient",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "informationGiving", "patientPerspective", "appropriateness" },
             OpeningResponse: "I'm OK I think, but honestly I just want to get home — when can I go?",
             Prompts: new[]
@@ -249,6 +255,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Negotiate",
             ClinicalTopic: "medication adherence",
             Difficulty: "extension",
+            PrimaryCategory: "Second Visit / Follow-up",
+            SecondaryTags: new[] { "Reluctant" },
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "informationGathering", "relationshipBuilding", "patientPerspective" },
             OpeningResponse: "Oh, I take all my tablets, dear, don't you worry about that.",
             Prompts: new[]
@@ -297,6 +306,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Empower",
             ClinicalTopic: "chronic wound care",
             Difficulty: "core",
+            PrimaryCategory: "Second Visit / Follow-up",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "informationGiving", "structure", "intelligibility" },
             OpeningResponse: "It's looking better, isn't it? My wife says I'm finally allowed back in the garden if I'm careful.",
             Prompts: new[]
@@ -343,6 +355,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Counsel",
             ClinicalTopic: "falls prevention",
             Difficulty: "extension",
+            PrimaryCategory: "Already Known Patient",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "patientPerspective", "relationshipBuilding", "informationGiving" },
             OpeningResponse: "I'm really not happy about Mum going home tomorrow — what if she falls again?",
             Prompts: new[]
@@ -391,6 +406,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Counsel",
             ClinicalTopic: "childhood immunisation",
             Difficulty: "exam",
+            PrimaryCategory: "Reluctant Patient",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "relationshipBuilding", "patientPerspective", "informationGiving" },
             OpeningResponse: "I want to be honest — I've read some things online and I'm not sure I'm comfortable with all of these today.",
             Prompts: new[]
@@ -440,6 +458,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Reassure",
             ClinicalTopic: "palliative care",
             Difficulty: "exam",
+            PrimaryCategory: "Already Known Patient",
+            SecondaryTags: new[] { "Breaking Bad News" },
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "relationshipBuilding", "patientPerspective", "appropriateness" },
             OpeningResponse: "They said they're stopping treatment. Are you all just going to leave him to die?",
             Prompts: new[]
@@ -494,6 +515,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Inform",
             ClinicalTopic: "type 2 diabetes diagnosis",
             Difficulty: "core",
+            PrimaryCategory: "Second Visit / Follow-up",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "informationGiving", "structure", "patientPerspective" },
             OpeningResponse: "So, doctor, my wife sent me — she said the blood tests were back. Is it bad news?",
             Prompts: new[]
@@ -541,6 +565,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Reassure",
             ClinicalTopic: "paediatric febrile convulsion",
             Difficulty: "extension",
+            PrimaryCategory: "Already Known Patient",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "patientPerspective", "informationGiving", "relationshipBuilding" },
             OpeningResponse: "I thought she was dying, doctor. I really did. Is she going to be epileptic now?",
             Prompts: new[]
@@ -590,6 +617,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Reassure",
             ClinicalTopic: "non-cardiac chest pain workup",
             Difficulty: "extension",
+            PrimaryCategory: "Second Visit / Follow-up",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "informationGiving", "patientPerspective", "appropriateness" },
             OpeningResponse: "Don't sugar-coat it, doctor — am I going to have a heart attack like my husband did?",
             Prompts: new[]
@@ -639,6 +669,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Negotiate",
             ClinicalTopic: "antibiotic stewardship",
             Difficulty: "exam",
+            PrimaryCategory: "Reluctant Patient",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "appropriateness", "patientPerspective", "relationshipBuilding" },
             OpeningResponse: "Look, doctor, last year I was given antibiotics and I was back at work in two days — can we just do the same?",
             Prompts: new[]
@@ -689,6 +722,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Empower",
             ClinicalTopic: "hypertension lifestyle management",
             Difficulty: "core",
+            PrimaryCategory: "Second Visit / Follow-up",
+            SecondaryTags: System.Array.Empty<string>(),
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "structure", "informationGiving", "patientPerspective" },
             OpeningResponse: "I've been reading about this — I really would prefer not to start any tablets if I don't have to.",
             Prompts: new[]
@@ -737,6 +773,9 @@ public static class SpeakingRolePlayCardSeed
             CommunicationGoal: "Counsel",
             ClinicalTopic: "breaking bad news (oncology)",
             Difficulty: "exam",
+            PrimaryCategory: "Second Visit / Follow-up",
+            SecondaryTags: new[] { "Breaking Bad News" },
+            CategoryNeedsReview: false,
             CriteriaFocus: new[] { "appropriateness", "relationshipBuilding", "patientPerspective" },
             OpeningResponse: "I thought I was just popping in for a quick result, doctor. You're being very quiet — is it bad?",
             Prompts: new[]
@@ -779,6 +818,12 @@ internal sealed record SeedCardData(
     string CommunicationGoal,
     string ClinicalTopic,
     string Difficulty,
+    // FINAL 2026-09-06 candidate-visible taxonomy (main catalogue filter).
+    // Classified per the deterministic §8B priority rules; uncertain cards
+    // use Other Cards with CategoryNeedsReview = true.
+    string PrimaryCategory,
+    string[] SecondaryTags,
+    bool CategoryNeedsReview,
     string[] CriteriaFocus,
     string OpeningResponse,
     string[] Prompts,

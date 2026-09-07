@@ -221,9 +221,9 @@ public sealed class Oet2026CatalogManifestTests
         Assert.Equal(JsonValueKind.Null, mastery.GetProperty("readingTests").ValueKind);
         Assert.Equal(0, mastery.GetProperty("grantCredits").GetInt32());
 
-        AssertWritingPackage("pkg_writing_starter", displayedItems: 3, debitUnits: 3);
-        AssertWritingPackage("pkg_writing_standard", displayedItems: 8, debitUnits: 8);
-        AssertWritingPackage("pkg_writing_pro", displayedItems: 15, debitUnits: 15);
+        AssertWritingPackage("pkg_writing_starter", displayedItems: 3, debitUnits: 6);
+        AssertWritingPackage("pkg_writing_standard", displayedItems: 8, debitUnits: 16);
+        AssertWritingPackage("pkg_writing_pro", displayedItems: 15, debitUnits: 30);
 
         void AssertWritingPackage(string code, int displayedItems, int debitUnits)
         {
@@ -245,26 +245,26 @@ public sealed class Oet2026CatalogManifestTests
         var addOns = manifest.RootElement.GetProperty("addOns").EnumerateArray().ToArray();
 
         var quickCheck = addOns.Single(addOn => addOn.GetProperty("code").GetString() == "pkg_quick_check");
-        Assert.Equal(5, quickCheck.GetProperty("flexibleCredits").GetInt32());
+        Assert.Equal(10, quickCheck.GetProperty("flexibleCredits").GetInt32());
         Assert.False(quickCheck.TryGetProperty("sharedCredits", out _) && quickCheck.GetProperty("sharedCredits").GetInt32() > 0);
         Assert.Equal(0, quickCheck.GetProperty("grantCredits").GetInt32());
         Assert.Equal(3, quickCheck.GetProperty("listeningTests").GetInt32());
         Assert.Equal(3, quickCheck.GetProperty("readingTests").GetInt32());
         Assert.Equal(30, quickCheck.GetProperty("durationDays").GetInt32());
         Assert.Contains(
-            "flexible AI grading credits",
+            "flexible AI practice attempts",
             quickCheck.GetProperty("description").GetString(),
             StringComparison.OrdinalIgnoreCase);
 
         var examPrepPro = addOns.Single(addOn => addOn.GetProperty("code").GetString() == "pkg_exam_prep_pro");
-        Assert.Equal(15, examPrepPro.GetProperty("flexibleCredits").GetInt32());
+        Assert.Equal(30, examPrepPro.GetProperty("flexibleCredits").GetInt32());
         Assert.False(examPrepPro.TryGetProperty("sharedCredits", out _) && examPrepPro.GetProperty("sharedCredits").GetInt32() > 0);
         Assert.Equal(0, examPrepPro.GetProperty("grantCredits").GetInt32());
         Assert.Equal(6, examPrepPro.GetProperty("listeningTests").GetInt32());
         Assert.Equal(6, examPrepPro.GetProperty("readingTests").GetInt32());
         Assert.Equal(90, examPrepPro.GetProperty("durationDays").GetInt32());
         Assert.Contains(
-            "flexible AI grading credits",
+            "flexible AI practice attempts",
             examPrepPro.GetProperty("description").GetString(),
             StringComparison.OrdinalIgnoreCase);
     }

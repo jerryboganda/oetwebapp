@@ -275,6 +275,26 @@ public class RolePlayCard
     /// admin marks them live-tutor eligible.</summary>
     public bool IsLiveTutorEligible { get; set; } = false;
 
+    /// <summary>FINAL 2026-09-06 — candidate-visible primary card category
+    /// (First Visit, Second Visit / Follow-up, Already Known Patient,
+    /// Examination Card, Emergency / Emergency Department, Breaking Bad
+    /// News, Angry Patient, Reluctant Patient, Other Cards). This is the
+    /// main catalogue filter and may appear as a chip on learner cards.
+    /// Distinct from the HIDDEN admin `CardTypeId` (scorer guidance, never
+    /// serialized to students).</summary>
+    [MaxLength(64)]
+    public string PrimaryCategory { get; set; } = "Other Cards";
+
+    /// <summary>Optional secondary behavioural tags (Angry, Reluctant,
+    /// Breaking Bad News) stored as a JSON string array. They coexist with
+    /// a stronger encounter-type primary category.</summary>
+    public string SecondaryTagsJson { get; set; } = "[]";
+
+    /// <summary>True when the classifier fell through to Other Cards and a
+    /// human should review the category. A visible Other Cards result is
+    /// safer than a forced wrong category.</summary>
+    public bool CategoryNeedsReview { get; set; } = false;
+
     [MaxLength(64)]
     public string? CreatedByUserId { get; set; }
 

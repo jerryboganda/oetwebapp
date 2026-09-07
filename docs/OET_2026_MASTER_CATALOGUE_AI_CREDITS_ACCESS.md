@@ -70,11 +70,11 @@ After every use, the candidate must immediately see what was used and what remai
 
                                                                       1 AI-graded Writing submission
  Writing Credits                 Subtest-specific                                                          Writing only
-                                                                      per credit
+                                                                      per 2 credits
 
                                                                       1 AI-graded Speaking submission
  Speaking Credits                Subtest-specific                                                          Speaking only
-                                                                      per credit
+                                                                      per 2 credits
 
                                                                       Reading 1; Listening 1; Writing 2;
  Shared Credits                  Universal                                                                 Any of the four subtests
@@ -82,7 +82,7 @@ After every use, the candidate must immediately see what was used and what remai
 
                                                                       1 AI-graded Writing
                                                                       submission or 1 AI-graded            Quick Check / Exam Prep
- Flexible W/S Credits            Restricted shared pool               Speaking card per credit;            Pro only
+ Flexible W/S Credits            Restricted shared pool               Speaking card per 2 credits;         Pro only
                                                                       Writing/Speaking only
 
                                                                       1 complete four-subtest mock per     Must not consume ordinary AI
@@ -91,9 +91,9 @@ After every use, the candidate must immediately see what was used and what remai
 
 ```
 
-### Important implementation distinction
+### Important implementation distinction (amended FINAL 2026-09-06)
 
-The separate Writing/Speaking packages are sold as a number of graded submissions/cards (for example Writing Starter = 3 letters). Their subtest-specific credit balance should therefore represent those attempts directly. Shared Credits remain universal units and use the 2-credit cost for Writing/Speaking stated in the 5-credit gift rule.
+The separate Writing/Speaking packages are sold as a number of complete graded submissions/cards (for example Writing Starter = 3 letters), while backend grants are denominated in AI credits at 2 per letter/card (Writing Starter = 6 Writing AI credits). Quick Check = 5 flexible attempts (10 flexible AI credits); Exam Prep Pro = 15 flexible attempts (30 flexible AI credits). Shared Credits remain universal units and use the 2-credit cost for Writing/Speaking stated in the 5-credit gift rule.
 
 ## 2. AI credit architecture and candidate dashboard
 
@@ -232,9 +232,9 @@ The 5-credit gift is applied once per qualifying purchase/assignment event. Retr
 ```text
 #                               Package                               Candidate balance / allowance    Validity
 
-30                              Quick Check                           R:3 | L:3 | Flexible W/S:5       30 days
+30                              Quick Check                           R:3 | L:3 | Flexible W/S:10 (5 attempts)  30 days
 
-31                              Exam Prep Pro                         R:6 | L:6 | Flexible W/S:15      90 days
+31                              Exam Prep Pro                         R:6 | L:6 | Flexible W/S:30 (15 attempts) 90 days
 
                                                                       R:Unlimited | L:Unlimited |
 32                              OET Mastery                                                            6 months
@@ -258,23 +258,23 @@ The 5-credit gift is applied once per qualifying purchase/assignment event. Retr
 
 41                              Reading Pro                           R:Unlimited                      6 months
 
-42                              Writing Starter                       W:3 submissions                  30 days
+42                              Writing Starter                       W:6 credits = 3 letters          30 days
 
-43                              Writing Standard                      W:8 submissions                  90 days
+43                              Writing Standard                      W:16 credits = 8 letters         90 days
 
-44                              Writing Pro                           W:15 submissions                 6 months
+44                              Writing Pro                           W:30 credits = 15 letters        6 months
 
-45                              Speaking Starter                      S:3 cards                        30 days
+45                              Speaking Starter                      S:6 credits = 3 cards            30 days
 
-46                              Speaking Standard                     S:8 cards                        90 days
+46                              Speaking Standard                     S:16 credits = 8 cards           90 days
 
-47                              Speaking Pro                          S:15 cards                       6 months
+47                              Speaking Pro                          S:30 credits = 15 cards          6 months
 
 ```
 
 ### Quick Check and Exam Prep Pro must remain restricted
 
-The supplied catalogue defines their 5 / 15 flexible AI grading credits as usable for Writing or Speaking. Do not silently convert this restricted W/S pool into Universal Shared Credits, because that would also allow Reading/Listening and would change the product. If the backend currently has only one universal Shared field, add a restricted Flexible W/S balance or equivalent entitlement rule.
+The supplied catalogue defines their 5 / 15 flexible AI practice attempts (10 / 30 flexible AI credits at 2 per Writing letter or Speaking card) as usable for Writing or Speaking. Do not silently convert this restricted W/S pool into Universal Shared Credits, because that would also allow Reading/Listening and would change the product. If the backend currently has only one universal Shared field, add a restricted Flexible W/S balance or equivalent entitlement rule.
 
 ### Separate Reading/Listening packages
 
@@ -296,8 +296,8 @@ A candidate account that has only 5 AI credits must not be able to open/start ev
 - Every protected exam/activity endpoint must check the candidate’s active entitlement and remaining balance on the server. Client-side hiding alone is insufficient.
 - For a metered Reading attempt: require Reading Credits >= 1, or Shared Credits >= 1, or an active unlimited Reading entitlement. Otherwise block the start request.
 - For Listening: require Listening Credits >= 1, or Shared Credits >= 1, or active unlimited Listening.
-- For Writing: require Writing Credits >= 1, or eligible Flexible W/S credit, or Shared Credits >= 2, or active unlimited Writing.
-- For Speaking: require Speaking Credits >= 1, or eligible Flexible W/S credit, or Shared Credits >= 2, or active unlimited Speaking.
+- For Writing: require Writing Credits >= 2, or eligible Flexible W/S credits >= 2, or Shared Credits >= 2, or active unlimited Writing.
+- For Speaking: require Speaking Credits >= 2, or eligible Flexible W/S credits >= 2, or Shared Credits >= 2, or active unlimited Speaking.
 - A direct URL, bookmarked exam link, mobile app request or API call must not bypass the same authorization check.
 - When balance reaches zero, the next start attempt must be blocked immediately and consistently across web, Android and iOS.
 
