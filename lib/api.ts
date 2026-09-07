@@ -1371,6 +1371,7 @@ export {
   fetchScheduleExceptions,
   fetchSpeakingReviewDetail,
   fetchExpertReviewHistory,
+  fetchTutorWritingQueue,
   fetchWritingReviewDetail,
   getWritingSubmissionVoiceNote,
   releaseReview,

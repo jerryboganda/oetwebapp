@@ -177,6 +177,24 @@ export async function fetchWritingReviewDetail(reviewRequestId: string): Promise
   return apiRequest<WritingReviewDetail>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing`);
 }
 
+export interface TutorWritingQueueItem {
+  submissionId: string;
+  userId: string;
+  profession: string;
+  letterType: string;
+  [key: string]: unknown;
+}
+
+export interface TutorWritingQueueResponse {
+  items: TutorWritingQueueItem[];
+}
+
+/** Tutor portal's own Writing queue (GET /v1/tutors/writing/queue) — distinct from the expert review queue above. */
+export async function fetchTutorWritingQueue(status?: string): Promise<TutorWritingQueueResponse> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiRequest<TutorWritingQueueResponse>(`/v1/tutors/writing/queue${query}`);
+}
+
 export async function addWritingReviewVoiceNote(reviewRequestId: string, payload: { mediaAssetId: string; durationSeconds?: number | null; transcriptText?: string; writtenNotes?: string; rubricScores?: Record<string, number>; }): Promise<{ reviewRequestId: string; item: ReviewVoiceNote }> {
   return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing/voice-notes`, {
     method: 'POST',
