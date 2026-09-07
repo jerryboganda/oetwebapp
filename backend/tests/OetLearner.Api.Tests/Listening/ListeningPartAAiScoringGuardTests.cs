@@ -839,7 +839,10 @@ public sealed class ListeningPartAAiScoringGuardTests
         => new(
             db,
             registry ?? new StubProviderRegistry(),
+            new NullRouteResolver(),
             new StaticHttpClientFactory(handler),
+            Microsoft.Extensions.Options.Options.Create(
+                new OetLearner.Api.Configuration.AiProviderOptions()),
             recorder ?? new RecordingUsageRecorder(),
             clock ?? new FixedClock(Now),
             NullLogger<ListeningPartAAiScoringService>.Instance,
@@ -1083,6 +1086,14 @@ public sealed class ListeningPartAAiScoringGuardTests
     private sealed class StaticHttpClientFactory(HttpMessageHandler handler) : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new(handler, disposeHandler: false);
+    }
+
+    private sealed class NullRouteResolver : IAiFeatureRouteResolver
+    {
+        public Task<AiFeatureRouteResolution?> ResolveAsync(string featureCode, CancellationToken ct)
+            => Task.FromResult<AiFeatureRouteResolution?>(null);
+
+        public bool IsKnownFeatureCode(string featureCode) => true;
     }
 
     private sealed class StubProviderRegistry(string? platformKey = "test-platform-key") : IAiProviderRegistry
