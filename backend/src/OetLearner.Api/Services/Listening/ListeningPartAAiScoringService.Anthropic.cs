@@ -279,38 +279,35 @@ public sealed partial class ListeningPartAAiScoringService
             StartedAt: startedAt);
         int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
 
-        // Assigned before FailAsync/RecordFailureAsync capture it (CS0165).
-        var model = !string.IsNullOrWhiteSpace(routeModel) ? routeModel.Trim() : "chatgpt_web";
-
-        async Task<ProviderCallOutcome> FailAsync(string errorClass, string message)
-            => await RecordAndTerminalAsync(errorClass, message);
-
-        async Task<ProviderCallOutcome> RecordAndTerminalAsync(string errorClass, string message)
+        async Task<ProviderCallOutcome> FailAsync(AiProvider? resolvedRow, string? resolvedModel, string errorClass, string message)
         {
-            await RecordFailureAsync(AiCallOutcome.ProviderError, errorClass, message);
+            await usageRecorder.RecordFailureAsync(
+                usageContext, UbagProviderCode, resolvedModel ?? "chatgpt_web", AiCallOutcome.ProviderError,
+                errorClass, message, LatencyMs(), AiFeatureCodes.ListeningPartAScore,
+                CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             return ProviderCallOutcome.Terminal(errorClass, ListeningPartAAiSkipReasons.IndeterminateTimeout);
         }
 
         var row = await registry.FindByCodeAsync(UbagProviderCode, ct);
         if (row is null)
         {
-            return await FailAsync("ubag_unconfigured", "UBAG provider is not registered.");
+            return await FailAsync(null, null, "ubag_unconfigured", "UBAG provider is not registered.");
         }
         var apiKey = await registry.GetPlatformKeyAsync(UbagProviderCode, ct);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            return await FailAsync("ubag_unconfigured", "UBAG provider key is missing.");
+            return await FailAsync(row, null, "ubag_unconfigured", "UBAG provider key is missing.");
         }
         var baseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? null : row.BaseUrl.Trim().TrimEnd('/');
         if (baseUrl is not null
             && AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl) is not null)
         {
-            return await FailAsync("ubag_unconfigured", "UBAG provider endpoint is not allowed.");
+            return await FailAsync(row, null, "ubag_unconfigured", "UBAG provider endpoint is not allowed.");
         }
-        if (string.IsNullOrWhiteSpace(routeModel) && !string.IsNullOrWhiteSpace(row.DefaultModel))
-        {
-            model = row.DefaultModel;
-        }
+        var model = !string.IsNullOrWhiteSpace(routeModel)
+            ? routeModel.Trim()
+            : string.IsNullOrWhiteSpace(row.DefaultModel) ? "chatgpt_web" : row.DefaultModel;
 
         var request = new AiProviderRequest
         {
