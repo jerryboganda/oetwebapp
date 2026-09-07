@@ -404,5 +404,36 @@ public sealed class WritingTaskUnderstandingTests
 
         Assert.False(string.IsNullOrWhiteSpace(result.DiagnosisOrPlanEvidence));
     }
+
+    // ── Routine-referral corroboration fix (2026-09-08): same-profession
+    // recipients (e.g. "...Community Dietitian...") and incidental "after
+    // discharge" mentions inside a routine referral must not false-positive
+    // as a classification conflict when the task text is explicit. ──
+
+    [Fact]
+    public void Explicit_routine_referral_to_same_profession_recipient_mentioning_discharge_is_not_conflicting()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Using the information in the case notes, write a routine referral letter to Ms Natalie Green, Community Dietitian, requesting ongoing nutritional support after discharge.",
+            "Malnutrition risk on an orthopaedic ward.",
+            "routine_referral");
+
+        Assert.False(result.ConflictingEvidence);
+        Assert.Equal("classified", result.Status);
+        Assert.Equal("routine_referral", result.PrimaryLetterType);
+    }
+
+    [Fact]
+    public void Other_letters_configuration_is_never_flagged_conflicting()
+    {
+        var result = WritingTaskUnderstandingService.Understand(
+            "Using the information in the case notes, write a letter to the school SENCO outlining classroom adjustments after the patient's discharge and referral to the occupational therapist.",
+            "Visual difficulties affecting classroom participation.",
+            "other");
+
+        Assert.False(result.ConflictingEvidence);
+        Assert.Equal("classified", result.Status);
+        Assert.Equal("other", result.PrimaryLetterType);
+    }
 }
 

@@ -35,6 +35,15 @@ public static class WritingTaskUnderstandingService
         // the narrower phrases miss.
         AddSignal(task, candidates, evidence, "transfer", ["transfer of care", "transfer letter", "transferring care", "transferred to", "transfer to"]);
         AddSignal(task, candidates, evidence, "non_medical_referral", ["occupational therapist", "physiotherapist", "physical therapist", "social worker", "psychologist", "dietitian", "dietician", "speech pathologist", "speech therapist", "speech and language therapist", "speech & language therapist", "podiatrist", "audiologist"]);
+        // Explicit "routine referral" phrasing (the OET staple "write a
+        // routine referral letter to...") corroborates a routine_referral
+        // configuration the same way "discharge letter"/"transfer letter"
+        // corroborate theirs below — without this, routine_referral could
+        // never be corroborated (see the switch below) and any incidental
+        // same-profession recipient title ("...Community Dietitian...") or
+        // background "after discharge" mention would false-positive as a
+        // classification conflict even though the task text is explicit.
+        AddSignal(task, candidates, evidence, "routine_referral", ["routine referral"]);
         var urgent = FindSignal(task, ["urgent", "asap", "admission", "acute management", "suspected cancer"]);
         if (urgent is not null)
         {
@@ -58,6 +67,13 @@ public static class WritingTaskUnderstandingService
             "urgent_referral" => candidates.Contains("urgent_referral", StringComparer.Ordinal),
             "discharge" or "transfer" or "non_medical_referral"
                 => candidates.Contains(normalizedConfiguredEarly, StringComparer.Ordinal),
+            "routine_referral" => candidates.Contains("routine_referral", StringComparer.Ordinal),
+            // "other" (Other Letters) is a universal fallback with no positive
+            // keyword signature of its own (WritingLetterTypeTaxonomy: valid
+            // under every profession, no defined vocabulary) — there is
+            // nothing meaningful to corroborate against, so it is never
+            // flagged as conflicting with itself.
+            "other" => true,
             _ => false,
         };
         var conflicting = !configuredCorroborated
