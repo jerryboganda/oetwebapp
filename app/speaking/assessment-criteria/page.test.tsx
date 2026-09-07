@@ -28,5 +28,6 @@ describe('Speaking Assessment Criteria page', () => {
     expect(screen.queryByText(/Banfield/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/promedicalenglish/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/rulebook/i)).not.toBeInTheDocument();
+    expect(screen.getByText('Back to Speaking').closest('a')).toHaveAttribute('href', '/speaking');
   });
 });

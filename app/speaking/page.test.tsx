@@ -156,22 +156,42 @@ describe('Speaking page', () => {
     mockLearnerListSpeakingSharedResources.mockResolvedValue([]);
   });
 
-  it('shows only the AI exam, tutor booking, and practice cards (everything else removed)', async () => {
+  it('shows the shared reference openers, AI exam, tutor booking, and practice cards', async () => {
     render(<SpeakingPage />);
 
-    // The three surfaces the owner wants kept.
     expect(await screen.findByText('Get assessed by AI or book a live tutor')).toBeInTheDocument();
+    expect(screen.getByText('Speaking Assessment Criteria')).toBeInTheDocument();
+    expect(screen.getByText('Speaking Intro Questions')).toBeInTheDocument();
+    expect(screen.getByText('Open Assessment Criteria').closest('a')).toHaveAttribute('href', '/speaking/assessment-criteria');
+    expect(screen.getByText('Open Intro Questions').closest('a')).toHaveAttribute('href', '/speaking/intro-questions');
+    expect(screen.getAllByText('All professions').length).toBeGreaterThan(0);
     expect(screen.getByText('Start Speaking Exam')).toBeInTheDocument();
     expect(screen.getByText('Book a Tutor')).toBeInTheDocument();
     expect(screen.getByText('Practise any speaking card on the platform')).toBeInTheDocument();
     expect(screen.getByText('Patient Handover - Post-Op Recovery')).toBeInTheDocument();
 
-    // Everything else must be gone.
     expect(screen.queryByText('Recent Speaking Evidence')).not.toBeInTheDocument();
     expect(screen.queryByText('Recent Mock Reports')).not.toBeInTheDocument();
     expect(screen.queryByText('Drill Groups')).not.toBeInTheDocument();
     expect(screen.queryByText('Open Speaking Rules')).not.toBeInTheDocument();
     expect(screen.queryByText('Breaking Bad News')).not.toBeInTheDocument();
+  });
+
+  it('keeps the shared reference openers even when the practice library is empty', async () => {
+    mockFetchSpeakingHome.mockResolvedValueOnce({
+      recommendedRolePlay: null,
+      featuredTasks: [],
+      drillGroups: [],
+      commonIssuesToImprove: [],
+      reviewCredits: { available: 0, route: '/reviews' },
+      pastAttempts: [],
+    });
+
+    render(<SpeakingPage />);
+
+    expect(await screen.findByText('Open Assessment Criteria')).toBeInTheDocument();
+    expect(screen.getByText('Open Intro Questions')).toBeInTheDocument();
+    expect(screen.getByText('No practice cards yet')).toBeInTheDocument();
   });
 
   it('shows the full exam as 4 AI credits with 2 AI credits per practice card', async () => {
