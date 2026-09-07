@@ -35,7 +35,8 @@ public sealed class LiveClassRecordingProcessingService(
     IFileStorage fileStorage,
     IRuntimeSettingsProvider runtimeSettings,
     TimeProvider timeProvider,
-    ILogger<LiveClassRecordingProcessingService> logger)
+    ILogger<LiveClassRecordingProcessingService> logger,
+    OetLearner.Api.Services.AiAssistant.Indexing.IEmbeddingService? embeddingService = null)
 {
     private const long MaxTranscriptionAttachmentBytes = 24L * 1024L * 1024L;
     private const int TranscriptionReadBufferBytes = 81920;
@@ -296,6 +297,11 @@ public sealed class LiveClassRecordingProcessingService(
             UserId = null,
             Temperature = 0.2,
             MaxTokens = 2048,
+            // UBAG facade JSON coercion: the OpenAI-compatible rows honour
+            // response_format json_object (the facade coerces + fails loudly
+            // when nothing parses); other providers ignore it and keep the
+            // tolerant TryParseSummaryJson path below.
+            ResponseFormatJson = "json_object",
         }, ct);
 
         var parsed = TryParseSummaryJson(result.Completion);
@@ -471,6 +477,28 @@ public sealed class LiveClassRecordingProcessingService(
 
     private async Task<string?> TryEmbedChunkAsync(string text, CancellationToken ct)
     {
+        // v2 — dedicated embedding path first: the shared IEmbeddingService
+        // calls POST /embeddings on the configured provider (real vectors
+        // from OpenAI-compatible hosts; deterministic hash vectors from the
+        // UBAG facade, which the EmbeddingService routes automatically). The
+        // legacy gateway-text prompt below stays as the fallback so a missing
+        // embedding registration can never regress to empty vectors.
+        if (embeddingService is not null)
+        {
+            try
+            {
+                var vector = await embeddingService.EmbedAsync(text, ct);
+                if (vector is { Length: > 0 })
+                {
+                    return JsonSerializer.Serialize(vector);
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogDebug(ex, "Embedding service failed (best-effort); falling back to gateway-text path.");
+            }
+        }
+
         // v1 — we route through the existing AI gateway with a small
         // grounded wrapper. Real embedding providers (OpenAI's
         // /v1/embeddings) return a numeric vector; until that endpoint is

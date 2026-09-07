@@ -134,6 +134,18 @@ public sealed class RegistryBackedProvider(
         if (unsafeBaseUrlReason is not null)
             throw new InvalidOperationException(unsafeBaseUrlReason);
 
+        // UBAG facade transcription divert: the facade has no Whisper weights —
+        // it serves audio/transcriptions by attaching the clip to a native job
+        // and letting the provider web UI listen. Route here (instead of the
+        // Whisper-only OpenAiCompatibleProvider branch) when the resolved
+        // provider is the ubag row, so every STT caller keeps working with
+        // zero call-site changes.
+        if (request.AudioAttachments is { Count: > 0 }
+            && string.Equals(request.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase))
+        {
+            return await CallUbagTranscriptionAsync(baseUrl, apiKey, request, ct);
+        }
+
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -151,6 +163,11 @@ public sealed class RegistryBackedProvider(
             ["max_tokens"] = maxTokens,
             ["stream"] = false,
         };
+        var responseFormat = AiProviderPayloadBuilder.BuildOpenAiResponseFormat(request.ResponseFormatJson);
+        if (responseFormat is not null)
+        {
+            payload["response_format"] = responseFormat;
+        }
         if (sendReasoning)
         {
             payload["reasoning_effort"] = effort;
@@ -176,6 +193,11 @@ public sealed class RegistryBackedProvider(
         AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "AI provider", out var choice, out var message);
         var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
         var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
+        if (toolCalls is null)
+        {
+            toolCalls = AiProviderPayloadBuilder.CoerceToolCallsFromJsonText(
+                text, request.Tools, request.ToolChoice);
+        }
         var usage = root.TryGetProperty("usage", out var usageEl)
             ? new AiUsage
             {
@@ -200,6 +222,64 @@ public sealed class RegistryBackedProvider(
         if (m.Contains("thinking")) return true;
         return false;
     }
+
+    /// <summary>POSTs one audio attachment to the UBAG facade's
+    /// <c>audio/transcriptions</c> endpoint (multipart <c>file</c> + model +
+    /// language) and returns the transcript as the completion text. The
+    /// facade answers <c>{text, ubag_job_id}</c>; verbose_json segment detail
+    /// is unavailable by design, so downstream confidence falls back to the
+    /// callers' existing defaults.</summary>
+    private async Task<AiProviderCompletion> CallUbagTranscriptionAsync(
+        string baseUrl, string apiKey, AiProviderRequest request, CancellationToken ct)
+    {
+        var audio = request.AudioAttachments!
+            .FirstOrDefault(attachment => attachment.Data is { Length: > 0 })
+            ?? throw new InvalidOperationException("UBAG transcription requires a non-empty audio attachment.");
+
+        var client = httpClientFactory.CreateClient("AiRegistryClient");
+        client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        using var form = new MultipartFormDataContent();
+        var audioContent = new ByteArrayContent(audio.Data);
+        audioContent.Headers.ContentType =
+            new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(audio.MimeType) ? "audio/webm" : audio.MimeType);
+        form.Add(audioContent, "file", FileNameForAudioMimeType(audio.MimeType));
+        form.Add(new StringContent(string.IsNullOrWhiteSpace(request.Model) ? "whisper-1" : request.Model), "model");
+        if (!string.IsNullOrWhiteSpace(request.UserPrompt))
+        {
+            form.Add(new StringContent(request.UserPrompt), "prompt");
+        }
+
+        using var response = await client.PostAsync("audio/transcriptions", form, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("UBAG transcription", (int)response.StatusCode, response.ReasonPhrase));
+
+        var text = body.Trim();
+        if (text.StartsWith('{'))
+        {
+            using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("text", out var textElement))
+            {
+                text = textElement.GetString()?.Trim() ?? string.Empty;
+            }
+        }
+
+        return new AiProviderCompletion { Text = text };
+    }
+
+    private static string FileNameForAudioMimeType(string? mimeType)
+        => mimeType?.ToLowerInvariant() switch
+        {
+            "audio/mpeg" => "recording.mp3",
+            "audio/mp4" => "recording.m4a",
+            "video/mp4" => "recording.mp4",
+            "audio/ogg" => "recording.ogg",
+            "audio/wav" or "audio/x-wav" => "recording.wav",
+            "audio/webm" => "recording.webm",
+            _ => "recording.bin",
+        };
 }
 
 /// <summary>

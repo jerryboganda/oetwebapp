@@ -54,13 +54,19 @@ public interface IListeningPartAAiScoringService
 public sealed partial class ListeningPartAAiScoringService(
     LearnerDbContext db,
     IAiProviderRegistry registry,
+    IAiFeatureRouteResolver routeResolver,
     IHttpClientFactory httpClientFactory,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions> providerOptions,
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
     ILogger<ListeningPartAAiScoringService> logger,
     IAiPricingResolver? pricingResolver = null) : IListeningPartAAiScoringService
 {
     public const string AnthropicProviderCode = "anthropic";
+    // UBAG route: mirrors the extraction services — an admin ubag route
+    // sends the same gap evidence to the facade with response_format
+    // json_object + forced-tool emulation.
+    public const string UbagProviderCode = "ubag";
 
     private sealed record GapItem(int Number, string Context, string UserAnswer, string Canonical, IReadOnlyList<string> Accepted, string ApprovedRationale);
     private sealed record Verdict(int Number, string? Verdict_, string? Rationale);
@@ -244,7 +250,13 @@ public sealed partial class ListeningPartAAiScoringService(
         CancellationToken ct)
     {
         var provider = await ResolveProviderAsync(ct);
-        if (provider is null)
+        // Route-aware: an admin ubag route for listening.parta.score diverts
+        // to the facade path below (usage recorded against ubag). Otherwise
+        // the Anthropic path runs byte-identical to before.
+        var ubagRoute = await routeResolver.ResolveAsync(AiFeatureCodes.ListeningPartAScore, ct);
+        var useUbag = ubagRoute is not null
+            && string.Equals(ubagRoute.ProviderCode, UbagProviderCode, StringComparison.OrdinalIgnoreCase);
+        if (provider is null && !useUbag)
         {
             // NOT terminal and NOT an attempt: nothing left the process and an
             // admin can still configure/rotate the platform credential. The
@@ -261,7 +273,11 @@ public sealed partial class ListeningPartAAiScoringService(
             return;
         }
 
-        var outcome = await CallClaudeVerdictsAsync(items, attempt.UserId, provider, lease, ct);
+        var outcome = useUbag
+            ? await CallUbagVerdictsAsync(items, attempt.UserId, ubagRoute!.Model, lease, ct)
+            : await CallClaudeVerdictsAsync(items, attempt.UserId, provider!, lease, ct);
+        var servingProviderCode = useUbag ? UbagProviderCode : AnthropicProviderCode;
+        var servingModel = useUbag ? (ubagRoute!.Model ?? "chatgpt_web") : provider!.Model;
 
         if (outcome.Disposition != CallDisposition.Success)
         {
@@ -274,7 +290,7 @@ public sealed partial class ListeningPartAAiScoringService(
             await usageRecorder.CompleteOperationAsync(
                 lease.OperationId!,
                 outcome.TerminalSkipReason is null ? AiOperationState.RetryScheduled : AiOperationState.FailedTerminal,
-                null, AnthropicProviderCode, provider.Model, CancellationToken.None,
+                null, servingProviderCode, servingModel, CancellationToken.None,
                 lease.BudgetReservation);
             return;
         }
@@ -304,7 +320,7 @@ public sealed partial class ListeningPartAAiScoringService(
                 a.AiVerdict = NormalizeVerdict(v.Verdict_);
                 a.AiRationale = Truncate(v.Rationale ?? string.Empty, 1024);
                 a.AiScoredAt = now;
-                a.AiModel = provider.Model;
+                a.AiModel = servingModel;
                 a.AiNextAttemptAt = null;
                 scored++;
                 continue;
@@ -327,7 +343,7 @@ public sealed partial class ListeningPartAAiScoringService(
         await db.SaveChangesAsync(CancellationToken.None);
         await usageRecorder.CompleteOperationAsync(
             lease.OperationId!, AiOperationState.Completed, outcome.UsageRecordId,
-            AnthropicProviderCode, provider.Model, CancellationToken.None,
+            servingProviderCode, servingModel, CancellationToken.None,
             lease.BudgetReservation);
         logger.LogInformation(
             "Part A AI advisory review: stamped {Scored}, terminally closed {Closed} of {Total} answers on attempt {AttemptId} (attempt {AttemptNumber}/{MaxAttempts}).",

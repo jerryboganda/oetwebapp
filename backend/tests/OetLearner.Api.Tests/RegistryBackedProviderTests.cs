@@ -83,6 +83,73 @@ public sealed class RegistryBackedProviderTests
     }
 
     [Fact]
+    public async Task CompleteAsync_ResponseFormatJsonObject_SendsResponseFormat()
+    {
+        string? capturedBody = null;
+        var provider = await NewProviderAsync(new StubHandler(async req =>
+        {
+            capturedBody = req.Content is null ? null : await req.Content.ReadAsStringAsync();
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(
+                    "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"summary\\\":\\\"ok\\\"}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":3}}",
+                    Encoding.UTF8,
+                    "application/json"),
+            };
+        }));
+
+        var completion = await provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "digitalocean-serverless",
+            Model = "glm-5",
+            SystemPrompt = "system",
+            UserPrompt = "summarise",
+            ResponseFormatJson = "json_object",
+        }, CancellationToken.None);
+
+        Assert.Equal("{\"summary\":\"ok\"}", completion.Text);
+        Assert.NotNull(capturedBody);
+        using var doc = JsonDocument.Parse(capturedBody!);
+        var format = doc.RootElement.GetProperty("response_format");
+        Assert.Equal("json_object", format.GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task CompleteAsync_ForcedToolWithoutProviderToolCalls_CoercesArgsJson()
+    {
+        var provider = await NewProviderAsync(new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Here is the JSON: {\\\"verdicts\\\":[]} done.\"},\"finish_reason\":\"stop\"}]}",
+                Encoding.UTF8,
+                "application/json"),
+        })));
+
+        var completion = await provider.CompleteAsync(new AiProviderRequest
+        {
+            ProviderCode = "digitalocean-serverless",
+            Model = "glm-5",
+            SystemPrompt = "system",
+            UserPrompt = "judge",
+            ResponseFormatJson = "json_object",
+            Tools = new[]
+            {
+                new AiToolDefinition(
+                    "emit_part_a_verdicts",
+                    "Emit verdicts",
+                    "Emit verdicts.",
+                    AiToolCategory.Read,
+                    "{\"type\":\"object\",\"properties\":{\"verdicts\":{\"type\":\"array\"}},\"required\":[\"verdicts\"]}"),
+            },
+            ToolChoice = "emit_part_a_verdicts",
+        }, CancellationToken.None);
+
+        var call = Assert.Single(completion.ToolCalls!);
+        Assert.Equal("emit_part_a_verdicts", call.ToolCode);
+        Assert.Equal("{\"verdicts\":[]}", call.ArgsJson);
+    }
+
+    [Fact]
     public async Task AnthropicProvider_SendsPromptCachingHeaderAndSystemCacheBlock()
     {
         HttpRequestMessage? capturedRequest = null;

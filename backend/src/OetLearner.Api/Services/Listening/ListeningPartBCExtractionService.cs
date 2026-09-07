@@ -71,7 +71,9 @@ public sealed class ListeningPartBCExtractionService(
     LearnerDbContext db,
     IOcrService ocr,
     IAiProviderRegistry registry,
+    IAiFeatureRouteResolver routeResolver,
     IHttpClientFactory httpClientFactory,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions> providerOptions,
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
     ILogger<ListeningPartBCExtractionService> logger,
@@ -80,6 +82,10 @@ public sealed class ListeningPartBCExtractionService(
     // Owner policy is checked before any OCR or model call. This path returns
     // a projection only; the admin must still review and save it explicitly.
     private const string AnthropicProviderCode = "anthropic";
+    // UBAG route: mirrors the Part A route-aware pattern — an admin ubag
+    // route sends the same OCR markdown to the facade with response_format
+    // json_object + forced-tool emulation.
+    private const string UbagProviderCode = "ubag";
     private const string DefaultModel = CoreAiProviderSeeder.AnthropicDefaultModel;
     private const string ToolName = "emit_part_bc_answers";
 
@@ -379,11 +385,22 @@ public sealed class ListeningPartBCExtractionService(
     }
 
     // ── Claude call (forced tool, no temperature for Opus 4.7/4.8) ──────────────
+    // Route-aware: honours the admin board toggle for
+    // listening.partbc.extract (ubag route → facade + emulation, otherwise
+    // the Anthropic forced-tool path byte-identical to before).
 
     private async Task<string> CallClaudeAnswersAsync(
         string part, string questionMarkdown, string answerMarkdown, string adminId,
         DirectAiOperationLease lease, CancellationToken ct)
     {
+        var ubagRoute = await routeResolver.ResolveAsync(AiFeatureCodes.ListeningPartBCExtract, ct);
+        if (ubagRoute is not null
+            && string.Equals(ubagRoute.ProviderCode, UbagProviderCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CallUbagAnswersAsync(
+                part, questionMarkdown, answerMarkdown, adminId, lease, ubagRoute.Model, ct);
+        }
+
         var row = await registry.FindByCodeAsync(AnthropicProviderCode, ct)
             ?? throw new InvalidOperationException(
                 $"Anthropic provider '{AnthropicProviderCode}' is not registered. Add a row in /admin/ai-providers with Code={AnthropicProviderCode}.");
@@ -484,6 +501,112 @@ public sealed class ListeningPartBCExtractionService(
             await usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
                 "anthropic_network", $"Anthropic transport failure ({ex.GetType().Name}).",
+                LatencyMs(), "listening.partbc.extract", CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            throw;
+        }
+    }
+
+    /// <summary>UBAG route for the Part B/C answers call. Same OCR markdown,
+    /// forced emit_part_bc_answers tool definition plus response_format
+    /// json_object through the registry (forced-tool emulation surfaces the
+    /// JSON as ArgsJson). Usage is recorded against ubag.</summary>
+    private async Task<string> CallUbagAnswersAsync(
+        string part, string questionMarkdown, string answerMarkdown, string adminId,
+        DirectAiOperationLease lease, string? routeModel, CancellationToken ct)
+    {
+        var row = await registry.FindByCodeAsync(UbagProviderCode, ct)
+            ?? throw new InvalidOperationException(
+                $"UBAG provider '{UbagProviderCode}' is not registered. Add a row in /admin/ai-providers with Code={UbagProviderCode}.");
+        var model = !string.IsNullOrWhiteSpace(routeModel)
+            ? routeModel.Trim()
+            : string.IsNullOrWhiteSpace(row.DefaultModel) ? "chatgpt_web" : row.DefaultModel;
+        var apiKey = await registry.GetPlatformKeyAsync(UbagProviderCode, ct)
+            ?? throw new InvalidOperationException($"Platform API key missing for provider {UbagProviderCode}.");
+        var baseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? null : row.BaseUrl.Trim().TrimEnd('/');
+        if (baseUrl is not null)
+        {
+            var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+            if (unsafeReason is not null) throw new InvalidOperationException(unsafeReason);
+        }
+
+        var range = part == "B" ? "25-30 (six 3-option MCQs)" : "31-42 (twelve 3-option MCQs)";
+        var userText =
+            $"PART: {part} — questions {range}.\n\n" +
+            "QUESTION PAPER (OCR Markdown):\n\n" + questionMarkdown +
+            "\n\n=====\n\nANSWER KEY (OCR Markdown):\n\n" + answerMarkdown;
+
+        var startedAt = clock.GetUtcNow();
+        var usageContext = new AiUsageContext(
+            UserId: adminId,
+            AuthAccountId: null,
+            TenantId: null,
+            FeatureCode: AiFeatureCodes.ListeningPartBCExtract,
+            RulebookVersion: null,
+            PromptTemplateId: ToolName,
+            SystemPrompt: SystemPrompt,
+            UserPrompt: userText,
+            StartedAt: startedAt);
+        int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
+
+        try
+        {
+            var completion = await new RegistryBackedProvider(httpClientFactory, registry, providerOptions).CompleteAsync(
+                new AiProviderRequest
+                {
+                    ProviderCode = UbagProviderCode,
+                    Model = model,
+                    SystemPrompt = SystemPrompt,
+                    UserPrompt = userText,
+                    MaxTokens = 8000,
+                    ApiKeyOverride = apiKey,
+                    BaseUrlOverride = baseUrl,
+                    ResponseFormatJson = "json_object",
+                    Tools =
+                    [
+                        new AiToolDefinition(
+                            ToolName,
+                            ToolName,
+                            "Emit the OET Listening Part B/C source question, all three options, correct option and rationale for every requested item.",
+                            AiToolCategory.Read,
+                            ToolSchemaJson),
+                    ],
+                    ToolChoice = ToolName,
+                },
+                ct);
+
+            var toolCall = completion.ToolCalls?.FirstOrDefault(call =>
+                string.Equals(call.ToolCode, ToolName, StringComparison.Ordinal));
+            if (toolCall is null || string.IsNullOrWhiteSpace(toolCall.ArgsJson))
+            {
+                await usageRecorder.RecordFailureAsync(
+                    usageContext, UbagProviderCode, model, AiCallOutcome.ProviderError,
+                    "no_tool_use", "UBAG did not return an emit_part_bc_answers JSON block.",
+                    LatencyMs(), "listening.partbc.extract", CancellationToken.None,
+                    operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+                throw new InvalidOperationException("UBAG did not return an emit_part_bc_answers JSON block.");
+            }
+
+            var usage = completion.Usage;
+            var cost = usage is null
+                ? 0m
+                : row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
+                  + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
+            await usageRecorder.RecordSuccessAsync(
+                usageContext, UbagProviderCode, model, usage,
+                LatencyMs(), "listening.partbc.extract", cost, CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            return toolCall.ArgsJson;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            await usageRecorder.RecordFailureAsync(
+                usageContext, UbagProviderCode, model, AiCallOutcome.ProviderError,
+                "ubag_network", $"UBAG transport failure ({ex.GetType().Name}).",
                 LatencyMs(), "listening.partbc.extract", CancellationToken.None,
                 operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             throw;

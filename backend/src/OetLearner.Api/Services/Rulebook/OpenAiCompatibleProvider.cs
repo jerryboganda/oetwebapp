@@ -68,6 +68,11 @@ public sealed class OpenAiCompatibleProvider(
             ["max_tokens"] = maxTokens,
             ["stream"] = false,
         };
+        var responseFormat = AiProviderPayloadBuilder.BuildOpenAiResponseFormat(request.ResponseFormatJson);
+        if (responseFormat is not null)
+        {
+            payload["response_format"] = responseFormat;
+        }
         if (sendReasoning)
         {
             payload["reasoning_effort"] = reasoningEffort;
@@ -93,6 +98,11 @@ public sealed class OpenAiCompatibleProvider(
         AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "AI provider", out var choice, out var message);
         var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
         var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
+        if (toolCalls is null)
+        {
+            toolCalls = AiProviderPayloadBuilder.CoerceToolCallsFromJsonText(
+                text, request.Tools, request.ToolChoice);
+        }
 
         var usage = root.TryGetProperty("usage", out var usageEl)
             ? new AiUsage

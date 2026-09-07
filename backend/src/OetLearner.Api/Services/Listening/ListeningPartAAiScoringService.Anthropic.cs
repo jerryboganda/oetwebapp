@@ -238,6 +238,164 @@ public sealed partial class ListeningPartAAiScoringService
         return result;
     }
 
+    /// <summary>UBAG route for the Part A verdicts call. Same gap evidence,
+    /// forced emit_part_a_verdicts tool definition plus response_format
+    /// json_object through the registry (forced-tool emulation surfaces the
+    /// JSON as ArgsJson). Response parsing, retry classification, and cost
+    /// accounting mirror the Anthropic path; usage is recorded against ubag.
+    /// The caller owns lease reconciliation and advisory persistence, so this
+    /// method only classifies the physical invocation.</summary>
+    private async Task<ProviderCallOutcome> CallUbagVerdictsAsync(
+        IReadOnlyList<GapItem> items, string learnerId, string? routeModel,
+        DirectAiOperationLease lease, CancellationToken ct)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Judge each candidate gap answer for OET Listening Part A note-completion.");
+        foreach (var grp in items.GroupBy(i => i.Context))
+        {
+            sb.AppendLine();
+            sb.AppendLine("CONSULTATION NOTE (blanks shown as ____):");
+            sb.AppendLine(string.IsNullOrWhiteSpace(grp.Key) ? "(note text unavailable)" : grp.Key);
+            sb.AppendLine("GAPS:");
+            foreach (var it in grp.OrderBy(i => i.Number))
+            {
+                var accepted = it.Accepted.Count > 0 ? " | also accepted: " + string.Join(", ", it.Accepted) : string.Empty;
+                sb.AppendLine($"({it.Number}) candidate: \"{it.UserAnswer}\" | official answer: \"{it.Canonical}\"{accepted}");
+                sb.AppendLine($"    approved rationale: {it.ApprovedRationale}");
+            }
+        }
+        var userText = sb.ToString();
+
+        var startedAt = clock.GetUtcNow();
+        var usageContext = new AiUsageContext(
+            UserId: learnerId,
+            AuthAccountId: null,
+            TenantId: null,
+            FeatureCode: AiFeatureCodes.ListeningPartAScore,
+            RulebookVersion: null,
+            PromptTemplateId: ToolName,
+            SystemPrompt: SystemPrompt,
+            UserPrompt: userText,
+            StartedAt: startedAt);
+        int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
+
+        async Task<ProviderCallOutcome> FailAsync(string errorClass, string message)
+            => await RecordAndTerminalAsync(errorClass, message);
+
+        async Task<ProviderCallOutcome> RecordAndTerminalAsync(string errorClass, string message)
+        {
+            await RecordFailureAsync(AiCallOutcome.ProviderError, errorClass, message);
+            return ProviderCallOutcome.Terminal(errorClass, ListeningPartAAiSkipReasons.IndeterminateTimeout);
+        }
+
+        var row = await registry.FindByCodeAsync(UbagProviderCode, ct);
+        if (row is null)
+        {
+            return await FailAsync("ubag_unconfigured", "UBAG provider is not registered.");
+        }
+        var apiKey = await registry.GetPlatformKeyAsync(UbagProviderCode, ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return await FailAsync("ubag_unconfigured", "UBAG provider key is missing.");
+        }
+        var baseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? null : row.BaseUrl.Trim().TrimEnd('/');
+        if (baseUrl is not null
+            && AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl) is not null)
+        {
+            return await FailAsync("ubag_unconfigured", "UBAG provider endpoint is not allowed.");
+        }
+        var model = !string.IsNullOrWhiteSpace(routeModel)
+            ? routeModel.Trim()
+            : string.IsNullOrWhiteSpace(row.DefaultModel) ? "chatgpt_web" : row.DefaultModel;
+
+        var request = new AiProviderRequest
+        {
+            ProviderCode = UbagProviderCode,
+            Model = model,
+            SystemPrompt = SystemPrompt,
+            UserPrompt = userText,
+            MaxTokens = 4000,
+            ApiKeyOverride = apiKey,
+            BaseUrlOverride = baseUrl,
+            ResponseFormatJson = "json_object",
+            Tools =
+            [
+                new AiToolDefinition(
+                    ToolName,
+                    ToolName,
+                    "Emit one post-submit advisory review per provided gap number; never change the deterministic mark.",
+                    AiToolCategory.Read,
+                    ToolSchemaJson),
+            ],
+            ToolChoice = ToolName,
+        };
+
+        AiProviderCompletion completion;
+        try
+        {
+            completion = await new RegistryBackedProvider(httpClientFactory, registry, providerOptions).CompleteAsync(request, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            await RecordFailureAsync(AiCallOutcome.Timeout, "ubag_timeout",
+                "UBAG request timed out before response headers were read.");
+            return ProviderCallOutcome.Terminal("ubag_timeout", ListeningPartAAiSkipReasons.IndeterminateTimeout);
+        }
+        catch (Exception ex)
+        {
+            await RecordFailureAsync(AiCallOutcome.ProviderError, "ubag_transport",
+                $"UBAG transport failure ({ex.GetType().Name}).");
+            logger.LogWarning(ex, "Part A AI advisory review: UBAG transport failure.");
+            return ProviderCallOutcome.Terminal("ubag_transport", ListeningPartAAiSkipReasons.IndeterminateTimeout);
+        }
+
+        var toolCall = completion.ToolCalls?.FirstOrDefault(call =>
+            string.Equals(call.ToolCode, ToolName, StringComparison.Ordinal));
+        if (toolCall is null || string.IsNullOrWhiteSpace(toolCall.ArgsJson))
+        {
+            await RecordFailureAsync(AiCallOutcome.ProviderError, "no_tool_use",
+                "UBAG returned no verdicts JSON block.");
+            return ProviderCallOutcome.Terminal("no_tool_use", ListeningPartAAiSkipReasons.NoMatchingVerdicts);
+        }
+
+        JsonDocument argsDoc;
+        try
+        {
+            argsDoc = JsonDocument.Parse(toolCall.ArgsJson);
+        }
+        catch (JsonException)
+        {
+            await RecordFailureAsync(AiCallOutcome.ProviderError, "invalid_json",
+                "UBAG returned a 2xx body that was not valid JSON.");
+            return ProviderCallOutcome.Terminal("invalid_json", ListeningPartAAiSkipReasons.NoMatchingVerdicts);
+        }
+
+        using (argsDoc)
+        {
+            var usage = completion.Usage;
+            var cost = usage is null
+                ? 0m
+                : row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
+                  + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
+            var usageRecordId = await usageRecorder.RecordSuccessAsync(
+                usageContext, UbagProviderCode, model, usage,
+                LatencyMs(), AiFeatureCodes.ListeningPartAScore, cost, CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            return ProviderCallOutcome.Succeeded(ParseVerdicts(argsDoc.RootElement), usageRecordId);
+        }
+
+        Task RecordFailureAsync(AiCallOutcome outcome, string errorClass, string sanitizedMessage)
+            => usageRecorder.RecordFailureAsync(
+                usageContext, UbagProviderCode, model, outcome,
+                errorClass, sanitizedMessage, LatencyMs(), AiFeatureCodes.ListeningPartAScore,
+                CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+    }
+
     /// <summary>
     /// Resolves an effective-dated <see cref="AiPricingResolution"/> when a
     /// resolver is wired (W2+) and prices normal + cache tokens without

@@ -369,11 +369,18 @@ one `AiUsageRecord`, preserving the audit invariant.
 
 **Boundaries**
 
-- Text completions only. Voice (TTS/ASR), OCR, embeddings, native-audio
-  pronunciation scoring, and strict-JSON pipelines stay on their existing
-  providers — the board's Group E lists every locked capability with reasons.
-- Streaming and tool calling are rejected by the facade (400); route
-  latency-sensitive conversation features only with UX acceptance (browser
-  jobs settle in 10–60s).
+- Text completions, file attachments (PDF/image/audio/video/voice via
+  `ubag_attachments`), audio transcription (`POST {BaseUrl}/audio/transcriptions`
+  → `{text, ubag_job_id}`), embeddings (`POST {BaseUrl}/embeddings` — exact
+  OpenAI shape, deterministic hash vectors, NOT semantic), and JSON coercion
+  (`response_format: json_object/json_schema` — completion reduced to its
+  first parseable JSON value, loud failure otherwise) all flow through the
+  facade. Native-audio (inline bytes) pronunciation scoring stays on Gemini;
+  TTS stays on the voice providers. The board's Group E lists every media
+  row with its facade mechanism.
+- Streaming and tool calling are rejected by the facade (400); forced-tool
+  call sites (listening extract/score) are served via JSON coercion +
+  client-side emulation instead. Route latency-sensitive conversation
+  features only with UX acceptance (browser jobs settle in 10–60s).
 - Usage figures are character-based estimates from the facade, not metered
   model tokens; quota/credits metering consumes them as reported.

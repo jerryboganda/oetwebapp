@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -52,7 +53,11 @@ public interface IWritingScenarioService
     Task<WritingScenarioResponse?> AdminApproveScenarioAsync(string adminUserId, Guid id, CancellationToken ct);
 }
 
-public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clock) : IWritingScenarioService
+public sealed class WritingScenarioService(
+    LearnerDbContext db,
+    TimeProvider clock,
+    OetLearner.Api.Services.AiAssistant.Indexing.IEmbeddingService? embeddingService = null,
+    ILogger<WritingScenarioService>? logger = null) : IWritingScenarioService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -112,6 +117,10 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         await PersistSentencesAsync(entity.Id, scenario.CaseNotesStructured, ct);
         AddAuditEvent(userId, "WritingScenario", entity.Id.ToString("D"), "writing.scenario.created", scenario.Title);
         await db.SaveChangesAsync(ct);
+        // Best-effort exemplar embedding (writing.exemplar.embed.v1): the
+        // shared IEmbeddingService calls POST /embeddings on the configured
+        // provider (UBAG facade when the embedding BaseUrl points at it).
+        await RefreshExemplarEmbeddingAsync(entity.Id, CancellationToken.None);
         return await GetAsync(userId, entity.Id, ct) ?? throw new InvalidOperationException("Scenario not found after create.");
     }
 
@@ -137,6 +146,7 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
         await PersistSentencesAsync(id, scenario.CaseNotesStructured, ct);
         AddAuditEvent(userId, "WritingScenario", id.ToString("D"), "writing.scenario.updated", scenario.Title);
         await db.SaveChangesAsync(ct);
+        await RefreshExemplarEmbeddingAsync(id, CancellationToken.None);
         return (await GetAsync(userId, id, ct))!;
     }
 
@@ -265,6 +275,62 @@ public sealed class WritingScenarioService(LearnerDbContext db, TimeProvider clo
             });
         }
         await Task.CompletedTask;
+    }
+
+    /// <summary>Best-effort refresh of the scenario's exemplar embedding row
+    /// (<c>writing.exemplar.embed.v1</c>). Embeds the title + topics + case
+    /// notes through the shared <see cref="IEmbeddingService"/> (which routes
+    /// to the UBAG facade when the embedding BaseUrl points at it) and
+    /// upserts the single <c>WritingScenarioEmbedding</c> row. Never throws:
+    /// a missing/unconfigured embedding service only skips the refresh.</summary>
+    private async Task RefreshExemplarEmbeddingAsync(Guid scenarioId, CancellationToken ct)
+    {
+        if (embeddingService is null) return;
+        try
+        {
+            var scenario = await db.WritingScenarios.AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
+            if (scenario is null) return;
+            var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
+                .Where(s => s.ScenarioId == scenarioId)
+                .OrderBy(s => s.Ordinal)
+                .ToListAsync(ct);
+            var topics = SafeDeserializeList(scenario.TopicsJson);
+            var text = string.Join("\n", new[]
+            {
+                scenario.Title,
+                string.Join(", ", topics),
+            }.Concat(sentences.Select(s => s.SentenceText))
+                .Where(part => !string.IsNullOrWhiteSpace(part)));
+            if (string.IsNullOrWhiteSpace(text)) return;
+            var vector = await embeddingService.EmbedAsync(text, ct);
+            if (vector is not { Length: 1536 }) return;
+            var existing = await db.WritingScenarioEmbeddings
+                .FirstOrDefaultAsync(e => e.ScenarioId == scenarioId, ct);
+            if (existing is null)
+            {
+                db.WritingScenarioEmbeddings.Add(new WritingScenarioEmbedding
+                {
+                    Id = Guid.NewGuid(),
+                    ScenarioId = scenarioId,
+                    ModelId = "text-embedding-3-small",
+                    Dimensions = vector.Length,
+                    EmbeddingJson = JsonSerializer.Serialize(vector, JsonOptions),
+                    CreatedAt = clock.GetUtcNow(),
+                });
+            }
+            else
+            {
+                existing.EmbeddingJson = JsonSerializer.Serialize(vector, JsonOptions);
+                existing.ModelId = "text-embedding-3-small";
+                existing.Dimensions = vector.Length;
+            }
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger?.LogDebug(ex, "Exemplar embedding refresh skipped for scenario {ScenarioId}.", scenarioId);
+        }
     }
 
     private static WritingScenarioView ToView(WritingScenario row, IReadOnlyList<WritingScenarioStructuredSentence> sentences)
