@@ -203,6 +203,8 @@ const PUBLIC_PATHS = new Set([
   '/auth/callback',
   '/get-app',
   '/get-app/android-install',
+  '/speaking/assessment-criteria',
+  '/speaking/intro-questions',
   '/.well-known/apple-app-site-association',
   '/.well-known/assetlinks.json',
 ]);
