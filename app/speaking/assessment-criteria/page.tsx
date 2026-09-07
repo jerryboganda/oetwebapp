@@ -16,7 +16,7 @@ export const metadata: Metadata = {
 
 export default function SpeakingAssessmentCriteriaPage() {
   return (
-    <LearnerDashboardShell pageTitle="Speaking Assessment Criteria">
+    <LearnerDashboardShell pageTitle="Speaking Assessment Criteria" requireAuth={false}>
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <Link
           href="/speaking"
