@@ -1991,6 +1991,10 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Voice.AiVoiceProviderS
 builder.Services.AddHostedService<OetLearner.Api.Services.Ai.CoreAiProviderSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.AiAssistant.AiAssistantFeatureRouteSeeder>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Seeding.AntigravityGatewaySeedHostedService>();
+// UBAG OpenAI facade provider row (Code="ubag", OpenAiCompatible dialect).
+// Strictly additive: seeds the row keyless/inactive when UBAG_OET_PAT is
+// absent; routing stays fully admin-owned via /admin/ai-providers/ubag.
+builder.Services.AddHostedService<OetLearner.Api.Services.Seeding.UbagProviderSeedHostedService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
     OetLearner.Api.Services.Grammar.GrammarDraftService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingDraftService,

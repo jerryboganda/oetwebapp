@@ -1,0 +1,177 @@
+/**
+ * Vitest spec for the UBAG provider toggle board.
+ *
+ * Mirrors the project pattern in `app/admin/ai-providers/page.test.tsx` —
+ * `vi.hoisted` for shared mocks, mock `lib/ai-management-api`, mock
+ * `useAdminAuth`. Asserts:
+ *   1. Groups and feature rows render with ON/OFF states from route rows.
+ *   2. Switching a standard feature OFF→ON calls upsertAiFeatureRoute.
+ *   3. Switching ON→OFF calls deleteAiFeatureRoute.
+ *   4. Scoring features open a confirmation modal before upserting.
+ *   5. Locked (Group E) rows render with no toggle buttons.
+ */
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+
+const {
+  mockProviders,
+  mockRoutes,
+  mockUpsert,
+  mockDelete,
+  mockTest,
+  mockDiscover,
+  mockUpdate,
+  authState,
+} = vi.hoisted(() => ({
+  mockProviders: vi.fn(),
+  mockRoutes: vi.fn(),
+  mockUpsert: vi.fn(),
+  mockDelete: vi.fn(),
+  mockTest: vi.fn(),
+  mockDiscover: vi.fn(),
+  mockUpdate: vi.fn(),
+  authState: {
+    isAuthenticated: true as boolean,
+    role: 'admin' as 'admin' | 'learner' | null,
+  },
+}));
+
+vi.mock('@/lib/ai-management-api', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/ai-management-api')>('@/lib/ai-management-api');
+  return {
+    ...actual,
+    fetchAiProviders: mockProviders,
+    fetchAiFeatureRoutes: mockRoutes,
+    upsertAiFeatureRoute: mockUpsert,
+    deleteAiFeatureRoute: mockDelete,
+    testAiProvider: mockTest,
+    discoverAiProviderModels: mockDiscover,
+    updateAiProvider: mockUpdate,
+  };
+});
+
+vi.mock('@/lib/hooks/use-admin-auth', () => ({
+  useAdminAuth: () => ({
+    isAuthenticated: authState.isAuthenticated,
+    role: authState.role,
+  }),
+}));
+
+import UbagBoardPage from './page';
+
+const ubagRow = {
+  id: 'ubag-1',
+  code: 'ubag',
+  name: 'UBAG (browser AI providers)',
+  dialect: 'OpenAiCompatible',
+  category: 'TextChat',
+  baseUrl: 'http://ubag-vps-gateway-1:8080/v1/openai',
+  apiKeyHint: '…1234',
+  defaultModel: 'mock',
+  allowedModelsCsv: '',
+  pricePer1kPromptTokens: 0,
+  pricePer1kCompletionTokens: 0,
+  retryCount: 2,
+  circuitBreakerThreshold: 5,
+  circuitBreakerWindowSeconds: 30,
+  failoverPriority: 70,
+  isActive: true,
+  lastTestedAt: null,
+  lastTestStatus: null,
+  lastTestError: null,
+  createdAt: '',
+  updatedAt: '',
+};
+
+function seed(routes: Array<{ featureCode: string; providerCode: string; model?: string | null }>) {
+  mockProviders.mockResolvedValue([ubagRow]);
+  mockRoutes.mockResolvedValue({
+    rows: routes.map((r, i) => ({
+      id: `route-${i}`,
+      featureCode: r.featureCode,
+      providerCode: r.providerCode,
+      model: r.model ?? null,
+      isActive: true,
+      createdAt: '',
+      updatedAt: '',
+      updatedByAdminId: null,
+    })),
+    knownFeatureCodes: ['vocabulary.gloss', 'writing.grade', 'ocr.listening.parta'],
+    copilotBulkRouteTargets: [],
+  });
+  mockUpsert.mockResolvedValue({});
+  mockDelete.mockResolvedValue(undefined);
+}
+
+describe('UbagBoardPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    authState.isAuthenticated = true;
+    authState.role = 'admin';
+  });
+
+  it('renders groups with ON/OFF states from active routes', async () => {
+    seed([{ featureCode: 'vocabulary.gloss', providerCode: 'ubag', model: 'deepseek_web' }]);
+    render(<UbagBoardPage />);
+
+    expect(await screen.findByText('A · Admin & content drafts')).toBeTruthy();
+    expect(await screen.findByText('B · Learner, non-scoring')).toBeTruthy();
+    expect(await screen.findByText('D · Scoring-critical')).toBeTruthy();
+    expect(await screen.findByText('E · Not servable by UBAG')).toBeTruthy();
+    // vocabulary.gloss is routed to UBAG → ON; writing.grade has no route → OFF.
+    const onButtons = await screen.findAllByRole('button', { name: 'ON' });
+    expect(onButtons.length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findAllByRole('button', { name: 'OFF' })).not.toHaveLength(0);
+  });
+
+  it('switching OFF→ON upserts a UBAG route with the group model', async () => {
+    seed([]);
+    render(<UbagBoardPage />);
+    await screen.findByText('B · Learner, non-scoring');
+
+    const offButtons = await screen.findAllByRole('button', { name: 'OFF' });
+    fireEvent.click(offButtons[0]);
+    await waitFor(() => expect(mockUpsert).toHaveBeenCalled());
+    const input = mockUpsert.mock.calls[0][0] as { featureCode: string; providerCode: string; isActive: boolean };
+    expect(input.providerCode).toBe('ubag');
+    expect(input.isActive).toBe(true);
+  });
+
+  it('switching ON→OFF deletes the route', async () => {
+    seed([{ featureCode: 'vocabulary.gloss', providerCode: 'ubag' }]);
+    render(<UbagBoardPage />);
+    await screen.findByText('B · Learner, non-scoring');
+
+    const onButtons = await screen.findAllByRole('button', { name: 'ON' });
+    fireEvent.click(onButtons[0]);
+    await waitFor(() => expect(mockDelete).toHaveBeenCalledWith('vocabulary.gloss'));
+  });
+
+  it('scoring toggles open a confirmation modal before upserting', async () => {
+    seed([]);
+    render(<UbagBoardPage />);
+    await screen.findByText('D · Scoring-critical');
+
+    const offButtons = await screen.findAllByRole('button', { name: 'OFF' });
+    fireEvent.click(offButtons[offButtons.length - 1]);
+    // Modal asks for confirmation; nothing is upserted yet.
+    expect(await screen.findByText('Enable scoring-critical UBAG routing?')).toBeTruthy();
+    expect(mockUpsert).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Enable anyway' }));
+    await waitFor(() => expect(mockUpsert).toHaveBeenCalled());
+    expect((mockUpsert.mock.calls[0][0] as { providerCode: string }).providerCode).toBe('ubag');
+  });
+
+  it('locked rows render reasons with no toggle buttons', async () => {
+    seed([]);
+    render(<UbagBoardPage />);
+    await screen.findByText('E · Not servable by UBAG');
+
+    expect(await screen.findAllByText('ASR — Whisper only.')).toHaveLength(4);
+    expect(await screen.findByText('Requires Gemini native inline-audio.')).toBeTruthy();
+    expect(await screen.findByText('Requires strict JSON output.')).toBeTruthy();
+    // Matrix pin: 12 (A) + 23 (B) + 6 (C) + 9 (D) = 50 toggleable rows, all OFF.
+    // Locked rows (E) and the empty Other section contribute no ON/OFF buttons.
+    expect(await screen.findAllByRole('button', { name: 'OFF' })).toHaveLength(50);
+    expect(screen.queryAllByRole('button', { name: 'ON' })).toHaveLength(0);
+  });
+});

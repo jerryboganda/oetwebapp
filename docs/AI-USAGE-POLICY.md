@@ -319,3 +319,61 @@ existing `IAiGatewayService` like any other provider; no policy bypass.
 
 See [`docs/AI-COPILOT-SDK-INTEGRATION.md`](AI-COPILOT-SDK-INTEGRATION.md)
 for the full architecture.
+
+---
+
+## 19. UBAG browser-AI provider (OpenAI facade)
+
+UBAG ships as a registered provider via its **OpenAI-compatibility facade** —
+`POST {BaseUrl}/chat/completions` with `stream:false`, where
+`BaseUrl = http://ubag-vps-gateway-1:8080/v1/openai` on the private compose
+network. Wired through the existing `IAiGatewayService` like any other
+provider; no policy bypass. One facade call = one native UBAG job = exactly
+one `AiUsageRecord`, preserving the audit invariant.
+
+**Setup**
+
+- Register at `/admin/ai-providers` → preset **UBAG** (sets `Code = "ubag"`,
+  `Dialect = OpenAiCompatible`, `DefaultModel = "mock"`), or deploy the
+  backend containing `UbagProviderSeeder` so the row is seeded.
+- Paste the tenant PAT (`tenant_oet` / `oet-platform`, service role — issued
+  via UBAG `POST /v1/auth/pat`, no expiry, revocable from the UBAG Security
+  page), or set `UBAG_OET_PAT` on the oet-api containers so the seeder keys
+  the row. Stored encrypted via `IDataProtectionProvider` purpose
+  `"AiProvider.PlatformKey.v1"`.
+- Default `IsActive = false` until the admin enables features on the
+  **UBAG toggle board** at `/admin/ai-providers/ubag` (per-feature
+  ON/OFF switches backed by `AiFeatureRoute` rows — instant, no deploy).
+- `OET_INTERNAL_AI_HOSTS` on oet-api must list `ubag-vps-gateway-1` (compose
+  default), otherwise the provider-URL SSRF guard rejects the container-DNS
+  http URL and every UBAG call fails closed. Do NOT add `oet-agent-gateway`
+  to that list without verifying the antigravity routes — allowlisting makes
+  that dormant row callable through the guarded path for the first time.
+
+**Model naming**
+
+- Facade `model` is a UBAG target (`chatgpt_web`) or `target|setting`
+  (`chatgpt_web|GPT-5.6 Sol`); the full list comes from the board's
+  **Discover models** button (`GET /v1/openai/models`).
+- Keep `DefaultModel = "mock"` so the admin **Test connection** probe runs a
+  fast mock job; per-feature `Model` overrides carry the real browser
+  targets. Pricing fields stay `0` (browser-session cost model).
+
+**PII position (approved as-is)**
+
+- Learner prompts flow into platform-owned provider browser sessions
+  (ChatGPT/DeepSeek web accounts). Approved by the owner for this
+  integration; the board still keeps scoring-critical features OFF by
+  default behind a confirmation modal until a parallel-evaluation window
+  validates browser-model grading quality vs Anthropic.
+
+**Boundaries**
+
+- Text completions only. Voice (TTS/ASR), OCR, embeddings, native-audio
+  pronunciation scoring, and strict-JSON pipelines stay on their existing
+  providers — the board's Group E lists every locked capability with reasons.
+- Streaming and tool calling are rejected by the facade (400); route
+  latency-sensitive conversation features only with UX acceptance (browser
+  jobs settle in 10–60s).
+- Usage figures are character-based estimates from the facade, not metered
+  model tokens; quota/credits metering consumes them as reported.
