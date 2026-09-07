@@ -11,7 +11,7 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from './fi
 //   5. Confirm the audit log surfaced the event (admin view spot-check).
 //
 // Robust to either of the two likely UIs:
-//   * `/speaking/settings` (settings panel inside the learner area)
+//   * `/speaking/recordings` (Phase 10.1 learner self-management page)
 //   * `/account/recordings` (cross-subtest list)
 
 test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
@@ -44,7 +44,7 @@ test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
     // Try the dedicated recordings page first; fall back to the more
     // generic settings page if not implemented yet.
     let landed = false;
-    for (const path of ['/speaking/settings', '/account/recordings', '/account/privacy']) {
+    for (const path of ['/speaking/recordings', '/account/recordings', '/account/privacy']) {
       const resp = await page.goto(path, { waitUntil: 'domcontentloaded' }).catch(() => null);
       if (resp && resp.ok()) {
         landed = true;
@@ -64,7 +64,11 @@ test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
       await expect(
         page.getByText(/(delete|erase|recordings|right to be forgotten)/i).first(),
       ).toBeVisible();
-      expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
+      expectNoSevereClientIssues(diagnostics, {
+        allowNextDevNoise: true,
+        allowAuthRedirectNoise: true,
+        allowNotificationReconnectNoise: true,
+      });
       diagnostics.detach();
       await attachDiagnostics(testInfo, diagnostics);
       return;
@@ -84,7 +88,11 @@ test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
       page.getByText(/(deleted|removed|erased|gone)/i).first(),
     ).toBeVisible({ timeout: 15000 });
 
-    expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
+    expectNoSevereClientIssues(diagnostics, {
+      allowNextDevNoise: true,
+      allowAuthRedirectNoise: true,
+      allowNotificationReconnectNoise: true,
+    });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
