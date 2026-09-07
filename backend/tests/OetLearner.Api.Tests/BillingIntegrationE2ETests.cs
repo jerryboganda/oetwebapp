@@ -52,15 +52,39 @@ public class BillingIntegrationE2ETests : IClassFixture<TestWebApplicationFactor
         await using (var catalogScope = _factory.Services.CreateAsyncScope())
         {
             var catalogDb = catalogScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-            var addOns = await catalogDb.BillingAddOns.AsNoTracking()
-                .Select(addOn => new { addOn.Id, addOn.Code, addOn.Status, addOn.GrantCredits })
-                .ToListAsync();
+            // The OET-2026 manifest carries no review-credit packs, so seed one
+            // explicitly (same hermetic pattern as BillingCheckoutSessionGuardTests).
+            var now = DateTimeOffset.UtcNow;
+            var packSuffix = Guid.NewGuid().ToString("N")[..8];
+            catalogDb.BillingAddOns.Add(new BillingAddOn
+            {
+                Id = $"addon-e2e-review-{packSuffix}",
+                Code = $"e2e-review-pack-{packSuffix}",
+                Name = "E2E Test Review Pack",
+                Description = "Three review credits for the billing E2E test.",
+                Price = 29.99m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 30,
+                GrantCredits = 3,
+                AppliesToAllPlans = true,
+                RequiresEligibleParent = false,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = JsonSerializer.Serialize(new Dictionary<string, int>
+                {
+                    ["ai_credits"] = 3
+                }),
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await catalogDb.SaveChangesAsync();
             var hasCreditsPack = await catalogDb.BillingAddOns
                 .AnyAsync(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == 3);
-            Assert.True(
-                hasCreditsPack,
-                "Expected the test billing catalog to contain an active 3-credit review pack. " +
-                $"Actual add-ons: {JsonSerializer.Serialize(addOns)}");
+            Assert.True(hasCreditsPack, "Expected the test billing catalog to contain an active 3-credit review pack.");
         }
 
         string? quoteId = null;

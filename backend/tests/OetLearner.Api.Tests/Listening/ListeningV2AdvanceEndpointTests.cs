@@ -295,7 +295,7 @@ public class ListeningV2AdvanceEndpointTests : IClassFixture<TestWebApplicationF
         var userId = $"listener-{Guid.NewGuid():N}";
         var attemptId = $"att-{Guid.NewGuid():N}";
         await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
-        await SeedStrictAttemptAsync(userId, attemptId, mode: ListeningAttemptMode.Paper);
+        await SeedStrictAttemptAsync(userId, attemptId);
 
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);

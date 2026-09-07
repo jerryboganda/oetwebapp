@@ -31,6 +31,7 @@
 import { readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
 
 // ── CLI ───────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -46,6 +47,7 @@ const API = (opt("api", process.env.OET_API_URL) || "http://localhost:5199").rep
 const EMAIL = opt("email", process.env.OET_ADMIN_EMAIL);
 const PASSWORD = opt("password", process.env.OET_ADMIN_PASSWORD);
 const TOKEN = opt("token", process.env.OET_ADMIN_TOKEN);
+const DEVICE_ID = opt("device", process.env.OET_DEVICE_ID) || randomUUID();
 const LIMIT = Number(opt("limit", "0")) || 0;
 const TRANSCRIPTS = opt(
   "transcripts",
@@ -61,7 +63,9 @@ const CRITERION_CODES = new Set([
   "relationshipBuilding", "patientPerspective", "structure",
   "informationGathering", "informationGiving",
 ]);
-// lib/auth/enrollment.ts:38 — PROFESSION_CATALOG ids.
+// Learner Speaking selection uses WRITING_PROFESSIONS kebab-case ids
+// (lib/writing/types.ts). Map printed banners onto those ids so students
+// actually see the cards. Unknown banners still fail closed (null).
 const PROFESSIONS = new Map([
   ["MEDICINE", "medicine"],
   ["NURSING", "nursing"],
@@ -69,6 +73,16 @@ const PROFESSIONS = new Map([
   ["DENTISTRY", "dentistry"],
   ["PHYSIOTHERAPY", "physiotherapy"],
   ["RADIOGRAPHY", "radiography"],
+  ["DIETETICS", "dietetics"],
+  ["OCCUPATIONAL THERAPY", "occupational-therapy"],
+  ["OCCUPATIONAL_THERAPY", "occupational-therapy"],
+  ["OPTOMETRY", "optometry"],
+  ["PODIATRY", "podiatry"],
+  ["SPEECH PATHOLOGY", "speech-pathology"],
+  ["SPEECH_PATHOLOGY", "speech-pathology"],
+  ["VETERINARY SCIENCE", "veterinary"],
+  ["VETERINARY", "veterinary"],
+  ["VETERINARY_SCIENCE", "veterinary"],
 ]);
 // AdminService.SpeakingRolePlayCards.cs — EvaluatePublishGate.
 const MIN_PUBLISHABLE_TASKS = 3;
@@ -137,6 +151,61 @@ export function provenanceToken(card, chunkId) {
  * literally what "When asked, say ..." bullet 1 is. It is copied, not moved:
  * the full patientTasks list is still sent in its entirety.
  */
+// Mirrors lib/speaking/category-taxonomy.ts classifySpeakingCard (priority order).
+const examStartPattern = /you have (just|finished|completed|now finished)[^.\n]{0,60}examin/i;
+const examOpeningPattern = /thank you for letting me examine you/i;
+const emergencySettingPattern = /emergency department|\bED\b|emergency room|\bA&E\b/i;
+const emergencyArrivalPattern =
+  /just arriv|recently arriv|arrived (just |recently |with|to|at)|presents? (now|today|with|to|at)|just (came|came in|presented|walked in)|new arrival|brought in|rushed in|by ambulance|triaged/i;
+const knownCarePattern =
+  /for hours|for \d+ (hours|days)|observed (for|over)|under observation|already (known|managed|under|admitted)|under (our|your|hospital|their) care|managed (in|for|on the)|known to (us|the)|admit(ted)? (to|for|on)|transfer(red)? to.{0,30}(unit|ward|hospital|palliative)|palliative (unit|ward|care)|inpatient|in-patient|\bward\b|discharge|pre-?op(erative)?|post-?op|ICU|intensive care|surgery|operation|undergo(ing|ne)? (surgery|an? operation)|hospital stay/i;
+const firstVisitPattern =
+  /first (visit|time|presentation|attendance|consultation|appointment)|present(s|ed|ing)? for the first time|new patient|new referral|initial (visit|consultation|presentation|assessment)|never (seen|visited|attended) before|first-?ever/i;
+const followUpPattern =
+  /follow.?up|return(ing|ed|s)? (for|to|visit|appointment)|(last|previous) visit|since the last|review (of|appointment)|test results?|results?.{0,20}(are|show|confirm|of)|side effects?|treatment progress|progress since|progression|came back|coming back|second visit|re-?attendance|ongoing (treatment|care|management)|continu(e[sd]?|ing) (treatment|management|care)|check-?up|recall (visit|appointment)|monitoring/i;
+const badNewsPattern =
+  /break(ing)? bad news|cancer|malignan|terminal|serious diagnosis|grave news|has died|death|life.?threatening|palliative|chemotherapy|oncology|poor prognosis|bad news/i;
+const angryPattern =
+  /\bangry\b|anger|furious|\bupset\b|complain(t|ed|ing|s)?|dissatisf|annoyed|irritat|raised a complaint|formal complaint|unhappy with|aggressive/i;
+const reluctantPattern =
+  /refus|reluctant|declin|resist|does ?n[o']t want|do not want|unwilling|hesitant|against (medical )?advice|won.?t (take|attend|have|go|accept|agree|come)|will not (take|attend|have|go|accept|agree|come)|non-?complian/i;
+
+export function classifyCard(input) {
+  const text = [
+    input.setting,
+    input.background,
+    ...(input.tasks ?? []),
+  ].filter(Boolean).join("\n");
+  const behavioural = [];
+  if (badNewsPattern.test(text)) behavioural.push("Breaking Bad News");
+  if (angryPattern.test(text)) behavioural.push("Angry");
+  if (reluctantPattern.test(text)) behavioural.push("Reluctant");
+  const withSecondary = (primary) => ({
+    primary,
+    secondaryTags: behavioural.filter((tag) => tag !== primary),
+    needsReview: false,
+  });
+  if (examStartPattern.test(text) || examOpeningPattern.test(text)) {
+    return withSecondary("Examination Card");
+  }
+  if (emergencySettingPattern.test(text) && emergencyArrivalPattern.test(text) && !knownCarePattern.test(text)) {
+    return withSecondary("Emergency / Emergency Department");
+  }
+  if (knownCarePattern.test(text)) return withSecondary("Already Known Patient");
+  if (firstVisitPattern.test(text)) return withSecondary("First Visit");
+  if (followUpPattern.test(text)) return withSecondary("Second Visit / Follow-up");
+  if (behavioural.includes("Breaking Bad News")) {
+    return { primary: "Breaking Bad News", secondaryTags: [], needsReview: false };
+  }
+  if (behavioural.includes("Angry")) {
+    return { primary: "Angry Patient", secondaryTags: [], needsReview: false };
+  }
+  if (behavioural.includes("Reluctant")) {
+    return { primary: "Reluctant Patient", secondaryTags: [], needsReview: false };
+  }
+  return { primary: "Other Cards", secondaryTags: [], needsReview: true };
+}
+
 export function deriveOpeningResponse(patientTasks, patientBackground) {
   return (
     patientTasks[0]
@@ -180,6 +249,13 @@ export function buildPayloads(card, chunkId) {
   const patientTasks = normaliseTasks(card.patientTasks);
   const printedNumber = Number.parseInt(String(card.printedCardNumber ?? ""), 10);
 
+  const classified = classifyCard({
+    setting: String(card.setting ?? ""),
+    background: String(card.candidateBackground ?? ""),
+    tasks,
+    patientEmotion: "neutral",
+    communicationGoal: "Inform",
+  });
   const create = {
     professionId,
     scenarioTitle: deriveScenarioTitle(card),
@@ -194,6 +270,9 @@ export function buildPayloads(card, chunkId) {
     clinicalTopic: "general",
     difficulty: "core",
     criteriaFocus: [],
+    primaryCategory: classified.primary,
+    secondaryTags: classified.secondaryTags,
+    categoryNeedsReview: classified.needsReview,
     displayCardNumber: Number.isFinite(printedNumber) ? printedNumber : null,
     sourceAttribution: deriveSourceAttribution(card, chunkId),
   };
@@ -234,6 +313,8 @@ async function api(method, path, body) {
     method,
     headers: {
       "content-type": "application/json",
+      "X-OET-Device-Id": DEVICE_ID,
+      "X-OET-Client-Platform": "desktop",
       ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -345,7 +426,11 @@ function selfCheck() {
   };
 
   assert(mapProfession("  medicine ") === "medicine", "profession is case/space insensitive");
-  assert(mapProfession("OPTOMETRY") === null, "unknown profession is rejected, not defaulted");
+  assert(mapProfession("OPTOMETRY") === "optometry", "allied speaking professions map to learner filter ids");
+  assert(mapProfession("OCCUPATIONAL THERAPY") === "occupational-therapy", "spaced OT banner maps");
+  assert(mapProfession("SPEECH PATHOLOGY") === "speech-pathology", "speech pathology banner maps");
+  assert(mapProfession("VETERINARY SCIENCE") === "veterinary", "veterinary banner maps");
+  assert(mapProfession("ASTRONOMY") === null, "unknown profession is rejected, not defaulted");
 
   // A nine-bullet card must survive intact — this is the whole reason the
   // unbounded task columns exist.
