@@ -1400,7 +1400,9 @@ describe('Admin Non-Editor Pages', () => {
     renderPage(<UserDetailPage />);
 
     expect(await screen.findByRole('main')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /dr sana malik/i })).toBeInTheDocument();
+    // Async page: wait for the detail payload to resolve and swap the loading
+    // shell out (a sync getByRole raced the load on slower CI runners).
+    expect(await screen.findByRole('heading', { name: /dr sana malik/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /identity/i })).toBeInTheDocument();
     expect(screen.getByText('icu')).toBeInTheDocument();
   });
