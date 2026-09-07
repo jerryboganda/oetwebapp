@@ -154,8 +154,11 @@ describe('UbagBoardPage', () => {
     render(<UbagBoardPage />);
     await screen.findByText('D · Scoring-critical');
 
-    const offButtons = await screen.findAllByRole('button', { name: 'OFF' });
-    fireEvent.click(offButtons[offButtons.length - 1]);
+    // Scope to the scoring group's own row so later groups (E · Media)
+    // cannot capture the click — their OFF buttons upsert without a modal.
+    const row = screen.getByText('writing.grade').closest('tr') as HTMLElement;
+    const offButton = row.querySelector('button[aria-pressed="false"]') as HTMLElement;
+    fireEvent.click(offButton);
     // Modal asks for confirmation; nothing is upserted yet.
     expect(await screen.findByText('Enable scoring-critical UBAG routing?')).toBeTruthy();
     expect(mockUpsert).not.toHaveBeenCalled();
@@ -171,7 +174,8 @@ describe('UbagBoardPage', () => {
 
     expect(await screen.findAllByText('Facade audio/transcriptions; provider listens.')).toHaveLength(1);
     expect(await screen.findByText('Facade /embeddings: deterministic hash vectors, NOT semantic.')).toBeTruthy();
-    expect(await screen.findByText('Route-aware: facade JSON coercion + forced-tool emulation.')).toBeTruthy();
+    // Shared by the three route-aware JSON rows (Part A extract/score, B/C extract).
+    expect(await screen.findAllByText('Route-aware: facade JSON coercion + forced-tool emulation.')).toHaveLength(3);
     // Matrix pin: 12 (A) + 23 (B) + 6 (C) + 9 (D) + 15 (E) = 65 toggleable rows, all OFF.
     expect(await screen.findAllByRole('button', { name: 'OFF' })).toHaveLength(65);
     expect(screen.queryAllByRole('button', { name: 'ON' })).toHaveLength(0);

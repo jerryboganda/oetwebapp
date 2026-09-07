@@ -111,6 +111,12 @@ test.describe('Speaking learner AI self-practice flow @learner @speaking', () =>
 
     expectNoSevereClientIssues(diagnostics, {
       allowNextDevNoise: true,
+      // The cold-load hydration burst (features/gamification/notifications)
+      // can race the auth manager's first refresh on the throttled stack and
+      // 401 before the bearer lands — the same auth-redirect noise class the
+      // consent-gdpr suite already tolerates. The AI-assistant negotiate 401
+      // is classified as reconnect noise (see diagnostics.ts).
+      allowAuthRedirectNoise: true,
       allowNotificationReconnectNoise: true,
     });
     diagnostics.detach();

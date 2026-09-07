@@ -21,6 +21,19 @@ test.describe('Speaking pre-warm-up timer @learner @speaking', () => {
     const diagnostics = observePage(page);
     const sessionId = 'smoke-warmup-session';
 
+    // The page bootstraps with GET /v1/speaking/sessions/{id} before it can
+    // transition into warm-up. The ephemeral stack has no seeded session with
+    // this id, so an unmocked GET always fails (401 during the cold-load auth
+    // race, 404 once authenticated) and the controls never render. Mock both
+    // calls — this is a pure UI smoke, not a backend contract test.
+    await page.route(`**/v1/speaking/sessions/${sessionId}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sessionId, state: 'PrepInProgress' }),
+      });
+    });
+
     await page.route(`**/v1/speaking/sessions/${sessionId}/start-warmup`, async (route) => {
       await route.fulfill({
         status: 200,
@@ -40,7 +53,14 @@ test.describe('Speaking pre-warm-up timer @learner @speaking', () => {
       const cont = page.getByRole('button', { name: /continue/i }).first();
       await expect(cont).toBeVisible();
 
-      await expectNoSevereClientIssues(diagnostics);
+      await expectNoSevereClientIssues(diagnostics, {
+        allowNextDevNoise: true,
+        // Same cold-load auth-race + AI-assistant negotiate 401 noise class
+        // the other learner-shell speaking specs tolerate (see
+        // speaking-learner-ai-flow.spec.ts).
+        allowAuthRedirectNoise: true,
+        allowNotificationReconnectNoise: true,
+      });
     } finally {
       await attachDiagnostics(testInfo, diagnostics);
     }

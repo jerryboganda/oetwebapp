@@ -527,6 +527,8 @@ public sealed class ListeningGradingService
             // Do not resolve or persist any converted score for an attempt
             // whose automated MCQ payload is invalid. The attempt is saved as
             // a review hold by the public method after this return.
+            attempt.RawScore = rawCorrect;
+            attempt.MaxRawScore = questions.Sum(q => Math.Max(0, q.Points));
             attempt.ScoreConversionTableId = null;
             attempt.ScoreConversionTableVersionKey = null;
             attempt.ScoreConversionGrade = null;
