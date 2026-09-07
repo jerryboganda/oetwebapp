@@ -279,6 +279,9 @@ public sealed partial class ListeningPartAAiScoringService
             StartedAt: startedAt);
         int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
 
+        // Assigned before FailAsync/RecordFailureAsync capture it (CS0165).
+        var model = !string.IsNullOrWhiteSpace(routeModel) ? routeModel.Trim() : "chatgpt_web";
+
         async Task<ProviderCallOutcome> FailAsync(string errorClass, string message)
             => await RecordAndTerminalAsync(errorClass, message);
 
@@ -304,9 +307,10 @@ public sealed partial class ListeningPartAAiScoringService
         {
             return await FailAsync("ubag_unconfigured", "UBAG provider endpoint is not allowed.");
         }
-        var model = !string.IsNullOrWhiteSpace(routeModel)
-            ? routeModel.Trim()
-            : string.IsNullOrWhiteSpace(row.DefaultModel) ? "chatgpt_web" : row.DefaultModel;
+        if (string.IsNullOrWhiteSpace(routeModel) && !string.IsNullOrWhiteSpace(row.DefaultModel))
+        {
+            model = row.DefaultModel;
+        }
 
         var request = new AiProviderRequest
         {
