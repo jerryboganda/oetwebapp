@@ -139,8 +139,16 @@ public static class CompanionLearnerEndpoints
         // packages created for it. AiCompanion is an opt-in module, so a plan that
         // never granted it grants nothing — access is always a deliberate
         // commercial act, never an accident of an old plan predating the feature.
+        // Grants come from two durable sources: the plan's catalog module list
+        // (snapshot) and admin-written PlanModuleOverride rows (the companion
+        // access admin section). Overrides are consulted here — the only
+        // AiCompanion enforcement point — and NOT baked into plan rows, because
+        // the catalog seeder rewrites DashboardModulesJson from the manifest on
+        // every boot and would silently wipe UI-made grants.
         var snapshot = await entitlements.ResolveAsync(userId, ct);
-        if (!snapshot.IsModuleEnabled(ModuleKeys.AiCompanion))
+        var planOverride = await ResolveCompanionPlanOverrideAsync(db, snapshot.PlanCode, ct);
+        if (planOverride is false
+            || (!snapshot.IsModuleEnabled(ModuleKeys.AiCompanion) && planOverride is not true))
         {
             return new CompanionAccess(false, "package_required", snapshot.PlanCode, null);
         }
@@ -196,6 +204,29 @@ public static class CompanionLearnerEndpoints
         }
 
         return new CompanionAccess(true, "ok", policy.PlanCode, policy.PlanName);
+    }
+
+    /// <summary>
+    /// Admin-written per-plan companion grant for the snapshot's plan code:
+    /// true = granted, false = explicitly revoked, null = no override row.
+    /// Matched case-insensitively (snapshot codes are normalized lowercase).
+    /// The whole table is read because it stays tiny (one row per plan at
+    /// most) — no translation-sensitive predicate, works on every provider.
+    /// </summary>
+    internal static async Task<bool?> ResolveCompanionPlanOverrideAsync(
+        LearnerDbContext db,
+        string? snapshotPlanCode,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotPlanCode)) return null;
+        var rows = await db.PlanModuleOverrides
+            .AsNoTracking()
+            .Where(o => o.ModuleKey == ModuleKeys.AiCompanion)
+            .Select(o => new { o.PlanCode, o.Enabled })
+            .ToListAsync(ct);
+        return rows
+            .FirstOrDefault(o => string.Equals(o.PlanCode, snapshotPlanCode, StringComparison.OrdinalIgnoreCase))
+            ?.Enabled;
     }
 
     /// <summary>

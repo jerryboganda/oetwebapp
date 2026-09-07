@@ -1460,7 +1460,9 @@ public class AuthFlowsTests
 
         await using (var partialDb = new LearnerDbContext(dbOptions))
         {
-            partialDb.SignupProfessionCatalog.Add(new SignupProfessionCatalog { Id = "radiography" });
+            // Seed a VALID pre-existing row: Label/Description are required
+            // by the model, so a bare-Id fixture can no longer be saved.
+            partialDb.SignupProfessionCatalog.Add(new SignupProfessionCatalog { Id = "radiography", Label = "Radiography", Description = "Radiography candidates." });
             await partialDb.SaveChangesAsync();
         }
 
@@ -1586,7 +1588,7 @@ public class AuthFlowsTests
         yield return new object[]
         {
             currentUser,
-            new[] { "userId", "email", "role", "displayName", "isEmailVerified", "isAuthenticatorEnabled", "requiresEmailVerification", "requiresMfa", "emailVerifiedAt", "authenticatorEnabledAt", "adminPermissions", "activeProfessionId", "activeProfessionLabel" }
+            new[] { "userId", "email", "role", "displayName", "isEmailVerified", "isAuthenticatorEnabled", "requiresEmailVerification", "requiresMfa", "emailVerifiedAt", "authenticatorEnabledAt", "adminPermissions", "activeProfessionId", "activeProfessionLabel", "avatarUrl" }
         };
 
         yield return new object[]

@@ -82,12 +82,28 @@ public sealed class AuthQueryPerformanceTests : IAsyncLifetime
                     result.Principal?.FindFirst(AuthTokenService.AuthAccountIdClaimType)?.Value);
             }
 
-            var command = Assert.Single(_factory.Commands.ReaderCommands);
+            // The fail-closed profile read is still exactly one command.
+            // Rejections additionally persist one SecurityEvents audit row
+            // (deliberate: log-token-rejections security fix) — that write is
+            // the only permitted second command, and only on failure.
+            var commands = _factory.Commands.ReaderCommands;
+            var command = Assert.Single(commands.Where(c =>
+                !c.TrimStart().StartsWith("INSERT", StringComparison.OrdinalIgnoreCase)));
             Assert.Contains("ApplicationUserAccounts", command, StringComparison.Ordinal);
             Assert.Contains("Users", command, StringComparison.Ordinal);
             Assert.Contains("ExpertUsers", command, StringComparison.Ordinal);
             Assert.Contains("EXISTS", command, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("INNER JOIN", command, StringComparison.OrdinalIgnoreCase);
+            var auditWrites = commands.Where(c =>
+                c.Contains("SecurityEvents", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (scenario.ShouldAuthenticate)
+            {
+                Assert.Empty(auditWrites);
+            }
+            else
+            {
+                Assert.Single(auditWrites);
+            }
         }
     }
 

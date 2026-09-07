@@ -106,17 +106,14 @@ public class ListeningSequenceServiceTests
     }
 
     [Fact]
-    public void DeriveFromPolicy_paper_mode_uses_final_review_all_parts_window()
+    public void DeriveFromPolicy_paper_mode_is_rejected_as_computer_only()
     {
-        var db = NewDb();
-        var svc = new ListeningSequenceService(db);
-        var policy = DefaultsPolicy();
-        var paperMode = new ListeningModePolicyResolver().For(ListeningAttemptMode.Paper);
+        // Paper simulation was removed (computer-only delivery): resolving the
+        // mode itself must fail closed with the documented code, so no paper
+        // sequence can ever be derived.
+        var ex = Assert.Throws<ApiException>(() => new ListeningModePolicyResolver().For(ListeningAttemptMode.Paper));
 
-        var sequence = svc.DeriveFromPolicy(policy, paperMode);
-
-        var c2Final = ListeningSequenceService.WindowMsForState(sequence, ListeningFsmTransitions.C2FinalReview);
-        Assert.Equal(ListeningPolicyDefaults.FinalReviewAllPartsMsPaper, c2Final);
+        Assert.Equal("listening_paper_mode_disabled", ex.ErrorCode);
     }
 
     [Fact]

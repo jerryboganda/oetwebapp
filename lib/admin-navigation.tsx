@@ -298,6 +298,13 @@ export const adminNavGroups: AdminNavGroup[] = [
         requiredPermissions: [AdminPermission.AiConfig],
       },
       {
+        href: '/admin/companion/access',
+        label: 'Learning Companion',
+        icon: <MessageSquare className={iconClassName} />,
+        matchPrefix: '/admin/companion',
+        requiredPermissions: [AdminPermission.AiConfig],
+      },
+      {
         href: '/admin/notifications',
         label: 'Notifications',
         icon: <Bell className={iconClassName} />,
@@ -541,6 +548,7 @@ const adminPageTitleRules: AdminPageTitleRule[] = [
   { prefix: '/admin/study-plan-templates', title: 'Study Plan Templates' },
   { prefix: '/admin/community', title: 'Community Moderation' },
   { prefix: '/admin/ai-assistant', title: 'AI Assistant' },
+  { prefix: '/admin/companion', title: 'Learning Companion' },
   { prefix: '/admin/ai-config', title: 'AI Eval Config' },
   { prefix: '/admin/ai-providers', title: 'AI Providers' },
   { prefix: '/admin/ai-usage', title: 'AI/API Usage & Billing' },

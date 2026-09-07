@@ -128,6 +128,23 @@ public static partial class SeedData
             hasChanges = true;
         }
 
+        // Companion tiers (F-136/137/138, priced by owner delegation 2026-09-07:
+        // Plus £9/mo, Pro £19/mo, Ultimate £39/mo). Seeded per-code so existing
+        // databases gain them without touching the base plans above. Quota
+        // POLICY only for now: sellable products + subscription mapping are a
+        // separate billing project (see traceability notes).
+        var companionTiers = CompanionQuotaTiers();
+        var existingTierCodes = (await db.AiQuotaPlans
+            .AsNoTracking()
+            .Select(plan => plan.Code)
+            .ToListAsync(cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var tier in companionTiers.Where(tier => !existingTierCodes.Contains(tier.Code)))
+        {
+            db.AiQuotaPlans.Add(tier);
+            hasChanges = true;
+        }
+
         if (!await db.AiGlobalPolicies.AnyAsync(cancellationToken))
         {
             SeedAiGlobalPolicy(db);
@@ -4018,6 +4035,74 @@ public static partial class SeedData
                 CreatedAt = now, UpdatedAt = now,
             }
         );
+    }
+
+    /// <summary>
+    /// Companion sellable tiers as quota policy (F-136 Plus / F-137 Pro /
+    /// F-138 Ultimate). Prices decided by owner delegation 2026-09-07 (£9 /
+    /// £19 / £39 per month, GBP): the meter a tier-holder gets once a
+    /// companion product grants the AiCompanion module. Companion feature
+    /// codes mirror the free plan's meter list — the module gate, not this
+    /// list, controls who gets in. Rollover expires monthly (study rhythm);
+    /// overage denies (fail closed, like the other learner tiers).
+    /// </summary>
+    private static IReadOnlyList<AiQuotaPlan> CompanionQuotaTiers()
+    {
+        var now = DateTimeOffset.UtcNow;
+        string Meter() => string.Join(",",
+            AiFeatureCodes.ConversationReply,
+            AiFeatureCodes.ConversationOpening,
+            AiFeatureCodes.ConversationEvaluation,
+            AiFeatureCodes.PronunciationScore,
+            AiFeatureCodes.PronunciationLinguisticScore,
+            AiFeatureCodes.PronunciationFeedback,
+            AiFeatureCodes.VocabularyGloss,
+            AiFeatureCodes.SummarisePassage,
+            AiFeatureCodes.AiAssistantLearner,
+            AiFeatureCodes.CompanionChat,
+            AiFeatureCodes.CompanionAction);
+        return new[]
+        {
+            new AiQuotaPlan
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "companion-plus", Name = "Companion Plus",
+                Description = "Companion tier — £9/month, 100k tokens/month.",
+                Period = AiQuotaPeriod.Monthly,
+                MonthlyTokenCap = 100_000, DailyTokenCap = 10_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.Expire, RolloverCapPct = 0,
+                OveragePolicy = AiOveragePolicy.Deny,
+                AllowedFeaturesCsv = Meter(),
+                IsActive = true, DisplayOrder = 25,
+                CreatedAt = now, UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "companion-pro", Name = "Companion Pro",
+                Description = "Companion tier — £19/month, 300k tokens/month.",
+                Period = AiQuotaPeriod.Monthly,
+                MonthlyTokenCap = 300_000, DailyTokenCap = 25_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.Expire, RolloverCapPct = 0,
+                OveragePolicy = AiOveragePolicy.Deny,
+                AllowedFeaturesCsv = Meter(),
+                IsActive = true, DisplayOrder = 26,
+                CreatedAt = now, UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "companion-ultimate", Name = "Companion Ultimate",
+                Description = "Companion tier — £39/month, 1M tokens/month.",
+                Period = AiQuotaPeriod.Monthly,
+                MonthlyTokenCap = 1_000_000, DailyTokenCap = 100_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.Expire, RolloverCapPct = 0,
+                OveragePolicy = AiOveragePolicy.Deny,
+                AllowedFeaturesCsv = Meter(),
+                IsActive = true, DisplayOrder = 27,
+                CreatedAt = now, UpdatedAt = now,
+            },
+        };
     }
 
     private static void SeedAiGlobalPolicy(LearnerDbContext db)

@@ -54,8 +54,10 @@ public class WritingCoachServiceTests
             ct: CancellationToken.None);
 
         var suggestions = await db.WritingCoachSuggestions.ToListAsync();
+        // BUILTIN.<checkId> is the canonical rule-id scheme (R-ids retired):
+        // every persisted suggestion must still carry an explicit citation.
         Assert.All(suggestions, s =>
-            Assert.Matches(@"^\[(R|RULE_)[A-Za-z0-9_.]+", s.Explanation));
+            Assert.Matches(@"^\[(R|RULE_|BUILTIN)[A-Za-z0-9_.]+", s.Explanation));
 
         var session = await db.WritingCoachSessions.SingleAsync();
         Assert.Equal(suggestions.Count, session.SuggestionsGenerated);

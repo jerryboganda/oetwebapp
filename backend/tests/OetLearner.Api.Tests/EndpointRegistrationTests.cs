@@ -46,6 +46,8 @@ public class EndpointRegistrationTests : IClassFixture<TestWebApplicationFactory
     [InlineData("/v1/admin/rulebooks")]
     [InlineData("/v1/admin/companion/knowledge/status")]
     [InlineData("/v1/admin/companion/knowledge/reindex")]
+    [InlineData("/v1/admin/companion/access")]
+    [InlineData("/v1/admin/companion/access/{planCode}")]
     [InlineData("/v1/companion/session")]
     [InlineData("/v1/companion/memory")]
     [InlineData("/v1/companion/memory/notes/{noteId}")]

@@ -11,6 +11,7 @@ namespace OetLearner.Api.Data;
 public partial class LearnerDbContext
 {
     public DbSet<UserModuleOverride> UserModuleOverrides => Set<UserModuleOverride>();
+    public DbSet<PlanModuleOverride> PlanModuleOverrides => Set<PlanModuleOverride>();
     public DbSet<UserMaterialFolderAccess> UserMaterialFolderAccesses => Set<UserMaterialFolderAccess>();
     public DbSet<UserVideoAccess> UserVideoAccesses => Set<UserVideoAccess>();
     public DbSet<UserRecallSetAccess> UserRecallSetAccesses => Set<UserRecallSetAccess>();
@@ -20,6 +21,11 @@ public partial class LearnerDbContext
         modelBuilder.Entity<UserModuleOverride>(e =>
         {
             e.HasIndex(x => x.UserId);
+        });
+
+        modelBuilder.Entity<PlanModuleOverride>(e =>
+        {
+            e.HasIndex(x => x.PlanCode);
         });
 
         modelBuilder.Entity<UserMaterialFolderAccess>(e =>

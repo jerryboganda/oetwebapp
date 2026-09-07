@@ -123,6 +123,70 @@ public class BillingCheckoutSessionGuardTests : IClassFixture<TestWebApplication
         // unique suffix that stays within the limit.
         var idempotencyKey = $"chk-{Guid.NewGuid():N}".Substring(0, 36);
 
+        // Quoteless review_credits checkout resolves a live pack. The test host
+        // silences the catalog seeder (BillingAddOns empty) and the OET-2026
+        // manifest carries no review-credit packs, so seed one explicitly like
+        // BillingQuoteGuardTests does — hermetic against catalog churn.
+        var packSuffix = Guid.NewGuid().ToString("N")[..8];
+        await using (var seedScope = _factory.Services.CreateAsyncScope())
+        {
+            var seedDb = seedScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var now = DateTimeOffset.UtcNow;
+            var pack = new BillingAddOn
+            {
+                Id = $"addon-chk-idem-{packSuffix}",
+                Code = $"chk-idem-pack-{packSuffix}",
+                Name = "Idempotency Test Review Pack",
+                Description = "Single review credit for idempotency guard tests.",
+                Price = 5m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 30,
+                GrantCredits = 1,
+                AppliesToAllPlans = true,
+                RequiresEligibleParent = false,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = JsonSerializer.Serialize(new Dictionary<string, int>
+                {
+                    ["ai_credits"] = 1
+                }),
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            var version = new BillingAddOnVersion
+            {
+                Id = $"addon-chk-idem-{packSuffix}-v1",
+                AddOnId = pack.Id,
+                VersionNumber = 1,
+                Code = pack.Code,
+                Name = pack.Name,
+                Description = pack.Description,
+                Price = pack.Price,
+                Currency = pack.Currency,
+                Interval = pack.Interval,
+                Status = pack.Status,
+                IsRecurring = pack.IsRecurring,
+                DurationDays = pack.DurationDays,
+                GrantCredits = pack.GrantCredits,
+                GrantEntitlementsJson = pack.GrantEntitlementsJson,
+                CompatiblePlanCodesJson = pack.CompatiblePlanCodesJson,
+                AppliesToAllPlans = pack.AppliesToAllPlans,
+                IsStackable = pack.IsStackable,
+                QuantityStep = pack.QuantityStep,
+                DisplayOrder = 0,
+                CreatedAt = now
+            };
+            pack.ActiveVersionId = version.Id;
+            pack.LatestVersionId = version.Id;
+            seedDb.BillingAddOns.Add(pack);
+            seedDb.BillingAddOnVersions.Add(version);
+            await seedDb.SaveChangesAsync();
+        }
+
         var first = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
         {
             productType = "review_credits",

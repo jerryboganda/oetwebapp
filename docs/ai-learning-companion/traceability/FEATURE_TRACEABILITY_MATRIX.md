@@ -184,9 +184,9 @@
 | ID | Requirement | Phase | Owner | Dependencies | Notes |
 |---|---|---|---|---|---|
 | F-135 | Free message cap | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry |  |
-| F-136 | Plus tier | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry |  |
-| F-137 | Pro tier | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry |  |
-| F-138 | Ultimate tier | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry | Appendix A classifies the Ultimate tier commercially as Stage 1, while the release sequence says the full Ultimate Mentor promise launches only in Stage 3. Implement schema/paywall readiness early but do not expose the full Ultimate promise until Stage 3 gates pass. |
+| F-136 | Plus tier | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry | Priced 2026-09-07 (owner delegation): Plus £9/month. Quota policy ships as `AiQuotaPlan` `companion-plus` (100k/mo, 10k/day); sellable product + mapping follow-up. |
+| F-137 | Pro tier | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry | Priced 2026-09-07 (owner delegation): Pro £19/month. Quota policy ships as `AiQuotaPlan` `companion-pro` (300k/mo, 25k/day); sellable product + mapping follow-up. |
+| F-138 | Ultimate tier | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry | Priced 2026-09-07 (owner delegation): Ultimate £39/month. Quota policy ships as `AiQuotaPlan` `companion-ultimate` (1M/mo, 100k/day). Appendix A classifies the Ultimate tier commercially as Stage 1, while the release sequence says the full Ultimate Mentor promise launches only in Stage 3: readiness ships now, the full promise stays dark until Stage 3 gates pass. |
 | F-139 | AI Credits | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry |  |
 | F-140 | Top-up packs | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry |  |
 | F-141 | Usage counter | Stage 1 | Product + Finance/Payments | Pricing + payments + entitlement service + cost telemetry |  |

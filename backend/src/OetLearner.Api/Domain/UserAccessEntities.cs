@@ -38,6 +38,43 @@ public class UserModuleOverride
 }
 
 /// <summary>
+/// Per-PLAN override of an admin-togglable subscription module (see
+/// <see cref="Services.Entitlements.ModuleKeys"/>). This is the per-plan layer
+/// the companion access admin section writes: an admin can grant a module to
+/// every learner on a plan, or revoke a module the plan's
+/// <see cref="BillingPlan.DashboardModulesJson"/> grants, without editing the
+/// catalog manifest. It survives the OET-2026 catalog seeder, which rewrites
+/// <c>DashboardModulesJson</c> from the manifest on every boot — edits made
+/// directly to plan rows would be silently wiped, rows here are never touched
+/// by the seeder. Resolved in <see cref="CompanionLearnerEndpoints"/>
+/// (the only <c>AiCompanion</c> enforcement point) after the snapshot check.
+/// </summary>
+[Index(nameof(PlanCode), nameof(ModuleKey), IsUnique = true)]
+public class PlanModuleOverride
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    /// <summary>Billing plan code (case-insensitive match).</summary>
+    [MaxLength(64)]
+    public string PlanCode { get; set; } = default!;
+
+    /// <summary>One of <see cref="Services.Entitlements.ModuleKeys"/> (PascalCase).</summary>
+    [MaxLength(32)]
+    public string ModuleKey { get; set; } = default!;
+
+    /// <summary>true = force-enable, false = force-disable for this plan.</summary>
+    public bool Enabled { get; set; }
+
+    /// <summary>Admin account id that last wrote this row (audit trail).</summary>
+    [MaxLength(64)]
+    public string? UpdatedByAdminId { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
 /// Per-user allow-list of Materials folders. When a learner has ANY rows, the
 /// Materials tree and download authorization are RESTRICTED to those folders
 /// (plus their ancestors for navigation and descendants for content) — a

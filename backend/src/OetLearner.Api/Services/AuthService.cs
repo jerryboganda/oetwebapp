@@ -334,7 +334,7 @@ public sealed class AuthService(
         }
 
         var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
-        var securityExempt = await ApplySecurityExemptionAsync(account, cancellationToken);
+        var securityExempt = await ApplySecurityExemptionAsync(account, cancellationToken, authenticatedLearner?.Email);
 
         if (!securityExempt
             && (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
@@ -359,7 +359,7 @@ public sealed class AuthService(
         await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInSucceeded, cancellationToken: cancellationToken);
 
         var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
-        return await CreateSessionFromSubjectAsync(account, subject, cancellationToken);
+        return await CreateSessionFromSubjectAsync(account, subject, cancellationToken, authenticatedLearner?.Email);
     }
 
     public async Task<AuthSessionResponse> CompleteDirectSignInAsync(
@@ -372,7 +372,7 @@ public sealed class AuthService(
             ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
         var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
-        await ApplySecurityExemptionAsync(account, cancellationToken);
+        await ApplySecurityExemptionAsync(account, cancellationToken, authenticatedLearner?.Email);
 
         var now = timeProvider.GetUtcNow();
         if (markEmailVerified && account.EmailVerifiedAt is null)
@@ -384,7 +384,7 @@ public sealed class AuthService(
         account.UpdatedAt = now;
 
         var subject = await ResolveSubjectAsync(account, cancellationToken, authenticatedLearner);
-        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken, knownProfileEmail: authenticatedLearner?.Email);
         await db.SaveChangesAsync(cancellationToken);
         return session;
     }
@@ -1163,9 +1163,10 @@ public sealed class AuthService(
     private async Task<AuthSessionResponse> CreateSessionFromSubjectAsync(
         ApplicationUserAccount account,
         AuthenticatedSessionSubject subject,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? knownProfileEmail = null)
     {
-        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken, knownProfileEmail: knownProfileEmail);
         await db.SaveChangesAsync(cancellationToken);
         return session;
     }
@@ -1421,7 +1422,8 @@ public sealed class AuthService(
         CancellationToken cancellationToken,
         Guid? familyId = null,
         bool riskStepUpSatisfied = false,
-        string? deviceIdOverride = null)
+        string? deviceIdOverride = null,
+        string? knownProfileEmail = null)
     {
         var sessionId = Guid.NewGuid();
         // Fresh sign-in (familyId is null on entry) starts its own family;
@@ -1473,7 +1475,7 @@ public sealed class AuthService(
             // trusted-device gate further down — never challenged, on any
             // device, from any country.
             deviceVerificationExempt = await IsDeviceVerificationExemptAsync(
-                account, security.DeviceVerificationExemptEmails, cancellationToken);
+                account, security.DeviceVerificationExemptEmails, cancellationToken, knownProfileEmail);
 
             // A device that already completed the persistent §3.2 trusted-device
             // check is a stronger identity signal than the heuristic §3.3 risk
@@ -1795,10 +1797,14 @@ public sealed class AuthService(
     private async Task<bool> IsDeviceVerificationExemptAsync(
         ApplicationUserAccount account,
         string? exemptEmailsCsv,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? knownProfileEmail = null)
     {
-        string? profileEmail = null;
-        if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+        // Sign-in resolves the learner profile once up front and threads its
+        // email through every exemption check, so this lookup must not repeat
+        // per call site (LearnerSignIn_LoadsAuthenticationProfileOnce pins it).
+        string? profileEmail = knownProfileEmail;
+        if (profileEmail is null && string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
         {
             profileEmail = await db.Users
                 .AsNoTracking()
@@ -1825,10 +1831,11 @@ public sealed class AuthService(
     /// verification so the JWT claim and learner gate match the list.</summary>
     private async Task<bool> ApplySecurityExemptionAsync(
         ApplicationUserAccount account,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? knownProfileEmail = null)
     {
         var csv = (await runtimeSettingsProvider.GetAsync(cancellationToken)).Security.DeviceVerificationExemptEmails;
-        if (!await IsDeviceVerificationExemptAsync(account, csv, cancellationToken))
+        if (!await IsDeviceVerificationExemptAsync(account, csv, cancellationToken, knownProfileEmail))
         {
             return false;
         }
@@ -1915,12 +1922,12 @@ public sealed class AuthService(
         }
     }
 
-    private async Task<AuthenticatedSessionSubject> ResolveSubjectAsync(
+    private async Task<        AuthenticatedSessionSubject> ResolveSubjectAsync(
         ApplicationUserAccount account,
         CancellationToken cancellationToken,
         LearnerUser? authenticatedLearner = null)
     {
-        await ApplySecurityExemptionAsync(account, cancellationToken);
+        await ApplySecurityExemptionAsync(account, cancellationToken, authenticatedLearner?.Email);
 
         if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
         {

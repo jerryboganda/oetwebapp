@@ -1,4 +1,5 @@
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
 
 namespace OetLearner.Api.Tests.Listening;
@@ -45,20 +46,13 @@ public class ListeningModePolicyTests
     }
 
     [Fact]
-    public void PaperMode_AllowsFreeNavigationNoReplay()
+    public void PaperMode_ThrowsPaperModeDisabled()
     {
-        var policy = _resolver.For(ListeningAttemptMode.Paper);
+        // Paper simulation was removed (computer-only delivery): the resolver
+        // must fail closed with the documented code, never return a policy.
+        var ex = Assert.Throws<ApiException>(() => _resolver.For(ListeningAttemptMode.Paper));
 
-        Assert.True(policy.FreeNavigation);
-        Assert.False(policy.OneWayLocks);
-        Assert.False(policy.AudioPauseAllowed);
-        Assert.False(policy.AudioSeekAllowed);
-        Assert.False(policy.ReplayAllowed);
-        Assert.False(policy.TranscriptVisibleOnReview);
-        Assert.False(policy.ConfirmDialogRequired);
-        Assert.True(policy.UnansweredWarningRequired);
-        Assert.NotNull(policy.FinalReviewAllPartsMs);
-        Assert.Equal(120_000, policy.FinalReviewAllPartsMs);
+        Assert.Equal("listening_paper_mode_disabled", ex.ErrorCode);
     }
 
     [Fact]
