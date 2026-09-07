@@ -159,13 +159,20 @@ jobs:
           if [ "$PERF_MODE" = 'ephemeral' ]; then
             learner_email='learner@oet-prep.dev'
             learner_password='Password123!'
+            # Same device id the Playwright auth bootstrap bound for this
+            # seeded learner (tests/e2e/fixtures/auth-bootstrap.ts). A second,
+            # different device id would trip the §3.2 trusted-device OTP gate
+            # and fail 100% of sign-ins on the ephemeral stack.
+            k6_device_id='e2e-playwright-harness'
+          else
+            k6_device_id="perf-playwright-${GITHUB_RUN_ID}"
           fi
           mkdir -p output/performance/k6
           K6_TARGET_URL="$PERF_API_URL" \
           OET_TEST_LEARNER_EMAIL="$learner_email" \
           OET_TEST_LEARNER_PASSWORD="$learner_password" \
           OET_TEST_ADMIN_ACCESS_TOKEN="$OET_PERF_ADMIN_ACCESS_TOKEN" \
-          OET_TEST_DEVICE_ID="perf-playwright-${GITHUB_RUN_ID}" \
+          OET_TEST_DEVICE_ID="$k6_device_id" \
           k6 run --summary-export output/performance/k6/critical-paths.json tests/load/critical-paths.k6.js
 
       - name: Capture isolated stack logs

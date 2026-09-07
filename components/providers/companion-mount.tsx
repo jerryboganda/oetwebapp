@@ -9,8 +9,10 @@ import { AiAssistantWidget } from '@/components/domain/ai-assistant';
  *
  * Two gates, both fail-closed:
  *
- *  1. **Authentication** — the flag endpoint is `LearnerOnly`, so an anonymous
- *     visitor never even asks. Nothing renders.
+ *  1. **Authentication + learner role** — the flag endpoint is `LearnerOnly`,
+ *     so an anonymous visitor or an admin/expert never even asks (asking as a
+ *     non-learner only produces a 403 violation in perf/a11y runs). Nothing
+ *     renders.
  *  2. **`ai_learning_companion` feature flag** — server-owned, backed by the
  *     `FeatureFlags` table, so the surface can be enabled or killed from
  *     `/admin/flags` without a deploy. `useFeatureFlagMap` retries twice and
@@ -26,9 +28,10 @@ const COMPANION_FLAG = 'ai_learning_companion';
 
 export function CompanionMount() {
   const { isAuthenticated, role } = useAuth();
-  const flags = useFeatureFlagMap([COMPANION_FLAG], isAuthenticated);
+  const isLearner = isAuthenticated && role === 'learner';
+  const flags = useFeatureFlagMap([COMPANION_FLAG], isLearner);
 
-  if (!isAuthenticated) return null;
+  if (!isLearner) return null;
   if (!flags[COMPANION_FLAG]) return null;
 
   // The widget applies its own role check (`canAccessAiAssistant`) on top.

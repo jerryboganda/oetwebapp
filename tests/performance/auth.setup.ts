@@ -12,7 +12,11 @@ type PerformanceAuthTarget = {
   path: string;
 };
 
-const performanceAppOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000').origin;
+// Same empty-string trap as auth-bootstrap.ts: an unset secret yields an
+// empty env var, and `new URL('')` throws before any test runs.
+const performanceAppOrigin = new URL(
+  (process.env.PLAYWRIGHT_BASE_URL?.trim() || 'http://localhost:3000'),
+).origin;
 
 async function markPerformanceTourComplete(
   request: Parameters<typeof bootstrapSessionForRole>[0],

@@ -6,8 +6,16 @@ import { promisify } from 'node:util';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { authStatePaths, seededAccounts, type SeededRole } from './auth';
 
-const defaultApiBaseURL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
-const defaultAppOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000').origin;
+// `??` is not enough here: a workflow that forgets to set the secret leaves
+// PLAYWRIGHT_BASE_URL as an EMPTY string (not undefined), and `new URL('')`
+// throws — which used to kill the whole suite with "Invalid URL" before any
+// test ran. Treat empty/whitespace the same as unset.
+const resolveUrl = (value: string | undefined, fallback: string) => {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length > 0 ? trimmed : fallback;
+};
+const defaultApiBaseURL = resolveUrl(process.env.NEXT_PUBLIC_API_BASE_URL, 'http://localhost:5198').replace(/\/$/, '');
+const defaultAppOrigin = new URL(resolveUrl(process.env.PLAYWRIGHT_BASE_URL, 'http://localhost:3000')).origin;
 const localSessionKey = 'oet.auth.session.local';
 const sessionSessionKey = 'oet.auth.session.session';
 const mfaChallengeKey = 'oet.auth.challenge.mfa';

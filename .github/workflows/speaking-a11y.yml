@@ -8,22 +8,48 @@ on:
 jobs:
   a11y:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
     env:
-      PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+      # Ephemeral local stack (same pattern as performance.yml). The old
+      # STAGING_BASE_URL secret was never created, so this resolved to an
+      # empty string and killed the suite with "Invalid URL" before any test
+      # ran. Override with the secret if a real staging env ever exists.
+      PLAYWRIGHT_BASE_URL: ${{ secrets.STAGING_BASE_URL || 'http://localhost:3000' }}
+      NEXT_PUBLIC_API_BASE_URL: ${{ secrets.STAGING_API_URL || 'http://127.0.0.1:5198' }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:
           version: 10.33.0
       - uses: ./.github/actions/setup-oet-stack
+
+      # A real app must be listening — setup-oet-stack only prepares the
+      # toolchain. Boot the disposable staging-like stack and wait for it.
+      - name: Build isolated staging-like stack
+        if: ${{ env.PLAYWRIGHT_BASE_URL == 'http://localhost:3000' }}
+        run: |
+          OET_PERF_APP_URL=http://localhost:3000 \
+            docker compose -f docker-compose.desktop.yml up -d --build
+
+      - name: Verify isolated stack readiness
+        if: ${{ env.PLAYWRIGHT_BASE_URL == 'http://localhost:3000' }}
+        env:
+          PLAYWRIGHT_READY_TIMEOUT_MS: '900000'
+        run: node ./scripts/qa/assert-local-stack.mjs
+
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
+
       - name: A11y suite
-        run: pnpm exec playwright test tests/a11y --reporter=html,line
+        run: pnpm exec playwright test -c playwright.a11y.config.ts --reporter=html,line
+
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: speaking-a11y-report
           path: playwright-report
+
+      - name: Shut down isolated stack
+        if: always() && env.PLAYWRIGHT_BASE_URL == 'http://localhost:3000'
+        run: docker compose -f docker-compose.desktop.yml down --remove-orphans

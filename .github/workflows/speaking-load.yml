@@ -10,11 +10,33 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      K6_TARGET_URL: ${{ secrets.STAGING_API_URL }}
-      OET_TEST_LEARNER_EMAIL: ${{ secrets.OET_LOAD_LEARNER_EMAIL }}
-      OET_TEST_LEARNER_PASSWORD: ${{ secrets.OET_LOAD_LEARNER_PASSWORD }}
+      # Ephemeral local stack (same pattern as performance.yml). The old
+      # STAGING_API_URL secret was never created, so every request went
+      # nowhere and the run was meaningless. Override with the secret if a
+      # real staging env ever exists.
+      K6_TARGET_URL: ${{ secrets.STAGING_API_URL || 'http://127.0.0.1:5198' }}
+      OET_TEST_LEARNER_EMAIL: ${{ secrets.OET_LOAD_LEARNER_EMAIL || 'learner@oet-prep.dev' }}
+      OET_TEST_LEARNER_PASSWORD: ${{ secrets.OET_LOAD_LEARNER_PASSWORD || 'Password123!' }}
+      # Must match the device id the stack's seeded learner first signed in
+      # with (tests/e2e/fixtures/auth-bootstrap.ts), otherwise the §3.2
+      # trusted-device gate demands an email OTP k6 cannot answer.
+      OET_TEST_DEVICE_ID: e2e-playwright-harness
     steps:
       - uses: actions/checkout@v4
+
+      # A real API must be listening. Boot the disposable staging-like stack.
+      - name: Build isolated staging-like stack
+        if: ${{ env.K6_TARGET_URL == 'http://127.0.0.1:5198' }}
+        run: |
+          OET_PERF_APP_URL=http://localhost:3000 \
+            docker compose -f docker-compose.desktop.yml up -d --build
+
+      - name: Verify isolated stack readiness
+        if: ${{ env.K6_TARGET_URL == 'http://127.0.0.1:5198' }}
+        env:
+          PLAYWRIGHT_READY_TIMEOUT_MS: '900000'
+        run: node ./scripts/qa/assert-local-stack.mjs
+
       - name: Install k6
         run: |
           sudo gpg -k
@@ -35,3 +57,7 @@ jobs:
         with:
           name: speaking-k6-results
           path: k6-out
+
+      - name: Shut down isolated stack
+        if: always() && env.K6_TARGET_URL == 'http://127.0.0.1:5198'
+        run: docker compose -f docker-compose.desktop.yml down --remove-orphans

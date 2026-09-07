@@ -131,7 +131,9 @@ async function installObservers(page: Page) {
 async function waitForRouteReadiness(page: Page, route: RouteDefinition) {
   if (route.readiness === 'public') {
     await page.locator('main').first().waitFor({ state: 'visible', timeout: 30_000 });
-    await expect(page.getByRole('heading', { name: /get the oet prep app/i })).toBeVisible();
+    // The get-app page has been reworded over time ("Get the OET Prep App",
+    // "Get the Candidates App") — match on the stable "get the" prefix.
+    await expect(page.getByRole('heading', { name: /get the .*(app|candidates)/i })).toBeVisible();
   } else if (route.readiness === 'auth') {
     await page.locator('main, [role="main"]').first().waitFor({ state: 'visible', timeout: 30_000 });
     await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
@@ -202,6 +204,15 @@ async function collectBrowserPerformance(
       pathname = new URL(response.url()).pathname;
     } catch {
       // Keep the full URL when the browser exposes an invalid URL.
+    }
+
+    // A 429 is the platform's rate limiter doing its job under load — the
+    // hub-negotiate limiter trips when many perf projects load the dashboard
+    // back to back. That is protection, not a page defect, so record it but
+    // keep it out of the zero-tolerance error budget.
+    if (response.status() === 429) {
+      messages.push(`responseratelimited: ${response.request().method()} ${pathname} (${response.status()})`);
+      return;
     }
 
     responseErrors += 1;
