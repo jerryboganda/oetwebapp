@@ -2,6 +2,46 @@
 
 Last updated: 2026-09-07
 
+## Current Checkpoint - UBAG provider board: per-model full-pipeline test (2026-09-07)
+
+- The UBAG provider board (`app/admin/ai-providers/ubag`) now lets the operator
+  pick any UBAG facade model from a dropdown on the right side of the provider
+  card and run a **full-pipeline pipeline test** against it. The existing
+  "Test connection" button only verifies the platform key / endpoint with a
+  cheap 1-token auth probe; the new "Test" button drives a real chat completion
+  through the whole chain (connectivity → auth → model routing → a meaningful
+  completion), which is exactly what the browser-AI facade needs to be proven
+  end-to-end per model.
+- Backend: `AiProviderConnectionTester` gained `TestProviderModelAsync(code,
+  model, ct)` which issues a real `POST /chat/completions` against the
+  provider's configured facade BaseUrl with the selected model and persists the
+  outcome on the provider row (`LastTestStatus`/`LastTestError`/`LastTestedAt`)
+  exactly like the existing probe. It returns a status (`ok` / `auth` /
+  `rate_limited` / `network` / `unknown`) plus a small ordered `steps` trail
+  (connectivity → completion → model) so the UI can render a green/red/yellow
+  signal with the failing hop. Added
+  `AiModelTestStep`/`AiProviderModelTestResult` result records and
+  `AiProviderModelTestRequest`. Uses a 75s timeout (`ModelProbeTimeout`) because
+  real browser-backed pipelines legitimately take 10–60s. New endpoint
+  `POST /v1/admin/ai/providers/{code}/test-model` (AdminAiConfig, audited as
+  `AiProviderModelTested`/`AiProviderModelTestFailed`).
+- Frontend: `lib/ai-management-api.ts` gained `testAiProviderModel(code, model)`.
+  The UBAG board card was split into a two-column grid: the left column keeps
+  the status badges + provider action buttons; the right column is a new
+  "Facade model test" panel with a model dropdown (populated from the same
+  budget-friendly fallback list / Discovery results) and a "Test" button that
+  calls the new endpoint and surfaces the green/red/yellow status pill, latency,
+  and per-step trail.
+- Tests: `AiProviderConnectionTesterTests.cs` gained 4 focused tests
+  (ok step trail, no-key auth short-circuit, unsupported-dialect refusal,
+  secret redaction on the model-test error path);
+  `app/admin/ai-providers/ubag/page.test.tsx` gained a test that renders the
+  dropdown, selects a model, triggers `testAiProviderModel('ubag', …)`, and
+  renders the success step trail. Local vitest: ubag board 6/6, ai-providers 4/4
+  green; eslint clean on both changed frontend files. Backend build not run
+  locally (no .NET toolchain on this host — verified via CI on push per project
+  rule).
+
 ## Current Checkpoint - FINAL Speaking + other-subtest brief (2026-09-06) implemented
 
 - Uniform 2-credit model (1 letter/card = 2, full exam = 4) across ledger, gates, and every UI surface; package grants doubled (W/S 6/16/30, flexible 10/30) with ledger-conserving migration; benefit-led catalogue copy (vendor terms removed candidate-side); Speaking landing reordered, Writing-master profession filter + 9-category taxonomy + Apply/Clear + server counts, Difficulty removed; deterministic classifier (33 checks green); Live Tutor server-side eligibility gate + ineligible UI. Backend suites green (265 across credit/manifest/exam/tutor/allocation/flows/admin-speaking), tsc clean, ship:gate OK. Only known reds are 2 pre-existing Speaking-suite failures (proven on pristine tree) and the host-broken vitest store.

@@ -35,9 +35,12 @@ import {
   fetchAiFeatureRoutes,
   fetchAiProviders,
   testAiProvider,
+  testAiProviderModel,
   updateAiProvider,
   upsertAiFeatureRoute,
   type AiFeatureRouteRow,
+  type AiModelTestStep,
+  type AiProviderModelTestResult,
   type AiProviderRow,
   type AiProviderTestStatus,
 } from '@/lib/ai-management-api';
@@ -220,6 +223,24 @@ function testStatusVariant(status: AiProviderTestStatus): 'success' | 'danger' |
   }
 }
 
+/**
+ * Full-pipeline model test signal: green (ok) / yellow (degraded, e.g.
+ * model routing warning or rate limiting) / red (broken pipeline).
+ */
+function modelTestSignalVariant(status: AiProviderTestStatus): 'success' | 'warning' | 'danger' {
+  switch (status) {
+    case 'ok':
+      return 'success';
+    case 'rate_limited':
+      return 'warning';
+    case 'auth':
+    case 'network':
+    case 'unknown':
+    default:
+      return 'danger';
+  }
+}
+
 export default function UbagBoardPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [status, setStatus] = useState<PageStatus>('loading');
@@ -235,6 +256,11 @@ export default function UbagBoardPage() {
   const [rotatingKey, setRotatingKey] = useState(false);
   const [newPat, setNewPat] = useState('');
   const [testing, setTesting] = useState(false);
+
+  // Full-pipeline model test state (right-side dropdown + Test button).
+  const [testModel, setTestModel] = useState<string>('');
+  const [testingModel, setTestingModel] = useState(false);
+  const [modelTestResult, setModelTestResult] = useState<AiProviderModelTestResult | null>(null);
 
   const ubag = useMemo(() => providers.find((p) => p.code === UBAG_PROVIDER_CODE) ?? null, [providers]);
   const ubagReady = !!ubag && ubag.isActive && ubag.apiKeyHint !== '';
@@ -405,6 +431,27 @@ export default function UbagBoardPage() {
     }
   };
 
+  // Runs the complete pipeline for the selected facade model: connectivity →
+  // auth → model routing → a real chat completion through the UBAG gateway.
+  const runModelTest = async () => {
+    const model = testModel.trim() || ubag?.defaultModel || 'mock';
+    setTestingModel(true);
+    setModelTestResult(null);
+    try {
+      const result = await testAiProviderModel(UBAG_PROVIDER_CODE, model);
+      setModelTestResult(result);
+      setToast({
+        variant: result.status === 'ok' ? 'success' : result.status === 'rate_limited' ? 'error' : 'error',
+        message: `Model ${result.model}: ${result.status}${result.errorMessage ? ', ' + result.errorMessage : ''} (${result.latencyMs} ms)`,
+      });
+      await load();
+    } catch (e) {
+      fail(`Test model ${model}`, e);
+    } finally {
+      setTestingModel(false);
+    }
+  };
+
   const discoverModels = async () => {
     setBusy('models');
     try {
@@ -521,31 +568,97 @@ export default function UbagBoardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex flex-wrap items-center gap-2 text-sm">
-                <Badge variant={ubag.isActive ? 'success' : 'muted'}>{ubag.isActive ? 'active' : 'inactive'}</Badge>
-                <Badge variant={ubag.apiKeyHint ? 'success' : 'warning'}>
-                  {ubag.apiKeyHint ? `PAT ${ubag.apiKeyHint}` : 'no PAT'}
-                </Badge>
-                {ubag.lastTestStatus && <Badge variant={testStatusVariant(ubag.lastTestStatus)}>test: {ubag.lastTestStatus}</Badge>}
-                <span className="text-muted-foreground font-mono text-xs">{ubag.baseUrl} · default {ubag.defaultModel}</span>
-              </div>
-              <div className="text-xs text-muted-foreground mt-2">
-                UBAG usage figures are character-based estimates, not metered model tokens. Prompts flow into
-                platform-owned provider browser sessions (approved).
-              </div>
-              <div className="flex flex-wrap gap-2 mt-3">
-                <Button variant={ubag.isActive ? 'outline' : 'primary'} size="sm" disabled={busy === 'provider'} onClick={() => void toggleProvider()}>
-                  {ubag.isActive ? 'Deactivate provider' : 'Activate provider'}
-                </Button>
-                <Button variant="outline" size="sm" disabled={testing || !ubag.apiKeyHint} onClick={() => void runTest()}>
-                  {testing ? 'Testing…' : 'Test connection'}
-                </Button>
-                <Button variant="outline" size="sm" disabled={busy === 'models'} onClick={() => void discoverModels()}>
-                  Discover models
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setRotatingKey(true)}>
-                  Rotate PAT
-                </Button>
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant={ubag.isActive ? 'success' : 'muted'}>{ubag.isActive ? 'active' : 'inactive'}</Badge>
+                    <Badge variant={ubag.apiKeyHint ? 'success' : 'warning'}>
+                      {ubag.apiKeyHint ? `PAT ${ubag.apiKeyHint}` : 'no PAT'}
+                    </Badge>
+                    {ubag.lastTestStatus && <Badge variant={testStatusVariant(ubag.lastTestStatus)}>test: {ubag.lastTestStatus}</Badge>}
+                    <span className="text-muted-foreground font-mono text-xs">{ubag.baseUrl} · default {ubag.defaultModel}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    UBAG usage figures are character-based estimates, not metered model tokens. Prompts flow into
+                    platform-owned provider browser sessions (approved).
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    <Button variant={ubag.isActive ? 'outline' : 'primary'} size="sm" disabled={busy === 'provider'} onClick={() => void toggleProvider()}>
+                      {ubag.isActive ? 'Deactivate provider' : 'Activate provider'}
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={testing || !ubag.apiKeyHint} onClick={() => void runTest()}>
+                      {testing ? 'Testing…' : 'Test connection'}
+                    </Button>
+                    <Button variant="outline" size="sm" disabled={busy === 'models'} onClick={() => void discoverModels()}>
+                      Discover models
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setRotatingKey(true)}>
+                      Rotate PAT
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Right side — full-pipeline model test: pick a facade model and
+                    run a real chat completion through the whole UBAG pipeline. */}
+                <div className="rounded-md border border-border bg-surface p-3 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-navy">Facade model test</h3>
+                    <Badge variant={testingModel ? 'warning' : 'muted'}>{testingModel ? 'running' : 'idle'}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Select any UBAG provider/model below; Test runs the complete pipeline
+                    (connectivity → auth → model routing → chat completion) and reports a
+                    green/red/yellow signal.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-3">
+                    <div className="min-w-[180px] flex-1">
+                      <Select
+                        aria-label="UBAG AI provider/model to test"
+                        className="w-full"
+                        value={testModel}
+                        disabled={testingModel || !ubagReady}
+                        options={[
+                          ...(models.length > 0 ? models : UBAG_MODEL_FALLBACK),
+                        ].map((m) => ({ value: m, label: m }))}
+                        onChange={(e) => setTestModel(e.target.value)}
+                      />
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={testingModel || !ubagReady}
+                      title={!ubagReady ? 'Activate the UBAG provider and set its PAT first' : `Test the full pipeline for ${testModel || ubag?.defaultModel || 'mock'}`}
+                      onClick={() => void runModelTest()}
+                    >
+                      {testingModel ? 'Testing…' : 'Test'}
+                    </Button>
+                  </div>
+
+                  {modelTestResult && (
+                    <div className="mt-3 space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Badge variant={modelTestSignalVariant(modelTestResult.status)}>
+                          {modelTestResult.status}
+                        </Badge>
+                        <span className="font-mono text-xs text-muted-foreground">{modelTestResult.latencyMs} ms</span>
+                      </div>
+                      {modelTestResult.errorMessage && (
+                        <p className="text-xs text-danger break-words">{modelTestResult.errorMessage}</p>
+                      )}
+                      <ul className="space-y-1">
+                        {modelTestResult.steps.map((step) => (
+                          <li key={step.step} className="flex items-start gap-2 text-xs">
+                            <span className={step.ok ? 'text-success' : step.step === 'model' ? 'text-warning' : 'text-danger'}>
+                              {step.ok ? '●' : step.step === 'model' ? '◐' : '○'}
+                            </span>
+                            <span className="font-mono font-semibold text-navy">{step.step}</span>
+                            <span className="text-muted-foreground break-all min-w-0">{step.detail}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

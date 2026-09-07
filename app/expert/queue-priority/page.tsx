@@ -90,7 +90,11 @@ export default function QueuePriorityPage() {
                 return (
                   <MotionItem key={item.assignmentId}>
                     <Link
-                      href={`/expert/review/${encodeURIComponent(item.reviewRequestId)}`}
+                      href={
+                        item.subtestCode?.toLowerCase() === 'writing'
+                          ? `/expert/review/writing/${encodeURIComponent(item.attemptId || item.reviewRequestId)}`
+                          : `/expert/review/${encodeURIComponent(item.reviewRequestId)}`
+                      }
                       className="block rounded-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                       aria-label={`Open ${item.subtestCode} review ${item.reviewRequestId}`}
                     >

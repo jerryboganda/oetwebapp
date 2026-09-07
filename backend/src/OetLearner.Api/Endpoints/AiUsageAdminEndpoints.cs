@@ -666,6 +666,47 @@ public static class AiUsageAdminEndpoints
             }
         }).RequireRateLimiting("PerUserWrite");
 
+        // Full-pipeline model test. Unlike the cheap auth probe above, this
+        // runs a REAL chat completion through the provider for a specific
+        // model, exercising the whole chain (connectivity → auth → model
+        // routing → a meaningful completion). Used by the UBAG provider board
+        // "Test model" button, which first discovers the facade model list so
+        // the operator can pick a specific provider/model and verify it
+        // end-to-end. Result is persisted server-side like a normal probe.
+        group.MapPost("/providers/{code}/test-model", async (
+            string code,
+            AiProviderModelTestRequest request,
+            IAiProviderConnectionTester tester,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(code))
+                return Results.BadRequest(new { error = "Provider code is required." });
+            if (request is null || string.IsNullOrWhiteSpace(request.Model))
+                return Results.BadRequest(new { error = "model is required." });
+
+            var providerRow = await db.AiProviders.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code == code, ct);
+            if (providerRow is null) return Results.NotFound();
+
+            var result = await tester.TestProviderModelAsync(code, request.Model.Trim(), ct);
+            var tracked = await db.AiProviders.FirstAsync(p => p.Code == code, ct);
+            await SaveWithAuditAsync(db, http,
+                result.Status == AiProviderTestStatuses.Ok ? "AiProviderModelTested" : "AiProviderModelTestFailed",
+                tracked.Id,
+                $"code={code} model={result.Model} status={result.Status} latency={result.LatencyMs}ms", ct);
+            return Results.Ok(new
+            {
+                status = result.Status,
+                errorMessage = result.ErrorMessage,
+                latencyMs = result.LatencyMs,
+                testedAt = result.TestedAt,
+                model = result.Model,
+                steps = result.Steps.Select(s => new { step = s.Step, detail = s.Detail, ok = s.Ok }),
+            });
+        }).RequireRateLimiting("PerUserWrite");
+
         // ═══ Multi-account pool (Phase 2 Slice 2b) ═══════════════════════════
         // Admin CRUD over AiProviderAccount rows. Used today by the Copilot
         // dialect to spread requests across multiple PATs with auto-failover
@@ -1289,6 +1330,9 @@ public sealed record AiProviderAccountUpsertDto(
     int? MonthlyRequestCap,
     int Priority,
     bool IsActive);
+
+/// <summary>Request to test the full pipeline for a single facade model.</summary>
+public sealed record AiProviderModelTestRequest(string Model);
 
 public sealed record AiCreditGrantDto(
     int Tokens,

@@ -382,6 +382,71 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.DoesNotContain(accountKey, account.LastTestError!);
     }
 
+    [Fact]
+    public async Task ModelTest_ReturnsOkStepTrailForSuccessfulCompletion()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var tester = NewTester(db, _ => Task.FromResult(BuildResponse(HttpStatusCode.OK)));
+
+        var result = await tester.TestProviderModelAsync("copilot", "openai/gpt-5", default);
+
+        Assert.Equal(AiProviderTestStatuses.Ok, result.Status);
+        Assert.Equal("openai/gpt-5", result.Model);
+        Assert.NotEmpty(result.Steps);
+        Assert.Contains(result.Steps, s => s.Step == "connectivity" && s.Ok);
+        Assert.Contains(result.Steps, s => s.Step == "completion" && s.Ok);
+        Assert.Contains(result.Steps, s => s.Step == "model" && s.Ok);
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(AiProviderTestStatuses.Ok, persisted.LastTestStatus);
+    }
+
+    [Fact]
+    public async Task ModelTest_WithoutApiKey_ReturnsAuthBeforeNetwork()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, apiKey: null);
+        var called = false;
+        var tester = NewTester(db, _ => { called = true; return Task.FromResult(BuildResponse(HttpStatusCode.OK)); });
+
+        var result = await tester.TestProviderModelAsync("copilot", "openai/gpt-5", default);
+
+        Assert.Equal(AiProviderTestStatuses.Auth, result.Status);
+        Assert.False(called);
+        Assert.Contains("No API key", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task ModelTest_UnsupportedDialect_ReturnsUnknownWithoutNetworkCall()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedUnsupportedAsync(db);
+        var called = false;
+        var tester = NewTester(db, _ => { called = true; return Task.FromResult(BuildResponse(HttpStatusCode.OK)); });
+
+        var result = await tester.TestProviderModelAsync("unsupported", "mock", default);
+
+        Assert.Equal(AiProviderTestStatuses.Unknown, result.Status);
+        Assert.False(called);
+        Assert.Contains("not available", result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task ModelTest_RedactsSecretInErrorPath()
+    {
+        const string liveKey = "sk-ant-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, liveKey);
+        var tester = NewTester(db, _ => Task.FromException<HttpResponseMessage>(
+            new HttpRequestException($"connection refused while sending Bearer {liveKey}")));
+
+        var result = await tester.TestProviderModelAsync("copilot", "openai/gpt-5", default);
+
+        Assert.Equal(AiProviderTestStatuses.Network, result.Status);
+        Assert.NotNull(result.ErrorMessage);
+        Assert.DoesNotContain(liveKey, result.ErrorMessage);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     private AiProviderConnectionTester NewTester(

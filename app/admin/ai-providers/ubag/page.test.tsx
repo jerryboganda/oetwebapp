@@ -18,6 +18,7 @@ const {
   mockUpsert,
   mockDelete,
   mockTest,
+  mockTestModel,
   mockDiscover,
   mockUpdate,
   authState,
@@ -27,6 +28,7 @@ const {
   mockUpsert: vi.fn(),
   mockDelete: vi.fn(),
   mockTest: vi.fn(),
+  mockTestModel: vi.fn(),
   mockDiscover: vi.fn(),
   mockUpdate: vi.fn(),
   authState: {
@@ -44,6 +46,7 @@ vi.mock('@/lib/ai-management-api', async () => {
     upsertAiFeatureRoute: mockUpsert,
     deleteAiFeatureRoute: mockDelete,
     testAiProvider: mockTest,
+    testAiProviderModel: mockTestModel,
     discoverAiProviderModels: mockDiscover,
     updateAiProvider: mockUpdate,
   };
@@ -173,5 +176,39 @@ describe('UbagBoardPage', () => {
     // Locked rows (E) and the empty Other section contribute no ON/OFF buttons.
     expect(await screen.findAllByRole('button', { name: 'OFF' })).toHaveLength(50);
     expect(screen.queryAllByRole('button', { name: 'ON' })).toHaveLength(0);
+  });
+
+  it('renders the facade model dropdown and test button', async () => {
+    seed([]);
+    mockTestModel.mockResolvedValue({
+      status: 'ok',
+      errorMessage: null,
+      latencyMs: 1234,
+      testedAt: new Date().toISOString(),
+      model: 'chatgpt_web|GPT-5.6 Sol',
+      steps: [
+        { step: 'connectivity', detail: 'http://ubag-vps-gateway-1:8080/v1/openai', ok: true },
+        { step: 'completion', detail: 'chat completion returned a 2xx response', ok: true },
+        { step: 'model', detail: 'chatgpt_web|GPT-5.6 Sol acknowledged', ok: true },
+      ],
+    });
+    render(<UbagBoardPage />);
+    await screen.findByText('Facade model test');
+
+    // Dropdown is populated from the UBAG model fallback list.
+    const select = screen.getByRole('combobox', { name: 'UBAG AI provider/model to test' }) as HTMLSelectElement;
+    expect(select.options.length).toBeGreaterThan(0);
+    expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|GPT-5.6 Sol')).toBeTruthy();
+
+    // Picking a model + clicking Test calls the full-pipeline endpoint.
+    fireEvent.change(select, { target: { value: 'chatgpt_web|GPT-5.6 Sol' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Test$/ }));
+    await waitFor(() => expect(mockTestModel).toHaveBeenCalledWith('ubag', 'chatgpt_web|GPT-5.6 Sol'));
+
+    // Success result surfaces a green signal and step trail.
+    expect(await screen.findByText(/^ok$/)).toBeTruthy();
+    expect(await screen.findByText('connectivity')).toBeTruthy();
+    expect(await screen.findByText('completion')).toBeTruthy();
+    expect(await screen.findByText('chatgpt_web|GPT-5.6 Sol acknowledged')).toBeTruthy();
   });
 });

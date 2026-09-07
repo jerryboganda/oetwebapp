@@ -33,7 +33,18 @@ public interface IAiProviderConnectionTester
     /// run a functional probe that exercises the real endpoint with a tiny
     /// embedded document rather than a cheap auth-only metadata read.</param>
     Task<AiProviderTestResult> TestProviderAsync(string providerCode, CancellationToken ct, bool deep = false);
+
     Task<AiProviderTestResult> TestAccountAsync(string providerId, string accountId, CancellationToken ct, bool deep = false);
+
+    /// <summary>
+    /// Runs a full-pipeline chat completion for a specific model through the
+    /// provider, rather than the cheap 1-token auth probe used by
+    /// <see cref="TestProviderAsync"/>. Exercises the whole chain
+    /// (connectivity → auth → model routing → a real completion with a
+    /// meaningful response), which is how the UBAG admin board verifies a
+    /// single facade model end-to-end. The result is persisted on the
+    /// provider row just like the standard probe.</summary>
+    Task<AiProviderModelTestResult> TestProviderModelAsync(string providerCode, string model, CancellationToken ct);
 }
 
 public sealed record AiProviderTestResult(
@@ -41,6 +52,21 @@ public sealed record AiProviderTestResult(
     string? ErrorMessage,
     int LatencyMs,
     DateTimeOffset TestedAt);
+
+/// <summary>
+/// Result of a full-pipeline model test. Mirrors <see cref="AiProviderTestResult"/>
+/// plus a <c>model</c> echo and a small ordered list of pipeline steps so the
+/// admin UI can show exactly which hop succeeded or failed.
+/// see </summary>
+public sealed record AiProviderModelTestResult(
+    string Status,
+    string? ErrorMessage,
+    int LatencyMs,
+    DateTimeOffset TestedAt,
+    string Model,
+    IReadOnlyList<AiModelTestStep> Steps);
+
+public sealed record AiModelTestStep(string Step, string Detail, bool Ok);
 
 public static class AiProviderTestStatuses
 {
@@ -59,6 +85,12 @@ public sealed class AiProviderConnectionTester(
     ILogger<AiProviderConnectionTester> logger) : IAiProviderConnectionTester
 {
     private static readonly TimeSpan ProbeTimeout = TimeSpan.FromSeconds(15);
+
+    /// <summary>Budget for a full end-to-end model test. Real browser-backed
+    /// pipelines (UBAG facade → worker → browser session → model) legitimately
+    /// take 10–60s, so this must allow the whole job to complete rather than
+    /// cutting off at the auth-probe timeout.</summary>
+    private static readonly TimeSpan ModelProbeTimeout = TimeSpan.FromSeconds(75);
 
     public async Task<AiProviderTestResult> TestProviderAsync(string providerCode, CancellationToken ct, bool deep = false)
     {
@@ -100,6 +132,177 @@ public sealed class AiProviderConnectionTester(
         account.UpdatedAt = result.TestedAt;
         await db.SaveChangesAsync(ct);
         return result;
+    }
+
+    public async Task<AiProviderModelTestResult> TestProviderModelAsync(string providerCode, string model, CancellationToken ct)
+    {
+        var provider = await db.AiProviders
+            .FirstOrDefaultAsync(p => p.Code == providerCode, ct)
+            ?? throw new InvalidOperationException($"Unknown AI provider code '{providerCode}'.");
+
+        var steps = new List<AiModelTestStep>();
+        var startedAt = clock.GetUtcNow();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        var protector = dataProtection.CreateProtector("AiProvider.PlatformKey.v1");
+        var apiKey = string.IsNullOrEmpty(provider.EncryptedApiKey)
+            ? string.Empty
+            : protector.Unprotect(provider.EncryptedApiKey);
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            steps.Add(new AiModelTestStep("credential", "No API key configured.", false));
+            stopwatch.Stop();
+            return new AiProviderModelTestResult(
+                AiProviderTestStatuses.Auth,
+                "No API key configured.",
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt, model, steps);
+        }
+
+        var unsafeReason = GetUnsafeBaseUrlReason(provider.BaseUrl);
+        if (unsafeReason is not null)
+        {
+            steps.Add(new AiModelTestStep("endpoint", unsafeReason, false));
+            stopwatch.Stop();
+            return new AiProviderModelTestResult(
+                AiProviderTestStatuses.Unknown,
+                unsafeReason,
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt, model, steps);
+        }
+
+        var targetModel = string.IsNullOrWhiteSpace(model)
+            ? (string.IsNullOrWhiteSpace(provider.DefaultModel) ? "mock" : provider.DefaultModel)
+            : model.Trim();
+
+        if (provider.Category != AiProviderCategory.TextChat
+            || provider.Dialect is not (AiProviderDialect.OpenAiCompatible or AiProviderDialect.Cloudflare or AiProviderDialect.Copilot or AiProviderDialect.Anthropic))
+        {
+            steps.Add(new AiModelTestStep("pipeline",
+                $"Full-pipeline model test is only available for text-chat OpenAI-compatible/Copilot/Anthropic providers.", false));
+            stopwatch.Stop();
+            return new AiProviderModelTestResult(
+                AiProviderTestStatuses.Unknown,
+                "Full-pipeline model test is not available for this provider category/dialect.",
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt, targetModel, steps);
+        }
+
+        try
+        {
+            using var client = httpClientFactory.CreateClient(nameof(AiProviderConnectionTester));
+            client.Timeout = ModelProbeTimeout;
+            steps.Add(new AiModelTestStep("connectivity", provider.BaseUrl, true));
+
+            var req = BuildChatCompletionsProbe(provider.BaseUrl, apiKey, targetModel, fullPipeline: true);
+            using var response = await client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+            stopwatch.Stop();
+            var latencyMs = (int)stopwatch.ElapsedMilliseconds;
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var relResult = await ClassifyResponseAsync(response, latencyMs, startedAt, apiKey, ct);
+                steps.Add(new AiModelTestStep(
+                    "completion",
+                    $"HTTP {(int)response.StatusCode}: {relResult.ErrorMessage ?? response.ReasonPhrase}",
+                    false));
+                return new AiProviderModelTestResult(
+                    relResult.Status, relResult.ErrorMessage, latencyMs, startedAt, targetModel, steps);
+            }
+
+            var body = await response.Content.ReadAsStringAsync(ct);
+            steps.Add(new AiModelTestStep("completion", "chat completion returned a 2xx response", true));
+
+            // Surface a model-routing warning when the configured model is
+            // absent from the facade model list whenever the list is available.
+            var warning = await TryBuildModelWarningFromBodyAsync(body, targetModel);
+            if (warning is not null)
+                steps.Add(new AiModelTestStep("model", warning, false));
+            else
+                steps.Add(new AiModelTestStep("model", $"{targetModel} acknowledged", true));
+
+            var result = new AiProviderModelTestResult(
+                AiProviderTestStatuses.Ok,
+                warning,
+                latencyMs,
+                startedAt,
+                targetModel,
+                steps);
+
+            provider.LastTestedAt = result.TestedAt;
+            provider.LastTestStatus = result.Status;
+            provider.LastTestError = result.ErrorMessage;
+            provider.UpdatedAt = result.TestedAt;
+            await db.SaveChangesAsync(ct);
+            return result;
+        }
+        catch (HttpRequestException ex)
+        {
+            stopwatch.Stop();
+            logger.LogInformation(ex, "AI provider model test network failure for {Provider}/{Model}", provider.Code, targetModel);
+            var message = Truncate(RedactSecrets(ex.Message, apiKey), 512);
+            steps.Add(new AiModelTestStep("completion", message, false));
+            return new AiProviderModelTestResult(
+                AiProviderTestStatuses.Network,
+                message,
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt, targetModel, steps);
+        }
+        catch (TaskCanceledException) when (!ct.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            steps.Add(new AiModelTestStep("completion", "Request timed out.", false));
+            return new AiProviderModelTestResult(
+                AiProviderTestStatuses.Network,
+                "Request timed out.",
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt, targetModel, steps);
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            logger.LogWarning(ex, "AI provider model test unknown failure for {Provider}/{Model}", provider.Code, targetModel);
+            var message = Truncate(RedactSecrets(ex.Message, apiKey), 512);
+            steps.Add(new AiModelTestStep("completion", message, false));
+            return new AiProviderModelTestResult(
+                AiProviderTestStatuses.Unknown,
+                message,
+                (int)stopwatch.ElapsedMilliseconds,
+                startedAt, targetModel, steps);
+        }
+    }
+
+    /// <summary>Parses an OpenAI-style <c>{ data: [{ id }] }</c> model list from
+    /// a completion body when the response happens to include one, and returns
+    /// a warning when the target model is absent. Fail-soft: returns null on
+    /// any parse miss, unknown shape, or non-JSON body.</summary>
+    private static async Task<string?> TryBuildModelWarningFromBodyAsync(string body, string expectedModel)
+    {
+        if (string.IsNullOrWhiteSpace(body) || string.IsNullOrWhiteSpace(expectedModel)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            // A true completion body has `choices`; a model-list/metadata body
+            // has `data`. Only the data array informs a model-routing warning.
+            if (doc.RootElement.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Array)
+            {
+                var found = false;
+                foreach (var m in data.EnumerateArray())
+                {
+                    if (m.TryGetProperty("id", out var id) && id.ValueKind == JsonValueKind.String
+                        && string.Equals(id.GetString(), expectedModel, StringComparison.OrdinalIgnoreCase))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                    return $"The model '{expectedModel}' was not in the provider's advertised model list.";
+            }
+        }
+        catch { /* not JSON */ }
+        return null;
     }
 
     private async Task<AiProviderTestResult> ProbeAsync(AiProvider provider, string apiKey, CancellationToken ct, bool deep)
@@ -448,7 +651,7 @@ public sealed class AiProviderConnectionTester(
         };
     }
 
-    private static HttpRequestMessage BuildChatCompletionsProbe(string baseUrl, string apiKey, string? defaultModel)
+    private static HttpRequestMessage BuildChatCompletionsProbe(string baseUrl, string apiKey, string? defaultModel, bool fullPipeline = false)
     {
         var url = new Uri(new Uri(TrimBase(baseUrl) + "/", UriKind.Absolute), "chat/completions");
         var model = string.IsNullOrWhiteSpace(defaultModel) ? "openai/gpt-4o-mini" : defaultModel;
@@ -459,8 +662,12 @@ public sealed class AiProviderConnectionTester(
         req.Content = JsonContent.Create(new
         {
             model,
-            max_tokens = 1,
-            messages = new[] { new { role = "user", content = "ping" } },
+            max_tokens = fullPipeline ? 16 : 1,
+            messages = new[]
+            {
+                new { role = "system", content = "Reply with the single word OK." },
+                new { role = "user", content = fullPipeline ? "ping — reply with a single word." : "ping" },
+            },
         });
         return req;
     }

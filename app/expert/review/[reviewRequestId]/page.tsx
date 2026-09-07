@@ -23,11 +23,13 @@ export default function ExpertReviewRedirectPage() {
     let cancelled = false;
 
     async function resolveReviewRoute() {
-      // Writing reviews are V2 submission-based and open directly at
-      // /expert/review/writing/{submissionId} from the writing review queue. A
-      // ReviewRequest (`review-…`) id has no WritingSubmission and cannot resolve in
-      // the submission-keyed marking workspace, so this dispatcher only routes the
-      // remaining ReviewRequest-keyed surfaces (speaking, then listening).
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(reviewId)) {
+        if (!cancelled) {
+          router.replace(`/expert/review/writing/${reviewId}`);
+        }
+        return;
+      }
+
       try {
         await fetchSpeakingReviewDetail(reviewId);
         if (!cancelled) {

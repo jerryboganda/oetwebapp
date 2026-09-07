@@ -381,6 +381,37 @@ export const testAiProvider = (code: string, deep = false) =>
     { method: 'POST' },
   );
 
+// ═════════════════════════════════════════════════════════════════════════
+// Full-pipeline single-model test (UBAG provider board)
+// ═════════════════════════════════════════════════════════════════════════
+
+export interface AiModelTestStep {
+  step: string;
+  detail: string;
+  ok: boolean;
+}
+
+export interface AiProviderModelTestResult {
+  status: AiProviderTestStatus;
+  errorMessage: string | null;
+  latencyMs: number;
+  testedAt: string;
+  model: string;
+  steps: AiModelTestStep[];
+}
+
+/**
+ * Runs a full end-to-end chat completion through the provider for a specific
+ * facade model, exercising the whole pipeline (connectivity → auth → model
+ * routing → a meaningful completion). Used by the "Test" button on the UBAG
+ * provider board after the operator picks a model from the dropdown.
+ */
+export const testAiProviderModel = (code: string, model: string) =>
+  aiApi<AiProviderModelTestResult>(`/v1/admin/ai/providers/${code}/test-model`, {
+    method: 'POST',
+    body: JSON.stringify({ model }),
+  });
+
 /**
  * Calls the provider's OpenAI-compatible `GET /models` endpoint via the
  * admin backend, using the encrypted platform key. Returns the list of
