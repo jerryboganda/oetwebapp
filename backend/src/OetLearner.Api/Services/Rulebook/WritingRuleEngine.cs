@@ -966,10 +966,20 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     }
 
     // R10.5 — "since" requires present perfect
+    //
+    // False-positive fix (2026-09-07): the subject alternation is
+    // case-insensitive, so "[A-Z][a-z]+" matches ANY word under
+    // RegexOptions.IgnoreCase -- including "has" itself. That let the
+    // "had" inside a perfectly correct "has had hypertension since 2016"
+    // be captured as a standalone past-simple subject+verb ("has" as
+    // subject, "had" as verb), flagging grammatically correct text.
+    // The negative lookbehind excludes "had" when it is itself preceded
+    // by "has "/"have " (i.e. already part of present-perfect "has had"),
+    // while still catching genuine past-simple "X had Y since ..." errors.
     private static IEnumerable<LintFinding> DetectSinceRequiresPresentPerfect(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var re = new Regex(
-            @"\b(?:she|he|they|the patient|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(had|has)\s+([a-z]+)\s+since\b",
+            @"\b(?:she|he|they|the patient|[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?<!has\s)(?<!have\s)(had|has)\s+([a-z]+)\s+since\b",
             RegexOptions.IgnoreCase);
         foreach (Match m in re.Matches(s.Body))
         {
@@ -1254,7 +1264,14 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         var findings = 0;
         foreach (var keyword in keywords)
         {
-            var re = new Regex(@"\b" + Regex.Escape(keyword) + @"\b[^.\n]{0,30}", RegexOptions.IgnoreCase);
+            // False-positive fix (2026-09-07): "[^.\n]{0,30}" excludes '.'
+            // entirely, so it stops dead at the DECIMAL POINT in a value
+            // like "37.4\u00b0C" or "17.3" -- truncating the snippet to
+            // "temperature of 37" before the unit that follows the decimal
+            // ever appears, and flagging a value that plainly has one. A
+            // '.' is only excluded when it is NOT immediately between two
+            // digits (i.e. a genuine sentence end, not a decimal point).
+            var re = new Regex(@"\b" + Regex.Escape(keyword) + @"\b(?:\.(?=\d)|[^.\n]){0,30}", RegexOptions.IgnoreCase);
             foreach (Match m in re.Matches(input.LetterText))
             {
                 var snippet = m.Value;
