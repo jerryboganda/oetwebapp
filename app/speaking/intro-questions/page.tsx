@@ -35,10 +35,10 @@ export default function SpeakingIntroQuestionsPage() {
     <LearnerDashboardShell pageTitle="Speaking Intro Questions">
       <div className="mx-auto w-full max-w-4xl space-y-6">
         <Link
-          href="/speaking/selection"
+          href="/speaking"
           className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
         >
-          <ArrowLeft className="h-4 w-4" aria-hidden /> Back to Speaking selection
+          <ArrowLeft className="h-4 w-4" aria-hidden /> Back to Speaking
         </Link>
 
         <LearnerPageHero

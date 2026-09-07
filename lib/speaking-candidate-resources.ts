@@ -1,7 +1,7 @@
 /**
  * Candidate-facing Speaking reference content — single source of truth.
  *
- * Two native resources shown in the Speaking selection block:
+ * Two native resources shown on the Speaking hub and selection block:
  *  - Speaking Assessment Criteria (same for all professions, 9 criteria)
  *  - Speaking Intro Questions (12 global questions with personalisable sample answers)
  *

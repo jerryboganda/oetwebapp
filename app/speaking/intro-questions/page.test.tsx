@@ -37,5 +37,6 @@ describe('Speaking Intro Questions page', () => {
     // Candidate rule: templates to personalise, not to memorise.
     expect(screen.getByText(/Candidate rule/i)).toBeInTheDocument();
     expect(screen.getByText(/Do not memorise them word-for-word/i)).toBeInTheDocument();
+    expect(screen.getByText('Back to Speaking').closest('a')).toHaveAttribute('href', '/speaking');
   });
 });

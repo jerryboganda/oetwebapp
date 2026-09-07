@@ -20,6 +20,10 @@ import {
   listLearnerRolePlayCards,
   type LearnerRolePlayCardSummary,
 } from '@/lib/api/speaking-role-play-cards';
+import {
+  SPEAKING_ASSESSMENT_CRITERIA_HREF,
+  SPEAKING_INTRO_QUESTIONS_HREF,
+} from '@/lib/speaking-candidate-resources';
 
 // FINAL 2026-09-06 — one shared profession master list (Writing parity, no
 // separate hard-coded Speaking list) + the candidate-visible card taxonomy
@@ -130,7 +134,7 @@ export default function SpeakingTaskSelection() {
                 ],
                 primaryAction: {
                   label: 'Open Assessment Criteria',
-                  href: '/speaking/assessment-criteria',
+                  href: SPEAKING_ASSESSMENT_CRITERIA_HREF,
                 },
               }}
             />
@@ -149,7 +153,7 @@ export default function SpeakingTaskSelection() {
                 ],
                 primaryAction: {
                   label: 'Open Intro Questions',
-                  href: '/speaking/intro-questions',
+                  href: SPEAKING_INTRO_QUESTIONS_HREF,
                 },
               }}
             />

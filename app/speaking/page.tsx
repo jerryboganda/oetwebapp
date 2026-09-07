@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowRight, Clock, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
+import { ArrowRight, ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -18,6 +18,10 @@ import { CreditsGuideButton, LearnerPageHero, LearnerSurfaceCard, LearnerSurface
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import {
+  SPEAKING_ASSESSMENT_CRITERIA_HREF,
+  SPEAKING_INTRO_QUESTIONS_HREF,
+} from '@/lib/speaking-candidate-resources';
 
 const primaryLinkClasses = 'pressable inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100 dark:bg-violet-700 dark:hover:bg-violet-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
@@ -129,6 +133,48 @@ export default function SpeakingHome() {
         />
 
         <CreditsGuideButton variant="banner" />
+
+        {/* Same for every profession / package — not filtered by the practice library. */}
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <LearnerSurfaceCard
+            card={{
+              kind: 'navigation',
+              sourceType: 'frontend_navigation',
+              accent: 'purple',
+              eyebrow: 'Reference · All professions',
+              eyebrowIcon: ClipboardList,
+              title: 'Speaking Assessment Criteria',
+              description: 'The 9 criteria your role-plays are assessed against, with weights and what to do well. Same for all professions.',
+              metaItems: [
+                { icon: ClipboardList, label: '9 sections' },
+                { icon: ClipboardList, label: '42 points' },
+              ],
+              primaryAction: {
+                label: 'Open Assessment Criteria',
+                href: SPEAKING_ASSESSMENT_CRITERIA_HREF,
+              },
+            }}
+          />
+          <LearnerSurfaceCard
+            card={{
+              kind: 'navigation',
+              sourceType: 'frontend_navigation',
+              accent: 'purple',
+              eyebrow: 'Reference · All professions',
+              eyebrowIcon: MessageCircleQuestion,
+              title: 'Speaking Intro Questions',
+              description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
+              metaItems: [
+                { icon: MessageCircleQuestion, label: '12 questions' },
+                { icon: MessageCircleQuestion, label: 'All professions' },
+              ],
+              primaryAction: {
+                label: 'Open Intro Questions',
+                href: SPEAKING_INTRO_QUESTIONS_HREF,
+              },
+            }}
+          />
+        </section>
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 

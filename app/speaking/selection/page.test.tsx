@@ -112,6 +112,8 @@ describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
     expect(await screen.findByText('Prepare for your OET Speaking')).toBeInTheDocument();
     expect(screen.getByText('Speaking Assessment Criteria')).toBeInTheDocument();
     expect(screen.getByText('Speaking Intro Questions')).toBeInTheDocument();
+    expect(screen.getByText('Open Assessment Criteria').closest('a')).toHaveAttribute('href', '/speaking/assessment-criteria');
+    expect(screen.getByText('Open Intro Questions').closest('a')).toHaveAttribute('href', '/speaking/intro-questions');
     expect(screen.queryByText('Difficulty')).not.toBeInTheDocument();
   });
 
