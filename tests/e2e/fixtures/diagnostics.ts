@@ -94,7 +94,13 @@ export function observePage(page: Page): PageDiagnostics {
   const onResponse = (response: { status(): number; url(): string }) => {
     const url = response.url();
     if (response.status() >= 400 && response.status() < 500 && !isIgnorableFailure(url)) {
-      clientErrorResponses.push(`${response.status()} :: ${url}`);
+      // The AI Assistant hub negotiate 401 is expected reconnect noise (see
+      // shouldIgnoreConsoleError) — the widget retries with a fresh token.
+      const isAssistantNegotiate401 = response.status() === 401
+        && url.includes('/api/backend/v1/ai-assistant/hub/negotiate');
+      if (!isAssistantNegotiate401) {
+        clientErrorResponses.push(`${response.status()} :: ${url}`);
+      }
     }
     if (response.status() >= 500 && !isIgnorableFailure(url)) {
       responseFailures.push(`${response.status()} :: ${url}`);
@@ -197,8 +203,20 @@ function shouldIgnoreConsoleError(
   }
 
   if (options.allowNotificationReconnectNoise) {
+    // The AI Assistant widget auto-connects its SignalR hub on mount with the
+    // localStorage access token. When that token has already been rotated by
+    // the time the page mounts (auth.setup minted it minutes earlier), the
+    // negotiate POST legitimately returns 401 and the widget retries with a
+    // fresh token — by design (hooks/use-ai-assistant.ts catches and logs).
+    // Same reconnect-noise class as the notifications-hub 404 above.
+    const isAiAssistantUnauthorizedNegotiateNoise =
+      text.includes('Failed to complete negotiation with the server: Error: Unauthorized')
+      || text.includes('Failed to start the connection: Error: Failed to complete negotiation with the server: Error: Unauthorized')
+      || text.startsWith('[AI Assistant] Connection failed: ')
+      || text === 'Failed to load resource: the server responded with a status of 401 (Unauthorized)';
     const isReconnectNoise =
-      text === 'TypeError: Failed to fetch'
+      isAiAssistantUnauthorizedNegotiateNoise
+      || text === 'TypeError: Failed to fetch'
       || text.includes('TypeError: NetworkError when attempting to fetch resource.')
       || text.includes("Connection disconnected with error 'TypeError: Load failed'.")
       || text.includes("Connection disconnected with error 'TypeError: NetworkError when attempting to fetch resource.'.")
