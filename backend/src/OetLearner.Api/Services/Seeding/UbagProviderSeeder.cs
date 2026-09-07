@@ -53,14 +53,26 @@ public static class UbagProviderRouteDefaults
     /// </summary>
     public const string RequiredInternalHost = "ubag-vps-gateway-1";
 
-    /// <summary>Full facade model catalog as served by GET /v1/openai/models.</summary>
+    /// <summary>Full facade model catalog as served by GET /v1/openai/models.
+    /// Mirror of UBAG's adapter manifests (target|choice-value per choice-kind
+    /// setting, sorted setting keys, manifest value order) plus the
+    /// transcription alias model accepted by POST /v1/openai/audio/
+    /// transcriptions. MUST stay in sync with the manifests — the UBAG
+    /// gateway test TestFacadeChoiceModelIDsMatchResolver guards the UBAG
+    /// end; this constant guards the OET end (see UbagProviderSeederTests).
+    /// Toggle-kind settings (gemini thinking, deepseek deepthink) carry no
+    /// labelled values and are intentionally absent: use the bare target for
+    /// the operator default.</summary>
     public const string AllowedModelsCsv =
         "mock,mock|mock-fast,mock|mock-deep,mock|standard,mock|extended," +
         "deepseek_web,deepseek_web|Expert,deepseek_web|Instant,deepseek_web|Vision," +
         "chatgpt_web,chatgpt_web|GPT-5.6 Sol,chatgpt_web|GPT-5.5,chatgpt_web|GPT-5.4,chatgpt_web|GPT-5.3,chatgpt_web|o3,chatgpt_web|Instant,chatgpt_web|Medium,chatgpt_web|High," +
         "claude_web," +
-        "gemini_web,gemini_web|3.7 Flash,gemini_web|3.6 Flash,gemini_web|3.5 Flash,gemini_web|3.1 Flash-Lite,gemini_web|3.1 Pro," +
-        "mistral_lechat,perplexity_web,generic_chat,generic_form";
+        "gemini_web,gemini_web|3.8 Flash,gemini_web|3.7 Flash,gemini_web|3.6 Flash,gemini_web|3.5 Flash,gemini_web|3.1 Flash-Lite,gemini_web|3.1 Pro," +
+        "mistral_lechat,perplexity_web," +
+        "duckai_web,duckai_web|GPT-5.6 Luna,duckai_web|GPT-5.4 mini,duckai_web|Claude Haiku 4.5,duckai_web|Mistral Small 4,duckai_web|gpt-oss 120B,duckai_web|Gemma 4 31B,duckai_web|Fast,duckai_web|Reasoning," +
+        "generic_chat,generic_form," +
+        "whisper-1";
 }
 
 /// <summary>Idempotent startup seeder for the UBAG provider row.</summary>
@@ -118,6 +130,19 @@ public static class UbagProviderSeeder
         if (inserted > 0)
         {
             await db.SaveChangesAsync(ct);
+        }
+        else
+        {
+            // Keep the allowlist current on existing rows: the seeder never
+            // overwrites admin-tuned fields, but a stale model catalog would
+            // offer facade IDs the gateway rejects (or hide new ones). Sync
+            // the CSV only — DefaultModel, keys, priority stay untouched.
+            if (!string.Equals(provider!.AllowedModelsCsv, UbagProviderRouteDefaults.AllowedModelsCsv, StringComparison.Ordinal))
+            {
+                provider.AllowedModelsCsv = UbagProviderRouteDefaults.AllowedModelsCsv;
+                await db.SaveChangesAsync(ct);
+                inserted++;
+            }
         }
 
         return inserted;

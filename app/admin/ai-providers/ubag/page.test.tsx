@@ -8,7 +8,7 @@
  *   2. Switching a standard feature OFF→ON calls upsertAiFeatureRoute.
  *   3. Switching ON→OFF calls deleteAiFeatureRoute.
  *   4. Scoring features open a confirmation modal before upserting.
- *   5. Locked (Group E) rows render with no toggle buttons.
+ *   5. Media (Group E) rows render toggleable with facade-mechanism notes.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -194,10 +194,15 @@ describe('UbagBoardPage', () => {
     render(<UbagBoardPage />);
     await screen.findByText('Facade model test');
 
-    // Dropdown is populated from the UBAG model fallback list.
+    // Dropdown is populated from the UBAG model fallback list (live facade
+    // catalog mirror incl. thinking levels + duck.ai + transcription alias).
     const select = screen.getByRole('combobox', { name: 'UBAG AI provider/model to test' }) as HTMLSelectElement;
     expect(select.options.length).toBeGreaterThan(0);
     expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|GPT-5.6 Sol')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|Medium')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.value === 'duckai_web|GPT-5.6 Luna')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.value === 'duckai_web|Reasoning')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.value === 'gemini_web|3.8 Flash')).toBeTruthy();
 
     // Picking a model + clicking Test calls the full-pipeline endpoint.
     fireEvent.change(select, { target: { value: 'chatgpt_web|GPT-5.6 Sol' } });
