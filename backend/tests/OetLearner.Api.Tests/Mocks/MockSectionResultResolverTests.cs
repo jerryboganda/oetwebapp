@@ -41,6 +41,7 @@ public class MockSectionResultResolverTests
             ScaledScore = 350,
             MaxRawScore = 42,
             ScoreConversionTableVersionKey = "test-listening-reading-v1",
+            ScoreConversionPassed = true,
             ScoreConversionGrade = "B",
         });
         await db.SaveChangesAsync();
@@ -84,6 +85,7 @@ public class MockSectionResultResolverTests
             ScaledScore = 350,
             MaxRawScore = 42,
             ScoreConversionTableVersionKey = "test-listening-reading-v1",
+            ScoreConversionPassed = true,
             ScoreConversionGrade = "B",
         });
         await db.SaveChangesAsync();

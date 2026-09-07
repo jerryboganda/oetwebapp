@@ -102,21 +102,37 @@ public class LearnerActionsService(LearnerDbContext db)
         var now = DateTimeOffset.UtcNow;
         var cutoff = now.AddMonths(-3);
 
-        var dailyAttempts = await db.Attempts
+        // Group by the raw timestamp in SQL (a plain column reference, so it
+        // translates on every provider — SQLite cannot extract date parts
+        // from timestamps) and merge sub-day buckets into calendar days on
+        // the client. Still a single grouped SELECT with no entity
+        // materialization.
+        var instantRows = await db.Attempts
             .AsNoTracking()
             .Where(a =>
                 a.UserId == userId &&
                 a.State == AttemptState.Completed &&
                 a.CompletedAt != null &&
                 a.CompletedAt >= cutoff)
-            .GroupBy(a => a.CompletedAt!.Value.Date)
+            .GroupBy(a => a.CompletedAt)
             .Select(group => new
             {
-                Day = group.Key,
+                CompletedAt = group.Key,
                 AttemptCount = group.Count()
             })
-            .OrderBy(row => row.Day)
+            .OrderBy(row => row.CompletedAt)
             .ToListAsync(ct);
+
+        var dailyAttempts = instantRows
+            .Where(row => row.CompletedAt.HasValue)
+            .GroupBy(row => row.CompletedAt!.Value.Date)
+            .Select(group => new
+            {
+                Day = DateOnly.FromDateTime(group.Key),
+                AttemptCount = group.Sum(row => row.AttemptCount),
+            })
+            .OrderBy(row => row.Day)
+            .ToList();
 
         var points = new List<LearnerProgressTrendPointResponse>();
         var weekGroups = dailyAttempts

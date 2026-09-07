@@ -40,7 +40,10 @@ public sealed class WritingEntitlementServiceTests : IAsyncDisposable
         var result = await svc.CheckAsync("user-1", default);
 
         Assert.True(result.Allowed);
-        Assert.Equal(5, result.Remaining);
+        // FINAL 2026-09-06: 3 Writing + 1 Flexible + 2 Shared credits fund
+        // exactly 3 complete letters at 2 credits each — Remaining counts
+        // complete activities, never raw credit units.
+        Assert.Equal(3, result.Remaining);
         Assert.DoesNotContain("unlimited writing attempts", result.Reason, StringComparison.OrdinalIgnoreCase);
     }
 

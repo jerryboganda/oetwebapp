@@ -271,6 +271,11 @@ public class MockSectionCompletionEvidenceTests
             LastActivityAt = now,
             RawScore = 30,
             MaxRawScore = 42,
+            // Completion requires an owner-approved scaled conversion.
+            ScaledScore = 350,
+            ScoreConversionTableVersionKey = "test-listening-v1",
+            ScoreConversionPassed = true,
+            ScoreConversionGrade = "B",
         });
         await db.SaveChangesAsync();
 

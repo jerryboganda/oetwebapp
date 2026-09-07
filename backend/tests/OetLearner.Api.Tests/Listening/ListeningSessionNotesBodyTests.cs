@@ -231,7 +231,7 @@ public class ListeningSessionNotesBodyTests
         var (db, svc) = Build();
         var (userId, paperId) = await SeedRelationalPaperAsync(db);
 
-        var session = await svc.GetSessionAsync(userId, paperId, "paper", attemptId: null, default);
+        var session = await svc.GetSessionAsync(userId, paperId, "practice", attemptId: null, default);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(session));
         var extracts = doc.RootElement.GetProperty("paper").GetProperty("extracts");
 
@@ -248,7 +248,7 @@ public class ListeningSessionNotesBodyTests
         var (db, svc) = Build();
         var (userId, paperId) = await SeedJsonPaperAsync(db);
 
-        var session = await svc.GetSessionAsync(userId, paperId, "paper", attemptId: null, default);
+        var session = await svc.GetSessionAsync(userId, paperId, "practice", attemptId: null, default);
         using var doc = JsonDocument.Parse(JsonSerializer.Serialize(session));
         var a1 = A1ExtractElement(doc.RootElement);
         Assert.Equal(A1Body, a1.GetProperty("notesBody").GetString());

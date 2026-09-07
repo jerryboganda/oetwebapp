@@ -106,8 +106,8 @@ public sealed class PaymentGatewayCatalog : IPaymentGatewayCatalog
 
         return rows
             .Where(row => IsVisibleInRegion(row.Region, wanted))
-            .Where(row => sandbox || row.IsEnabled)
-            .Where(row => sandbox || IsConfigured(row.Name, effective, sandbox))
+            .Where(row => row.IsEnabled)
+            .Where(row => IsConfigured(row.Name, effective, sandbox))
             .OrderBy(row => row.DisplayOrder)
             .ThenBy(row => row.Name)
             .Select(row => new LearnerPaymentMethodDto(
@@ -131,7 +131,7 @@ public sealed class PaymentGatewayCatalog : IPaymentGatewayCatalog
             return false;
         }
 
-        return row.IsEnabled || _billing.Value.AllowSandboxFallbacks;
+        return row.IsEnabled;
     }
 
     public async Task<IReadOnlyList<AdminPaymentGatewayDto>> ListAdminAsync(CancellationToken ct)

@@ -303,6 +303,11 @@ public class ListeningAdminAttemptExportEndpointTests : IClassFixture<TestWebApp
             ModelExplanationSafe = "test",
             LearnerDisclaimer = "test",
             LastTransitionAt = now,
+            // Production grading always stamps these; the export's approved-
+            // conversion filter requires them.
+            MaxRawScore = 42,
+            ScoreConversionTableVersionKey = "test-listening-v1",
+            ScoreConversionPassed = true,
         });
 
         await db.SaveChangesAsync();

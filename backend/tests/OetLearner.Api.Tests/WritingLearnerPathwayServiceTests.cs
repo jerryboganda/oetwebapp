@@ -297,16 +297,16 @@ public class WritingLearnerPathwayServiceTests
     {
         var (db, service, clock) = Build();
         db.WritingRuleViolations.AddRange(
-            Violation("R13.2", clock.GetUtcNow().AddHours(-4), DefaultUser),
-            Violation("R13.2", clock.GetUtcNow().AddHours(-3), DefaultUser),
-            Violation("R13.2", clock.GetUtcNow().AddHours(-2), "other-user"));
+            Violation("DH-W-009", clock.GetUtcNow().AddHours(-4), DefaultUser),
+            Violation("DH-W-009", clock.GetUtcNow().AddHours(-3), DefaultUser),
+            Violation("DH-W-009", clock.GetUtcNow().AddHours(-2), "other-user"));
         await db.SaveChangesAsync();
 
         var canon = await service.GetCanonAsync(DefaultUser, "urgent", "critical", CancellationToken.None);
 
-        Assert.Contains(canon.Rules, rule => rule.RuleId == "R13.2");
+        Assert.Contains(canon.Rules, rule => rule.RuleId == "DH-W-009");
         var stat = Assert.Single(canon.RecentViolations);
-        Assert.Equal("R13.2", stat.RuleId);
+        Assert.Equal("DH-W-009", stat.RuleId);
         Assert.Equal(2, stat.Count);
         Assert.Equal(2, canon.TotalRecentViolations);
 

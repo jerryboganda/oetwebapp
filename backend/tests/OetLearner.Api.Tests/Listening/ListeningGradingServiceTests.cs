@@ -119,8 +119,11 @@ public class ListeningGradingServiceTests
     }
 
     [Fact]
-    public async Task GradeAsync_rejects_governed_policy_snapshot_version_mismatch()
+    public async Task GradeAsync_degrades_governed_policy_snapshot_version_mismatch_without_throwing()
     {
+        // Policy snapshots degrade, never 500: a version mismatch falls back
+        // to conservative defaults and the attempt still grades on its
+        // captured key — the candidate never sees a generic server error.
         await using var db = NewDb();
         var now = DateTimeOffset.UtcNow;
         db.AssessmentMarkingPolicyVersions.Add(new AssessmentMarkingPolicyVersion
@@ -181,10 +184,10 @@ public class ListeningGradingServiceTests
         });
         await db.SaveChangesAsync();
 
-        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            new ListeningGradingService(db).GradeAsync("attempt-policy-mismatch", CancellationToken.None));
+        var result = await new ListeningGradingService(db).GradeAsync("attempt-policy-mismatch", CancellationToken.None);
 
-        Assert.Equal("assessment_marking_policy_snapshot_version_mismatch", ex.Message);
+        // The correct answer still grades against the captured key.
+        Assert.Equal(1, result.RawScore);
     }
 
     [Fact]
@@ -323,9 +326,14 @@ public class ListeningGradingServiceTests
         db.ListeningAnswers.Add(answer);
         await db.SaveChangesAsync();
 
-        var result = await new ListeningGradingService(db).GradeAsync(attempt.Id, CancellationToken.None);
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
+            new ListeningGradingService(db).GradeAsync(attempt.Id, CancellationToken.None));
 
-        Assert.Equal(0, result.RawScore);
+        // Fail-closed: corrupt multi-select input never resolves into a score.
+        Assert.Equal("listening_attempt_requires_admin_review", ex.ErrorCode);
+        // The zero raw score, invalid marking, and review evidence are still
+        // persisted by the grading attempt before the hold is raised.
+        Assert.Equal(0, (await db.ListeningAttempts.SingleAsync(a => a.Id == attempt.Id)).RawScore);
         Assert.Null((await db.ListeningAnswers.SingleAsync(a => a.Id == answer.Id)).IsCorrect);
         var audit = await db.AuditEvents.SingleAsync(e =>
             e.Action == "listening.mcq.multiple_selection_review_required");
@@ -499,11 +507,14 @@ public class ListeningGradingServiceTests
         await using var db = NewDb();
         var seeded = await SeedOverrideAttemptAsync(db, submitted: false);
 
-        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+        // Ownership denials use the codebase-wide fail-closed ApiException
+        // contract (machine-readable code), not BCL exceptions.
+        var ex = await Assert.ThrowsAsync<ApiException>(() =>
             new ListeningGradingService(db).GradeAsync(
                 seeded.AttemptId,
                 userId: "different-learner",
                 CancellationToken.None));
+        Assert.Equal("listening_attempt_not_owned", ex.ErrorCode);
     }
 
     [Fact]

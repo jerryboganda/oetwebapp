@@ -387,7 +387,13 @@ public class PaymentGatewaySecurityTests
             PayPalCancelUrl: null));
         IPaymentGateway gateway = new PayPalGateway(new HttpClient(new FailingPayPalCaptureHandler()), Options.Create(options), runtime);
 
-        await Assert.ThrowsAsync<HttpRequestException>(() => gateway.CaptureOrderAsync("ORDER-1", "capture-ORDER-1", default));
+        // Gateway HTTP rejections surface as the documented wrapper (carrying
+        // the upstream status), never a silent "completed" and never a raw
+        // HttpRequestException opaque 500 — the caller translates the wrapper
+        // into a clean retryable API error.
+        var ex = await Assert.ThrowsAsync<PaymentGatewayApiException>(() => gateway.CaptureOrderAsync("ORDER-1", "capture-ORDER-1", default));
+        Assert.Equal("paypal", ex.Gateway);
+        Assert.Equal(400, ex.UpstreamStatusCode);
     }
 
     private static PayPalGateway ConfiguredPayPalWebhookGateway(HttpMessageHandler handler)

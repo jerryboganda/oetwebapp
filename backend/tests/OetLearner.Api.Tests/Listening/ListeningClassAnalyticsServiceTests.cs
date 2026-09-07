@@ -423,6 +423,10 @@ public class ListeningClassAnalyticsServiceTests
             ModelExplanationSafe = "test",
             LearnerDisclaimer = "test",
             LastTransitionAt = now,
+            // Production grading always stamps MaxRawScore on evaluations
+            // (ListeningGradingService); the analytics conversion filter
+            // requires it, so the fixture must carry it too.
+            MaxRawScore = OetLearner.Api.Services.OetScoring.ListeningReadingRawMax,
             ScoreConversionTableVersionKey = scoreConversionPassed.HasValue ? "test-listening-v1" : null,
             ScoreConversionPassed = scoreConversionPassed,
         };

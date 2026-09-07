@@ -314,6 +314,10 @@ public class MockV2EndpointTests : IClassFixture<TestWebApplicationFactory>
             RawScore = 30,
             ScaledScore = OetScoring.OetRawToScaled(30),
             MaxRawScore = 42,
+            // Section completion requires an owner-approved scaled conversion.
+            ScoreConversionTableVersionKey = "test-reading-v1",
+            ScoreConversionPassed = true,
+            ScoreConversionGrade = "B",
         });
         if (!string.IsNullOrWhiteSpace(mockSectionId))
         {

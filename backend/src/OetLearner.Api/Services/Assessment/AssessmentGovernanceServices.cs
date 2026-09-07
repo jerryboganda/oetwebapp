@@ -473,7 +473,10 @@ public sealed record AssessmentReleaseGateDocument(
 
 public sealed record AssessmentMarkingPolicyDocument(
     bool TrimLeadingTrailingWhitespace = true,
-    bool CollapseInternalWhitespace = false,
+    // Default ON: Reading Part A collapses unconditionally and Listening
+    // shares that accuracy floor — extra internal spaces must never mark a
+    // correct answer wrong. Explicit policies still opt out per paper.
+    bool CollapseInternalWhitespace = true,
     bool CaseSensitive = true,
     bool ReadingPartAMatchingPartialCredit = false,
     bool ListeningAudioReplayAllowed = false,

@@ -28,6 +28,14 @@ public class VideoLibraryAdminFlowsTests(BunnyMockedWebApplicationFactory factor
         Assert.Equal(HttpStatusCode.OK, createResponse.StatusCode);
         var videoId = (await ReadJsonAsync(createResponse)).GetProperty("videoId").GetString()!;
 
+        // 1b. Tag language + subtest + free tier: the publish gate requires
+        // English/Arabic and a course subtest (Listening/Reading are shared,
+        // no targets needed); free tier keeps the video visible to a learner
+        // without a subscription for the step-6 visibility assertions.
+        var patchResponse = await admin.PatchAsJsonAsync(
+            $"/v1/admin/video-library/videos/{videoId}", new { language = "en", subtestCode = "listening", accessTier = "free" });
+        Assert.Equal(HttpStatusCode.OK, patchResponse.StatusCode);
+
         // 2. Presign the browser→Bunny TUS upload (mocked Bunny assigns a guid).
         var authResponse = await admin.PostAsync(
             $"/v1/admin/video-library/videos/{videoId}/upload-authorization", content: null);
