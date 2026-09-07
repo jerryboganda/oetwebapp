@@ -266,32 +266,6 @@ public sealed partial class ListeningPartAAiScoringService
         }
         var userText = sb.ToString();
 
-        var row = await registry.FindByCodeAsync(UbagProviderCode, ct);
-        if (row is null)
-        {
-            await RecordFailureAsync(AiCallOutcome.ProviderError, "ubag_unconfigured",
-                "UBAG provider is not registered.");
-            return ProviderCallOutcome.Terminal("ubag_unconfigured", ListeningPartAAiSkipReasons.IndeterminateTimeout);
-        }
-        var apiKey = await registry.GetPlatformKeyAsync(UbagProviderCode, ct);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            await RecordFailureAsync(AiCallOutcome.ProviderError, "ubag_unconfigured",
-                "UBAG provider key is missing.");
-            return ProviderCallOutcome.Terminal("ubag_unconfigured", ListeningPartAAiSkipReasons.IndeterminateTimeout);
-        }
-        var baseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? null : row.BaseUrl.Trim().TrimEnd('/');
-        if (baseUrl is not null
-            && AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl) is not null)
-        {
-            await RecordFailureAsync(AiCallOutcome.ProviderError, "ubag_unconfigured",
-                "UBAG provider endpoint is not allowed.");
-            return ProviderCallOutcome.Terminal("ubag_unconfigured", ListeningPartAAiSkipReasons.IndeterminateTimeout);
-        }
-        var model = !string.IsNullOrWhiteSpace(routeModel)
-            ? routeModel.Trim()
-            : string.IsNullOrWhiteSpace(row.DefaultModel) ? "chatgpt_web" : row.DefaultModel;
-
         var startedAt = clock.GetUtcNow();
         var usageContext = new AiUsageContext(
             UserId: learnerId,
@@ -304,6 +278,35 @@ public sealed partial class ListeningPartAAiScoringService
             UserPrompt: userText,
             StartedAt: startedAt);
         int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
+
+        async Task<ProviderCallOutcome> FailAsync(string errorClass, string message)
+            => await RecordAndTerminalAsync(errorClass, message);
+
+        async Task<ProviderCallOutcome> RecordAndTerminalAsync(string errorClass, string message)
+        {
+            await RecordFailureAsync(AiCallOutcome.ProviderError, errorClass, message);
+            return ProviderCallOutcome.Terminal(errorClass, ListeningPartAAiSkipReasons.IndeterminateTimeout);
+        }
+
+        var row = await registry.FindByCodeAsync(UbagProviderCode, ct);
+        if (row is null)
+        {
+            return await FailAsync("ubag_unconfigured", "UBAG provider is not registered.");
+        }
+        var apiKey = await registry.GetPlatformKeyAsync(UbagProviderCode, ct);
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return await FailAsync("ubag_unconfigured", "UBAG provider key is missing.");
+        }
+        var baseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? null : row.BaseUrl.Trim().TrimEnd('/');
+        if (baseUrl is not null
+            && AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl) is not null)
+        {
+            return await FailAsync("ubag_unconfigured", "UBAG provider endpoint is not allowed.");
+        }
+        var model = !string.IsNullOrWhiteSpace(routeModel)
+            ? routeModel.Trim()
+            : string.IsNullOrWhiteSpace(row.DefaultModel) ? "chatgpt_web" : row.DefaultModel;
 
         var request = new AiProviderRequest
         {
