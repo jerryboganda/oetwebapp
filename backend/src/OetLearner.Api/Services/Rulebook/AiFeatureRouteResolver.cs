@@ -343,6 +343,27 @@ public sealed class AiFeatureRouteResolver(LearnerDbContext db) : IAiFeatureRout
         AiFeatureCodes.WritingOutlineV1,
         AiFeatureCodes.WritingParaphraseV1,
         AiFeatureCodes.WritingAskV1,
+        // UBAG-servable Group E rows: OCR passes (facade vision via
+        // ubag_attachments), forced-tool listening structuring/scoring
+        // (facade response_format + emulation), Whisper-shape STT (facade
+        // audio/transcriptions), embeddings (facade /embeddings), and the
+        // strict-JSON class summary (facade JSON coercion). Routing any of
+        // these to ubag requires the ubag provider row to be active + keyed;
+        // the approval service still gates scoring-critical switches.
+        AiFeatureCodes.OcrListeningPartA,
+        AiFeatureCodes.OcrListeningPartBC,
+        AiFeatureCodes.OcrContentPdfFallback,
+        AiFeatureCodes.OcrWritingHandwriting,
+        AiFeatureCodes.ListeningPartAExtract,
+        AiFeatureCodes.ListeningPartAScore,
+        AiFeatureCodes.ListeningPartBCExtract,
+        AiFeatureCodes.SttSpeakingTranscribe,
+        AiFeatureCodes.SttPronunciationTranscribe,
+        AiFeatureCodes.SttConversationTranscribe,
+        AiFeatureCodes.ClassRecordingTranscribe,
+        AiFeatureCodes.ClassRecordingSummarize,
+        AiFeatureCodes.EmbeddingsGenerate,
+        AiFeatureCodes.WritingExemplarEmbedV1,
     };
 
     /// <summary>Subset of <see cref="KnownFeatureCodes"/> the bulk-route

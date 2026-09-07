@@ -74,6 +74,17 @@ public sealed class EmbeddingService : IEmbeddingService
             return texts.Select(t => GenerateLocalEmbedding(t)).ToList();
         }
 
+        // UBAG divert: the ubag facade serves POST /embeddings in the exact
+        // OpenAI shape with deterministic hash vectors. When the configured
+        // embedding BaseUrl points at the UBAG facade (same host the ubag
+        // provider row uses), call {base}/embeddings directly instead of the
+        // configured provider — zero call-site changes for every consumer
+        // (CodebaseIndexer, CodebaseRetriever, recording embed, exemplars).
+        if (IsUbagEmbeddingsBaseUrl(baseUrl))
+        {
+            return await CallUbagEmbeddingsAsync(texts, baseUrl, opts.ApiKey, embeddingModel, ct);
+        }
+
         var allEmbeddings = new List<float[]>(texts.Count);
 
         for (int i = 0; i < texts.Count; i += BatchSize)
@@ -89,6 +100,46 @@ public sealed class EmbeddingService : IEmbeddingService
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Embedding API call failed for batch starting at index {Index}. Falling back to local embeddings.", i);
+                allEmbeddings.AddRange(batch.Select(t => GenerateLocalEmbedding(t)));
+            }
+        }
+
+        return allEmbeddings;
+    }
+
+    /// <summary>True when the configured embedding BaseUrl targets the UBAG
+    /// OpenAI facade (same internal host as the ubag provider row). The
+    /// facade serves <c>POST {base}/embeddings</c> in the OpenAI shape, so the
+    /// standard embeddings call below works unchanged — this only switches
+    /// the response parsing/recorded provider id to the facade contract.
+    /// Matching is host-based (SSRF guard already constrains the row), so
+    /// admins point embeddings at UBAG by setting the embedding BaseUrl to
+    /// the facade URL in the runtime settings.</summary>
+    private static bool IsUbagEmbeddingsBaseUrl(string baseUrl)
+        => baseUrl.Contains("ubag-vps-gateway-1", StringComparison.OrdinalIgnoreCase)
+        || baseUrl.TrimEnd('/').EndsWith("/v1/openai", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Calls the UBAG facade <c>POST /embeddings</c> (OpenAI shape,
+    /// deterministic hash vectors) and parses the indexed float arrays. Same
+    /// batching, lease, usage-recording, and hash-fallback semantics as the
+    /// standard path — only the provider id and response contract differ.
+    /// Vectors are deterministic, NOT semantic (documented on the facade).</summary>
+    private async Task<List<float[]>> CallUbagEmbeddingsAsync(
+        IReadOnlyList<string> texts, string baseUrl, string apiKey, string model, CancellationToken ct)
+    {
+        var allEmbeddings = new List<float[]>(texts.Count);
+        for (int i = 0; i < texts.Count; i += BatchSize)
+        {
+            ct.ThrowIfCancellationRequested();
+            var batch = texts.Skip(i).Take(BatchSize).ToList();
+            try
+            {
+                var batchResults = await CallEmbeddingApiAsync(batch, baseUrl, apiKey, model, ct);
+                allEmbeddings.AddRange(batchResults);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "UBAG embeddings call failed for batch starting at index {Index}. Falling back to local embeddings.", i);
                 allEmbeddings.AddRange(batch.Select(t => GenerateLocalEmbedding(t)));
             }
         }
@@ -188,9 +239,23 @@ public sealed class EmbeddingService : IEmbeddingService
             int idx = 0;
             foreach (var val in embeddingArray.EnumerateArray())
             {
-                embedding[idx++] = val.GetSingle();
+                embedding[idx++] = val.ValueKind == JsonValueKind.Number ? val.GetSingle() : 0f;
             }
             results.Add(embedding);
+        }
+
+        // UBAG facade serves deterministic hash vectors (same contract shape,
+        // float arrays). Pad/truncate defensively so a dimension drift can
+        // never corrupt a vector column — the failure mode is a padded row,
+        // never a short write.
+        for (var i = 0; i < results.Count; i++)
+        {
+            if (results[i].Length != DefaultDimension)
+            {
+                var normalized = new float[DefaultDimension];
+                Array.Copy(results[i], normalized, Math.Min(results[i].Length, DefaultDimension));
+                results[i] = normalized;
+            }
         }
 
         sw.Stop();

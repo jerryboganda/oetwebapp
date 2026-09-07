@@ -13,8 +13,9 @@
  *  C. Conversation partner — works, but every reply waits on a browser job.
  *  D. Scoring-critical — behind an explicit confirmation modal; browser-model
  *     grading quality is unverified vs the Anthropic baseline.
- *  E. Not servable by UBAG — locked rows with reasons (STT/TTS/OCR/audio/
- *     embeddings/strict-JSON/non-routable).
+ *  E. Media in/out via UBAG — audio, OCR, embeddings and strict-JSON rows
+ *     served through the facade (attachments, audio/transcriptions,
+ *     /embeddings, JSON coercion).
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -47,7 +48,7 @@ import {
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
-type Risk = 'standard' | 'latency' | 'scoring' | 'locked';
+type Risk = 'standard' | 'latency' | 'scoring';
 
 interface BoardFeature {
   code: string;
@@ -63,7 +64,6 @@ interface BoardGroup {
   blurb: string;
   risk: Risk;
   features: BoardFeature[];
-  lockedReason?: string;
 }
 
 const UBAG_PROVIDER_CODE = 'ubag';
@@ -168,27 +168,26 @@ const GROUPS: BoardGroup[] = [
     ],
   },
   {
-    id: 'locked',
-    title: 'E · Not servable by UBAG',
-    blurb: 'Locked OFF with reasons. UBAG has no STT/TTS/OCR/audio/embeddings and cannot guarantee strict JSON.',
-    risk: 'locked',
-    lockedReason: 'Capability gap — keep on existing providers.',
+    id: 'media',
+    title: 'E · Media in/out via UBAG',
+    blurb: 'Audio, OCR, embeddings and strict-JSON rows served through the UBAG facade (attachments, audio/transcriptions, /embeddings, JSON coercion). Latency 10–60s per call; embeddings are deterministic hash vectors, not semantic.',
+    risk: 'latency',
     features: [
-      { code: 'pronunciation.linguistic.score.v1', label: 'Linguistic pronunciation scoring', model: '', note: 'Requires Gemini native inline-audio.' },
-      { code: 'ocr.listening.parta', label: 'Listening Part A OCR', model: '', note: 'OCR — Mistral only.' },
-      { code: 'ocr.content.pdf_fallback', label: 'Scanned-PDF OCR fallback', model: '', note: 'OCR — Mistral only.' },
-      { code: 'ocr.writing.handwriting', label: 'Handwriting OCR', model: '', note: 'OCR — Mistral only.' },
-      { code: 'ocr.listening.partbc', label: 'Listening Part B/C OCR', model: '', note: 'OCR — Mistral only.' },
-      { code: 'listening.parta.extract', label: 'Part A manifest structuring', model: '', note: 'Not gateway-routable (direct Claude call).' },
-      { code: 'listening.parta.score', label: 'Part A per-gap marking', model: '', note: 'Not gateway-routable (direct Claude call).' },
-      { code: 'listening.partbc.extract', label: 'Part B/C key structuring', model: '', note: 'Not gateway-routable (direct Claude call).' },
-      { code: 'stt.speaking.transcribe', label: 'Speaking transcription', model: '', note: 'ASR — Whisper only.' },
-      { code: 'stt.pronunciation.transcribe', label: 'Pronunciation transcription', model: '', note: 'ASR — Whisper only.' },
-      { code: 'stt.conversation.transcribe', label: 'Conversation transcription', model: '', note: 'ASR — Whisper only.' },
-      { code: 'class.recording.transcribe.v1', label: 'Class recording transcription', model: '', note: 'ASR — Whisper only.' },
-      { code: 'embeddings.generate', label: 'Embeddings', model: '', note: 'No embedding model behind UBAG.' },
-      { code: 'writing.exemplar.embed.v1', label: 'Exemplar embeddings', model: '', note: 'No embedding model behind UBAG.' },
-      { code: 'class.recording.summarize.v1', label: 'Class summary JSON', model: '', note: 'Requires strict JSON output.' },
+      { code: 'pronunciation.linguistic.score.v1', label: 'Linguistic pronunciation scoring', model: CHATGPT, note: 'Audio rides ubag_attachments; provider listens + scores JSON.' },
+      { code: 'ocr.listening.parta', label: 'Listening Part A OCR', model: CHATGPT, note: 'PDF/image via ubag_attachments; provider returns Markdown.' },
+      { code: 'ocr.content.pdf_fallback', label: 'Scanned-PDF OCR fallback', model: CHATGPT, note: 'PDF via ubag_attachments.' },
+      { code: 'ocr.writing.handwriting', label: 'Handwriting OCR', model: CHATGPT, note: 'Image via ubag_attachments.' },
+      { code: 'ocr.listening.partbc', label: 'Listening Part B/C OCR', model: CHATGPT, note: 'PDF/image via ubag_attachments.' },
+      { code: 'listening.parta.extract', label: 'Part A manifest structuring', model: CHATGPT, note: 'Route-aware: facade JSON coercion + forced-tool emulation.' },
+      { code: 'listening.parta.score', label: 'Part A per-gap marking', model: CHATGPT, note: 'Route-aware: facade JSON coercion + forced-tool emulation.' },
+      { code: 'listening.partbc.extract', label: 'Part B/C key structuring', model: CHATGPT, note: 'Route-aware: facade JSON coercion + forced-tool emulation.' },
+      { code: 'stt.speaking.transcribe', label: 'Speaking transcription', model: 'whisper-1', note: 'Facade audio/transcriptions; provider listens.' },
+      { code: 'stt.pronunciation.transcribe', label: 'Pronunciation transcription', model: 'whisper-1', note: 'Facade audio/transcriptions.' },
+      { code: 'stt.conversation.transcribe', label: 'Conversation transcription', model: 'whisper-1', note: 'Facade audio/transcriptions.' },
+      { code: 'class.recording.transcribe.v1', label: 'Class recording transcription', model: 'whisper-1', note: 'Gateway route; facade transcribes the attachment.' },
+      { code: 'embeddings.generate', label: 'Embeddings', model: 'text-embedding-3-small', note: 'Facade /embeddings: deterministic hash vectors, NOT semantic.' },
+      { code: 'writing.exemplar.embed.v1', label: 'Exemplar embeddings', model: 'text-embedding-3-small', note: 'Best-effort refresh via shared embedding service.' },
+      { code: 'class.recording.summarize.v1', label: 'Class summary JSON', model: CHATGPT, note: 'response_format json_object; tolerant parser kept.' },
     ],
   },
 ];
@@ -203,8 +202,6 @@ function riskBadge(risk: Risk) {
       return <Badge variant="warning">latency-sensitive</Badge>;
     case 'scoring':
       return <Badge variant="danger">scoring-critical</Badge>;
-    case 'locked':
-      return <Badge variant="muted">locked</Badge>;
   }
 }
 
@@ -337,7 +334,6 @@ export default function UbagBoardPage() {
   };
 
   const enableGroup = async (group: BoardGroup) => {
-    if (group.risk === 'locked') return;
     if (group.risk === 'scoring') {
       setConfirmScoring(group.features);
       return;
@@ -504,7 +500,7 @@ export default function UbagBoardPage() {
           <Select
             aria-label={`Model for ${feature.code}`}
             value={draft}
-            disabled={group.risk === 'locked' || isBusy}
+            disabled={isBusy}
             options={(models.includes(draft) || draft === '' ? models : [...models, draft]).map((m) => ({
               value: m,
               label: m,
@@ -517,9 +513,7 @@ export default function UbagBoardPage() {
           />
         </td>
         <td className="px-3 py-2 text-right">
-          {group.risk === 'locked' ? (
-            <Badge variant="muted">{group.lockedReason ?? 'locked'}</Badge>
-          ) : onUbag ? (
+          {onUbag ? (
             <Button variant="primary" size="sm" aria-pressed="true" disabled={isBusy} onClick={() => void disableFeature(feature.code)}>
               ON
             </Button>
@@ -673,16 +667,14 @@ export default function UbagBoardPage() {
                 </span>
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">{group.blurb}</p>
-              {group.risk !== 'locked' && (
-                <div className="flex gap-2 mt-2">
-                  <Button variant="outline" size="sm" disabled={busy === `group:${group.id}`} onClick={() => void enableGroup(group)}>
-                    Enable group
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={busy === `group:${group.id}`} onClick={() => void disableGroup(group)}>
-                    Disable group
-                  </Button>
-                </div>
-              )}
+              <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" disabled={busy === `group:${group.id}`} onClick={() => void enableGroup(group)}>
+                  Enable group
+                </Button>
+                <Button variant="outline" size="sm" disabled={busy === `group:${group.id}`} onClick={() => void disableGroup(group)}>
+                  Disable group
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <table className="w-full text-sm">

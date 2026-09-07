@@ -68,6 +68,122 @@ internal static class AiProviderPayloadBuilder
         }).ToList();
     }
 
+    /// <summary>Maps the gateway <c>ResponseFormatJson</c> contract onto an
+    /// OpenAI <c>response_format</c> payload value. Null/blank means "no
+    /// format requested" (key omitted). <c>json_object</c> (bare or as
+    /// <c>{"type":"json_object"}</c>) maps to <c>{"type":"json_object"}</c>;
+    /// anything else must already be a <c>{"type":"json_schema",...}</c>
+    /// object and is passed through verbatim. Unknown shapes return null so
+    /// the caller omits the key rather than sending a provider-rejected
+    /// value.</summary>
+    public static Dictionary<string, object?>? BuildOpenAiResponseFormat(string? responseFormatJson)
+    {
+        if (string.IsNullOrWhiteSpace(responseFormatJson)) return null;
+        var trimmed = responseFormatJson.Trim();
+        if (string.Equals(trimmed, "json_object", StringComparison.OrdinalIgnoreCase))
+            return new Dictionary<string, object?> { ["type"] = "json_object" };
+        try
+        {
+            using var doc = JsonDocument.Parse(trimmed);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            if (!root.TryGetProperty("type", out var typeEl)
+                || typeEl.ValueKind != JsonValueKind.String)
+                return null;
+            var typeValue = (typeEl.GetString() ?? string.Empty).Trim().ToLowerInvariant();
+            if (typeValue is not ("json_object" or "json_schema")) return null;
+            return new Dictionary<string, object?> { ["type"] = typeValue };
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Forced-tool emulation for providers without function calling
+    /// (notably the UBAG facade, which 400s <c>tools</c>). When the request
+    /// carried exactly one forced tool (a named <c>ToolChoice</c> matching a
+    /// single definition) but the provider returned plain text, extract the
+    /// first parseable JSON value from the text and surface it as that
+    /// tool's <c>ArgsJson</c>. Returns null unless the emulation applies and
+    /// parses — callers keep the provider's text outcome either way.</summary>
+    public static IReadOnlyList<AiToolCall>? CoerceToolCallsFromJsonText(
+        string completionText,
+        IReadOnlyList<AiToolDefinition>? tools,
+        string? toolChoice)
+    {
+        if (tools is not { Count: 1 }) return null;
+        if (string.IsNullOrWhiteSpace(toolChoice)
+            || string.Equals(toolChoice.Trim(), "auto", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(toolChoice.Trim(), "none", StringComparison.OrdinalIgnoreCase))
+            return null;
+        var tool = tools[0];
+        if (!string.Equals(tool.Code, toolChoice.Trim(), StringComparison.OrdinalIgnoreCase)) return null;
+        var argsJson = ExtractFirstJsonValue(completionText);
+        if (argsJson is null) return null;
+        return new List<AiToolCall>
+        {
+            new() { Id = Guid.NewGuid().ToString("N"), ToolCode = tool.Code, ArgsJson = argsJson },
+        };
+    }
+
+    /// <summary>Extracts the first parseable top-level JSON object or array
+    /// from free text (fence-strip, then longest-parseable-brace scan).
+    /// Mirrors the UBAG facade's server-side coercion so both ends agree on
+    /// what "parseable" means.</summary>
+    public static string? ExtractFirstJsonValue(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        var trimmed = text.Trim();
+        if (trimmed.StartsWith("```", StringComparison.Ordinal))
+        {
+            var firstNewline = trimmed.IndexOf('\n');
+            if (firstNewline > 0) trimmed = trimmed[(firstNewline + 1)..];
+            var fenceEnd = trimmed.LastIndexOf("```", StringComparison.Ordinal);
+            if (fenceEnd >= 0) trimmed = trimmed[..fenceEnd];
+            trimmed = trimmed.Trim();
+        }
+        if (trimmed.Length == 0) return null;
+        if (IsJsonObjectOrArray(trimmed)) return CompactJson(trimmed);
+        for (var start = 0; start < trimmed.Length; start++)
+        {
+            if (trimmed[start] is not ('{' or '[')) continue;
+            for (var end = trimmed.Length; end > start; end--)
+            {
+                var candidate = trimmed.Substring(start, end - start).Trim();
+                if (candidate.Length == 0) continue;
+                if (IsJsonObjectOrArray(candidate)) return CompactJson(candidate);
+            }
+        }
+        return null;
+    }
+
+    private static bool IsJsonObjectOrArray(string candidate)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(candidate);
+            return doc.RootElement.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string CompactJson(string candidate)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(candidate);
+            return doc.RootElement.GetRawText();
+        }
+        catch (JsonException)
+        {
+            return candidate.Trim();
+        }
+    }
+
     public static void ReadOpenAiChoiceMessage(JsonElement root, string providerName, out JsonElement choice, out JsonElement message)
     {
         if (!root.TryGetProperty("choices", out var choices)

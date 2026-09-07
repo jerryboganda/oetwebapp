@@ -110,7 +110,9 @@ public sealed class ListeningPartAExtractionService(
     IOcrService ocr,
     IListeningAuthoringService authoring,
     IAiProviderRegistry registry,
+    IAiFeatureRouteResolver routeResolver,
     IHttpClientFactory httpClientFactory,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions> providerOptions,
     IDirectAiCallRecorder usageRecorder,
     TimeProvider clock,
     ILogger<ListeningPartAExtractionService> logger,
@@ -121,6 +123,12 @@ public sealed class ListeningPartAExtractionService(
     // retry cap counts all durable extraction starts for the paper, including
     // runs that fail before a draft can be persisted.
     public const string AnthropicProviderCode = "anthropic";
+    // UBAG route: when an admin routes listening.parta.extract to the ubag
+    // provider row, the same OCR markdown goes to the UBAG facade as
+    // response_format json_object + forced-tool emulation instead of Claude.
+    // Resolution honours the admin board toggle (route → model), with the
+    // Anthropic default preserved when no UBAG route exists.
+    public const string UbagProviderCode = "ubag";
     // Claude Sonnet 4.6 is the app-wide contextual-understanding model; the
     // registered `anthropic` row's DefaultModel overrides this when set.
     // Single source of truth: CoreAiProviderSeeder.AnthropicDefaultModel.
@@ -544,11 +552,25 @@ public sealed class ListeningPartAExtractionService(
         => string.IsNullOrEmpty(body) ? 0 : Regex.Matches(body, "_{4,}").Count;
 
     // ── Claude call (forced tool, no temperature for Opus 4.7/4.8) ──────────────
+    // Route-aware: honours the admin board toggle for
+    // listening.parta.extract. A ubag route sends the same OCR markdown to
+    // the UBAG facade (OpenAI-compatible row) with response_format
+    // json_object; the registry's forced-tool emulation surfaces the JSON as
+    // the emit_part_a_manifest ArgsJson. Anything else keeps the Anthropic
+    // forced-tool path byte-identical to before.
 
     private async Task<string> CallClaudeManifestAsync(
         string questionMarkdown, string answerMarkdown, string adminId,
         DirectAiOperationLease lease, CancellationToken ct)
     {
+        var ubagRoute = await routeResolver.ResolveAsync(AiFeatureCodes.ListeningPartAExtract, ct);
+        if (ubagRoute is not null
+            && string.Equals(ubagRoute.ProviderCode, UbagProviderCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return await CallUbagManifestAsync(
+                questionMarkdown, answerMarkdown, adminId, lease, ubagRoute.Model, ct);
+        }
+
         var row = await registry.FindByCodeAsync(AnthropicProviderCode, ct)
             ?? throw new InvalidOperationException(
                 $"Anthropic provider '{AnthropicProviderCode}' is not registered. Add a row in /admin/ai-providers with Code={AnthropicProviderCode}.");
@@ -647,6 +669,112 @@ public sealed class ListeningPartAExtractionService(
             await usageRecorder.RecordFailureAsync(
                 usageContext, AnthropicProviderCode, model, AiCallOutcome.ProviderError,
                 "anthropic_network", $"Anthropic transport failure ({ex.GetType().Name}).",
+                LatencyMs(), "listening.parta.extract", CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            throw;
+        }
+    }
+
+    /// <summary>UBAG route for the Part A manifest call. Resolves the ubag
+    /// provider row (OpenAI-compatible facade), sends the same OCR markdown
+    /// with the forced emit_part_a_manifest tool definition plus
+    /// response_format json_object, and returns the emulated ArgsJson. Usage
+    /// is recorded against the ubag provider code so the spend attribution
+    /// stays honest; validation downstream is unchanged.</summary>
+    private async Task<string> CallUbagManifestAsync(
+        string questionMarkdown, string answerMarkdown, string adminId,
+        DirectAiOperationLease lease, string? routeModel, CancellationToken ct)
+    {
+        var row = await registry.FindByCodeAsync(UbagProviderCode, ct)
+            ?? throw new InvalidOperationException(
+                $"UBAG provider '{UbagProviderCode}' is not registered. Add a row in /admin/ai-providers with Code={UbagProviderCode}.");
+        var model = !string.IsNullOrWhiteSpace(routeModel)
+            ? routeModel.Trim()
+            : string.IsNullOrWhiteSpace(row.DefaultModel) ? "chatgpt_web" : row.DefaultModel;
+        var apiKey = await registry.GetPlatformKeyAsync(UbagProviderCode, ct)
+            ?? throw new InvalidOperationException($"Platform API key missing for provider {UbagProviderCode}.");
+        var baseUrl = string.IsNullOrWhiteSpace(row.BaseUrl) ? null : row.BaseUrl.Trim().TrimEnd('/');
+        if (baseUrl is not null)
+        {
+            var unsafeReason = AiProviderConnectionTester.GetUnsafeBaseUrlReason(baseUrl);
+            if (unsafeReason is not null) throw new InvalidOperationException(unsafeReason);
+        }
+
+        var userText =
+            "QUESTION PAPER (OCR Markdown):\n\n" + questionMarkdown +
+            "\n\n=====\n\nANSWER KEY (OCR Markdown):\n\n" + answerMarkdown;
+
+        var startedAt = clock.GetUtcNow();
+        var usageContext = new AiUsageContext(
+            UserId: adminId,
+            AuthAccountId: null,
+            TenantId: null,
+            FeatureCode: AiFeatureCodes.ListeningPartAExtract,
+            RulebookVersion: null,
+            PromptTemplateId: ToolName,
+            SystemPrompt: SystemPrompt,
+            UserPrompt: userText,
+            StartedAt: startedAt);
+        int LatencyMs() => (int)(clock.GetUtcNow() - startedAt).TotalMilliseconds;
+
+        try
+        {
+            var completion = await new RegistryBackedProvider(httpClientFactory, registry, providerOptions).CompleteAsync(
+                new AiProviderRequest
+                {
+                    ProviderCode = UbagProviderCode,
+                    Model = model,
+                    SystemPrompt = SystemPrompt,
+                    UserPrompt = userText,
+                    MaxTokens = 8000,
+                    ApiKeyOverride = apiKey,
+                    BaseUrlOverride = baseUrl,
+                    ResponseFormatJson = "json_object",
+                    Tools =
+                    [
+                        new AiToolDefinition(
+                            ToolName,
+                            ToolName,
+                            "Emit the structured OET Listening Part A manifest (partA only).",
+                            AiToolCategory.Read,
+                            ToolSchemaJson),
+                    ],
+                    ToolChoice = ToolName,
+                },
+                ct);
+
+            var toolCall = completion.ToolCalls?.FirstOrDefault(call =>
+                string.Equals(call.ToolCode, ToolName, StringComparison.Ordinal));
+            if (toolCall is null || string.IsNullOrWhiteSpace(toolCall.ArgsJson))
+            {
+                await usageRecorder.RecordFailureAsync(
+                    usageContext, UbagProviderCode, model, AiCallOutcome.ProviderError,
+                    "no_tool_use", "UBAG did not return an emit_part_a_manifest JSON block.",
+                    LatencyMs(), "listening.parta.extract", CancellationToken.None,
+                    operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+                throw new InvalidOperationException("UBAG did not return an emit_part_a_manifest JSON block.");
+            }
+
+            var usage = completion.Usage;
+            var cost = usage is null
+                ? 0m
+                : row.PricePer1kPromptTokens * usage.PromptTokens / 1000m
+                  + row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
+            await usageRecorder.RecordSuccessAsync(
+                usageContext, UbagProviderCode, model, usage,
+                LatencyMs(), "listening.parta.extract", cost, CancellationToken.None,
+                operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
+            return toolCall.ArgsJson;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is not InvalidOperationException)
+        {
+            await usageRecorder.RecordFailureAsync(
+                usageContext, UbagProviderCode, model, AiCallOutcome.ProviderError,
+                "ubag_network", $"UBAG transport failure ({ex.GetType().Name}).",
                 LatencyMs(), "listening.parta.extract", CancellationToken.None,
                 operationId: lease.OperationId, attemptNumber: lease.AttemptNumber);
             throw;

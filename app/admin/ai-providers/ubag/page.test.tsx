@@ -119,7 +119,7 @@ describe('UbagBoardPage', () => {
     expect(await screen.findByText('A · Admin & content drafts')).toBeTruthy();
     expect(await screen.findByText('B · Learner, non-scoring')).toBeTruthy();
     expect(await screen.findByText('D · Scoring-critical')).toBeTruthy();
-    expect(await screen.findByText('E · Not servable by UBAG')).toBeTruthy();
+    expect(await screen.findByText('E · Media in/out via UBAG')).toBeTruthy();
     // vocabulary.gloss is routed to UBAG → ON; writing.grade has no route → OFF.
     const onButtons = await screen.findAllByRole('button', { name: 'ON' });
     expect(onButtons.length).toBeGreaterThanOrEqual(1);
@@ -164,17 +164,16 @@ describe('UbagBoardPage', () => {
     expect((mockUpsert.mock.calls[0][0] as { providerCode: string }).providerCode).toBe('ubag');
   });
 
-  it('locked rows render reasons with no toggle buttons', async () => {
+  it('media rows render toggleable with facade-mechanism notes', async () => {
     seed([]);
     render(<UbagBoardPage />);
-    await screen.findByText('E · Not servable by UBAG');
+    await screen.findByText('E · Media in/out via UBAG');
 
-    expect(await screen.findAllByText('ASR — Whisper only.')).toHaveLength(4);
-    expect(await screen.findByText('Requires Gemini native inline-audio.')).toBeTruthy();
-    expect(await screen.findByText('Requires strict JSON output.')).toBeTruthy();
-    // Matrix pin: 12 (A) + 23 (B) + 6 (C) + 9 (D) = 50 toggleable rows, all OFF.
-    // Locked rows (E) and the empty Other section contribute no ON/OFF buttons.
-    expect(await screen.findAllByRole('button', { name: 'OFF' })).toHaveLength(50);
+    expect(await screen.findAllByText('Facade audio/transcriptions; provider listens.')).toHaveLength(1);
+    expect(await screen.findByText('Facade /embeddings: deterministic hash vectors, NOT semantic.')).toBeTruthy();
+    expect(await screen.findByText('Route-aware: facade JSON coercion + forced-tool emulation.')).toBeTruthy();
+    // Matrix pin: 12 (A) + 23 (B) + 6 (C) + 9 (D) + 15 (E) = 65 toggleable rows, all OFF.
+    expect(await screen.findAllByRole('button', { name: 'OFF' })).toHaveLength(65);
     expect(screen.queryAllByRole('button', { name: 'ON' })).toHaveLength(0);
   });
 

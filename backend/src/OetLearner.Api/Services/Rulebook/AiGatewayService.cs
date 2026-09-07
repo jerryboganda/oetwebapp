@@ -729,6 +729,7 @@ public sealed class AiGatewayService(
                         Messages = messages,
                         Tools = tools.Count == 0 ? null : tools,
                         ToolChoice = tools.Count == 0 ? null : "auto",
+                        ResponseFormatJson = request.ResponseFormatJson,
                         EnableExtendedThinking = request.EnableExtendedThinking,
                         ThinkingEffort = request.ThinkingEffort,
                     },
@@ -1981,10 +1982,10 @@ public sealed record AiGatewayRequest
     /// provider's own default.</summary>
     public string? ThinkingEffort { get; init; }
 
-    // --- Slice 1 additions: usage accounting context ---
-    // These are optional for backward compatibility. Call sites are expected
-    // to fill them in so admin explorer / cost dashboards can attribute the
-    // call correctly. See docs/AI-USAGE-POLICY.md §5 for feature codes.
+    /// <summary>Structured-output request forwarded to OpenAI-compatible
+    /// providers as <c>response_format</c>. See
+    /// <see cref="AiProviderRequest.ResponseFormatJson"/>.</summary>
+    public string? ResponseFormatJson { get; init; }
 
     /// <summary>Learner / admin / system user this call is on behalf of.</summary>
     public string? UserId { get; init; }
@@ -2178,6 +2179,14 @@ public sealed class AiProviderRequest
     /// tool code. Providers MAY ignore this if their backing API does not
     /// support tool_choice; the gateway only sets <c>"auto"</c>.</summary>
     public string? ToolChoice { get; init; }
+
+    /// <summary>Structured-output request forwarded to OpenAI-compatible
+    /// providers as <c>response_format</c> (<c>{"type":"json_object"}</c> or
+    /// <c>{"type":"json_schema","json_schema":{...}}</c>). Providers that do
+    /// not support it MUST ignore this. The UBAG facade coerces the
+    /// completion to its first parseable JSON value and fails loudly when
+    /// nothing parses.</summary>
+    public string? ResponseFormatJson { get; init; }
 
     /// <summary>Inline binary media for providers with native multimodal
     /// request parts. Text-only providers ignore this. Current production
