@@ -76,19 +76,13 @@ public sealed class VocabularyRecallsPerformanceTests : IAsyncLifetime
         Assert.Empty(db.ChangeTracker.Entries());
     }
 
-    // NOTE (Task 2 close-out, 2026-09-07): the streak-activity UNION below is
-    // SQLite-only-untranslatable by design — NOT a production defect. Proof by
-    // ToQueryString() probe (EF Core 10.0.5, Npgsql provider 10.0.1, no server):
-    // Npgsql TRANSLATES the DateTimeOffset.Date-projection + Concat shape, so
-    // GET /v1/vocabulary/stats is healthy on Postgres. SQLite throws on ANY
-    // DateTimeOffset member access AND on raw DateTimeOffset comparisons
-    // ("Unable to translate set operation after client projection…";
-    // "could not be translated… insert AsEnumerable…"), so no server-side
-    // UNION over activity instants can exist on SQLite. Do not "fix" this
-    // test by rewriting ComputeStreakAsync around SQLite: the Npgsql
-    // translation is the production contract. To green this test, scope it to
-    // Npgsql (Testcontainers) or assert the client-side day-truncation outcome
-    // instead of the SQL shape.
+    // NOTE (2026-09-07, commit aecd49bbf): the streak-activity UNION below
+    // DOES translate on SQLite — the earlier ToQueryString-probe conclusion
+    // was wrong. Comparing a DateTimeOffset column to DateTimeOffset bounds
+    // (not .Date projections, not DateTime bounds) translates on both SQLite
+    // and Npgsql, keeping ONE statement (UNION + DISTINCT + LIMIT) inside the
+    // 3-command budget. Proven by this test executing green on SQLite
+    // in-memory. Day truncation happens client-side after the fetch.
     [Fact]
     public async Task GetStats_UsesThreeCommands_WithDistinctBoundedActivityDates()
     {
