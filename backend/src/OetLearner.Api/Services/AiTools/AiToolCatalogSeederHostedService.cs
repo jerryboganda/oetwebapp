@@ -68,17 +68,49 @@ public sealed class AiToolCatalogSeederHostedService(
         "bookmark_recall_term",
     ];
 
+    /// <summary>
+    /// The full codebase toolset the admin chatbot (`ai_assistant.admin`) is
+    /// entitled to. Read + search the repo (direct + semantic), list the tree,
+    /// SELECT-only DB inspection, plus the guarded mutation tools (write/commit
+    /// need SafetyGuard admin + backups + rate limits; deploy stays
+    /// status/preview-only; git never pushes). Seeded here so every
+    /// environment grants it without a manual admin step; an operator who
+    /// deactivates a grant keeps it off (existing rows are never modified).
+    /// </summary>
+    private static readonly string[] AdminAssistantToolCodes =
+    [
+        "read_file",
+        "search_codebase",
+        "retrieve_codebase",
+        "list_directory",
+        "query_database",
+        "write_file",
+        "run_command",
+        "git_operations",
+        "deploy",
+        "web_search",
+    ];
+
     private async Task SeedCompanionGrantsAsync(IServiceProvider provider, CancellationToken ct)
     {
         var db = provider.GetRequiredService<LearnerDbContext>();
-        const string featureCode = AiFeatureCodes.AiAssistantLearner;
+        await SeedGrantsForFeatureAsync(db, provider, AiFeatureCodes.AiAssistantLearner, CompanionToolCodes, ct);
+        await SeedGrantsForFeatureAsync(db, provider, AiFeatureCodes.AiAssistantAdmin, AdminAssistantToolCodes, ct);
+    }
 
+    private async Task SeedGrantsForFeatureAsync(
+        LearnerDbContext db,
+        IServiceProvider provider,
+        string featureCode,
+        IReadOnlyList<string> toolCodes,
+        CancellationToken ct)
+    {
         var existing = await db.AiFeatureToolGrants
             .Where(g => g.FeatureCode == featureCode)
             .Select(g => g.ToolCode)
             .ToListAsync(ct);
 
-        var missing = CompanionToolCodes
+        var missing = toolCodes
             .Except(existing, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -101,7 +133,7 @@ public sealed class AiToolCatalogSeederHostedService(
         await db.SaveChangesAsync(ct);
         provider.GetRequiredService<IAiToolRegistry>().InvalidateFeature(featureCode);
         logger.LogInformation(
-            "AiToolCatalogSeeder: granted {Count} companion tool(s) to {FeatureCode}.",
+            "AiToolCatalogSeeder: granted {Count} tool(s) to {FeatureCode}.",
             missing.Count, featureCode);
     }
 }

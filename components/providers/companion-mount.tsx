@@ -5,31 +5,34 @@ import { useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import { AiAssistantWidget } from '@/components/domain/ai-assistant';
 
 /**
- * Mount point for the AI Learning Companion floating launcher.
+ * Mount point for the AI assistant floating launcher.
  *
- * Two gates, both fail-closed:
+ * Two surfaces share one widget:
  *
- *  1. **Authentication + learner role** — the flag endpoint is `LearnerOnly`,
- *     so an anonymous visitor or an admin/expert never even asks (asking as a
- *     non-learner only produces a 403 violation in perf/a11y runs). Nothing
- *     renders.
- *  2. **`ai_learning_companion` feature flag** — server-owned, backed by the
- *     `FeatureFlags` table, so the surface can be enabled or killed from
- *     `/admin/flags` without a deploy. `useFeatureFlagMap` retries twice and
- *     then resolves `false`, so a flaky flag read hides the companion rather
- *     than exposing it.
+ * - **Learners** — the AI Learning Companion, gated on the server-owned
+ *   `ai_learning_companion` flag (`LearnerOnly` endpoint, fail-closed,
+ *   ships disabled as `flg-026`). See docs/ai-learning-companion/.
+ * - **Admins** — the developer chatbot (`ai_assistant.admin`, full codebase
+ *   toolset via AiFeatureToolGrants, SafetyGuard admin-gated mutations).
+ *   Mounted unconditionally: staff need it even with the learner flag off,
+ *   and its own permission check (`canAccessAiAssistant`) plus the
+ *   role-derived server feature code keep learners out.
  *
- * The flag ships **disabled** (`flg-026`). Mounting this component does not by
- * itself make the companion visible to anyone.
- *
- * See docs/ai-learning-companion/.
+ * Experts and unauthenticated visitors render nothing here (the widget's own
+ * role check is authoritative; this mount only avoids the wasted flag fetch
+ * for non-learners).
  */
 const COMPANION_FLAG = 'ai_learning_companion';
 
 export function CompanionMount() {
   const { isAuthenticated, role } = useAuth();
+  const isAdmin = isAuthenticated && role === 'admin';
   const isLearner = isAuthenticated && role === 'learner';
   const flags = useFeatureFlagMap([COMPANION_FLAG], isLearner);
+
+  // Admin chatbot: bottom-right, always available to staff — never gated on
+  // the learner companion flag.
+  if (isAdmin) return <AiAssistantWidget role={role} />;
 
   if (!isLearner) return null;
   if (!flags[COMPANION_FLAG]) return null;

@@ -9,6 +9,9 @@
  *   3. Switching ON→OFF calls deleteAiFeatureRoute.
  *   4. Scoring features open a confirmation modal before upserting.
  *   5. Media (Group E) rows render toggleable with facade-mechanism notes.
+ *   6. Each part heading carries one UBAG model selector + one UBAG on/off
+ *      that apply to everything under that heading; every selector (row,
+ *      part, facade-test) can pick any UBAG model from the catalog.
  */
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
@@ -177,8 +180,99 @@ describe('UbagBoardPage', () => {
     // Shared by the three route-aware JSON rows (Part A extract/score, B/C extract).
     expect(await screen.findAllByText('Route-aware: facade JSON coercion + forced-tool emulation.')).toHaveLength(3);
     // Matrix pin: 12 (A) + 23 (B) + 6 (C) + 9 (D) + 15 (E) = 65 toggleable rows, all OFF.
-    expect(await screen.findAllByRole('button', { name: 'OFF' })).toHaveLength(65);
+    // Row toggles keep exact ON/OFF labels; the five per-part UBAG switches
+    // use their own UBAG ON/OFF labels so both are queryable independently.
+    const rowOff = await screen.findAllByRole('button', { name: 'OFF' });
+    expect(rowOff).toHaveLength(65);
     expect(screen.queryAllByRole('button', { name: 'ON' })).toHaveLength(0);
+    expect(await screen.findAllByRole('button', { name: /UBAG for .* off/ })).toHaveLength(5);
+  });
+
+  it('each part heading has one model selector + one UBAG on/off for the whole part', async () => {
+    seed([]);
+    render(<UbagBoardPage />);
+    await screen.findByText('B · Learner, non-scoring');
+
+    // One per-part model selector per heading (A–E), each offering any UBAG model.
+    const partSelects = await screen.findAllByRole('combobox', { name: /UBAG model for / });
+    expect(partSelects).toHaveLength(5);
+    for (const select of partSelects) {
+      const options = Array.from((select as HTMLSelectElement).options).map((o) => o.value);
+      expect(options).toContain('chatgpt_web|GPT-5.6 Sol + Medium');
+      expect(options).toContain('duckai_web|GPT-5.6 Luna');
+      expect(options).toContain('gemini_web|3.8 Flash');
+      expect(options).toContain('whisper-1');
+    }
+
+    // One per-part UBAG switch per heading, all OFF with nothing routed.
+    expect(await screen.findAllByRole('button', { name: /UBAG for .* off/ })).toHaveLength(5);
+
+    // Flipping part B's switch routes everything under that heading with the
+    // part model (deepseek_web default): 23 upserts, zero deletes.
+    fireEvent.click(screen.getByRole('button', { name: /UBAG for B · Learner, non-scoring: off/ }));
+    await waitFor(() => expect(mockUpsert.mock.calls.length).toBe(23));
+    expect(mockUpsert.mock.calls[0][0]).toMatchObject({ featureCode: 'vocabulary.gloss', providerCode: 'ubag', isActive: true });
+    // The part model wins for every row without its own draft — one model for
+    // the whole part, exactly what the heading selector promises.
+    expect(mockUpsert.mock.calls.every(
+      (c) => ((c[0] as { model?: string }).model ?? null) === 'deepseek_web',
+    )).toBe(true);
+    expect(mockDelete).not.toHaveBeenCalled();
+    expect(await screen.findByRole('button', { name: /UBAG for B · Learner, non-scoring: on/ })).toBeTruthy();
+
+    // Picking a part model re-seeds every row draft under that heading, so the
+    // next row enable uses the part model.
+    fireEvent.change(screen.getByRole('combobox', { name: 'UBAG model for B · Learner, non-scoring' }), {
+      target: { value: 'gemini_web|3.8 Flash' },
+    });
+    const glossRow = screen.getByText('vocabulary.gloss').closest('tr') as HTMLElement;
+    const glossSelect = glossRow.querySelector('select') as HTMLSelectElement;
+    expect(glossSelect.value).toBe('gemini_web|3.8 Flash');
+  });
+
+  it('per-part UBAG off un-routes everything under that heading', async () => {
+    seed([
+      { featureCode: 'vocabulary.gloss', providerCode: 'ubag', model: 'deepseek_web' },
+      { featureCode: 'summarise.passage', providerCode: 'ubag', model: 'deepseek_web' },
+    ]);
+    render(<UbagBoardPage />);
+    await screen.findByText('B · Learner, non-scoring');
+
+    // Two of 23 routed → the part switch reports its mixed state. It still
+    // reads OFF (not everything is on UBAG) and offers the whole-part ON.
+    expect(await screen.findByRole('button', { name: 'UBAG for B · Learner, non-scoring: off (mixed)' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'UBAG for B · Learner, non-scoring: off (mixed)' }));
+    // Whole-part ON routes all 23 (the 2 already-routed rows are re-upserted
+    // with the part model, like the per-part ON test proves), zero deletes.
+    await waitFor(() => expect(mockUpsert.mock.calls.length).toBe(23));
+    expect(mockUpsert.mock.calls.every(
+      (c) => ((c[0] as { model?: string }).model ?? null) === 'deepseek_web',
+    )).toBe(true);
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it('per-part UBAG on then off un-routes everything under that heading', async () => {
+    // Seed all 23 routed: the switch reads fully ON, one click OFF deletes
+    // exactly those 23 — one delete per feature under the heading, the mirror
+    // of the per-row OFF.
+    seed([
+      'vocabulary.gloss', 'summarise.passage', 'reading.explanation.v1', 'reading.passage_qna.v1',
+      'reading.vocabulary.card', 'listening.explanation.v1', 'pronunciation.tip', 'pronunciation.feedback',
+      'writing.coach.suggest', 'writing.coach.explain', 'writing.coach.v1', 'writing.rewrite.v1',
+      'writing.scenario.generate.v1', 'writing.outline.v1', 'writing.paraphrase.v1', 'writing.ask.v1',
+      'writing.canon.detect.v1', 'recalls.mistake_explain', 'recalls.revision_plan', 'mock.remediation_draft',
+      'tutor.recommendation.v1', 'class.assistant.qna.v1', 'class.recording.translate.v1',
+    ].map((featureCode) => ({ featureCode, providerCode: 'ubag', model: 'deepseek_web' })));
+    render(<UbagBoardPage />);
+    await screen.findByText('B · Learner, non-scoring');
+
+    expect(await screen.findByRole('button', { name: 'UBAG for B · Learner, non-scoring: on' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'UBAG for B · Learner, non-scoring: on' }));
+    await waitFor(() => expect(mockDelete).toHaveBeenCalledTimes(23));
+    expect(mockDelete).toHaveBeenCalledWith('vocabulary.gloss');
+    expect(mockDelete).toHaveBeenCalledWith('class.recording.translate.v1');
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
   it('renders the facade model dropdown and test button', async () => {

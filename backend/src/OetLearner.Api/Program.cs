@@ -1920,6 +1920,50 @@ builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolRegistry,
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolInvoker,
     OetLearner.Api.Services.AiTools.AiToolInvoker>();
 
+// Developer-assistant tool executors (admin chatbot: read/search/list the
+// codebase, SELECT-only DB reads, guarded write/commit/run/deploy-preview).
+// Deny-by-default still holds: each resolves only for features holding an
+// AiFeatureToolGrant row (AiToolCatalogSeederHostedService grants the
+// ai_assistant.admin set at startup; learner features stay on the
+// LearnerSafeToolCodes allowlist in AiToolRegistry).
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.Safety.ISafetyGuard,
+    OetLearner.Api.Services.AiAssistant.Safety.SafetyGuard>();
+builder.Services.AddSingleton<OetLearner.Api.Services.AiAssistant.Safety.ISecretScanner,
+    OetLearner.Api.Services.AiAssistant.Safety.SecretScanner>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.Safety.IBackupService,
+    OetLearner.Api.Services.AiAssistant.Safety.BackupService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.AiAssistant.Safety.ICircuitBreaker,
+    OetLearner.Api.Services.AiAssistant.Safety.CircuitBreaker>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.Indexing.ICodeChunker,
+    OetLearner.Api.Services.AiAssistant.Indexing.CodeChunker>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.Indexing.ICodebaseIndexer,
+    OetLearner.Api.Services.AiAssistant.Indexing.CodebaseIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiAssistant.Indexing.ICodebaseRetriever,
+    OetLearner.Api.Services.AiAssistant.Indexing.CodebaseRetriever>();
+builder.Services.AddSingleton<OetLearner.Api.Services.AiAssistant.Tools.IWebSearchProvider,
+    OetLearner.Api.Services.AiAssistant.Tools.StubWebSearchProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.ReadFileTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.SearchCodebaseTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.RetrieveCodebaseTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.ListDirectoryTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.QueryDatabaseTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.WriteFileTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.RunCommandTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.GitTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.DeployTool>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
+    OetLearner.Api.Services.AiAssistant.Tools.WebSearchTool>();
+builder.Services.AddHostedService<OetLearner.Api.Services.AiAssistant.Indexing.CodebaseIndexerHostedService>();
+
 // 7-tool catalog (Phase 5 v1). Deny-by-default — admins grant per feature.
 builder.Services.AddScoped<OetLearner.Api.Services.AiTools.IAiToolExecutor,
     OetLearner.Api.Services.AiTools.Tools.LookupRulebookRuleTool>();

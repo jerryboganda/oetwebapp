@@ -25,7 +25,15 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
 
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".ts", ".tsx", ".cs", ".json", ".md", ".yaml", ".yml"
+        ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".cs", ".json", ".md", ".yaml", ".yml",
+        ".ps1", ".py", ".sql", ".css"
+    };
+
+    private static readonly HashSet<string> SupportedRootPrefixes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "app", "components", "lib", "hooks", "contexts", "types",
+        "backend", "tests", "docs", "rulebooks", "scripts",
+        "messages", "config", "public", "agent-gateway",
     };
 
     private static readonly HashSet<string> SkippedDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -241,6 +249,11 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
                 var relativePath = Path.GetRelativePath(rootPath, file);
                 var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 if (segments.Any(s => SkippedDirectories.Contains(s)))
+                    continue;
+
+                // The admin chatbot has full codebase access: index the whole
+                // platform surface, not just the original 4 folders.
+                if (segments.Length == 0 || !SupportedRootPrefixes.Contains(segments[0]))
                     continue;
 
                 // Skip very large files (> 100KB)

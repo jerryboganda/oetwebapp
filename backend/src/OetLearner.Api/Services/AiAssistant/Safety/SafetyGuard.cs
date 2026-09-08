@@ -24,7 +24,18 @@ public sealed class SafetyGuard : ISafetyGuard
         "app/", "app\\",
         "components/", "components\\",
         "lib/", "lib\\",
-        "backend/src/", "backend\\src\\",
+        "hooks/", "hooks\\",
+        "contexts/", "contexts\\",
+        "types/", "types\\",
+        "backend/", "backend\\",
+        "tests/", "tests\\",
+        "docs/", "docs\\",
+        "rulebooks/", "rulebooks\\",
+        "scripts/", "scripts\\",
+        "messages/", "messages\\",
+        "config/", "config\\",
+        "public/", "public\\",
+        "agent-gateway/", "agent-gateway\\",
     ];
 
     private static readonly HashSet<string> BlockedFilePatterns = new(StringComparer.OrdinalIgnoreCase)
@@ -47,7 +58,9 @@ public sealed class SafetyGuard : ISafetyGuard
     private static volatile bool _isDeploymentActive;
     public static bool IsDeploymentActive { get => _isDeploymentActive; set => _isDeploymentActive = value; }
 
-    // Admin user IDs (in production, this would come from claims/roles)
+    // Admin / privileged user ids registered out-of-band (kept for
+    // compatibility; the primary signal is now AiToolContext.IsAdmin,
+    // resolved server-side from the caller's role claim).
     private static readonly HashSet<string> AdminUserIds = new(StringComparer.OrdinalIgnoreCase);
     public static void RegisterAdmin(string userId) => AdminUserIds.Add(userId);
     public static void UnregisterAdmin(string userId) => AdminUserIds.Remove(userId);
@@ -67,8 +80,12 @@ public sealed class SafetyGuard : ISafetyGuard
         if (!MutationToolCodes.Contains(toolCode))
             return Task.FromResult(new SafetyCheckResult(true, null, SafetyRiskLevel.None));
 
-        // 1. Admin-only check
-        if (string.IsNullOrEmpty(ctx.UserId) || !AdminUserIds.Contains(ctx.UserId))
+        // 1. Admin-only check — resolved server-side from the role claim and
+        // carried on AiToolContext.IsAdmin (the legacy static AdminUserIds set
+        // stays as a fallback registration path).
+        var isAdmin = ctx.IsAdmin
+            || (!string.IsNullOrEmpty(ctx.UserId) && AdminUserIds.Contains(ctx.UserId));
+        if (!isAdmin)
         {
             _logger.LogWarning("SafetyGuard: Non-admin user {UserId} attempted mutation tool {Tool}", ctx.UserId, toolCode);
             return Task.FromResult(new SafetyCheckResult(false, "Mutation tools require admin role.", SafetyRiskLevel.Critical));
@@ -172,7 +189,7 @@ public sealed class SafetyGuard : ISafetyGuard
         var isAllowed = AllowedDirectoryPrefixes.Any(prefix => normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         if (!isAllowed)
             return new SafetyCheckResult(false,
-                $"Path '{normalized}' is outside allowed directories (app/, components/, lib/, backend/src/).", SafetyRiskLevel.High);
+                $"Path '{normalized}' is outside allowed directories (app/, components/, lib/, hooks/, contexts/, types/, backend/, tests/, docs/, rulebooks/, scripts/, messages/, config/, public/, agent-gateway/).", SafetyRiskLevel.High);
 
         return new SafetyCheckResult(true, null, SafetyRiskLevel.None);
     }

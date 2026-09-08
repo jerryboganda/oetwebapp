@@ -26,8 +26,12 @@ public sealed class ListDirectoryTool : IAiToolExecutor
     }
     """;
 
-    private static readonly string[] AllowedPrefixes = { "app/", "components/", "lib/", "backend/src/" };
-    private static readonly string[] BlockedSegments = { ".env", "secrets", "node_modules", ".git" };
+    private static readonly string[] AllowedPrefixes = {
+        "app/", "components/", "lib/", "hooks/", "contexts/", "types/",
+        "backend/", "tests/", "docs/", "rulebooks/", "scripts/",
+        "messages/", "config/", "public/", "agent-gateway/"
+    };
+    private static readonly string[] BlockedSegments = { ".env", "secrets", "node_modules", ".git", ".next", "dist", "coverage", "bin", "obj" };
     private const int DefaultMaxDepth = 2;
     private const int AbsoluteMaxDepth = 3;
 

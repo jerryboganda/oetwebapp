@@ -64,6 +64,8 @@ interface BoardGroup {
   blurb: string;
   risk: Risk;
   features: BoardFeature[];
+  /** Default UBAG facade model applied to the whole part when no per-feature draft exists. */
+  defaultModel: string;
 }
 
 const UBAG_PROVIDER_CODE = 'ubag';
@@ -135,6 +137,7 @@ const GROUPS: BoardGroup[] = [
     title: 'A · Admin & content drafts',
     blurb: 'Internal users, async-tolerant, zero learner risk. Recommended first.',
     risk: 'standard',
+    defaultModel: CHATGPT,
     features: [
       { code: 'admin.content_generation', label: 'Content generation', model: CHATGPT },
       { code: 'admin.grammar_draft', label: 'Grammar lesson drafting', model: CHATGPT },
@@ -155,6 +158,7 @@ const GROUPS: BoardGroup[] = [
     title: 'B · Learner, non-scoring',
     blurb: 'Advisory features. Accept 10–60s latency before enabling each one.',
     risk: 'standard',
+    defaultModel: DEEPSEEK,
     features: [
       { code: 'vocabulary.gloss', label: 'Word gloss (ideal canary)', model: DEEPSEEK },
       { code: 'summarise.passage', label: 'Study-notes summarisation', model: DEEPSEEK },
@@ -186,6 +190,7 @@ const GROUPS: BoardGroup[] = [
     title: 'C · Conversation partner',
     blurb: 'Works, but every reply waits on a 10–60s browser job. Enable only with UX acceptance.',
     risk: 'latency',
+    defaultModel: DEEPSEEK,
     features: [
       { code: 'conversation.opening', label: 'AI partner opening', model: DEEPSEEK },
       { code: 'conversation.reply', label: 'AI partner mid-session replies', model: DEEPSEEK },
@@ -200,6 +205,7 @@ const GROUPS: BoardGroup[] = [
     title: 'D · Scoring-critical',
     blurb: 'Affects score predictions. Browser-model grading is unverified vs Anthropic — confirm each enable, and run a parallel-evaluation window first.',
     risk: 'scoring',
+    defaultModel: CHATGPT,
     features: [
       { code: 'writing.grade', label: 'Writing grading', model: CHATGPT },
       { code: 'writing.sample_score', label: 'Writing sample scoring', model: CHATGPT },
@@ -217,6 +223,7 @@ const GROUPS: BoardGroup[] = [
     title: 'E · Media in/out via UBAG',
     blurb: 'Audio, OCR, embeddings and strict-JSON rows served through the UBAG facade (attachments, audio/transcriptions, /embeddings, JSON coercion). Latency 10–60s per call; embeddings are deterministic hash vectors, not semantic.',
     risk: 'latency',
+    defaultModel: CHATGPT,
     features: [
       { code: 'pronunciation.linguistic.score.v1', label: 'Linguistic pronunciation scoring', model: CHATGPT, note: 'Audio rides ubag_attachments; provider listens + scores JSON.' },
       { code: 'ocr.listening.parta', label: 'Listening Part A OCR', model: CHATGPT, note: 'PDF/image via ubag_attachments; provider returns Markdown.' },
@@ -292,6 +299,11 @@ export default function UbagBoardPage() {
   const [knownCodes, setKnownCodes] = useState<string[]>([]);
   const [models, setModels] = useState<string[]>(UBAG_MODEL_FALLBACK);
   const [modelDrafts, setModelDrafts] = useState<Record<string, string>>({});
+  // Per-part controls: one facade model + one UBAG on/off per group heading.
+  // The group model seeds every row without its own draft; the group switch
+  // routes (or un-routes) every feature under that heading in one action.
+  const [groupModels, setGroupModels] = useState<Record<string, string>>({});
+  const [groupUbagOn, setGroupUbagOn] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [confirmScoring, setConfirmScoring] = useState<BoardFeature[] | null>(null);
@@ -314,11 +326,6 @@ export default function UbagBoardPage() {
     }
     return map;
   }, [routes]);
-
-  const otherCodes = useMemo(
-    () => knownCodes.filter((c) => !KNOWN_GROUP_CODES.has(c)).sort(),
-    [knownCodes],
-  );
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -345,8 +352,151 @@ export default function UbagBoardPage() {
     setToast({ variant: 'error', message: `${action} failed: ${(e as Error).message}` });
   };
 
+  const otherCodes = useMemo(
+    () => knownCodes.filter((c) => !KNOWN_GROUP_CODES.has(c)).sort(),
+    [knownCodes],
+  );
+
+  // The full discovered facade catalog is the source of truth for "any UBAG
+  // model": every selector unions it with the fallback list and with any
+  // draft/route value, so an operator can always pick any model UBAG serves.
+  const allUbagModels = useMemo(() => {
+    const seen = new Set<string>();
+    const all: string[] = [];
+    for (const m of [...models, ...UBAG_MODEL_FALLBACK, ubag?.defaultModel ?? '']) {
+      if (m && !seen.has(m)) {
+        seen.add(m);
+        all.push(m);
+      }
+    }
+    return all;
+  }, [models, ubag?.defaultModel]);
+
+  const modelOptionsFor = useCallback(
+    (draft: string) =>
+      (allUbagModels.includes(draft) || draft === '' ? allUbagModels : [...allUbagModels, draft]).map((m) => ({
+        value: m,
+        label: modelLabel(m),
+      })),
+    [allUbagModels],
+  );
+
+  // Per-part rollups derived from the live routes: a part reads ON when every
+  // feature under its heading is routed to UBAG, OFF when none is, and mixed
+  // otherwise. The group switch + model selector write through the same
+  // per-feature upserts, so they stay consistent with the row toggles.
+  const groupStatus = useCallback(
+    (group: BoardGroup) => {
+      const routed = group.features.filter((f) => {
+        const r = routesByCode.get(f.code);
+        return !!r && r.providerCode === UBAG_PROVIDER_CODE;
+      }).length;
+      if (routed === 0) return 'off' as const;
+      if (routed === group.features.length) return 'on' as const;
+      return 'mixed' as const;
+    },
+    [routesByCode],
+  );
+
+  const groupModelFor = useCallback(
+    (group: BoardGroup) => groupModels[group.id] ?? group.defaultModel,
+    [groupModels],
+  );
+
+  const applyGroupModel = useCallback(
+    async (group: BoardGroup, model: string) => {
+      setGroupModels((g) => ({ ...g, [group.id]: model }));
+      // Push the part model down to every row: rows already on UBAG are
+      // re-routed immediately; rows still on defaults keep it as their draft
+      // so the next enable uses this exact model.
+      setModelDrafts((d) => {
+        const next = { ...d };
+        for (const f of group.features) next[f.code] = model;
+        return next;
+      });
+      const routed = group.features.filter((f) => {
+        const r = routesByCode.get(f.code);
+        return !!r && r.providerCode === UBAG_PROVIDER_CODE;
+      });
+      if (routed.length === 0) return;
+      setBusy(`group-model:${group.id}`);
+      try {
+        for (const f of routed) {
+          await upsertAiFeatureRoute({
+            featureCode: f.code,
+            providerCode: UBAG_PROVIDER_CODE,
+            model: model || null,
+            isActive: true,
+          });
+        }
+        setToast({ variant: 'success', message: `${group.title}: model → ${model} on ${routed.length} routed features.` });
+        await load();
+      } catch (e) {
+        fail(`Set ${group.title} model`, e);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [routesByCode, load],
+  );
+
+  const setGroupUbag = useCallback(
+    async (group: BoardGroup, on: boolean) => {
+      if (on && group.risk === 'scoring') {
+        setConfirmScoring(group.features);
+        return;
+      }
+      setBusy(`group:${group.id}`);
+      try {
+        if (on) {
+          const model = groupModels[group.id] ?? group.defaultModel;
+          for (const f of group.features) {
+            const chosen = modelDrafts[f.code] ?? model;
+            await upsertAiFeatureRoute({
+              featureCode: f.code,
+              providerCode: UBAG_PROVIDER_CODE,
+              model: chosen || null,
+              isActive: true,
+            });
+          }
+          setGroupUbagOn((g) => ({ ...g, [group.id]: true }));
+          setModelDrafts((d) => {
+            const next = { ...d };
+            for (const f of group.features) {
+              if (!(f.code in next)) next[f.code] = model;
+            }
+            return next;
+          });
+          setToast({ variant: 'success', message: `${group.title}: UBAG ON — ${group.features.length} features → ${model}.` });
+        } else {
+          // OFF mirrors the per-row OFF exactly: only routed features are
+          // un-routed, one delete per routed feature under this heading.
+          const routed = group.features.filter((f) => routesByCode.has(f.code));
+          for (const f of routed) {
+            await deleteAiFeatureRoute(f.code);
+          }
+          setGroupUbagOn((g) => ({ ...g, [group.id]: false }));
+          setToast({
+            variant: 'success',
+            message: routed.length > 0
+              ? `${group.title}: UBAG OFF — ${routed.length} features back to defaults.`
+              : `${group.title} already on defaults.`,
+          });
+        }
+        await load();
+      } catch (e) {
+        fail(`${on ? 'Enable' : 'Disable'} ${group.title}`, e);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [groupModels, modelDrafts, routesByCode, load],
+  );
+
   const enableFeature = async (feature: BoardFeature, model?: string) => {
-    const chosen = model ?? modelDrafts[feature.code] ?? feature.model;
+    const group = GROUPS.find((g) => g.features.some((f) => f.code === feature.code));
+    const groupFallback = group ? (groupModels[group.id] ?? group.defaultModel) : undefined;
+    const chosen = model ?? modelDrafts[feature.code] ?? groupFallback ?? feature.model;
     setBusy(feature.code);
     try {
       await upsertAiFeatureRoute({
@@ -385,8 +535,9 @@ export default function UbagBoardPage() {
     }
     setBusy(`group:${group.id}`);
     try {
+      const groupModel = groupModels[group.id] ?? group.defaultModel;
       for (const f of group.features) {
-        const chosen = modelDrafts[f.code] ?? f.model;
+        const chosen = modelDrafts[f.code] ?? groupModel;
         await upsertAiFeatureRoute({
           featureCode: f.code,
           providerCode: UBAG_PROVIDER_CODE,
@@ -394,6 +545,7 @@ export default function UbagBoardPage() {
           isActive: true,
         });
       }
+      setGroupUbagOn((g) => ({ ...g, [group.id]: true }));
       setToast({ variant: 'success', message: `${group.title}: ${group.features.length} features → UBAG.` });
       await load();
     } catch (e) {
@@ -409,8 +561,16 @@ export default function UbagBoardPage() {
     setConfirmScoring(null);
     setBusy('group:scoring');
     try {
+      // Scoring confirm covers both single-row and whole-part enables: the
+      // part model (or per-row draft when set) is the model that gets routed.
+      const scoringGroup = GROUPS.find((g) => g.risk === 'scoring' && g.features.length === features.length);
+      const fallback = scoringGroup ? (groupModels[scoringGroup.id] ?? scoringGroup.defaultModel) : undefined;
       for (const f of features) {
-        const chosen = modelDrafts[f.code] ?? f.model;
+        // Single-row confirm (length 1) still honours that row's own model:
+        // only a whole-part confirm falls back to the part model.
+        const chosen = features.length === 1
+          ? (modelDrafts[f.code] ?? f.model)
+          : (modelDrafts[f.code] ?? fallback ?? f.model);
         await upsertAiFeatureRoute({
           featureCode: f.code,
           providerCode: UBAG_PROVIDER_CODE,
@@ -418,6 +578,7 @@ export default function UbagBoardPage() {
           isActive: true,
         });
       }
+      if (scoringGroup) setGroupUbagOn((g) => ({ ...g, [scoringGroup.id]: true }));
       setToast({ variant: 'success', message: `${features.length} scoring features → UBAG. Watch grading quality.` });
       await load();
     } catch (e) {
@@ -433,6 +594,7 @@ export default function UbagBoardPage() {
       for (const f of group.features) {
         if (routesByCode.has(f.code)) await deleteAiFeatureRoute(f.code);
       }
+      setGroupUbagOn((g) => ({ ...g, [group.id]: false }));
       setToast({ variant: 'success', message: `${group.title} back to defaults.` });
       await load();
     } catch (e) {
@@ -529,7 +691,7 @@ export default function UbagBoardPage() {
     const route = routesByCode.get(feature.code);
     const onUbag = !!route && route.providerCode === UBAG_PROVIDER_CODE;
     const effective = route ? `${route.providerCode}${route.model ? ` · ${route.model}` : ''}` : 'default';
-    const draft = modelDrafts[feature.code] ?? route?.model ?? feature.model;
+    const draft = modelDrafts[feature.code] ?? route?.model ?? groupModels[group.id] ?? group.defaultModel ?? feature.model;
     const isBusy = busy === feature.code;
     return (
       <tr key={feature.code} className="border-t border-[var(--border)]">
@@ -546,10 +708,7 @@ export default function UbagBoardPage() {
             aria-label={`Model for ${feature.code}`}
             value={draft}
             disabled={isBusy}
-            options={(models.includes(draft) || draft === '' ? models : [...models, draft]).map((m) => ({
-              value: m,
-              label: modelLabel(m),
-            }))}
+            options={modelOptionsFor(draft)}
             onChange={(e) => {
               const next = e.target.value;
               setModelDrafts((d) => ({ ...d, [feature.code]: next }));
@@ -656,9 +815,7 @@ export default function UbagBoardPage() {
                         className="w-full"
                         value={testModel}
                         disabled={testingModel || !ubagReady}
-                        options={[
-                          ...(models.length > 0 ? models : UBAG_MODEL_FALLBACK),
-                        ].map((m) => ({ value: m, label: modelLabel(m) }))}
+                        options={modelOptionsFor(testModel)}
                         onChange={(e) => setTestModel(e.target.value)}
                       />
                     </div>
@@ -712,7 +869,49 @@ export default function UbagBoardPage() {
                 </span>
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">{group.blurb}</p>
-              <div className="flex gap-2 mt-2">
+              {/* Per-part controls: one UBAG model selector for the whole part
+                  plus a single UBAG on/off that applies to everything under
+                  this heading. */}
+              <div className="flex flex-wrap items-end gap-2 mt-3">
+                <div className="min-w-[220px] max-w-[320px] flex-1">
+                  <Select
+                    aria-label={`UBAG model for ${group.title}`}
+                    value={groupModelFor(group)}
+                    disabled={busy === `group:${group.id}` || busy === `group-model:${group.id}` || !ubagReady}
+                    title={!ubagReady ? 'Activate the UBAG provider and set its PAT first' : `Model applied to every feature under ${group.title}`}
+                    options={modelOptionsFor(groupModelFor(group))}
+                    onChange={(e) => void applyGroupModel(group, e.target.value)}
+                  />
+                </div>
+                {(() => {
+                  const st = groupStatus(group);
+                  const override = groupUbagOn[group.id];
+                  const on = override ?? st === 'on';
+                  return on ? (
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      aria-pressed="true"
+                      aria-label={`UBAG for ${group.title}: on${st === 'mixed' ? ' (mixed)' : ''}`}
+                      disabled={busy === `group:${group.id}`}
+                      onClick={() => void setGroupUbag(group, false)}
+                    >
+                      UBAG ON{st === 'mixed' ? ' *' : ''}
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      aria-pressed="false"
+                      aria-label={`UBAG for ${group.title}: off${st === 'mixed' ? ' (mixed)' : ''}`}
+                      disabled={busy === `group:${group.id}` || !ubagReady}
+                      title={!ubagReady ? 'Activate the UBAG provider and set its PAT first' : `Route everything under ${group.title} to UBAG`}
+                      onClick={() => void setGroupUbag(group, true)}
+                    >
+                      UBAG OFF{st === 'mixed' ? ' *' : ''}
+                    </Button>
+                  );
+                })()}
                 <Button variant="outline" size="sm" disabled={busy === `group:${group.id}`} onClick={() => void enableGroup(group)}>
                   Enable group
                 </Button>

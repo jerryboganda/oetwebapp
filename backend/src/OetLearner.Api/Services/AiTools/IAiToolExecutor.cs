@@ -27,13 +27,17 @@ public interface IAiToolExecutor
 /// Per-call context handed to the tool executor. The invoker fills this
 /// from the gateway's request context; tools must NEVER reach back into
 /// HTTP / claims principals — only fields here are available.
+/// <see cref="IsAdmin"/> is resolved server-side from the caller's role
+/// claim (the orchestrator maps it; the gateway leaves it false) so the
+/// safety guard can tell staff from learners without touching HttpContext.
 /// </summary>
 public sealed record AiToolContext(
     string FeatureCode,
     string? UserId,
     string? AuthAccountId,
     string AiUsageRecordId,
-    int TurnIndex);
+    int TurnIndex,
+    bool IsAdmin = false);
 
 public sealed record AiToolExecutionResult(
     OetLearner.Api.Domain.AiToolOutcome Outcome,
