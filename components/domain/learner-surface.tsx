@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { isValidElement, type ElementType, type ReactNode } from 'react';
+import { cloneElement, isValidElement, type ElementType, type ReactElement, type ReactNode } from 'react';
 import { Badge, Button, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import {
@@ -70,7 +70,8 @@ function renderIcon(icon: ElementType | ReactNode | undefined, className?: strin
   }
 
   if (isValidElement(icon)) {
-    return icon;
+    const element = icon as ReactElement<{ className?: string }>;
+    return cloneElement(element, { className: cn(className, element.props.className) });
   }
 
   const Icon = icon as ElementType;
@@ -188,16 +189,14 @@ export function LearnerPageHero({
   const highlights = sanitizeLearnerPageHeroHighlights(rawHighlights);
 
   const renderHighlight = (item: LearnerPageHeroHighlight) => {
-    const HighlightIcon = item.icon;
-
     return (
       <div
         key={`${item.label}-${item.value}`}
         className="inline-flex min-w-0 flex-1 basis-[108px] items-center gap-1.5 rounded-xl border border-border bg-background-light px-2 py-1.5 sm:basis-[140px] sm:gap-2 sm:rounded-2xl sm:px-3 sm:py-2"
       >
-        {HighlightIcon ? (
+        {item.icon ? (
           <div className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-md sm:h-8 sm:w-8 sm:rounded-xl', palette.icon)}>
-            <HighlightIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            {renderIcon(item.icon, 'h-3.5 w-3.5 sm:h-4 sm:w-4')}
           </div>
         ) : null}
         <div className="min-w-0">

@@ -80,4 +80,23 @@ describe('LearnerPageHero', () => {
 
     expect(screen.queryByText('Exam target')).not.toBeInTheDocument();
   });
+
+  it('renders when hero and highlight icons are React elements instead of component functions', () => {
+    render(
+      <LearnerPageHero
+        eyebrow="Learner Workspace"
+        icon={<Sparkles data-testid="hero-icon" />}
+        title="Focus on today"
+        description="See the next actions and evidence that matter right now."
+        highlights={[
+          { icon: <Clock data-testid="highlight-icon" />, label: 'Exam target', value: '2026-06-27' },
+        ]}
+      />,
+    );
+
+    expect(screen.getByTestId('hero-icon')).toBeInTheDocument();
+    expect(screen.getByTestId('highlight-icon')).toBeInTheDocument();
+    expect(screen.getByText('Exam target')).toBeInTheDocument();
+    expect(screen.getByText('2026-06-27')).toBeInTheDocument();
+  });
 });

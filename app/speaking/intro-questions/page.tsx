@@ -43,13 +43,13 @@ export default function SpeakingIntroQuestionsPage() {
 
         <LearnerPageHero
           eyebrow="Speaking reference · All professions"
-          icon={MessageCircleQuestion}
+          icon={<MessageCircleQuestion />}
           accent="purple"
           title="Speaking Intro Questions"
           description="Eleven common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own."
           highlights={[
-            { icon: MessageCircleQuestion, label: 'Questions', value: '11 with sample answers' },
-            { icon: Users, label: 'Works for', value: 'Every profession' },
+            { icon: <MessageCircleQuestion />, label: 'Questions', value: '11 with sample answers' },
+            { icon: <Users />, label: 'Works for', value: 'Every profession' },
           ]}
         />
 

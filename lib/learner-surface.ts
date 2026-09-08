@@ -67,7 +67,7 @@ export interface LearnerPageHeroModel {
 export interface LearnerPageHeroHighlight {
   label: string;
   value: string;
-  icon?: ElementType;
+  icon?: ElementType | ReactNode;
 }
 
 export function sanitizeLearnerSurfaceMetaItems(items?: LearnerSurfaceMetaItem[]) {
