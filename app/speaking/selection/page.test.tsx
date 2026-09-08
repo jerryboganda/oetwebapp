@@ -156,4 +156,77 @@ describe('Speaking selection page (FINAL 2026-09-06 catalogue)', () => {
       primaryCategory: undefined,
     }));
   });
+
+  it('API failure shows a retryable error state only — never alongside "No cards available"', async () => {
+    mockListLearnerCards.mockReset();
+    mockListLearnerCards.mockRejectedValueOnce(new Error('network down'));
+
+    render(<SpeakingTaskSelection />);
+
+    expect(await screen.findByText('Could not load speaking cards. Please try again.')).toBeInTheDocument();
+    // The contradictory double-render bug: an error banner must never be
+    // paired with the "no cards" empty state for the same failed fetch.
+    expect(screen.queryByText('No speaking cards available')).not.toBeInTheDocument();
+    expect(screen.queryByText('No cards available for these filters')).not.toBeInTheDocument();
+
+    mockListLearnerCards.mockResolvedValueOnce({
+      rolePlayCards: [CARD],
+      activeProfessionId: 'nursing',
+      totalCount: 1,
+      appliedProfessionId: 'nursing',
+      appliedPrimaryCategory: null,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Discharge advice after appendectomy')).toBeInTheDocument();
+    expect(screen.queryByText('Could not load speaking cards. Please try again.')).not.toBeInTheDocument();
+  });
+
+  it('a malformed response (missing rolePlayCards array) is treated as a failure, not a crash', async () => {
+    mockListLearnerCards.mockReset();
+    // Deliberately malformed (no rolePlayCards array) to exercise the guard.
+    mockListLearnerCards.mockResolvedValueOnce({ totalCount: 'oops' });
+
+    render(<SpeakingTaskSelection />);
+
+    expect(await screen.findByText('Could not load speaking cards. Please try again.')).toBeInTheDocument();
+    expect(screen.queryByText('No speaking cards available')).not.toBeInTheDocument();
+  });
+
+  it('a stale in-flight response never overwrites a newer one (request race)', async () => {
+    mockListLearnerCards.mockReset();
+    let resolveFirst!: (value: unknown) => void;
+    const first = new Promise((resolve) => { resolveFirst = resolve; });
+    mockListLearnerCards.mockReturnValueOnce(first);
+
+    render(<SpeakingTaskSelection />);
+    await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(1));
+
+    // A second (newer) request resolves BEFORE the first, stale one.
+    mockListLearnerCards.mockResolvedValueOnce({
+      rolePlayCards: [CARD],
+      activeProfessionId: 'nursing',
+      totalCount: 1,
+      appliedProfessionId: 'medicine',
+      appliedPrimaryCategory: 'First Visit',
+    });
+    fireEvent.click(screen.getByTestId('filter-profession-medicine'));
+    fireEvent.click(screen.getByTestId('filter-category-First Visit'));
+    fireEvent.click(screen.getByRole('button', { name: /Apply filters/ }));
+    await waitFor(() => expect(mockListLearnerCards).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText('Discharge advice after appendectomy')).toBeInTheDocument();
+
+    // The stale first request now resolves with a DIFFERENT (empty) result —
+    // it must be dropped, not clobber the newer render.
+    resolveFirst({
+      rolePlayCards: [],
+      activeProfessionId: 'nursing',
+      totalCount: 0,
+      appliedProfessionId: 'nursing',
+      appliedPrimaryCategory: null,
+    });
+    await Promise.resolve();
+    expect(screen.getByText('Discharge advice after appendectomy')).toBeInTheDocument();
+  });
 });

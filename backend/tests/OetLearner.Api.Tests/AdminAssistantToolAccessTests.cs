@@ -63,7 +63,7 @@ public sealed class AdminAssistantToolAccessTests
         using var doc = System.Text.Json.JsonDocument.Parse("{\"path\":\"app/page.tsx\"}");
         var ctx = new AiToolContext("ai_assistant.admin", "admin-user-1", null, "usage-1", 0, IsAdmin: true);
 
-        var result = await guard.CheckAsync("write_file", doc.RootElement, CancellationToken.None);
+        var result = await guard.CheckAsync("write_file", doc.RootElement, ctx, CancellationToken.None);
 
         Assert.True(result.IsAllowed);
     }
@@ -75,7 +75,7 @@ public sealed class AdminAssistantToolAccessTests
         using var doc = System.Text.Json.JsonDocument.Parse("{\"path\":\"app/page.tsx\"}");
         var ctx = new AiToolContext("ai_assistant.learner", "learner-user-1", null, "usage-1", 0, IsAdmin: false);
 
-        var result = await guard.CheckAsync("write_file", doc.RootElement, CancellationToken.None);
+        var result = await guard.CheckAsync("write_file", doc.RootElement, ctx, CancellationToken.None);
 
         Assert.False(result.IsAllowed);
         Assert.Contains("admin", result.DenialReason, StringComparison.OrdinalIgnoreCase);

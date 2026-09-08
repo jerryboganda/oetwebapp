@@ -36,7 +36,7 @@ public partial class AdminService
 {
     public async Task<object> ListSpeakingRolePlayCardsAsync(
         string? professionId,
-        string? difficulty,
+        string? primaryCategory,
         string? status,
         CancellationToken ct)
     {
@@ -46,10 +46,13 @@ public partial class AdminService
             var normalised = professionId.Trim().ToLowerInvariant();
             q = q.Where(x => x.ProfessionId == normalised);
         }
-        if (!string.IsNullOrWhiteSpace(difficulty))
+        // FINAL 2026-09-09 — primaryCategory is now the active catalogue
+        // filter; Difficulty was removed from the Speaking UI (§9 guardrail)
+        // and no longer filters this list.
+        if (!string.IsNullOrWhiteSpace(primaryCategory))
         {
-            var normalised = difficulty.Trim().ToLowerInvariant();
-            q = q.Where(x => x.Difficulty == normalised);
+            var normalised = NormalisePrimaryCategory(primaryCategory);
+            q = q.Where(x => x.PrimaryCategory == normalised);
         }
         if (!string.IsNullOrWhiteSpace(status)
             && Enum.TryParse<ContentStatus>(status, ignoreCase: true, out var parsed))
@@ -99,6 +102,9 @@ public partial class AdminService
                     PrimaryCategory: string.IsNullOrWhiteSpace(r.PrimaryCategory) ? "Other Cards" : r.PrimaryCategory,
                     SecondaryTags: DeserializeSecondaryTags(r.SecondaryTagsJson),
                     CategoryNeedsReview: r.CategoryNeedsReview,
+                    CategorySource: r.CategorySource,
+                    CategoryClassifierVersion: r.CategoryClassifierVersion,
+                    CategoryClassifiedAt: r.CategoryClassifiedAt,
                     CardTypeId: r.CardTypeId,
                     CardTypeName: r.CardTypeId is not null && typeNames.TryGetValue(r.CardTypeId, out var tn) ? tn : null,
                     SourceAttribution: r.SourceAttribution))
@@ -168,6 +174,12 @@ public partial class AdminService
                 .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToArray();
 
         SpeakingCardClassification? classification = null;
+        // Provenance turns on whether the CATEGORY itself was supplied, not
+        // on classificationNeeded below (that also fires when only
+        // SecondaryTags/CategoryNeedsReview are omitted, to fill in those
+        // two — an explicit PrimaryCategory still wins for the persisted
+        // category either way, so it must still count as "manual").
+        var categoryWasExplicit = !string.IsNullOrWhiteSpace(req.PrimaryCategory);
         var classificationNeeded = string.IsNullOrWhiteSpace(req.PrimaryCategory)
             || req.SecondaryTags is null
             || !req.CategoryNeedsReview.HasValue;
@@ -235,6 +247,9 @@ public partial class AdminService
             PrimaryCategory = primaryCategory,
             SecondaryTagsJson = secondaryTagsJson,
             CategoryNeedsReview = categoryNeedsReview,
+            CategorySource = categoryWasExplicit ? "manual" : "classifier",
+            CategoryClassifierVersion = categoryWasExplicit ? null : SpeakingCardClassifier.ClassifierVersion,
+            CategoryClassifiedAt = categoryWasExplicit ? (DateTimeOffset?)null : now,
             CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim(),
             DisplayCardNumber = req.DisplayCardNumber,
             SourceAttribution = NormaliseSourceAttribution(req.SourceAttribution),
@@ -270,6 +285,19 @@ public partial class AdminService
             throw ApiException.Conflict("role_play_card_archived",
                 "Archived role-play cards are read-only.");
         }
+
+        // Snapshot of classification-relevant content BEFORE this update's
+        // field patches apply, so we can tell afterwards whether an edit
+        // invalidates a previously classifier/legacy category (re-run it) or
+        // a human-confirmed one (preserve it, but flag for re-review).
+        var beforeScenarioTitle = card.ScenarioTitle;
+        var beforeSetting = card.Setting;
+        var beforeBackground = card.Background;
+        var beforeTasksJson = card.TasksJson;
+        var beforeClinicalTopic = card.ClinicalTopic;
+        var beforePatientEmotion = card.PatientEmotion;
+        var beforePatientName = card.PatientName;
+        var beforeCommunicationGoal = card.CommunicationGoal;
 
         if (req.ProfessionId is not null)
         {
@@ -338,8 +366,19 @@ public partial class AdminService
         // FINAL 2026-09-06 candidate-visible taxonomy: a non-blank value
         // sets (normalised to the nine brief categories); null leaves it
         // unchanged. SecondaryTags replaces the whole tag list when supplied.
+        // An explicit pick is "manual" provenance and clears stale review
+        // state (unless the caller also explicitly supplies CategoryNeedsReview).
         if (req.PrimaryCategory is not null && !string.IsNullOrWhiteSpace(req.PrimaryCategory))
+        {
             card.PrimaryCategory = NormalisePrimaryCategory(req.PrimaryCategory);
+            card.CategorySource = "manual";
+            card.CategoryClassifierVersion = null;
+            card.CategoryClassifiedAt = null;
+            if (!req.CategoryNeedsReview.HasValue)
+            {
+                card.CategoryNeedsReview = false;
+            }
+        }
         if (req.SecondaryTags is not null)
             card.SecondaryTagsJson = SerializeSecondaryTags(req.SecondaryTags);
         if (req.CategoryNeedsReview.HasValue) card.CategoryNeedsReview = req.CategoryNeedsReview.Value;
@@ -359,7 +398,36 @@ public partial class AdminService
 
         if (string.IsNullOrWhiteSpace(req.PrimaryCategory))
         {
-            SpeakingCardClassifier.ApplyIfUnclassified(card);
+            var contentChanged =
+                !string.Equals(beforeScenarioTitle, card.ScenarioTitle, StringComparison.Ordinal)
+                || !string.Equals(beforeSetting, card.Setting, StringComparison.Ordinal)
+                || !string.Equals(beforeBackground, card.Background, StringComparison.Ordinal)
+                || !string.Equals(beforeTasksJson, card.TasksJson, StringComparison.Ordinal)
+                || !string.Equals(beforeClinicalTopic, card.ClinicalTopic, StringComparison.Ordinal)
+                || !string.Equals(beforePatientEmotion, card.PatientEmotion, StringComparison.Ordinal)
+                || !string.Equals(beforePatientName, card.PatientName, StringComparison.Ordinal)
+                || !string.Equals(beforeCommunicationGoal, card.CommunicationGoal, StringComparison.Ordinal);
+
+            var isConfirmed = card.CategorySource is "manual" or "reviewed" or "seed";
+
+            if (isConfirmed)
+            {
+                // Never silently reclassify a human-confirmed row — surface
+                // it for re-review instead, keeping the existing category.
+                if (contentChanged)
+                {
+                    card.CategoryNeedsReview = true;
+                }
+            }
+            else if (contentChanged || card.CategoryNeedsReview
+                || string.IsNullOrWhiteSpace(card.PrimaryCategory)
+                || string.Equals(card.PrimaryCategory, "Other Cards", StringComparison.OrdinalIgnoreCase))
+            {
+                // classifier/legacy rows: re-run the deterministic classifier
+                // whenever classification-relevant content changed, or the
+                // row was already unclassified/flagged.
+                SpeakingCardClassifier.StampClassifierProvenance(card, SpeakingCardClassifier.Classify(card));
+            }
         }
 
         card.UpdatedAt = DateTimeOffset.UtcNow;
@@ -548,6 +616,9 @@ public partial class AdminService
             PrimaryCategory = source.PrimaryCategory,
             SecondaryTagsJson = source.SecondaryTagsJson,
             CategoryNeedsReview = source.CategoryNeedsReview,
+            CategorySource = source.CategorySource,
+            CategoryClassifierVersion = source.CategoryClassifierVersion,
+            CategoryClassifiedAt = source.CategoryClassifiedAt,
             CardTypeId = source.CardTypeId,
             DisplayCardNumber = source.DisplayCardNumber,
             // A duplicate is derived from the same printed source, so the
@@ -921,15 +992,48 @@ public partial class AdminService
         };
     }
 
+    /// <summary>Only the three §9-approved behavioural tags may be stored;
+    /// anything else supplied by a caller is silently dropped rather than
+    /// persisted as an ad-hoc tag.</summary>
     internal static string SerializeSecondaryTags(string[]? tags)
     {
         if (tags is null || tags.Length == 0) return "[]";
         var clean = tags
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Select(t => t.Trim())
+            .Where(t => SpeakingCardClassifier.BehaviouralTags.Contains(t, StringComparer.OrdinalIgnoreCase))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         return JsonSerializer.Serialize(clean);
+    }
+
+    /// <summary>Server-authoritative classification preview: runs the same
+    /// §8B classifier a create/update would use, without persisting
+    /// anything. Replaces the admin editor's old client-side (TS regex)
+    /// "Suggest" button so the server is the only classification authority.</summary>
+    public Task<AdminRolePlayCardClassificationPreviewResponse> PreviewSpeakingCardClassificationAsync(
+        AdminRolePlayCardClassificationPreviewRequest req,
+        CancellationToken ct)
+    {
+        var classification = SpeakingCardClassifier.Classify(new SpeakingCardClassifiable(
+            ScenarioTitle: req.ScenarioTitle,
+            Setting: req.Setting,
+            Background: req.Background,
+            Tasks: req.Tasks,
+            ClinicalTopic: req.ClinicalTopic,
+            PatientEmotion: req.PatientEmotion,
+            PatientName: req.PatientName,
+            CandidateRole: req.CandidateRole,
+            InterlocutorRole: req.InterlocutorRole,
+            CommunicationGoal: req.CommunicationGoal));
+
+        return Task.FromResult(new AdminRolePlayCardClassificationPreviewResponse(
+            PrimaryCategory: classification.Primary,
+            SecondaryTags: classification.SecondaryTags,
+            CategoryNeedsReview: classification.NeedsReview,
+            RuleCode: classification.RuleCode,
+            Evidence: classification.Evidence,
+            ClassifierVersion: SpeakingCardClassifier.ClassifierVersion));
     }
 
     internal static string[] DeserializeSecondaryTags(string? json)
@@ -1052,6 +1156,9 @@ public partial class AdminService
             PrimaryCategory: string.IsNullOrWhiteSpace(card.PrimaryCategory) ? "Other Cards" : card.PrimaryCategory,
             SecondaryTags: DeserializeSecondaryTags(card.SecondaryTagsJson),
             CategoryNeedsReview: card.CategoryNeedsReview,
+            CategorySource: card.CategorySource,
+            CategoryClassifierVersion: card.CategoryClassifierVersion,
+            CategoryClassifiedAt: card.CategoryClassifiedAt,
             CardTypeId: card.CardTypeId,
             CardTypeName: cardTypeName,
             DisplayCardNumber: card.DisplayCardNumber,
@@ -1268,6 +1375,9 @@ public partial class AdminService
             PrimaryCategory = classification.Primary,
             SecondaryTagsJson = JsonSerializer.Serialize(classification.SecondaryTags),
             CategoryNeedsReview = classification.NeedsReview,
+            CategorySource = "classifier",
+            CategoryClassifierVersion = SpeakingCardClassifier.ClassifierVersion,
+            CategoryClassifiedAt = now,
             CreatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,

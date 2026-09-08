@@ -49,6 +49,10 @@ export interface RolePlayCardSummary {
   primaryCategory?: string | null;
   secondaryTags?: string[];
   categoryNeedsReview?: boolean;
+  // 2026-09-09 classifier repair — provenance of primaryCategory.
+  categorySource?: string | null;
+  categoryClassifierVersion?: string | null;
+  categoryClassifiedAt?: string | null;
   // Speaking module rebuild (2026-06-11) — hidden card type (admin only).
   cardTypeId?: string | null;
   cardTypeName?: string | null;
@@ -89,6 +93,10 @@ export interface RolePlayCardDetail {
   primaryCategory?: string | null;
   secondaryTags?: string[];
   categoryNeedsReview?: boolean;
+  // 2026-09-09 classifier repair — provenance of primaryCategory.
+  categorySource?: string | null;
+  categoryClassifierVersion?: string | null;
+  categoryClassifiedAt?: string | null;
   // Speaking module rebuild (2026-06-11) — hidden card type + printed number.
   cardTypeId?: string | null;
   cardTypeName?: string | null;
@@ -294,6 +302,48 @@ export async function adminListRolePlayCards(filters: ListRolePlayCardsFilters =
   if (filters.status) qs.set('status', filters.status);
   const query = qs.toString();
   return apiRequest<RolePlayCardSummary[]>(`/v1/admin/speaking/role-play-cards${query ? `?${query}` : ''}`);
+}
+
+/**
+ * 2026-09-09 classifier repair — the classifiable subset of
+ * `CreateRolePlayCardInput`, sent to the server-authoritative preview
+ * endpoint. Mirrors `AdminRolePlayCardClassificationPreviewRequest`.
+ */
+export interface ClassificationPreviewInput {
+  scenarioTitle?: string;
+  setting?: string;
+  background?: string;
+  tasks?: string[];
+  clinicalTopic?: string;
+  patientEmotion?: string;
+  patientName?: string | null;
+  candidateRole?: string;
+  interlocutorRole?: string;
+  communicationGoal?: string;
+}
+
+export interface ClassificationPreviewResult {
+  primaryCategory: string;
+  secondaryTags: string[];
+  categoryNeedsReview: boolean;
+  ruleCode: string;
+  evidence: string | null;
+  classifierVersion: string;
+}
+
+/**
+ * Server-authoritative classification preview:
+ * `POST /v1/admin/speaking/role-play-cards/classification-preview`. Never
+ * persists — replaces the old client-side (duplicated TS regex) "Suggest"
+ * button so the backend classifier is the only classification authority.
+ */
+export async function adminPreviewSpeakingCardClassification(
+  input: ClassificationPreviewInput,
+): Promise<ClassificationPreviewResult> {
+  return apiRequest<ClassificationPreviewResult>('/v1/admin/speaking/role-play-cards/classification-preview', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
 }
 
 export async function adminCreateRolePlayCard(input: CreateRolePlayCardInput): Promise<RolePlayCardDetail> {

@@ -20742,8 +20742,20 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<DateTimeOffset?>("CategoryClassifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CategoryClassifierVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<bool>("CategoryNeedsReview")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("CategorySource")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
 
                     b.Property<string>("ClinicalTopic")
                         .IsRequired()

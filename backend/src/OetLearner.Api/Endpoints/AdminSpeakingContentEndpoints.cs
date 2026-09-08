@@ -38,9 +38,9 @@ public static class AdminSpeakingContentEndpoints
             AdminService service,
             CancellationToken ct,
             [FromQuery] string? professionId,
-            [FromQuery] string? difficulty,
+            [FromQuery] string? primaryCategory,
             [FromQuery] string? status) =>
-            Results.Ok(await service.ListSpeakingRolePlayCardsAsync(professionId, difficulty, status, ct)));
+            Results.Ok(await service.ListSpeakingRolePlayCardsAsync(professionId, primaryCategory, status, ct)));
 
         group.MapGet("/{id}", async (
             string id,
@@ -175,6 +175,19 @@ public static class AdminSpeakingContentEndpoints
             .DisableAntiforgery()
             .RequireRateLimiting("PerUserWrite")
             .WithAdminWrite("AdminContentWrite");
+
+        // ── Classification preview (2026-09-09 classifier repair) ──────────
+        //
+        // Read-only: replaces the admin editor's old client-side (TS regex)
+        // "Suggest" button so the server is the sole classification
+        // authority. Never persists — just runs SpeakingCardClassifier over
+        // the supplied draft fields. Gated by the group's base
+        // AdminContentRead auth (no write permission needed).
+        group.MapPost("/classification-preview", async (
+            AdminRolePlayCardClassificationPreviewRequest request,
+            AdminService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.PreviewSpeakingCardClassificationAsync(request, ct)));
 
         // ── Hidden interlocutor script ────────────────────────────────────
         //

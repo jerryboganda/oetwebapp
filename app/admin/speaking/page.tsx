@@ -44,6 +44,7 @@ import {
   bulkAdminRolePlayCards,
   type RolePlayCardSummary,
 } from '@/lib/api/speaking-role-play-cards';
+import { speakingCategoryFilterOptions } from '@/lib/speaking/category-taxonomy';
 import {
   archiveAdminSpeakingMockSet,
   fetchAdminSpeakingMockSets,
@@ -101,6 +102,10 @@ export default function AdminSpeakingPage() {
   const [cardsLoading, setCardsLoading] = useState(true);
   const [cardsPage, setCardsPage] = useState(1);
   const [cardsPageSize, setCardsPageSize] = useState(25);
+  // 2026-09-09 classifier repair — corrected admin filtering: the list
+  // endpoint now honours primaryCategory (Difficulty is no longer a filter).
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const categoryOptions = useMemo(() => speakingCategoryFilterOptions(), []);
 
   const [mockSets, setMockSets] = useState<AdminSpeakingMockSetRow[]>([]);
   const [mockSetsLoading, setMockSetsLoading] = useState(true);
@@ -109,7 +114,7 @@ export default function AdminSpeakingPage() {
   const reloadCards = useCallback(async () => {
     setCardsLoading(true);
     try {
-      const data = await adminListRolePlayCards({});
+      const data = await adminListRolePlayCards({ primaryCategory: categoryFilter || undefined });
       const items = Array.isArray(data)
         ? (data as RolePlayCardSummary[])
         : ((data as unknown as { rolePlayCards?: RolePlayCardSummary[] }).rolePlayCards ?? []);
@@ -120,7 +125,7 @@ export default function AdminSpeakingPage() {
     } finally {
       setCardsLoading(false);
     }
-  }, []);
+  }, [categoryFilter]);
 
   const reloadMockSets = useCallback(async () => {
     setMockSetsLoading(true);
@@ -362,6 +367,24 @@ export default function AdminSpeakingPage() {
           {tabButton('mock-sets', 'Mock sets')}
         </div>
         <div className="p-4">
+          {tab === 'cards' ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <label htmlFor="admin-speaking-category-filter" className="text-sm font-medium text-navy">
+                Category
+              </label>
+              <select
+                id="admin-speaking-category-filter"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="rounded-xl border border-border bg-surface px-3 py-1.5 text-sm text-navy"
+              >
+                <option value="">All categories</option>
+                {categoryOptions.map((option) => (
+                  <option key={option.id} value={option.id}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
           {tab === 'cards' ? (
             cardsLoading ? (
               <p className="inline-flex items-center gap-2 text-sm text-muted"><Loader2 className="h-4 w-4 animate-spin" /> Loading cards…</p>

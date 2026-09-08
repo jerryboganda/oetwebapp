@@ -173,6 +173,12 @@ public record AdminRolePlayCardSummary(
     string PrimaryCategory = "Other Cards",
     string[]? SecondaryTags = null,
     bool CategoryNeedsReview = false,
+    // 2026-09-09 classifier repair — provenance of PrimaryCategory: legacy |
+    // classifier | reviewed | manual | seed. Version/timestamp are set only
+    // when CategorySource == "classifier".
+    string? CategorySource = null,
+    string? CategoryClassifierVersion = null,
+    DateTimeOffset? CategoryClassifiedAt = null,
     // Speaking module rebuild (2026-06-11). Hidden card type (admin/tutor only).
     string? CardTypeId = null,
     string? CardTypeName = null,
@@ -217,6 +223,10 @@ public record AdminRolePlayCardDetail(
     string PrimaryCategory = "Other Cards",
     string[]? SecondaryTags = null,
     bool CategoryNeedsReview = false,
+    // 2026-09-09 classifier repair — see AdminRolePlayCardSummary.
+    string? CategorySource = null,
+    string? CategoryClassifierVersion = null,
+    DateTimeOffset? CategoryClassifiedAt = null,
     // Speaking module rebuild (2026-06-11). Hidden card type metadata (admin/
     // tutor only) + printed card number.
     string? CardTypeId = null,
@@ -225,6 +235,34 @@ public record AdminRolePlayCardDetail(
     // Verbatim provenance/rights notice from the printed source. Present on
     // the ADMIN projection only — never on AdminRolePlayCardLearnerDetail.
     string? SourceAttribution = null);
+
+// ── Classification preview (2026-09-09 classifier repair) ─────────────────
+
+/// <summary>Request for `POST …/role-play-cards/classification-preview` —
+/// the classifiable subset of AdminRolePlayCardCreateRequest. Preview only:
+/// the server never persists anything from this call.</summary>
+public record AdminRolePlayCardClassificationPreviewRequest(
+    string? ScenarioTitle = null,
+    string? Setting = null,
+    string? Background = null,
+    string[]? Tasks = null,
+    string? ClinicalTopic = null,
+    string? PatientEmotion = null,
+    string? PatientName = null,
+    string? CandidateRole = null,
+    string? InterlocutorRole = null,
+    string? CommunicationGoal = null);
+
+/// <summary>Result of a classification preview: the same category/tags/
+/// review-flag a create or update would compute, plus the §8B rule code and
+/// matched-phrase evidence for admin auditing.</summary>
+public record AdminRolePlayCardClassificationPreviewResponse(
+    string PrimaryCategory,
+    string[] SecondaryTags,
+    bool CategoryNeedsReview,
+    string RuleCode,
+    string? Evidence,
+    string ClassifierVersion);
 
 /// <summary>Admin projection of the hidden interlocutor card. Holds every
 /// field that drives the AI patient persona and the tutor cue panel.</summary>

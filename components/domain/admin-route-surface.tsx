@@ -112,18 +112,15 @@ export function AdminRouteHero({
           </div>
           {highlights.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-2">
-              {highlights.map((item) => {
-                const HighlightIcon = item.icon;
-                return (
-                  <div key={`${item.label}-${item.value}`} className="min-w-0 rounded-2xl border border-admin-border bg-admin-surface-raised/60 px-3 py-2">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-admin-text-muted">
-                      {HighlightIcon && <HighlightIcon className="h-3.5 w-3.5" />}
-                      {item.label}
-                    </div>
-                    <p className="mt-1 text-sm font-bold text-admin-text">{item.value}</p>
+              {highlights.map((item) => (
+                <div key={`${item.label}-${item.value}`} className="min-w-0 rounded-2xl border border-admin-border bg-admin-surface-raised/60 px-3 py-2">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-admin-text-muted">
+                    {renderAdminRouteIcon(item.icon, 'h-3.5 w-3.5')}
+                    {item.label}
                   </div>
-                );
-              })}
+                  <p className="mt-1 text-sm font-bold text-admin-text">{item.value}</p>
+                </div>
+              ))}
             </div>
           )}
           {hasActions && (
