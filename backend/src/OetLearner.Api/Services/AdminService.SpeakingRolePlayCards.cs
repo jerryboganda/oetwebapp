@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services;
 
@@ -162,6 +163,41 @@ public partial class AdminService
             QaStatus = "approved",
         };
 
+        var cardTasks = req.Tasks
+            ?? new[] { req.Task1, req.Task2, req.Task3, req.Task4, req.Task5 }
+                .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToArray();
+
+        SpeakingCardClassification? classification = null;
+        var classificationNeeded = string.IsNullOrWhiteSpace(req.PrimaryCategory)
+            || req.SecondaryTags is null
+            || !req.CategoryNeedsReview.HasValue;
+        if (classificationNeeded)
+        {
+            classification = SpeakingCardClassifier.Classify(new SpeakingCardClassifiable(
+                ScenarioTitle: req.ScenarioTitle,
+                Setting: req.Setting,
+                Background: req.Background,
+                Tasks: cardTasks,
+                ClinicalTopic: req.ClinicalTopic,
+                PatientEmotion: req.PatientEmotion,
+                PatientName: req.PatientName,
+                CandidateRole: req.CandidateRole,
+                InterlocutorRole: req.InterlocutorRole,
+                CommunicationGoal: req.CommunicationGoal));
+        }
+
+        var primaryCategory = !string.IsNullOrWhiteSpace(req.PrimaryCategory)
+            ? NormalisePrimaryCategory(req.PrimaryCategory)
+            : classification!.Primary;
+
+        var secondaryTagsJson = req.SecondaryTags is not null
+            ? SerializeSecondaryTags(req.SecondaryTags)
+            : SerializeSecondaryTags(classification?.SecondaryTags);
+
+        var categoryNeedsReview = req.CategoryNeedsReview.HasValue
+            ? req.CategoryNeedsReview.Value
+            : (classification?.NeedsReview ?? false);
+
         var card = new RolePlayCard
         {
             Id = cardId,
@@ -176,11 +212,7 @@ public partial class AdminService
             PatientName = req.PatientName?.Trim(),
             PatientAge = req.PatientAge?.Trim(),
             Background = req.Background?.Trim() ?? string.Empty,
-            // `Tasks` wins when supplied; otherwise fold the five positional
-            // fields into the list. The setter mirrors back to Task1..Task5.
-            Tasks = req.Tasks
-                ?? new[] { req.Task1, req.Task2, req.Task3, req.Task4, req.Task5 }
-                    .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToArray(),
+            Tasks = cardTasks,
             AllowedNotes = req.AllowedNotes ?? true,
             PrepTimeSeconds = req.PrepTimeSeconds ?? 180,
             RolePlayTimeSeconds = req.RolePlayTimeSeconds ?? 300,
@@ -200,9 +232,9 @@ public partial class AdminService
                 : req.Disclaimer.Trim(),
             Status = ContentStatus.Draft,
             IsLiveTutorEligible = req.IsLiveTutorEligible ?? false,
-            PrimaryCategory = NormalisePrimaryCategory(req.PrimaryCategory),
-            SecondaryTagsJson = SerializeSecondaryTags(req.SecondaryTags),
-            CategoryNeedsReview = req.CategoryNeedsReview ?? string.IsNullOrWhiteSpace(req.PrimaryCategory),
+            PrimaryCategory = primaryCategory,
+            SecondaryTagsJson = secondaryTagsJson,
+            CategoryNeedsReview = categoryNeedsReview,
             CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim(),
             DisplayCardNumber = req.DisplayCardNumber,
             SourceAttribution = NormaliseSourceAttribution(req.SourceAttribution),
@@ -323,6 +355,11 @@ public partial class AdminService
         if (req.SourceAttribution is not null)
         {
             card.SourceAttribution = NormaliseSourceAttribution(req.SourceAttribution);
+        }
+
+        if (string.IsNullOrWhiteSpace(req.PrimaryCategory))
+        {
+            SpeakingCardClassifier.ApplyIfUnclassified(card);
         }
 
         card.UpdatedAt = DateTimeOffset.UtcNow;
@@ -1194,6 +1231,16 @@ public partial class AdminService
             ContentLanguage = "en",
         };
 
+        var classification = SpeakingCardClassifier.Classify(
+            parsed.ScenarioTitle,
+            parsed.Setting,
+            parsed.Background,
+            parsed.Tasks,
+            parsed.ClinicalTopic,
+            parsed.PatientEmotion,
+            parsed.PatientName,
+            parsed.CommunicationGoal);
+
         var card = new RolePlayCard
         {
             Id = cardId,
@@ -1218,12 +1265,9 @@ public partial class AdminService
             Disclaimer = "Practice estimate only. This is not an official OET score or result.",
             Status = ContentStatus.Draft,
             IsLiveTutorEligible = false,
-            // FINAL 2026-09-06: AI drafts land unclassified (visible Other
-            // Cards + review flag) — an admin confirms the category in the
-            // classification step before publishing.
-            PrimaryCategory = "Other Cards",
-            SecondaryTagsJson = "[]",
-            CategoryNeedsReview = true,
+            PrimaryCategory = classification.Primary,
+            SecondaryTagsJson = JsonSerializer.Serialize(classification.SecondaryTags),
+            CategoryNeedsReview = classification.NeedsReview,
             CreatedByUserId = adminId,
             CreatedAt = now,
             UpdatedAt = now,

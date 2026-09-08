@@ -63,9 +63,6 @@ public partial class LearnerService
                 on card.ContentItemId equals item.Id into joined
             from item in joined.DefaultIfEmpty()
             where card.Status == ContentStatus.Published
-                && (card.ProfessionId.ToLower() == effectiveProfession
-                    || item == null
-                    || item.ProfessionId == null)
             select new
             {
                 card.Id,
@@ -101,7 +98,13 @@ public partial class LearnerService
             .OrderByDescending(r => r.UpdatedAt)
             .ToListAsync(ct);
 
-        var filtered = rows.AsEnumerable();
+        var filtered = rows.AsEnumerable()
+            .Where(r =>
+                string.IsNullOrWhiteSpace(effectiveProfession)
+                || string.Equals(r.ProfessionId ?? string.Empty, effectiveProfession, StringComparison.OrdinalIgnoreCase)
+                || r.ContentItemProfessionId is null
+                || string.IsNullOrWhiteSpace(r.ContentItemProfessionId));
+
         if (!string.IsNullOrWhiteSpace(requestedCategory))
         {
             filtered = filtered.Where(r => string.Equals(

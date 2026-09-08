@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Speaking;
 
 namespace OetLearner.Api.Services.Seeding;
 
@@ -27,6 +28,30 @@ public static class SpeakingRolePlayCardSeed
     public const string SeedIdPrefix = "rpc-seed-";
     private const string SeederUserId = "system-speaking-seed";
     private const string CriteriaFocusJsonDefault = "[]";
+
+    public static async Task ClassifyUnclassifiedAsync(LearnerDbContext db, CancellationToken ct = default)
+    {
+        // Equality only — string.Equals(..., OrdinalIgnoreCase) / Trim() /
+        // IsNullOrWhiteSpace are not reliably translated by Npgsql. The
+        // column is NOT NULL and defaults to "Other Cards".
+        var cards = await db.RolePlayCards
+            .Where(c => c.CategoryNeedsReview || c.PrimaryCategory == "Other Cards")
+            .ToListAsync(ct);
+
+        var changed = false;
+        foreach (var card in cards)
+        {
+            if (SpeakingCardClassifier.ApplyIfUnclassified(card))
+            {
+                changed = true;
+            }
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+    }
 
     public static async Task SeedAsync(LearnerDbContext db, CancellationToken ct = default)
     {
@@ -150,28 +175,52 @@ public static class SpeakingRolePlayCardSeed
         await db.SaveChangesAsync(ct);
     }
 
-    // Maps a seed card to one of the 6 hidden communication-function card types
-    // (see SpeakingCardTypeSeed) using its communication goal, with a topic
-    // override for breaking-bad-news. Keeps the seeded sample set spread across
-    // every type so each type has live example content.
+    // Maps a seeded card to the owner-approved visit-type taxonomy in
+    // `SpeakingCardTypeSeed` based on its primary category, not its
+    // communication goal. The hidden card type is separate from the learner
+    // catalogue filter and must stay aligned with the visit taxonomy.
     private static string CardTypeSlugFor(SeedCardData card)
     {
-        if (card.ClinicalTopic.Contains("breaking bad news", StringComparison.OrdinalIgnoreCase)
-            || card.CommunicationGoal.Equals("BreakBadNews", StringComparison.OrdinalIgnoreCase))
+        var category = card.PrimaryCategory?.Trim() ?? string.Empty;
+
+        if (string.Equals(category, "Emergency / Emergency Department", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, "Emergency", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, "Emergency Department", StringComparison.OrdinalIgnoreCase))
         {
-            return "bad-news";
+            return "first-visit-emergency";
         }
 
-        return card.CommunicationGoal.Trim().ToLowerInvariant() switch
+        if (string.Equals(category, "First Visit", StringComparison.OrdinalIgnoreCase))
         {
-            "inform" => "diagnosis",
-            "reassure" => "reassurance",
-            "negotiate" => "persuasion",
-            "empower" => "health-education",
-            "counsel" => "counselling",
-            "advise" => "counselling",
-            _ => "counselling",
-        };
+            return "first-visit-routine";
+        }
+
+        if (string.Equals(category, "Second Visit / Follow-up", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, "Second Visit", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, "Follow-up", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, "Followup", StringComparison.OrdinalIgnoreCase))
+        {
+            return "follow-up";
+        }
+
+        if (string.Equals(category, "Already Known Patient", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, "Already Known", StringComparison.OrdinalIgnoreCase))
+        {
+            return "already-known-patient";
+        }
+
+        if (string.Equals(category, "Examination Card", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(category, "Examination", StringComparison.OrdinalIgnoreCase))
+        {
+            return "examination";
+        }
+
+        if (string.Equals(category, "Breaking Bad News", StringComparison.OrdinalIgnoreCase))
+        {
+            return "breaking-bad-news";
+        }
+
+        return "first-visit-routine";
     }
 
     // ─── Nursing cards (6) ────────────────────────────────────────────────

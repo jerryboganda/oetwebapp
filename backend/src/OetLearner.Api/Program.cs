@@ -2966,6 +2966,7 @@ using (var speakingContentScope = app.Services.CreateScope())
             .GetRequiredService<OetLearner.Api.Data.LearnerDbContext>();
         await OetLearner.Api.Services.Seeding.SpeakingCardTypeSeed.SeedAsync(speakingContentDb, CancellationToken.None);
         await OetLearner.Api.Services.Seeding.SpeakingRolePlayCardSeed.SeedAsync(speakingContentDb, CancellationToken.None);
+        await OetLearner.Api.Services.Seeding.SpeakingRolePlayCardSeed.ClassifyUnclassifiedAsync(speakingContentDb, CancellationToken.None);
     }
     catch (Exception ex)
     {
