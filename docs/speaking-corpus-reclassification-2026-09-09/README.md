@@ -95,3 +95,26 @@ Every other one of the nine categories has at least one verified card in the
 corpus after this pass (see the distribution table above; all are also
 represented among **published** cards specifically — see `manifest.json` for
 the per-card `status` field, 4 = Published).
+
+## Correction — 20260909100000_SpeakingCorpusReclassificationCorrection
+
+The deploy of the four migrations above restarted the API containers, which
+run `SpeakingCardClassifier.ApplyIfUnclassified` on every boot as an
+auto-improvement sweep. Its guard treated *any* row whose `PrimaryCategory`
+was `"Other Cards"` as an unclassified placeholder eligible for automatic
+reclassification, regardless of provenance — so it immediately re-ran the
+deterministic classifier over the 23 rows this review had confirmed as
+`Other Cards`, silently overwriting `CategorySource` back to `classifier`
+(11 rows kept `Other Cards` by coincidence, 12 were moved to a different
+category the classifier alone was confident about).
+
+Root cause fixed in `SpeakingCardClassifier.ApplyIfUnclassified`: it now
+skips any row whose `CategorySource` is `manual`/`reviewed`/`seed`
+unconditionally, before even checking the category — a confirmed
+`Other Cards` is a deliberate conclusion, not a placeholder. A regression
+test (`ApplyIfUnclassified_NeverTouchesAReviewedOtherCardsRow`) pins this.
+
+`20260909100000_SpeakingCorpusReclassificationCorrection.cs` restores the
+23 affected rows to this review's actual conclusion (captured in
+`manifest.json`); its `Down()` restores the exact clobbered state queried
+from production immediately before the fix.
