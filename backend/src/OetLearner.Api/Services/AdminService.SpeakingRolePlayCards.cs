@@ -174,6 +174,12 @@ public partial class AdminService
                 .Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!).ToArray();
 
         SpeakingCardClassification? classification = null;
+        // Provenance turns on whether the CATEGORY itself was supplied, not
+        // on classificationNeeded below (that also fires when only
+        // SecondaryTags/CategoryNeedsReview are omitted, to fill in those
+        // two — an explicit PrimaryCategory still wins for the persisted
+        // category either way, so it must still count as "manual").
+        var categoryWasExplicit = !string.IsNullOrWhiteSpace(req.PrimaryCategory);
         var classificationNeeded = string.IsNullOrWhiteSpace(req.PrimaryCategory)
             || req.SecondaryTags is null
             || !req.CategoryNeedsReview.HasValue;
@@ -241,11 +247,9 @@ public partial class AdminService
             PrimaryCategory = primaryCategory,
             SecondaryTagsJson = secondaryTagsJson,
             CategoryNeedsReview = categoryNeedsReview,
-            // classificationNeeded == the server ran the classifier because the
-            // caller didn't supply a category; otherwise it's an explicit pick.
-            CategorySource = classificationNeeded ? "classifier" : "manual",
-            CategoryClassifierVersion = classificationNeeded ? SpeakingCardClassifier.ClassifierVersion : null,
-            CategoryClassifiedAt = classificationNeeded ? now : (DateTimeOffset?)null,
+            CategorySource = categoryWasExplicit ? "manual" : "classifier",
+            CategoryClassifierVersion = categoryWasExplicit ? null : SpeakingCardClassifier.ClassifierVersion,
+            CategoryClassifiedAt = categoryWasExplicit ? (DateTimeOffset?)null : now,
             CardTypeId = string.IsNullOrWhiteSpace(req.CardTypeId) ? null : req.CardTypeId.Trim(),
             DisplayCardNumber = req.DisplayCardNumber,
             SourceAttribution = NormaliseSourceAttribution(req.SourceAttribution),

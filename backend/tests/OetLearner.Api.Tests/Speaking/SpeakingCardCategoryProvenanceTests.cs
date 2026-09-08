@@ -187,11 +187,13 @@ public sealed class SpeakingCardCategoryProvenanceTests : IAsyncLifetime
         Assert.Equal("First Visit", created.PrimaryCategory);
         Assert.Equal("classifier", created.CategorySource);
 
-        // Edit the background so it now reads as a follow-up — no PrimaryCategory
-        // supplied, so the classifier/legacy row is re-run, not preserved as-is.
+        // Edit title + background so the encounter now reads as a follow-up —
+        // no PrimaryCategory supplied, so the classifier/legacy row is
+        // re-run, not preserved as-is.
         var updated = await _adminService.UpdateSpeakingRolePlayCardAsync(
             "admin-1", "Admin One", created.CardId,
             new AdminRolePlayCardUpdateRequest(
+                ScenarioTitle: "Headache follow-up",
                 Background: "Mrs Allen is returning for a follow-up of her headaches."),
             CancellationToken.None);
 
