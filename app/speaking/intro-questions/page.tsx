@@ -10,14 +10,14 @@ import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking-candidate-resources';
 export const metadata: Metadata = {
   title: 'Speaking Intro Questions | OET with Dr Hesham',
   description:
-    'Candidate reference: 12 common OET Speaking introductory questions with adaptable sample answers for all professions.',
+    'Candidate reference: 11 common OET Speaking introductory questions with adaptable sample answers for all professions.',
 };
 
-/** Render [bracketed fields] as visible highlighted personalisation cues. */
+/** Render [bracketed fields] and (parenthetical cues) as visible highlighted personalisation markers. */
 function renderWithPlaceholders(text: string) {
-  const parts = text.split(/(\[[^\]]+\])/g);
+  const parts = text.split(/(\[[^\]]+\]|\([^\)]+\))/g);
   return parts.map((part, i) =>
-    /^\[.+\]$/.test(part) ? (
+    /^\[.+\]$/.test(part) || /^\(.+\)$/.test(part) ? (
       <mark
         key={i}
         className="rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900 dark:bg-amber-500/20 dark:text-amber-200"
@@ -46,9 +46,9 @@ export default function SpeakingIntroQuestionsPage() {
           icon={MessageCircleQuestion}
           accent="purple"
           title="Speaking Intro Questions"
-          description="Common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own."
+          description="Eleven common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own."
           highlights={[
-            { icon: MessageCircleQuestion, label: 'Questions', value: '12 with sample answers' },
+            { icon: MessageCircleQuestion, label: 'Questions', value: '11 with sample answers' },
             { icon: Users, label: 'Works for', value: 'Every profession' },
           ]}
         />
@@ -58,8 +58,8 @@ export default function SpeakingIntroQuestionsPage() {
             Candidate rule
           </p>
           <p className="mt-1.5 text-sm leading-6 text-navy dark:text-white">
-            The sample answers are examples and templates to personalise. Do not memorise them word-for-word —
-            adapt the highlighted details to your own profession, experience, country, specialty, and career plan.
+            These are sample answers to personalise, not memorise word-for-word. Adapt the highlighted details to
+            your own profession, experience, country, specialty, and career plan.
           </p>
         </Card>
 
@@ -78,7 +78,7 @@ export default function SpeakingIntroQuestionsPage() {
                 </h2>
               </div>
               <p className="mt-3 text-xs font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
-                Sample answer — personalise the bracketed details:
+                Sample answer — personalise the bracketed and parenthetical details:
               </p>
               <p className="mt-1.5 text-sm leading-7 text-navy/85 dark:text-white/85">
                 {renderWithPlaceholders(item.sampleAnswer)}

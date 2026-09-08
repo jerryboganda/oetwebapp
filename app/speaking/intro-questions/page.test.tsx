@@ -12,31 +12,23 @@ import SpeakingIntroQuestionsPage from './page';
 import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking-candidate-resources';
 
 describe('Speaking Intro Questions page', () => {
-  it('renders all 12 global questions with sample answers underneath', () => {
+  it('renders the 11 question set with sample answers and do-not-memorise guidance', () => {
     render(<SpeakingIntroQuestionsPage />);
 
     expect(screen.getByRole('heading', { name: 'Speaking Intro Questions' })).toBeInTheDocument();
-    expect(SPEAKING_INTRO_QUESTIONS).toHaveLength(12);
+    expect(SPEAKING_INTRO_QUESTIONS).toHaveLength(11);
 
-    // Every question is shown…
     for (const q of SPEAKING_INTRO_QUESTIONS) {
       expect(screen.getByText(q.question, { exact: false })).toBeInTheDocument();
     }
 
-    // …with its sample answer directly beneath (12 labels) and highlighted placeholders.
-    expect(screen.getAllByText(/Sample answer — personalise the bracketed details/i)).toHaveLength(12);
+    expect(screen.getAllByText(/Sample answer .* personalise/i)).toHaveLength(11);
     expect(screen.getByText(/My name is/i)).toBeInTheDocument();
-    expect(
-      screen.getByText('What does a typical working day look like for you?', { exact: false }),
-    ).toBeInTheDocument();
+    expect(screen.getByText('(your first name + last name)')).toBeInTheDocument();
+    expect(screen.getByText(/Australian medical council registration process/i)).toBeInTheDocument();
 
-    // Profession-neutral: no Medicine/Australia fixed content.
-    expect(screen.queryByText(/Australian medical council/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/practicing medicine in Australia/i)).not.toBeInTheDocument();
-
-    // Candidate rule: templates to personalise, not to memorise.
     expect(screen.getByText(/Candidate rule/i)).toBeInTheDocument();
-    expect(screen.getByText(/Do not memorise them word-for-word/i)).toBeInTheDocument();
+    expect(screen.getByText(/not memorise word-for-word/i)).toBeInTheDocument();
     expect(screen.getByText('Back to Speaking').closest('a')).toHaveAttribute('href', '/speaking');
   });
 });

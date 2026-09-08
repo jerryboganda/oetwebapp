@@ -3,240 +3,306 @@
  *
  * Two native resources shown on the Speaking hub and selection block:
  *  - Speaking Assessment Criteria (same for all professions, 9 criteria)
- *  - Speaking Intro Questions (12 global questions with personalisable sample answers)
+ *  - Speaking Intro Questions (11 global questions with personalisable sample answers)
  *
  * Deliberately separate from the internal Speaking rulebook
  * (`rulebooks/speaking/*`, `/speaking/rulebook`) and from AI grading prompts.
  * No source-PDF branding, cover, footer, or contact details belong here.
  */
 
-export interface SpeakingCriterion {
-  no: number;
-  id: string;
-  name: string;
-  weight: string;
-  points: number;
-  summary: string;
-  whatItMeans: string[];
-  doWell: string[];
-  avoid: string[];
+export interface LinguisticBand {
+  band: number;
+  descriptors: string[];
 }
 
-export const SPEAKING_CRITERIA: SpeakingCriterion[] = [
+export interface LinguisticCriterion {
+  id: string;
+  name: string;
+  maxBand: 6;
+  bands: LinguisticBand[];
+}
+
+export interface ClinicalIndicator {
+  code: string;
+  text: string;
+}
+
+export interface ClinicalCriterion {
+  id: string;
+  letter: string;
+  name: string;
+  maxScore: 3;
+  scale: string[];
+  indicators: ClinicalIndicator[];
+}
+
+export const SPEAKING_LINGUISTIC_CRITERIA: LinguisticCriterion[] = [
   {
-    no: 1,
     id: 'intelligibility',
     name: 'Intelligibility',
-    weight: '6 points',
-    points: 6,
-    summary: 'Be easy to understand — clear pronunciation, word stress, rhythm, and intonation.',
-    whatItMeans: [
-      'Having an accent is expected. Your pronunciation, word stress, and rhythm should still be clear and easy to follow.',
-      'Words that sound similar must sound distinct (for example, “share” vs “chair”; “today” must not sound like “tidy”).',
-      'Match your tone to the function: let your voice rise at the end of questions and fall at the end of statements.',
-      'Keep a steady pace — not so fast or so slow that the listener has to strain to stay focused.',
-    ],
-    doWell: [
-      'Correct, natural word choice',
-      'Clear pronunciation and even rhythm',
-      'Appropriate intonation for questions vs statements',
-    ],
-    avoid: [
-      'Poor or limited word choice',
-      'Unclear pronunciation',
-      'Speaking too quickly, too slowly, or with erratic fast–slow pacing',
-      'Speaking in a monotone',
+    maxBand: 6,
+    bands: [
+      {
+        band: 6,
+        descriptors: [
+          'Pronunciation is easily understood and prosodic features (stress, intonation, rhythm) are used effectively.',
+          'L1 accent has no effect on intelligibility.',
+        ],
+      },
+      {
+        band: 5,
+        descriptors: [
+          'Easily understood. Communication is not impeded by a few pronunciation or prosodic errors and/or noticeable L1 accent.',
+          'Minimal strain for the listener.',
+        ],
+      },
+      {
+        band: 4,
+        descriptors: [
+          'Easily understood most of the time.',
+          'Pronunciation or prosodic errors and/or L1 accent at times cause strain for the listener.',
+        ],
+      },
+      {
+        band: 3,
+        descriptors: [
+          'Produces some acceptable features of spoken English.',
+          'Difficult to understand because errors in pronunciation/stress/intonation and/or L1 accent cause serious strain for the listener.',
+        ],
+      },
+      {
+        band: 2,
+        descriptors: [
+          'Often unintelligible.',
+          'Frequent errors in pronunciation/stress/intonation and/or L1 accent cause severe strain for the listener.',
+        ],
+      },
+      {
+        band: 1,
+        descriptors: ['Almost entirely unintelligible.'],
+      },
+      {
+        band: 0,
+        descriptors: ['Candidate does not provide any response.'],
+      },
     ],
   },
   {
-    no: 2,
     id: 'fluency',
     name: 'Fluency',
-    weight: '6 points',
-    points: 6,
-    summary: 'Keep a natural flow — occasional hesitation is fine, constant stopping is not.',
-    whatItMeans: [
-      'Occasional hesitation is normal. Overall your speech should flow at a normal pace without excessive pauses that strain the listener.',
-      'A rare filler sound (“um”, “err”) or a quick self-correction is acceptable.',
-      'Frequent self-correction or hesitation suggests a limited range of vocabulary and grammar.',
-    ],
-    doWell: [
-      'Rare self-correction and filler sounds',
-      'Good range of expressions',
-      'Normal, steady flow of conversation',
-    ],
-    avoid: [
-      'Repeated self-correction mid-sentence',
-      'Searching audibly for words',
-      'Overusing filler sounds such as “um”, “err”, “ahh”',
-    ],
-  },
-  {
-    no: 3,
-    id: 'appropriateness',
-    name: 'Appropriateness of language',
-    weight: '6 points',
-    points: 6,
-    summary: 'Stay professional yet approachable, using language your patient or client understands.',
-    whatItMeans: [
-      'Be approachable but always professional — never overly familiar or informal.',
-      'Use vocabulary a lay person understands. Avoid overusing technical jargon, but do not talk down to the person.',
-      'If you are unsure they understood a term, ask — then explain it in simpler words.',
-    ],
-    doWell: [
-      'Professional but warm tone',
-      'Plain language for technical ideas, with brief explanations where needed',
-      'Checking understanding before moving on',
-    ],
-    avoid: [
-      'Being overly familiar or informal',
-      'Using technical jargon without explanation',
-      'Assuming understanding without checking',
-    ],
-  },
-  {
-    no: 4,
-    id: 'grammar-expression',
-    name: 'Grammar and expression',
-    weight: '6 points',
-    points: 6,
-    summary: 'Use a wide, accurate range of grammar and vocabulary — and adapt it to the moment.',
-    whatItMeans: [
-      'Show a wide range of grammar and vocabulary, used correctly and accurately.',
-      'Be comfortable with natural, idiomatic speech — and adjust your wording when the other person responds unexpectedly.',
-      'Avoid relying on memorised phrases that may not fit the situation. Occasional small errors are fine if the conversation still flows.',
-    ],
-    doWell: [
-      'Wide range of vocabulary and grammar',
-      'Confident, natural phrasing',
-      'Flexibly rewording when the response changes',
-      'Few errors, so neither side has to strain',
-    ],
-    avoid: [
-      'Fixed memorised phrases that do not fit the situation',
-      'Limited vocabulary with no way to rephrase',
-      'Frequent grammar errors that make the conversation a strain',
+    maxBand: 6,
+    bands: [
+      {
+        band: 6,
+        descriptors: [
+          'Completely fluent speech at normal speed.',
+          'Any hesitation is appropriate and not a sign of searching for words or structures.',
+        ],
+      },
+      {
+        band: 5,
+        descriptors: [
+          'Fluent speech at normal speed, with only occasional repetition or self-correction.',
+          'Hesitation may occasionally indicate searching for words or structures, but is generally appropriate.',
+        ],
+      },
+      {
+        band: 4,
+        descriptors: [
+          'Uneven flow, with some repetition, especially in longer utterances.',
+          'Some evidence of searching for words, which does not cause serious strain.',
+          'Delivery may be staccato or too fast/slow.',
+        ],
+      },
+      {
+        band: 3,
+        descriptors: [
+          'Very uneven.',
+          'Frequent pauses and repetitions indicate searching for words or structures.',
+          'Excessive use of fillers and difficulty sustaining longer utterances cause serious strain for the listener.',
+        ],
+      },
+      {
+        band: 2,
+        descriptors: [
+          'Extremely uneven.',
+          'Long pauses, numerous repetition and self-corrections make speech difficult to follow.',
+        ],
+      },
+      {
+        band: 1,
+        descriptors: ['Impossible to follow, consisting of isolated words and phrases and self-corrections, separated by long pauses.'],
+      },
+      {
+        band: 0,
+        descriptors: ['Candidate does not provide any response.'],
+      },
     ],
   },
   {
-    no: 5,
+    id: 'appropriateness-of-language',
+    name: 'Appropriateness of Language',
+    maxBand: 6,
+    bands: [
+      {
+        band: 6,
+        descriptors: [
+          'Entirely appropriate register, tone and lexis for the context.',
+          'No difficulty at all in explaining technical matters in lay terms.',
+          'Rich and flexible.',
+        ],
+      },
+      {
+        band: 5,
+        descriptors: [
+          'Mostly appropriate register, tone and lexis for the context.',
+          'Occasional lapses are not intrusive.',
+        ],
+      },
+      {
+        band: 4,
+        descriptors: [
+          'Generally appropriate register, tone and lexis for the context, but somewhat restricted and lacking in complexity.',
+          'Lapses are noticeable and at times reflect limited resources of grammar and expression.',
+          'Sufficient resources to maintain the interaction.',
+        ],
+      },
+      {
+        band: 3,
+        descriptors: [
+          'Some evidence of appropriate register, tone and lexis, but lapses are frequent and intrusive, reflecting inadequate resources of grammar and expression.',
+        ],
+      },
+      {
+        band: 2,
+        descriptors: ['Mostly inappropriate register, tone and lexis for the context.'],
+      },
+      {
+        band: 1,
+        descriptors: ['Entirely inappropriate register, tone and lexis for the context.'],
+      },
+      {
+        band: 0,
+        descriptors: ['Candidate does not provide any response.'],
+      },
+    ],
+  },
+  {
+    id: 'resources-of-grammar-and-expression',
+    name: 'Resources of Grammar and Expression',
+    maxBand: 6,
+    bands: [
+      {
+        band: 6,
+        descriptors: [
+          'Wide range of grammar and vocabulary used accurately and flexibly.',
+          'Confident use of idiomatic speech.',
+        ],
+      },
+      {
+        band: 5,
+        descriptors: [
+          'Wide range of grammar and vocabulary generally used accurately and flexibly.',
+          'Occasional errors in grammar or vocabulary are not intrusive.',
+        ],
+      },
+      {
+        band: 4,
+        descriptors: [
+          'Inaccuracies in vocabulary and grammar, particularly in more complex sentences, are sometimes intrusive.',
+          'Meaning is generally clear.',
+        ],
+      },
+      {
+        band: 3,
+        descriptors: [
+          'Limited vocabulary and control of grammatical structures, except very simple sentences.',
+          'Persistent inaccuracies are intrusive.',
+        ],
+      },
+      {
+        band: 2,
+        descriptors: [
+          'Very limited resources of vocabulary and grammar, even in simple sentences.',
+          'Numerous errors in word choice.',
+        ],
+      },
+      {
+        band: 1,
+        descriptors: ['Limited in all respects.'],
+      },
+      {
+        band: 0,
+        descriptors: ['Candidate does not provide any response.'],
+      },
+    ],
+  },
+];
+
+export const SPEAKING_CLINICAL_CRITERIA: ClinicalCriterion[] = [
+  {
     id: 'relationship-building',
+    letter: 'A',
     name: 'Relationship building',
-    weight: '3 points',
-    points: 3,
-    summary: 'Open warmly and stay respectful, empathetic, and attentive throughout.',
-    whatItMeans: [
-      'Start with an appropriate greeting — professional but approachable.',
-      'Be respectful, empathetic, and non-judgemental while the other person speaks.',
-      'Stay attentive: do not cut the person off, look distracted, or judge their concerns.',
-    ],
-    doWell: [
-      'Greeting the person by name and putting them at ease',
-      'Listening attentively without interrupting',
-      'Responding with empathy, not judgement',
-    ],
-    avoid: [
-      'Opening with a blunt “So what is your problem today?”',
-      'Cutting the person off or appearing distracted',
-      'Judgemental remarks about their situation',
+    maxScore: 3,
+    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
+    indicators: [
+      { code: 'A1', text: 'Initiating the interaction appropriately (greeting, introductions, nature of interview)' },
+      { code: 'A2', text: 'Demonstrating an attentive and respectful attitude' },
+      { code: 'A3', text: 'Adopting a non-judgemental approach' },
+      { code: 'A4', text: 'Showing empathy for feelings/predicament/emotional state' },
     ],
   },
   {
-    no: 6,
-    id: 'patient-perspective',
-    name: 'Incorporating patient perspective',
-    weight: '3 points',
-    points: 3,
-    summary: 'Show you heard their worries — even when they differ from your clinical view.',
-    whatItMeans: [
-      'The other person’s concerns may differ from your professional priorities. Show you have heard their worries and put them in perspective.',
-      'Gently confirm what is correct and correct what is inaccurate — professionally and without judgement.',
-      'Pick up on cues about fears or beliefs rather than dismissing them.',
-    ],
-    doWell: [
-      'Listening for worries and naming them back',
-      'Picking up on emotional cues and exploring them kindly',
-      'Correcting misinformation respectfully',
-    ],
-    avoid: [
-      'Dismissing concerns as unimportant next to the clinical issue',
-      'Being rude about inaccurate information',
-      'Ignoring hints about fears at home or about treatment',
+    id: 'understanding-patient-perspective',
+    letter: 'B',
+    name: "Understanding & incorporating the patient's perspective",
+    maxScore: 3,
+    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
+    indicators: [
+      { code: 'B1', text: "Eliciting and exploring the patient's ideas/concerns/expectations" },
+      { code: 'B2', text: "Picking up the patient's cues" },
+      { code: 'B3', text: 'Relating explanations to elicited ideas/concerns/expectations' },
     ],
   },
   {
-    no: 7,
     id: 'providing-structure',
+    letter: 'C',
     name: 'Providing structure',
-    weight: '3 points',
-    points: 3,
-    summary: 'Guide the conversation through the task points without rushing or controlling it.',
-    whatItMeans: [
-      'Use the role-play points to guide the interview while letting the other person speak freely.',
-      'Use signposting and linking language to move forward naturally (“Speaking of tablets, how is your blood pressure?”).',
-      'Cover as many points as you can, in any sensible order — you do not need a rigid order, and you do not need every single point.',
-    ],
-    doWell: [
-      'Opening the interview clearly (“Hello, my name is…”)',
-      'Guiding with prompts (“Tell me about…”)',
-      'Using the other person’s own words as a bridge to the next topic',
-      'Allowing time to answer without interrupting',
-    ],
-    avoid: [
-      'Waiting for the other person to lead the conversation',
-      'Letting one topic run so long that other points are missed',
-      'Rushing through every point with no room to answer',
-      'Sticking rigidly to card order with no flexibility',
+    maxScore: 3,
+    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
+    indicators: [
+      { code: 'C1', text: 'Sequencing the interview purposefully and logically' },
+      { code: 'C2', text: 'Signposting changes in topic' },
+      { code: 'C3', text: 'Using organising techniques in explanations' },
     ],
   },
   {
-    no: 8,
     id: 'information-gathering',
+    letter: 'D',
     name: 'Information gathering',
-    weight: '3 points',
-    points: 3,
-    summary: 'Ask open questions first, follow cues, and clarify — don’t interrogate.',
-    whatItMeans: [
-      'Start with open questions so the person can answer freely, then narrow to closed questions.',
-      'Follow the person’s cues and signposts into the next topic (“You mentioned long hours at work — does that leave time to exercise?”).',
-      'Ask for clarification when unsure, and acknowledge concerns even when they are not the main clinical focus.',
-    ],
-    doWell: [
-      'Open question first, then focused follow-up (“Roughly how much do you drink in the evening?” → “Do you think this affects your sleep?”)',
-      'Using cues to open the next topic',
-      'Clarifying vague answers (“When you say insomnia, do you mean falling asleep or waking often?”)',
-      'Acknowledging worries, including ones off the task card',
-    ],
-    avoid: [
-      'Only yes/no questions',
-      'Compound questions (“How much do you drink and how many hours do you sleep?”)',
-      'Rushing past answers you did not understand',
-      'Ignoring concerns that are not on the role-play card',
+    maxScore: 3,
+    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
+    indicators: [
+      { code: 'D1', text: "Facilitating the patient's narrative with active listening techniques, minimising interruption" },
+      { code: 'D2', text: 'Using initially open questions, appropriately moving to closed questions' },
+      { code: 'D3', text: 'NOT using compound questions/leading questions' },
+      { code: 'D4', text: 'Clarifying statements which are vague or need amplification' },
+      { code: 'D5', text: 'Summarising information to encourage correction/invite further information' },
     ],
   },
   {
-    no: 9,
     id: 'information-giving',
+    letter: 'E',
     name: 'Information giving',
-    weight: '3 points',
-    points: 3,
-    summary: 'Build on what they already know, explain clearly, and check understanding.',
-    whatItMeans: [
-      'First find out what the person already knows, then build on it and correct anything inaccurate.',
-      'Give information in stages: explain one point, check understanding, then move on — and factor in their opinions and attitudes.',
-      'Summarise the important points, confirm they have what they need, and offer where to find out more where relevant.',
-    ],
-    doWell: [
-      'Asking what they know first (“Have you had this procedure before?”)',
-      'Explaining briefly after they answer, in plain language',
-      'Pausing to check (“Does that make sense so far?”)',
-      'Offering a leaflet or trusted source for more detail',
-    ],
-    avoid: [
-      'Assuming they know nothing and over-explaining the obvious',
-      'Asking everything first, then dumping all the information at once',
-      'Never pausing to check understanding',
-      'Ignoring their views when giving advice',
+    maxScore: 3,
+    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
+    indicators: [
+      { code: 'E1', text: 'Establishing initially what the patient already knows' },
+      { code: 'E2', text: 'Pausing periodically when giving information, using the response to guide next steps' },
+      { code: 'E3', text: 'Encouraging the patient to contribute reactions/feelings' },
+      { code: 'E4', text: 'Checking whether the patient has understood information' },
+      { code: 'E5', text: 'Discovering what further information the patient needs' },
     ],
   },
 ];
@@ -252,75 +318,66 @@ export const SPEAKING_INTRO_QUESTIONS: SpeakingIntroQuestion[] = [
   {
     no: 1,
     question: 'What is your name?',
-    sampleAnswer: 'My name is [full name], but you can call me [preferred name].',
+    sampleAnswer: 'My name is (your first name + last name)',
   },
   {
     no: 2,
     question: 'What is your profession?',
-    sampleAnswer:
-      'I am a [profession]. I have been working in this field for [number of years], mainly in [area / setting].',
+    sampleAnswer: 'My profession is medicine',
   },
   {
     no: 3,
     question: 'Why are you taking the OET?',
     sampleAnswer:
-      'I am taking the OET because I need to demonstrate my English proficiency for [professional registration / work / study] in [country or organisation]. Passing the test will help me move forward with my career plans and communicate safely and confidently in an English-speaking healthcare environment.',
+      "Honestly I'm taking the OET to complete Australian medical council registration process because it is one of the two tests required to practice medicine in Australia. Practicing medicine in Australia is one of my dreams to upgrade myself in my career. In Australia i can get advanced training and recent modalities of diagnosis and treatment. I am also searching for a better chance of education for my children who are an essential part of my life so I hope to pass the OET as soon as possible to start practicing medicine in Australia.",
   },
   {
     no: 4,
-    question: 'How long have you been working in your profession?',
+    question: 'How long have you been working as a physician?',
     sampleAnswer:
-      'I have been working as a [profession] for [number of years]. Most of my experience has been in [main workplace / specialty / area], where I have developed experience in [brief example of your work].',
+      "I've been working as a physician for 10 years. 5 years were in Egypt and the other 5 years were in United Arab Emirates.",
   },
   {
     no: 5,
-    question: 'What are your usual working hours?',
+    question: 'What about your working hours?',
     sampleAnswer:
-      'I usually work around [number] hours a day, [number] days a week. My schedule is generally [daytime / evening / shift-based], although it can vary depending on the workload, appointments, and any urgent cases.',
+      "I'm working for 8 hours daily from Saturday to Thursday so I'm working about 48 hours per week. Unfortunately, I've no enough time to spend with my family.",
   },
   {
     no: 6,
-    question: 'Why did you choose your profession as a career?',
+    question: 'Why did you choose medicine as a career?',
     sampleAnswer:
-      "I chose [profession] because I wanted a career that combines professional knowledge, communication, and the opportunity to make a meaningful difference to people's health and quality of life. I also particularly enjoy [specific aspect of your profession].",
+      'Actually, it was my childhood dream and it was also a dream of my family especially my mother so I studied hard to achieve my target. My first day in the faculty of medicine was one of the happiest days in my life. I like medicine a lot because it gives me the chance to help the others.',
   },
   {
     no: 7,
-    question: 'What is your specialty / main area of practice, and why did you choose it?',
+    question: 'What about your specialty? And why?',
     sampleAnswer:
-      'My main area of practice is [specialty / area]. I chose it because [personal or professional reason]. I particularly enjoy [specific feature of the work], and I feel that it suits my interests and strengths.',
-    note: 'If your profession does not use formal specialties, answer using your main area of practice, workplace, or clinical focus.',
+      'I like all branches of medicine so I was hesitated to choose a specific specialty and leave the others. Finally I found my target in family medicine because it allows me to practice all branches of medicine and to deal with a variety of cases which in turn help me to feel satisfied.',
   },
   {
     no: 8,
-    question: 'What advice would you give to fresh graduates in your profession?',
+    question: 'What is your advice for fresh graduates?',
     sampleAnswer:
-      'I would advise new graduates to keep learning, ask for feedback, communicate clearly, and never be afraid to seek help when they need it. It is also important to stay up to date, work well with the wider team, and treat every patient or client with respect and empathy.',
+      'Ooh! the most important advice I give to them is to choose their specialty carefully by choosing what they actually like because they will spend the rest of their life practicing it. I also advise them to outline their target at an early stage to avoid wasting their time so I recommend them to find out the different styles of post graduation qualifications before choosing a specific one and to keep updated with the recent guidelines to help people well.',
   },
   {
     no: 9,
-    question: 'What do you think makes someone successful in your profession?',
+    question: 'How to be a successful physician?',
     sampleAnswer:
-      'I think success comes from a combination of strong professional knowledge, good communication, empathy, teamwork, reliability, and continuous learning. A successful professional should also know their limits, ask for support when necessary, and always put safety and quality of care first.',
+      "Ooh! What a difficult question! from my point of view I think that success in the field of medicine mainly depends on early and proper planning for your career pathway. You should fulfill two elements. The first element is the good planning which will save time and effort for you and the second one is hard continuous working. You should also have a lot of skills like being a good listener, showing sympathy to your patients, respecting the patients' time and confidentiality, building a trust bond between you and the patients and continuously updating yourself with the new guidelines",
   },
   {
     no: 10,
-    question: 'What was the last professional training or course you completed?',
+    question: 'What was the last training you had?',
     sampleAnswer:
-      'The most recent training I completed was [course / workshop / programme]. It focused on [topic]. I found it very useful because it improved my knowledge and confidence in [area], and I have been able to apply what I learned in my daily work.',
+      'I\'m keen to get frequent training courses. The last one that I had was about "advanced cardiac life support" which was about one month ago and implied how to perform a cardiac and respiratory support in case of cardiac arrest. It also taught us how to deal with the cases of life threatening arrhythmias. It was really a valuable course.',
   },
   {
     no: 11,
-    question: 'What is the most recent advance in your profession that you have heard about?',
+    question: 'What is the most recent medical advance you heard about?',
     sampleAnswer:
-      'One recent development I have been interested in is [new technology / treatment / guideline / professional development]. It may improve [patient outcome / safety / efficiency / quality of care]. I find it interesting because it shows how quickly the profession is evolving, so I try to keep up to date through guidelines, courses, and professional literature.',
-  },
-  {
-    no: 12,
-    question: 'What does a typical working day look like for you?',
-    sampleAnswer:
-      'A typical working day usually starts with [handover / reviewing appointments / preparing the clinic]. I then spend most of the day [main clinical or professional duties]. I also spend time documenting my work, communicating with colleagues, and supporting or educating patients and clients. Every day is slightly different, which is one of the things I enjoy about my profession.',
-    note: 'If you are not currently working, adapt this answer to your most recent role, internship, placement, or usual clinical training day.',
+      'No doubt that the medical field is one of the fastest developing fields in the world. Nearly every month there are new researches, theories and guidelines. Diabetes mellitus treatment is one of the most important tasks that is developing rapidly. I heard about a new trend of the treatment of diabetic patients by putting a pump of insulin under their skin to release proper amounts of insulin according to their need which will help them to get rid of the needles pricks and gain a good control of their blood glucose level all over the day.',
   },
 ];
 

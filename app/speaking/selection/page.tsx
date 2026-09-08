@@ -127,10 +127,10 @@ export default function SpeakingTaskSelection() {
                 eyebrow: 'Reference',
                 eyebrowIcon: ClipboardList,
                 title: 'Speaking Assessment Criteria',
-                description: 'The 9 criteria your role-plays are assessed against, with weights and what to do well. Same for all professions.',
+                description: 'The 9 criteria your role-plays are assessed against, with 4 linguistic bands and 5 clinical indicators. Same for all professions.',
                 metaItems: [
                   { icon: ClipboardList, label: '9 sections' },
-                  { icon: ClipboardList, label: '42 points' },
+                  { icon: ClipboardList, label: 'Language + clinical' },
                 ],
                 primaryAction: {
                   label: 'Open Assessment Criteria',
@@ -146,9 +146,9 @@ export default function SpeakingTaskSelection() {
                 eyebrow: 'Reference',
                 eyebrowIcon: MessageCircleQuestion,
                 title: 'Speaking Intro Questions',
-                description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
+                description: '11 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
                 metaItems: [
-                  { icon: MessageCircleQuestion, label: '12 questions' },
+                  { icon: MessageCircleQuestion, label: '11 questions' },
                   { icon: MessageCircleQuestion, label: 'All professions' },
                 ],
                 primaryAction: {

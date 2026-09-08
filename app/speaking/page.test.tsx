@@ -169,6 +169,10 @@ describe('Speaking page', () => {
     expect(screen.getByText('Open Assessment Criteria').closest('a')).toHaveAttribute('href', '/speaking/assessment-criteria');
     expect(screen.getByText('Open Intro Questions').closest('a')).toHaveAttribute('href', '/speaking/intro-questions');
     expect(screen.getAllByText('All professions').length).toBeGreaterThan(0);
+    expect(screen.getByText('Language + clinical')).toBeInTheDocument();
+    expect(screen.getByText('11 questions')).toBeInTheDocument();
+    expect(screen.queryByText('42 points')).not.toBeInTheDocument();
+    expect(screen.queryByText('12 questions')).not.toBeInTheDocument();
     expect(screen.getByText('Start Speaking Exam')).toBeInTheDocument();
     expect(screen.getByText('Book a Tutor')).toBeInTheDocument();
     expect(screen.getByText('Practise any speaking card on the platform')).toBeInTheDocument();

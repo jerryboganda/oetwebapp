@@ -9,22 +9,28 @@ vi.mock('@/components/layout', () => ({
 }));
 
 import SpeakingAssessmentCriteriaPage from './page';
-import { SPEAKING_CRITERIA } from '@/lib/speaking-candidate-resources';
+import {
+  SPEAKING_CLINICAL_CRITERIA,
+  SPEAKING_LINGUISTIC_CRITERIA,
+} from '@/lib/speaking-candidate-resources';
 
 describe('Speaking Assessment Criteria page', () => {
-  it('renders all 9 criteria with weights, natively (no PDF)', () => {
+  it('renders the official linguistic and clinical criteria from the PDF', () => {
     render(<SpeakingAssessmentCriteriaPage />);
 
     expect(screen.getByRole('heading', { name: 'Speaking Assessment Criteria' })).toBeInTheDocument();
-    expect(SPEAKING_CRITERIA).toHaveLength(9);
+    expect(SPEAKING_LINGUISTIC_CRITERIA).toHaveLength(4);
+    expect(SPEAKING_CLINICAL_CRITERIA).toHaveLength(5);
 
-    for (const c of SPEAKING_CRITERIA) {
-      // Each name appears twice by design (overview table + accordion title).
-      expect(screen.getAllByText(c.name, { exact: false }).length).toBeGreaterThanOrEqual(2);
+    for (const criterion of SPEAKING_LINGUISTIC_CRITERIA) {
+      expect(screen.getAllByText(criterion.name).length).toBeGreaterThanOrEqual(2);
     }
-    expect(screen.getAllByText('6 points').length).toBeGreaterThanOrEqual(4);
-    expect(screen.getAllByText('3 points').length).toBeGreaterThanOrEqual(5);
+    for (const criterion of SPEAKING_CLINICAL_CRITERIA) {
+      expect(screen.getAllByText(criterion.name).length).toBeGreaterThanOrEqual(2);
+    }
 
+    expect(screen.getByText(/Pronunciation is easily understood and prosodic features/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Adept use/i).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText(/Banfield/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/promedicalenglish/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/rulebook/i)).not.toBeInTheDocument();
