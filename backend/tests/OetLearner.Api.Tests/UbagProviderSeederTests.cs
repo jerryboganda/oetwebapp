@@ -13,7 +13,10 @@ namespace OetLearner.Api.Tests;
 /// TestFacadeChoiceModelIDsMatchResolver guards the UBAG end; a drift on
 /// either side re-opens the "admin board offers IDs the facade rejects"
 /// mismatch. Toggle-kind settings (gemini thinking, deepseek deepthink)
-/// carry no labelled values and are intentionally absent.
+/// carry no labelled values and are intentionally absent. The board-curated
+/// ChatGPT composite (GPT-5.6 Sol + Medium, bound as ONE pick) is absent too:
+/// the allowlist gates free-form model strings, while the composite is a
+/// board+facade contract pinned by the board test, not this list.
 /// </summary>
 public sealed class UbagProviderSeederTests : IAsyncDisposable
 {
@@ -70,9 +73,11 @@ public sealed class UbagProviderSeederTests : IAsyncDisposable
             Assert.Contains(id, ids);
         }
 
-        // Stale entries the facade rejects must stay out.
+        // Stale entries the facade rejects must stay out. The board-curated
+        // composite is a board+facade contract, not an allowlist entry.
         Assert.DoesNotContain("gemini_web|3.1 Flash", ids);
         Assert.DoesNotContain("duckai_web|GPT-5.4 Mini", ids);
+        Assert.DoesNotContain("chatgpt_web|GPT-5.6 Sol + Medium", ids);
     }
 
     [Fact]
