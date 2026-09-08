@@ -144,7 +144,7 @@ public sealed class AiAssistantThreadManagementTests : IAsyncDisposable
 
     private sealed class NullAssistantGateway : IAiAssistantGateway
     {
-        public async IAsyncEnumerable<AssistantStreamEvent> StreamCompleteWithToolsAsync(
+        public async IAsyncEnumerable<LlmStreamChunk> StreamCompleteWithToolsAsync(
             string featureCode, string? userId, List<LlmMessage> messages,
             IReadOnlyList<OetLearner.Api.Services.AiTools.AiToolDefinition> tools,
             string? modelOverride,
