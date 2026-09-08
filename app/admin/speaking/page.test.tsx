@@ -1,6 +1,7 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithRouter } from '@/tests/test-utils';
 import { AdminPermission } from '@/lib/admin-permissions';
+import { adminListRolePlayCards } from '@/lib/api/speaking-role-play-cards';
 
 const { mockUseCurrentUser } = vi.hoisted(() => ({
   mockUseCurrentUser: vi.fn(),
@@ -82,5 +83,16 @@ describe('AdminSpeakingPage', () => {
     // But the content tabs are still visible for reading.
     expect(screen.getByRole('button', { name: 'Role-play cards' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mock sets' })).toBeInTheDocument();
+  });
+
+  it('2026-09-09 classifier repair: the category filter re-lists by primaryCategory and clears back to unfiltered', async () => {
+    renderHub([AdminPermission.SystemAdmin]);
+    await waitFor(() => expect(adminListRolePlayCards).toHaveBeenCalledWith({ primaryCategory: undefined }));
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: 'First Visit' } });
+    await waitFor(() => expect(adminListRolePlayCards).toHaveBeenCalledWith({ primaryCategory: 'First Visit' }));
+
+    fireEvent.change(screen.getByLabelText('Category'), { target: { value: '' } });
+    await waitFor(() => expect(adminListRolePlayCards).toHaveBeenLastCalledWith({ primaryCategory: undefined }));
   });
 });

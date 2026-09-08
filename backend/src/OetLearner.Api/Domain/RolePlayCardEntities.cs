@@ -295,6 +295,26 @@ public class RolePlayCard
     /// safer than a forced wrong category.</summary>
     public bool CategoryNeedsReview { get; set; } = false;
 
+    /// <summary>Provenance of <see cref="PrimaryCategory"/>: <c>legacy</c>
+    /// (pre-provenance row, machine-classified with no record kept),
+    /// <c>classifier</c> (the deterministic §8B engine set it),
+    /// <c>reviewed</c> (a human confirmed a classifier/legacy value during
+    /// the corpus repair sweep), <c>manual</c> (an admin explicitly picked
+    /// it), or <c>seed</c> (hand-authored system seed data). Drives whether
+    /// a content edit is allowed to silently reclassify the row.</summary>
+    [MaxLength(16)]
+    public string CategorySource { get; set; } = "legacy";
+
+    /// <summary>Which <see cref="SpeakingCardClassifier.ClassifierVersion"/>
+    /// produced the current category, when <see cref="CategorySource"/> is
+    /// <c>classifier</c>. Null for manual/reviewed/seed/legacy rows.</summary>
+    [MaxLength(32)]
+    public string? CategoryClassifierVersion { get; set; }
+
+    /// <summary>When the classifier last set <see cref="PrimaryCategory"/>.
+    /// Null for manual/reviewed/seed/legacy rows.</summary>
+    public DateTimeOffset? CategoryClassifiedAt { get; set; }
+
     [MaxLength(64)]
     public string? CreatedByUserId { get; set; }
 

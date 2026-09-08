@@ -142,6 +142,8 @@ public static class SpeakingRolePlayCardSeed
             PrimaryCategory = card.PrimaryCategory,
             SecondaryTagsJson = JsonSupport.Serialize(card.SecondaryTags),
             CategoryNeedsReview = card.CategoryNeedsReview,
+            // Hand-authored, not classifier output.
+            CategorySource = "seed",
             CriteriaFocusJson = JsonSupport.Serialize(card.CriteriaFocus),
                 Disclaimer = "Practice estimate only. This is not an official OET score or result.",
                 Status = ContentStatus.Published,

@@ -214,6 +214,104 @@ public sealed class SpeakingCardClassifierTests
         Assert.True(result.NeedsReview);
     }
 
+    // ── 2026-09-09 classifier repair — regressions named in the spec ────────
+
+    [Fact]
+    public void HistoricalSurgeryMention_DuringFirstVisit_IsNotAlreadyKnownPatient()
+    {
+        // Bare "surgery"/"operation" must no longer trigger Already Known
+        // Patient — only an active peri-operative/inpatient setting does.
+        var result = Card(
+            scenarioTitle: "First visit for hernia assessment",
+            background: "Mr Okafor attends the clinic for the first time to discuss a possible hernia repair. "
+                + "He had abdominal surgery 3 years ago for an unrelated condition.",
+            tasks: new[] { "Take a history", "Discuss options for surgery" });
+
+        Assert.Equal("First Visit", result.Primary);
+        Assert.Equal("Q4-first-visit", result.RuleCode);
+    }
+
+    [Fact]
+    public void SymptomDurationPhrase_DoesNotFalsePositiveAsKnownCare()
+    {
+        // "cough for 3 days" is ordinary first-visit history-taking, not an
+        // ED/ward "known for hours/days" signal.
+        var result = Card(
+            scenarioTitle: "First visit with a persistent cough",
+            background: "Ms Ibrahim attends for the first time with a cough for 3 days and a mild fever.",
+            tasks: new[] { "Take a history", "Examine the chest" });
+
+        Assert.Equal("First Visit", result.Primary);
+    }
+
+    [Fact]
+    public void NewEdArrival_VersusManagedEd_ClassifiesCorrectly()
+    {
+        var justArrived = Card(
+            scenarioTitle: "Chest pain",
+            setting: "Emergency Department",
+            background: "Mr Petrov has just arrived in the Emergency Department with sudden chest pain.",
+            tasks: new[] { "Take a focused history" });
+        Assert.Equal("Emergency / Emergency Department", justArrived.Primary);
+        Assert.Equal("Q2-ed-arrival", justArrived.RuleCode);
+
+        var alreadyManaged = Card(
+            scenarioTitle: "Chest pain follow-up",
+            setting: "Emergency Department",
+            background: "Mr Petrov has already been managed in the Emergency Department for several hours "
+                + "and is now stable. Review his progress.",
+            tasks: new[] { "Review progress" });
+        Assert.Equal("Already Known Patient", alreadyManaged.Primary);
+        Assert.Equal("Q3-known-care", alreadyManaged.RuleCode);
+    }
+
+    [Fact]
+    public void NegatedAngryMention_DoesNotTagAngry()
+    {
+        var result = Card(
+            scenarioTitle: "First visit review",
+            background: "Ms Duval attends the clinic for the first time. She is not angry, just seeking reassurance about her results.",
+            tasks: new[] { "Take a history", "Reassure the patient" });
+
+        Assert.DoesNotContain("Angry", result.SecondaryTags);
+    }
+
+    [Fact]
+    public void InitialDietaryConsultation_IsFirstVisit()
+    {
+        var result = Card(
+            scenarioTitle: "Initial dietary consultation",
+            background: "This is Mrs Farrow's initial dietary consultation following a referral for weight management advice.",
+            tasks: new[] { "Take a diet history", "Discuss goals" });
+
+        Assert.Equal("First Visit", result.Primary);
+        Assert.Equal("Q4-first-visit", result.RuleCode);
+    }
+
+    [Fact]
+    public void FirstPhysiotherapyAppointment_IsFirstVisit()
+    {
+        var result = Card(
+            scenarioTitle: "First physiotherapy appointment",
+            background: "Mr Sato attends his first physiotherapy appointment after a knee injury.",
+            tasks: new[] { "Assess the knee", "Explain the treatment plan" });
+
+        Assert.Equal("First Visit", result.Primary);
+    }
+
+    [Fact]
+    public void Classification_ReturnsRuleCodeAndEvidenceForAuditing()
+    {
+        var result = Card(
+            scenarioTitle: "Follow-up review",
+            background: "Mr Lee is returning for a follow-up of his asthma control.",
+            tasks: new[] { "Review inhaler technique" });
+
+        Assert.Equal("Second Visit / Follow-up", result.Primary);
+        Assert.Equal("Q5-follow-up", result.RuleCode);
+        Assert.NotNull(result.Evidence);
+    }
+
     [Fact]
     public void ApplyIfUnclassified_DoesNotOverwriteConfirmedFirstVisitCategory()
     {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { ClipboardList, MessageCircleQuestion } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -60,13 +60,25 @@ export default function SpeakingTaskSelection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Stale-request guard: only the most recently issued fetch is allowed to
+  // write state. A slow response for a filter the user has since changed
+  // away from must never clobber a faster, newer response.
+  const requestIdRef = useRef(0);
+
   const fetchCards = useCallback(async (selection: Selection) => {
+    const requestId = ++requestIdRef.current;
     setLoading(true);
     setError(null);
     try {
       const professionId = single(selection, 'profession');
       const primaryCategory = single(selection, 'category') as SpeakingPrimaryCategory | undefined;
       const response = await listLearnerRolePlayCards({ professionId, primaryCategory });
+      if (requestId !== requestIdRef.current) return; // superseded by a newer request
+
+      if (!response || !Array.isArray(response.rolePlayCards) || typeof response.totalCount !== 'number') {
+        throw new Error('Malformed response from the server.');
+      }
+
       setCards(response.rolePlayCards);
       // The count is server-derived from the same filters that populate the
       // list — display it verbatim, never compute it on the client.
@@ -77,9 +89,10 @@ export default function SpeakingTaskSelection() {
         : null;
       setAppliedProfessionLabel(professionLabel);
     } catch {
+      if (requestId !== requestIdRef.current) return;
       setError('Could not load speaking cards. Please try again.');
     } finally {
-      setLoading(false);
+      if (requestId === requestIdRef.current) setLoading(false);
     }
   }, []);
 
@@ -186,9 +199,25 @@ export default function SpeakingTaskSelection() {
           )}
         </div>
 
-        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
-
-        {loading ? (
+        {error ? (
+          // Retryable error state ONLY — never rendered alongside the empty
+          // or loading state below (that contradictory double-render was
+          // the bug: an error banner PLUS "No cards available").
+          <InlineAlert
+            variant="error"
+            action={(
+              <button
+                type="button"
+                onClick={() => fetchCards(applied)}
+                className="pressable rounded-lg border border-current px-3 py-1 text-xs font-semibold"
+              >
+                Retry
+              </button>
+            )}
+          >
+            {error}
+          </InlineAlert>
+        ) : loading ? (
           <div className="grid grid-cols-1 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-28 w-full rounded-xl" />

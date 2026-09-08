@@ -23,6 +23,7 @@ import {
   DEFAULT_DISCLAIMER,
   PROFESSION_OPTIONS,
   SPEAKING_CRITERIA_OPTIONS,
+  adminPreviewSpeakingCardClassification,
   type CreateRolePlayCardInput,
   type RolePlayCardDetail,
   type SpeakingCardTypeDetail,
@@ -30,7 +31,6 @@ import {
 import {
   SPEAKING_BEHAVIOURAL_TAGS,
   SPEAKING_PRIMARY_CATEGORIES,
-  classifySpeakingCard,
 } from '@/lib/speaking/category-taxonomy';
 
 export type RolePlayCardEditorMode = 'create' | 'edit';
@@ -94,6 +94,8 @@ export function RolePlayCardEditor({
   const [primaryCategory, setPrimaryCategory] = useState<string>(initial?.primaryCategory ?? 'Other Cards');
   const [secondaryTags, setSecondaryTags] = useState<string[]>(initial?.secondaryTags ?? []);
   const [categoryNeedsReview, setCategoryNeedsReview] = useState<boolean>(initial?.categoryNeedsReview ?? true);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const [criteriaFocus, setCriteriaFocus] = useState<string[]>(initial?.criteriaFocus ?? []);
   const [disclaimer, setDisclaimer] = useState(initial?.disclaimer ?? DEFAULT_DISCLAIMER);
   const [isLiveTutorEligible, setIsLiveTutorEligible] = useState<boolean>(initial?.isLiveTutorEligible ?? false);
@@ -182,24 +184,37 @@ export function RolePlayCardEditor({
             <Button
               type="button"
               variant="secondary"
+              disabled={suggesting}
               onClick={() => {
-                const suggestion = classifySpeakingCard({
+                setSuggesting(true);
+                setSuggestError(null);
+                // Server-authoritative preview (2026-09-09) — never classify
+                // client-side; the backend §8B classifier is the only source
+                // of truth for this suggestion.
+                adminPreviewSpeakingCardClassification({
                   scenarioTitle,
                   setting,
                   background,
                   tasks: cleanedTasks,
                   clinicalTopic,
                   patientEmotion,
-                });
-                setPrimaryCategory(suggestion.primary);
-                setSecondaryTags(suggestion.secondaryTags);
-                setCategoryNeedsReview(suggestion.needsReview);
+                })
+                  .then((suggestion) => {
+                    setPrimaryCategory(suggestion.primaryCategory);
+                    setSecondaryTags(suggestion.secondaryTags);
+                    setCategoryNeedsReview(suggestion.categoryNeedsReview);
+                  })
+                  .catch((e) => {
+                    setSuggestError(e instanceof Error ? e.message : 'Could not get a suggestion.');
+                  })
+                  .finally(() => setSuggesting(false));
               }}
             >
-              Suggest
+              {suggesting ? 'Suggesting…' : 'Suggest'}
             </Button>
           </div>
         </div>
+        {suggestError ? <p className="text-xs text-danger">{suggestError}</p> : null}
         <div className="flex flex-wrap items-center gap-4">
           <span className="text-sm font-medium text-navy">Behavioural tags:</span>
           {SPEAKING_BEHAVIOURAL_TAGS.map((tag) => (
