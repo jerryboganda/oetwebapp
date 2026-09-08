@@ -199,19 +199,23 @@ describe('UbagBoardPage', () => {
     await screen.findByText('Facade model test');
 
     // Dropdown is populated from the UBAG model fallback list (live facade
-    // catalog mirror incl. thinking levels + duck.ai + transcription alias).
+    // catalog mirror incl. duck.ai + transcription alias). ChatGPT shows ONE
+    // curated entry (Sol + Medium bound as one pick) with a recommended
+    // label; legacy single-setting IDs stay out of the board.
     const select = screen.getByRole('combobox', { name: 'UBAG AI provider/model to test' }) as HTMLSelectElement;
     expect(select.options.length).toBeGreaterThan(0);
-    expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|GPT-5.6 Sol')).toBeTruthy();
-    expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|Medium')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|GPT-5.6 Sol + Medium')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.text === 'chatgpt_web · GPT-5.6 Sol + Medium (recommended)')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|GPT-5.5')).toBeFalsy();
+    expect(Array.from(select.options).some((o) => o.value === 'chatgpt_web|Medium')).toBeFalsy();
     expect(Array.from(select.options).some((o) => o.value === 'duckai_web|GPT-5.6 Luna')).toBeTruthy();
     expect(Array.from(select.options).some((o) => o.value === 'duckai_web|Reasoning')).toBeTruthy();
     expect(Array.from(select.options).some((o) => o.value === 'gemini_web|3.8 Flash')).toBeTruthy();
 
-    // Picking a model + clicking Test calls the full-pipeline endpoint.
-    fireEvent.change(select, { target: { value: 'chatgpt_web|GPT-5.6 Sol' } });
+    // Picking the curated entry + clicking Test calls the full-pipeline endpoint.
+    fireEvent.change(select, { target: { value: 'chatgpt_web|GPT-5.6 Sol + Medium' } });
     fireEvent.click(screen.getByRole('button', { name: /^Test$/ }));
-    await waitFor(() => expect(mockTestModel).toHaveBeenCalledWith('ubag', 'chatgpt_web|GPT-5.6 Sol'));
+    await waitFor(() => expect(mockTestModel).toHaveBeenCalledWith('ubag', 'chatgpt_web|GPT-5.6 Sol + Medium'));
 
     // Success result surfaces a green signal and step trail.
     expect(await screen.findByText(/^ok$/)).toBeTruthy();

@@ -659,6 +659,12 @@ public sealed class AiProviderConnectionTester(
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         // Some Azure-style endpoints prefer api-key header; harmless to set both.
         req.Headers.TryAddWithoutValidation("api-key", apiKey);
+        // Unique nonce per probe so the UBAG facade's derived idempotency key
+        // can never collide with a previous probe's record: without it, a
+        // retest of the same model replays the SAME native job ID, and after
+        // any fingerprint-scheme change the store answers CONFLICT instead.
+        // Harmless to every other OpenAI-compatible provider (extra field
+        // ignored), and it keeps each admin Test click an independent run.
         req.Content = JsonContent.Create(new
         {
             model,
@@ -668,6 +674,7 @@ public sealed class AiProviderConnectionTester(
                 new { role = "system", content = "Reply with the single word OK." },
                 new { role = "user", content = fullPipeline ? "ping — reply with a single word." : "ping" },
             },
+            ubag_nonce = Guid.NewGuid().ToString("N"),
         });
         return req;
     }

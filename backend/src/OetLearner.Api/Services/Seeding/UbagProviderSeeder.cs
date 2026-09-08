@@ -62,7 +62,10 @@ public static class UbagProviderRouteDefaults
     /// end; this constant guards the OET end (see UbagProviderSeederTests).
     /// Toggle-kind settings (gemini thinking, deepseek deepthink) carry no
     /// labelled values and are intentionally absent: use the bare target for
-    /// the operator default.</summary>
+    /// the operator default. The board-curated ChatGPT composite
+    /// (GPT-5.6 Sol + Medium, bound as ONE pick) is intentionally absent too:
+    /// the allowlist gates free-form model strings, while the composite is a
+    /// board+facade contract (see UbagProviderSeederTests).</summary>
     public const string AllowedModelsCsv =
         "mock,mock|mock-fast,mock|mock-deep,mock|standard,mock|extended," +
         "deepseek_web,deepseek_web|Expert,deepseek_web|Instant,deepseek_web|Vision," +

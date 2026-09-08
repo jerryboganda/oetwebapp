@@ -68,6 +68,18 @@ interface BoardGroup {
 
 const UBAG_PROVIDER_CODE = 'ubag';
 
+/**
+ * Operator-curated ChatGPT default: GPT-5.6 Sol at Medium thinking. The
+ * facade also accepts every manifest choice value (older models, o3,
+ * Instant/High), but those are legacy/advanced — the board surfaces Sol +
+ * Medium only so the operator can never pick a stale or wrong-effort combo.
+ * Full catalog (incl. duck.ai reasoning, gemini flashes, deepseek modes)
+ * stays one click away via Discover models.
+ */
+const CHATGPT_MODEL = 'chatgpt_web|GPT-5.6 Sol';
+const CHATGPT_THINKING = 'chatgpt_web|Medium';
+const CHATGPT_SOL_MEDIUM = 'chatgpt_web|GPT-5.6 Sol + Medium';
+
 const UBAG_MODEL_FALLBACK = [
   'mock',
   'mock|mock-fast',
@@ -79,14 +91,7 @@ const UBAG_MODEL_FALLBACK = [
   'deepseek_web|Instant',
   'deepseek_web|Vision',
   'chatgpt_web',
-  'chatgpt_web|GPT-5.6 Sol',
-  'chatgpt_web|GPT-5.5',
-  'chatgpt_web|GPT-5.4',
-  'chatgpt_web|GPT-5.3',
-  'chatgpt_web|o3',
-  'chatgpt_web|Instant',
-  'chatgpt_web|Medium',
-  'chatgpt_web|High',
+  CHATGPT_SOL_MEDIUM,
   'claude_web',
   'gemini_web',
   'gemini_web|3.8 Flash',
@@ -110,6 +115,16 @@ const UBAG_MODEL_FALLBACK = [
   'generic_form',
   'whisper-1',
 ];
+
+/**
+ * Display labels for composite facade IDs. The facade model string stays the
+ * wire value; the label is what the operator reads.
+ */
+const MODEL_LABELS: Record<string, string> = {
+  [CHATGPT_SOL_MEDIUM]: 'chatgpt_web · GPT-5.6 Sol + Medium (recommended)',
+};
+
+const modelLabel = (m: string) => MODEL_LABELS[m] ?? m;
 
 const CHATGPT = 'chatgpt_web';
 const DEEPSEEK = 'deepseek_web';
@@ -533,7 +548,7 @@ export default function UbagBoardPage() {
             disabled={isBusy}
             options={(models.includes(draft) || draft === '' ? models : [...models, draft]).map((m) => ({
               value: m,
-              label: m,
+              label: modelLabel(m),
             }))}
             onChange={(e) => {
               const next = e.target.value;
@@ -643,7 +658,7 @@ export default function UbagBoardPage() {
                         disabled={testingModel || !ubagReady}
                         options={[
                           ...(models.length > 0 ? models : UBAG_MODEL_FALLBACK),
-                        ].map((m) => ({ value: m, label: m }))}
+                        ].map((m) => ({ value: m, label: modelLabel(m) }))}
                         onChange={(e) => setTestModel(e.target.value)}
                       />
                     </div>
