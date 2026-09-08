@@ -7,12 +7,16 @@ const {
   mockFetchMockReports,
   mockLearnerListSpeakingSharedResources,
   mockTrack,
+  mockLearnerDashboardShell,
 } = vi.hoisted(() => ({
   mockFetchSpeakingHome: vi.fn(),
   mockFetchSubmissions: vi.fn(),
   mockFetchMockReports: vi.fn(),
   mockLearnerListSpeakingSharedResources: vi.fn(),
   mockTrack: vi.fn(),
+  mockLearnerDashboardShell: vi.fn(({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => (
+    <div data-testid="learner-dashboard-shell" data-require-auth={String(Boolean(props.requireAuth))}>{children}</div>
+  )),
 }));
 
 vi.mock('next/link', () => ({
@@ -33,9 +37,7 @@ vi.mock('next/navigation', () => ({
 
 vi.mock('@/components/layout', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
-  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
-    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
-  ),
+  LearnerDashboardShell: mockLearnerDashboardShell,
   LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div data-testid="learner-workspace-container" className={className}>{children}</div>
   ),
@@ -66,6 +68,8 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import SpeakingPage from './page';
+import SpeakingAssessmentCriteriaPage from './assessment-criteria/page';
+import SpeakingIntroQuestionsPage from './intro-questions/page';
 
 describe('Speaking page', () => {
   beforeEach(() => {
@@ -218,5 +222,14 @@ describe('Speaking page', () => {
 
     const tutorLink = (await screen.findByText('Book a Tutor')).closest('a');
     expect(tutorLink).toHaveAttribute('href', '/private-speaking');
+  });
+
+  it('keeps the public speaking reference pages outside the learner auth gate', () => {
+    render(<SpeakingAssessmentCriteriaPage />);
+    render(<SpeakingIntroQuestionsPage />);
+
+    const calls = mockLearnerDashboardShell.mock.calls.map(([props]) => props as Record<string, unknown>);
+    expect(calls.some((props) => props.pageTitle === 'Speaking Assessment Criteria' && props.requireAuth === false)).toBe(true);
+    expect(calls.some((props) => props.pageTitle === 'Speaking Intro Questions' && props.requireAuth === false)).toBe(true);
   });
 });

@@ -292,7 +292,10 @@ public sealed class ListeningExtractionOperationTests : IAsyncDisposable
             _db,
             ocr ?? new StubOcrService(),
             new StubProviderRegistry(),
+            new NullRouteResolver(),
             new StaticHttpClientFactory(http),
+            Microsoft.Extensions.Options.Options.Create(
+                new OetLearner.Api.Configuration.AiProviderOptions()),
             new DirectAiCallRecorder(
                 _provider.GetRequiredService<IServiceScopeFactory>(),
                 NullLogger<DirectAiCallRecorder>.Instance),
@@ -343,6 +346,14 @@ public sealed class ListeningExtractionOperationTests : IAsyncDisposable
         public Task<string> OcrToMarkdownAsync(
             byte[] documentBytes, string mimeType, string featureCode, string? userId, CancellationToken ct)
             => throw new InvalidOperationException("OCR provider unavailable");
+    }
+
+    private sealed class NullRouteResolver : IAiFeatureRouteResolver
+    {
+        public Task<AiFeatureRouteResolution?> ResolveAsync(string featureCode, CancellationToken ct)
+            => Task.FromResult<AiFeatureRouteResolution?>(null);
+
+        public bool IsKnownFeatureCode(string featureCode) => true;
     }
 
     private sealed class StubProviderRegistry : IAiProviderRegistry

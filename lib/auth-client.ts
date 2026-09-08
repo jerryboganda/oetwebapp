@@ -270,6 +270,8 @@ const PUBLIC_PATHS_NO_REDIRECT = new Set<string>([
   '/mfa/challenge',
   '/mfa/setup',
   '/mfa/recovery',
+  '/speaking/assessment-criteria',
+  '/speaking/intro-questions',
   '/auth/callback',
 ]);
 

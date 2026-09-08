@@ -30,6 +30,15 @@ describe('middleware payment webhooks', () => {
   });
 });
 
+describe('middleware public speaking references', () => {
+  it.each(['/speaking/assessment-criteria', '/speaking/intro-questions'])('allows %s without authentication', (pathname) => {
+    const response = proxy(new NextRequest(`https://app.oetwithdrhesham.co.uk${pathname}`));
+
+    expect(response.status).not.toBe(307);
+    expect(response.headers.get('location')).toBeNull();
+  });
+});
+
 describe('middleware sponsor launch gate', () => {
   it('redirects sponsor routes to support while the sponsor portal is disabled', () => {
     const response = proxy(new NextRequest('https://app.oetwithdrhesham.co.uk/sponsor/billing'));
