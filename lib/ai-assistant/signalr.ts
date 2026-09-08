@@ -128,9 +128,32 @@ export async function invokeStartTurn(
   threadId: string,
   message: string,
   context?: CompanionSurfaceContext,
+  attachments?: AssistantTurnAttachments,
 ): Promise<void> {
   // The third argument is optional on the hub, so older clients keep working.
-  return connection.invoke('StartTurn', threadId, message, context ?? null);
+  // Attachment args are appended positionally after it; nulls keep the shape.
+  return connection.invoke(
+    'StartTurn',
+    threadId,
+    message,
+    context ?? null,
+    attachments?.imageDataUrls ?? null,
+    attachments?.document ?? null,
+  );
+}
+
+/** Inline attachments carried with one assistant turn. Images are data URLs
+ * (UBAG forwards them as ubag_attachments vision parts); document is the
+ * pipe-escaped `fileName|mimeType|text` payload folded into the prompt. */
+export interface AssistantTurnAttachments {
+  imageDataUrls?: string[] | null;
+  document?: string | null;
+}
+
+/** Pack extracted document text for the hub wire format (`\|`/`\\` escaped). */
+export function packDocumentAttachment(fileName: string, mimeType: string, text: string): string {
+  const escape = (value: string) => value.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
+  return `${escape(fileName)}|${escape(mimeType)}|${escape(text)}`;
 }
 
 export async function invokeCancelTurn(

@@ -192,6 +192,9 @@ public sealed class RegistryBackedProvider(
         var root = doc.RootElement;
         AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "AI provider", out var choice, out var message);
         var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
+        var servedModel = root.TryGetProperty("model", out var servedEl) && servedEl.ValueKind == JsonValueKind.String
+            ? servedEl.GetString()
+            : null;
         var toolCalls = AiProviderPayloadBuilder.ReadOpenAiToolCalls(message);
         if (toolCalls is null)
         {
@@ -207,7 +210,7 @@ public sealed class RegistryBackedProvider(
             : null;
 
         var finishReason = choice.TryGetProperty("finish_reason", out var finish) ? finish.GetString() : null;
-        return new AiProviderCompletion { Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason };
+        return new AiProviderCompletion { Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason, ServedModel = servedModel };
     }
 
     private static bool IsReasoningCapable(string model)

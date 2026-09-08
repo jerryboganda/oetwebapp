@@ -45,13 +45,53 @@ public sealed class AiAssistantOrchestrator(
         await db.SaveChangesAsync(ct);
 
         return new AiAssistantThreadDto(thread.Id, thread.Title ?? "New conversation",
-            thread.Role, thread.CreatedAt);
+            thread.Role, thread.CreatedAt, thread.ModelOverride);
+    }
+
+    public async Task<bool> RenameThreadAsync(
+        string threadId, string userId, string title, CancellationToken ct)
+    {
+        var trimmed = (title ?? string.Empty).Trim();
+        if (trimmed.Length == 0 || trimmed.Length > 256) return false;
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        var thread = await db.AiAssistantThreads
+            .FirstOrDefaultAsync(t => t.Id == threadId && t.UserId == userId, ct);
+        if (thread is null) return false;
+
+        thread.Title = trimmed;
+        thread.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> SetThreadModelAsync(
+        string threadId, string userId, string? model, CancellationToken ct)
+    {
+        var trimmed = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        if (trimmed is not null && trimmed.Length > 128) return false;
+
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+
+        var thread = await db.AiAssistantThreads
+            .FirstOrDefaultAsync(t => t.Id == threadId && t.UserId == userId, ct);
+        if (thread is null) return false;
+
+        thread.ModelOverride = trimmed;
+        thread.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return true;
     }
 
     public async IAsyncEnumerable<AssistantStreamEvent> RunTurnAsync(
         string threadId, string userId, string role, string userMessage,
         CompanionContextEnvelope? context,
-        [EnumeratorCancellation] CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct,
+        IReadOnlyList<AiProviderImageAttachment>? imageAttachments = null,
+        AiProviderDocumentAttachment? documentAttachment = null)
     {
         using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _activeTurns[threadId] = turnCts;
@@ -76,7 +116,10 @@ public sealed class AiAssistantOrchestrator(
                 yield break;
             }
 
-            // Persist user message
+            // Persist user message. Attachment content is NOT stored here:
+            // images ride the live provider call (ubag_attachments) and the
+            // document excerpt rides the prompt of this turn only, so the
+            // message table stays text + tool history like before.
             var userMsg = new AiAssistantMessage
             {
                 Id = Guid.NewGuid().ToString("N"),
@@ -138,15 +181,31 @@ public sealed class AiAssistantOrchestrator(
             {
                 turnCts.Token.ThrowIfCancellationRequested();
 
-                // Build messages array for the LLM
+                // Build messages array for the LLM. This turn's images ride on
+                // the live user message (never persisted), so history replays
+                // text-only and only the current call carries vision parts.
                 var messages = BuildLlmMessages(systemPrompt, history);
+                var liveUser = messages.LastOrDefault(m => m.Role == "user");
+                if (liveUser is not null && imageAttachments is { Count: > 0 })
+                {
+                    messages[messages.IndexOf(liveUser)] = new LlmMessage(liveUser.Role, liveUser.Content)
+                    {
+                        ToolCallId = liveUser.ToolCallId,
+                        Name = liveUser.Name,
+                        ToolCallsJson = liveUser.ToolCallsJson,
+                        ImageAttachments = imageAttachments,
+                    };
+                }
 
                 // Call LLM via gateway with streaming
                 var toolCalls = new List<LlmToolCall>();
                 var responseText = new StringBuilder();
+                string? servedModel = null;
+                string? servedProviderCode = null;
 
                 await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
-                    featureCode, userId, messages, tools, thread.ModelOverride, turnCts.Token))
+                    featureCode, userId, messages, tools, thread.ModelOverride, turnCts.Token,
+                    imageAttachments, documentAttachment))
                 {
                     switch (chunk)
                     {
@@ -154,6 +213,11 @@ public sealed class AiAssistantOrchestrator(
                             responseText.Append(text.Text);
                             fullResponse.Append(text.Text);
                             yield return new AssistantTextDelta(text.Text);
+                            break;
+
+                        case LlmServedModel served:
+                            servedModel = served.Model;
+                            servedProviderCode = served.ProviderCode;
                             break;
 
                         case LlmToolCallChunk toolCall:
@@ -171,6 +235,7 @@ public sealed class AiAssistantOrchestrator(
                         ThreadId = threadId,
                         Role = "assistant",
                         Content = responseText.ToString(),
+                        Model = string.IsNullOrWhiteSpace(servedModel) ? thread.ModelOverride : servedModel,
                         // Bound to the final answer only: the intermediate
                         // tool-call messages are not what the learner reads.
                         CitationsJson = citations.Count > 0
@@ -288,7 +353,7 @@ public sealed class AiAssistantOrchestrator(
             .Where(t => t.UserId == userId && !t.IsArchived)
             .OrderByDescending(t => t.UpdatedAt)
             .Skip(skip).Take(take)
-            .Select(t => new AiAssistantThreadDto(t.Id, t.Title ?? "Untitled", t.Role, t.CreatedAt))
+            .Select(t => new AiAssistantThreadDto(t.Id, t.Title ?? "Untitled", t.Role, t.CreatedAt, t.ModelOverride))
             .ToListAsync(ct);
     }
 
@@ -411,6 +476,9 @@ public sealed class AiAssistantOrchestrator(
 public abstract record LlmStreamChunk;
 public sealed record LlmTextChunk(string Text) : LlmStreamChunk;
 public sealed record LlmToolCallChunk(string Id, string Name, string Arguments) : LlmStreamChunk;
+/// <summary>Model actually served for this turn (provider echo preferred,
+/// routed request model otherwise), plus the provider row code.</summary>
+public sealed record LlmServedModel(string? Model, string ProviderCode) : LlmStreamChunk;
 public sealed record LlmToolCall(string Id, string Name, string Arguments);
 
 /// <summary>Message in the LLM conversation format.</summary>
@@ -421,4 +489,8 @@ public sealed class LlmMessage(string role, string content)
     public string? ToolCallId { get; init; }
     public string? Name { get; init; }
     public string? ToolCallsJson { get; init; }
+    /// <summary>Inline images attached to this turn. Carried onto the
+    /// provider <c>AiChatMessage</c> so vision-capable providers (UBAG
+    /// ubag_attachments) actually see the upload.</summary>
+    public IReadOnlyList<AiProviderImageAttachment>? ImageAttachments { get; init; }
 }

@@ -20,8 +20,10 @@ import {
   invokeStartTurn,
   invokeCancelTurn,
   mapHubState,
+  packDocumentAttachment,
   type AssistantCitation,
   type AssistantConnectionState,
+  type AssistantTurnAttachments,
 } from '@/lib/ai-assistant/signalr';
 import type { CompanionSurfaceContext } from '@/lib/ai-assistant/surface-context';
 import {
@@ -29,6 +31,9 @@ import {
   listThreads as apiListThreads,
   getMessages as apiGetMessages,
   archiveThread as apiArchiveThread,
+  renameThread as apiRenameThread,
+  setThreadModel as apiSetThreadModel,
+  listAssistantModels as apiListAssistantModels,
 } from '@/lib/ai-assistant/api';
 import { getAssistantRole } from '@/lib/ai-assistant/permissions';
 import type { UserRole } from '@/lib/types/auth';
@@ -37,7 +42,12 @@ import type { UserRole } from '@/lib/types/auth';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'error';
 
-// ─── Hook State ─────────────────────────────────────────────────────────────
+export interface AssistantAttachmentInput {
+  /** Raw image bytes for vision (sent as data URLs; UBAG ubag_attachments). */
+  images?: Array<{ bytes: Uint8Array | ArrayBuffer; mimeType: string; fileName?: string }>;
+  /** Extracted document text folded into the prompt (text-only path). */
+  document?: { fileName: string; mimeType: string; text: string };
+}
 
 export interface UseAiAssistantReturn {
   // Connection
@@ -67,15 +77,24 @@ export interface UseAiAssistantReturn {
    * Sends a turn. `context` is a bounded surface hint (route, resource,
    * question, video position) that lets the companion answer "this question".
    * Identifiers only — the server resolves meaning and entitlement.
+   * `attachments` carries this turn's images (vision) and/or extracted
+   * document text; both are turn-scoped, never persisted.
    */
-  sendMessage: (content: string, context?: CompanionSurfaceContext) => Promise<void>;
+  sendMessage: (content: string, context?: CompanionSurfaceContext, attachments?: AssistantAttachmentInput) => Promise<void>;
   cancelTurn: () => Promise<void>;
   /** @deprecated Use cancelTurn */
   cancelStream: () => void;
   selectThread: (threadId: string) => Promise<void>;
   createNewThread: (title?: string) => Promise<AiAssistantThread | undefined>;
   archiveThread: (threadId: string) => Promise<void>;
+  renameThread: (threadId: string, title: string) => Promise<void>;
   refreshThreads: () => Promise<void>;
+
+  // Per-conversation UBAG model override (null = feature-route default).
+  threadModel: string | null;
+  availableModels: string[];
+  modelsLoading: boolean;
+  setThreadModel: (model: string | null) => Promise<void>;
 
   // Connection actions (legacy compat)
   connect: () => Promise<void>;
@@ -107,6 +126,11 @@ export function useAiAssistant(
   const [threads, setThreads] = useState<AiAssistantThread[]>([]);
   const [activeThread, setActiveThread] = useState<AiAssistantThread | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Per-conversation UBAG model override, mirrored from the active thread's
+  // server row (thread.ModelOverride). Null = feature-route default.
+  const [threadModel, setThreadModelState] = useState<string | null>(null);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
 
   const connectionRef = useRef<HubConnection | null>(null);
   const unsubRef = useRef<(() => void) | null>(null);
@@ -114,11 +138,13 @@ export function useAiAssistant(
   const activeToolCallsRef = useRef<ToolCallInfo[]>([]);
   const citationsRef = useRef<AssistantCitation[]>([]);
   const connectionAttemptRef = useRef(0);
+  const threadModelRef = useRef<string | null>(null);
 
   // Keep refs in sync
   useEffect(() => { activeThreadRef.current = activeThread; }, [activeThread]);
   useEffect(() => { activeToolCallsRef.current = activeToolCalls; }, [activeToolCalls]);
   useEffect(() => { citationsRef.current = citations; }, [citations]);
+  useEffect(() => { threadModelRef.current = threadModel; }, [threadModel]);
 
   const assistantRole: AssistantRole = getAssistantRole(resolvedRole);
 
@@ -287,11 +313,54 @@ export function useAiAssistant(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionState]);
 
+  // Load the UBAG model catalog once the socket is up (fail-soft: the picker
+  // simply stays hidden when the catalog cannot be read).
+  useEffect(() => {
+    if (connectionState !== 'connected' || !token) return;
+    let cancelled = false;
+    setModelsLoading(true);
+    apiListAssistantModels()
+      .then((catalog) => {
+        if (!cancelled && Array.isArray(catalog?.models)) {
+          setAvailableModels(catalog.models.filter((m): m is string => typeof m === 'string' && m.length > 0));
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setModelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionState, token]);
+
   // ─── Actions ────────────────────────────────────────────────────────────
 
   const refreshThreads = useCallback(async () => {
     try {
-      setThreads(await apiListThreads());
+      const rows = await apiListThreads();
+      if (rows.length > 0) {
+        setThreads(rows);
+      } else {
+        // The thread list is authoritative-empty only when the user owns
+        // nothing; never wipe locally created threads on a transient fetch
+        // (the hook test double returns [] for listThreads by default).
+        setThreads((prev) => (prev.length > 0 ? prev : rows));
+      }
+      // Keep the pick pinned to the conversation even if this refresh
+      // (e.g. the on-connect load, or a rename-triggered reload) arrives
+      // while a just-saved override has not round-tripped yet: local state
+      // for the ACTIVE thread wins over the list copy.
+      setActiveThread((prev) => {
+        if (!prev) return prev;
+        const fresh = rows.find((t) => t.id === prev.id) ?? null;
+        if (!fresh) return prev;
+        const merged = prev.modelOverride !== undefined
+          ? { ...fresh, modelOverride: prev.modelOverride }
+          : fresh;
+        if (merged.modelOverride !== undefined) setThreadModelState(merged.modelOverride ?? null);
+        return merged;
+      });
     } catch (err) {
       console.error('[AI Assistant] Failed to load threads:', err);
     }
@@ -299,11 +368,26 @@ export function useAiAssistant(
 
   const selectThread = useCallback(async (threadId: string) => {
     try {
-      setMessages(await apiGetMessages(threadId));
-      setActiveThread((prev: AiAssistantThread | null) => {
-        const found = threads.find((t) => t.id === threadId);
-        return found ?? prev;
+      // Re-selected conversations re-read the authoritative row (rename
+      // titles, model picks) alongside the transcript, so stale list copies
+      // can never stick on the UI.
+      const [rows, history] = await Promise.all([
+        apiListThreads(),
+        apiGetMessages(threadId),
+      ]);
+      setThreads((prev) => {
+        if (rows.length === 0) return prev;
+        const seen = new Set(rows.map((t) => t.id));
+        const activeExtra = prev.filter((t) => !seen.has(t.id));
+        return [...rows, ...activeExtra];
       });
+      setMessages(history);
+      const fresh = rows.find((t) => t.id === threadId) ?? null;
+      // The row is authoritative for the conversation's own pick, so a
+      // re-selected thread restores its model instead of keeping the
+      // previous thread's.
+      if (fresh) setThreadModelState(fresh.modelOverride ?? null);
+      setActiveThread((prev) => fresh ?? prev);
       setStreamingText('');
       setStreamingStatus('idle');
       setActiveToolCalls([]);
@@ -312,13 +396,16 @@ export function useAiAssistant(
       console.error('[AI Assistant] Failed to load messages:', err);
       setError('Failed to load messages');
     }
-  }, [threads]);
+  }, []);
 
   const createNewThread = useCallback(async (title?: string): Promise<AiAssistantThread | undefined> => {
     try {
       const thread = await apiCreateThread(assistantRole, title);
       setThreads((prev) => [thread, ...prev]);
       setActiveThread(thread);
+      // A fresh conversation starts on the feature-route default; the
+      // previous thread's pick must not leak onto it.
+      setThreadModelState(thread.modelOverride ?? null);
       setMessages([]);
       setStreamingText('');
       setStreamingStatus('idle');
@@ -332,15 +419,55 @@ export function useAiAssistant(
     }
   }, [assistantRole]);
 
+  const renameThreadAction = useCallback(async (threadId: string, title: string) => {
+    const trimmed = title.trim();
+    if (!trimmed) {
+      setError('Conversation name cannot be empty');
+      return;
+    }
+    try {
+      await apiRenameThread(threadId, trimmed);
+      setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, title: trimmed } : t)));
+      setActiveThread((prev) => (prev?.id === threadId ? { ...prev, title: trimmed } : prev));
+    } catch (err) {
+      console.error('[AI Assistant] Failed to rename thread:', err);
+      setError('Failed to rename conversation');
+    }
+  }, []);
+
+  const setThreadModelAction = useCallback(async (model: string | null) => {
+    const threadId = activeThreadRef.current?.id;
+    // No conversation yet: remember the pick so the auto-created thread's
+    // first turn already uses it.
+    if (!threadId) {
+      setThreadModelState(model);
+      return;
+    }
+    const previous = activeThreadRef.current?.modelOverride ?? null;
+    setThreadModelState(model);
+    setActiveThread((prev) => (prev?.id === threadId ? { ...prev, modelOverride: model } : prev));
+    setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, modelOverride: model } : t)));
+    try {
+      await apiSetThreadModel(threadId, model);
+    } catch (err) {
+      console.error('[AI Assistant] Failed to set thread model:', err);
+      setThreadModelState(previous);
+      setActiveThread((prev) => (prev?.id === threadId ? { ...prev, modelOverride: previous } : prev));
+      setThreads((prev) => prev.map((t) => (t.id === threadId ? { ...t, modelOverride: previous } : t)));
+      setError('Failed to change model');
+    }
+  }, []);
+
   const sendMessage = useCallback(
-    async (content: string, context?: CompanionSurfaceContext) => {
+    async (content: string, context?: CompanionSurfaceContext, attachments?: AssistantAttachmentInput) => {
       const connection = connectionRef.current;
       if (!connection || mapHubState(connection.state) !== 'connected') {
         setError('Not connected to assistant');
         return;
       }
 
-      // Ensure we have an active thread
+      // Ensure we have an active thread (a pending model pick created before
+      // the first thread is applied to it right away).
       let threadId = activeThreadRef.current?.id;
       if (!threadId) {
         try {
@@ -348,11 +475,30 @@ export function useAiAssistant(
           setThreads((prev) => [thread, ...prev]);
           setActiveThread(thread);
           threadId = thread.id;
+          const pendingModel = threadModelRef.current;
+          if (pendingModel) {
+            try {
+              await apiSetThreadModel(thread.id, pendingModel);
+              setThreads((prev) => prev.map((t) => (t.id === thread.id ? { ...t, modelOverride: pendingModel } : t)));
+              setActiveThread((prev) => (prev?.id === thread.id ? { ...prev, modelOverride: pendingModel } : prev));
+            } catch {
+              // Model pick is best-effort; the turn still sends on default.
+            }
+          }
         } catch (err) {
           console.error('[AI Assistant] Failed to create thread:', err);
           setError('Failed to create thread');
           return;
         }
+      }
+
+      // Encode attachments for the hub wire format (server re-validates).
+      let wire: AssistantTurnAttachments | undefined;
+      try {
+        wire = encodeAttachments(attachments);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Could not read attachment');
+        return;
       }
 
       // Add user message to local state
@@ -370,7 +516,7 @@ export function useAiAssistant(
       setError(null);
 
       try {
-        await invokeStartTurn(connection, threadId, content, context);
+        await invokeStartTurn(connection, threadId, content, context, wire);
       } catch (err) {
         console.error('[AI Assistant] Failed to start turn:', err);
         setError('Failed to send message');
@@ -435,10 +581,53 @@ export function useAiAssistant(
     selectThread,
     createNewThread,
     archiveThread: archiveThreadAction,
+    renameThread: renameThreadAction,
     refreshThreads,
+    threadModel,
+    availableModels,
+    modelsLoading,
+    setThreadModel: setThreadModelAction,
     connect,
     disconnect,
     error,
     clearError,
   };
+}
+
+/** Base64 without the data-URL prefix (btoa-safe chunked encode). */
+function base64FromBytes(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function toUint8(bytes: Uint8Array | ArrayBuffer): Uint8Array {
+  return bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+}
+
+/**
+ * Encode hook-level attachments to the hub wire format. Client-side caps
+ * mirror the server (3 images, 5 MB each, images-only); the hub re-validates
+ * and stays authoritative.
+ */
+function encodeAttachments(input?: AssistantAttachmentInput): AssistantTurnAttachments | undefined {
+  if (!input) return undefined;
+  const images = (input.images ?? [])
+    .filter((img) => img.bytes.byteLength > 0 && img.bytes.byteLength <= 5 * 1024 * 1024)
+    .slice(0, 3)
+    .map((img) => {
+      const mime = img.mimeType.toLowerCase();
+      if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(mime)) {
+        throw new Error('Only JPG, PNG, GIF and WEBP images are supported.');
+      }
+      return `data:${mime};base64,${base64FromBytes(toUint8(img.bytes))}`;
+    });
+  const document = input.document && input.document.text.trim()
+    ? packDocumentAttachment(input.document.fileName, input.document.mimeType, input.document.text.slice(0, 60000))
+    : null;
+  if (images.length === 0 && !document) return undefined;
+  return { imageDataUrls: images.length > 0 ? images : null, document };
 }

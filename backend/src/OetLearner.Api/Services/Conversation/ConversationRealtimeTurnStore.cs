@@ -404,8 +404,10 @@ public static class ConversationRealtimeTransportLimits
 {
     // Candidates are never cut off mid-turn (owner rule), so a single voice-loop
     // turn can run minutes: 210s at 32kbps ≈ 840KB binary ≈ 1.12MB base64. 2MB
-    // keeps headroom above the client-side 1.4MB blob cap.
-    public const int MaximumReceiveMessageBytes = 2 * 1024 * 1024;
+    // keeps headroom above the client-side 1.4MB blob cap. 28MB additionally
+    // clears the worst AI-assistant turn (3 × 5MB images ≈ 20MB base64 +
+    // 60KB doc + JSON framing), so chat uploads are never the binding cap.
+    public const int MaximumReceiveMessageBytes = 28 * 1024 * 1024;
     public const int MaxBinaryChunkBytes = 256 * 1024;
     public const int MaximumActiveStreams = 512;
     public const long MaximumBufferedBytes = 64L * 1024 * 1024;

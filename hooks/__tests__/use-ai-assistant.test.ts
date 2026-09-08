@@ -23,6 +23,9 @@ vi.mock('@/lib/ai-assistant/signalr', () => ({
   invokeStartTurn: vi.fn().mockResolvedValue(undefined),
   invokeCancelTurn: vi.fn().mockResolvedValue(undefined),
   mapHubState: vi.fn(() => 'connected'),
+  packDocumentAttachment: vi.fn(
+    (fileName: string, mimeType: string, text: string) => `${fileName}|${mimeType}|${text}`,
+  ),
 }));
 
 // ─── Mock API ────────────────────────────────────────────────────────────────
@@ -41,6 +44,9 @@ vi.mock('@/lib/ai-assistant/api', () => ({
     { id: 'm1', threadId: 't1', role: 'user', content: 'Hello', createdAt: '2024-01-01T00:00:00Z' },
   ]),
   archiveThread: vi.fn().mockResolvedValue(undefined),
+  renameThread: vi.fn().mockResolvedValue(undefined),
+  setThreadModel: vi.fn().mockResolvedValue(undefined),
+  listAssistantModels: vi.fn().mockResolvedValue({ provider: 'ubag', models: [] }),
 }));
 
 // Import the mocked module to access registerHubCallbacks
@@ -48,7 +54,13 @@ import {
   createAssistantConnection,
   registerHubCallbacks,
   invokeCancelTurn,
+  invokeStartTurn,
 } from '@/lib/ai-assistant/signalr';
+import {
+  listAssistantModels,
+  renameThread,
+  setThreadModel,
+} from '@/lib/ai-assistant/api';
 
 describe('useAiAssistant hook', () => {
   beforeEach(() => {
@@ -349,6 +361,134 @@ describe('useAiAssistant hook', () => {
       expect(result.current.isStreaming).toBe(false);
       expect(result.current.streamingContent).toBe('');
       expect(invokeCancelTurn).toHaveBeenCalled();
+    });
+
+    it('renames a thread through the API and updates local state', async () => {
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await act(async () => {
+        await result.current.createNewThread('Test');
+      });
+      await act(async () => {
+        await result.current.renameThread('new-thread-1', 'Rounds');
+      });
+
+      expect(renameThread).toHaveBeenCalledWith('new-thread-1', 'Rounds');
+      expect(result.current.threads.find((t) => t.id === 'new-thread-1')?.title).toBe('Rounds');
+    });
+
+    it('loads the UBAG model catalog on connect', async () => {
+      vi.mocked(listAssistantModels).mockResolvedValueOnce({
+        provider: 'ubag',
+        models: ['chatgpt_web', 'deepseek_web'],
+      });
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await act(async () => {});
+
+      expect(listAssistantModels).toHaveBeenCalled();
+      expect(result.current.availableModels).toEqual(['chatgpt_web', 'deepseek_web']);
+    });
+
+    it('pins the model override immediately with rollback on failure', async () => {
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await act(async () => {
+        await result.current.createNewThread('Test');
+      });
+
+      await act(async () => {
+        await result.current.setThreadModel('chatgpt_web');
+      });
+
+      expect(setThreadModel).toHaveBeenCalledWith('new-thread-1', 'chatgpt_web');
+      expect(result.current.threadModel).toBe('chatgpt_web');
+
+      vi.mocked(setThreadModel).mockRejectedValueOnce(new Error('nope'));
+      await act(async () => {
+        await result.current.setThreadModel('deepseek_web');
+      });
+
+      expect(result.current.threadModel).toBe('chatgpt_web');
+      expect(result.current.error).toBe('Failed to change model');
+    });
+
+    it('restores the conversation pick from the reloaded row on select', async () => {
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await act(async () => {
+        await result.current.createNewThread('Test');
+      });
+      const { listThreads } = await import('@/lib/ai-assistant/api');
+      vi.mocked(listThreads).mockResolvedValueOnce([
+        {
+          id: 'new-thread-1',
+          title: 'Test',
+          role: 'admin',
+          createdAt: '2024-01-01T00:00:00Z',
+          modelOverride: 'deepseek_web|Vision',
+        },
+      ]);
+
+      await act(async () => {
+        await result.current.selectThread('new-thread-1');
+      });
+
+      expect(result.current.threadModel).toBe('deepseek_web|Vision');
+    });
+
+    it('resets to the default model on a fresh conversation', async () => {
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await act(async () => {
+        await result.current.createNewThread('First');
+      });
+      await act(async () => {
+        await result.current.setThreadModel('chatgpt_web');
+      });
+      expect(result.current.threadModel).toBe('chatgpt_web');
+
+      await act(async () => {
+        await result.current.createNewThread('Second');
+      });
+      expect(result.current.threadModel).toBeNull();
+    });
+
+    it('forwards attachments to the hub turn', async () => {
+      const { result } = renderHook(() =>
+        useAiAssistant({ token: 'test-token' }),
+      );
+
+      await act(async () => {
+        await result.current.createNewThread('Test');
+      });
+      await act(async () => {});
+
+      await act(async () => {
+        await result.current.sendMessage('look at this', undefined, {
+          images: [{ bytes: new Uint8Array([1, 2, 3]), mimeType: 'image/png' }],
+          document: { fileName: 'n.pdf', mimeType: 'application/pdf', text: 'hello' },
+        });
+      });
+
+      expect(result.current.error).toBeNull();
+      const args = vi.mocked(invokeStartTurn).mock.calls.at(-1);
+      expect(args?.[0]).toBe(mockConnection);
+      expect(args?.[1]).toBe('new-thread-1');
+      expect(args?.[2]).toBe('look at this');
+      const wire = args?.[4] as { imageDataUrls: string[]; document: string };
+      expect(wire.imageDataUrls[0]).toMatch(/^data:image\/png;base64,/);
+      expect(wire.document).toContain('n.pdf');
     });
   });
 });

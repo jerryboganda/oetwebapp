@@ -36,6 +36,12 @@ public sealed class SafetyGuard : ISafetyGuard
         "config/", "config\\",
         "public/", "public\\",
         "agent-gateway/", "agent-gateway\\",
+        "android/", "android\\",
+        "ios/", "ios\\",
+        "capacitor-web/", "capacitor-web\\",
+        "tools/", "tools\\",
+        "ops/", "ops\\",
+        "agents/", "agents\\",
     ];
 
     private static readonly HashSet<string> BlockedFilePatterns = new(StringComparer.OrdinalIgnoreCase)
@@ -189,7 +195,7 @@ public sealed class SafetyGuard : ISafetyGuard
         var isAllowed = AllowedDirectoryPrefixes.Any(prefix => normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         if (!isAllowed)
             return new SafetyCheckResult(false,
-                $"Path '{normalized}' is outside allowed directories (app/, components/, lib/, hooks/, contexts/, types/, backend/, tests/, docs/, rulebooks/, scripts/, messages/, config/, public/, agent-gateway/).", SafetyRiskLevel.High);
+                $"Path '{normalized}' is outside allowed directories (app/, components/, lib/, hooks/, contexts/, types/, backend/, tests/, docs/, rulebooks/, scripts/, messages/, config/, public/, agent-gateway/, android/, ios/, capacitor-web/, tools/, ops/, agents/).", SafetyRiskLevel.High);
 
         return new SafetyCheckResult(true, null, SafetyRiskLevel.None);
     }

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AiAssistantInput } from '../AiAssistantInput';
 
@@ -42,7 +42,7 @@ describe('AiAssistantInput', () => {
     const input = screen.getByRole('textbox', { name: /message input/i });
     await user.type(input, 'Test message{Enter}');
 
-    expect(onSend).toHaveBeenCalledWith('Test message');
+    expect(onSend).toHaveBeenCalledWith('Test message', expect.anything());
     expect(input).toHaveValue('');
   });
 
@@ -105,5 +105,59 @@ describe('AiAssistantInput', () => {
   it('input is disabled when disabled prop is true', () => {
     render(<AiAssistantInput {...defaultProps} disabled />);
     expect(screen.getByRole('textbox', { name: /message input/i })).toBeDisabled();
+  });
+
+  it('attaches an image and sends its bytes with the message', async () => {
+    const onSend = vi.fn();
+    render(<AiAssistantInput onSend={onSend} onCancel={vi.fn()} isStreaming={false} />);
+
+    const picker = screen.getByTestId('assistant-file-picker') as HTMLInputElement;
+    fireEvent.change(picker, {
+      target: { files: [new File([new Uint8Array([1, 2, 3])], 'scan.png', { type: 'image/png' })] },
+    });
+
+    expect(await screen.findByTestId('assistant-attachments')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Message input'), { target: { value: 'read this' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onSend.mock.calls[0][0]).toBe('read this');
+    const attachments = onSend.mock.calls[0][1] as {
+      images: Array<{ bytes: Uint8Array; mimeType: string }>;
+    };
+    expect(attachments.images).toHaveLength(1);
+    expect(attachments.images[0].mimeType).toBe('image/png');
+  });
+
+  it('rejects unsupported file kinds with an alert', async () => {
+    const onSend = vi.fn();
+    render(<AiAssistantInput onSend={onSend} onCancel={vi.fn()} isStreaming={false} />);
+
+    const picker = screen.getByTestId('assistant-file-picker') as HTMLInputElement;
+    fireEvent.change(picker, {
+      target: { files: [new File(['x'], 'run.exe', { type: 'application/octet-stream' })] },
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('supported files are');
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('extracts a text document and sends it alongside the message', async () => {
+    const onSend = vi.fn();
+    render(<AiAssistantInput onSend={onSend} onCancel={vi.fn()} isStreaming={false} />);
+
+    const picker = screen.getByTestId('assistant-file-picker') as HTMLInputElement;
+    fireEvent.change(picker, {
+      target: { files: [new File(['case notes here'], 'notes.txt', { type: 'text/plain' })] },
+    });
+
+    expect(await screen.findByText('notes.txt')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+
+    expect(onSend).toHaveBeenCalledTimes(1);
+    const attachments = onSend.mock.calls[0][1] as { document: { text: string } };
+    expect(attachments.document.text).toContain('case notes here');
   });
 });

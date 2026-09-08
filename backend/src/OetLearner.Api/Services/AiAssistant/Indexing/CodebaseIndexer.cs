@@ -26,7 +26,7 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".cs", ".json", ".md", ".yaml", ".yml",
-        ".ps1", ".py", ".sql", ".css"
+        ".ps1", ".py", ".sql", ".css", ".kt", ".kts", ".java", ".swift", ".m", ".mm", ".gradle"
     };
 
     private static readonly HashSet<string> SupportedRootPrefixes = new(StringComparer.OrdinalIgnoreCase)
@@ -34,6 +34,7 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
         "app", "components", "lib", "hooks", "contexts", "types",
         "backend", "tests", "docs", "rulebooks", "scripts",
         "messages", "config", "public", "agent-gateway",
+        "android", "ios", "capacitor-web", "tools", "ops", "agents",
     };
 
     private static readonly HashSet<string> SkippedDirectories = new(StringComparer.OrdinalIgnoreCase)
@@ -305,6 +306,11 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
         ".yaml" or ".yml" => "yaml",
         ".js" => "javascript",
         ".jsx" => "jsx",
+        ".kt" or ".kts" => "kotlin",
+        ".java" => "java",
+        ".swift" => "swift",
+        ".m" or ".mm" => "objective-c",
+        ".gradle" => "gradle",
         _ => "unknown"
     };
 

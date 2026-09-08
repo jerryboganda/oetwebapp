@@ -60,6 +60,8 @@ export interface AiAssistantThread {
   updatedAt?: string;
   archived?: boolean;
   messageCount?: number;
+  /** Per-conversation UBAG model override (null = feature-route default). */
+  modelOverride?: string | null;
 }
 
 /** Backwards-compatible alias */

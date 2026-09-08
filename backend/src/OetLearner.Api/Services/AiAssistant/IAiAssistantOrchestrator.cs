@@ -1,4 +1,5 @@
 using OetLearner.Api.Hubs;
+using OetLearner.Api.Services.Rulebook;
 
 using OetLearner.Api.Services.Companion;
 
@@ -21,6 +22,17 @@ public interface IAiAssistantOrchestrator
     Task<AiAssistantThreadDto> CreateThreadAsync(
         string userId, string role, string? title, CancellationToken ct);
 
+    /// <summary>Renames a thread owned by the user. Returns false when the
+    /// thread does not exist or belongs to someone else.</summary>
+    Task<bool> RenameThreadAsync(
+        string threadId, string userId, string title, CancellationToken ct);
+
+    /// <summary>Pins a UBAG model override onto a thread owned by the user
+    /// (null clears it back to the feature-route default). Returns false when
+    /// the thread does not exist or belongs to someone else.</summary>
+    Task<bool> SetThreadModelAsync(
+        string threadId, string userId, string? model, CancellationToken ct);
+
     /// <summary>
     /// Runs a single turn of the assistant: processes the user message through
     /// the ReAct loop and yields streaming events.
@@ -32,10 +44,16 @@ public interface IAiAssistantOrchestrator
     /// never widen entitlement, and exam mode is resolved from the database
     /// regardless of what it says.
     /// </param>
+    /// <param name="imageAttachments">Inline images for this turn (vision).
+    /// Forwarded to the provider as native parts / ubag_attachments.</param>
+    /// <param name="documentAttachment">Extracted document text for this turn,
+    /// folded into the prompt so text-only providers can answer about it.</param>
     IAsyncEnumerable<AssistantStreamEvent> RunTurnAsync(
         string threadId, string userId, string role, string userMessage,
         CompanionContextEnvelope? context,
-        CancellationToken ct);
+        CancellationToken ct,
+        IReadOnlyList<AiProviderImageAttachment>? imageAttachments = null,
+        AiProviderDocumentAttachment? documentAttachment = null);
 
     /// <summary>Cancels a running turn for the given thread.</summary>
     Task CancelTurnAsync(string threadId, string userId, CancellationToken ct);

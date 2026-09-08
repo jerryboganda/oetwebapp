@@ -26,6 +26,28 @@ export async function createThread(role?: AssistantRole, title?: string): Promis
   });
 }
 
+/** Rename a conversation (1–256 chars). Ownership-checked server-side. */
+export async function renameThread(threadId: string, title: string): Promise<void> {
+  await apiClient.patch(`/v1/ai-assistant/threads/${encodeURIComponent(threadId)}`, { title });
+}
+
+/** Pin a UBAG model override onto a conversation; null clears to default. */
+export async function setThreadModel(threadId: string, model: string | null): Promise<void> {
+  await apiClient.patch(`/v1/ai-assistant/threads/${encodeURIComponent(threadId)}/model`, {
+    model: model ?? null,
+  });
+}
+
+export interface AssistantModelOption {
+  provider: string;
+  models: string[];
+}
+
+/** Models the chat model-picker may offer (UBAG catalog + board composite). */
+export async function listAssistantModels(): Promise<AssistantModelOption> {
+  return apiClient.get<AssistantModelOption>('/v1/ai-assistant/models');
+}
+
 export async function listThreads(skip = 0, take = 20): Promise<AiAssistantThread[]> {
   const threads = await apiClient.get<AiAssistantThread[]>(
     `/v1/ai-assistant/threads?skip=${skip}&take=${take}`,

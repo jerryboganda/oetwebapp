@@ -29,7 +29,8 @@ public sealed class SearchCodebaseTool : IAiToolExecutor
     private static readonly string[] AllowedPrefixes = {
         "app/", "components/", "lib/", "hooks/", "contexts/", "types/",
         "backend/", "tests/", "docs/", "rulebooks/", "scripts/",
-        "messages/", "config/", "public/", "agent-gateway/"
+        "messages/", "config/", "public/", "agent-gateway/",
+        "android/", "ios/", "capacitor-web/", "tools/", "ops/", "agents/"
     };
     private static readonly string[] BlockedSegments = { ".env", "secrets", "node_modules", ".git", "bin", "obj", ".next", "dist", "coverage" };
     private const int DefaultMaxResults = 20;

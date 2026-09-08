@@ -21,7 +21,9 @@ public interface IAiAssistantGateway
         List<LlmMessage> messages,
         IReadOnlyList<AiToolDefinition> tools,
         string? modelOverride,
-        CancellationToken ct);
+        CancellationToken ct,
+        IReadOnlyList<AiProviderImageAttachment>? imageAttachments = null,
+        AiProviderDocumentAttachment? documentAttachment = null);
 }
 
 public sealed class AiAssistantGateway(
@@ -41,7 +43,9 @@ public sealed class AiAssistantGateway(
         List<LlmMessage> messages,
         IReadOnlyList<AiToolDefinition> tools,
         string? modelOverride,
-        [EnumeratorCancellation] CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct,
+        IReadOnlyList<AiProviderImageAttachment>? imageAttachments = null,
+        AiProviderDocumentAttachment? documentAttachment = null)
     {
         var startedAt = DateTimeOffset.UtcNow;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -162,6 +166,7 @@ public sealed class AiAssistantGateway(
                     Role = m.Role,
                     Content = m.Content,
                     ToolCallId = m.ToolCallId,
+                    ImageAttachments = m.ImageAttachments,
                 };
                 if (m.ToolCallsJson != null)
                 {
@@ -170,6 +175,7 @@ public sealed class AiAssistantGateway(
                         Role = m.Role,
                         Content = m.Content,
                         ToolCallId = m.ToolCallId,
+                        ImageAttachments = m.ImageAttachments,
                         ToolCalls = ParseToolCalls(m.ToolCallsJson),
                     };
                 }
@@ -206,17 +212,35 @@ public sealed class AiAssistantGateway(
         var systemMsg = messages.FirstOrDefault(m => m.Role == "system");
         var lastUser = messages.LastOrDefault(m => m.Role == "user");
 
+        // Document text rides in the prompt so even text-only providers (incl.
+        // the UBAG chat path) can answer about the file. Images ride as native
+        // vision parts via ImageAttachments (UBAG forwards ubag_attachments).
+        var userPrompt = lastUser?.Content ?? "";
+        if (documentAttachment is not null && !string.IsNullOrWhiteSpace(documentAttachment.Text))
+        {
+            var excerpt = documentAttachment.Text.Length > 12000
+                ? documentAttachment.Text[..12000] + "\n…[truncated]"
+                : documentAttachment.Text;
+            userPrompt = string.IsNullOrWhiteSpace(userPrompt)
+                ? $"Attached document \"{documentAttachment.FileName}\" ({documentAttachment.MimeType}):\n\n{excerpt}"
+                : $"{userPrompt}\n\nAttached document \"{documentAttachment.FileName}\" ({documentAttachment.MimeType}):\n\n{excerpt}";
+        }
+        var effectiveImages = (imageAttachments is { Count: > 0 } ? imageAttachments : lastUser?.ImageAttachments)
+            ?? Array.Empty<AiProviderImageAttachment>();
+
         var request = new AiProviderRequest
         {
             ProviderCode = providerCode,
             Model = model,
             SystemPrompt = systemMsg?.Content ?? "",
-            UserPrompt = lastUser?.Content ?? "",
+            UserPrompt = userPrompt,
             Temperature = 0.7,
             MaxTokens = 4096,
             Messages = chatMessages,
             Tools = tools,
             ToolChoice = tools.Count > 0 ? "auto" : null,
+            ImageAttachments = effectiveImages,
+            DocumentAttachment = documentAttachment,
         };
 
         AiProviderCompletion? completion = null;
@@ -322,6 +346,10 @@ public sealed class AiAssistantGateway(
 
         var usageRecordId = $"aiu_{Guid.NewGuid():N}";
         string? persistedUsageRecordId = null;
+
+        // Surfaced so callers (orchestrator → message row) can stamp honest
+        // model provenance instead of the requested id. The provider answer
+        // is authoritative for the model; the row code comes from routing.
 
         // Record usage
         if (usageRecorder != null)
@@ -429,6 +457,12 @@ public sealed class AiAssistantGateway(
             }
             yield break;
         }
+
+        // Stamp honest per-message provenance for the orchestrator: prefer
+        // what the provider says it served, else the routed request model.
+        var servedModel = completion!.ServedModel;
+        if (string.IsNullOrWhiteSpace(servedModel)) servedModel = model;
+        yield return new LlmServedModel(servedModel, providerCode);
 
         // Yield text response in chunks for streaming feel
         var content = completion!.Text ?? "";

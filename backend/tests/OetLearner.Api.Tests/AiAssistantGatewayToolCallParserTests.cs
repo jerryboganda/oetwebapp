@@ -62,7 +62,7 @@ public sealed class AiAssistantGatewayToolCallParserTests
             chunks.Add(chunk);
         }
 
-        var text = Assert.IsType<LlmTextChunk>(Assert.Single(chunks));
+        var text = Assert.IsType<LlmTextChunk>(chunks.OfType<LlmTextChunk>().Single());
         Assert.Equal("assistant response", text.Text);
         Assert.True(provider.WasCalled);
         Assert.StartsWith("aiu_", recorder.RecordedUsageId);
@@ -97,9 +97,76 @@ public sealed class AiAssistantGatewayToolCallParserTests
             chunks.Add(chunk);
         }
 
-        Assert.IsType<LlmTextChunk>(Assert.Single(chunks));
+        Assert.IsType<LlmTextChunk>(chunks.OfType<LlmTextChunk>().Single());
         Assert.StartsWith("aiu_", recorder.RequestedUsageId);
         Assert.Equal("persisted-usage-1", credits.DebitRequest?.UsageRecordId);
+    }
+
+    [Fact]
+    public async Task StreamCompleteWithToolsAsync_EmitsServedModelChunk_BeforeText()
+    {
+        var provider = new FakeAssistantProvider();
+        var gateway = new AiAssistantGateway(
+            new FakeRouteResolver(),
+            new EmptyProviderRegistry(),
+            new[] { (IAiModelProvider)provider },
+            NullLogger<AiAssistantGateway>.Instance);
+
+        var chunks = new List<LlmStreamChunk>();
+        await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
+                   AiFeatureCodes.WritingGrade,
+                   "user-1",
+                   [new LlmMessage("system", "You are helpful."), new LlmMessage("user", "Score this.")],
+                   Array.Empty<AiToolDefinition>(),
+                   modelOverride: null,
+                   CancellationToken.None))
+        {
+            chunks.Add(chunk);
+        }
+
+        var served = Assert.IsType<LlmServedModel>(chunks[0]);
+        Assert.Equal("assistant-model", served.Model);
+        Assert.IsType<LlmTextChunk>(chunks[1]);
+    }
+
+    [Fact]
+    public async Task StreamCompleteWithToolsAsync_ForwardsImageAndDocumentAttachments_ToProvider()
+    {
+        var provider = new CapturingAssistantProvider();
+        var gateway = new AiAssistantGateway(
+            new FakeRouteResolver(),
+            new EmptyProviderRegistry(),
+            new[] { (IAiModelProvider)provider },
+            NullLogger<AiAssistantGateway>.Instance);
+
+        var images = new[]
+        {
+            new AiProviderImageAttachment { MimeType = "image/png", Data = new byte[] { 1, 2, 3 } },
+        };
+        var document = new AiProviderDocumentAttachment
+        {
+            FileName = "notes.pdf",
+            MimeType = "application/pdf",
+            Text = "case notes excerpt",
+        };
+
+        await foreach (var _ in gateway.StreamCompleteWithToolsAsync(
+                   AiFeatureCodes.AiAssistantLearner,
+                   "user-1",
+                   [new LlmMessage("system", "sys"), new LlmMessage("user", "hi")],
+                   Array.Empty<AiToolDefinition>(),
+                   modelOverride: null,
+                   CancellationToken.None,
+                   images,
+                   document))
+        {
+        }
+
+        Assert.NotNull(provider.SeenRequest);
+        Assert.Same(images, provider.SeenRequest!.ImageAttachments);
+        Assert.Same(document, provider.SeenRequest.DocumentAttachment);
+        Assert.Contains("notes.pdf", provider.SeenRequest.UserPrompt);
+        Assert.Contains("case notes excerpt", provider.SeenRequest.UserPrompt);
     }
 
     [Fact]
@@ -128,7 +195,7 @@ public sealed class AiAssistantGatewayToolCallParserTests
             chunks.Add(chunk);
         }
 
-        Assert.IsType<LlmTextChunk>(Assert.Single(chunks));
+        Assert.IsType<LlmTextChunk>(chunks.OfType<LlmTextChunk>().Single());
         Assert.True(provider.WasCalled);
         Assert.StartsWith("aiu_", recorder.RequestedUsageId);
         Assert.Null(credits.DebitRequest);
@@ -158,7 +225,7 @@ public sealed class AiAssistantGatewayToolCallParserTests
             chunks.Add(chunk);
         }
 
-        var text = Assert.IsType<LlmTextChunk>(Assert.Single(chunks));
+        var text = Assert.IsType<LlmTextChunk>(chunks.OfType<LlmTextChunk>().Single());
         Assert.Contains("AI credit accounting is not configured", text.Text);
         Assert.False(provider.WasCalled);
         Assert.Equal("ai_credit_accounting_unavailable", recorder.FailureErrorCode);
@@ -195,6 +262,22 @@ public sealed class AiAssistantGatewayToolCallParserTests
         public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
         {
             WasCalled = true;
+            return Task.FromResult(new AiProviderCompletion
+            {
+                Text = "assistant response",
+                Usage = new AiUsage { PromptTokens = 10, CompletionTokens = 5 },
+            });
+        }
+    }
+
+    private sealed class CapturingAssistantProvider : IAiModelProvider
+    {
+        public string Name => "fake-assistant";
+        public AiProviderRequest? SeenRequest { get; private set; }
+
+        public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+        {
+            SeenRequest = request;
             return Task.FromResult(new AiProviderCompletion
             {
                 Text = "assistant response",

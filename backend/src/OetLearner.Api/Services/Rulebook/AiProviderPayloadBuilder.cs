@@ -24,10 +24,41 @@ internal static class AiProviderPayloadBuilder
                 throw new InvalidOperationException("AI tool result messages must include a tool call id.");
             }
 
+            // Vision: a user message carrying image parts becomes the
+            // OpenAI content-parts shape (text + image_url/data:). Plain
+            // string content keeps the legacy shape so text-only providers
+            // and the mock see byte-identical payloads to before.
+            object? content = message.Content ?? string.Empty;
+            if (role is "user" or "system" && message.ImageAttachments is { Count: > 0 })
+            {
+                var parts = new List<object?>();
+                if (!string.IsNullOrWhiteSpace(message.Content))
+                {
+                    parts.Add(new Dictionary<string, object?>
+                    {
+                        ["type"] = "text",
+                        ["text"] = message.Content,
+                    });
+                }
+                foreach (var image in message.ImageAttachments)
+                {
+                    if (image.Data is not { Length: > 0 }) continue;
+                    parts.Add(new Dictionary<string, object?>
+                    {
+                        ["type"] = "image_url",
+                        ["image_url"] = new Dictionary<string, object?>
+                        {
+                            ["url"] = $"data:{image.MimeType};base64,{Convert.ToBase64String(image.Data)}",
+                        },
+                    });
+                }
+                content = parts;
+            }
+
             var output = new Dictionary<string, object?>
             {
                 ["role"] = role,
-                ["content"] = message.Content ?? string.Empty,
+                ["content"] = content,
             };
 
             if (role == "tool" && !string.IsNullOrWhiteSpace(message.ToolCallId))

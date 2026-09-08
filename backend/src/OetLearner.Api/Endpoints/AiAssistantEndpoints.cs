@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiAssistant;
 using OetLearner.Api.Services.AiAssistant.SystemPrompts;
+using OetLearner.Api.Services.Seeding;
 using OetLearner.Api.Services.Settings;
 
 namespace OetLearner.Api.Endpoints;
@@ -46,6 +47,60 @@ public static class AiAssistantEndpoints
             var role = GetUserRole(ctx);
             var thread = await orchestrator.CreateThreadAsync(userId, role, req?.Title, ct);
             return Results.Created($"/v1/ai-assistant/threads/{thread.Id}", thread);
+        });
+
+        // Rename a conversation. Ownership-checked; 404 covers both missing
+        // and foreign threads so ids cannot be probed.
+        group.MapPatch("/threads/{threadId}", async (
+            string threadId,
+            [FromServices] IAiAssistantOrchestrator orchestrator,
+            HttpContext ctx,
+            [FromBody] RenameAiThreadRequest? req,
+            CancellationToken ct = default) =>
+        {
+            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+            var title = (req?.Title ?? string.Empty).Trim();
+            if (title.Length == 0 || title.Length > 256)
+                return Results.BadRequest(new { error = "Title must be 1–256 characters." });
+
+            var renamed = await orchestrator.RenameThreadAsync(threadId, userId, title, ct);
+            return renamed ? Results.NoContent() : Results.NotFound();
+        }).RequireRateLimiting("PerUserWrite");
+
+        // Per-conversation UBAG model override. The model id is validated
+        // against the ubag allowlist (+ board composite) server-side; unknown
+        // ids 400. Null/empty clears back to the feature-route default.
+        group.MapPatch("/threads/{threadId}/model", async (
+            string threadId,
+            [FromServices] IAiAssistantOrchestrator orchestrator,
+            HttpContext ctx,
+            [FromBody] SetAiThreadModelRequest? req,
+            CancellationToken ct = default) =>
+        {
+            var userId = ctx.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
+
+            var model = string.IsNullOrWhiteSpace(req?.Model) ? null : req.Model.Trim();
+            if (model is not null && !IsSelectableAssistantModel(model))
+                return Results.BadRequest(new { error = "Unknown model for the UBAG provider." });
+
+            var saved = await orchestrator.SetThreadModelAsync(threadId, userId, model, ct);
+            return saved ? Results.NoContent() : Results.NotFound();
+        }).RequireRateLimiting("PerUserWrite");
+
+        // Models the chat model-picker may offer: the live UBAG catalog
+        // (allowlist, always) plus the board-curated composite pick.
+        group.MapGet("/models", () =>
+        {
+            var models = UbagProviderRouteDefaults.AllowedModelsCsv
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Concat(["chatgpt_web|GPT-5.6 Sol + Medium"])
+                .Distinct(StringComparer.Ordinal)
+                .OrderBy(m => m, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return Results.Ok(new { provider = UbagProviderRouteDefaults.ProviderCode, models });
         });
 
         group.MapGet("/threads/{threadId}/messages", async (
@@ -688,6 +743,18 @@ public static class AiAssistantEndpoints
         _ => AiFeatureCodes.AiAssistantLearner,
     };
 
+    /// <summary>Every model id the chat model-picker may offer: the live UBAG
+    /// allowlist plus the board-curated composite pick. The PATCH model route
+    /// validates against this exact set.</summary>
+    private static readonly HashSet<string> SelectableAssistantModels = new(
+        UbagProviderRouteDefaults.AllowedModelsCsv
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Append("chatgpt_web|GPT-5.6 Sol + Medium"),
+        StringComparer.Ordinal);
+
+    private static bool IsSelectableAssistantModel(string model) =>
+        !string.IsNullOrWhiteSpace(model) && SelectableAssistantModels.Contains(model.Trim());
+
     private static string GetUserRole(HttpContext ctx)
     {
         var user = ctx.User;
@@ -698,6 +765,10 @@ public static class AiAssistantEndpoints
 }
 
 public sealed record CreateAiThreadRequest(string? Title);
+
+public sealed record RenameAiThreadRequest(string? Title);
+
+public sealed record SetAiThreadModelRequest(string? Model);
 
 /// <summary>Per-role slice of the admin AI Assistant config editor.</summary>
 public sealed record AssistantRoleConfigSave(

@@ -26,6 +26,12 @@ const contextValue = {
   cancelTurn: vi.fn(),
   selectThread: vi.fn(),
   createNewThread: vi.fn(),
+  archiveThread: vi.fn(),
+  renameThread: vi.fn(),
+  threadModel: null as string | null,
+  availableModels: [] as string[],
+  modelsLoading: false,
+  setThreadModel: vi.fn(),
 };
 
 vi.mock('@/contexts/ai-assistant-context', () => ({
@@ -74,6 +80,12 @@ function resetContext(overrides: Partial<typeof contextValue> = {}) {
     cancelTurn: vi.fn(),
     selectThread: vi.fn(),
     createNewThread: vi.fn(),
+    archiveThread: vi.fn(),
+    renameThread: vi.fn(),
+    threadModel: null,
+    availableModels: [],
+    modelsLoading: false,
+    setThreadModel: vi.fn(),
     ...overrides,
   });
 }
@@ -187,5 +199,66 @@ describe('AiAssistantPanel', () => {
     await user.click(screen.getByRole('button', { name: 'Writing help' }));
 
     expect(contextValue.selectThread).toHaveBeenCalledWith('t1');
+  });
+
+  it('offers every UBAG model in the picker and applies the pick immediately', async () => {
+    const user = userEvent.setup();
+    resetContext({ availableModels: ['chatgpt_web', 'deepseek_web|Vision', 'whisper-1'] });
+    render(<AiAssistantPanel onClose={onClose} />);
+
+    const picker = screen.getByRole('combobox', { name: /ai model for this conversation/i });
+    expect(picker).toHaveDisplayValue('Default');
+    for (const model of ['chatgpt_web', 'deepseek_web|Vision', 'whisper-1']) {
+      expect(screen.getByRole('option', { name: model })).toBeInTheDocument();
+    }
+
+    await user.selectOptions(picker, 'deepseek_web|Vision');
+    expect(contextValue.setThreadModel).toHaveBeenCalledWith('deepseek_web|Vision');
+  });
+
+  it('keeps the picker visible with the saved pick when the catalog fetch fails', () => {
+    resetContext({ availableModels: [], threadModel: 'chatgpt_web|GPT-5.6 Sol + Medium' });
+    render(<AiAssistantPanel onClose={onClose} />);
+
+    expect(screen.getByRole('combobox', { name: /ai model for this conversation/i })).toHaveDisplayValue(
+      'chatgpt_web|GPT-5.6 Sol + Medium',
+    );
+  });
+
+  it('shows rename and delete actions without hover', async () => {
+    const user = userEvent.setup();
+    resetContext({ threads: [{ id: 't1', title: 'Old name' }] });
+    render(<AiAssistantPanel onClose={onClose} />);
+
+    await user.click(screen.getByRole('button', { name: /thread list/i }));
+
+    expect(screen.getByRole('button', { name: 'Rename Old name' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Delete Old name' })).toBeVisible();
+  });
+
+  it('renames a conversation from the thread list', async () => {
+    const user = userEvent.setup();
+    resetContext({ threads: [{ id: 't1', title: 'Old name' }] });
+    render(<AiAssistantPanel onClose={onClose} />);
+
+    await user.click(screen.getByRole('button', { name: /thread list/i }));
+    await user.click(screen.getByRole('button', { name: 'Rename Old name' }));
+    await user.clear(screen.getByRole('textbox', { name: /conversation name/i }));
+    await user.type(screen.getByRole('textbox', { name: /conversation name/i }), 'New name');
+    await user.click(screen.getByRole('button', { name: /save conversation name/i }));
+
+    expect(contextValue.renameThread).toHaveBeenCalledWith('t1', 'New name');
+  });
+
+  it('deletes a conversation after confirmation', async () => {
+    const user = userEvent.setup();
+    resetContext({ threads: [{ id: 't1', title: 'Old name' }] });
+    render(<AiAssistantPanel onClose={onClose} />);
+
+    await user.click(screen.getByRole('button', { name: /thread list/i }));
+    await user.click(screen.getByRole('button', { name: 'Delete Old name' }));
+    await user.click(screen.getByRole('button', { name: 'Confirm delete Old name' }));
+
+    expect(contextValue.archiveThread).toHaveBeenCalledWith('t1');
   });
 });

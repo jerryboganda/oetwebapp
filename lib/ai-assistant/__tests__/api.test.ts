@@ -1,4 +1,4 @@
-import { createThread, listThreads, getMessages, archiveThread } from '../api';
+import { createThread, listThreads, getMessages, archiveThread, renameThread, setThreadModel, listAssistantModels } from '../api';
 
 /**
  * These tests previously asserted the client's own invented wrappers
@@ -12,12 +12,14 @@ import { createThread, listThreads, getMessages, archiveThread } from '../api';
 // Mock the apiClient dependency
 const mockGet = vi.fn();
 const mockPost = vi.fn();
+const mockPatch = vi.fn();
 const mockDelete = vi.fn();
 
 vi.mock('@/lib/api', () => ({
   apiClient: {
     get: (...args: unknown[]) => mockGet(...args),
     post: (...args: unknown[]) => mockPost(...args),
+    patch: (...args: unknown[]) => mockPatch(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
   },
 }));
@@ -160,6 +162,39 @@ describe('AI Assistant API client', () => {
     it('propagates 403 errors', async () => {
       mockDelete.mockRejectedValue(new Error('Forbidden'));
       await expect(archiveThread('t1')).rejects.toThrow('Forbidden');
+    });
+  });
+
+  describe('renameThread', () => {
+    it('PATCHes the trimmed title onto the thread route', async () => {
+      mockPatch.mockResolvedValue(undefined);
+
+      await renameThread('t1', 'Rounds review');
+
+      expect(mockPatch).toHaveBeenCalledWith('/v1/ai-assistant/threads/t1', { title: 'Rounds review' });
+    });
+  });
+
+  describe('setThreadModel', () => {
+    it('PATCHes the UBAG model override, or null to clear it', async () => {
+      mockPatch.mockResolvedValue(undefined);
+
+      await setThreadModel('t1', 'chatgpt_web');
+      expect(mockPatch).toHaveBeenCalledWith('/v1/ai-assistant/threads/t1/model', { model: 'chatgpt_web' });
+
+      await setThreadModel('t1', null);
+      expect(mockPatch).toHaveBeenCalledWith('/v1/ai-assistant/threads/t1/model', { model: null });
+    });
+  });
+
+  describe('listAssistantModels', () => {
+    it('returns the UBAG model catalog the picker offers', async () => {
+      mockGet.mockResolvedValue({ provider: 'ubag', models: ['chatgpt_web', 'deepseek_web'] });
+
+      const catalog = await listAssistantModels();
+
+      expect(catalog.models).toEqual(['chatgpt_web', 'deepseek_web']);
+      expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/models');
     });
   });
 

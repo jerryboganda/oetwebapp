@@ -2193,6 +2193,21 @@ public sealed class AiProviderRequest
     /// use is Gemini native-audio pronunciation scoring.</summary>
     public IReadOnlyList<AiProviderAudioAttachment>? AudioAttachments { get; init; }
 
+    /// <summary>Inline image parts for OpenAI-compatible vision calls. Each
+    /// entry carries the raw image bytes + mime type; the payload builder
+    /// emits them as <c>image_url/data:</c> parts. Null/empty = text-only
+    /// turn. The UBAG facade forwards them as <c>ubag_attachments</c> browser
+    /// jobs (PDF/image/audio/video/voice), so vision-capable UBAG models can
+    /// actually see the upload.</summary>
+    public IReadOnlyList<AiProviderImageAttachment>? ImageAttachments { get; init; }
+
+    /// <summary>Plain-text extraction of an uploaded document (PDF/DOCX/TXT)
+    /// supplied alongside the turn, or null when no document was attached.
+    /// Folded into the user prompt text so every provider — including the
+    /// text-only UBAG chat path — can answer questions about the file without
+    /// needing native attachment support.</summary>
+    public AiProviderDocumentAttachment? DocumentAttachment { get; init; }
+
     /// <summary>See <see cref="AiGatewayRequest.EnableExtendedThinking"/>.
     /// Only the native <see cref="AnthropicProvider"/> honours this; other
     /// dialects ignore it.</summary>
@@ -2206,6 +2221,23 @@ public sealed class AiProviderAudioAttachment
 {
     public required string MimeType { get; init; }
     public required byte[] Data { get; init; }
+}
+
+/// <summary>One inline image for an OpenAI-compatible vision turn.</summary>
+public sealed class AiProviderImageAttachment
+{
+    public required string MimeType { get; init; }
+    public required byte[] Data { get; init; }
+    public string? FileName { get; init; }
+}
+
+/// <summary>Extracted text of one uploaded document attached to a turn.</summary>
+public sealed class AiProviderDocumentAttachment
+{
+    public required string FileName { get; init; }
+    public required string MimeType { get; init; }
+    public required string Text { get; init; }
+    public bool Truncated { get; init; }
 }
 
 public sealed class AiProviderCompletion
@@ -2234,6 +2266,11 @@ public sealed class AiProviderCompletion
     /// <c>"stop"</c>, <c>"tool_calls"</c>, <c>"length"</c>, <c>"content_filter"</c>.
     /// Used only for diagnostics and gateway loop bookkeeping.</summary>
     public string? FinishReason { get; init; }
+
+    /// <summary>Model id the provider reports it actually served (OpenAI
+    /// <c>model</c> field on the completion). Lets the assistant stamp honest
+    /// per-message provenance; null when the provider echoes nothing.</summary>
+    public string? ServedModel { get; init; }
 }
 
 /// <summary>Phase 5 — chat-message envelope used by tool-calling providers.
@@ -2248,6 +2285,10 @@ public sealed class AiChatMessage
     /// <summary>Set on <c>"tool"</c> messages — matches an
     /// <see cref="AiToolCall.Id"/> from the previous assistant turn.</summary>
     public string? ToolCallId { get; init; }
+    /// <summary>Inline images attached to a user/system message. Emitted as
+    /// OpenAI <c>image_url/data:</c> parts by the payload builder; ignored by
+    /// providers that only read <see cref="Content"/>.</summary>
+    public IReadOnlyList<AiProviderImageAttachment>? ImageAttachments { get; init; }
 }
 
 /// <summary>Phase 5 — single tool call requested by the model.
