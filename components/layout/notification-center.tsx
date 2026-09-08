@@ -29,7 +29,7 @@ import {
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
-import { useNotificationCenter, useNotificationState } from '@/contexts/notification-center-context';
+import { useNotificationCenter, useNotificationState, useOptionalNotificationState } from '@/contexts/notification-center-context';
 import { useAdminAlerts, type AdminAlertItem } from '@/hooks/use-admin-alerts';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/modal';
@@ -652,8 +652,11 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
 /* ────────────────────────────────────────────────────────────── */
 
 export function NotificationCenter({ triggerClassName }: { triggerClassName?: string } = {}) {
+  const notificationState = useOptionalNotificationState();
   const [desktopOpen, setDesktopOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  if (!notificationState) return null;
 
   return (
     <>

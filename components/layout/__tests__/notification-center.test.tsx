@@ -34,6 +34,7 @@ const mockNotificationContext = {
 vi.mock('@/contexts/notification-center-context', () => ({
   useNotificationCenter: () => mockNotificationContext,
   useNotificationState: () => mockNotificationContext,
+  useOptionalNotificationState: () => mockNotificationContext,
   cloneNotificationPreferences: () => null,
 }));
 

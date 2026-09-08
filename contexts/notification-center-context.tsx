@@ -835,11 +835,16 @@ export function useNotificationCenter() {
  * that do not call any mutation — the bell badge, small state chips, etc.
  */
 export function useNotificationState() {
-  const context = useContext(NotificationStateContext);
+  const context = useOptionalNotificationState();
   if (!context) {
     throw new Error('useNotificationState must be used within NotificationCenterProvider');
   }
   return context;
+}
+
+/** Null when AuthenticatedNotificationCenter skipped the workspace provider (guests / auth routes). */
+export function useOptionalNotificationState() {
+  return useContext(NotificationStateContext);
 }
 
 export function cloneNotificationPreferences(preferences: NotificationPreferencePayload | null) {
