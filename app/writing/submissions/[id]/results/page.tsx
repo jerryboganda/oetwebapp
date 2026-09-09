@@ -208,13 +208,14 @@ export default function WritingSubmissionResultsPage() {
             eyebrow="Writing assessment v1.1"
             icon={Award}
             title={assessment.scoreLabel}
-            subtitle="This practice estimate is governed by the released v1.1 calibration gate."
+            subtitle="An AI-generated practice estimate, not an official OET result."
             gaugeValue={(assessment.estimatedPracticeScore / 500) * 100}
             gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{assessment.estimatedPracticeScore}</span>}
-            gaugeLabel={assessment.scoreRange ?? 'calibration-approved range'}
+            gaugeLabel={assessment.scoreRange ?? assessment.gradeBand ?? 'AI estimate'}
             gaugeColor={assessment.estimatedPracticeScore >= 350 ? 'var(--color-success)' : assessment.estimatedPracticeScore >= 300 ? 'var(--color-warning)' : 'var(--color-danger)'}
             stats={[
               { label: 'Score', value: `${assessment.estimatedPracticeScore}/500`, tone: 'info', icon: <Award /> },
+              ...(assessment.gradeBand ? [{ label: 'Grade band', value: assessment.gradeBand, tone: 'info' as const, icon: <Award /> }] : []),
               { label: 'Confidence', value: assessment.confidenceLabel ?? 'restricted', tone: 'default', icon: <Sparkles /> },
               { label: 'Version', value: assessment.calibrationSetVersion, tone: 'default', icon: <FileText /> },
             ]}

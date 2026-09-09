@@ -15,9 +15,11 @@ public interface IWritingAssessmentV11ResultService
 }
 
 /// <summary>
-/// Candidate-facing v1.1 projection. It never returns the legacy raw-total or
-/// band fields. A report remains an internal restricted snapshot until the
-/// calibrated release gate explicitly makes it candidate-visible.
+/// Candidate-facing v1.1 projection. It never returns the legacy raw-total
+/// field, but does surface an OET grade band derived from the /500 practice
+/// score (2026-09-09 owner decision — see WritingCalibrationReleaseService).
+/// A report remains an internal restricted snapshot until
+/// WritingCalibrationReleaseService.ResolveAsync makes it candidate-visible.
 /// </summary>
 public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWritingAssessmentV11ResultService
 {
@@ -50,6 +52,10 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
             && report.CandidateReportVisible;
         var score = report.CandidateNumericScoreEnabled && candidateVisible
             ? report.EstimatedPracticeScore
+            : null;
+        var gradeBand = score is { } scoreValue
+            ? OetLearner.Api.Services.OetScoring.OetGradeLabel(
+                OetLearner.Api.Services.OetScoring.OetGradeLetterFromScaled(scoreValue))
             : null;
         var blockingCodes = ParseBlockingCodes(report.ClassificationJson);
         if (!candidateVisible && blockingCodes.Count == 0)
@@ -123,6 +129,7 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
             report.CalibrationSetVersion,
             score,
             "AI Estimated Practice Score — not an official OET result",
+            gradeBand,
             report.ScoreRange,
             report.ConfidenceLabel,
             report.ConfidenceRange,
