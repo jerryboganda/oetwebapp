@@ -261,7 +261,19 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
 
         var salutationIdx = Find(new Regex(@"^\s*Dear\b", RegexOptions.IgnoreCase));
         var reLineIdx = Find(new Regex(@"^\s*Re\s*:", RegexOptions.IgnoreCase));
-        var dateIdx = Find(new Regex(@"^\s*(\d{1,2}[\/\s-]\w+|\d{1,2}\/\d{1,2}\/\d{2,4}|\w+\s\d{1,2},?\s\d{2,4})\s*$"));
+        // Matches every date style the Global Formatting Addendum accepts: fully
+        // written ("5 September 2026" / "September 5, 2026"), slash ("05/09/2026"),
+        // and dot ("05.09.2026"). The previous pattern's first branch
+        // (\d{1,2}[\/\s-]\w+) only matched "day month" with no year, so any
+        // whole-line "D Month YYYY" date — the addendum's own lead example —
+        // never set DateIndex, which cascaded into false "missing Date"
+        // structure findings and skipped every check gated on DateIndex.
+        // Confirmed as a genuine bug, not governed behavior: the "locked"
+        // cross-engine parity fixture's expected output for every affected
+        // case also carries the same false "missing Date" finding — it's a
+        // frozen snapshot of the retired TS engine, which had this same bug,
+        // not a deliberate rulebook decision (see writing-engine-parity.json).
+        var dateIdx = Find(new Regex(@"^\s*(\d{1,2}\s+[A-Za-z]+\s+\d{2,4}|[A-Za-z]+\s+\d{1,2},?\s+\d{2,4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{1,2}\.\d{1,2}\.\d{2,4})\s*$"));
         var yoursIdx = Find(new Regex(@"^\s*Yours\s+(sincerely|faithfully)\b", RegexOptions.IgnoreCase));
 
         var bodyParagraphs = new List<string>();
