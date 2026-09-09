@@ -73,6 +73,21 @@ public sealed class PronunciationCredentialResolver(
     {
         if (cache.TryGetValue<Dictionary<string, PronunciationCredentials>>(CacheKey, out var snap) && snap is not null)
             return snap.ContainsKey(providerCode);
+
+        // 2026-09-09 bug fix — this method never warmed its own cache, only
+        // read it. That's fine for a provider whose real IsConfiguredAsync/
+        // ResolveAsync path runs regardless (Pronunciation), but Speaking's
+        // Whisper-vs-Mock DI factory (Program.cs) selects the real provider
+        // ONLY when this sync check is already true — and the one call that
+        // would warm the cache (ResolveAsync, inside the real provider) never
+        // fires while Mock keeps getting selected instead. Net effect: once
+        // cold (e.g. after any container restart), a correctly-configured
+        // registry row could never be observed here again, silently
+        // defaulting every Speaking submission to the honest-failure path
+        // forever. Kick off a background warm so the TTL window promised by
+        // this method's own doc comment ("the first request after cold-start
+        // will populate it") actually happens.
+        _ = Task.Run(() => GetSnapshotAsync(CancellationToken.None));
         return false;
     }
 
