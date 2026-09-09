@@ -219,9 +219,9 @@ public sealed class RegistryBackedProvider(
         var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
         if (string.IsNullOrWhiteSpace(text))
         {
-            var finishReason = choice.TryGetProperty("finish_reason", out var finishReasonEl) ? finishReasonEl.GetString() : null;
+            var emptyFinish = choice.TryGetProperty("finish_reason", out var emptyFinishEl) ? emptyFinishEl.GetString() : null;
             throw new InvalidOperationException(
-                $"UBAG provider call failed: the browser job finished but returned no text (finish_reason={finishReason ?? "stop"}). Retry the request.");
+                $"UBAG provider call failed: the browser job finished but returned no text (finish_reason={emptyFinish ?? "stop"}). Retry the request.");
         }
         var servedModel = root.TryGetProperty("model", out var servedEl) && servedEl.ValueKind == JsonValueKind.String
             ? servedEl.GetString()
