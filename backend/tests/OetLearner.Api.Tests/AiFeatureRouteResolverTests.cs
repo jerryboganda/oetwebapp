@@ -41,7 +41,7 @@ public sealed class AiFeatureRouteResolverTests : IAsyncDisposable
     [InlineData(AiFeatureCodes.ConversationReply, "anthropic", "claude-sonnet-5")]
     [InlineData(AiFeatureCodes.ConversationEvaluation, "anthropic", "claude-sonnet-5")]
     [InlineData(AiFeatureCodes.WritingGrade, "anthropic", "claude-sonnet-5")]
-    [InlineData(AiFeatureCodes.ReadingExplanation, "anthropic", "claude-sonnet-5")]
+    [InlineData(AiFeatureCodes.ReadingExplanation, "anthropic", "claude-haiku-4-5-20251001")]
     [InlineData(AiFeatureCodes.PronunciationLinguisticScore, "gemini-pronunciation-audio", "gemini-3.5-flash")]
     public async Task ResolveAsync_NoRow_ReturnsStaticDefault_WhenProviderKeyed(string featureCode, string provider, string model)
     {

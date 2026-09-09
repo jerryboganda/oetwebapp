@@ -39,8 +39,8 @@ public class MockBookingReminderPlannerTests
         // Locking the order so worker iteration "larger first" is stable.
         Assert.Equal(3, MockBookingReminderPlanner.Offsets.Length);
         Assert.Equal(TimeSpan.FromHours(24), MockBookingReminderPlanner.Offsets[0].Offset);
-        Assert.Equal(TimeSpan.FromHours(1), MockBookingReminderPlanner.Offsets[1].Offset);
-        Assert.Equal(TimeSpan.FromMinutes(15), MockBookingReminderPlanner.Offsets[2].Offset);
+        Assert.Equal(TimeSpan.FromHours(2), MockBookingReminderPlanner.Offsets[1].Offset);
+        Assert.Equal(TimeSpan.FromMinutes(30), MockBookingReminderPlanner.Offsets[2].Offset);
 
         Assert.Equal(NotificationEventKey.LearnerMockReminder24h, MockBookingReminderPlanner.Offsets[0].LearnerEventKey);
         Assert.Equal(NotificationEventKey.LearnerMockReminder1h, MockBookingReminderPlanner.Offsets[1].LearnerEventKey);

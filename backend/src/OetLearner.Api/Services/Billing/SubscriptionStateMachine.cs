@@ -32,7 +32,6 @@ public static class SubscriptionStateMachine
                 SubscriptionStatus.Trial,
                 SubscriptionStatus.Pending,
                 SubscriptionStatus.Active,
-                SubscriptionStatus.Suspended, // admin suspend (reversible via Suspended -> Active)
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Expired,
             },
@@ -101,14 +100,16 @@ public static class SubscriptionStateMachine
             {
                 SubscriptionStatus.Cancelled,
                 SubscriptionStatus.Pending,
-                SubscriptionStatus.Active,    // admin restore / ReactivateCancelled
                 SubscriptionStatus.Expired,
+                // Note: Active deliberately excluded — resubscribing after cancellation is a
+                // new subscription. Admin restore uses ReactivateCancelled(), which mutates
+                // Status directly and does not consult this table.
             },
             [SubscriptionStatus.Expired] = new HashSet<SubscriptionStatus>
             {
                 SubscriptionStatus.Expired,
                 SubscriptionStatus.Pending,
-                SubscriptionStatus.Active,
+                // Note: Active deliberately excluded — Expired is terminal.
             },
         };
 

@@ -18,6 +18,7 @@ public sealed class AdminLaunchReadinessSettingsTests
 
         var update = await client.PutAsJsonAsync("/v1/admin/launch-readiness/settings", new
         {
+            enforceClientVersionGate = true,
             mobileMinSupportedVersion = "1.2.0",
             mobileLatestVersion = "1.3.0",
             mobileForceUpdate = true,

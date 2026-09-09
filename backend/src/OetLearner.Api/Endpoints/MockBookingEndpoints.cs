@@ -293,48 +293,54 @@ public static class MockBookingEndpoints
                 .FirstOrDefaultAsync(b => b.Id == body.BundleId, ct)
                 ?? throw ApiException.NotFound("bundle_not_found", "Mock bundle not found.");
 
-            var isSpeakingBundle = string.Equals(bundle.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
-                || await db.MockBundleSections.AsNoTracking().AnyAsync(section =>
-                    section.MockBundleId == bundle.Id
-                    && section.SubtestCode == "speaking", ct);
-            if (!isSpeakingBundle)
+            // The tutor-booking sub-flow (a Full Mock Speaking session
+            // scheduled with a live tutor) only applies when the caller is
+            // actually requesting a tutor slot. General Full Mock bookings —
+            // standalone or scoped to an in-progress attempt — send no
+            // tutorProfileId and must keep working as they did before this
+            // workflow was layered on (2026-08-10).
+            PrivateSpeakingTutorProfile? tutor = null;
+            if (!string.IsNullOrWhiteSpace(body.TutorProfileId))
             {
-                throw ApiException.Validation("speaking_bundle_required", "Only Full Mock Speaking bookings use this tutor workflow.");
-            }
-            if (string.IsNullOrWhiteSpace(body.TutorProfileId))
-            {
-                throw ApiException.Validation("tutor_required", "Select an available tutor slot before booking.");
-            }
+                var isSpeakingBundle = string.Equals(bundle.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+                    || await db.MockBundleSections.AsNoTracking().AnyAsync(section =>
+                        section.MockBundleId == bundle.Id
+                        && section.SubtestCode == "speaking", ct);
+                if (!isSpeakingBundle)
+                {
+                    throw ApiException.Validation("speaking_bundle_required", "Only Full Mock Speaking bookings use this tutor workflow.");
+                }
 
-            var tutor = await db.PrivateSpeakingTutorProfiles.AsNoTracking()
-                .FirstOrDefaultAsync(profile => profile.Id == body.TutorProfileId && profile.IsActive, ct)
-                ?? throw ApiException.Conflict("tutor_unavailable", "The selected tutor is no longer available.");
-            var enforcedTargetExamDate = await db.Goals.AsNoTracking()
-                .Where(goal => goal.UserId == userId)
-                .Select(goal => (DateOnly?)goal.TargetExamDate)
-                .SingleOrDefaultAsync(ct);
-            if (SpeakingBookingPolicy.TutorWindowClosed(
-                    enforcedTargetExamDate,
-                    DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime))
-                )
-            {
-                throw ApiException.Conflict(
-                    "speaking_tutor_window_closed",
-                    "A Full Mock Speaking tutor session is available only when the exam is at least 7 days away.");
-            }
+                tutor = await db.PrivateSpeakingTutorProfiles.AsNoTracking()
+                    .FirstOrDefaultAsync(profile => profile.Id == body.TutorProfileId && profile.IsActive, ct)
+                    ?? throw ApiException.Conflict("tutor_unavailable", "The selected tutor is no longer available.");
+                var enforcedTargetExamDate = await db.Goals.AsNoTracking()
+                    .Where(goal => goal.UserId == userId)
+                    .Select(goal => (DateOnly?)goal.TargetExamDate)
+                    .SingleOrDefaultAsync(ct);
+                if (SpeakingBookingPolicy.TutorWindowClosed(
+                        enforcedTargetExamDate,
+                        DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime))
+                    )
+                {
+                    throw ApiException.Conflict(
+                        "speaking_tutor_window_closed",
+                        "A Full Mock Speaking tutor session is available only when the exam is at least 7 days away.");
+                }
 
-            var tutorTimeZone = TimeZoneInfo.FindSystemTimeZoneById(tutor.Timezone);
-            var tutorLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(scheduledStartAt, tutorTimeZone).DateTime);
-            var tutorSlots = await speakingService.GetAvailableSlotsAsync(
-                tutor.Id, tutorLocalDate, tutorLocalDate, ct);
-            var requestedDuration = bundle.EstimatedDurationMinutes > 0 ? bundle.EstimatedDurationMinutes : SlotMinutes;
-            if (!tutorSlots.Any(slot =>
-                    slot.StartTimeUtc == scheduledStartAt
-                    && slot.DurationMinutes >= requestedDuration))
-            {
-                throw ApiException.Conflict(
-                    "tutor_slot_unavailable",
-                    "The selected time is not currently available in the tutor calendar.");
+                var tutorTimeZone = TimeZoneInfo.FindSystemTimeZoneById(tutor.Timezone);
+                var tutorLocalDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(scheduledStartAt, tutorTimeZone).DateTime);
+                var tutorSlots = await speakingService.GetAvailableSlotsAsync(
+                    tutor.Id, tutorLocalDate, tutorLocalDate, ct);
+                var requestedDuration = bundle.EstimatedDurationMinutes > 0 ? bundle.EstimatedDurationMinutes : SlotMinutes;
+                if (!tutorSlots.Any(slot =>
+                        slot.StartTimeUtc == scheduledStartAt
+                        && slot.DurationMinutes >= requestedDuration))
+                {
+                    throw ApiException.Conflict(
+                        "tutor_slot_unavailable",
+                        "The selected time is not currently available in the tutor calendar.");
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(body.MockAttemptId))
@@ -382,16 +388,19 @@ public static class MockBookingEndpoints
                 return Results.Ok(cached);
             }
 
-            // Slot collision check — any non-cancelled booking whose span overlaps
-            // this mock's span blocks creation. Matches /availability exactly, so
-            // a slot shown as free cannot be rejected here (and vice versa).
-            if (!await zoomService.IsEnabledAsync(ct))
+            // Live tutor sessions need a working Zoom integration up front —
+            // general Full Mock bookings don't, they just queue the
+            // out-of-band MockBookingZoomCreate job below regardless.
+            if (!string.IsNullOrWhiteSpace(body.TutorProfileId) && !await zoomService.IsEnabledAsync(ct))
             {
                 throw ApiException.Conflict(
                     "zoom_unavailable",
                     "Live tutor bookings are temporarily unavailable until the required Zoom integration is configured.");
             }
 
+            // Slot collision check — any non-cancelled booking whose span overlaps
+            // this mock's span blocks creation. Matches /availability exactly, so
+            // a slot shown as free cannot be rejected here (and vice versa).
             var slotTaken = await HasOverlappingBookingAsync(
                 db, scheduledStartAt, bundle.EstimatedDurationMinutes, excludeBookingId: null, ct);
             if (slotTaken)
@@ -408,10 +417,12 @@ public static class MockBookingEndpoints
                 ? "none"
                 : "attempt_prepaid";
 
-            // A standalone Full Mock booking reserves one mock entitlement. A
-            // booking reached from an existing mock attempt is already paid for
-            // by that attempt and must not be double-debited.
-            if (string.IsNullOrWhiteSpace(body.MockAttemptId))
+            // A standalone tutor booking reserves one mock entitlement (a live
+            // tutor session is a paid resource). A booking reached from an
+            // existing mock attempt is already paid for by that attempt and
+            // must not be double-debited; a plain standalone Full Mock slot
+            // booking (no tutor) predates this entitlement gate and stays free.
+            if (string.IsNullOrWhiteSpace(body.MockAttemptId) && !string.IsNullOrWhiteSpace(body.TutorProfileId))
             {
                 var packageDebit = await aiPackageCreditService.DeductMockAsync(
                     userId, entitlementReferenceId, ct);
@@ -454,7 +465,7 @@ public static class MockBookingEndpoints
                 MockAttemptId = string.IsNullOrWhiteSpace(body.MockAttemptId) ? null : body.MockAttemptId,
                 MockSectionId = string.IsNullOrWhiteSpace(body.MockSectionId) ? null : body.MockSectionId,
                 TutorProfileId = body.TutorProfileId,
-                AssignedTutorId = tutor.ExpertUserId,
+                AssignedTutorId = tutor?.ExpertUserId,
                 EntitlementReferenceId = entitlementReferenceId,
                 EntitlementSource = entitlementSource,
                 ScheduledStartAt = scheduledStartAt,

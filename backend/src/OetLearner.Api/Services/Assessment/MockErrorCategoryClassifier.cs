@@ -31,13 +31,34 @@ internal static class MockErrorCategoryClassifier
             return "spelling";
         }
 
-        if (correct.Contains(learner, StringComparison.OrdinalIgnoreCase)
-            && correct.Length > learner.Length)
+        if (IsSubsequenceOfWords(learner, correct)
+            || (correct.Contains(learner, StringComparison.OrdinalIgnoreCase)
+                && correct.Length > learner.Length))
         {
             return "form";
         }
 
         return "detail";
+    }
+
+    // A learner answer missing one or more qualifying/describing words from the
+    // middle of the correct phrase (e.g. "the outcome" vs "the clinical outcome")
+    // is an incomplete-answer "form" error, not a naive character substring: the
+    // dropped word breaks contiguity, so a straight Contains() check misses it.
+    private static bool IsSubsequenceOfWords(string learner, string correct)
+    {
+        var learnerWords = learner.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var correctWords = correct.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (learnerWords.Length == 0 || learnerWords.Length >= correctWords.Length)
+            return false;
+
+        var i = 0;
+        foreach (var word in correctWords)
+        {
+            if (i < learnerWords.Length && string.Equals(word, learnerWords[i], StringComparison.OrdinalIgnoreCase))
+                i++;
+        }
+        return i == learnerWords.Length;
     }
 
     private static bool HasSkillTag(string? skillTags, string expected)

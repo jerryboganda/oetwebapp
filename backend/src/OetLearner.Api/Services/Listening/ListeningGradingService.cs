@@ -776,10 +776,10 @@ public sealed class ListeningGradingService
         "trim_only" => s.Trim(),
         "trim_collapse" => CollapseWhitespace(s.Trim()),
         "trim_collapse_case_insensitive" => CollapseWhitespace(s.Trim()),
-        // Legacy fuzzy and unknown policy names fail closed to exact matching;
-        // neither stale configuration nor malformed snapshots may grant
-        // additional normalization or fuzzy acceptance.
-        _ => s,
+        // Legacy fuzzy and unknown policy names fail closed to exact
+        // (trim + whitespace-collapsed) matching; neither stale configuration
+        // nor malformed snapshots may grant fuzzy/Levenshtein acceptance.
+        _ => CollapseWhitespace(s.Trim()),
     };
 
     private static bool LevenshteinDistanceAtMostOne(string a, string b)

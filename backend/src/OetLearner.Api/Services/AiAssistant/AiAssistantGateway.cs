@@ -78,6 +78,13 @@ public sealed class AiAssistantGateway(
             yield break;
         }
 
+        // Flush the served-model chunk as soon as routing is known, ahead of
+        // every text chunk below (including the early-refusal messages) so
+        // the UI can show "answered by X" before any text streams. The later
+        // completion-based emission (below) corrects this with the honest
+        // provider-reported model if it ever differs from what was routed.
+        yield return new LlmServedModel(model, providerCode);
+
         AiQuotaDecision? quotaDecision = null;
         if (quotaService is not null)
         {

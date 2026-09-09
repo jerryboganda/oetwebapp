@@ -4914,9 +4914,19 @@ public sealed class ListeningLearnerService(
         return new ListeningScoreDto(score.RawScore, score.MaxRawScore, null, "—", null);
     }
 
+    // Note: this gate intentionally does NOT require maxRawScore to equal the
+    // canonical 42-item exam. It is the shared "is this scaled score safe to
+    // show" check for every submit/review/analytics site, including the
+    // legacy JSON-content submit path where a paper's own raw item count is
+    // never 42 (see ListeningLearnerService session "scoring.maxRawScore",
+    // which is always the paper's own Questions.Sum(q => q.Points)). Scoped
+    // relational part-practice attempts are separately protected upstream:
+    // ListeningGradingService.GradeAsync only sets attempt.ScaledScore when
+    // attempt.MaxRawScore == OetScoring.ListeningReadingRawMax, so a scoped
+    // attempt already arrives here with scaledScore == null and fails the
+    // check below regardless of maxRawScore.
     private static bool HasApprovedScoreConversion(string? scoreConversionTableVersionKey, int? scaledScore, bool? passed, int maxRawScore)
-        => maxRawScore == CanonicalRawMax
-            && scaledScore.HasValue
+        => scaledScore.HasValue
             && !string.IsNullOrWhiteSpace(scoreConversionTableVersionKey)
             && passed.HasValue;
 

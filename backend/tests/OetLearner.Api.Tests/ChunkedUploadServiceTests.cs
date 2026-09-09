@@ -230,7 +230,7 @@ public class ChunkedUploadServiceTests
         await Assert.ThrowsAsync<ApiException>(() =>
             svc.StartAsync(new ChunkedUploadStart(
                 "admin-1", "big.mp3", "audio/mpeg",
-                200L * 1024 * 1024, // 200 MB > 150 MB audio cap
+                400L * 1024 * 1024, // 400 MB > 350 MB audio cap (ContentUploadOptions.MaxAudioBytes, raised by #117)
                 "Audio"), default));
         await db.DisposeAsync();
     }

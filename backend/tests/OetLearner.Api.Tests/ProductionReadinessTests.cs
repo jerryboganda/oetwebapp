@@ -12,6 +12,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -331,11 +332,55 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     {
         using var learner = await CreateLearnerClientAsync("checkout-user");
 
+        // Whop (embedded) is the default checkout gateway since PaymentGatewayCatalog made
+        // it MAIN (backend/src/OetLearner.Api/Services/LearnerService.cs's CreateCheckoutSessionAsync
+        // defaults an unspecified gateway to Whop, not Stripe). This test specifically covers a
+        // hosted/redirect provider's checkout URL, so it must opt into Stripe explicitly — and
+        // gateways are disabled unless an admin turns them on (PaymentGatewayCatalog.IsEnabledAsync
+        // has no sandbox-fallback escape hatch), so enable it first the way an admin would.
+        //
+        // Quoteless review_credits checkout resolves a live pack, but the OET-2026 manifest
+        // (Oet2026CatalogSeeder) carries no review-credit packs, so seed one explicitly — the
+        // same hermetic pattern BillingQuoteGuardTests/BillingCheckoutSessionGuardTests use.
+        var packSuffix = Guid.NewGuid().ToString("N")[..8];
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            await EnableGatewayAsync(db, PaymentGatewayNames.Stripe);
+            var now = DateTimeOffset.UtcNow;
+            var pack = new BillingAddOn
+            {
+                Id = $"addon-hosted-checkout-{packSuffix}",
+                Code = $"hosted-checkout-pack-{packSuffix}",
+                Name = "Hosted Checkout Test Review Pack",
+                Description = "Three review credits for the hosted-checkout-url readiness test.",
+                Price = 29.99m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 30,
+                GrantCredits = 3,
+                AppliesToAllPlans = true,
+                RequiresEligibleParent = false,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = JsonSerializer.Serialize(new Dictionary<string, int> { ["ai_credits"] = 3 }),
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.BillingAddOns.Add(pack);
+            await db.SaveChangesAsync();
+        }
+
         var response = await learner.PostAsJsonAsync("/v1/billing/checkout-sessions", new
         {
             productType = "review_credits",
             quantity = 3,
             priceId = (string?)null,
+            gateway = "stripe",
             idempotencyKey = Guid.NewGuid().ToString("N")
         });
         response.EnsureSuccessStatusCode();
@@ -345,6 +390,27 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         Assert.NotNull(checkoutUrl);
         Assert.StartsWith("https://checkout.stripe.com/pay/", checkoutUrl, StringComparison.Ordinal);
         Assert.DoesNotContain("app.example.test/billing/checkout", checkoutUrl, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Payment gateways default to disabled (PaymentGatewayCatalog.DefaultCatalog — only
+    /// Whop/Fawaterak start enabled) and PaymentGatewayCatalog.IsEnabledAsync has no
+    /// sandbox-fallback escape hatch, so tests that check out via a non-default gateway
+    /// must explicitly turn it on first, the same way an admin would via
+    /// PaymentGatewayCatalog.UpdateAsync.
+    /// </summary>
+    private static async Task EnableGatewayAsync(LearnerDbContext db, string gatewayName)
+    {
+        var existing = await db.PaymentGatewayToggles.FirstOrDefaultAsync(x => x.Name == gatewayName);
+        if (existing is not null)
+        {
+            existing.IsEnabled = true;
+            return;
+        }
+
+        var seed = PaymentGatewayCatalog.DefaultCatalog().First(x => x.Name == gatewayName);
+        seed.IsEnabled = true;
+        db.PaymentGatewayToggles.Add(seed);
     }
 
     private async Task<HttpClient> CreateLearnerClientAsync(string userId)

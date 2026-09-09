@@ -333,7 +333,11 @@ public class AiGatewayRecorderIntegrationTests
         Assert.Equal(AiCallOutcome.Success, row.Outcome);
         Assert.Equal(AiKeySource.Platform, row.KeySource);
         Assert.Equal("mock", row.ProviderId);
-        Assert.Equal("1.0.0", row.RulebookVersion);
+        // The Medicine Writing rulebook is canonically versioned 2.0.0-canonical
+        // (rulebooks/writing/medicine/rulebook.v1.json). This asserts on the
+        // real value threaded through RulebookPromptBuilder -> AiGatewayService
+        // -> AiUsageRecorder, not a fixed test double.
+        Assert.Equal("2.0.0-canonical", row.RulebookVersion);
         Assert.Equal("writing.grade.v3", row.PromptTemplateId);
         Assert.True(row.LatencyMs >= 0);
         await db.DisposeAsync();

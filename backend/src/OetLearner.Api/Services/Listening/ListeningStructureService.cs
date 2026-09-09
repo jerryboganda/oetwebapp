@@ -1027,11 +1027,21 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             if (questionCount <= 0) continue;
 
-            var body = extracts
+            var matchingExtracts = extracts
                 .Where(extract => string.Equals(
                     (extract.GetValueOrDefault("partCode") ?? extract.GetValueOrDefault("part"))?.ToString()?.Trim(),
                     code,
                     StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            // Pre-split legacy papers (bare "A" only, question-number-resolved
+            // into A1/A2 above) never authored a per-sub-part extract at all, so
+            // there is no sub-part-specific note-completion document to check —
+            // skip rather than false-flag a mismatch that doesn't exist. This
+            // differs from an A1/A2 extract that exists but omits notesBody,
+            // which still fails below (gaps=0).
+            if (matchingExtracts.Count == 0) continue;
+
+            var body = matchingExtracts
                 .Select(extract => ReadString(extract, "notesBody"))
                 .FirstOrDefault();
             var gaps = CountNotesGaps(body);

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -129,6 +130,7 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
             addOn.LatestVersionId = version.Id;
             db.BillingAddOns.Add(addOn);
             db.BillingAddOnVersions.Add(version);
+            await EnableGatewayAsync(db, PaymentGatewayNames.PayPal);
             await db.SaveChangesAsync();
         }
 
@@ -326,6 +328,7 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
             addOn.LatestVersionId = version.Id;
             db.BillingAddOns.Add(addOn);
             db.BillingAddOnVersions.Add(version);
+            await EnableGatewayAsync(db, PaymentGatewayNames.PayPal);
             await db.SaveChangesAsync();
         }
 
@@ -1124,6 +1127,7 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
             addOn.LatestVersionId = version.Id;
             db.BillingAddOns.Add(addOn);
             db.BillingAddOnVersions.Add(version);
+            await EnableGatewayAsync(db, PaymentGatewayNames.PayPal);
             await db.SaveChangesAsync();
         }
 
@@ -1429,5 +1433,26 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
+    }
+
+    /// <summary>
+    /// Payment gateways default to disabled (PaymentGatewayCatalog.DefaultCatalog — only
+    /// Whop/Fawaterak start enabled) and PaymentGatewayCatalog.IsEnabledAsync has no
+    /// sandbox-fallback escape hatch, so tests that check out via a non-default gateway
+    /// (e.g. PayPal) must explicitly turn it on first, the same way an admin would via
+    /// PaymentGatewayCatalog.UpdateAsync.
+    /// </summary>
+    private static async Task EnableGatewayAsync(LearnerDbContext db, string gatewayName)
+    {
+        var existing = await db.PaymentGatewayToggles.FirstOrDefaultAsync(x => x.Name == gatewayName);
+        if (existing is not null)
+        {
+            existing.IsEnabled = true;
+            return;
+        }
+
+        var seed = PaymentGatewayCatalog.DefaultCatalog().First(x => x.Name == gatewayName);
+        seed.IsEnabled = true;
+        db.PaymentGatewayToggles.Add(seed);
     }
 }
