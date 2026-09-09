@@ -99,7 +99,18 @@ jobs:
             -c max_connections=400
           for i in $(seq 1 30); do
             if docker exec oet-ai-pg pg_isready -U postgres -d oet_ai_control_plane_tests; then
-              docker exec oet-ai-pg psql -U postgres -d oet_ai_control_plane_tests -c "CREATE EXTENSION IF NOT EXISTS vector;"
+              break
+            fi
+            sleep 1
+          done
+          # The official postgres entrypoint briefly reports ready on its
+          # temporary init server before restarting into the real one —
+          # pg_isready can catch that window and hand back a connection that
+          # dies with "the database system is shutting down". Retry the
+          # actual psql connection separately rather than trusting pg_isready
+          # alone.
+          for i in $(seq 1 15); do
+            if docker exec oet-ai-pg psql -U postgres -d oet_ai_control_plane_tests -c "CREATE EXTENSION IF NOT EXISTS vector;"; then
               exit 0
             fi
             sleep 1
