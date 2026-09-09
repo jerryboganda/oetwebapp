@@ -1,4 +1,6 @@
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -155,13 +157,25 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
             form.Add(new StringContent("verbose_json"), "response_format");
             form.Add(new StringContent("segment"), "timestamp_granularities[]");
 
+            // 2026-09-09 bug fix — AiOperations.ResourceId/RequestHash are both
+            // varchar(64). mediaAssetReference is a storage path like
+            // "audio/{attemptId}/upload-{uploadId}" (~80+ chars), which
+            // overflowed the column and threw a DbUpdateException on every
+            // real attempt (masked until now by the credential-cache bug
+            // above, which meant this line was never actually reached in
+            // production before). Every sibling DirectAiCallRecorder caller
+            // (WhisperPronunciationAsrProvider, WhisperConversationAsrProvider,
+            // WritingSubmissionEvaluationPipeline) already uses a short
+            // synthetic key instead of a raw domain path — match that
+            // convention with a deterministic short hash so idempotency/dedup
+            // still works, just within the column budget.
             var sttLease = await _usageRecorder.BeginOperationAsync(new OetLearner.Api.Services.Ai.DirectAiOperationRequest
             {
                 FeatureCode = Domain.AiFeatureCodes.SttSpeakingTranscribe,
                 Module = "stt",
-                ResourceId = mediaAssetReference,
+                ResourceId = ShortHash(mediaAssetReference),
                 ResourceType = "speaking_audio",
-                RequestHash = $"{creds.Model}:{language}:{mediaAssetReference}",
+                RequestHash = ShortHash($"{creds.Model}:{language}:{mediaAssetReference}"),
                 OperationClass = Domain.AiOperationClass.InteractiveLearning,
                 AllowRetryAfterFailure = true,
             }, ct);
@@ -262,6 +276,14 @@ public sealed class OpenAiWhisperSpeakingProvider : ISpeakingTranscriptionProvid
             audioClient?.Dispose();
         }
     }
+
+    /// <summary>Deterministic, column-safe key for AiOperations.ResourceId /
+    /// RequestHash (both varchar(64)). Raw domain values like a storage path
+    /// ("audio/{attemptId}/upload-{uploadId}") can exceed 64 chars and
+    /// overflow the column; every sibling DirectAiCallRecorder caller already
+    /// uses a short synthetic key instead of the raw value for this reason.</summary>
+    internal static string ShortHash(string value)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..32];
 
     private static string GuessMediaTypeFromReference(string reference)
     {
