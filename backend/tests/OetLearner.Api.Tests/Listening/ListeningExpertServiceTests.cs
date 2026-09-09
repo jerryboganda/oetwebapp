@@ -5,6 +5,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests.Listening;
 
@@ -112,6 +113,11 @@ public class ListeningExpertServiceTests
         db.Users.Add(SeedUser());
         db.ListeningAttempts.Add(SeedAttempt());
         SeedListeningAssignment(db, "attempt-1");
+        // A raw-score override must resolve through the owner-approved,
+        // versioned conversion table (ListeningScoringPathAuditTest forbids
+        // any copied-formula bypass) — seed the default table the same way
+        // production data does.
+        AssessmentGovernanceSeeder.SeedDefaultScoreTables(db);
         await db.SaveChangesAsync();
 
         var svc = CreateService(db);
@@ -441,6 +447,7 @@ public class ListeningExpertServiceTests
         db.Users.Add(SeedUser());
         db.ListeningAttempts.Add(SeedAttempt());
         SeedListeningAssignment(db, "attempt-1");
+        AssessmentGovernanceSeeder.SeedDefaultScoreTables(db);
         await db.SaveChangesAsync();
 
         var svc = CreateService(db);

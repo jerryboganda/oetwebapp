@@ -109,7 +109,11 @@ public static class SubscriptionStateMachine
             {
                 SubscriptionStatus.Expired,
                 SubscriptionStatus.Pending,
-                // Note: Active deliberately excluded — Expired is terminal.
+                // Active is reachable from Expired: UserAccessAllocationService.
+                // UpdatePackageDatesAsync uses this to revive access when an
+                // admin extends a learner's package dates past an expiry that
+                // has already passed (reason "admin_date_override_extended").
+                SubscriptionStatus.Active,
             },
         };
 

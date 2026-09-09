@@ -581,17 +581,7 @@ public sealed class ListeningExpertService(
             attempt.ScoreConversionTableVersionKey = hasApprovedConversion ? conversion.TableVersionKey : null;
             attempt.ScoreConversionGrade = hasApprovedConversion ? conversion.Grade : null;
             attempt.ScoreConversionPassed = hasApprovedConversion ? conversion.Passed : null;
-
-            // An expert's raw override is a manually-verified, definitive
-            // score — unlike automatic grading it must not go un-scaled just
-            // because no governed conversion table happens to be configured.
-            // Recompute directly from the fixed, canonical OET scoring table
-            // (OetScoring.OetRawToScaled) for the standard 42-item paper.
-            // (Note raw == 0 is a legitimate override, not "no override" —
-            // this branch is reached only when RawScoreOverride.HasValue.)
-            attempt.ScaledScore = attempt.MaxRawScore == OetScoring.ListeningReadingRawMax
-                ? OetScoring.OetRawToScaled(req.RawScoreOverride.Value)
-                : null;
+            attempt.ScaledScore = hasApprovedConversion ? conversion.ConvertedScore : null;
 
             // B1: emit an audit row for every override so the missing
             // ExpertReviewAssignment model is compensated by traceability.

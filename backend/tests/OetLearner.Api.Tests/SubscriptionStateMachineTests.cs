@@ -33,8 +33,10 @@ public class SubscriptionStateMachineTests
     [InlineData(SubscriptionStatus.Cancelled, SubscriptionStatus.Expired, true)]
     [InlineData(SubscriptionStatus.Cancelled, SubscriptionStatus.Active, false)] // resubscribe = new sub
     [InlineData(SubscriptionStatus.Cancelled, SubscriptionStatus.Trial, false)]
-    // Expired terminal
-    [InlineData(SubscriptionStatus.Expired, SubscriptionStatus.Active, false)]
+    // Expired is not fully terminal: an admin date-override extension can
+    // revive it back to Active (UserAccessAllocationService.
+    // UpdatePackageDatesAsync) without going through resubscription.
+    [InlineData(SubscriptionStatus.Expired, SubscriptionStatus.Active, true)]
     [InlineData(SubscriptionStatus.Expired, SubscriptionStatus.Cancelled, false)]
     public void IsLegal_ReturnsExpected(SubscriptionStatus from, SubscriptionStatus to, bool expected)
     {
