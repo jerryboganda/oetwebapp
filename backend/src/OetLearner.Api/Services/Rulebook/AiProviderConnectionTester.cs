@@ -88,9 +88,11 @@ public sealed class AiProviderConnectionTester(
 
     /// <summary>Budget for a full end-to-end model test. Real browser-backed
     /// pipelines (UBAG facade → worker → browser session → model) legitimately
-    /// take 10–60s, so this must allow the whole job to complete rather than
-    /// cutting off at the auth-probe timeout.</summary>
-    private static readonly TimeSpan ModelProbeTimeout = TimeSpan.FromSeconds(75);
+    /// take 10–60s (live chatgpt_web/gemini_web probes measured 48–50s), and
+    /// the facade itself waits up to 110s per call. 300s keeps the admin Test
+    /// button slower than the facade deadline but faster than a hung client,
+    /// so a browser-job completion is never reported as "Request timed out".</summary>
+    private static readonly TimeSpan ModelProbeTimeout = TimeSpan.FromSeconds(300);
 
     public async Task<AiProviderTestResult> TestProviderAsync(string providerCode, CancellationToken ct, bool deep = false)
     {
@@ -203,8 +205,13 @@ public sealed class AiProviderConnectionTester(
             if (!response.IsSuccessStatusCode)
             {
                 var relResult = await ClassifyResponseAsync(response, latencyMs, startedAt, apiKey, ct);
+                var failedStep = relResult.Status == AiProviderTestStatuses.Auth
+                    ? "auth"
+                    : relResult.Status == AiProviderTestStatuses.RateLimited
+                        ? "provider"
+                        : "completion";
                 steps.Add(new AiModelTestStep(
-                    "completion",
+                    failedStep,
                     $"HTTP {(int)response.StatusCode}: {relResult.ErrorMessage ?? response.ReasonPhrase}",
                     false));
                 return new AiProviderModelTestResult(
@@ -212,6 +219,18 @@ public sealed class AiProviderConnectionTester(
             }
 
             var body = await response.Content.ReadAsStringAsync(ct);
+            var emptyFinish = TryReadEmptyCompletionText(body);
+            if (emptyFinish is not null)
+            {
+                steps.Add(new AiModelTestStep("completion", "chat completion returned a 2xx response", true));
+                var emptyMessage = $"The provider returned an empty completion for '{targetModel}' (finish_reason={emptyFinish}). The browser job finished but produced no text — retry the test.";
+                steps.Add(new AiModelTestStep("model", emptyMessage, false));
+                return new AiProviderModelTestResult(
+                    AiProviderTestStatuses.RateLimited,
+                    emptyMessage,
+                    latencyMs,
+                    startedAt, targetModel, steps);
+            }
             steps.Add(new AiModelTestStep("completion", "chat completion returned a 2xx response", true));
 
             // Surface a model-routing warning when the configured model is
@@ -270,6 +289,49 @@ public sealed class AiProviderConnectionTester(
                 message,
                 (int)stopwatch.ElapsedMilliseconds,
                 startedAt, targetModel, steps);
+        }
+    }
+
+    /// <summary>Reads a 2xx OpenAI-style completion body and returns the
+    /// finish reason when the assistant message carries no text (null/empty
+    /// string content). A 200 with no text is a real facade failure mode
+    /// (browser job finished, nothing extracted) — the caller must not report
+    /// it as green. Returns null when the body has text or is unparseable
+    /// (fail-open: the normal path decides).</summary>
+    internal static string? TryReadEmptyCompletionText(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("choices", out var choices)
+                || choices.ValueKind != JsonValueKind.Array
+                || choices.GetArrayLength() == 0)
+                return null;
+            var choice = choices[0];
+            if (!choice.TryGetProperty("message", out var message)
+                || message.ValueKind != JsonValueKind.Object)
+                return null;
+            if (message.TryGetProperty("content", out var content))
+            {
+                if (content.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(content.GetString()))
+                    return null;
+                if (content.ValueKind != JsonValueKind.String
+                    && content.ValueKind != JsonValueKind.Null)
+                    return null;
+            }
+            var finish = "stop";
+            if (choice.TryGetProperty("finish_reason", out var finishEl)
+                && finishEl.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(finishEl.GetString()))
+                finish = finishEl.GetString()!.Trim();
+            return finish;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 
@@ -417,6 +479,13 @@ public sealed class AiProviderConnectionTester(
             HttpStatusCode.Unauthorized => AiProviderTestStatuses.Auth,
             HttpStatusCode.Forbidden => AiProviderTestStatuses.Auth,
             HttpStatusCode.TooManyRequests => AiProviderTestStatuses.RateLimited,
+            // The UBAG facade reports terminal browser-job failures as 503
+            // (provider_transient / provider_login_required) and wait-budget
+            // overruns as 504: the pipeline is reachable + authenticated, so
+            // this is a provider-side condition, not an OET network fault.
+            // Surface the facade's own detail (login drift, wait timeout)
+            // instead of a bare HTTP status.
+            HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout => AiProviderTestStatuses.RateLimited,
             >= HttpStatusCode.InternalServerError => AiProviderTestStatuses.Network,
             _ => AiProviderTestStatuses.Unknown,
         };

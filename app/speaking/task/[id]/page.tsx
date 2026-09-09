@@ -695,7 +695,7 @@ function LiveSpeakingTaskContent() {
 
   if (cardLoading) {
     return (
-      <AppShell pageTitle="Speaking Task" workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
+      <AppShell pageTitle="Speaking Task" workspaceRole="learner" distractionFree className="px-3 sm:px-4 lg:px-6">
         <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-border/80 bg-surface shadow-sm">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
@@ -704,7 +704,7 @@ function LiveSpeakingTaskContent() {
   }
 
   return (
-    <AppShell pageTitle={card?.title ?? 'Speaking Task'} workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
+    <AppShell pageTitle={card?.title ?? 'Speaking Task'} workspaceRole="learner" distractionFree className="px-3 sm:px-4 lg:px-6">
     <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-border/80 bg-surface text-navy shadow-sm">
       {mockAttemptId || speakingMockSessionId ? (
         <div
@@ -1213,7 +1213,7 @@ function LiveSpeakingTaskContent() {
 export default function LiveSpeakingTask() {
   return (
     <Suspense fallback={
-      <AppShell pageTitle="Speaking Task" workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
+      <AppShell pageTitle="Speaking Task" workspaceRole="learner" distractionFree className="px-3 sm:px-4 lg:px-6">
         <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-border/80 bg-surface shadow-sm">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>

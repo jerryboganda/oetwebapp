@@ -262,6 +262,57 @@ public sealed class WritingSubmitGradingPathTests : IAsyncDisposable
         Assert.Equal(31, grade.RawTotal);
     }
 
+    [Fact]
+    public async Task Normal_submit_with_no_release_gate_configured_is_candidate_ready_by_default()
+    {
+        // 2026-09-09 owner decision (Dr Ahmed Hesham, FINAL OWNER DECISION —
+        // WRITING AI SCORE RELEASE): Writing AI grading is fully automated;
+        // production has zero WritingAssessmentReleaseGates rows and none
+        // should be required for a successful grading to reach the
+        // candidate. See WritingCalibrationReleaseService.ResolveAsync.
+        var scenarioId = await SeedGradableScenarioAsync(withPregeneratedAnswer: true);
+        var gateway = new QueueGateway([CanonicalCompletion, "{}"]);
+        var pipeline = BuildPipeline(gateway, new CountingReservations());
+
+        var submissionId = await pipeline.CreateSubmissionAsync(
+            SampleContext(scenarioId, "release-default-1", NormalLetter), default);
+        await pipeline.EvaluateAsync(submissionId, default);
+
+        var report = await _db.WritingAssessmentReportsV11.AsNoTracking().SingleAsync(r => r.SubmissionId == submissionId);
+        Assert.Equal(WritingAssessmentV11Status.CandidateReady, report.Status);
+        Assert.True(report.CandidateNumericScoreEnabled);
+        Assert.True(report.CandidateReportVisible);
+        Assert.Equal(380, report.EstimatedPracticeScore);
+    }
+
+    [Fact]
+    public async Task Normal_submit_stays_restricted_when_admin_explicitly_blocks_the_model()
+    {
+        // The release-gate table remains a real admin kill switch: an
+        // explicit Blocked row for this exact model+calibration-set pairing
+        // still suppresses candidate release, independent of calibration.
+        var scenarioId = await SeedGradableScenarioAsync(withPregeneratedAnswer: true);
+        _db.WritingAssessmentReleaseGates.Add(new WritingAssessmentReleaseGate
+        {
+            Id = Guid.NewGuid(),
+            ModelVersion = "claude-sonnet-5",
+            CalibrationSetVersion = "unreleased",
+            Status = WritingAssessmentReleaseStatus.Blocked,
+        });
+        await _db.SaveChangesAsync();
+        var gateway = new QueueGateway([CanonicalCompletion, "{}"]);
+        var pipeline = BuildPipeline(gateway, new CountingReservations());
+
+        var submissionId = await pipeline.CreateSubmissionAsync(
+            SampleContext(scenarioId, "release-blocked-1", NormalLetter), default);
+        await pipeline.EvaluateAsync(submissionId, default);
+
+        var report = await _db.WritingAssessmentReportsV11.AsNoTracking().SingleAsync(r => r.SubmissionId == submissionId);
+        Assert.Equal(WritingAssessmentV11Status.RestrictedCalibration, report.Status);
+        Assert.False(report.CandidateNumericScoreEnabled);
+        Assert.False(report.CandidateReportVisible);
+    }
+
     private async Task<Guid> SeedGradableScenarioAsync(bool withPregeneratedAnswer)
     {
         var scenarioId = Guid.NewGuid();
