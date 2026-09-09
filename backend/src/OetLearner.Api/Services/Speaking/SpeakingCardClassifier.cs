@@ -341,13 +341,20 @@ public static class SpeakingCardClassifier
 
     /// <summary>
     /// Classifies only if PrimaryCategory is blank/Other Cards OR CategoryNeedsReview is true.
-    /// Never overwrites a confirmed non-Other category with NeedsReview == false.
-    /// Sets PrimaryCategory, SecondaryTagsJson, CategoryNeedsReview, and the
+    /// Never overwrites a confirmed non-Other category with NeedsReview == false, and never
+    /// touches a row with confirmed provenance (manual/reviewed/seed) at all — even "Other
+    /// Cards" can be a deliberate, confirmed conclusion there, not a placeholder awaiting the
+    /// automatic sweep. Sets PrimaryCategory, SecondaryTagsJson, CategoryNeedsReview, and the
     /// classifier provenance fields.
     /// </summary>
     public static bool ApplyIfUnclassified(RolePlayCard card)
     {
         if (card is null) return false;
+
+        if (card.CategorySource is "manual" or "reviewed" or "seed")
+        {
+            return false;
+        }
 
         var trimmedPrimary = card.PrimaryCategory?.Trim();
         var isBlankOrOther = string.IsNullOrWhiteSpace(trimmedPrimary)

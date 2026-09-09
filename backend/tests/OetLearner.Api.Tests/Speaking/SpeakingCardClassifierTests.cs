@@ -340,6 +340,39 @@ public sealed class SpeakingCardClassifierTests
     }
 
     [Fact]
+    public void ApplyIfUnclassified_NeverTouchesAReviewedOtherCardsRow()
+    {
+        // Regression (2026-09-09): the boot-time sweep treated ANY "Other
+        // Cards" row as an unclassified placeholder, silently reclassifying
+        // rows a dual-review process had already confirmed as genuinely
+        // uncertain — clobbering 23 production rows on the very next deploy.
+        var card = new RolePlayCard
+        {
+            Id = "rpc-test-reviewed-other",
+            ContentItemId = "ci-test-reviewed-other",
+            ProfessionId = "pharmacy",
+            ScenarioTitle = "Nursing home medication review visit",
+            Setting = "Nursing home",
+            Background = "You are visiting a nursing home resident to review the medication chart.",
+            Tasks = new[] { "Go through the chart" },
+            PatientEmotion = "neutral",
+            CommunicationGoal = "Inform",
+            ClinicalTopic = "general",
+            PrimaryCategory = "Other Cards",
+            SecondaryTagsJson = "[]",
+            CategoryNeedsReview = true,
+            CategorySource = "reviewed",
+        };
+
+        var changed = SpeakingCardClassifier.ApplyIfUnclassified(card);
+
+        Assert.False(changed);
+        Assert.Equal("Other Cards", card.PrimaryCategory);
+        Assert.True(card.CategoryNeedsReview);
+        Assert.Equal("reviewed", card.CategorySource);
+    }
+
+    [Fact]
     public void ApplyIfUnclassified_UsesClassificationForOtherCardsNeedsReview()
     {
         var card = new RolePlayCard
