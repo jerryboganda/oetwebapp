@@ -137,11 +137,44 @@ public sealed class PronunciationCredentialResolverTests : IAsyncDisposable
     [Fact]
     public void IsRegistryConfigured_ColdCache_ReturnsFalse()
     {
-        // Sync hot-path contract: cold cache returns false even when the
-        // DB has a row, by design — first request after restart falls
-        // through to options. ResolveAsync warms the cache.
+        // Sync hot-path contract: THIS call returns false when the cache is
+        // cold, even when the DB has a row — the caller falls through to
+        // options for this one request. It also kicks off a background warm
+        // (see IsRegistryConfigured_ColdCache_SelfWarmsForNextCall) so a
+        // caller whose only path to ResolveAsync is gated behind this same
+        // check (e.g. Speaking's Whisper-vs-Mock DI selection) doesn't stay
+        // cold forever.
         var resolver = BuildResolver();
         Assert.False(resolver.IsRegistryConfigured("azure-phoneme"));
+    }
+
+    [Fact]
+    public async Task IsRegistryConfigured_ColdCache_SelfWarmsForNextCall()
+    {
+        // 2026-09-09 regression: IsRegistryConfigured used to be a pure read
+        // — cold cache returned false forever unless something ELSE called
+        // ResolveAsync first. Speaking's DI factory (Program.cs) selects the
+        // real Whisper provider vs Mock based solely on this sync check, and
+        // the only thing that would warm the cache (the real provider's own
+        // ResolveAsync, inside TranscribeAsync) never runs while Mock keeps
+        // getting selected instead — a correctly-configured registry row
+        // could never be observed again after any cold start. This proves
+        // the self-warm: a cold call (which fires a background warm) is
+        // followed, after that warm completes, by a call that sees it.
+        await SeedRowAsync("whisper-asr", AiProviderCategory.Asr, AiProviderDialect.OpenAiCompatible,
+            baseUrl: "https://api.openai.com/v1", plaintextKey: "sk-selfwarm-9999");
+
+        var resolver = BuildResolver();
+        Assert.False(resolver.IsRegistryConfigured("whisper-asr")); // cold — kicks off background warm
+
+        var warmed = false;
+        for (var i = 0; i < 50 && !warmed; i++)
+        {
+            await Task.Delay(20);
+            warmed = resolver.IsRegistryConfigured("whisper-asr");
+        }
+
+        Assert.True(warmed, "IsRegistryConfigured never became true — the cold-cache call did not self-warm.");
     }
 
     [Fact]
