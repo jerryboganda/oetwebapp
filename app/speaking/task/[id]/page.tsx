@@ -767,7 +767,15 @@ function LiveSpeakingTaskContent() {
       </header>
 
       {/* Main Content Area */}
-      <main className="relative flex flex-1 flex-col items-center justify-center bg-background-light p-6">
+      {/* pb-56/pb-64: the "Role Card / Notes / AI patient" dock (fixed
+          bottom-24 sm:bottom-32) and the submit footer both float over this
+          flex-centered content. With long consent copy the actual "Start
+          recording" mic button (the last thing in this flow) can end up
+          rendered underneath the dock, receiving no clicks — confirmed live:
+          at a standard 1366x900 desktop viewport it's completely unusable
+          via mouse/keyboard. overflow-y-auto is the safety net for content
+          taller than any fixed clearance covers. */}
+      <main className="relative flex flex-1 flex-col items-center justify-center overflow-y-auto bg-background-light p-6 pb-56 sm:pb-64">
 
         {/* Visualizer / AI State */}
         <div className="relative z-10 mb-24 flex flex-col items-center gap-10">
