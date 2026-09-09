@@ -256,12 +256,17 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         // side-effects, so allow extra passes) before asserting the outcome.
         await _factory.DrainBackgroundJobsAsync(passes: 5);
 
-        // W7: legacy attempt-based Speaking grading is fail-closed. Submitting
-        // an attempt still stores the binary and yields an evaluation row, but
-        // the queued evaluation lands in Failed with
-        // canonical_speaking_required — candidates grade through the typed
-        // Speaking session flow instead. Guard that contract explicitly:
-        // never silently resurrect legacy grading, never fail open.
+        // 2026-09-09: the legacy attempt-based Speaking flow now bridges into
+        // the canonical session-based AI assessor (see
+        // docs/speaking-attempt-session-bridge-2026-09-09/) instead of
+        // failing unconditionally. This test host has no real (non-mock) ASR
+        // provider configured, so the bridge correctly declines to grade off
+        // a fabricated transcript — the binary is still stored, an
+        // evaluation row still lands, but it fails honestly and retryably
+        // with speaking_transcription_unavailable rather than the old,
+        // dead-end canonical_speaking_required. Guard that contract
+        // explicitly: never silently resurrect mock-transcript grading,
+        // never fail open.
         await WaitForAsync(
             async () =>
             {
@@ -278,7 +283,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         {
             var root = summaryJson.RootElement;
             Assert.True(string.Equals(root.GetProperty("state").GetString(), "failed", StringComparison.OrdinalIgnoreCase));
-            Assert.Equal("canonical_speaking_required", root.GetProperty("statusReasonCode").GetString());
+            Assert.Equal("speaking_transcription_unavailable", root.GetProperty("statusReasonCode").GetString());
         }
 
         // The fail-closed legacy attempt never reaches Completed on its own,

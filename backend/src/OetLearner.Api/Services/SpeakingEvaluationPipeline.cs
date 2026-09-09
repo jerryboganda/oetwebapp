@@ -2,6 +2,7 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Billing;
@@ -22,7 +23,8 @@ public sealed class SpeakingEvaluationPipeline(
     SpeakingRuleEngine ruleEngine,
     ILogger<SpeakingEvaluationPipeline> logger,
     IAiPackageCreditService? aiPackageCreditService = null,
-    SpeakingAiAssessmentService? sessionAssessor = null) : ISpeakingEvaluationPipeline
+    SpeakingAiAssessmentService? sessionAssessor = null,
+    ISpeakingTranscriptionProvider? attemptTranscriptionProvider = null) : ISpeakingEvaluationPipeline
 {
     public async Task CompleteTranscriptionAsync(BackgroundJobItem job, CancellationToken cancellationToken)
     {
@@ -87,25 +89,152 @@ public sealed class SpeakingEvaluationPipeline(
 
         if (linkedSession is not null && sessionAssessor is not null)
         {
-            await sessionAssessor.RunAssessmentAsync(linkedSession.Id, cancellationToken);
-            attempt.State = AttemptState.Completed;
-            evaluation.State = AsyncState.Completed;
-            evaluation.StatusReasonCode = "canonical_speaking_assessment";
-            evaluation.StatusMessage = "Scored by the canonical Speaking assessment pipeline.";
-            evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+            var projection = await sessionAssessor.RunAssessmentAsync(linkedSession.Id, cancellationToken);
+            ApplyCanonicalAssessment(attempt, evaluation, projection);
             return;
+        }
+
+        // ── Attempt→Session bridge (2026-09-09 acceptance-test fix) ────────
+        // The learner-facing recorder at app/speaking/task/[id]/page.tsx (the
+        // ONLY UI the Selection page links to) submits through the older
+        // Attempt model and never creates a SpeakingSession, so every real
+        // submission fell through to a hard-coded failure here since the W7
+        // canonical-assessment cutover (commit ba5df294ad) — confirmed via a
+        // full learner acceptance pass, see docs/speaking-attempt-session-
+        // bridge-2026-09-09/README.md. Rather than resurrect the old
+        // mock-transcript-based scorer (dishonest — it graded fabricated
+        // text, not the candidate's actual speech), synthesize the typed
+        // session this submission should have created, transcribe the
+        // uploaded audio for real, and run it through the same canonical
+        // assessor the typed-session flow already uses. Credits were
+        // already charged when the Attempt was created (CreateAttemptAsync),
+        // so this synthesized session must NOT go through
+        // SpeakingSessionService.CreateSessionAsync (which reserves its own
+        // warm-up credit) — it is inserted directly.
+        if (sessionAssessor is not null
+            && attemptTranscriptionProvider is not null
+            && attemptTranscriptionProvider.ProviderCode != "mock"
+            && !string.IsNullOrWhiteSpace(attempt.AudioObjectKey))
+        {
+            var card = await db.RolePlayCards.AsNoTracking()
+                .FirstOrDefaultAsync(c => c.ContentItemId == attempt.ContentId, cancellationToken);
+            if (card is not null)
+            {
+                SpeakingTranscriptionProviderResult? transcription = null;
+                try
+                {
+                    transcription = await attemptTranscriptionProvider.TranscribeAsync(
+                        attempt.AudioObjectKey!, "en", cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex,
+                        "Attempt-bridge ASR transcription failed for attempt {AttemptId}; will surface a retryable failure.",
+                        attempt.Id);
+                }
+
+                if (transcription is not null && !string.IsNullOrWhiteSpace(transcription.SegmentsJson) && transcription.SegmentsJson != "[]")
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    var bridgeSessionId = $"sps_{Guid.NewGuid():N}";
+                    db.SpeakingSessions.Add(new SpeakingSession
+                    {
+                        Id = bridgeSessionId,
+                        UserId = attempt.UserId,
+                        RolePlayCardId = card.Id,
+                        Mode = string.Equals(attempt.Mode, "exam", StringComparison.OrdinalIgnoreCase)
+                            ? SpeakingSessionMode.AiExam
+                            : SpeakingSessionMode.AiSelfPractice,
+                        State = SpeakingSessionState.Finished,
+                        AttemptId = attempt.Id,
+                        PrepStartedAt = attempt.StartedAt,
+                        RolePlayStartedAt = attempt.StartedAt,
+                        EndedAt = now,
+                        SubmittedAt = now,
+                        ElapsedSeconds = attempt.ElapsedSeconds,
+                        CreatedAt = attempt.StartedAt,
+                        UpdatedAt = now,
+                    });
+                    db.SpeakingTranscripts.Add(new SpeakingTranscript
+                    {
+                        Id = Guid.NewGuid().ToString("N"),
+                        SpeakingSessionId = bridgeSessionId,
+                        Provider = transcription.Provider,
+                        Language = transcription.Language,
+                        SegmentsJson = transcription.SegmentsJson,
+                        IsLatest = true,
+                        WordCount = transcription.WordCount,
+                        MeanConfidence = transcription.MeanConfidence,
+                        GeneratedAt = now,
+                    });
+                    await db.SaveChangesAsync(cancellationToken);
+
+                    var bridgeProjection = await sessionAssessor.RunAssessmentAsync(bridgeSessionId, cancellationToken);
+                    ApplyCanonicalAssessment(attempt, evaluation, bridgeProjection);
+                    return;
+                }
+            }
         }
 
         attempt.State = AttemptState.Submitted;
         evaluation.State = AsyncState.Failed;
-        evaluation.StatusReasonCode = "canonical_speaking_required";
-        evaluation.StatusMessage = "Legacy attempt-based Speaking grading is disabled. Submit through the typed Speaking session flow.";
-        evaluation.Retryable = false;
+        evaluation.StatusReasonCode = "speaking_transcription_unavailable";
+        evaluation.StatusMessage = "We couldn't process your recording right now. Please try submitting again shortly.";
+        evaluation.Retryable = true;
+        evaluation.RetryAfterMs = 60_000;
         evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-        return;
+    }
 
-    }
-
+    /// <summary>Maps a canonical <see cref="SpeakingAiAssessmentProjection"/>
+    /// onto the legacy <see cref="Evaluation"/>/<see cref="Attempt"/> columns
+    /// so <c>GetSpeakingEvaluationSummaryAsync</c> (the endpoint the
+    /// learner's results page reads) renders real content.</summary>
+    private static void ApplyCanonicalAssessment(Attempt attempt, Evaluation evaluation, SpeakingAiAssessmentProjection projection)
+    {
+        var criterionScores = new OetScoring.SpeakingCriterionScores(
+            Intelligibility:      CriterionOf(projection, "intelligibility"),
+            Fluency:              CriterionOf(projection, "fluency"),
+            Appropriateness:      CriterionOf(projection, "appropriateness"),
+            GrammarExpression:    CriterionOf(projection, "grammarExpression"),
+            RelationshipBuilding: CriterionOf(projection, "relationshipBuilding"),
+            PatientPerspective:   CriterionOf(projection, "patientPerspective"),
+            Structure:            CriterionOf(projection, "structure"),
+            InformationGathering: CriterionOf(projection, "informationGathering"),
+            InformationGiving:    CriterionOf(projection, "informationGiving"));
+
+        attempt.State = AttemptState.Completed;
+        attempt.AnalysisJson = JsonSupport.Serialize(MergeAnalysis(attempt.AnalysisJson, new Dictionary<string, object?>
+        {
+            ["speakingBand"] = new
+            {
+                scaledEstimate = projection.EstimatedScaledScore,
+                readinessBand = projection.ReadinessBand,
+                criteriaSource = "ai_grounded",
+            }
+        }));
+
+        evaluation.State = AsyncState.Completed;
+        evaluation.StatusReasonCode = "canonical_speaking_assessment";
+        evaluation.StatusMessage = "Scored by the canonical Speaking assessment pipeline.";
+        evaluation.ScoreRange = BuildScoreRange(projection.EstimatedScaledScore);
+        evaluation.ConfidenceBand = projection.ConfidenceBand switch
+        {
+            "high" => ConfidenceBand.High,
+            "low" => ConfidenceBand.Low,
+            _ => ConfidenceBand.Medium,
+        };
+        evaluation.CriterionScoresJson = JsonSupport.Serialize(
+            BuildCriterionScores([], projection.EstimatedScaledScore, criterionScores));
+        evaluation.ModelExplanationSafe = projection.OverallSummary;
+        evaluation.Retryable = false;
+        evaluation.RetryAfterMs = null;
+        evaluation.GeneratedAt = projection.GeneratedAt;
+        evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
+    }
+
+    private static int CriterionOf(SpeakingAiAssessmentProjection projection, string code)
+        => projection.CriterionScores.TryGetValue(code, out var score) ? score.Score : 0;
+
     private async Task RefundAiPackageCreditAsync(Attempt attempt, Evaluation evaluation, string reasonCode, CancellationToken cancellationToken)
     {
         if (aiPackageCreditService is null) return;
