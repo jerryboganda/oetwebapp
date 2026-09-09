@@ -1,35 +1,29 @@
 'use client';
 
 /**
- * Reading Practice Hub — Phase 3 (a + b).
+ * Reading Practice Hub — simplified per the Final Developer Modification
+ * Brief (8 Sept 2026), items 6-8.
  *
- * Surfaces every non-exam Reading flow we ship:
- *   1. Learning Mode — full untimed practice on any published paper.
- *   2. Skill Drills — short scoped runs against a Part + skillTag.
- *   3. Mini-Tests — 5 / 10 / 15-minute mixed-Part subsets.
- *   4. Error Bank — questions the learner missed in past graded
- *      attempts, plus a one-click "Retest open misses" launcher.
+ * Surfaces exactly two non-exam Reading flows:
+ *   1. Untimed Practice — no timer, Part A/B/C or Full Exam, only for papers
+ *      the candidate has already opened (the normal 1 Reading credit is
+ *      already spent, and reopening never deducts another).
+ *   2. Mini-Tests — 5 / 10 / 15-minute timed mixed-Part warm-ups (unchanged).
  *
- * All non-Exam attempts use {@link ReadingAttemptMode} on the backend so
- * Part A hard-lock, the per-paper exam attempt cap, and OET 0-500 scaled
- * conversion are all suppressed. Subsets carry a `ScopeJson` payload so
- * the grader only counts in-scope questions. See
- * `docs/READING-MODULE-A-Z-IMPLEMENTATION-PLAN.md` Phase 3.
+ * The pathway/drill/error-bank system (Drill weak skills, Error Bank,
+ * targeted retests, Practice on paper skill drills) is intentionally removed
+ * — see docs/READING-MODULE-A-Z-IMPLEMENTATION-PLAN.md Phase 3 for the prior
+ * shape. A concise, data-based AI performance snapshot replaces it.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  AlertTriangle,
   ArrowRight,
   BookOpen,
-  CheckCircle2,
   Clock,
   Lock,
   Sparkles,
-  Trash2,
-  TrendingUp,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
@@ -45,20 +39,17 @@ import {
 import { LearnerEmptyState } from '@/components/domain/learner-empty-state';
 import { useAuth } from '@/contexts/auth-context';
 import {
-  clearReadingErrorBankEntry,
   getReadingDrillCatalogue,
-  getReadingErrorBank,
   getReadingHome,
-  getReadingPathway,
-  startReadingDrill,
-  startReadingErrorBankRetest,
+  getReadingPerformanceSnapshot,
   startReadingLearningAttempt,
   startReadingMiniTest,
+  startReadingPartPracticeAttempt,
   type ReadingDrillCatalogueDto,
-  type ReadingErrorBankDto,
   type ReadingHomeDto,
   type ReadingHomePaperDto,
-  type ReadingPathwaySnapshot,
+  type ReadingPartCode,
+  type ReadingPerformanceSnapshotDto,
 } from '@/lib/reading-authoring-api';
 import {
   InsufficientCreditsModal,
@@ -67,67 +58,43 @@ import {
 } from '@/components/domain/InsufficientCreditsModal';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 
-/**
- * Fallback mini-test duration (minutes), used until the reading pathway API
- * exposes a recommended duration on ReadingPathwayAction (see `start_mini_test`).
- */
-const DEFAULT_MINI_TEST_DURATION_MINUTES = 10;
+const READING_PARTS: ReadingPartCode[] = ['A', 'B', 'C'];
 
 function isPaperAccessible(paper: ReadingHomePaperDto): boolean {
   return paper.entitlement?.allowed !== false;
 }
 
-// TODO: wire up when API returns attempt count + cooldown fields on ReadingHomePaperDto
-function papersWithAccess(papers: ReadingHomePaperDto[]): ReadingHomePaperDto[] {
-  return papers.filter(isPaperAccessible);
+/** Untimed Practice eligibility (item 7): only papers already opened — the
+ *  normal 1 Reading credit is already spent — never the full library. */
+function isUntimedEligible(paper: ReadingHomePaperDto): boolean {
+  return isPaperAccessible(paper) && paper.hasPriorAttempt === true;
 }
 
 export default function ReadingPracticePage() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const [home, setHome] = useState<ReadingHomeDto | null>(null);
-  const [errorBank, setErrorBank] = useState<ReadingErrorBankDto | null>(null);
   const [drillCatalogue, setDrillCatalogue] = useState<ReadingDrillCatalogueDto | null>(null);
-  const [pathway, setPathway] = useState<ReadingPathwaySnapshot | null>(null);
+  const [snapshot, setSnapshot] = useState<ReadingPerformanceSnapshotDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [startingPaperId, setStartingPaperId] = useState<string | null>(null);
-  const [clearingEntryId, setClearingEntryId] = useState<string | null>(null);
-  // Single-flight guard for non-Learning launchers — formatted as
-  // `${paperId}::${kind}` (or just `kind` for cross-paper retest).
+  // Single-flight guard, formatted as `${paperId}::${kind}` (mini-test) or
+  // `${paperId}::${part}` (untimed practice).
   const [busyKey, setBusyKey] = useState<string | null>(null);
-  const [drillPaperId, setDrillPaperId] = useState<string | null>(null);
-  const [drillSelectError, setDrillSelectError] = useState<string | null>(null);
   const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
-  const accessiblePapers = useMemo(() => papersWithAccess(home?.papers ?? []), [home?.papers]);
-
-  // ── Deep-link support: /reading/practice?focus=A|B|C&tab=errors ─────────
-  const searchParams = useSearchParams();
-  const focusParamRaw = searchParams?.get('focus') ?? null;
-  const focusPart = focusParamRaw === 'A' || focusParamRaw === 'B' || focusParamRaw === 'C'
-    ? focusParamRaw
-    : null;
-  const tabParam = searchParams?.get('tab') ?? null;
 
   const refresh = useCallback(async () => {
     if (!isAuthenticated) return;
     setLoading(true);
     setErrorMsg(null);
     try {
-      const [homeData, bank, drills] = await Promise.all([
+      const [homeData, drills] = await Promise.all([
         getReadingHome().catch(() => null),
-        getReadingErrorBank({ limit: 50 }).catch(() => null),
         getReadingDrillCatalogue().catch(() => null),
       ]);
       setHome(homeData);
-      setErrorBank(bank);
       setDrillCatalogue(drills);
-      // Pathway snapshot is best-effort; never blocks the hub.
-      void getReadingPathway()
-        .then((snap) => setPathway(snap))
-        .catch(() => setPathway(null));
-      // Default the drill paper picker to the first accessible paper, if any.
-      setDrillPaperId((current) => current ?? homeData?.papers?.find((paper) => isPaperAccessible(paper))?.id ?? null);
+      void getReadingPerformanceSnapshot().then(setSnapshot).catch(() => setSnapshot(null));
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Could not load practice hub.');
     } finally {
@@ -141,50 +108,47 @@ export default function ReadingPracticePage() {
     }
   }, [authLoading, isAuthenticated, refresh]);
 
-  const handleStartLearning = useCallback(
+  const untimedEligiblePapers = useMemo(
+    () => (home?.papers ?? []).filter(isUntimedEligible),
+    [home?.papers],
+  );
+
+  const handleStartUntimedFullExam = useCallback(
     async (paper: ReadingHomePaperDto) => {
-      if (!isPaperAccessible(paper)) {
-        setErrorMsg('This Reading paper is locked for your current package. Open packages to unlock it.');
-        return;
-      }
-      setStartingPaperId(paper.id);
+      const key = `${paper.id}::full`;
+      setBusyKey(key);
       setErrorMsg(null);
       try {
-        const started = await startReadingLearningAttempt(paper.id);
+        const started = await startReadingLearningAttempt(paper.id, { untimed: true });
         showCreditFeedback(started.feedbackMessage);
         router.push(started.playerRoute);
       } catch (err) {
         if (isInsufficientCreditsError(err)) {
           setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
         } else {
-          const message = err instanceof Error ? err.message : 'Could not start learning mode.';
-          setErrorMsg(message);
+          setErrorMsg(err instanceof Error ? err.message : 'Could not start Untimed Practice.');
         }
       } finally {
-        setStartingPaperId(null);
+        setBusyKey(null);
       }
     },
     [router],
   );
 
-  const handleStartDrill = useCallback(
-    async (paperId: string, drillCode: string) => {
-      if (!paperId) {
-        setDrillSelectError('Please select a paper first.');
-        return;
-      }
-      const key = `${paperId}::drill::${drillCode}`;
+  const handleStartUntimedPart = useCallback(
+    async (paper: ReadingHomePaperDto, part: ReadingPartCode) => {
+      const key = `${paper.id}::${part}`;
       setBusyKey(key);
       setErrorMsg(null);
       try {
-        const started = await startReadingDrill(paperId, drillCode);
+        const started = await startReadingPartPracticeAttempt(paper.id, part, { untimed: true });
         showCreditFeedback(started.feedbackMessage);
         router.push(started.playerRoute);
       } catch (err) {
         if (isInsufficientCreditsError(err)) {
           setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
         } else {
-          setErrorMsg(err instanceof Error ? err.message : 'Could not start drill.');
+          setErrorMsg(err instanceof Error ? err.message : 'Could not start Untimed Practice.');
         }
       } finally {
         setBusyKey(null);
@@ -215,135 +179,7 @@ export default function ReadingPracticePage() {
     [router],
   );
 
-  const handleErrorBankRetest = useCallback(async () => {
-    setBusyKey('retest');
-    setErrorMsg(null);
-    try {
-      const started = await startReadingErrorBankRetest({ partCode: focusPart ?? undefined, limit: 10 });
-      router.push(started.playerRoute);
-    } catch (err) {
-      if (isInsufficientCreditsError(err)) {
-        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
-      } else {
-        setErrorMsg(err instanceof Error ? err.message : 'Could not start retest.');
-      }
-    } finally {
-      setBusyKey(null);
-    }
-  }, [focusPart, router]);
-
-  // ── Pathway: convert the recommended next action into a real launcher.
-  const handlePathwayAction = useCallback(async () => {
-    if (!pathway) return;
-    const { nextAction } = pathway;
-    setBusyKey('pathway');
-    setErrorMsg(null);
-    try {
-      switch (nextAction.kind) {
-        case 'start_drill': {
-          if (nextAction.drillCode) {
-            const paperId = accessiblePapers.find((paper) => paper.id === nextAction.paperId)?.id
-              ?? accessiblePapers[0]?.id
-              ?? null;
-            if (!paperId) {
-              router.push('/billing');
-              return;
-            }
-            const started = await startReadingDrill(paperId, nextAction.drillCode);
-            showCreditFeedback(started.feedbackMessage);
-            router.push(started.playerRoute);
-            return;
-          }
-          break;
-        }
-        case 'start_mini_test': {
-          const paperId = accessiblePapers.find((paper) => paper.id === nextAction.paperId)?.id
-            ?? accessiblePapers[0]?.id
-            ?? null;
-          if (!paperId) {
-            router.push('/billing');
-            return;
-          }
-          // TODO: use pathway-recommended duration when API exposes it (ReadingPathwayAction has no durationMinutes yet)
-          const started = await startReadingMiniTest(paperId, DEFAULT_MINI_TEST_DURATION_MINUTES);
-          showCreditFeedback(started.feedbackMessage);
-          router.push(started.playerRoute);
-          return;
-        }
-        case 'start_mock':
-        case 'review_results':
-        case 'book_exam':
-        default: {
-          if (nextAction.route) {
-            router.push(nextAction.route);
-            return;
-          }
-        }
-      }
-      // Fallback: route-only navigation if the structured launcher could not run.
-      if (nextAction.route) router.push(nextAction.route);
-    } catch (err) {
-      if (isInsufficientCreditsError(err)) {
-        setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
-      } else {
-        setErrorMsg(err instanceof Error ? err.message : 'Could not start the recommended step.');
-      }
-    } finally {
-      setBusyKey(null);
-    }
-  }, [accessiblePapers, pathway, router]);
-
-  const handleClearEntry = useCallback(
-    async (entryId: string) => {
-      setClearingEntryId(entryId);
-      try {
-        await clearReadingErrorBankEntry(entryId);
-        setErrorBank((prev) =>
-          prev
-            ? {
-                totals: {
-                  ...prev.totals,
-                  open: Math.max(0, prev.totals.open - 1),
-                  resolved: prev.totals.resolved + 1,
-                },
-                entries: prev.entries.filter((e) => e.id !== entryId),
-              }
-            : prev,
-        );
-      } catch (err) {
-        setErrorMsg(err instanceof Error ? err.message : 'Could not clear entry.');
-      } finally {
-        setClearingEntryId(null);
-      }
-    },
-    [],
-  );
-
-  const errorBankSectionRef = useRef<HTMLElement | null>(null);
-  useEffect(() => {
-    if (tabParam === 'errors' && !loading && errorBankSectionRef.current) {
-      errorBankSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [tabParam, loading]);
-
-  const filteredDrills = useMemo(() => {
-    const all = drillCatalogue?.drills ?? [];
-    return focusPart ? all.filter((d) => d.partCode === focusPart) : all;
-  }, [drillCatalogue, focusPart]);
-
-  const filteredErrorEntries = useMemo(() => {
-    const all = errorBank?.entries ?? [];
-    return focusPart ? all.filter((e) => e.partCode === focusPart) : all;
-  }, [errorBank, focusPart]);
-
-  useEffect(() => {
-    if (accessiblePapers.length === 0) return;
-    if (!drillPaperId || !accessiblePapers.some((paper) => paper.id === drillPaperId)) {
-      setDrillPaperId(accessiblePapers[0]?.id ?? null);
-    }
-  }, [accessiblePapers, drillPaperId]);
-
-  if (authLoading || (loading && !home && !errorBank)) {
+  if (authLoading || (loading && !home)) {
     return (
       <LearnerDashboardShell>
         <div className="space-y-6">
@@ -362,13 +198,10 @@ export default function ReadingPracticePage() {
     );
   }
 
-  const papers = home?.papers ?? [];
-  const selectedDrillPaperAvailable = accessiblePapers.some((paper) => paper.id === drillPaperId);
-  const openErrorCount = errorBank?.totals.open ?? 0;
-  const visibleErrorCount = focusPart ? filteredErrorEntries.length : openErrorCount;
-  const pathwayNeedsAccessiblePaper = pathway?.nextAction.kind === 'start_drill'
-    || pathway?.nextAction.kind === 'start_mini_test';
-  const pathwayPackageRequired = Boolean(pathwayNeedsAccessiblePaper && accessiblePapers.length === 0);
+  // Mini-tests need at least one published paper to attach the timed subset
+  // to (the mini-test picker below defaults to the first accessible one).
+  const accessiblePapers = (home?.papers ?? []).filter(isPaperAccessible);
+  const miniTestPaperId = accessiblePapers[0]?.id ?? null;
 
   return (
     <LearnerDashboardShell>
@@ -381,299 +214,92 @@ export default function ReadingPracticePage() {
         <LearnerPageHero
           eyebrow="Reading"
           title="Practice Hub"
-          description="Untimed Learning Mode and your personal Error Bank. Review missed questions in your own time without consuming an exam attempt."
+          description="Untimed practice on papers you've already unlocked, plus quick mixed-Part warm-ups."
           icon={Sparkles}
         />
 
         {errorMsg ? <InlineAlert variant="error">{errorMsg}</InlineAlert> : null}
 
-        <InlineAlert variant="info">
-          Practice mode is <strong>non-standard</strong>. The real OET Reading exam is strictly
-          timed and Part A cannot be revisited. Use Practice for teaching; switch to a full
-          mock when you need exam fidelity.
-        </InlineAlert>
-
-        {/* ── Course pathway recommendation ───────────────────────
-            Joins your diagnostic, drill, error-bank, and mock signals
-            into a single readiness stage with one concrete next step. */}
-        {pathway ? (
-          <section aria-label="Course pathway">
-            <LearnerSurfaceCard
-              card={{
-                kind: 'navigation',
-                sourceType: 'frontend_navigation',
-                accent: pathway.stage === 'exam_ready' ? 'emerald' : 'amber',
-                eyebrow: 'YOUR PATHWAY',
-                eyebrowIcon: TrendingUp,
-                title: pathway.headline,
-                description:
-                  pathway.weakestSkillTag
-                    ? `Weakest skill in your error bank: ${pathway.weakestSkillTag}.`
-                    : 'A single recommended next step based on your recent attempts.',
-                metaItems: [
-                  {
-                    icon: CheckCircle2,
-                    label: `${pathway.submittedExamAttempts} exam · ${pathway.submittedPracticeAttempts} practice · ${pathway.submittedReadingMockAttempts} mocks`,
-                  },
-                  pathway.bestScaledScore != null
-                    ? { icon: Sparkles, label: `Best ${pathway.bestScaledScore}/500` }
-                    : { icon: AlertTriangle, label: `${pathway.openErrorBankCount} open errors` },
-                ],
-              }}
-            >
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap gap-2">
-                  {pathway.milestones.map((m) => (
-                    <Badge
-                      key={m.code}
-                      variant={m.achieved ? 'success' : 'info'}
-                      title={
-                        m.target != null && m.progress != null
-                          ? `${m.label} (${m.progress}/${m.target})`
-                          : m.label
-                      }
-                    >
-                      {m.achieved ? '✓ ' : ''}
-                      {m.label}
-                    </Badge>
-                  ))}
-                </div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={busyKey === 'pathway'}
-                  onClick={() => void handlePathwayAction()}
-                >
-                  {busyKey === 'pathway' ? 'Starting…' : pathwayPackageRequired ? 'View packages' : pathway.nextAction.label}{' '}
-                  <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
-                </Button>
-              </div>
-            </LearnerSurfaceCard>
-          </section>
+        {/* ── AI Reading Performance Snapshot ─────────────────────────
+            Concise, data-based summary from the candidate's own completed
+            attempts — not a pathway/drill system. Hidden until there's
+            enough graded history to say something real. */}
+        {snapshot?.available ? (
+          <InlineAlert variant="info">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <strong>Weakest area: Part {snapshot.weakestPart}.</strong>
+              <span className="text-muted">
+                {snapshot.accuracyByPart
+                  ?.map((p) => `Part ${p.partCode} ${p.accuracyPct}%`)
+                  .join(' • ')}
+              </span>
+              {snapshot.mainIssue ? (
+                <span className="text-muted">Main issue: {snapshot.mainIssue}.</span>
+              ) : null}
+            </div>
+          </InlineAlert>
         ) : null}
 
-        {/* ── Learning Mode launcher ──────────────────────────── */}
+        {/* ── Untimed Practice ─────────────────────────────────────── */}
         <section>
           <LearnerSurfaceSectionHeader
-            eyebrow="Learning Mode"
-            title="Untimed practice on any published paper"
-            description="Walk through a full Reading paper at your own pace. Part A is not hard-locked, and your Learning attempt does not count against the exam attempt cap."
+            eyebrow="Untimed Practice"
+            title="Practice papers you've already unlocked"
+            description="Once you've opened a paper, revisit it here at your own pace — Part A, Part B, Part C, or the Full Exam, with no timer and no extra credit."
             className="mb-5"
           />
-          {papers.length === 0 ? (
-            <InlineAlert variant="info">
-              No published Reading papers are available yet. Check back after content is released.
-            </InlineAlert>
-          ) : (
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              {papers.map((paper, idx) => {
-                const locked = !isPaperAccessible(paper);
-                return (
-                  <MotionItem key={paper.id} delayIndex={idx}>
-                    <LearnerSurfaceCard
-                      card={{
-                        kind: 'navigation',
-                        sourceType: 'frontend_navigation',
-                        accent: locked ? 'amber' : 'blue',
-                        eyebrow: locked ? 'PACKAGE REQUIRED' : 'READING',
-                        eyebrowIcon: locked ? Lock : BookOpen,
-                        title: paper.title,
-                        description: locked
-                          ? 'This structured Reading paper is ready, but your current package does not include Learning Mode access yet.'
-                          : `Difficulty: ${paper.difficulty} · ${paper.partACount + paper.partBCount + paper.partCCount} questions`,
-                        metaItems: [
-                          { icon: Clock, label: `${paper.estimatedDurationMinutes ?? 60} min` },
-                          ...(locked && paper.entitlement?.requiredScope ? [{ icon: Lock, label: paper.entitlement.requiredScope }] : []),
-                        ],
-                      }}
-                    >
-                      <div className="mt-4 flex items-center justify-between gap-3">
-                        <Badge variant={locked ? 'warning' : 'info'}>{locked ? 'Locked' : 'Learning Mode'}</Badge>
-                        {locked ? (
-                          <Button asChild variant="outline" size="sm">
-                            <Link href="/billing">View packages</Link>
-                          </Button>
-                        ) : (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            disabled={startingPaperId === paper.id}
-                            onClick={() => void handleStartLearning(paper)}
-                          >
-                            {startingPaperId === paper.id ? 'Starting…' : 'Start untimed'}{' '}
-                            <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
-                          </Button>
-                        )}
-                      </div>
-                    </LearnerSurfaceCard>
-                  </MotionItem>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        {/* ── Error Bank ──────────────────────────────────────── */}
-        <section ref={errorBankSectionRef} id="error-bank">
-          <LearnerSurfaceSectionHeader
-            eyebrow="Error Bank"
-            title={`${focusPart ? `Part ${focusPart}: ` : ''}${focusPart ? filteredErrorEntries.length : openErrorCount} question${(focusPart ? filteredErrorEntries.length : openErrorCount) === 1 ? '' : 's'} to revisit`}
-            description={focusPart
-              ? `Filtered to Part ${focusPart}. Clear ?focus to see every part.`
-              : "Questions you missed in past graded attempts. Clear an entry when you're confident. The next time you answer it correctly we clear it automatically."}
-            className="mb-5"
-          />
-          {(focusPart ? filteredErrorEntries.length === 0 : openErrorCount === 0) ? (
-            <InlineAlert variant="success">
-              <CheckCircle2 className="mr-2 inline h-4 w-4" aria-hidden />
-              {focusPart
-                ? `You have no open Error Bank entries in Part ${focusPart}.`
-                : 'You have no open Error Bank entries. Submit a graded Reading attempt to start tracking missed questions.'}
-            </InlineAlert>
-          ) : (
-            <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted text-xs uppercase tracking-wide text-muted">
-                  <tr>
-                    <th className="px-4 py-3">Paper</th>
-                    <th className="px-4 py-3">Part</th>
-                    <th className="px-4 py-3">Question</th>
-                    <th className="px-4 py-3">Skill</th>
-                    <th className="px-4 py-3 text-right">Times wrong</th>
-                    <th className="px-4 py-3" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredErrorEntries.map((entry) => (
-                    <tr key={entry.id} className="border-t border-border">
-                      <td className="px-4 py-3">
-                        {entry.paper ? (
-                          <Link
-                            className="text-primary hover:underline"
-                            href={`/reading/paper/${entry.paper.id}/results?attemptId=${entry.lastWrongAttemptId}#item-review`}
-                          >
-                            {entry.paper.title}
-                          </Link>
-                        ) : (
-                          <span className="text-muted">Unavailable</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant="info">Part {entry.partCode}</Badge>
-                      </td>
-                      <td className="px-4 py-3 max-w-md truncate" title={entry.questionStem ?? ''}>
-                        {entry.questionStem ?? <span className="text-muted">(stem unavailable)</span>}
-                      </td>
-                      <td className="px-4 py-3 text-muted">
-                        {entry.skillTag ?? entry.questionType ?? 'General'}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span className="inline-flex items-center gap-1 text-warning">
-                          <AlertTriangle className="h-4 w-4" aria-hidden /> {entry.timesWrong}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={clearingEntryId === entry.id}
-                          onClick={() => void handleClearEntry(entry.id)}
-                          aria-label="Clear from Error Bank"
-                        >
-                          <Trash2 className="h-4 w-4" aria-hidden />
-                          <span className="ml-1">{clearingEntryId === entry.id ? 'Clearing…' : 'Clear'}</span>
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        {/* ── Skill Drills ────────────────────────────────────── */}
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="Skill Drills"
-            title="Targeted Part A / B / C practice"
-            description="Short scoped runs against one Part or sub-skill. Drill scores are practice-only and do not produce an OET 0-500 scaled grade."
-            className="mb-5"
-          />
-          {papers.length === 0 || !drillCatalogue ? (
-            <LearnerEmptyState
-              compact
-              icon={BookOpen}
-              title="Drills are not available yet"
-              description="Drills will appear once at least one Reading paper is published and eligible for your package."
-              primaryAction={{ label: 'Back to Reading', href: '/reading', variant: 'outline' }}
-            />
-          ) : accessiblePapers.length === 0 ? (
+          {untimedEligiblePapers.length === 0 ? (
             <LearnerEmptyState
               compact
               icon={Lock}
-              title="Practice papers are locked"
-              description="Your current package does not include the available structured Reading papers yet."
-              primaryAction={{ label: 'View packages', href: '/billing' }}
+              title="No unlocked papers yet"
+              description="Open a Reading paper from the Paper Library first — it will appear here for untimed revisits afterwards."
+              primaryAction={{ label: 'Back to Reading', href: '/reading', variant: 'outline' }}
             />
           ) : (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-foreground" htmlFor="drill-paper">
-                  Practice on paper
-                </label>
-                <select
-                  id="drill-paper"
-                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={drillPaperId ?? ''}
-                  onChange={(e) => { setDrillPaperId(e.target.value || null); setDrillSelectError(null); }}
-                >
-                  {accessiblePapers.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {drillSelectError && <span className="text-sm text-danger">{drillSelectError}</span>}
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filteredDrills.map((d, idx) => {
-                  const key = drillPaperId ? `${drillPaperId}::drill::${d.code}` : null;
-                  const busy = key !== null && busyKey === key;
-                  return (
-                    <MotionItem key={d.code} delayIndex={idx}>
-                      <LearnerSurfaceCard
-                        card={{
-                          kind: 'navigation',
-                          sourceType: 'frontend_navigation',
-                          accent: d.partCode === 'A' ? 'blue' : d.partCode === 'B' ? 'purple' : 'emerald',
-                          eyebrow: `PART ${d.partCode}${d.skillTag ? ` · ${d.skillTag.toUpperCase()}` : ''}`,
-                          eyebrowIcon: TrendingUp,
-                          title: d.title,
-                          description: d.description,
-                          metaItems: [
-                            { icon: Clock, label: `${d.minutes} min` },
-                            { icon: BookOpen, label: `${d.questionCount} Qs` },
-                          ],
-                        }}
-                      >
-                        <div className="mt-4 flex items-center justify-between gap-3">
-                          <Badge variant="info">Drill</Badge>
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {untimedEligiblePapers.map((paper, idx) => (
+                <MotionItem key={paper.id} delayIndex={idx}>
+                  <LearnerSurfaceCard
+                    card={{
+                      kind: 'navigation',
+                      sourceType: 'frontend_navigation',
+                      accent: 'blue',
+                      eyebrow: 'READING',
+                      eyebrowIcon: BookOpen,
+                      title: paper.title,
+                      description: `Difficulty: ${paper.difficulty} · ${paper.partACount + paper.partBCount + paper.partCCount} questions`,
+                      metaItems: [{ icon: Clock, label: 'No timer' }],
+                    }}
+                  >
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
+                      {READING_PARTS.map((part) => {
+                        const key = `${paper.id}::${part}`;
+                        return (
                           <Button
-                            variant="primary"
+                            key={part}
+                            variant="outline"
                             size="sm"
-                            disabled={!drillPaperId || !selectedDrillPaperAvailable || busy}
-                            onClick={() => drillPaperId && selectedDrillPaperAvailable && void handleStartDrill(drillPaperId, d.code)}
+                            disabled={busyKey === key}
+                            onClick={() => void handleStartUntimedPart(paper, part)}
                           >
-                            {busy ? 'Starting…' : 'Start drill'}
-                            <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                            {busyKey === key ? 'Starting…' : `Part ${part}`}
                           </Button>
-                        </div>
-                      </LearnerSurfaceCard>
-                    </MotionItem>
-                  );
-                })}
-              </div>
+                        );
+                      })}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={busyKey === `${paper.id}::full`}
+                        onClick={() => void handleStartUntimedFullExam(paper)}
+                      >
+                        {busyKey === `${paper.id}::full` ? 'Starting…' : 'Full Exam'}
+                        <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
+                      </Button>
+                    </div>
+                  </LearnerSurfaceCard>
+                </MotionItem>
+              ))}
             </div>
           )}
         </section>
@@ -683,10 +309,10 @@ export default function ReadingPracticePage() {
           <LearnerSurfaceSectionHeader
             eyebrow="Mini-Tests"
             title="5 / 10 / 15 minute timed warm-ups"
-            description="A balanced mix of Part A, B, and C questions sized to the time you've got. Like drills, mini-tests are practice-only and don't produce a scaled score."
+            description="A balanced mix of Part A, B, and C questions sized to the time you've got. Like the untimed papers above, mini-tests are practice-only and don't produce a scaled score."
             className="mb-5"
           />
-          {papers.length === 0 || !drillCatalogue ? (
+          {accessiblePapers.length === 0 || !drillCatalogue ? (
             <LearnerEmptyState
               compact
               icon={BookOpen}
@@ -694,18 +320,10 @@ export default function ReadingPracticePage() {
               description="Mini-tests will appear once at least one Reading paper is published and eligible for your package."
               primaryAction={{ label: 'Back to Reading', href: '/reading', variant: 'outline' }}
             />
-          ) : accessiblePapers.length === 0 ? (
-            <LearnerEmptyState
-              compact
-              icon={Lock}
-              title="Mini-tests are locked"
-              description="Unlock a structured Reading paper package before starting timed mini-tests."
-              primaryAction={{ label: 'View packages', href: '/billing' }}
-            />
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {drillCatalogue.miniTests.map((m, idx) => {
-                const key = drillPaperId ? `${drillPaperId}::mini::${m.minutes}` : null;
+                const key = miniTestPaperId ? `${miniTestPaperId}::mini::${m.minutes}` : null;
                 const busy = key !== null && busyKey === key;
                 return (
                   <MotionItem key={m.minutes} delayIndex={idx}>
@@ -725,8 +343,8 @@ export default function ReadingPracticePage() {
                         <Button
                           variant="primary"
                           size="sm"
-                          disabled={!drillPaperId || !selectedDrillPaperAvailable || busy}
-                          onClick={() => drillPaperId && selectedDrillPaperAvailable && void handleStartMiniTest(drillPaperId, m.minutes)}
+                          disabled={!miniTestPaperId || busy}
+                          onClick={() => miniTestPaperId && void handleStartMiniTest(miniTestPaperId, m.minutes)}
                         >
                           {busy ? 'Starting…' : 'Start'}
                           <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
@@ -739,32 +357,6 @@ export default function ReadingPracticePage() {
             </div>
           )}
         </section>
-
-        {/* ── Error Bank Retest ──────────────────────────────── */}
-        {visibleErrorCount > 0 ? (
-          <section>
-            <LearnerSurfaceSectionHeader
-              eyebrow="Targeted retest"
-              title="Retest your top open misses"
-              description="Spin up a focused practice run against your most recent missed questions. Answering correctly clears them from the Error Bank automatically."
-              className="mb-5"
-            />
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                variant="primary"
-                onClick={() => void handleErrorBankRetest()}
-                disabled={busyKey === 'retest'}
-              >
-                {busyKey === 'retest' ? 'Building retest…' : `Retest up to ${Math.min(10, visibleErrorCount)} ${focusPart ? `Part ${focusPart} ` : ''}open miss${Math.min(10, visibleErrorCount) === 1 ? '' : 'es'}`}
-                <ArrowRight className="ml-1 h-4 w-4" aria-hidden />
-              </Button>
-              <span className="text-sm text-muted">
-                Pulls from the {visibleErrorCount} visible open question
-                {visibleErrorCount === 1 ? '' : 's'} above.
-              </span>
-            </div>
-          </section>
-        ) : null}
       </div>
     </LearnerDashboardShell>
   );

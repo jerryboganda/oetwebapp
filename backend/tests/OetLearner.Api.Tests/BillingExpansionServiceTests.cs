@@ -34,7 +34,7 @@ public class BillingExpansionServiceTests
             QuoteId: null,
             AmountAmount: 100m,
             Currency: "GBP",
-            Method: "uk_monzo_transfer",
+            Method: "hsbc_uk_transfer",
             Reference: reference,
             ProofUrl: "",
             CandidateFullName: "Candidate One",
@@ -371,12 +371,12 @@ public class BillingExpansionServiceTests
     public async Task ManualPaymentService_AcceptsKnownActiveMethod()
     {
         await using var db = NewContext(nameof(ManualPaymentService_AcceptsKnownActiveMethod));
-        db.PaymentMethodConfigs.Add(PmConfig("uk_monzo_transfer"));
+        db.PaymentMethodConfigs.Add(PmConfig("hsbc_uk_transfer"));
         await db.SaveChangesAsync();
         var svc = NewManualPaymentService(db);
 
         var row = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("known"), CancellationToken.None);
-        Assert.Equal("uk_monzo_transfer", row.Method);
+        Assert.Equal("hsbc_uk_transfer", row.Method);
     }
 
     [Fact]
@@ -384,11 +384,11 @@ public class BillingExpansionServiceTests
     {
         await using var db = NewContext(nameof(ManualPaymentService_RejectsInactiveMethodWhenOthersActive));
         db.PaymentMethodConfigs.Add(PmConfig("instapay_qr_link"));            // active
-        db.PaymentMethodConfigs.Add(PmConfig("uk_monzo_transfer", active: false)); // disabled
+        db.PaymentMethodConfigs.Add(PmConfig("hsbc_uk_transfer", active: false)); // disabled
         await db.SaveChangesAsync();
         var svc = NewManualPaymentService(db);
 
-        // ManualRequest uses uk_monzo_transfer, which is present but inactive.
+        // ManualRequest uses hsbc_uk_transfer, which is present but inactive.
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("inactive"), CancellationToken.None));
     }
@@ -401,7 +401,7 @@ public class BillingExpansionServiceTests
 
         // Empty config table → fallback allowlist accepts the seeded key…
         var row = await svc.SubmitAsync("user_a", ManualRequest("REF"), ValidProof("fb-ok"), CancellationToken.None);
-        Assert.Equal("uk_monzo_transfer", row.Method);
+        Assert.Equal("hsbc_uk_transfer", row.Method);
 
         // …but still rejects a method outside the fallback list.
         var bogus = ManualRequest("REF2") with { Method = "bogus_method" };

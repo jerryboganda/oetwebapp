@@ -3,26 +3,22 @@ import userEvent from '@testing-library/user-event';
 
 const {
   mockGetReadingHome,
-  mockGetReadingErrorBank,
   mockGetReadingDrillCatalogue,
-  mockGetReadingPathway,
-  mockStartReadingDrill,
-  mockStartReadingErrorBankRetest,
+  mockGetReadingPerformanceSnapshot,
+  mockStartReadingLearningAttempt,
+  mockStartReadingPartPracticeAttempt,
   mockStartReadingMiniTest,
   mockUseAuth,
   mockRouterPush,
-  mockSearchParams,
 } = vi.hoisted(() => ({
   mockGetReadingHome: vi.fn(),
-  mockGetReadingErrorBank: vi.fn(),
   mockGetReadingDrillCatalogue: vi.fn(),
-  mockGetReadingPathway: vi.fn(),
-  mockStartReadingDrill: vi.fn(),
-  mockStartReadingErrorBankRetest: vi.fn(),
+  mockGetReadingPerformanceSnapshot: vi.fn(),
+  mockStartReadingLearningAttempt: vi.fn(),
+  mockStartReadingPartPracticeAttempt: vi.fn(),
   mockStartReadingMiniTest: vi.fn(),
   mockUseAuth: vi.fn(),
   mockRouterPush: vi.fn(),
-  mockSearchParams: { current: new URLSearchParams() },
 }));
 
 vi.mock('next/link', () => ({
@@ -31,7 +27,6 @@ vi.mock('next/link', () => ({
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockRouterPush }),
-  useSearchParams: () => mockSearchParams.current,
 }));
 
 vi.mock('@/contexts/auth-context', () => ({
@@ -65,88 +60,89 @@ vi.mock('@/components/ui/motion-primitives', () => ({
 }));
 
 vi.mock('@/lib/reading-authoring-api', () => ({
-  clearReadingErrorBankEntry: vi.fn(),
   getReadingDrillCatalogue: mockGetReadingDrillCatalogue,
-  getReadingErrorBank: mockGetReadingErrorBank,
   getReadingHome: mockGetReadingHome,
-  getReadingPathway: mockGetReadingPathway,
-  startReadingDrill: mockStartReadingDrill,
-  startReadingErrorBankRetest: mockStartReadingErrorBankRetest,
-  startReadingLearningAttempt: vi.fn(),
+  getReadingPerformanceSnapshot: mockGetReadingPerformanceSnapshot,
+  startReadingLearningAttempt: mockStartReadingLearningAttempt,
+  startReadingPartPracticeAttempt: mockStartReadingPartPracticeAttempt,
   startReadingMiniTest: mockStartReadingMiniTest,
 }));
 
 import ReadingPracticePage from './page';
 
-describe('Reading practice page', () => {
+describe('Reading practice page (simplified Untimed Practice + Mini-Tests hub)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    Element.prototype.scrollIntoView = vi.fn();
-    mockSearchParams.current = new URLSearchParams();
     mockUseAuth.mockReturnValue({ isAuthenticated: true, loading: false });
-    mockGetReadingHome.mockResolvedValue(buildHome());
-    mockGetReadingErrorBank.mockResolvedValue({ totals: { open: 0, resolved: 0, byPart: {} }, entries: [] });
-    mockGetReadingDrillCatalogue.mockResolvedValue({ drills: [], miniTests: [] });
-    mockGetReadingPathway.mockResolvedValue(null);
-    mockStartReadingErrorBankRetest.mockResolvedValue({ playerRoute: '/reading/paper/paper-1/player?attemptId=retest-1' });
+    mockGetReadingHome.mockResolvedValue(buildHome({ hasPriorAttempt: true }));
+    mockGetReadingDrillCatalogue.mockResolvedValue({ drills: [], miniTests: [{ minutes: 5, label: '5-minute warm-up', questionCount: 6 }] });
+    mockGetReadingPerformanceSnapshot.mockResolvedValue({ available: false });
+    mockStartReadingLearningAttempt.mockResolvedValue({ playerRoute: '/reading/paper/paper-1?attemptId=a1&mode=learning&untimed=true' });
+    mockStartReadingPartPracticeAttempt.mockResolvedValue({ playerRoute: '/reading/paper/paper-1?attemptId=a1&mode=part-practice&part=A&untimed=true' });
   });
 
-  it('shows locked Reading papers without exposing a dead-end start action', async () => {
-    mockGetReadingHome.mockResolvedValue(buildHome({ locked: true }));
-    mockGetReadingDrillCatalogue.mockResolvedValue({
-      drills: [{ code: 'part-a-scan', title: 'Part A scan', description: 'Scan quickly.', partCode: 'A', skillTag: 'scan', questionCount: 10, minutes: 8 }],
-      miniTests: [{ minutes: 5, label: '5-minute warm-up', questionCount: 5 }],
-    });
-
+  it('shows a paper in Untimed Practice only once it has a prior attempt', async () => {
+    mockGetReadingHome.mockResolvedValue(buildHome({ hasPriorAttempt: false }));
     render(<ReadingPracticePage />);
 
-    expect(await screen.findByText('Locked')).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /view packages/i })[0]).toHaveAttribute('href', '/billing');
-    expect(screen.queryByRole('button', { name: /start untimed/i })).not.toBeInTheDocument();
-    expect(screen.getByText('Practice papers are locked')).toBeInTheDocument();
-    expect(screen.getByText('Mini-tests are locked')).toBeInTheDocument();
+    expect(await screen.findByText('No unlocked papers yet')).toBeInTheDocument();
+    expect(screen.queryByText('Reading Sample Paper 1')).not.toBeInTheDocument();
   });
 
-  it('passes the focused part into an Error Bank retest', async () => {
+  it('offers Part A/B/C and Full Exam, untimed, for an already-attempted paper', async () => {
     const user = userEvent.setup();
-    mockSearchParams.current = new URLSearchParams('focus=A&tab=errors');
-    mockGetReadingErrorBank.mockResolvedValue({
-      totals: { open: 2, resolved: 0, byPart: { A: 1, B: 1 } },
-      entries: [
-        buildErrorEntry({ id: 'entry-a', partCode: 'A', questionStem: 'Part A missed item' }),
-        buildErrorEntry({ id: 'entry-b', partCode: 'B', questionStem: 'Part B missed item' }),
+    render(<ReadingPracticePage />);
+
+    expect(await screen.findByText('Reading Sample Paper 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Part A' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Part B' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Part C' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Part A' }));
+    expect(mockStartReadingPartPracticeAttempt).toHaveBeenCalledWith('paper-1', 'A', { untimed: true });
+    expect(mockRouterPush).toHaveBeenCalledWith('/reading/paper/paper-1?attemptId=a1&mode=part-practice&part=A&untimed=true');
+
+    await user.click(screen.getByRole('button', { name: /full exam/i }));
+    expect(mockStartReadingLearningAttempt).toHaveBeenCalledWith('paper-1', { untimed: true });
+  });
+
+  it('never shows Untimed Practice actions for a locked paper', async () => {
+    mockGetReadingHome.mockResolvedValue(buildHome({ hasPriorAttempt: true, locked: true }));
+    render(<ReadingPracticePage />);
+
+    expect(await screen.findByText('No unlocked papers yet')).toBeInTheDocument();
+  });
+
+  it('shows the AI performance snapshot when the backend has enough graded history', async () => {
+    mockGetReadingPerformanceSnapshot.mockResolvedValue({
+      available: true,
+      weakestPart: 'C',
+      accuracyByPart: [
+        { partCode: 'A', accuracyPct: 82 },
+        { partCode: 'B', accuracyPct: 71 },
+        { partCode: 'C', accuracyPct: 54 },
       ],
+      mainIssue: 'Inference questions',
     });
 
     render(<ReadingPracticePage />);
 
-    expect(await screen.findByText('Part A missed item')).toBeInTheDocument();
-    expect(screen.queryByText('Part B missed item')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /retest up to 1 part a open miss/i }));
-
-    expect(mockStartReadingErrorBankRetest).toHaveBeenCalledWith({ partCode: 'A', limit: 10 });
-    expect(mockRouterPush).toHaveBeenCalledWith('/reading/paper/paper-1/player?attemptId=retest-1');
+    expect(await screen.findByText('Weakest area: Part C.')).toBeInTheDocument();
+    expect(screen.getByText('Part A 82% • Part B 71% • Part C 54%')).toBeInTheDocument();
+    expect(screen.getByText(/Inference questions/)).toBeInTheDocument();
   });
 
-  it('does not launch a pathway drill when the recommended paper is locked', async () => {
-    const user = userEvent.setup();
-    mockGetReadingHome.mockResolvedValue(buildHome({ locked: true }));
-    mockGetReadingPathway.mockResolvedValue(buildPathway({ kind: 'start_drill', label: 'Repair Part A scanning', drillCode: 'part-a-scan' }));
-
+  it('keeps Mini-Tests available independent of Untimed Practice eligibility', async () => {
+    mockGetReadingHome.mockResolvedValue(buildHome({ hasPriorAttempt: false }));
     render(<ReadingPracticePage />);
 
-    await user.click(await screen.findByRole('button', { name: /view packages/i }));
-
-    expect(mockStartReadingDrill).not.toHaveBeenCalled();
-    expect(mockStartReadingMiniTest).not.toHaveBeenCalled();
-    expect(mockRouterPush).toHaveBeenCalledWith('/billing');
+    expect(await screen.findByText('5-minute warm-up')).toBeInTheDocument();
   });
 });
 
-function buildHome(opts?: { locked?: boolean }) {
+function buildHome(opts?: { hasPriorAttempt?: boolean; locked?: boolean }) {
   return {
-    intro: 'Use the Reading practice hub to repair weaknesses.',
+    intro: 'Use the Reading practice hub.',
     papers: [
       {
         id: 'paper-1',
@@ -162,6 +158,7 @@ function buildHome(opts?: { locked?: boolean }) {
         totalPoints: 42,
         partATimerMinutes: 15,
         partBCTimerMinutes: 45,
+        hasPriorAttempt: opts?.hasPriorAttempt ?? false,
         entitlement: opts?.locked
           ? { allowed: false, reason: 'upgrade_required', currentTier: 'free', requiredScope: 'reading.full' }
           : { allowed: true, reason: 'included', currentTier: 'premium', requiredScope: null },
@@ -179,47 +176,5 @@ function buildHome(opts?: { locked?: boolean }) {
       showExplanationsAfterSubmit: true,
       allowPaperReadingMode: true,
     },
-    safeDrills: [],
-  };
-}
-
-function buildErrorEntry(overrides: Partial<{ id: string; partCode: 'A' | 'B' | 'C'; questionStem: string }>) {
-  return {
-    id: overrides.id ?? 'entry-1',
-    readingQuestionId: 'q-1',
-    partCode: overrides.partCode ?? 'A',
-    timesWrong: 1,
-    lastSeenWrongAt: '2026-05-12T10:00:00Z',
-    lastWrongAttemptId: 'attempt-1',
-    questionStem: overrides.questionStem ?? 'Missed item',
-    questionType: 'ShortAnswer',
-    skillTag: 'scan',
-    paper: { id: 'paper-1', title: 'Reading Sample Paper 1', slug: 'reading-sample-paper-1' },
-  };
-}
-
-function buildPathway(overrides: Partial<{
-  kind: 'start_diagnostic' | 'start_drill' | 'start_mini_test' | 'start_mock' | 'review_results' | 'book_exam';
-  label: string;
-  drillCode: string | null;
-  paperId: string | null;
-}>) {
-  return {
-    stage: 'drilling',
-    headline: 'Repair Reading gaps',
-    bestScaledScore: null,
-    openErrorBankCount: 2,
-    submittedExamAttempts: 1,
-    submittedPracticeAttempts: 1,
-    submittedReadingMockAttempts: 0,
-    weakestSkillTag: 'scan',
-    nextAction: {
-      kind: overrides.kind ?? 'start_drill',
-      label: overrides.label ?? 'Start drill',
-      drillCode: overrides.drillCode ?? 'part-a-scan',
-      paperId: overrides.paperId ?? 'paper-1',
-      route: '/reading/practice',
-    },
-    milestones: [],
   };
 }

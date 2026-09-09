@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState, type ElementType } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { CreditCard, Info, Landmark, Mail, QrCode, Receipt, Upload, WalletCards } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
@@ -17,7 +17,6 @@ import { ProofDropzone } from '@/components/billing/proof-dropzone';
 import { SendProofOnWhatsAppButton } from '@/components/billing/send-proof-whatsapp-button';
 import { buildManualPaymentWhatsAppLink, fetchSupportWhatsApp } from '@/lib/billing/whatsapp';
 import {
-  fetchAvailablePaymentGateways,
   fetchPaymentMethodQrBlob,
   listOwnManualPayments,
   listPublicPaymentMethods,
@@ -69,28 +68,52 @@ const FALLBACK_PAYMENT_METHODS: PaymentMethodConfigDto[] = [
     note: 'Inside Egypt only.', referenceRule: false, showQr: false, hasQrImage: false, iconName: 'Landmark', isActive: true, displayOrder: 3, createdAt: '', updatedAt: '',
   },
   {
-    id: 'fallback-stripe', key: 'stripe_card', label: 'Stripe card', category: 'international',
-    detail: 'Use the card checkout route for instant, verified activation.', meta: 'Manual proof is only needed if support asks for it.',
-    instructions: 'Pay by card through the secure Stripe checkout — access is activated automatically once the payment is confirmed.',
-    note: null, referenceRule: false, showQr: false, hasQrImage: false, iconName: 'CreditCard', isActive: true, displayOrder: 4, createdAt: '', updatedAt: '',
+    id: 'fallback-whop', key: 'whop_manual', label: 'Whop', category: 'international',
+    detail: 'Pay through the Whop checkout.', meta: 'Manual proof is only needed if support asks for it.',
+    instructions: 'Pay through the secure Whop checkout — access is activated automatically once the payment is confirmed.',
+    note: null, referenceRule: false, showQr: false, hasQrImage: false, iconName: 'WalletCards', isActive: true, displayOrder: 4, createdAt: '', updatedAt: '',
   },
   {
-    id: 'fallback-paypal', key: 'paypal_business', label: 'PayPal Business', category: 'international',
-    detail: 'support@oetwithdrhesham.co.uk', meta: '+447961725989',
-    instructions: 'Pay through PayPal Business, then send proof of payment if access is not activated automatically.',
+    id: 'fallback-fawaterak', key: 'fawaterak_manual', label: 'Fawaterak', category: 'international',
+    detail: 'Pay through the Fawaterak checkout.', meta: 'Manual proof is only needed if support asks for it.',
+    instructions: 'Pay through the secure Fawaterak checkout — access is activated automatically once the payment is confirmed.',
     note: null, referenceRule: false, showQr: false, hasQrImage: false, iconName: 'WalletCards', isActive: true, displayOrder: 5, createdAt: '', updatedAt: '',
   },
   {
-    id: 'fallback-uk-monzo', key: 'uk_monzo_transfer', label: 'UK bank transfer — Monzo', category: 'international',
-    detail: 'Ahmed Ibrahim · Monzo Bank', meta: 'Account 98630202 · Sort code 04-00-03',
+    id: 'fallback-hsbc-uk', key: 'hsbc_uk_transfer', label: 'HSBC bank transfer - Inside the UK', category: 'international',
+    detail: 'Ahmed Hesham Ibrahim Abdrabu Ibrahim · HSBC', meta: 'Account 64686063 · Sort code 40-16-64',
     instructions: 'Send a UK bank transfer using the details above, then send proof of payment.',
     note: null, referenceRule: true, showQr: false, hasQrImage: false, iconName: 'Landmark', isActive: true, displayOrder: 6, createdAt: '', updatedAt: '',
   },
   {
-    id: 'fallback-intl-monzo', key: 'international_monzo_transfer', label: 'International bank transfer — Monzo', category: 'international',
-    detail: 'Ahmed Ibrahim · IBAN GB44MONZ04000398630202', meta: 'BIC / SWIFT MONZGB2L (some banks use MONZGB2LXXX)',
-    instructions: 'Send the transfer using the IBAN and BIC/SWIFT details above, then send proof of payment.',
+    id: 'fallback-hsbc-intl', key: 'hsbc_international_transfer', label: 'HSBC bank transfer - International', category: 'international',
+    detail: 'Ahmed Hesham Ibrahim Abdrabu Ibrahim · IBAN GB57HBUK40166464686063', meta: 'SWIFT / BIC HBUKGB4196Y',
+    instructions: 'Send the transfer using the IBAN and SWIFT/BIC details above, then send proof of payment.',
     note: null, referenceRule: true, showQr: false, hasQrImage: false, iconName: 'Landmark', isActive: true, displayOrder: 7, createdAt: '', updatedAt: '',
+  },
+  {
+    id: 'fallback-lloyds-uk', key: 'lloyds_uk_transfer', label: 'Lloyds bank transfer - Inside the UK', category: 'international',
+    detail: 'Ahmed Ibrahim · Lloyds', meta: 'Account 84744968 · Sort code 77-48-17',
+    instructions: 'Send a UK bank transfer using the details above, then send proof of payment.',
+    note: null, referenceRule: true, showQr: false, hasQrImage: false, iconName: 'Landmark', isActive: true, displayOrder: 8, createdAt: '', updatedAt: '',
+  },
+  {
+    id: 'fallback-lloyds-intl', key: 'lloyds_international_transfer', label: 'Lloyds bank transfer - International', category: 'international',
+    detail: 'Ahmed Ibrahim · IBAN GB22LOYD77481784744968', meta: 'SWIFT / BIC LOYDGB21W78',
+    instructions: 'Send the transfer using the IBAN and SWIFT/BIC details above, then send proof of payment.',
+    note: null, referenceRule: true, showQr: false, hasQrImage: false, iconName: 'Landmark', isActive: true, displayOrder: 9, createdAt: '', updatedAt: '',
+  },
+  {
+    id: 'fallback-barclays-uk', key: 'barclays_uk_transfer', label: 'Barclays bank transfer - Inside the UK', category: 'international',
+    detail: 'AHMED IBRAHIM · Barclays', meta: 'Account 10274178 · Sort code 20-25-44',
+    instructions: 'Send a UK bank transfer using the details above, then send proof of payment.',
+    note: null, referenceRule: true, showQr: false, hasQrImage: false, iconName: 'Landmark', isActive: true, displayOrder: 10, createdAt: '', updatedAt: '',
+  },
+  {
+    id: 'fallback-barclays-intl', key: 'barclays_international_transfer', label: 'Barclays bank transfer - International', category: 'international',
+    detail: 'AHMED IBRAHIM · IBAN GB90BUKB20254410274178', meta: 'SWIFT / BIC BUKBGB22',
+    instructions: 'Send the transfer using the IBAN and SWIFT/BIC details above, then send proof of payment.',
+    note: null, referenceRule: true, showQr: false, hasQrImage: false, iconName: 'Landmark', isActive: true, displayOrder: 11, createdAt: '', updatedAt: '',
   },
 ];
 
@@ -132,7 +155,6 @@ function buildResubmitHref(row: ManualPaymentDto): string {
 }
 
 function ManualPaymentContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
 
@@ -160,7 +182,6 @@ function ManualPaymentContent() {
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfigDto[]>([]);
   const [qrUrls, setQrUrls] = useState<Record<string, string>>({});
-  const [availableGateways, setAvailableGateways] = useState<string[]>([]);
 
   const [history, setHistory] = useState<ManualPaymentDto[] | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -192,11 +213,6 @@ function ManualPaymentContent() {
       }
       if (!cancelled) setPaymentMethods(methods);
     })();
-    void fetchAvailablePaymentGateways()
-      .then((res) => {
-        if (!cancelled) setAvailableGateways(res.gateways ?? []);
-      })
-      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -241,14 +257,6 @@ function ManualPaymentContent() {
     if (!m.showQr) return null;
     if (m.hasQrImage) return qrUrls[m.key] ?? null;
     return m.key === 'instapay_qr_link' ? '/payment/instapay-qr.jpg' : null;
-  }
-
-  function handlePayWithPayPal() {
-    if (quoteId) {
-      router.push(`/checkout/review?quoteId=${encodeURIComponent(quoteId)}&gateway=paypal`);
-    } else {
-      router.push('/catalog');
-    }
   }
 
   async function handleSubmit() {
@@ -338,16 +346,12 @@ function ManualPaymentContent() {
             category="inside_egypt"
             methods={paymentMethods}
             qrSrcFor={qrSrcFor}
-            availableGateways={availableGateways}
-            onPayWithPayPal={handlePayWithPayPal}
           />
           <PaymentCategory
             title="International payment"
             category="international"
             methods={paymentMethods}
             qrSrcFor={qrSrcFor}
-            availableGateways={availableGateways}
-            onPayWithPayPal={handlePayWithPayPal}
           />
         </div>
 
@@ -365,10 +369,7 @@ function ManualPaymentContent() {
                 label="How did you pay?"
                 value={selectedMethodKey}
                 onChange={(e) => setMethodKey(e.target.value)}
-                options={paymentMethods.map((m) => ({
-                  value: m.key,
-                  label: `${m.label} · ${m.category === 'inside_egypt' ? 'Inside Egypt' : 'International'}`,
-                }))}
+                options={paymentMethods.map((m) => ({ value: m.key, label: m.label }))}
                 placeholder={paymentMethods.length === 0 ? 'Loading payment methods…' : undefined}
               />
               <Input
@@ -522,15 +523,11 @@ function PaymentCategory({
   category,
   methods,
   qrSrcFor,
-  availableGateways,
-  onPayWithPayPal,
 }: {
   title: string;
   category: 'inside_egypt' | 'international';
   methods: PaymentMethodConfigDto[];
   qrSrcFor: (m: PaymentMethodConfigDto) => string | null;
-  availableGateways: string[];
-  onPayWithPayPal: () => void;
 }) {
   const rows = methods.filter((method) => method.category === category);
   if (rows.length === 0) return null;
@@ -541,7 +538,6 @@ function PaymentCategory({
         {rows.map((method) => {
           const Icon = resolveIcon(method.iconName);
           const qrSrc = qrSrcFor(method);
-          const showPayPal = method.key === 'paypal_business' && availableGateways.includes('paypal');
           return (
             <div key={method.key} className="rounded-xl border border-border/70 bg-background-light/50 p-4">
               <div className="flex items-start gap-3">
@@ -558,11 +554,6 @@ function PaymentCategory({
                     <p className="mt-1 break-words text-xs font-medium text-navy/80">
                       Payment reference: your full name + course name.
                     </p>
-                  ) : null}
-                  {showPayPal ? (
-                    <Button variant="outline" className="mt-3" onClick={onPayWithPayPal}>
-                      Pay with PayPal via secure checkout
-                    </Button>
                   ) : null}
                 </div>
               </div>
