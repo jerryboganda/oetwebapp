@@ -66,7 +66,8 @@ export function ForgotPasswordVerifyPageContent() {
         </p>
       }
     >
-      <form onSubmit={handleSubmit} className={styles.passwordFlowForm}>
+      {/* method="post" defensive fallback — see components/auth/sign-in-form.tsx for why. */}
+      <form onSubmit={handleSubmit} method="post" className={styles.passwordFlowForm}>
         <OtpCodeInput
           value={otp}
           onChange={(value) => {

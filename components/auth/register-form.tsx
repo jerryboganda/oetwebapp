@@ -244,7 +244,8 @@ export function RegisterForm() {
       }
       socials={socials}
     >
-      <form onSubmit={handleSubmit} className={styles.wizard}>
+      {/* method="post" defensive fallback — see sign-in-form.tsx for why. */}
+      <form onSubmit={handleSubmit} method="post" className={styles.wizard}>
         <AuthModeSwitch mode="signUp" />
         <input type="hidden" {...form.register('mobileNumber')} />
 

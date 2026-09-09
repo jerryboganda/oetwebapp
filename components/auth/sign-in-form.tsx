@@ -215,7 +215,12 @@ export function SignInForm({ nextHref, initialEmail, externalError, reason }: Si
       }
       socials={socials}
     >
-      <form onSubmit={handleSubmit} className={styles.signInForm}>
+      {/* method="post" is a defensive fallback only — handleSubmit always
+          preventDefault()s and posts via fetch. Without it, a submit that
+          fires before React hydration attaches the handler (slow network,
+          disabled JS, race on click) falls back to the browser's native
+          GET submission, putting the password in the URL/history/logs. */}
+      <form onSubmit={handleSubmit} method="post" className={styles.signInForm}>
         <AuthModeSwitch mode="signIn" />
 
         <div className={styles.field}>

@@ -81,7 +81,8 @@ export function ResetPasswordPageContent() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className={styles.passwordFlowForm}>
+      {/* method="post" defensive fallback — see components/auth/sign-in-form.tsx for why. */}
+      <form onSubmit={handleSubmit} method="post" className={styles.passwordFlowForm}>
         <div className={styles.field}>
           <label htmlFor="reset-email">Email</label>
           <input
