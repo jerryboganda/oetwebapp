@@ -253,6 +253,7 @@ public sealed record WritingAssessmentV11ReportResponse(
     string CalibrationSetVersion,
     int? EstimatedPracticeScore,
     string ScoreLabel,
+    string? GradeBand,
     string? ScoreRange,
     string? ConfidenceLabel,
     string? ConfidenceRange,

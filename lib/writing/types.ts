@@ -1025,6 +1025,7 @@ export interface WritingAssessmentV11ReportDto {
   calibrationSetVersion: string;
   estimatedPracticeScore: number | null;
   scoreLabel: string;
+  gradeBand: string | null;
   scoreRange: string | null;
   confidenceLabel: string | null;
   confidenceRange: string | null;
