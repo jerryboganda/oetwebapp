@@ -207,6 +207,128 @@ public sealed class RegistryBackedProviderTests
     }
 
     [Fact]
+    public async Task CompleteAsync_UbagToolsRequest_FailsFastWithGuidance()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-agent-gateway,ubag-vps-gateway-1");
+        try
+        {
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase($"registry-provider-ubag-tools-{Guid.NewGuid():N}")
+                .Options;
+            var db = new LearnerDbContext(options);
+            var dpProvider = new EphemeralDataProtectionProvider();
+            var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+            db.AiProviders.Add(new AiProvider
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "ubag",
+                Name = "UBAG (browser AI providers)",
+                Dialect = AiProviderDialect.OpenAiCompatible,
+                Category = AiProviderCategory.TextChat,
+                BaseUrl = "http://ubag-vps-gateway-1:8080/v1/openai",
+                EncryptedApiKey = protector.Protect("ubag-test-pat-1234567890"),
+                ApiKeyHint = "ubag-pat",
+                DefaultModel = "mock",
+                IsActive = true,
+                FailoverPriority = 70,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            var called = false;
+            var provider = new RegistryBackedProvider(
+                new StubHttpClientFactory(new StubHandler(_ =>
+                {
+                    called = true;
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK));
+                })),
+                new AiProviderRegistry(db, dpProvider),
+                Options.Create(new AiProviderOptions()));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+            {
+                ProviderCode = "ubag",
+                Model = "chatgpt_web",
+                SystemPrompt = "system",
+                UserPrompt = "ping",
+                Tools = new[]
+                {
+                    new AiToolDefinition(
+                        "lookup_case",
+                        "Lookup case",
+                        "Lookup a case record.",
+                        AiToolCategory.Read,
+                        "{}"),
+                },
+                ToolChoice = "auto",
+            }, CancellationToken.None));
+
+            Assert.Contains("does not support native function calling", ex.Message);
+            Assert.False(called);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
+    public async Task CompleteAsync_UbagEmptyCompletion_ThrowsWithRetryGuidance()
+    {
+        Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", "oet-agent-gateway,ubag-vps-gateway-1");
+        try
+        {
+            var options = new DbContextOptionsBuilder<LearnerDbContext>()
+                .UseInMemoryDatabase($"registry-provider-ubag-empty-{Guid.NewGuid():N}")
+                .Options;
+            var db = new LearnerDbContext(options);
+            var dpProvider = new EphemeralDataProtectionProvider();
+            var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+            db.AiProviders.Add(new AiProvider
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "ubag",
+                Name = "UBAG (browser AI providers)",
+                Dialect = AiProviderDialect.OpenAiCompatible,
+                Category = AiProviderCategory.TextChat,
+                BaseUrl = "http://ubag-vps-gateway-1:8080/v1/openai",
+                EncryptedApiKey = protector.Protect("ubag-test-pat-1234567890"),
+                ApiKeyHint = "ubag-pat",
+                DefaultModel = "mock",
+                IsActive = true,
+                FailoverPriority = 70,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync();
+            var provider = new RegistryBackedProvider(
+                new StubHttpClientFactory(new StubHandler(_ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent(
+                        "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"\"},\"finish_reason\":\"stop\"}],\"model\":\"chatgpt_web\"}",
+                        Encoding.UTF8,
+                        "application/json"),
+                }))),
+                new AiProviderRegistry(db, dpProvider),
+                Options.Create(new AiProviderOptions()));
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => provider.CompleteAsync(new AiProviderRequest
+            {
+                ProviderCode = "ubag",
+                Model = "chatgpt_web",
+                SystemPrompt = "system",
+                UserPrompt = "ping",
+            }, CancellationToken.None));
+
+            Assert.Contains("returned no text", ex.Message);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("OET_INTERNAL_AI_HOSTS", null);
+        }
+    }
+
+    [Fact]
     public async Task ExtractUbagErrorDetail_ReturnsFacadeMessage()
     {
         Assert.Equal(

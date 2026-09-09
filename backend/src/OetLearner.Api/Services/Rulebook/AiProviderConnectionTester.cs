@@ -219,6 +219,18 @@ public sealed class AiProviderConnectionTester(
             }
 
             var body = await response.Content.ReadAsStringAsync(ct);
+            var emptyFinish = TryReadEmptyCompletionText(body);
+            if (emptyFinish is not null)
+            {
+                steps.Add(new AiModelTestStep("completion", "chat completion returned a 2xx response", true));
+                var emptyMessage = $"The provider returned an empty completion for '{targetModel}' (finish_reason={emptyFinish}). The browser job finished but produced no text — retry the test.";
+                steps.Add(new AiModelTestStep("model", emptyMessage, false));
+                return new AiProviderModelTestResult(
+                    AiProviderTestStatuses.RateLimited,
+                    emptyMessage,
+                    latencyMs,
+                    startedAt, targetModel, steps);
+            }
             steps.Add(new AiModelTestStep("completion", "chat completion returned a 2xx response", true));
 
             // Surface a model-routing warning when the configured model is
@@ -277,6 +289,49 @@ public sealed class AiProviderConnectionTester(
                 message,
                 (int)stopwatch.ElapsedMilliseconds,
                 startedAt, targetModel, steps);
+        }
+    }
+
+    /// <summary>Reads a 2xx OpenAI-style completion body and returns the
+    /// finish reason when the assistant message carries no text (null/empty
+    /// string content). A 200 with no text is a real facade failure mode
+    /// (browser job finished, nothing extracted) — the caller must not report
+    /// it as green. Returns null when the body has text or is unparseable
+    /// (fail-open: the normal path decides).</summary>
+    internal static string? TryReadEmptyCompletionText(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (!root.TryGetProperty("choices", out var choices)
+                || choices.ValueKind != JsonValueKind.Array
+                || choices.GetArrayLength() == 0)
+                return null;
+            var choice = choices[0];
+            if (!choice.TryGetProperty("message", out var message)
+                || message.ValueKind != JsonValueKind.Object)
+                return null;
+            if (message.TryGetProperty("content", out var content))
+            {
+                if (content.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(content.GetString()))
+                    return null;
+                if (content.ValueKind != JsonValueKind.String
+                    && content.ValueKind != JsonValueKind.Null)
+                    return null;
+            }
+            var finish = "stop";
+            if (choice.TryGetProperty("finish_reason", out var finishEl)
+                && finishEl.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(finishEl.GetString()))
+                finish = finishEl.GetString()!.Trim();
+            return finish;
+        }
+        catch (JsonException)
+        {
+            return null;
         }
     }
 

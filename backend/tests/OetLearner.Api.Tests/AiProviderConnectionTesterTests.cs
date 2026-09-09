@@ -479,6 +479,26 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.Contains(result.Steps, s => s.Step == "auth" && !s.Ok);
     }
 
+    [Fact]
+    public async Task ModelTest_EmptyCompletion_ReturnsRateLimitedWithGuidance()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var tester = NewTester(db, _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                """{"choices":[{"message":{"role":"assistant","content":""},"finish_reason":"stop"}],"model":"chatgpt_web"}""",
+                Encoding.UTF8,
+                "application/json"),
+        }));
+
+        var result = await tester.TestProviderModelAsync("copilot", "openai/gpt-5", default);
+
+        Assert.Equal(AiProviderTestStatuses.RateLimited, result.Status);
+        Assert.Contains("empty completion", result.ErrorMessage);
+        Assert.Contains(result.Steps, s => s.Step == "model" && !s.Ok);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────
 
     private AiProviderConnectionTester NewTester(

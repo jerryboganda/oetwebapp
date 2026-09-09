@@ -165,6 +165,7 @@ public sealed class RegistryBackedProvider(
         var effort = string.IsNullOrWhiteSpace(reasoningEffort) ? "high" : reasoningEffort!.ToLowerInvariant();
         var sendReasoning = IsReasoningCapable(model);
 
+        var ubagFacade = IsUbagFacadeRequest(baseUrl, request);
         var payload = new Dictionary<string, object?>
         {
             ["model"] = model,
@@ -173,6 +174,10 @@ public sealed class RegistryBackedProvider(
             ["max_tokens"] = maxTokens,
             ["stream"] = false,
         };
+        if (ubagFacade)
+        {
+            payload["ubag_nonce"] = Guid.NewGuid().ToString("N");
+        }
         var responseFormat = AiProviderPayloadBuilder.BuildOpenAiResponseFormat(request.ResponseFormatJson);
         if (responseFormat is not null)
         {
@@ -183,6 +188,12 @@ public sealed class RegistryBackedProvider(
             payload["reasoning_effort"] = effort;
         }
         var tools = AiProviderPayloadBuilder.BuildOpenAiTools(request.Tools);
+        if (ubagFacade && tools.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "UBAG provider call failed: the UBAG browser facade does not support native function calling (tools/tool_choice). " +
+                "Route tool-using features to an Anthropic/OpenAI row, or call a UBAG text-only feature without tools.");
+        }
         if (tools.Count > 0)
         {
             payload["tools"] = tools;
@@ -204,8 +215,14 @@ public sealed class RegistryBackedProvider(
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
-        AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "AI provider", out var choice, out var message);
+        AiProviderPayloadBuilder.ReadOpenAiChoiceMessage(root, "UBAG provider", out var choice, out var message);
         var text = AiProviderPayloadBuilder.ReadOpenAiMessageContent(message);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            var finish = choice.TryGetProperty("finish_reason", out var finishEl) ? finishEl.GetString() : null;
+            throw new InvalidOperationException(
+                $"UBAG provider call failed: the browser job finished but returned no text (finish_reason={finish ?? "stop"}). Retry the request.");
+        }
         var servedModel = root.TryGetProperty("model", out var servedEl) && servedEl.ValueKind == JsonValueKind.String
             ? servedEl.GetString()
             : null;
