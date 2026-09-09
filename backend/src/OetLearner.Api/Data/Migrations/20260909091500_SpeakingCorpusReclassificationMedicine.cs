@@ -40,6 +40,39 @@ public partial class SpeakingCorpusReclassificationMedicine : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
     {
+        // Defensive column guard — do not remove, do not rely on migration
+        // ordering to make this unnecessary. 20261224090000_
+        // SpeakingCardCategoryColumns (which owns these three columns) is
+        // ALREADY APPLIED to production under that exact MigrationId; its ID
+        // must never be renamed, even though its Dec-2026 timestamp sorts
+        // after this Sept-2026 migration. On production that's harmless —
+        // these migrations were deployed at different real times, so
+        // production's __EFMigrationsHistory already has the columns from a
+        // prior deploy and this is a no-op. On any FRESH bootstrap (new dev
+        // machine, CI/E2E, disaster recovery) EF applies every pending
+        // migration in strict MigrationId order, so without this guard the
+        // UPDATE below fails outright on a table that doesn't have these
+        // columns yet — the app crash a Sept-2026 E2E run first caught.
+        //
+        // ponytail: the ~12 system-seeded demo cards (rpc-seed-*) that
+        // SpeakingCardCategoryColumns.Backfill() also sets will show ITS
+        // values rather than this review's, on a fresh bootstrap only,
+        // because that migration still runs last there and re-overwrites
+        // them — production is unaffected (its real history already has the
+        // review's values as final) and the ~400 real imported cards this
+        // migration updates by exact Id are untouched by that migration
+        // entirely. Fix properly only if a fresh-bootstrap seed-card category
+        // ever actually matters to a test.
+        migrationBuilder.Sql("""
+ALTER TABLE "RolePlayCards" ADD COLUMN IF NOT EXISTS "PrimaryCategory" character varying(64) NOT NULL DEFAULT 'Other Cards';
+""");
+        migrationBuilder.Sql("""
+ALTER TABLE "RolePlayCards" ADD COLUMN IF NOT EXISTS "SecondaryTagsJson" text NOT NULL DEFAULT '[]';
+""");
+        migrationBuilder.Sql("""
+ALTER TABLE "RolePlayCards" ADD COLUMN IF NOT EXISTS "CategoryNeedsReview" boolean NOT NULL DEFAULT FALSE;
+""");
+
         migrationBuilder.Sql("""
 UPDATE "RolePlayCards" AS t
 SET "PrimaryCategory" = v.category,

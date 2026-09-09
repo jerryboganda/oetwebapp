@@ -18,7 +18,16 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        # pgvector/pgvector, not plain postgres: LearnerDbContext declares
+        # HasPostgresExtension("vector") for CompanionChunk.Embedding, and EF
+        # validates the full model (not just whatever tables a given test
+        # touches) the moment any code calls db.Database.* — Npgsql's
+        # UseVector() plugin silently drops the vector type mapping when the
+        # extension isn't installed, so every PostgreSqlFact test in this
+        # matrix failed with "could not be mapped to the database type
+        # vector(1536)" regardless of what it actually exercised. Same fix as
+        # ai-control-plane-tests.yml (#213).
+        image: pgvector/pgvector:pg17
         env:
           POSTGRES_DB: oet_provider_tests
           POSTGRES_USER: postgres
@@ -53,6 +62,8 @@ jobs:
       OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_provider_tests;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v4
+      - name: Create the vector extension
+        run: PGPASSWORD=postgres psql -h 127.0.0.1 -U postgres -d oet_provider_tests -c "CREATE EXTENSION IF NOT EXISTS vector;"
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
