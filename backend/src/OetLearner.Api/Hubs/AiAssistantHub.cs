@@ -30,6 +30,7 @@ namespace OetLearner.Api.Hubs;
 [Authorize]
 public class AiAssistantHub(
     IAiAssistantOrchestrator orchestrator,
+    ICompanionVoiceService voice,
     ILogger<AiAssistantHub> logger) : Hub
 {
     private static string? GetUserId(HubCallerContext context)
@@ -93,12 +94,18 @@ public class AiAssistantHub(
     /// <param name="documentAttachment">Extracted document text for this turn
     /// (<c>fileName|mimeType|text</c>, pipe-escaped by the client). Folded
     /// into the prompt so text-only providers can answer about the file.</param>
+    /// <param name="audioAttachment">One voice note for this turn, as
+    /// <c>data:{mime};base64,{bytes}</c>. Transcribed server-side through the
+    /// platform's existing ASR pipeline and folded into the message as the
+    /// learner's own words; the transcript is echoed back so they can see what
+    /// was heard.</param>
     public async Task StartTurn(
         string threadId,
         string userMessage,
         CompanionContextEnvelope? context = null,
         IReadOnlyList<string>? imageAttachments = null,
-        string? documentAttachment = null)
+        string? documentAttachment = null,
+        string? audioAttachment = null)
     {
         var userId = GetUserId(Context);
         if (string.IsNullOrWhiteSpace(userId)) return;
@@ -123,6 +130,49 @@ public class AiAssistantHub(
                 cancellationToken: Context.ConnectionAborted);
             return;
         }
+
+        var audio = AiAssistantAttachmentGuard.ParseAudio(audioAttachment, out var audioError);
+        if (audioError is not null)
+        {
+            await Clients.Caller.SendAsync("TurnError", threadId, "ATTACHMENT_REJECTED", audioError,
+                cancellationToken: Context.ConnectionAborted);
+            return;
+        }
+
+        // Voice in. The transcript replaces the (usually empty) typed message and
+        // is echoed back to the client, because a learner who spoke needs to see
+        // what was heard — a misheard drug name that silently becomes the
+        // question produces an answer to something they never asked.
+        if (audio is not null)
+        {
+            var transcript = await voice.TranscribeAsync(
+                audio.Data, audio.MimeType, locale: "en", Context.ConnectionAborted);
+
+            if (!transcript.Ok)
+            {
+                var message = transcript.Error switch
+                {
+                    "no_speech_detected" => "I could not hear anything in that recording. Try again, or type it instead.",
+                    "empty_audio" => "That recording was empty.",
+                    // Deliberately not "something went wrong": voice being
+                    // unconfigured is a permanent state on this deployment, and
+                    // telling the learner to retry would waste their time.
+                    _ => "Voice messages are not available at the moment. Please type your message instead.",
+                };
+
+                await Clients.Caller.SendAsync("TurnError", threadId, "VOICE_UNAVAILABLE", message,
+                    cancellationToken: Context.ConnectionAborted);
+                return;
+            }
+
+            await Clients.Caller.SendAsync("VoiceTranscript", threadId, transcript.Text,
+                cancellationToken: Context.ConnectionAborted);
+
+            userMessage = string.IsNullOrWhiteSpace(userMessage)
+                ? transcript.Text
+                : $"{userMessage}\n{transcript.Text}";
+        }
+
 
         try
         {
@@ -198,6 +248,9 @@ public class AiAssistantHub(
 
 public sealed record AiAssistantThreadDto(string Id, string Title, string Role, DateTimeOffset CreatedAt, string? ModelOverride = null);
 
+/// <summary>A validated voice note, ready to transcribe.</summary>
+internal sealed record CompanionAudioAttachment(string MimeType, byte[] Data);
+
 /// <summary>Attachment guardrails shared by every assistant turn. Kept on the
 /// hub (not the orchestrator) so rejection happens before any DB write, usage
 /// record, or provider call.</summary>
@@ -211,6 +264,73 @@ internal static class AiAssistantAttachmentGuard
     {
         "image/jpeg", "image/png", "image/gif", "image/webp",
     };
+
+    internal const int MaxAudioBytes = 20 * 1024 * 1024;
+
+    private static readonly HashSet<string> AllowedAudioMimes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "audio/webm", "audio/ogg", "audio/mpeg", "audio/mp3", "audio/mp4",
+        "audio/m4a", "audio/x-m4a", "audio/wav", "audio/x-wav", "audio/flac",
+    };
+
+    /// <summary>
+    /// One voice note per turn, as a data URL.
+    ///
+    /// <para>
+    /// The cap is larger than the image cap because speech is bulky — twenty
+    /// megabytes is roughly twenty minutes of compressed audio, past which the
+    /// learner is recording a lecture rather than asking a question. Rejection
+    /// happens here, before the DB write and before a paid transcription call,
+    /// exactly as it does for images.
+    /// </para>
+    /// </summary>
+    internal static CompanionAudioAttachment? ParseAudio(string? dataUrl, out string? error)
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(dataUrl)) return null;
+
+        if (!dataUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            error = "Audio must be a data URL (data:audio/...;base64,...).";
+            return null;
+        }
+
+        var comma = dataUrl.IndexOf(',');
+        if (comma < 0)
+        {
+            error = "Malformed audio data URL.";
+            return null;
+        }
+
+        var meta = dataUrl[5..comma];
+        var mime = meta.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .FirstOrDefault(part => part.Contains('/')) ?? string.Empty;
+
+        if (!AllowedAudioMimes.Contains(mime))
+        {
+            error = "Unsupported audio format. Use WEBM, OGG, MP3, M4A, WAV or FLAC.";
+            return null;
+        }
+
+        byte[] bytes;
+        try
+        {
+            bytes = Convert.FromBase64String(dataUrl[(comma + 1)..]);
+        }
+        catch (FormatException)
+        {
+            error = "Audio data is not valid base64.";
+            return null;
+        }
+
+        if (bytes.Length == 0 || bytes.Length > MaxAudioBytes)
+        {
+            error = "The recording must be non-empty and at most 20 MB.";
+            return null;
+        }
+
+        return new CompanionAudioAttachment(mime, bytes);
+    }
 
     internal static IReadOnlyList<AiProviderImageAttachment>? ParseImages(
         IReadOnlyList<string>? dataUrls, out string? error)

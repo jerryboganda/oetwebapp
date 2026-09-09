@@ -489,7 +489,7 @@ export function TopNav({
                                     aria-current={active ? 'page' : undefined}
                                   >
                                     {item.icon}
-                                    {item.label}
+                                    {item.sidebarLabel ?? item.label}
                                   </Link>
                                 </motion.li>
                               );

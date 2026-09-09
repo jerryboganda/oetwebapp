@@ -9,7 +9,6 @@ import { useAuth } from '@/contexts/auth-context';
 import { initializeMobileRuntime } from '@/lib/mobile/runtime';
 import { queryKeys } from '@/lib/query/keys';
 import { triggerResumeMotion } from '@/lib/mobile/lifecycle-motion';
-import { consumeRestorableRoute, rememberCurrentRoute } from '@/lib/mobile/route-restore';
 import { registerPushNotifications } from '@/lib/mobile/push-notifications';
 import { initializeDeepLinkHandler } from '@/lib/mobile/deep-link-handler';
 import { removeAllDeliveredNotifications } from '@/lib/mobile/push-notifications';
@@ -250,39 +249,6 @@ export function MobileRuntimeBridge() {
   useEffect(() => {
     authStateRef.current = { isAuthenticated, loading, revalidateSessionSilent, userId: user?.userId };
   }, [isAuthenticated, loading, revalidateSessionSilent, user?.userId]);
-
-  // ── Route persistence (true-reload recovery) ────────────────────────
-  // Remember the learner's location continuously so that if the OS kills the
-  // WebView renderer/process while backgrounded, the cold boot can silently
-  // return them to the same screen instead of the trampoline landing on `/`.
-  useEffect(() => {
-    // Restore once per document load: only rescues a trampoline/root landing.
-    const restoreTarget = consumeRestorableRoute();
-    if (restoreTarget) {
-      router.replace(restoreTarget);
-    }
-
-    rememberCurrentRoute();
-
-    // Track every client-side navigation.
-    const originalPushState = window.history.pushState.bind(window.history);
-    const originalReplaceState = window.history.replaceState.bind(window.history);
-    const recordRoute = () => rememberCurrentRoute();
-
-    window.history.pushState = (...args: Parameters<typeof originalPushState>) => {
-      originalPushState(...args);
-      recordRoute();
-    };
-    window.history.replaceState = (...args: Parameters<typeof originalReplaceState>) => {
-      originalReplaceState(...args);
-      recordRoute();
-    };
-
-    return () => {
-      window.history.pushState = originalPushState;
-      window.history.replaceState = originalReplaceState;
-    };
-  }, [router]);
 
   const sendNativePushToken = useCallback(async () => {
     const token = lastNativePushTokenRef.current;

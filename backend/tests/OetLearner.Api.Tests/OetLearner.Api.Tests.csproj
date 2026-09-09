@@ -33,4 +33,14 @@
     <ProjectReference Include="..\..\scripts\StripeProductSeeder\StripeProductSeeder.csproj" />
   </ItemGroup>
 
+  <!--
+    The same candidate-facing Speaking data the API ships, so the criteria
+    indexer tests exercise the real file rather than a fixture that could pass
+    while the shipped one was malformed.
+  -->
+  <ItemGroup>
+    <None Include="..\..\..\data\speaking-candidate-resources.json" Link="Data\Seeds\speaking-candidate-resources.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 </Project>

@@ -45,6 +45,13 @@ export interface NavItem {
   exact?: boolean;
   featureFlag?: string;
   /**
+   * Override shown only in the side menu (desktop sidebar + mobile hamburger
+   * drawer) — e.g. "Reading Practice" instead of "Reading" — so the exam-practice
+   * areas read as distinct from Course Materials without touching the bottom nav,
+   * which always renders `label` and never this field.
+   */
+  sidebarLabel?: string;
+  /**
    * Canonical PascalCase module key (see hooks/use-enabled-modules MODULE_KEYS). When set, the item
    * is hidden for learners whose plan has that admin-togglable module disabled. Fail-open otherwise.
    */
@@ -100,13 +107,13 @@ export const mainNavItems: NavItem[] = [
 // `mainNavItems`, but stay out of the learner workspace nav.
 export const learnerMainNavItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
-  { href: '/listening', label: 'Listening', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
-  { href: '/reading', label: 'Reading', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
-  { href: '/writing', label: 'Writing', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
-  { href: '/speaking', label: 'Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
+  { href: '/listening', label: 'Listening', sidebarLabel: 'Listening Practice', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
+  { href: '/reading', label: 'Reading', sidebarLabel: 'Reading Practice', icon: <BookOpen className="w-5 h-5" />, matchPrefix: '/reading' },
+  { href: '/writing', label: 'Writing', sidebarLabel: 'Writing Practice', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
+  { href: '/speaking', label: 'Speaking', sidebarLabel: 'Speaking Practice', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks', moduleKey: 'Mocks' },
   { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls', moduleKey: 'Recalls' },
-  { href: '/materials', label: 'Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials', moduleKey: 'MaterialsLibrary' },
+  { href: '/materials', label: 'Materials', sidebarLabel: 'Course Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials', moduleKey: 'MaterialsLibrary' },
   { href: '/videos', label: 'Videos', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos', featureFlag: 'video_library', moduleKey: 'VideoLibrary' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
   { href: '/submissions', label: 'History', icon: <History className="w-5 h-5" />, matchPrefix: '/submissions' },
@@ -266,7 +273,7 @@ function NavSection({
                 <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-muted group-hover:text-white')}>
                   {item.icon}
                 </span>
-                <span className="relative z-10">{item.label}</span>
+                <span className="relative z-10">{item.sidebarLabel ?? item.label}</span>
                 {typeof item.badge === 'number' && item.badge > 0 && (
                   <span className="relative z-10 ml-auto inline-flex min-w-[20px] items-center justify-center rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white shadow-sm">
                     {item.badge > 99 ? '99+' : item.badge}

@@ -60,6 +60,9 @@ public sealed class CoreAiProviderSeederTests : IAsyncDisposable
         Assert.Equal(3, rows.Count);
         Assert.All(rows, r => Assert.Equal(string.Empty, r.EncryptedApiKey));
         Assert.All(rows, r => Assert.True(r.IsActive));
+        Assert.Equal(
+            CoreAiProviderSeeder.AnthropicAllowedModelsCsv,
+            rows.Single(r => r.Code == "anthropic").AllowedModelsCsv);
     }
 
     [Fact]

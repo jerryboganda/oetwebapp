@@ -36,6 +36,7 @@ public sealed class AiAssistantHubContractTests
         "ToolCallResult",
         "TurnError",
         "Citations",
+        "VoiceTranscript",
     ];
 
     [Fact]

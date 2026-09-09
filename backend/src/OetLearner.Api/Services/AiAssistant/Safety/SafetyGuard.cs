@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiTools;
 
 namespace OetLearner.Api.Services.AiAssistant.Safety;
@@ -18,6 +19,8 @@ public sealed class SafetyGuard : ISafetyGuard
     {
         "write_file", "run_command", "git_operations", "deploy"
     };
+
+    public static bool IsMutationTool(string toolCode) => MutationToolCodes.Contains(toolCode);
 
     private static readonly string[] AllowedDirectoryPrefixes =
     [
@@ -85,6 +88,16 @@ public sealed class SafetyGuard : ISafetyGuard
         // Non-mutation tools pass through
         if (!MutationToolCodes.Contains(toolCode))
             return Task.FromResult(new SafetyCheckResult(true, null, SafetyRiskLevel.None));
+
+        // Chatbot is read-only even for admins. Mutation tools stay available
+        // to other admin surfaces; this feature code never writes.
+        if (string.Equals(ctx.FeatureCode, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ctx.FeatureCode, AiFeatureCodes.AiAssistantLearner, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(ctx.FeatureCode, AiFeatureCodes.AiAssistantExpert, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("SafetyGuard: Chatbot mutation blocked for {FeatureCode} tool {Tool}", ctx.FeatureCode, toolCode);
+            return Task.FromResult(new SafetyCheckResult(false, "The AI assistant is read-only.", SafetyRiskLevel.Critical));
+        }
 
         // 1. Admin-only check — resolved server-side from the role claim and
         // carried on AiToolContext.IsAdmin (the legacy static AdminUserIds set

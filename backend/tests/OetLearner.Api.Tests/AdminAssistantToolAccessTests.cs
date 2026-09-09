@@ -7,14 +7,11 @@ using Xunit;
 namespace OetLearner.Api.Tests;
 
 /// <summary>
-/// The admin chatbot (`ai_assistant.admin`) is the only surface entitled to
-/// the full codebase toolset. These tests pin both halves of that contract:
-/// (1) the seeder grants exactly the 10 codebase tools (read/search/list,
-/// SELECT-only DB, guarded write/run/git/deploy-preview + web search) to
-/// `ai_assistant.admin` — and nothing learner-unsafe leaks to learners; (2)
-/// the SafetyGuard mutation gate keys off the server-resolved
-/// `AiToolContext.IsAdmin` flag (role claim), with the legacy static
-/// registration set as fallback.
+/// The admin chatbot (`ai_assistant.admin`) is read-only. These tests pin
+/// both halves of that contract: (1) the seeder grants only read/search/list,
+/// SELECT-only DB, and web search — never write/run/git/deploy; (2)
+/// SafetyGuard denies mutation tools on chatbot feature codes even when
+/// `AiToolContext.IsAdmin` is true.
 /// </summary>
 public sealed class AdminAssistantToolAccessTests
 {
@@ -25,10 +22,6 @@ public sealed class AdminAssistantToolAccessTests
         "retrieve_codebase",
         "list_directory",
         "query_database",
-        "write_file",
-        "run_command",
-        "git_operations",
-        "deploy",
         "web_search",
     ];
 
@@ -57,11 +50,24 @@ public sealed class AdminAssistantToolAccessTests
     }
 
     [Fact]
-    public async Task SafetyGuard_AllowsMutation_ForServerResolvedAdmin()
+    public async Task SafetyGuard_DeniesMutation_ForAdminChatbot()
     {
         var guard = new SafetyGuard(new SecretScanner(), NullLogger<SafetyGuard>.Instance);
         using var doc = System.Text.Json.JsonDocument.Parse("{\"path\":\"app/page.tsx\"}");
         var ctx = new AiToolContext("ai_assistant.admin", "admin-user-1", null, "usage-1", 0, IsAdmin: true);
+
+        var result = await guard.CheckAsync("write_file", doc.RootElement, ctx, CancellationToken.None);
+
+        Assert.False(result.IsAllowed);
+        Assert.Contains("read-only", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SafetyGuard_AllowsMutation_ForNonChatbotAdminSurface()
+    {
+        var guard = new SafetyGuard(new SecretScanner(), NullLogger<SafetyGuard>.Instance);
+        using var doc = System.Text.Json.JsonDocument.Parse("{\"path\":\"app/page.tsx\"}");
+        var ctx = new AiToolContext("admin.listening.skill_tag", "admin-user-1", null, "usage-1", 0, IsAdmin: true);
 
         var result = await guard.CheckAsync("write_file", doc.RootElement, ctx, CancellationToken.None);
 
@@ -78,6 +84,6 @@ public sealed class AdminAssistantToolAccessTests
         var result = await guard.CheckAsync("write_file", doc.RootElement, ctx, CancellationToken.None);
 
         Assert.False(result.IsAllowed);
-        Assert.Contains("admin", result.DenialReason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("read-only", result.DenialReason, StringComparison.OrdinalIgnoreCase);
     }
 }

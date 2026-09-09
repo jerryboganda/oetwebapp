@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Data;
+using OetLearner.Api.Services.Companion;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
 
@@ -252,6 +253,24 @@ public sealed class SaveUserNoteTool : IAiToolExecutor
         }
         var title = args.GetProperty("title").GetString()!;
         var body = args.GetProperty("body_markdown").GetString()!;
+
+        // A note is durable: it outlives the conversation, is re-read into later
+        // turns, and appears in a data export. The prompt already tells the
+        // companion not to repeat real patient detail back, but guidance does not
+        // stop a row being written — so identifying detail is refused here, at
+        // the write, rather than trusted not to arrive.
+        var identifying = CompanionPiiScreen.FindIdentifyingDetail(title)
+                          ?? CompanionPiiScreen.FindIdentifyingDetail(body);
+        if (identifying is not null)
+        {
+            return new AiToolExecutionResult(
+                AiToolOutcome.ArgsInvalid,
+                null,
+                "pii_detected",
+                $"This note looks like it contains {identifying}. Nothing was saved. " +
+                "Remove the identifying detail and save an anonymised version instead.");
+        }
+
         var now = DateTimeOffset.UtcNow;
         var note = new UserNote
         {

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiAssistant;
+using OetLearner.Api.Services.AiAssistant.Safety;
 using OetLearner.Api.Services.AiAssistant.SystemPrompts;
 using OetLearner.Api.Services.Seeding;
 using OetLearner.Api.Services.Settings;
@@ -69,9 +70,9 @@ public static class AiAssistantEndpoints
             return renamed ? Results.NoContent() : Results.NotFound();
         }).RequireRateLimiting("PerUserWrite");
 
-        // Per-conversation UBAG model override. The model id is validated
-        // against the ubag allowlist (+ board composite) server-side; unknown
-        // ids 400. Null/empty clears back to the feature-route default.
+        // Per-conversation model override. Claude API ids and UBAG browser
+        // ids are separate catalogs; unknown ids 400. Null/empty clears
+        // back to the feature-route default.
         group.MapPatch("/threads/{threadId}/model", async (
             string threadId,
             [FromServices] IAiAssistantOrchestrator orchestrator,
@@ -83,25 +84,26 @@ public static class AiAssistantEndpoints
             if (string.IsNullOrWhiteSpace(userId)) return Results.Unauthorized();
 
             var model = string.IsNullOrWhiteSpace(req?.Model) ? null : req.Model.Trim();
-            if (model is not null && !IsSelectableAssistantModel(model))
-                return Results.BadRequest(new { error = "Unknown model for the UBAG provider." });
+            if (model is not null && !AssistantModelCatalog.IsSelectable(model))
+                return Results.BadRequest(new { error = "Unknown assistant model." });
 
             var saved = await orchestrator.SetThreadModelAsync(threadId, userId, model, ct);
             return saved ? Results.NoContent() : Results.NotFound();
         }).RequireRateLimiting("PerUserWrite");
 
-        // Models the chat model-picker may offer: the live UBAG catalog
-        // (allowlist, always) plus the board-curated composite pick.
-        group.MapGet("/models", () =>
+        // Two catalogs, never mixed: Claude (Anthropic API) and UBAG (browser).
+        // `claude_web` is a UBAG browser target, not an Anthropic model.
+        group.MapGet("/models", () => Results.Ok(new
         {
-            var models = UbagProviderRouteDefaults.AllowedModelsCsv
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Concat(["chatgpt_web|GPT-5.6 Sol + Medium"])
-                .Distinct(StringComparer.Ordinal)
-                .OrderBy(m => m, StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-            return Results.Ok(new { provider = UbagProviderRouteDefaults.ProviderCode, models });
-        });
+            groups = new[]
+            {
+                new { provider = AssistantModelCatalog.AnthropicProviderCode, label = "Claude (API)", models = AssistantModelCatalog.ClaudeApiModels },
+                new { provider = UbagProviderRouteDefaults.ProviderCode, label = "UBAG (browser)", models = AssistantModelCatalog.UbagModels.ToArray() },
+            },
+            models = AssistantModelCatalog.ClaudeApiModels
+                .Concat(AssistantModelCatalog.UbagModels)
+                .ToArray(),
+        }));
 
         group.MapGet("/threads/{threadId}/messages", async (
             string threadId,
@@ -574,6 +576,7 @@ public static class AiAssistantEndpoints
                     var desired = roleConfig.EnabledTools
                         .Where(code => !string.IsNullOrWhiteSpace(code))
                         .Select(code => code.Trim())
+                        .Where(code => !SafetyGuard.IsMutationTool(code))
                         .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
                     var existing = await db.AiFeatureToolGrants
@@ -742,18 +745,6 @@ public static class AiAssistantEndpoints
         "expert" => AiFeatureCodes.AiAssistantExpert,
         _ => AiFeatureCodes.AiAssistantLearner,
     };
-
-    /// <summary>Every model id the chat model-picker may offer: the live UBAG
-    /// allowlist plus the board-curated composite pick. The PATCH model route
-    /// validates against this exact set.</summary>
-    private static readonly HashSet<string> SelectableAssistantModels = new(
-        UbagProviderRouteDefaults.AllowedModelsCsv
-            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Append("chatgpt_web|GPT-5.6 Sol + Medium"),
-        StringComparer.Ordinal);
-
-    private static bool IsSelectableAssistantModel(string model) =>
-        !string.IsNullOrWhiteSpace(model) && SelectableAssistantModels.Contains(model.Trim());
 
     private static string GetUserRole(HttpContext ctx)
     {

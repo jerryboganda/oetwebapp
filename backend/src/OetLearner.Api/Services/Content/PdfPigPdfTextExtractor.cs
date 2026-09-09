@@ -35,7 +35,16 @@ public sealed class PdfPigPdfTextExtractor : IPdfTextExtractor
     /// </summary>
     private const double SameLineTolerance = 0.6;
 
+    /// <summary>Kept as two newlines, the separator callers already parse against.</summary>
+    private const string PageSeparator = "\n\n";
+
     public async Task<string> ExtractAsync(Stream pdfStream, CancellationToken ct)
+    {
+        var pages = await ExtractPagesAsync(pdfStream, ct);
+        return string.Join(PageSeparator, pages).Trim();
+    }
+
+    public async Task<IReadOnlyList<string>> ExtractPagesAsync(Stream pdfStream, CancellationToken ct)
     {
         try
         {
@@ -45,20 +54,20 @@ public sealed class PdfPigPdfTextExtractor : IPdfTextExtractor
             ms.Position = 0;
 
             using var doc = UglyToad.PdfPig.PdfDocument.Open(ms);
-            var builder = new StringBuilder();
-            var first = true;
+            var pages = new List<string>();
+
             foreach (var page in doc.GetPages())
             {
                 ct.ThrowIfCancellationRequested();
-                if (!first) builder.Append("\n\n");
-                builder.Append(ExtractPage(page));
-                first = false;
+                // Empty pages are kept, not dropped: the index of a page in this
+                // list IS its page number, so skipping a blank cover page would
+                // shift every citation in the document by one.
+                pages.Add(ExtractPage(page));
             }
 
-            var text = builder.ToString().Trim();
             // A PDF with no text layer yields only stray marks; let the caller
             // fall through to OCR rather than caching noise.
-            return text;
+            return pages.All(string.IsNullOrWhiteSpace) ? [] : pages;
         }
         catch (OperationCanceledException)
         {
@@ -66,8 +75,8 @@ public sealed class PdfPigPdfTextExtractor : IPdfTextExtractor
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "PdfPig extraction failed; returning empty string.");
-            return string.Empty;
+            _logger.LogWarning(ex, "PdfPig extraction failed; returning no pages.");
+            return [];
         }
     }
 

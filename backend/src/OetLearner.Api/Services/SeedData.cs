@@ -2061,7 +2061,7 @@ public static partial class SeedData
             new FeatureFlag { Id = "flg-023", Name = "Exam Booking", Key = "exam_booking", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable exam booking integration with official booking portals.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-024", Name = "Content Marketplace", Key = "content_marketplace", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable content contributor marketplace.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-025", Name = "Offline Mode", Key = "offline_mode", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable offline practice mode for mobile.", Owner = "Mobile Team", CreatedAt = now, UpdatedAt = now },
-            // ── AI Learning Companion (persona "Jana") — docs/ai-learning-companion/ ──
+            // ── AI Learning Companion (persona "Sami") — docs/ai-learning-companion/ ──
             // Independent switches so an incident can disable retrieval, actions or
             // credit consumption WITHOUT killing the whole surface, and without a
             // deploy. All default OFF; the owner enables them deliberately.

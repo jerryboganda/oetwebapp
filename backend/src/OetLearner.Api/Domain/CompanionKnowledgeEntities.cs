@@ -104,6 +104,35 @@ public class CompanionSource
     public string? RequiredEntitlementScope { get; set; }
 
     /// <summary>
+    /// Package isolation, in the same vocabulary as <c>LibraryVideo.VisibilityScope</c>
+    /// (<see cref="VideoVisibilityScopes"/>). Null or <c>SHARED</c> means every
+    /// entitled learner; a <c>FULL_*</c> or <c>CRASH</c> value means only learners
+    /// whose packages resolve that scope.
+    ///
+    /// <para>
+    /// Deliberately a second axis rather than a reuse of
+    /// <see cref="RequiredEntitlementScope"/>: a learner holds a <i>set</i> of
+    /// package scopes, so a single required-scope string cannot express "Full
+    /// Medicine or Crash", and collapsing the two would deny a Crash learner the
+    /// method they paid for. Profession, package and entitlement each gate a
+    /// different thing (Manifest 1.B "content from one package must not be
+    /// silently mixed into another").
+    /// </para>
+    /// </summary>
+    [MaxLength(32)]
+    public string? PackageScope { get; set; }
+
+    /// <summary>Where an official fact was verified from. Required for <see cref="CompanionAuthorityClass.OfficialCurrentFact"/>.</summary>
+    [MaxLength(1024)]
+    public string? SourceUrl { get; set; }
+
+    /// <summary>Who checked this against the official source, and when. An unverified official fact must not be Approved.</summary>
+    [MaxLength(64)]
+    public string? VerifiedByUserId { get; set; }
+
+    public DateTimeOffset? VerifiedAt { get; set; }
+
+    /// <summary>
     /// True when the source is proprietary teaching material subject to the
     /// verbatim-span and retrieval-volume caps. Even an entitled learner must
     /// not be able to use the companion as a bulk export channel.

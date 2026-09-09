@@ -188,5 +188,19 @@
     </None>
   </ItemGroup>
 
+  <!--
+    Candidate-facing Speaking reference data (assessment criteria + intro
+    questions). Linked rather than copied so the /speaking pages and the
+    companion knowledge indexer read the SAME file: Testing Pack 1 scenario 24
+    asks Sami for the approved set and forbids inventing one, which only holds
+    if there is exactly one set.
+  -->
+  <ItemGroup>
+    <None Include="..\..\..\data\speaking-candidate-resources.json" Link="Data\Seeds\speaking-candidate-resources.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 
 </Project>

@@ -49,6 +49,11 @@ public sealed class CoreAiProviderSeeder(
     /// </summary>
     public const string AnthropicDefaultModel = "claude-sonnet-5";
 
+    /// <summary>Claude API ids the chatbot picker may offer. Kept next to
+    /// the default so seeder + picker cannot drift.</summary>
+    public const string AnthropicAllowedModelsCsv =
+        "claude-sonnet-5,claude-haiku-5,claude-fable-5,claude-opus-4-8,claude-haiku-4-5-20251001";
+
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         try
@@ -79,7 +84,7 @@ public sealed class CoreAiProviderSeeder(
                     DefaultModel = s.DefaultModel,
                     EncryptedApiKey = string.Empty,   // admin pastes the key in the UI
                     ApiKeyHint = string.Empty,
-                    AllowedModelsCsv = string.Empty,
+                    AllowedModelsCsv = s.Code == "anthropic" ? AnthropicAllowedModelsCsv : string.Empty,
                     PricePer1kPromptTokens = s.PricePer1kPromptTokens,
                     PricePer1kCompletionTokens = s.PricePer1kCompletionTokens,
                     RetryCount = 2,

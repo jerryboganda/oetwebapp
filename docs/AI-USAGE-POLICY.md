@@ -128,7 +128,7 @@ Every feature the gateway serves is classified. Defaults:
 | `admin.vocabulary_draft` | ❌ | ❌ | ✅ | Vocabulary term drafting (grounded), platform only |
 | `admin.listening_draft` | ❌ | ❌ | ✅ | Listening 42-item structure drafting from PDFs (grounded), platform only |
 | `admin.reading_draft` | ❌ | ❌ | ✅ | Reading extraction drafting, platform only; human approval required |
-| `companion.chat.v1` | ❌ | ❌ | ✅ | AI Learning Companion turn (persona "Jana"). Non-scoring, but **platform-only**: the prompt carries learner performance history, entitlement scope and credit state, so a learner-supplied key must never see it. |
+| `companion.chat.v1` | ❌ | ❌ | ✅ | AI Learning Companion turn (persona "Sami"). Non-scoring, but **platform-only**: the prompt carries learner performance history, entitlement scope and credit state, so a learner-supplied key must never see it. |
 | `companion.retrieval.v1` | ❌ | ❌ | ✅ | Companion knowledge retrieval (embedding + hybrid search over approved sources). Platform-only for the same reason, and because the candidate source set is entitlement-filtered. |
 | `companion.action.v1` | ❌ | ❌ | ✅ | Companion typed platform action (server-resolved targets only). Platform-only — actions read and write learner state. |
 

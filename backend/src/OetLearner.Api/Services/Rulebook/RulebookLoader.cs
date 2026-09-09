@@ -1,6 +1,7 @@
 using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 
 namespace OetLearner.Api.Services.Rulebook;
@@ -45,6 +46,9 @@ public sealed class RulebookLoader : IRulebookLoader
             }
         }
 
+        LoadExamModeBook(RuleKind.ReadingExamMode);
+        LoadExamModeBook(RuleKind.ListeningExamMode);
+
         foreach (var kind in Enum.GetValues<RuleKind>())
         {
             var stream = OpenResource($"OetRulebooks/{FolderOf(kind)}/common/assessment-criteria.json");
@@ -53,6 +57,60 @@ public sealed class RulebookLoader : IRulebookLoader
             using var doc = JsonDocument.Parse(stream);
             _assessmentCache[kind] = doc.RootElement.Clone();
         }
+    }
+
+    /// <summary>
+    /// Loads the candidate-facing exam-UX books, which do not follow the
+    /// {kind}/{profession}/ layout the constructor loop assumes.
+    ///
+    /// <para>
+    /// They live at <c>rulebooks/reading/_exam-mode/rulebook.v1.json</c> with no
+    /// profession folder, because their own R01.6 / R01.10 make Reading and
+    /// Listening profession-agnostic — the same exam runs for every candidate.
+    /// The loop therefore looked for <c>reading/_exam-mode/{profession}/</c>,
+    /// found nothing for all thirteen professions, and silently left both books
+    /// unreachable through <see cref="All"/>. That is how 161 approved
+    /// candidate-facing rules came to be present in the repository and absent
+    /// from every consumer.
+    /// </para>
+    /// </summary>
+    private void LoadExamModeBook(RuleKind kind)
+    {
+        using var stream = OpenResource($"OetRulebooks/{FolderOf(kind)}/rulebook.v1.json");
+        if (stream is null) return;
+
+        // The file states its own kind as the kebab-case "reading-exam-mode",
+        // which RuleKind has no member for, and its profession as a "medicine"
+        // sentinel. Both are rewritten on the parsed node before the record is
+        // materialised, because OetRulebook pins a JsonStringEnumConverter on
+        // Kind with a property attribute — and a property attribute beats
+        // anything supplied through JsonSerializerOptions, so a tolerant
+        // converter passed in options would simply be ignored and the whole
+        // loader would throw on construction.
+        //
+        // The JSON itself is left alone: it ships verbatim to the TypeScript
+        // engine, which reads these same files.
+        JsonNode? node;
+        try
+        {
+            node = JsonNode.Parse(stream);
+        }
+        catch (JsonException)
+        {
+            return;
+        }
+
+        if (node is null) return;
+        node["kind"] = kind.ToString();
+        node["profession"] = ExamProfession.Medicine.ToString().ToLowerInvariant();
+
+        var book = node.Deserialize<OetRulebook>(JsonOpts);
+        if (book is null || book.Rules.Count == 0) return;
+
+        // Keyed under Medicine so All() yields each book exactly once. Consumers
+        // that care read Kind, not Profession, and the companion indexer strips
+        // the profession precisely because these rules apply to everyone.
+        _cache[BuildKey(kind, ExamProfession.Medicine)] = book;
     }
 
     public OetRulebook Load(RuleKind kind, ExamProfession profession)

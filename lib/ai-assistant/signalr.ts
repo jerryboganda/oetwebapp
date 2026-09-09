@@ -139,6 +139,7 @@ export async function invokeStartTurn(
     context ?? null,
     attachments?.imageDataUrls ?? null,
     attachments?.document ?? null,
+    attachments?.audioDataUrl ?? null,
   );
 }
 
@@ -148,6 +149,8 @@ export async function invokeStartTurn(
 export interface AssistantTurnAttachments {
   imageDataUrls?: string[] | null;
   document?: string | null;
+  /** One voice note as `data:{mime};base64,{bytes}`. Transcribed server-side. */
+  audioDataUrl?: string | null;
 }
 
 /** Pack extracted document text for the hub wire format (`\|`/`\\` escaped). */
@@ -173,6 +176,8 @@ export interface AssistantHubCallbacks {
   onTurnError?: (code: string, message: string) => void;
   /** AI Learning Companion: approved sources for the turn being streamed. */
   onCitations?: (citations: AssistantCitation[]) => void;
+  /** ASR result for this turn's voice note. Hub sends it before the answer. */
+  onVoiceTranscript?: (text: string) => void;
 }
 
 /**
@@ -243,6 +248,13 @@ export function registerHubCallbacks(
     const cb = callbacks.onCitations;
     on('Citations', (_threadId: unknown, citations: unknown) =>
       cb(Array.isArray(citations) ? (citations as AssistantCitation[]) : []),
+    );
+  }
+
+  if (callbacks.onVoiceTranscript) {
+    const cb = callbacks.onVoiceTranscript;
+    on('VoiceTranscript', (_threadId: unknown, text: unknown) =>
+      cb(typeof text === 'string' ? text : ''),
     );
   }
 

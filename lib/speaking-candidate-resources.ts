@@ -1,14 +1,19 @@
 /**
- * Candidate-facing Speaking reference content — single source of truth.
+ * Candidate-facing Speaking reference data: the 9 assessment criteria and the
+ * 11 introductory questions.
  *
- * Two native resources shown on the Speaking hub and selection block:
- *  - Speaking Assessment Criteria (same for all professions, 9 criteria)
- *  - Speaking Intro Questions (11 global questions with personalisable sample answers)
+ * The data itself lives in `data/speaking-candidate-resources.json`, not here.
+ * That file is the single source of truth and the AI Learning Companion's
+ * knowledge indexer reads the same one
+ * (`backend/src/OetLearner.Api/Services/Companion/CompanionSpeakingCriteriaIndexer.cs`),
+ * so Sami and the /speaking pages can never quote different criteria at a
+ * candidate. Testing Pack 1 scenario 24 asks Sami for exactly this approved set
+ * and instructs it not to invent one, which only works if there is one set.
  *
- * Deliberately separate from the internal Speaking rulebook
- * (`rulebooks/speaking/*`, `/speaking/rulebook`) and from AI grading prompts.
- * No source-PDF branding, cover, footer, or contact details belong here.
+ * This module keeps the typed shape and the route constants the UI imports, so
+ * every existing call site is unchanged.
  */
+import data from '@/data/speaking-candidate-resources.json';
 
 export interface LinguisticBand {
   band: number;
@@ -36,277 +41,6 @@ export interface ClinicalCriterion {
   indicators: ClinicalIndicator[];
 }
 
-export const SPEAKING_LINGUISTIC_CRITERIA: LinguisticCriterion[] = [
-  {
-    id: 'intelligibility',
-    name: 'Intelligibility',
-    maxBand: 6,
-    bands: [
-      {
-        band: 6,
-        descriptors: [
-          'Pronunciation is easily understood and prosodic features (stress, intonation, rhythm) are used effectively.',
-          'L1 accent has no effect on intelligibility.',
-        ],
-      },
-      {
-        band: 5,
-        descriptors: [
-          'Easily understood. Communication is not impeded by a few pronunciation or prosodic errors and/or noticeable L1 accent.',
-          'Minimal strain for the listener.',
-        ],
-      },
-      {
-        band: 4,
-        descriptors: [
-          'Easily understood most of the time.',
-          'Pronunciation or prosodic errors and/or L1 accent at times cause strain for the listener.',
-        ],
-      },
-      {
-        band: 3,
-        descriptors: [
-          'Produces some acceptable features of spoken English.',
-          'Difficult to understand because errors in pronunciation/stress/intonation and/or L1 accent cause serious strain for the listener.',
-        ],
-      },
-      {
-        band: 2,
-        descriptors: [
-          'Often unintelligible.',
-          'Frequent errors in pronunciation/stress/intonation and/or L1 accent cause severe strain for the listener.',
-        ],
-      },
-      {
-        band: 1,
-        descriptors: ['Almost entirely unintelligible.'],
-      },
-      {
-        band: 0,
-        descriptors: ['Candidate does not provide any response.'],
-      },
-    ],
-  },
-  {
-    id: 'fluency',
-    name: 'Fluency',
-    maxBand: 6,
-    bands: [
-      {
-        band: 6,
-        descriptors: [
-          'Completely fluent speech at normal speed.',
-          'Any hesitation is appropriate and not a sign of searching for words or structures.',
-        ],
-      },
-      {
-        band: 5,
-        descriptors: [
-          'Fluent speech at normal speed, with only occasional repetition or self-correction.',
-          'Hesitation may occasionally indicate searching for words or structures, but is generally appropriate.',
-        ],
-      },
-      {
-        band: 4,
-        descriptors: [
-          'Uneven flow, with some repetition, especially in longer utterances.',
-          'Some evidence of searching for words, which does not cause serious strain.',
-          'Delivery may be staccato or too fast/slow.',
-        ],
-      },
-      {
-        band: 3,
-        descriptors: [
-          'Very uneven.',
-          'Frequent pauses and repetitions indicate searching for words or structures.',
-          'Excessive use of fillers and difficulty sustaining longer utterances cause serious strain for the listener.',
-        ],
-      },
-      {
-        band: 2,
-        descriptors: [
-          'Extremely uneven.',
-          'Long pauses, numerous repetition and self-corrections make speech difficult to follow.',
-        ],
-      },
-      {
-        band: 1,
-        descriptors: ['Impossible to follow, consisting of isolated words and phrases and self-corrections, separated by long pauses.'],
-      },
-      {
-        band: 0,
-        descriptors: ['Candidate does not provide any response.'],
-      },
-    ],
-  },
-  {
-    id: 'appropriateness-of-language',
-    name: 'Appropriateness of Language',
-    maxBand: 6,
-    bands: [
-      {
-        band: 6,
-        descriptors: [
-          'Entirely appropriate register, tone and lexis for the context.',
-          'No difficulty at all in explaining technical matters in lay terms.',
-          'Rich and flexible.',
-        ],
-      },
-      {
-        band: 5,
-        descriptors: [
-          'Mostly appropriate register, tone and lexis for the context.',
-          'Occasional lapses are not intrusive.',
-        ],
-      },
-      {
-        band: 4,
-        descriptors: [
-          'Generally appropriate register, tone and lexis for the context, but somewhat restricted and lacking in complexity.',
-          'Lapses are noticeable and at times reflect limited resources of grammar and expression.',
-          'Sufficient resources to maintain the interaction.',
-        ],
-      },
-      {
-        band: 3,
-        descriptors: [
-          'Some evidence of appropriate register, tone and lexis, but lapses are frequent and intrusive, reflecting inadequate resources of grammar and expression.',
-        ],
-      },
-      {
-        band: 2,
-        descriptors: ['Mostly inappropriate register, tone and lexis for the context.'],
-      },
-      {
-        band: 1,
-        descriptors: ['Entirely inappropriate register, tone and lexis for the context.'],
-      },
-      {
-        band: 0,
-        descriptors: ['Candidate does not provide any response.'],
-      },
-    ],
-  },
-  {
-    id: 'resources-of-grammar-and-expression',
-    name: 'Resources of Grammar and Expression',
-    maxBand: 6,
-    bands: [
-      {
-        band: 6,
-        descriptors: [
-          'Wide range of grammar and vocabulary used accurately and flexibly.',
-          'Confident use of idiomatic speech.',
-        ],
-      },
-      {
-        band: 5,
-        descriptors: [
-          'Wide range of grammar and vocabulary generally used accurately and flexibly.',
-          'Occasional errors in grammar or vocabulary are not intrusive.',
-        ],
-      },
-      {
-        band: 4,
-        descriptors: [
-          'Inaccuracies in vocabulary and grammar, particularly in more complex sentences, are sometimes intrusive.',
-          'Meaning is generally clear.',
-        ],
-      },
-      {
-        band: 3,
-        descriptors: [
-          'Limited vocabulary and control of grammatical structures, except very simple sentences.',
-          'Persistent inaccuracies are intrusive.',
-        ],
-      },
-      {
-        band: 2,
-        descriptors: [
-          'Very limited resources of vocabulary and grammar, even in simple sentences.',
-          'Numerous errors in word choice.',
-        ],
-      },
-      {
-        band: 1,
-        descriptors: ['Limited in all respects.'],
-      },
-      {
-        band: 0,
-        descriptors: ['Candidate does not provide any response.'],
-      },
-    ],
-  },
-];
-
-export const SPEAKING_CLINICAL_CRITERIA: ClinicalCriterion[] = [
-  {
-    id: 'relationship-building',
-    letter: 'A',
-    name: 'Relationship building',
-    maxScore: 3,
-    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
-    indicators: [
-      { code: 'A1', text: 'Initiating the interaction appropriately (greeting, introductions, nature of interview)' },
-      { code: 'A2', text: 'Demonstrating an attentive and respectful attitude' },
-      { code: 'A3', text: 'Adopting a non-judgemental approach' },
-      { code: 'A4', text: 'Showing empathy for feelings/predicament/emotional state' },
-    ],
-  },
-  {
-    id: 'understanding-patient-perspective',
-    letter: 'B',
-    name: "Understanding & incorporating the patient's perspective",
-    maxScore: 3,
-    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
-    indicators: [
-      { code: 'B1', text: "Eliciting and exploring the patient's ideas/concerns/expectations" },
-      { code: 'B2', text: "Picking up the patient's cues" },
-      { code: 'B3', text: 'Relating explanations to elicited ideas/concerns/expectations' },
-    ],
-  },
-  {
-    id: 'providing-structure',
-    letter: 'C',
-    name: 'Providing structure',
-    maxScore: 3,
-    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
-    indicators: [
-      { code: 'C1', text: 'Sequencing the interview purposefully and logically' },
-      { code: 'C2', text: 'Signposting changes in topic' },
-      { code: 'C3', text: 'Using organising techniques in explanations' },
-    ],
-  },
-  {
-    id: 'information-gathering',
-    letter: 'D',
-    name: 'Information gathering',
-    maxScore: 3,
-    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
-    indicators: [
-      { code: 'D1', text: "Facilitating the patient's narrative with active listening techniques, minimising interruption" },
-      { code: 'D2', text: 'Using initially open questions, appropriately moving to closed questions' },
-      { code: 'D3', text: 'NOT using compound questions/leading questions' },
-      { code: 'D4', text: 'Clarifying statements which are vague or need amplification' },
-      { code: 'D5', text: 'Summarising information to encourage correction/invite further information' },
-    ],
-  },
-  {
-    id: 'information-giving',
-    letter: 'E',
-    name: 'Information giving',
-    maxScore: 3,
-    scale: ['Adept use', 'Competent use', 'Partially effective use', 'Ineffective use'],
-    indicators: [
-      { code: 'E1', text: 'Establishing initially what the patient already knows' },
-      { code: 'E2', text: 'Pausing periodically when giving information, using the response to guide next steps' },
-      { code: 'E3', text: 'Encouraging the patient to contribute reactions/feelings' },
-      { code: 'E4', text: 'Checking whether the patient has understood information' },
-      { code: 'E5', text: 'Discovering what further information the patient needs' },
-    ],
-  },
-];
-
 export interface SpeakingIntroQuestion {
   no: number;
   question: string;
@@ -314,72 +48,17 @@ export interface SpeakingIntroQuestion {
   note?: string;
 }
 
-export const SPEAKING_INTRO_QUESTIONS: SpeakingIntroQuestion[] = [
-  {
-    no: 1,
-    question: 'What is your name?',
-    sampleAnswer: 'My name is (your first name + last name)',
-  },
-  {
-    no: 2,
-    question: 'What is your profession?',
-    sampleAnswer: 'My profession is medicine',
-  },
-  {
-    no: 3,
-    question: 'Why are you taking the OET?',
-    sampleAnswer:
-      "Honestly I'm taking the OET to complete Australian medical council registration process because it is one of the two tests required to practice medicine in Australia. Practicing medicine in Australia is one of my dreams to upgrade myself in my career. In Australia i can get advanced training and recent modalities of diagnosis and treatment. I am also searching for a better chance of education for my children who are an essential part of my life so I hope to pass the OET as soon as possible to start practicing medicine in Australia.",
-  },
-  {
-    no: 4,
-    question: 'How long have you been working as a physician?',
-    sampleAnswer:
-      "I've been working as a physician for 10 years. 5 years were in Egypt and the other 5 years were in United Arab Emirates.",
-  },
-  {
-    no: 5,
-    question: 'What about your working hours?',
-    sampleAnswer:
-      "I'm working for 8 hours daily from Saturday to Thursday so I'm working about 48 hours per week. Unfortunately, I've no enough time to spend with my family.",
-  },
-  {
-    no: 6,
-    question: 'Why did you choose medicine as a career?',
-    sampleAnswer:
-      'Actually, it was my childhood dream and it was also a dream of my family especially my mother so I studied hard to achieve my target. My first day in the faculty of medicine was one of the happiest days in my life. I like medicine a lot because it gives me the chance to help the others.',
-  },
-  {
-    no: 7,
-    question: 'What about your specialty? And why?',
-    sampleAnswer:
-      'I like all branches of medicine so I was hesitated to choose a specific specialty and leave the others. Finally I found my target in family medicine because it allows me to practice all branches of medicine and to deal with a variety of cases which in turn help me to feel satisfied.',
-  },
-  {
-    no: 8,
-    question: 'What is your advice for fresh graduates?',
-    sampleAnswer:
-      'Ooh! the most important advice I give to them is to choose their specialty carefully by choosing what they actually like because they will spend the rest of their life practicing it. I also advise them to outline their target at an early stage to avoid wasting their time so I recommend them to find out the different styles of post graduation qualifications before choosing a specific one and to keep updated with the recent guidelines to help people well.',
-  },
-  {
-    no: 9,
-    question: 'How to be a successful physician?',
-    sampleAnswer:
-      "Ooh! What a difficult question! from my point of view I think that success in the field of medicine mainly depends on early and proper planning for your career pathway. You should fulfill two elements. The first element is the good planning which will save time and effort for you and the second one is hard continuous working. You should also have a lot of skills like being a good listener, showing sympathy to your patients, respecting the patients' time and confidentiality, building a trust bond between you and the patients and continuously updating yourself with the new guidelines",
-  },
-  {
-    no: 10,
-    question: 'What was the last training you had?',
-    sampleAnswer:
-      'I\'m keen to get frequent training courses. The last one that I had was about "advanced cardiac life support" which was about one month ago and implied how to perform a cardiac and respiratory support in case of cardiac arrest. It also taught us how to deal with the cases of life threatening arrhythmias. It was really a valuable course.',
-  },
-  {
-    no: 11,
-    question: 'What is the most recent medical advance you heard about?',
-    sampleAnswer:
-      'No doubt that the medical field is one of the fastest developing fields in the world. Nearly every month there are new researches, theories and guidelines. Diabetes mellitus treatment is one of the most important tasks that is developing rapidly. I heard about a new trend of the treatment of diabetic patients by putting a pump of insulin under their skin to release proper amounts of insulin according to their need which will help them to get rid of the needles pricks and gain a good control of their blood glucose level all over the day.',
-  },
-];
+/** The 4 linguistic criteria, each scored 0–6. */
+export const SPEAKING_LINGUISTIC_CRITERIA: LinguisticCriterion[] =
+  data.linguisticCriteria as LinguisticCriterion[];
+
+/** The 5 clinical communication criteria (A–E), each scored 0–3. */
+export const SPEAKING_CLINICAL_CRITERIA: ClinicalCriterion[] =
+  data.clinicalCriteria as ClinicalCriterion[];
+
+/** 11 common introductory questions with adaptable sample answers. */
+export const SPEAKING_INTRO_QUESTIONS: SpeakingIntroQuestion[] =
+  data.introQuestions as SpeakingIntroQuestion[];
 
 export const SPEAKING_ASSESSMENT_CRITERIA_HREF = '/speaking/assessment-criteria';
 export const SPEAKING_INTRO_QUESTIONS_HREF = '/speaking/intro-questions';

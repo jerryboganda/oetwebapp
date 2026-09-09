@@ -43,6 +43,38 @@ public sealed class AutoPdfTextExtractor : IPdfTextExtractor
         _scopeFactory = scopeFactory;
     }
 
+    /// <summary>
+    /// Page-aware extraction, preferring the embedded text layer because it is
+    /// the only tier that knows where the pages are.
+    ///
+    /// <para>
+    /// When PdfPig finds enough text — the same threshold
+    /// <see cref="ExtractAsync"/> uses to decide the document is not a scan —
+    /// its per-page result is returned intact. Below that the document is a
+    /// scan, OCR runs, and the result comes back as a single page: an OCR
+    /// transcript genuinely has no page boundaries to report, and inventing them
+    /// would put a confident wrong page number on a citation.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<string>> ExtractPagesAsync(Stream pdfStream, CancellationToken ct)
+    {
+        var options = (await _runtimeSettings.GetAsync(ct)).PdfExtraction;
+        if (string.Equals(options.Provider, "noop", StringComparison.OrdinalIgnoreCase)) return [];
+
+        // Buffer once: the OCR fallback needs the bytes again after PdfPig.
+        using var ms = new MemoryStream();
+        await pdfStream.CopyToAsync(ms, ct);
+
+        ms.Position = 0;
+        var pages = await _pdfPig.ExtractPagesAsync(ms, ct);
+        var embeddedLength = pages.Sum(page => page.Length);
+        if (embeddedLength >= options.MinTextLengthForSuccess) return pages;
+
+        ms.Position = 0;
+        var text = await ExtractAsync(ms, ct);
+        return string.IsNullOrWhiteSpace(text) ? [] : [text];
+    }
+
     public async Task<string> ExtractAsync(Stream pdfStream, CancellationToken ct)
     {
         // Wave 4: PDF extraction provider/endpoint/key/min-length are DB-overridable

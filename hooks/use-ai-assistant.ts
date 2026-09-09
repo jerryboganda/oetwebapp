@@ -47,6 +47,12 @@ export interface AssistantAttachmentInput {
   images?: Array<{ bytes: Uint8Array | ArrayBuffer; mimeType: string; fileName?: string }>;
   /** Extracted document text folded into the prompt (text-only path). */
   document?: { fileName: string; mimeType: string; text: string };
+  /**
+   * One recorded voice note. Transcribed server-side through the platform's
+   * existing ASR pipeline; the transcript comes back on the `VoiceTranscript`
+   * event so the learner can see what was heard before the answer arrives.
+   */
+  audio?: { bytes: Uint8Array | ArrayBuffer; mimeType: string };
 }
 
 export interface UseAiAssistantReturn {
@@ -90,9 +96,10 @@ export interface UseAiAssistantReturn {
   renameThread: (threadId: string, title: string) => Promise<void>;
   refreshThreads: () => Promise<void>;
 
-  // Per-conversation UBAG model override (null = feature-route default).
+  // Per-conversation model override (null = feature-route default).
   threadModel: string | null;
   availableModels: string[];
+  modelGroups: Array<{ provider: string; label: string; models: string[] }>;
   modelsLoading: boolean;
   setThreadModel: (model: string | null) => Promise<void>;
 
@@ -130,6 +137,7 @@ export function useAiAssistant(
   // server row (thread.ModelOverride). Null = feature-route default.
   const [threadModel, setThreadModelState] = useState<string | null>(null);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelGroups, setModelGroups] = useState<Array<{ provider: string; label: string; models: string[] }>>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
 
   const connectionRef = useRef<HubConnection | null>(null);
@@ -139,6 +147,8 @@ export function useAiAssistant(
   const citationsRef = useRef<AssistantCitation[]>([]);
   const connectionAttemptRef = useRef(0);
   const threadModelRef = useRef<string | null>(null);
+  const pendingVoiceTranscriptRef = useRef<string | null>(null);
+  const pendingUserMessageIdRef = useRef<string | null>(null);
 
   // Keep refs in sync
   useEffect(() => { activeThreadRef.current = activeThread; }, [activeThread]);
@@ -222,7 +232,30 @@ export function useAiAssistant(
         // Arrive before the first token; bound to the message on completion.
         setCitations(incoming);
       },
+      onVoiceTranscript: (text: string) => {
+        // Hub already folded this into the stored user turn. Mirror it locally
+        // so a voice-only send is not a blank bubble. Hold the text if the
+        // optimistic bubble has not flushed yet — sendMessage reads the same ref.
+        if (!text) return;
+        pendingVoiceTranscriptRef.current = text;
+        const id = pendingUserMessageIdRef.current;
+        setMessages((prev) => {
+          const idx = id ? prev.findIndex((m) => m.id === id) : -1;
+          if (idx < 0) return prev;
+          const last = prev[idx];
+          pendingVoiceTranscriptRef.current = null;
+          if (last.content.includes(text)) return prev;
+          const next = [...prev];
+          next[idx] = {
+            ...last,
+            content: last.content.trim() ? `${last.content}\n${text}` : text,
+          };
+          return next;
+        });
+      },
       onTurnComplete: (messageId: string, fullText: string) => {
+        pendingVoiceTranscriptRef.current = null;
+        pendingUserMessageIdRef.current = null;
         const assistantMsg: AiAssistantMessage = {
           id: messageId,
           threadId: activeThreadRef.current?.id ?? '',
@@ -243,6 +276,8 @@ export function useAiAssistant(
         setCitations([]);
       },
       onTurnError: (code: string, message: string) => {
+        pendingVoiceTranscriptRef.current = null;
+        pendingUserMessageIdRef.current = null;
         setError(`[${code}] ${message}`);
         setStreamingStatus('idle');
         setStreamingText('');
@@ -313,17 +348,26 @@ export function useAiAssistant(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connectionState]);
 
-  // Load the UBAG model catalog once the socket is up (fail-soft: the picker
-  // simply stays hidden when the catalog cannot be read).
+  // Load Claude + UBAG catalogs once the socket is up (fail-soft).
   useEffect(() => {
     if (connectionState !== 'connected' || !token) return;
     let cancelled = false;
     setModelsLoading(true);
     apiListAssistantModels()
       .then((catalog) => {
-        if (!cancelled && Array.isArray(catalog?.models)) {
-          setAvailableModels(catalog.models.filter((m): m is string => typeof m === 'string' && m.length > 0));
-        }
+        if (cancelled) return;
+        const groups = Array.isArray(catalog?.groups)
+          ? catalog.groups.filter((g) => Array.isArray(g?.models) && g.models.length > 0)
+          : [];
+        setModelGroups(groups.map((g) => ({
+          provider: typeof g.provider === 'string' ? g.provider : '',
+          label: typeof g.label === 'string' && g.label.length > 0 ? g.label : g.provider,
+          models: g.models.filter((m): m is string => typeof m === 'string' && m.length > 0),
+        })));
+        const flat = groups.length > 0
+          ? groups.flatMap((g) => g.models)
+          : Array.isArray(catalog?.models) ? catalog.models : [];
+        setAvailableModels(flat.filter((m): m is string => typeof m === 'string' && m.length > 0));
       })
       .catch(() => {})
       .finally(() => {
@@ -501,15 +545,24 @@ export function useAiAssistant(
         return;
       }
 
-      // Add user message to local state
-      const userMsg: AiAssistantMessage = {
-        id: `temp-${Date.now()}`,
-        threadId,
-        role: 'user',
-        content,
-        createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, userMsg]);
+      // Add user message to local state. A voice-only send has empty `content`
+      // until VoiceTranscript arrives; if it already did, fold it in here.
+      const userMsgId = `temp-${Date.now()}`;
+      pendingUserMessageIdRef.current = userMsgId;
+      setMessages((prev) => {
+        const heard = pendingVoiceTranscriptRef.current;
+        if (heard) pendingVoiceTranscriptRef.current = null;
+        const userContent = content.trim()
+          ? (heard && !content.includes(heard) ? `${content}\n${heard}` : content)
+          : (heard ?? '');
+        return [...prev, {
+          id: userMsgId,
+          threadId,
+          role: 'user',
+          content: userContent,
+          createdAt: new Date().toISOString(),
+        }];
+      });
       setStreamingStatus('thinking');
       setStreamingText('');
       setActiveToolCalls([]);
@@ -585,6 +638,7 @@ export function useAiAssistant(
     refreshThreads,
     threadModel,
     availableModels,
+    modelGroups,
     modelsLoading,
     setThreadModel: setThreadModelAction,
     connect,
@@ -628,6 +682,18 @@ function encodeAttachments(input?: AssistantAttachmentInput): AssistantTurnAttac
   const document = input.document && input.document.text.trim()
     ? packDocumentAttachment(input.document.fileName, input.document.mimeType, input.document.text.slice(0, 60000))
     : null;
-  if (images.length === 0 && !document) return undefined;
-  return { imageDataUrls: images.length > 0 ? images : null, document };
+
+  // Speech is bulky, so the audio cap is far larger than the image one: 20 MB is
+  // roughly twenty minutes compressed, past which the learner is recording a
+  // lecture rather than asking a question. The hub re-checks it either way.
+  let audio: string | null = null;
+  if (input.audio && input.audio.bytes.byteLength > 0) {
+    if (input.audio.bytes.byteLength > 20 * 1024 * 1024) {
+      throw new Error('That recording is too long. Keep voice notes under 20 MB.');
+    }
+    audio = `data:${input.audio.mimeType.toLowerCase()};base64,${base64FromBytes(toUint8(input.audio.bytes))}`;
+  }
+
+  if (images.length === 0 && !document && !audio) return undefined;
+  return { imageDataUrls: images.length > 0 ? images : null, document, audioDataUrl: audio };
 }

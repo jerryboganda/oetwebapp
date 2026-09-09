@@ -60,6 +60,20 @@ public sealed record CompanionTurnContext
     /// <summary>Content packages / scopes this learner may have retrieved for them.</summary>
     public IReadOnlyList<string> EntitlementScopes { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// Package isolation scopes the learner's packages resolve (FULL_MEDICINE,
+    /// FULL_NURSING, FULL_PHARMACY, CRASH). Empty means shared-only access.
+    ///
+    /// <para>
+    /// Kept separate from <see cref="EntitlementScopes"/>, which is a flat bag
+    /// used for single-value <c>RequiredEntitlementScope</c> matching. Package
+    /// isolation is a set-membership question — a learner may hold both Full
+    /// Medicine and Crash — and flattening it would make "either" inexpressible.
+    /// </para>
+    /// </summary>
+    public IReadOnlySet<string> PackageScopes { get; init; } =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
     public bool HasEligibleSubscription { get; init; }
 
     /// <summary>Candidate-facing AI Credit balance, for the "exact charge" contract.</summary>

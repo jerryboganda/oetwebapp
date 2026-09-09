@@ -31,19 +31,26 @@ export async function renameThread(threadId: string, title: string): Promise<voi
   await apiClient.patch(`/v1/ai-assistant/threads/${encodeURIComponent(threadId)}`, { title });
 }
 
-/** Pin a UBAG model override onto a conversation; null clears to default. */
+/** Pin a model override onto a conversation; null clears to default. */
 export async function setThreadModel(threadId: string, model: string | null): Promise<void> {
   await apiClient.patch(`/v1/ai-assistant/threads/${encodeURIComponent(threadId)}/model`, {
     model: model ?? null,
   });
 }
 
-export interface AssistantModelOption {
+export interface AssistantModelGroup {
   provider: string;
+  label: string;
   models: string[];
 }
 
-/** Models the chat model-picker may offer (UBAG catalog + board composite). */
+export interface AssistantModelOption {
+  provider?: string;
+  models: string[];
+  groups?: AssistantModelGroup[];
+}
+
+/** Models the chat model-picker may offer: Claude API and UBAG as separate groups. */
 export async function listAssistantModels(): Promise<AssistantModelOption> {
   return apiClient.get<AssistantModelOption>('/v1/ai-assistant/models');
 }

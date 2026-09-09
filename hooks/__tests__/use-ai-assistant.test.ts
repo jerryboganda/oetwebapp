@@ -379,10 +379,13 @@ describe('useAiAssistant hook', () => {
       expect(result.current.threads.find((t) => t.id === 'new-thread-1')?.title).toBe('Rounds');
     });
 
-    it('loads the UBAG model catalog on connect', async () => {
+    it('loads Claude and UBAG catalogs as separate groups on connect', async () => {
       vi.mocked(listAssistantModels).mockResolvedValueOnce({
-        provider: 'ubag',
-        models: ['chatgpt_web', 'deepseek_web'],
+        groups: [
+          { provider: 'anthropic', label: 'Claude (API)', models: ['claude-sonnet-5'] },
+          { provider: 'ubag', label: 'UBAG (browser)', models: ['chatgpt_web', 'deepseek_web'] },
+        ],
+        models: ['claude-sonnet-5', 'chatgpt_web', 'deepseek_web'],
       });
       const { result } = renderHook(() =>
         useAiAssistant({ token: 'test-token' }),
@@ -391,7 +394,8 @@ describe('useAiAssistant hook', () => {
       await act(async () => {});
 
       expect(listAssistantModels).toHaveBeenCalled();
-      expect(result.current.availableModels).toEqual(['chatgpt_web', 'deepseek_web']);
+      expect(result.current.modelGroups.map((g) => g.provider)).toEqual(['anthropic', 'ubag']);
+      expect(result.current.availableModels).toEqual(['claude-sonnet-5', 'chatgpt_web', 'deepseek_web']);
     });
 
     it('pins the model override immediately with rollback on failure', async () => {

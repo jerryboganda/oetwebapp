@@ -442,7 +442,7 @@ public static class AiFeatureCodes
     /// <summary>OpenAI-compatible embeddings generation (non-Claude).</summary>
     public const string EmbeddingsGenerate = "embeddings.generate";
 
-    // ── AI Learning Companion (persona "Jana") — Stage 1 ───────────────────
+    // ── AI Learning Companion (persona "Sami") — Stage 1 ───────────────────
     // Learner-facing grounded OET mentor. See docs/ai-learning-companion/.
     // All three are NON-SCORING but PLATFORM-ONLY: the companion reads learner
     // performance history, entitlements and credit state, so a learner-supplied

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import {
@@ -77,8 +77,26 @@ function ReviewBadge({ status }: { status: ReviewStatus }) {
   );
 }
 
+/**
+ * Entry-point wrapper: filtering is driven by `?subtest=writing` (see
+ * app/writing/page.tsx's "Past submissions" card), and reading that query
+ * param via useSearchParams forces a CSR bailout — Suspense is required
+ * around it, matching the pattern already used in app/mocks/page.tsx.
+ */
 export default function SubmissionHistory() {
+  return (
+    <Suspense fallback={null}>
+      <SubmissionHistoryInner />
+    </Suspense>
+  );
+}
+
+function SubmissionHistoryInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // The Writing hub's "Past submissions" card links here with ?subtest=writing
+  // so it never opens the global all-subtest history — see brief item 5.
+  const writingOnly = searchParams?.get('subtest') === 'writing';
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [attempts, setAttempts] = useState<LearnerAttemptHistoryItem[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,24 +114,35 @@ export default function SubmissionHistory() {
       .catch(() => setAttempts([]));
   }, []);
 
-  const pendingReviewCount = submissions.filter((submission) => submission.reviewStatus === 'pending').length;
-  const comparisonReadyCount = submissions.filter((submission) => Boolean(submission.actions.compareRoute)).length;
+  const visibleSubmissions = useMemo(
+    () => (writingOnly ? submissions.filter((sub) => sub.subTest === 'Writing') : submissions),
+    [submissions, writingOnly],
+  );
+  const visibleAttempts = useMemo(
+    () => (writingOnly ? (attempts ?? []).filter((attempt) => attempt.subtest === 'writing') : attempts),
+    [attempts, writingOnly],
+  );
+
+  const pendingReviewCount = visibleSubmissions.filter((submission) => submission.reviewStatus === 'pending').length;
+  const comparisonReadyCount = visibleSubmissions.filter((submission) => Boolean(submission.actions.compareRoute)).length;
 
   return (
     <LearnerDashboardShell
-      pageTitle="Submission History"
-      subtitle="Review your past work and follow up on feedback"
-      backHref="/"
+      pageTitle={writingOnly ? 'Writing Submissions' : 'Submission History'}
+      subtitle={writingOnly ? 'Review your past Writing letters and feedback' : 'Review your past work and follow up on feedback'}
+      backHref={writingOnly ? '/writing' : '/'}
     >
       <div className="space-y-5 sm:space-y-8">
         <LearnerPageHero
-          eyebrow="Evidence History"
+          eyebrow={writingOnly ? 'Writing Evidence' : 'Evidence History'}
           icon={History}
           accent="slate"
-          title="Reopen the attempts that need review or comparison"
-          description="Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision."
+          title={writingOnly ? 'Reopen Writing letters that need review or comparison' : 'Reopen the attempts that need review or comparison'}
+          description={writingOnly
+            ? 'Every submitted Writing letter and its feedback/review state — Reading, Listening and Speaking attempts are never shown here.'
+            : 'Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision.'}
           highlights={[
-            { icon: History, label: 'Attempts', value: `${submissions.length} recorded` },
+            { icon: History, label: 'Attempts', value: `${visibleSubmissions.length} recorded` },
             { icon: Clock, label: 'Pending reviews', value: `${pendingReviewCount} waiting` },
             { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
           ]}
@@ -121,16 +150,19 @@ export default function SubmissionHistory() {
 
         {/* Unified attempt activity — Reading / Listening / Writing / Speaking
             plus full mocks: exact item title/ID, subtest, start time, status,
-            balance source and credits used; reopening never deducts again. */}
-        {attempts && attempts.length > 0 ? (
+            balance source and credits used; reopening never deducts again.
+            Filtered to Writing only when opened from inside Writing. */}
+        {visibleAttempts && visibleAttempts.length > 0 ? (
           <section aria-label="Attempt activity" className="space-y-3">
             <LearnerSurfaceSectionHeader
-              eyebrow="All Subtests"
+              eyebrow={writingOnly ? 'Writing' : 'All Subtests'}
               title="Attempt activity"
-              description="Every opened exam or card, its balance source, credits used and where to resume."
+              description={writingOnly
+                ? 'Every opened Writing letter, its balance source, credits used and where to resume.'
+                : 'Every opened exam or card, its balance source, credits used and where to resume.'}
             />
             <ul className="space-y-2">
-              {attempts.map((attempt) => {
+              {visibleAttempts.map((attempt) => {
                 const styleKeyMap: Record<string, SubTest> = {
                   reading: 'Reading',
                   listening: 'Listening',
@@ -203,21 +235,26 @@ export default function SubmissionHistory() {
           <InlineAlert variant="error">{error}</InlineAlert>
         ) : null}
 
-        {!loading && !error && submissions.length === 0 ? (
-          <EmptyState title="No submissions yet" description="Complete a writing or speaking task to see your history here." action={{ label: 'Start a writing task', onClick: () => router.push('/writing') }} className="py-24" />
+        {!loading && !error && visibleSubmissions.length === 0 ? (
+          <EmptyState
+            title={writingOnly ? 'No Writing submissions yet' : 'No submissions yet'}
+            description={writingOnly ? 'Complete a Writing letter to see your history here.' : 'Complete a writing or speaking task to see your history here.'}
+            action={{ label: 'Start a writing task', onClick: () => router.push('/writing') }}
+            className="py-24"
+          />
         ) : null}
 
-        {!loading && !error && submissions.length > 0 ? (
+        {!loading && !error && visibleSubmissions.length > 0 ? (
           <section>
             <LearnerSurfaceSectionHeader
-              eyebrow="Past Evidence"
+              eyebrow={writingOnly ? 'Writing Evidence' : 'Past Evidence'}
               title="Keep review state and score direction visible"
               description="Each card should answer what was submitted, when, how it performed, and whether follow-up is still available."
               className="mb-4"
             />
 
             <div className="space-y-4">
-              {submissions.map((sub, idx) => {
+              {visibleSubmissions.map((sub, idx) => {
                 const meta = SUBTEST_STYLE[sub.subTest] ?? SUBTEST_STYLE.Writing;
                 const Icon = meta.icon;
                 const canRequest = sub.canRequestReview;

@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -236,6 +237,9 @@ public sealed class CompanionMultiLearnerIsolationTests : IAsyncDisposable
     private CompanionRetriever BuildRetriever() =>
         new(new LearnerDbContext(_options),
             new UnusedEmbeddingService(),
+            // A fresh budget per retriever keeps these cases independent: they
+            // assert entitlement scoping, not the rolling extraction window.
+            new CompanionExtractionBudget(new MemoryCache(new MemoryCacheOptions())),
             NullLogger<CompanionRetriever>.Instance);
 
     private CompanionContextResolver BuildResolver(

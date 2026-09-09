@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiAssistant.Safety;
 
 namespace OetLearner.Api.Services.AiTools;
 
@@ -69,13 +70,10 @@ public sealed class AiToolCatalogSeederHostedService(
     ];
 
     /// <summary>
-    /// The full codebase toolset the admin chatbot (`ai_assistant.admin`) is
-    /// entitled to. Read + search the repo (direct + semantic), list the tree,
-    /// SELECT-only DB inspection, plus the guarded mutation tools (write/commit
-    /// need SafetyGuard admin + backups + rate limits; deploy stays
-    /// status/preview-only; git never pushes). Seeded here so every
-    /// environment grants it without a manual admin step; an operator who
-    /// deactivates a grant keeps it off (existing rows are never modified).
+    /// Read-only toolset for the admin chatbot (`ai_assistant.admin`).
+    /// Mutation tools (write_file / run_command / git_operations / deploy)
+    /// are never granted here and are denied at SafetyGuard even if a
+    /// leftover DB grant exists.
     /// </summary>
     private static readonly string[] AdminAssistantToolCodes =
     [
@@ -84,10 +82,6 @@ public sealed class AiToolCatalogSeederHostedService(
         "retrieve_codebase",
         "list_directory",
         "query_database",
-        "write_file",
-        "run_command",
-        "git_operations",
-        "deploy",
         "web_search",
     ];
 
@@ -96,6 +90,40 @@ public sealed class AiToolCatalogSeederHostedService(
         var db = provider.GetRequiredService<LearnerDbContext>();
         await SeedGrantsForFeatureAsync(db, provider, AiFeatureCodes.AiAssistantLearner, CompanionToolCodes, ct);
         await SeedGrantsForFeatureAsync(db, provider, AiFeatureCodes.AiAssistantAdmin, AdminAssistantToolCodes, ct);
+        await DeactivateAdminMutationGrantsAsync(db, provider, ct);
+    }
+
+    /// <summary>
+    /// Existing rows are otherwise never modified. Mutation grants for the
+    /// admin chatbot are the exception: they must stay off.
+    /// </summary>
+    private async Task DeactivateAdminMutationGrantsAsync(
+        LearnerDbContext db,
+        IServiceProvider provider,
+        CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var grants = await db.AiFeatureToolGrants
+            .Where(g => g.FeatureCode == AiFeatureCodes.AiAssistantAdmin && g.IsActive)
+            .ToListAsync(ct);
+
+        var deactivated = 0;
+        foreach (var grant in grants)
+        {
+            if (!SafetyGuard.IsMutationTool(grant.ToolCode))
+                continue;
+            grant.IsActive = false;
+            grant.UpdatedAt = now;
+            deactivated++;
+        }
+
+        if (deactivated == 0) return;
+
+        await db.SaveChangesAsync(ct);
+        provider.GetRequiredService<IAiToolRegistry>().InvalidateFeature(AiFeatureCodes.AiAssistantAdmin);
+        logger.LogInformation(
+            "AiToolCatalogSeeder: deactivated {Count} mutation grant(s) on {FeatureCode}.",
+            deactivated, AiFeatureCodes.AiAssistantAdmin);
     }
 
     private async Task SeedGrantsForFeatureAsync(

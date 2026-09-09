@@ -30,6 +30,7 @@ const contextValue = {
   renameThread: vi.fn(),
   threadModel: null as string | null,
   availableModels: [] as string[],
+  modelGroups: [] as Array<{ provider: string; label: string; models: string[] }>,
   modelsLoading: false,
   setThreadModel: vi.fn(),
 };
@@ -84,6 +85,7 @@ function resetContext(overrides: Partial<typeof contextValue> = {}) {
     renameThread: vi.fn(),
     threadModel: null,
     availableModels: [],
+    modelGroups: [],
     modelsLoading: false,
     setThreadModel: vi.fn(),
     ...overrides,
@@ -201,19 +203,27 @@ describe('AiAssistantPanel', () => {
     expect(contextValue.selectThread).toHaveBeenCalledWith('t1');
   });
 
-  it('offers every UBAG model in the picker and applies the pick immediately', async () => {
+  it('offers Claude API and UBAG browser models in separate groups', async () => {
     const user = userEvent.setup();
-    resetContext({ availableModels: ['chatgpt_web', 'deepseek_web|Vision', 'whisper-1'] });
+    resetContext({
+      availableModels: ['claude-sonnet-5', 'chatgpt_web', 'deepseek_web|Vision'],
+      modelGroups: [
+        { provider: 'anthropic', label: 'Claude (API)', models: ['claude-sonnet-5'] },
+        { provider: 'ubag', label: 'UBAG (browser)', models: ['chatgpt_web', 'deepseek_web|Vision'] },
+      ],
+    });
     render(<AiAssistantPanel onClose={onClose} />);
 
     const picker = screen.getByRole('combobox', { name: /ai model for this conversation/i });
     expect(picker).toHaveDisplayValue('Default');
-    for (const model of ['chatgpt_web', 'deepseek_web|Vision', 'whisper-1']) {
+    expect(screen.getByRole('group', { name: 'Claude (API)' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'UBAG (browser)' })).toBeInTheDocument();
+    for (const model of ['claude-sonnet-5', 'chatgpt_web', 'deepseek_web|Vision']) {
       expect(screen.getByRole('option', { name: model })).toBeInTheDocument();
     }
 
-    await user.selectOptions(picker, 'deepseek_web|Vision');
-    expect(contextValue.setThreadModel).toHaveBeenCalledWith('deepseek_web|Vision');
+    await user.selectOptions(picker, 'claude-sonnet-5');
+    expect(contextValue.setThreadModel).toHaveBeenCalledWith('claude-sonnet-5');
   });
 
   it('keeps the picker visible with the saved pick when the catalog fetch fails', () => {

@@ -20,6 +20,12 @@ public sealed record CompanionEvidence(
     int? PageNumber,
     int? TimestampSeconds,
     bool IsProprietary,
+    /// <summary>
+    /// Watermark planted on this source, when it has one. Carried through to the
+    /// output screen: emitting it verbatim means source text reached the answer
+    /// unparaphrased, which is a security event rather than a formatting slip.
+    /// </summary>
+    string? CanaryTag,
     float Score);
 
 public sealed record CompanionRetrievalResult(
@@ -55,6 +61,7 @@ public interface ICompanionRetriever
 public sealed class CompanionRetriever(
     LearnerDbContext db,
     IEmbeddingService embeddings,
+    ICompanionExtractionBudget extractionBudget,
     ILogger<CompanionRetriever> logger) : ICompanionRetriever
 {
     private const float VectorWeight = 0.7f;
@@ -145,6 +152,20 @@ public sealed class CompanionRetriever(
                     score *= 1.25f;
                 }
 
+                // Subtest is a nudge, deliberately not a filter. The envelope
+                // says where the learner IS, not what they ASKED: someone on a
+                // reading page may perfectly well ask where their speaking cards
+                // are, and a hard predicate would return nothing for them. A
+                // boost makes the on-screen subtest win ties without ever
+                // hiding the rest of the corpus.
+                var surfaceSubtest = context.Envelope.SubtestCode;
+                if (!string.IsNullOrWhiteSpace(source.SubtestCode) &&
+                    !string.IsNullOrWhiteSpace(surfaceSubtest) &&
+                    string.Equals(source.SubtestCode, surfaceSubtest, StringComparison.OrdinalIgnoreCase))
+                {
+                    score *= 1.15f;
+                }
+
                 return (Chunk: c, Source: source, Score: score);
             })
             .OrderByDescending(x => x.Score)
@@ -154,6 +175,7 @@ public sealed class CompanionRetriever(
         var evidence = new List<CompanionEvidence>();
         var perSourceChunks = new Dictionary<Guid, int>();
         var perSourceChars = new Dictionary<Guid, int>();
+        var exhaustedSources = new HashSet<Guid>();
         var truncated = false;
 
         foreach (var (chunk, source, score) in ranked)
@@ -164,8 +186,23 @@ public sealed class CompanionRetriever(
             if (used >= MaxChunksPerSource) { truncated = true; continue; }
 
             perSourceChars.TryGetValue(source.Id, out var chars);
+
+            // Two independent limits, and the tighter one wins. The per-turn cap
+            // stops one greedy request; the rolling cap stops the chapter-walk
+            // across turns that actually reconstructs a rulebook (GC-006).
             var budget = MaxVerbatimCharsPerSource - chars;
-            if (source.IsProprietary && budget <= 0) { truncated = true; continue; }
+            if (source.IsProprietary)
+            {
+                var rolling = extractionBudget.RemainingChars(context.UserId, source.Id) - chars;
+                if (rolling < budget) budget = rolling;
+            }
+
+            if (source.IsProprietary && budget <= 0)
+            {
+                truncated = true;
+                exhaustedSources.Add(source.Id);
+                continue;
+            }
 
             var text = chunk.Text;
             if (source.IsProprietary && text.Length > budget)
@@ -182,7 +219,27 @@ public sealed class CompanionRetriever(
             evidence.Add(new CompanionEvidence(
                 chunk.Id, source.Id, source.SourceKey, source.Title, source.AuthorityClass,
                 source.ProfessionId, source.SubtestCode, chunk.Heading, text,
-                chunk.PageNumber, chunk.TimestampSeconds, source.IsProprietary, score));
+                chunk.PageNumber, chunk.TimestampSeconds, source.IsProprietary, source.CanaryTag, score));
+        }
+
+        // ── Step 4b: charge the rolling budget ───────────────────────────────
+        // Charged after packing, so a learner is only billed for text that
+        // actually reached the prompt.
+        foreach (var (sourceId, packedChars) in perSourceChars)
+        {
+            if (candidates[sourceId].IsProprietary)
+            {
+                extractionBudget.Consume(context.UserId, sourceId, packedChars);
+            }
+        }
+
+        if (exhaustedSources.Count > 0)
+        {
+            trace.Add($"extraction.budget_exhausted={exhaustedSources.Count}");
+            logger.LogInformation(
+                "Companion extraction budget exhausted for {UserId} on {Count} proprietary source(s); " +
+                "further verbatim material withheld this window.",
+                context.UserId, exhaustedSources.Count);
         }
 
         // ── Step 5: conflict detection — surface, never blend ────────────────
@@ -206,7 +263,17 @@ public sealed class CompanionRetriever(
         CompanionTurnContext context,
         CancellationToken ct)
     {
-        var today = DateTimeOffset.UtcNow;
+        // Effectivity is resolved against the learner's EXAM date, not today.
+        //
+        // A candidate sitting the exam in three months must be taught the rules
+        // in force *then*; a rule that supersedes on the first of next month is
+        // already the right answer for them, and last year's version is not.
+        // Resolving against UtcNow would teach whoever asks the rules of the day
+        // they happened to ask, which is the whole reason the field exists
+        // (Manifest §3 "exam + version/effective date").
+        var today = context.ExamDate is { } examDate
+            ? new DateTimeOffset(examDate.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero)
+            : DateTimeOffset.UtcNow;
 
         var query = db.CompanionSources
             .AsNoTracking()
@@ -237,7 +304,29 @@ public sealed class CompanionRetriever(
 
         return sources
             .Where(s => s.RequiredEntitlementScope is null || scopes.Contains(s.RequiredEntitlementScope))
+            .Where(s => IsInPackageScope(s, context))
             .ToDictionary(s => s.Id);
+    }
+
+    /// <summary>
+    /// Package isolation (Manifest 1.B). A source with no scope, or the SHARED
+    /// scope, reaches every entitled learner; a FULL_*/CRASH source reaches only
+    /// learners whose packages resolve that same scope.
+    ///
+    /// <para>
+    /// This is a <b>separate axis from profession</b>, and both apply. Profession
+    /// answers "is this material about their job?" (GC-004, GC-007); package
+    /// answers "did they buy this course?". Collapsing them would either leak
+    /// Full Course material into Crash accounts or deny Crash learners the method
+    /// they paid for, depending on which way it was collapsed.
+    /// </para>
+    /// </summary>
+    private static bool IsInPackageScope(CompanionSource source, CompanionTurnContext context)
+    {
+        if (string.IsNullOrWhiteSpace(source.PackageScope)) return true;
+        if (string.Equals(source.PackageScope, VideoVisibilityScopes.Shared, StringComparison.OrdinalIgnoreCase)) return true;
+
+        return context.PackageScopes.Contains(source.PackageScope);
     }
 
     private async Task<Dictionary<Guid, float>> VectorSearchAsync(

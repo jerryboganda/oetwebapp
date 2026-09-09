@@ -24,6 +24,29 @@ public interface IPdfTextExtractor
     /// <summary>Extract plain text from a PDF stream. Return empty string
     /// if the engine is a no-op or the PDF has no extractable text.</summary>
     Task<string> ExtractAsync(Stream pdfStream, CancellationToken ct);
+
+    /// <summary>
+    /// Extract text one page at a time, index 0 = page 1.
+    ///
+    /// <para>
+    /// Needed because a citation that cannot say which page it came from is not
+    /// much of a citation: the companion is required to point at an exact
+    /// location, and <see cref="ExtractAsync"/> concatenates the document into a
+    /// single string where that information is gone. Splitting the flat result
+    /// back apart afterwards is not possible — a blank line inside a page is
+    /// indistinguishable from a page break.
+    /// </para>
+    ///
+    /// <para>
+    /// The default implementation returns the whole document as one page, which
+    /// is honest for engines that genuinely cannot paginate; PdfPig overrides it.
+    /// </para>
+    /// </summary>
+    async Task<IReadOnlyList<string>> ExtractPagesAsync(Stream pdfStream, CancellationToken ct)
+    {
+        var text = await ExtractAsync(pdfStream, ct);
+        return string.IsNullOrWhiteSpace(text) ? [] : [text];
+    }
 }
 
 /// <summary>No-op default. Replaced at DI time by a PdfPig-backed impl in

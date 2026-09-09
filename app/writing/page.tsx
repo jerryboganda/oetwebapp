@@ -41,7 +41,7 @@ const START_CARDS: WritingLandingCard[] = [
   },
   {
     key: 'submissions',
-    href: '/submissions',
+    href: '/submissions?subtest=writing',
     icon: History,
     titleKey: 'writing.hub.cards.submissions.title',
     descriptionKey: 'writing.hub.cards.submissions.description',

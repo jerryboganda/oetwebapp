@@ -1236,12 +1236,36 @@ builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionFeatureFl
     OetLearner.Api.Services.Companion.CompanionFeatureFlags>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionContextResolver,
     OetLearner.Api.Services.Companion.CompanionContextResolver>();
+// Singleton: the rolling extraction window must outlive the request scope,
+// otherwise the cap resets every turn and stops being a cross-turn control.
+builder.Services.AddSingleton<OetLearner.Api.Services.Companion.ICompanionExtractionBudget,
+    OetLearner.Api.Services.Companion.CompanionExtractionBudget>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionRetriever,
     OetLearner.Api.Services.Companion.CompanionRetriever>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionPromptComposer,
     OetLearner.Api.Services.Companion.CompanionPromptComposer>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionRulebookIndexer,
     OetLearner.Api.Services.Companion.CompanionRulebookIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionSpeakingTaxonomyIndexer,
+    OetLearner.Api.Services.Companion.CompanionSpeakingTaxonomyIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionSpeakingCriteriaIndexer,
+    OetLearner.Api.Services.Companion.CompanionSpeakingCriteriaIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionVoiceService,
+    OetLearner.Api.Services.Companion.CompanionVoiceService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionKnowledgeGovernance,
+    OetLearner.Api.Services.Companion.CompanionKnowledgeGovernance>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionOfficialFactsIndexer,
+    OetLearner.Api.Services.Companion.CompanionOfficialFactsIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionDocumentIndexer,
+    OetLearner.Api.Services.Companion.CompanionDocumentIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionCorpusBuilder,
+    OetLearner.Api.Services.Companion.CompanionCorpusBuilder>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionPlatformMapIndexer,
+    OetLearner.Api.Services.Companion.CompanionPlatformMapIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionSupportKnowledgeIndexer,
+    OetLearner.Api.Services.Companion.CompanionSupportKnowledgeIndexer>();
+builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionVocabularyIndexer,
+    OetLearner.Api.Services.Companion.CompanionVocabularyIndexer>();
 builder.Services.AddScoped<OetLearner.Api.Services.Companion.ICompanionDestinationRegistry,
     OetLearner.Api.Services.Companion.CompanionDestinationRegistry>();
 // Bootstraps the knowledge corpus on first boot with the flag on, so grounding

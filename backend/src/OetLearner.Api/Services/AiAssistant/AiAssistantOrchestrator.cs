@@ -151,6 +151,7 @@ public sealed class AiAssistantOrchestrator(
             // leak protected content, because it carries no retrieved evidence.
             var systemPrompt = systemPromptProvider.GetSystemPrompt(role, userId);
             IReadOnlyList<AssistantCitation> citations = Array.Empty<AssistantCitation>();
+            IReadOnlyList<CompanionEvidence> evidence = Array.Empty<CompanionEvidence>();
 
             if (!string.Equals(role, "admin", StringComparison.OrdinalIgnoreCase) &&
                 !string.Equals(role, "expert", StringComparison.OrdinalIgnoreCase))
@@ -159,6 +160,7 @@ public sealed class AiAssistantOrchestrator(
                     scope.ServiceProvider, userId, userMessage, systemPrompt, context, turnCts.Token);
                 systemPrompt = companion.Prompt;
                 citations = companion.Citations;
+                evidence = companion.Evidence;
             }
 
             // Emitted before the first token so the surface can show what the
@@ -303,6 +305,53 @@ public sealed class AiAssistantOrchestrator(
 
             await db.SaveChangesAsync(turnCts.Token);
 
+            // Output-side leak screen — the last control, and the only one that
+            // can see what the model actually said.
+            //
+            // Everything else guards the way IN: the prefilter decides what may
+            // be retrieved, the extraction budget how much may be packed, the
+            // prompt what may be said. None of them can catch a model that
+            // reproduces a paid source anyway, emits a credential, or repeats
+            // acceptance-pack scaffolding that should never have been in the
+            // corpus. On a finding the stored message is replaced, so the
+            // conversation history does not keep the leak, and the turn ends as
+            // an error rather than a doctored answer.
+            var answer = fullResponse.ToString();
+            var leak = CompanionLeakDetector.Screen(answer, evidence.Select(e => e.CanaryTag));
+            if (!leak.Blocked) leak = CompanionLeakDetector.ScreenVerbatimReuse(answer, evidence);
+
+            if (leak.Blocked)
+            {
+                logger.LogError(
+                    "Companion output blocked for {UserId} on thread {ThreadId}: {Findings}",
+                    userId, threadId, string.Join("; ", leak.Findings));
+
+                if (finalMessageId is not null)
+                {
+                    // Read through the context rather than through the in-memory
+                    // history list: the final assistant message is added to the
+                    // DbSet and never to that list, so looking there would find
+                    // nothing and the leak would quietly stay in the stored
+                    // conversation while the learner saw a refusal.
+                    var stored = await db.AiAssistantMessages
+                        .FirstOrDefaultAsync(m => m.Id == finalMessageId, turnCts.Token);
+                    if (stored is not null)
+                    {
+                        stored.Content =
+                            "[Withheld by the content-protection check. The assistant may not reproduce paid " +
+                            "material at length — ask for an explanation of the concept instead.]";
+                        await db.SaveChangesAsync(turnCts.Token);
+                    }
+                }
+
+                yield return new AssistantTurnError(
+                    "OUTPUT_WITHHELD",
+                    "I stopped that answer because it was reproducing the source material rather than teaching " +
+                    "it. Ask me to explain the idea, or to walk you through it in my own words.");
+
+                yield break;
+            }
+
             yield return new AssistantTurnComplete(
                 finalMessageId ?? "unknown",
                 fullResponse.ToString());
@@ -389,7 +438,7 @@ public sealed class AiAssistantOrchestrator(
             var flags = scopedProvider.GetRequiredService<ICompanionFeatureFlags>();
             if (!await flags.IsEnabledAsync(ct))
             {
-                return new CompanionPromptResult(fallbackPrompt, Array.Empty<AssistantCitation>());
+                return new CompanionPromptResult(fallbackPrompt, [], []);
             }
 
             var contextResolver = scopedProvider.GetRequiredService<ICompanionContextResolver>();
@@ -418,19 +467,20 @@ public sealed class AiAssistantOrchestrator(
                     TimestampSeconds: e.TimestampSeconds))
                 .ToList();
 
-            return new CompanionPromptResult(prompt, citations);
+            return new CompanionPromptResult(prompt, citations, retrieval.Evidence);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogError(ex, "Companion prompt composition failed for {UserId}; using the static learner prompt.", userId);
-            return new CompanionPromptResult(fallbackPrompt, Array.Empty<AssistantCitation>());
+            return new CompanionPromptResult(fallbackPrompt, [], []);
         }
     }
 
     /// <summary>Composed prompt plus the sources it was grounded in.</summary>
     private sealed record CompanionPromptResult(
         string Prompt,
-        IReadOnlyList<AssistantCitation> Citations);
+        IReadOnlyList<AssistantCitation> Citations,
+        IReadOnlyList<CompanionEvidence> Evidence);
 
     private static string GetFeatureCode(string role) => role switch
     {

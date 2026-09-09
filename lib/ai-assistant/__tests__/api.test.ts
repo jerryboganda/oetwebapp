@@ -176,7 +176,7 @@ describe('AI Assistant API client', () => {
   });
 
   describe('setThreadModel', () => {
-    it('PATCHes the UBAG model override, or null to clear it', async () => {
+    it('PATCHes the model override, or null to clear it', async () => {
       mockPatch.mockResolvedValue(undefined);
 
       await setThreadModel('t1', 'chatgpt_web');
@@ -188,12 +188,20 @@ describe('AI Assistant API client', () => {
   });
 
   describe('listAssistantModels', () => {
-    it('returns the UBAG model catalog the picker offers', async () => {
-      mockGet.mockResolvedValue({ provider: 'ubag', models: ['chatgpt_web', 'deepseek_web'] });
+    it('returns Claude API and UBAG as separate groups', async () => {
+      mockGet.mockResolvedValue({
+        groups: [
+          { provider: 'anthropic', label: 'Claude (API)', models: ['claude-sonnet-5'] },
+          { provider: 'ubag', label: 'UBAG (browser)', models: ['chatgpt_web', 'deepseek_web'] },
+        ],
+        models: ['claude-sonnet-5', 'chatgpt_web', 'deepseek_web'],
+      });
 
       const catalog = await listAssistantModels();
 
-      expect(catalog.models).toEqual(['chatgpt_web', 'deepseek_web']);
+      expect(catalog.groups).toHaveLength(2);
+      expect(catalog.groups?.[0]?.provider).toBe('anthropic');
+      expect(catalog.groups?.[1]?.provider).toBe('ubag');
       expect(mockGet).toHaveBeenCalledWith('/v1/ai-assistant/models');
     });
   });

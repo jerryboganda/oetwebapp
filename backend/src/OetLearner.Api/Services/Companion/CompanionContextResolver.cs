@@ -105,6 +105,7 @@ public sealed class CompanionContextResolver(
             TargetCountry = goal?.TargetCountry,
             Tier = snapshot.Tier,
             EntitlementScopes = BuildScopes(snapshot),
+            PackageScopes = snapshot.PackageScopes,
             HasEligibleSubscription = snapshot.HasEligibleSubscription,
             AiCreditsRemaining = creditBalance,
             Locale = NormaliseLocale(user?.Locale),

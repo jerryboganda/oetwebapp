@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
-import { Send, Square, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { Send, Square, Paperclip, X, FileText, Image as ImageIcon, Mic } from 'lucide-react';
 import type { AssistantAttachmentInput } from '@/hooks/use-ai-assistant';
 
 export interface AiAssistantInputProps {
@@ -32,6 +32,8 @@ const DOCUMENT_EXTENSIONS = new Set(['pdf', 'txt', 'md', 'docx']);
 const MAX_IMAGES = 3;
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_DOCUMENT_CHARS = 60000;
+/** Speech is bulky; twenty megabytes is roughly twenty minutes compressed. */
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 
 export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = false }: AiAssistantInputProps) {
   const [value, setValue] = useState('');
@@ -39,23 +41,33 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
   const [document, setDocument] = useState<PendingDocument | null>(null);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [voiceNote, setVoiceNote] = useState<{ bytes: Uint8Array; mimeType: string } | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
 
-  const busy = disabled || isStreaming || extracting;
-  const canSend = (value.trim().length > 0 || images.length > 0 || document !== null) && !busy;
+  // A live microphone stream is not something to leave running because a
+  // component unmounted mid-recording.
+  useEffect(() => () => stopTracks(recorderRef.current), []);
+
+  const busy = disabled || isStreaming || extracting || recording;
+  const canSend =
+    (value.trim().length > 0 || images.length > 0 || document !== null || voiceNote !== null) && !busy;
 
   const handleSend = () => {
     const trimmed = value.trim();
-    if ((!trimmed && images.length === 0 && !document) || busy) return;
+    if ((!trimmed && images.length === 0 && !document && !voiceNote) || busy) return;
     onSend(trimmed, {
       images: images.map((img) => ({ bytes: img.bytes, mimeType: img.mimeType, fileName: img.fileName })),
       document: document ? { fileName: document.fileName, mimeType: document.mimeType, text: document.text } : undefined,
+      audio: voiceNote ?? undefined,
     });
     setValue('');
     for (const img of images) URL.revokeObjectURL(img.previewUrl);
     setImages([]);
     setDocument(null);
+    setVoiceNote(null);
     setAttachError(null);
   };
 
@@ -116,6 +128,64 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
     }
   };
 
+  const startRecording = async () => {
+    setAttachError(null);
+
+    // Feature-detect rather than assume: MediaRecorder is absent in some in-app
+    // browsers and on older iOS, and the honest failure is "type it instead",
+    // not a button that does nothing.
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices?.getUserMedia ||
+      typeof MediaRecorder === 'undefined'
+    ) {
+      setAttachError('Voice messages are not supported in this browser. Type your message instead.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const parts: BlobPart[] = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) parts.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        stopTracks(recorder);
+        const blob = new Blob(parts, { type: recorder.mimeType || 'audio/webm' });
+
+        if (blob.size === 0) {
+          setAttachError('That recording was empty. Try again.');
+          return;
+        }
+        if (blob.size > MAX_AUDIO_BYTES) {
+          setAttachError('That recording is too long. Keep voice notes under 20 MB.');
+          return;
+        }
+
+        setVoiceNote({
+          bytes: new Uint8Array(await blob.arrayBuffer()),
+          mimeType: (recorder.mimeType || 'audio/webm').split(';')[0],
+        });
+      };
+
+      recorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch {
+      // Almost always a denied permission prompt. Saying so is more useful than
+      // a generic failure, because the fix is in the browser, not in the app.
+      setAttachError('Microphone access was not granted. Type your message instead.');
+    }
+  };
+
+  const stopRecording = () => {
+    recorderRef.current?.stop();
+    setRecording(false);
+  };
+
   const removeImage = (index: number) => {
     setImages((prev) => {
       URL.revokeObjectURL(prev[index].previewUrl);
@@ -125,7 +195,7 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
 
   return (
     <div className="border-t border-border p-3">
-      {(images.length > 0 || document) && (
+      {(images.length > 0 || document || voiceNote) && (
         <div className="mb-2 flex flex-wrap gap-2" data-testid="assistant-attachments">
           {images.map((img, i) => (
             <span key={`${img.fileName}-${i}`} className="relative inline-block">
@@ -145,6 +215,19 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
               <FileText className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{document.fileName}</span>
               <button onClick={() => setDocument(null)} aria-label={`Remove ${document.fileName}`} className="rounded p-0.5 hover:bg-background-light">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {voiceNote && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1 text-xs">
+              <Mic className="h-3.5 w-3.5 shrink-0" />
+              <span>Voice message ready to send</span>
+              <button
+                onClick={() => setVoiceNote(null)}
+                aria-label="Remove voice message"
+                className="rounded p-0.5 hover:bg-background-light"
+              >
                 <X className="h-3 w-3" />
               </button>
             </span>
@@ -175,6 +258,19 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
           title="Attach an image (JPG/PNG/GIF/WEBP) or document (PDF/TXT/MD/DOCX)"
         >
           <Paperclip className="h-4 w-4" />
+        </button>
+        <button
+          onClick={recording ? stopRecording : () => void startRecording()}
+          disabled={disabled || isStreaming || extracting}
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border disabled:opacity-50 ${
+            recording ? 'bg-red-500 text-white' : 'hover:bg-background-light'
+          }`}
+          aria-label={recording ? 'Stop recording' : 'Record a voice message'}
+          aria-pressed={recording}
+          title={recording ? 'Stop recording' : 'Record a voice message'}
+          data-testid="assistant-record"
+        >
+          {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
         </button>
         <textarea
           ref={textareaRef}
@@ -246,4 +342,9 @@ async function extractPdfText(file: File): Promise<string> {
   }
   await pdf.destroy();
   return pages.join('\n\n');
+}
+
+/** Release the microphone. A stopped recorder does not free the device on its own. */
+function stopTracks(recorder: MediaRecorder | null) {
+  recorder?.stream.getTracks().forEach((track) => track.stop());
 }

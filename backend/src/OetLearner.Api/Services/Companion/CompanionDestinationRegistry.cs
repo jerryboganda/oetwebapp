@@ -63,6 +63,36 @@ public sealed record CompanionDestination
     /// </summary>
     public string? SupersededById { get; init; }
 
+    /// <summary>
+    /// True for surfaces that put the learner straight into a timed or immersive
+    /// activity — an exam runner, a practice player, a mock.
+    ///
+    /// <para>
+    /// These were originally excluded from the catalog altogether, so the
+    /// companion could describe where to go but never start anything. The owner
+    /// has decided it should be able to start and to continue, which makes the
+    /// flag a <i>confirmation</i> requirement rather than an exclusion: the
+    /// resolution carries it through to the prompt, which must state what is
+    /// about to happen and get agreement before opening it. Dropping someone
+    /// into a timed paper they did not ask for is a worse failure than making
+    /// them click once more.
+    /// </para>
+    /// </summary>
+    public bool Immersive { get; init; }
+
+    /// <summary>
+    /// Gated on <c>TutorBookUnlocked</c> rather than on a module key.
+    ///
+    /// <para>
+    /// The Tutor Book is sold as an add-on and unlocks a subscription flag; it is
+    /// not one of the admin-togglable dashboard modules. Checking a module key
+    /// for it would be wrong in both directions — it would hide the book from a
+    /// learner who bought the add-on, and advertise it to one on a legacy plan
+    /// that fails module checks open.
+    /// </para>
+    /// </summary>
+    public bool RequiresTutorBook { get; init; }
+
     /// <summary>Extra search terms; the title and description are always searched.</summary>
     public string Keywords { get; init; } = string.Empty;
 }
@@ -79,7 +109,13 @@ public sealed record CompanionDestinationResolution(
     string? Url,
     string Reason,
     CompanionDestinationKind Kind = CompanionDestinationKind.Learning,
-    string? RequiredScope = null)
+    string? RequiredScope = null,
+    /// <summary>
+    /// True for a timed or immersive surface. The companion must say what is
+    /// about to start and get agreement before opening it — the owner lifted the
+    /// old blanket ban on starting activities, not the requirement to ask.
+    /// </summary>
+    bool RequiresConfirmation = false)
 {
     public static CompanionDestinationResolution Unknown(string id) =>
         new(false, id, id, null, "unknown_destination");
@@ -127,6 +163,14 @@ public sealed class CompanionDestinationRegistry(
     PlatformLinkService links) : ICompanionDestinationRegistry
 {
     public IReadOnlyList<CompanionDestination> All => Catalog;
+
+    /// <summary>
+    /// The catalog as static data, for <see cref="CompanionPlatformMapIndexer"/>.
+    /// Indexing happens outside a request, so it has no registry instance and no
+    /// learner to resolve entitlement against — it publishes what the product
+    /// contains, and opening any of it still goes through <see cref="ResolveAsync"/>.
+    /// </summary>
+    internal static IReadOnlyList<CompanionDestination> CatalogForIndexing => Catalog;
 
     public async Task<CompanionDestinationResolution> ResolveAsync(
         string destinationId,
@@ -188,6 +232,40 @@ public sealed class CompanionDestinationRegistry(
         EffectiveEntitlementSnapshot snapshot,
         CancellationToken ct)
     {
+        // The platform flag is the only check that needs to go to the database,
+        // so it is asked first and the rest is decided by Gate, which is pure.
+        if (destination.RequiredFeatureFlag is { } flagKey
+            && !await flags.IsPlatformFlagOnAsync(flagKey, ct))
+        {
+            return new CompanionDestinationResolution(
+                false, destination.Id, destination.Title, null, "surface_disabled", destination.Kind);
+        }
+
+        var gated = Gate(destination, context, snapshot);
+        if (!gated.Allowed) return gated;
+
+        return gated with { Url = links.BuildWebUrl(destination.Path) };
+    }
+
+    /// <summary>
+    /// Every entitlement decision for one destination, as a pure function.
+    ///
+    /// <para>
+    /// Separated from <see cref="EvaluateAsync"/> so the rules can be tested
+    /// against a hand-built entitlement snapshot rather than against a database
+    /// seeded with subscriptions, plans and module lists. These are the checks
+    /// that decide whether a paying learner gets in and a lapsed one does not,
+    /// and they should be cheap enough to test exhaustively.
+    /// </para>
+    ///
+    /// <para>The URL is filled in by the caller, so this can never hand one back
+    /// by accident on a refusal path.</para>
+    /// </summary>
+    internal static CompanionDestinationResolution Gate(
+        CompanionDestination destination,
+        CompanionTurnContext context,
+        EffectiveEntitlementSnapshot snapshot)
+    {
         if (destination.Professions is { Count: > 0 } professions
             && !professions.Contains(context.Profession))
         {
@@ -195,11 +273,25 @@ public sealed class CompanionDestinationRegistry(
                 false, destination.Id, destination.Title, null, "wrong_profession", destination.Kind);
         }
 
-        if (destination.RequiredFeatureFlag is { } flagKey
-            && !await flags.IsPlatformFlagOnAsync(flagKey, ct))
+        // Expiry, checked before the module gate.
+        //
+        // An expired course leaves ExpiresAt in the past while the module list
+        // can still read as enabled, so an expired learner resolved every gated
+        // destination and was handed a working link into content they no longer
+        // have. Anything needing a package therefore has to ask whether the
+        // package is still live, and the answer leads to renewal rather than to
+        // a locked page.
+        var needsLiveAccess = destination.RequiredModuleKey is not null || destination.RequiresTutorBook;
+        if (needsLiveAccess && snapshot.ExpiresAt is { } expiresAt && expiresAt <= DateTimeOffset.UtcNow)
         {
             return new CompanionDestinationResolution(
-                false, destination.Id, destination.Title, null, "surface_disabled", destination.Kind);
+                false, destination.Id, destination.Title, null, "access_expired", destination.Kind, "renew");
+        }
+
+        if (destination.RequiresTutorBook && !snapshot.TutorBookUnlocked)
+        {
+            return new CompanionDestinationResolution(
+                false, destination.Id, destination.Title, null, "module_not_entitled", destination.Kind, "tutor-book");
         }
 
         if (destination.RequiredModuleKey is { } moduleKey && !snapshot.IsModuleEnabled(moduleKey))
@@ -208,8 +300,18 @@ public sealed class CompanionDestinationRegistry(
                 false, destination.Id, destination.Title, null, "module_not_entitled", destination.Kind, $"module:{moduleKey}");
         }
 
+        // Never hand back a link into a timed activity while the learner is
+        // already inside a protected attempt. Starting a second one mid-exam is
+        // the kind of "helpful" action that costs somebody their attempt.
+        if (destination.Immersive && context.ExamMode)
+        {
+            return new CompanionDestinationResolution(
+                false, destination.Id, destination.Title, null, "exam_in_progress", destination.Kind);
+        }
+
         return new CompanionDestinationResolution(
-            true, destination.Id, destination.Title, links.BuildWebUrl(destination.Path), "allowed", destination.Kind);
+            true, destination.Id, destination.Title, null, "allowed",
+            destination.Kind, RequiredScope: null, RequiresConfirmation: destination.Immersive);
     }
 
     private static CompanionDestination? Find(string id) =>
@@ -250,9 +352,13 @@ public sealed class CompanionDestinationRegistry(
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // The catalog. Every path here is a real learner route; immersive players
-    // and exam runners are deliberately absent — the companion suggests where
-    // to go, it never drops a learner into a timed attempt.
+    // The catalog. Every path here is a real learner route.
+    //
+    // Immersive players and exam runners were originally left out so the
+    // companion could only ever suggest. The owner has decided it should be able
+    // to start and to continue an activity, so they are present and marked
+    // Immersive, which turns the exclusion into a confirmation step: the
+    // companion says what is about to start and waits for a yes.
     // ─────────────────────────────────────────────────────────────────────────
     private static readonly IReadOnlyList<CompanionDestination> Catalog =
     [
@@ -265,7 +371,7 @@ public sealed class CompanionDestinationRegistry(
         new() { Id = "conversation.practice", Title = "AI conversation", Path = "/conversation", Kind = CompanionDestinationKind.Practice, SubtestCode = "speaking", Description = "Live spoken practice with the AI conversation partner.", Keywords = "voice talk speak partner" },
         new() { Id = "mock.exams", Title = "Mock exams", Path = "/mocks", Kind = CompanionDestinationKind.Practice, RequiredModuleKey = ModuleKeys.Mocks, Description = "Full-length timed mock exams under test conditions.", Keywords = "full test simulation timed" },
 
-        new() { Id = "companion", Title = "AI Learning Companion", Path = "/companion", Kind = CompanionDestinationKind.Learning, RequiredFeatureFlag = "ai_learning_companion", Description = "The full-screen study conversation, with previous threads and credit balance.", Keywords = "companion chat assistant tutor jana ask" },
+        new() { Id = "companion", Title = "AI Learning Companion", Path = "/companion", Kind = CompanionDestinationKind.Learning, RequiredFeatureFlag = "ai_learning_companion", Description = "The full-screen study conversation, with previous threads and credit balance.", Keywords = "companion chat assistant tutor sami ask" },
 
         new() { Id = "study.plan", Title = "Study plan", Path = "/study-plan", Kind = CompanionDestinationKind.Learning, Description = "The personalised weekly plan built from the exam date and goals.", Keywords = "schedule weekly timetable" },
         new() { Id = "next.actions", Title = "Next best actions", Path = "/next-actions", Kind = CompanionDestinationKind.Learning, Description = "What to do next, ranked by impact on the score.", Keywords = "recommended todo priority" },
@@ -300,5 +406,37 @@ public sealed class CompanionDestinationRegistry(
         new() { Id = "support", Title = "Support", Path = "/support", Kind = CompanionDestinationKind.Support, Description = "Contact the support team about an account or technical problem.", Keywords = "help contact problem issue ticket" },
         new() { Id = "escalations", Title = "Escalations", Path = "/escalations", Kind = CompanionDestinationKind.Support, Description = "Raise or track a formal escalation about marking or service.", Keywords = "escalate complaint dispute appeal" },
         new() { Id = "feedback.guide", Title = "Understanding your feedback", Path = "/feedback-guide", Kind = CompanionDestinationKind.Support, Description = "How to read the AI and expert feedback reports.", Keywords = "feedback report criteria explain" },
+
+        // ── Phase 6 additions ───────────────────────────────────────────────
+        // Places the companion could not name at all, plus the two immersive
+        // surfaces it may now start rather than only describe.
+
+        new() { Id = "register", Title = "Create an account", Path = "/register", Kind = CompanionDestinationKind.Account, Description = "Register for a new account on the platform.", Keywords = "sign up signup join create account new" },
+        new() { Id = "sign.in", Title = "Sign in", Path = "/sign-in", Kind = CompanionDestinationKind.Account, Description = "Sign in to an existing account.", Keywords = "login log in signin access" },
+        new() { Id = "devices", Title = "Devices", Path = "/settings", Kind = CompanionDestinationKind.Account, Description = "The devices signed in to this account, and how to remove one.", Keywords = "device phone laptop trusted otp code limit remove" },
+
+        // TutorBookUnlocked, NOT IsModuleEnabled — see EvaluateAsync. The two
+        // are different flags and gating on the wrong one either hides the book
+        // from someone who bought it or advertises it to someone who did not.
+        new() { Id = "tutor.book", Title = "The Tutor Book", Path = "/learner/tutor-book", Kind = CompanionDestinationKind.Library, RequiresTutorBook = true, Description = "The Tutor Book, for learners whose package includes it.", Keywords = "tutor book sessions comprehensive" },
+
+        new() { Id = "vocabulary", Title = "Vocabulary", Path = "/vocabulary", Kind = CompanionDestinationKind.Learning, Description = "Browse medical vocabulary, flashcards and quizzes.", Keywords = "word term definition flashcard quiz browse lexis" },
+        new() { Id = "vocabulary.favourites", Title = "Saved words", Path = "/recalls/favourites", Kind = CompanionDestinationKind.Learning, RequiredModuleKey = ModuleKeys.Recalls, Description = "Words the learner has bookmarked to revisit.", Keywords = "saved bookmark favourite starred words" },
+        new() { Id = "listening.recalls", Title = "Listening recalls", Path = "/listening/practice", Kind = CompanionDestinationKind.Practice, SubtestCode = "listening", Description = "Listening practice built from reported recall material.", Keywords = "recall listening practice reported remembered" },
+        new() { Id = "listening.dictation", Title = "Listening dictation", Path = "/listening/dictation", Kind = CompanionDestinationKind.Practice, SubtestCode = "listening", Description = "Dictation drills for Part A note completion and spelling.", Keywords = "dictation spelling note completion type" },
+        new() { Id = "reading.drills", Title = "Reading drills", Path = "/reading/drills", Kind = CompanionDestinationKind.Practice, SubtestCode = "reading", Description = "Targeted drills on one Reading part at a time.", Keywords = "drill part a b c skim scan practice" },
+        new() { Id = "writing.submissions", Title = "Writing submissions", Path = "/writing/submissions", Kind = CompanionDestinationKind.Progress, SubtestCode = "writing", Description = "Every letter submitted, with its feedback and any appeal.", Keywords = "letter submitted feedback appeal regrade past" },
+        new() { Id = "basic.english", Title = "Basic English course", Path = "/materials", Kind = CompanionDestinationKind.Library, RequiredModuleKey = ModuleKeys.BasicEnglish, Description = "General English foundation materials, for learners whose package includes them.", Keywords = "general english basic foundation beginner grammar" },
+        new() { Id = "onboarding", Title = "Getting started", Path = "/onboarding", Kind = CompanionDestinationKind.Learning, Description = "The setup walkthrough: profession, exam date and goals.", Keywords = "start setup begin first tour walkthrough new" },
+
+        // Immersive surfaces. Present so the companion can START them, which is
+        // the owner's decision to lift the earlier suggest-only rule. Every one
+        // is marked Immersive, which forces an explicit confirmation before the
+        // learner is dropped into anything timed.
+        new() { Id = "writing.start", Title = "Start a writing task", Path = "/writing/practice", Kind = CompanionDestinationKind.Practice, SubtestCode = "writing", Immersive = true, Description = "Begin a new writing practice letter now.", Keywords = "start begin write letter task now practice" },
+        new() { Id = "speaking.start", Title = "Start a speaking card", Path = "/speaking/practice", Kind = CompanionDestinationKind.Practice, SubtestCode = "speaking", Immersive = true, Description = "Begin a new speaking role-play card now.", Keywords = "start begin speak card role play now practice" },
+        new() { Id = "reading.start", Title = "Start a reading paper", Path = "/reading/practice", Kind = CompanionDestinationKind.Practice, SubtestCode = "reading", Immersive = true, Description = "Begin a reading paper now. It is timed.", Keywords = "start begin reading paper now timed practice" },
+        new() { Id = "listening.start", Title = "Start a listening paper", Path = "/listening/practice", Kind = CompanionDestinationKind.Practice, SubtestCode = "listening", Immersive = true, Description = "Begin a listening paper now. It is timed.", Keywords = "start begin listening paper now timed practice" },
+        new() { Id = "mock.start", Title = "Start a mock exam", Path = "/mocks", Kind = CompanionDestinationKind.Practice, RequiredModuleKey = ModuleKeys.Mocks, Immersive = true, Description = "Begin a full timed mock exam under test conditions.", Keywords = "start begin mock full exam timed simulation" },
     ];
 }

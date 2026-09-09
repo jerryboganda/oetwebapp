@@ -69,10 +69,14 @@ public sealed class CompanionCorpusBootstrapHostedService(
                 return;
             }
 
-            logger.LogInformation("Companion corpus is empty; indexing the rulebooks now.");
+            logger.LogInformation("Companion corpus is empty; building it now.");
 
-            var indexer = scope.ServiceProvider.GetRequiredService<ICompanionRulebookIndexer>();
-            var result = await indexer.IndexAsync(professions: null, embed: true, stoppingToken);
+            // The WHOLE corpus, not just the rulebooks. Bootstrapping only the
+            // rulebooks left a fresh environment without the Speaking taxonomy,
+            // the assessment criteria, the platform map or the support rules,
+            // with nothing to indicate they were missing.
+            var builder = scope.ServiceProvider.GetRequiredService<ICompanionCorpusBuilder>();
+            var result = await builder.BuildAsync(professions: null, embed: true, stoppingToken);
 
             logger.LogInformation(
                 "Companion corpus bootstrap complete: {Sources} sources, {Chunks} chunks, "

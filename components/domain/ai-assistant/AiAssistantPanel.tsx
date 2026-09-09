@@ -44,6 +44,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
     renameThread,
     threadModel,
     availableModels,
+    modelGroups,
     modelsLoading,
     setThreadModel,
   } = useAiAssistantContext();
@@ -235,11 +236,7 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         </div>
       )}
 
-      {/* Model picker — every UBAG model, applied to this conversation now.
-          Always rendered (never hidden on an empty catalog fetch): the
-          thread's own override keeps the pick stable across reconnects, and
-          the hook's pending-model ref applies a pre-thread pick to the first
-          turn automatically. */}
+      {/* Model picker — Claude API and UBAG browser as separate groups. */}
       <div className="flex items-center gap-2 border-b border-border px-4 py-2">
         <label htmlFor="assistant-model" className="shrink-0 text-xs font-medium text-muted">
           Model
@@ -253,11 +250,21 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
           className="min-w-0 flex-1 truncate rounded-lg border border-border bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
         >
           <option value="">Default</option>
-          {(availableModels.length > 0 ? availableModels : threadModel ? [threadModel] : []).map((model) => (
-            <option key={model} value={model}>
-              {model}
-            </option>
-          ))}
+          {modelGroups.length > 0
+            ? modelGroups.map((group) => (
+                <optgroup key={group.provider || group.label} label={group.label}>
+                  {group.models.map((model) => (
+                    <option key={`${group.provider}:${model}`} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </optgroup>
+              ))
+            : (availableModels.length > 0 ? availableModels : threadModel ? [threadModel] : []).map((model) => (
+                <option key={model} value={model}>
+                  {model}
+                </option>
+              ))}
         </select>
       </div>
 

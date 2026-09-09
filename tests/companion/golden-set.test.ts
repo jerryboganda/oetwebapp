@@ -41,6 +41,24 @@ const REQUIRED_CASE_CLASSES = [
   'entitlement_fabrication',
   'credit_transparency',
   'arabic_code_switch',
+
+  // Added when the knowledge base was completed. Each corresponds to a source
+  // class or control that did not exist before and would otherwise be covered
+  // by nothing.
+  'corpus_contamination',
+  'official_fact_staging',
+  'exam_format_fact',
+  'speaking_taxonomy',
+  'approved_set_retrieval',
+  'platform_support_fact',
+  'package_isolation',
+  'expired_access',
+  'start_activity_confirmation',
+  'hint_not_answer',
+  'role_play_control',
+  'real_exam_declared',
+  'capability_honesty',
+  'pii_before_persistence',
 ] as const;
 
 /**
@@ -52,6 +70,13 @@ const ZERO_TOLERANCE_CLASSES = [
   'exam_integrity',
   'prompt_injection',
   'entitlement_fabrication',
+
+  // A retrievable PASS CHECK voids the whole acceptance run rather than
+  // scoring badly, and package leakage is a commercial boundary, not a
+  // quality metric. Both belong here for the same reason as the original four.
+  'corpus_contamination',
+  'package_isolation',
+  'real_exam_declared',
 ] as const;
 
 interface GoldenCase {
@@ -130,6 +155,48 @@ describe('companion golden sets', () => {
         cases.some((c) => c.expect.zeroTolerance === true),
         `class '${cls}' must have at least one case flagged zeroTolerance`,
       ).toBe(true);
+    }
+  });
+
+  it('contains no acceptance-pack material', () => {
+    // The golden set is developer-authored on purpose. If a scenario prompt or a
+    // PASS CHECK from one of the four Final Testing PDFs were ever pasted in
+    // here, the set would stop being an independent check and start being an
+    // answer key — and it lives in the repository, which is an indexable path.
+    //
+    // The markers are the same ones CompanionCorpusGuard screens for, minus the
+    // one GC-017 legitimately quotes in its own prompt to prove the companion
+    // cannot retrieve it.
+    const markers = [
+      'FINAL TESTING PACK',
+      'TESTER SCORECARD',
+      'PROMPT TO SEND',
+      'SETUP / SEQUENCE',
+      'RELEASE BLOCKER',
+      'NOTES / DEFECT ID',
+      'PRE-CANDIDATE TECHNICAL RELEASE GATE',
+    ];
+
+    for (const { file, set } of sets) {
+      const prompts = set.cases
+        .flatMap((c) => [c.prompt ?? '', ...(c.turns ?? [])])
+        .join(' ')
+        .toUpperCase();
+
+      for (const marker of markers) {
+        expect(prompts, `${file} contains acceptance-pack scaffolding: ${marker}`).not.toContain(marker);
+      }
+    }
+  });
+
+  it('gives every zero-tolerance case an explicit flag', () => {
+    // A zero-tolerance behaviour that is merely present but unflagged gets
+    // averaged into a score, which is exactly what "zero tolerance" rules out.
+    const allCases = sets.flatMap(({ set }) => set.cases);
+
+    for (const cls of ZERO_TOLERANCE_CLASSES) {
+      const flagged = allCases.filter((c) => c.class === cls && c.expect.zeroTolerance === true);
+      expect(flagged.length, `class '${cls}' has no case flagged zeroTolerance`).toBeGreaterThan(0);
     }
   });
 

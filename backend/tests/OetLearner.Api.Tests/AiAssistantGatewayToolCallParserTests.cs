@@ -231,12 +231,121 @@ public sealed class AiAssistantGatewayToolCallParserTests
         Assert.Equal("ai_credit_accounting_unavailable", recorder.FailureErrorCode);
     }
 
-    private sealed class FakeRouteResolver : IAiFeatureRouteResolver
+    [Fact]
+    public async Task StreamCompleteWithToolsAsync_RoutesDuckAiOverride_ToUbag_NotAnthropic()
+    {
+        var (gateway, anthropic, ubag) = BuildSplitCatalogGateway();
+
+        var chunks = new List<LlmStreamChunk>();
+        await foreach (var chunk in gateway.StreamCompleteWithToolsAsync(
+                   AiFeatureCodes.AiAssistantAdmin,
+                   "admin-1",
+                   [new LlmMessage("system", "You are helpful."), new LlmMessage("user", "hi")],
+                   Array.Empty<AiToolDefinition>(),
+                   modelOverride: "duckai_web|GPT-5.6 Luna",
+                   CancellationToken.None))
+        {
+            chunks.Add(chunk);
+        }
+
+        Assert.Null(anthropic.SeenRequest);
+        Assert.NotNull(ubag.SeenRequest);
+        Assert.Equal("duckai_web|GPT-5.6 Luna", ubag.SeenRequest!.Model);
+        Assert.Equal("ubag", ubag.SeenRequest.ProviderCode);
+        Assert.Equal("ubag", Assert.IsType<LlmServedModel>(chunks[0]).ProviderCode);
+    }
+
+    [Fact]
+    public async Task StreamCompleteWithToolsAsync_RoutesClaudeOverride_ToAnthropic()
+    {
+        var (gateway, anthropic, ubag) = BuildSplitCatalogGateway();
+
+        await foreach (var _ in gateway.StreamCompleteWithToolsAsync(
+                   AiFeatureCodes.AiAssistantAdmin,
+                   "admin-1",
+                   [new LlmMessage("system", "You are helpful."), new LlmMessage("user", "hi")],
+                   Array.Empty<AiToolDefinition>(),
+                   modelOverride: "claude-haiku-5",
+                   CancellationToken.None))
+        { }
+
+        Assert.Null(ubag.SeenRequest);
+        Assert.NotNull(anthropic.SeenRequest);
+        Assert.Equal("claude-haiku-5", anthropic.SeenRequest!.Model);
+        Assert.Equal("anthropic", anthropic.SeenRequest.ProviderCode);
+    }
+
+    [Fact]
+    public async Task StreamCompleteWithToolsAsync_RoutesClaudeWeb_ToUbag_NotAnthropic()
+    {
+        var (gateway, anthropic, ubag) = BuildSplitCatalogGateway();
+
+        await foreach (var _ in gateway.StreamCompleteWithToolsAsync(
+                   AiFeatureCodes.AiAssistantAdmin,
+                   "admin-1",
+                   [new LlmMessage("system", "You are helpful."), new LlmMessage("user", "hi")],
+                   Array.Empty<AiToolDefinition>(),
+                   modelOverride: "claude_web",
+                   CancellationToken.None))
+        { }
+
+        Assert.Null(anthropic.SeenRequest);
+        Assert.NotNull(ubag.SeenRequest);
+        Assert.Equal("claude_web", ubag.SeenRequest!.Model);
+        Assert.Equal("ubag", ubag.SeenRequest.ProviderCode);
+    }
+
+    private static (AiAssistantGateway Gateway, NamedCapturingProvider Anthropic, NamedCapturingProvider Ubag) BuildSplitCatalogGateway()
+    {
+        var anthropic = new NamedCapturingProvider("anthropic");
+        var ubag = new NamedCapturingProvider("registry");
+        var gateway = new AiAssistantGateway(
+            new FakeRouteResolver("anthropic", "claude-sonnet-5"),
+            new MapProviderRegistry(
+                new AiProvider { Code = "anthropic", Dialect = AiProviderDialect.Anthropic, DefaultModel = "claude-sonnet-5", IsActive = true, EncryptedApiKey = "k" },
+                new AiProvider { Code = "ubag", Dialect = AiProviderDialect.OpenAiCompatible, DefaultModel = "mock", IsActive = true, EncryptedApiKey = "k" }),
+            new IAiModelProvider[] { anthropic, ubag },
+            NullLogger<AiAssistantGateway>.Instance);
+        return (gateway, anthropic, ubag);
+    }
+
+    private sealed class FakeRouteResolver(string providerCode = "fake-assistant", string? model = "assistant-model") : IAiFeatureRouteResolver
     {
         public Task<AiFeatureRouteResolution?> ResolveAsync(string featureCode, CancellationToken ct)
-            => Task.FromResult<AiFeatureRouteResolution?>(new("fake-assistant", "assistant-model"));
+            => Task.FromResult<AiFeatureRouteResolution?>(new(providerCode, model));
 
         public bool IsKnownFeatureCode(string featureCode) => true;
+    }
+
+    private sealed class MapProviderRegistry(params AiProvider[] rows) : IAiProviderRegistry
+    {
+        public Task<AiProvider?> FindByCodeAsync(string code, CancellationToken ct)
+            => Task.FromResult(rows.FirstOrDefault(r => r.Code.Equals(code, StringComparison.OrdinalIgnoreCase)));
+
+        public Task<IReadOnlyList<AiProvider>> ListActiveAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AiProvider>>(rows);
+
+        public Task<IReadOnlyList<AiProvider>> ListByCategoryAsync(AiProviderCategory category, CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<AiProvider>>(rows);
+
+        public Task<string?> GetPlatformKeyAsync(string providerCode, CancellationToken ct)
+            => Task.FromResult<string?>(null);
+    }
+
+    private sealed class NamedCapturingProvider(string name) : IAiModelProvider
+    {
+        public string Name => name;
+        public AiProviderRequest? SeenRequest { get; private set; }
+
+        public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+        {
+            SeenRequest = request;
+            return Task.FromResult(new AiProviderCompletion
+            {
+                Text = "ok",
+                Usage = new AiUsage { PromptTokens = 1, CompletionTokens = 1 },
+            });
+        }
     }
 
     private sealed class EmptyProviderRegistry : IAiProviderRegistry

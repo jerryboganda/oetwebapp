@@ -50,10 +50,13 @@ public sealed class AiAssistantGateway(
         var startedAt = DateTimeOffset.UtcNow;
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-        // Resolve provider + model via feature routing
+        // Resolve provider + model via feature routing. A thread model
+        // override is provider-aware: Claude API ids stay on anthropic,
+        // UBAG browser ids (duckai_web, claude_web, …) stay on ubag.
         var route = await routeResolver.ResolveAsync(featureCode, ct);
-        var requestedProviderCode = route?.ProviderCode;
         var requestedModel = modelOverride ?? route?.Model;
+        var requestedProviderCode = AssistantModelCatalog.ProviderCodeForModel(requestedModel)
+            ?? route?.ProviderCode;
         var resolvedProvider = await ResolveProviderAsync(requestedProviderCode, requestedModel, ct);
         var providerCode = resolvedProvider?.ProviderCode ?? requestedProviderCode ?? string.Empty;
         var model = resolvedProvider?.Model ?? requestedModel ?? string.Empty;
