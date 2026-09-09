@@ -31,6 +31,8 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/Services/AiBudgetServicePostgreSqlConcurrencyTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiExecutionCoordinatorPostgreSqlConcurrencyTests.cs'
       - 'backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs'
+      - 'backend/src/OetLearner.Api/Services/Ai/AiOperationLeaseClaimer.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiOperationLeaseTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
       - '.github/workflows/ai-control-plane-tests.yml'
@@ -54,6 +56,8 @@ on:
       - 'backend/tests/OetLearner.Api.Tests/Services/AiBudgetServicePostgreSqlConcurrencyTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/Services/AiExecutionCoordinatorPostgreSqlConcurrencyTests.cs'
       - 'backend/src/OetLearner.Api/Services/Ai/AiBudgetService.cs'
+      - 'backend/src/OetLearner.Api/Services/Ai/AiOperationLeaseClaimer.cs'
+      - 'backend/tests/OetLearner.Api.Tests/Services/AiOperationLeaseTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/PostgreSqlPerformanceProviderTests.cs'
       - 'backend/tests/OetLearner.Api.Tests/MigrationHygieneTests.cs'
       - '.github/workflows/ai-control-plane-tests.yml'
@@ -78,15 +82,24 @@ jobs:
 
       - name: Start PostgreSQL with headroom for 40-way races
         run: |
+          # pgvector/pgvector:pg16 (not plain postgres:16-alpine): LearnerDbContext
+          # declares HasPostgresExtension("vector") for CompanionChunk.Embedding, and
+          # EF's model validation touches the full model (not just the two hand-rolled
+          # DDL tables these tests create) the moment any code calls db.Database.* —
+          # Npgsql's UseVector() plugin silently degrades to "no vector mapping" when
+          # the extension isn't installed, and EF then throws
+          # "could not be mapped to the database type 'vector(1536)'" for every test
+          # in this workflow, not just the ones that touch Companion tables directly.
           docker run -d --name oet-ai-pg \
             -e POSTGRES_DB=oet_ai_control_plane_tests \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=postgres \
             -p 5432:5432 \
-            postgres:16-alpine \
+            pgvector/pgvector:pg16 \
             -c max_connections=400
           for i in $(seq 1 30); do
             if docker exec oet-ai-pg pg_isready -U postgres -d oet_ai_control_plane_tests; then
+              docker exec oet-ai-pg psql -U postgres -d oet_ai_control_plane_tests -c "CREATE EXTENSION IF NOT EXISTS vector;"
               exit 0
             fi
             sleep 1
@@ -107,4 +120,4 @@ jobs:
           dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
           --configuration Debug --no-restore --nologo
           --logger "console;verbosity=normal"
-          --filter "FullyQualifiedName~AiControlPlane|FullyQualifiedName~PostgreSql|FullyQualifiedName~MigrationHygieneTests"
+          --filter "FullyQualifiedName~AiControlPlane|FullyQualifiedName~PostgreSql|FullyQualifiedName~MigrationHygieneTests|FullyQualifiedName~AiOperationLeaseTests"
