@@ -114,7 +114,7 @@ public sealed class AiOperationLeaseTests
 
     private static LearnerDbContext CreateContext(PostgreSqlTestDatabase database)
         => new(new DbContextOptionsBuilder<LearnerDbContext>()
-            .UseNpgsql(database.SchemaConnectionString)
+            .UseNpgsql(database.SchemaConnectionString, npgsql => npgsql.UseVector())
             .Options);
 
     private static async Task InsertAsync(
