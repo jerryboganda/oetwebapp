@@ -6626,10 +6626,22 @@ public partial class LearnerService(
         if (!string.IsNullOrWhiteSpace(normalizedContentId)
             && !string.Equals(attempt.ContentId, normalizedContentId, StringComparison.Ordinal))
         {
-            throw ApiException.Validation(
-                "speaking_attempt_content_mismatch",
-                "This speaking attempt does not belong to the requested task.",
-                [new ApiFieldError("contentId", "mismatch", "Use the attempt created for this speaking task.")]);
+            // The learner UI's upload/complete calls bind by the same id the
+            // page URL carries throughout (RolePlayCard.Id for Speaking —
+            // see CreateAttemptAsync's matching fallback), which differs
+            // from attempt.ContentId (the resolved ContentItem shell id) by
+            // design. Accept a RolePlayCard.Id that maps to this attempt's
+            // ContentItem as a match instead of hard-mismatching.
+            var mapsToSameContent = await db.RolePlayCards
+                .AsNoTracking()
+                .AnyAsync(c => c.Id == normalizedContentId && c.ContentItemId == attempt.ContentId, cancellationToken);
+            if (!mapsToSameContent)
+            {
+                throw ApiException.Validation(
+                    "speaking_attempt_content_mismatch",
+                    "This speaking attempt does not belong to the requested task.",
+                    [new ApiFieldError("contentId", "mismatch", "Use the attempt created for this speaking task.")]);
+            }
         }
 
         if (!string.Equals(attempt.Context, "mock_set", StringComparison.OrdinalIgnoreCase))
@@ -7014,8 +7026,40 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var contentForAttempt = await db.ContentItems
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Id == request.ContentId, cancellationToken)
-            ?? throw ApiException.NotFound("content_not_found", "Practice content not found.");
+            .FirstOrDefaultAsync(x => x.Id == request.ContentId, cancellationToken);
+        // Speaking submissions are keyed by RolePlayCard.Id throughout the
+        // learner UI (Selection -> roleplay -> task, and submitSpeakingRecording
+        // ultimately calls this with that id as ContentId) — RolePlayCard.Id
+        // and its ContentItem shell's own Id are minted as two distinct,
+        // differently-prefixed values (rpc-... vs ci-...), so the strict
+        // lookup above 404s for every Speaking card. Mirrors the identical
+        // fallback GetSpeakingTaskAsync already uses for card previews.
+        // Without this, attempt creation — and therefore every downstream
+        // grading step — never runs for a real Speaking submission
+        // (confirmed live via full acceptance testing, 2026-09-09).
+        var resolvedContentId = request.ContentId;
+        if (contentForAttempt is null && string.Equals(subtest, "speaking", StringComparison.OrdinalIgnoreCase))
+        {
+            var fallbackContentItemId = await db.RolePlayCards
+                .AsNoTracking()
+                .Where(c => c.Id == request.ContentId)
+                .Select(c => c.ContentItemId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (!string.IsNullOrEmpty(fallbackContentItemId))
+            {
+                contentForAttempt = await db.ContentItems
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.Id == fallbackContentItemId, cancellationToken);
+                if (contentForAttempt is not null)
+                {
+                    resolvedContentId = fallbackContentItemId;
+                }
+            }
+        }
+        if (contentForAttempt is null)
+        {
+            throw ApiException.NotFound("content_not_found", "Practice content not found.");
+        }
         if (!string.Equals(contentForAttempt.SubtestCode, subtest, StringComparison.OrdinalIgnoreCase))
         {
             throw ApiException.NotFound("content_not_found", "Practice content not found.");
@@ -7059,7 +7103,7 @@ public partial class LearnerService(
         var mode = request.Mode ?? (subtest is "reading" or "listening" ? "exam" : "practice");
         var existingAttempts = await db.Attempts
             .Where(x => x.UserId == userId
-                        && x.ContentId == request.ContentId
+                        && x.ContentId == resolvedContentId
                         && x.SubtestCode == subtest
                         && x.Context == context
                         && x.State == AttemptState.InProgress)
@@ -7100,7 +7144,7 @@ public partial class LearnerService(
         {
             Id = $"{subtest[..1]}a-{Guid.NewGuid():N}",
             UserId = userId,
-            ContentId = request.ContentId,
+            ContentId = resolvedContentId,
             SubtestCode = subtest,
             Context = context,
             Mode = mode,
@@ -7108,7 +7152,7 @@ public partial class LearnerService(
             StartedAt = DateTimeOffset.UtcNow,
             DeviceType = request.DeviceType ?? "web",
             ParentAttemptId = request.ParentAttemptId,
-            ComparisonGroupId = $"{subtest}-{request.ContentId}",
+            ComparisonGroupId = $"{subtest}-{resolvedContentId}",
             MarkingPolicyVersionId = markingPolicy?.PolicyId,
             ScoreConversionSnapshotJson = scoreConversionAtStart is null
                 ? null
