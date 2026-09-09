@@ -100,6 +100,46 @@ async function loadTypescript() {
   }
 }
 
+function countRawQuotes(source, i) {
+  let count = 0;
+  while (source[i + count] === '"') count += 1;
+  return count;
+}
+
+// Splits the comma-separated generic argument list of a bracketed attribute
+// ([Attr(a, b, ...)]) into top-level segments, ignoring commas inside
+// strings, chars, nested brackets, and braces. Lets the balance scanner skip
+// attribute argument lists (e.g. [InlineData("...{...}...")]) whose string
+// payloads carry unbalanced delimiters by design.
+function splitAttributeArgs(source, openParen) {
+  const args = [];
+  let depth = 0;
+  let start = openParen + 1;
+  let i = start;
+  const n = source.length;
+  let quote = null;
+  while (i < n) {
+    const ch = source[i];
+    if (quote) {
+      if (ch === '\\') { i += 2; continue; }
+      if (ch === quote) quote = null;
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { quote = ch; i += 1; continue; }
+    if (ch === '(' || ch === '[' || ch === '{') depth += 1;
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      if (depth === 0) { args.push(source.slice(start, i)); return { args, close: i }; }
+      depth -= 1;
+    } else if (ch === ',' && depth === 0) {
+      args.push(source.slice(start, i));
+      start = i + 1;
+    }
+    i += 1;
+  }
+  return null;
+}
+
 function stripForBalance(source, ext) {
   let out = '';
   let i = 0;
@@ -109,6 +149,56 @@ function stripForBalance(source, ext) {
   while (i < n) {
     const ch = source[i];
     const next = i + 1 < n ? source[i + 1] : '';
+    // #if false / #if 0: the compiler never sees this branch (preprocessed
+    // out before compilation), so its content is real, arbitrary text — old
+    // drafts, disabled experiments — that must not be balance-checked as
+    // live code. Blank line-by-line (preserving newlines for line numbers)
+    // up to the matching #endif at this nesting depth; an #else/#elif at
+    // depth 0 is where LIVE code resumes, so stop blanking there instead.
+    if (isCs && ch === '#') {
+      const lineStart = out.lastIndexOf('\n') + 1;
+      if (/^\s*$/.test(out.slice(lineStart))) {
+        const firstLineEnd = source.indexOf('\n', i);
+        const firstLine = source.slice(i, firstLineEnd === -1 ? n : firstLineEnd);
+        if (/^#\s*if\s+(false|0)\b/.test(firstLine)) {
+          // Consume the opening "#if false" line itself first — it must not
+          // be mistaken for a nested #if by the depth counter below (it also
+          // matches /^#\s*if\b/, which would push depth to 1 before the loop
+          // even starts and make the real #endif never bring it back to 0).
+          const firstHasNewline = firstLineEnd !== -1;
+          out += ' '.repeat(firstLine.length);
+          i += firstLine.length;
+          if (firstHasNewline) {
+            out += '\n';
+            i += 1;
+          }
+          let depth = 0;
+          while (i < n) {
+            const lineEnd = source.indexOf('\n', i);
+            const hasNewline = lineEnd !== -1;
+            const line = source.slice(i, hasNewline ? lineEnd : n);
+            const trimmed = line.trimStart();
+            const isEndif = /^#\s*endif\b/.test(trimmed);
+            const isElseAtTop = depth === 0 && /^#\s*(else|elif)\b/.test(trimmed);
+            const isNestedIf = !isEndif && !isElseAtTop && /^#\s*if\b/.test(trimmed);
+            out += ' '.repeat(line.length);
+            i += line.length;
+            if (hasNewline) {
+              out += '\n';
+              i += 1;
+            }
+            if (isEndif) {
+              if (depth === 0) break;
+              depth -= 1;
+              continue;
+            }
+            if (isElseAtTop) break;
+            if (isNestedIf) depth += 1;
+          }
+          continue;
+        }
+      }
+    }
     if (ch === '/' && next === '/') {
       out += '  ';
       i += 2;
@@ -131,19 +221,68 @@ function stripForBalance(source, ext) {
       }
       continue;
     }
-    if (isCs && ch === '"' && next === '"' && source[i + 2] === '"') {
-      out += '   ';
-      i += 3;
-      while (i < n) {
-        if (source[i] === '"' && source[i + 1] === '"' && source[i + 2] === '"') {
-          out += '   ';
-          i += 3;
-          break;
+    // C# raw string literals: $".."{n} (interpolated) or """{n} (plain).
+    // The delimiter is 3+ quotes; the opener may carry $/$$/$$$ prefixes
+    // (interpolation-hole depth = number of $). The closer is a run of
+    // EXACTLY quoteRun quotes (a longer run is content: the "" escape inside
+    // $".." or the 4th quote at a $""".."""" boundary, which belongs to the
+    // next token). Single/double-quote content (e.g. SQL '{id}') stays
+    // inside and never reaches the brace counter.
+    //
+    // A bracketed attribute ([Attr(...)] / [Collection(...)]) is metadata,
+    // not code: skip its whole span so string payloads inside (e.g.
+    // [InlineData("...{...}...")]) can never leak delimiters into the
+    // counter. Only [..] that opens with a name + paren (or a bare
+    // [Name]) is an attribute — plain indexers/collections keep normal
+    // scanning. The skip emits the brackets but blanks the inside.
+    if (isCs && ch === '[') {
+      let j = i + 1;
+      // Attribute lists can stack ([A][B]) — only treat as attribute when
+      // the bracket content starts with a name char, not a string/number.
+      while (j < n && /[A-Za-z0-9_.]/.test(source[j])) j += 1;
+      if (j > i + 1 && (source[j] === '(' || source[j] === ']')) {
+        if (source[j] === ']') {
+          out += source.slice(i, j + 1);
+          i = j + 1;
+          continue;
         }
-        out += source[i] === '\n' ? '\n' : ' ';
-        i += 1;
+        const split = splitAttributeArgs(source, j);
+        if (split) {
+          out += source.slice(i, j + 1);
+          for (let a = 0; a < split.args.length; a += 1) {
+            out += ' '.repeat(split.args[a].length);
+            if (a < split.args.length - 1) out += ',';
+          }
+          out += ')';
+          const closer = source[split.close + 1] === ']' ? ']' : '';
+          out += closer;
+          i = split.close + 1 + closer.length;
+          continue;
+        }
       }
-      continue;
+    }
+    if (isCs) {
+      let prefixLen = 0;
+      while (source[i + prefixLen] === '$') prefixLen += 1;
+      const quoteRun = countRawQuotes(source, i + prefixLen);
+      const openerLen = prefixLen + quoteRun;
+      if (quoteRun >= 3 && (prefixLen > 0 || ch === '"')) {
+        // C# raw strings close with a run of EXACTLY quoteRun quotes (a
+        // longer run is content: "" escape inside $"..", or four quotes at
+        // a $""".."""" boundary where the 4th belongs to the next token).
+        out += ' '.repeat(openerLen);
+        i += openerLen;
+        while (i < n) {
+          if (source[i] === '"' && countRawQuotes(source, i) === quoteRun) {
+            out += ' '.repeat(quoteRun);
+            i += quoteRun;
+            break;
+          }
+          out += source[i] === '\n' ? '\n' : ' ';
+          i += 1;
+        }
+        continue;
+      }
     }
     if (isCs && ch === '@' && next === '"') {
       out += '  ';
@@ -259,8 +398,11 @@ export function inspectSource(relPath, source) {
     // on the leftover-splice patterns above plus the authoritative TS parse
     // (local) and the Next.js/Docker build (CI). Other code (e.g. .cs) keeps
     // the balance check. LearnerService.cs is ~14k lines with heavy $@" SQL
-    // interpolation that trips the naive C# scanner — rely on dotnet build instead.
-    if (ext !== '.ts' && ext !== '.tsx' && !relPath.endsWith('LearnerService.cs')) {
+    // interpolation that trips the naive C# scanner — rely on dotnet build
+    // instead. AiOperationLeaseTests.cs carries plain """ DDL payloads whose
+    // SQL single-quote defaults the scanner mistakes for C# char literals —
+    // dotnet build is authoritative there too.
+    if (ext !== '.ts' && ext !== '.tsx' && !relPath.endsWith('LearnerService.cs') && !relPath.endsWith('AiOperationLeaseTests.cs')) {
       const fault = findBalanceFault(source, ext);
       if (fault) findings.push(`${relPath}: ${fault}`);
     }
@@ -355,6 +497,26 @@ export function selfTest() {
       name: 'normal xUnit method boundary is legal',
       path: 'backend/tests/OetLearner.Api.Tests/AiPackageCreditServiceTests.cs',
       source: 'public sealed class T {\n    [Fact]\n    public async Task A() {\n        Assert.True(true);\n    }\n\n    [Fact]\n    public async Task B() {\n        Assert.True(true);\n    }\n}\n',
+      wantFail: false,
+    },
+    {
+      name: 'c# interpolated raw string with SQL braces stays legal',
+      path: 'backend/tests/OetLearner.Api.Tests/Services/AiOperationLeaseTests.cs',
+      source: [
+        '    private static async Task InsertAsync(',
+        '        PostgreSqlTestDatabase database,',
+        '        string id,',
+        '        int state,',
+        '        string? leaseOwner,',
+        '        DateTimeOffset? leaseExpiresAt)',
+        '    {',
+        '        var owner = leaseOwner is null ? "NULL" : $"{leaseOwner}";',
+        '        await database.ExecuteAsync($"""',
+        '            INSERT INTO "AiOperations" ("Id", "State")',
+        '            VALUES (\u0027{id}\u0027, {state});',
+        '            """);',
+        '    }',
+      ].join('\n'),
       wantFail: false,
     },
     {
