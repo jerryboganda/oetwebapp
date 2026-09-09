@@ -79,6 +79,15 @@ public sealed class RegistryBackedProvider(
 {
     public string Name => "registry";
 
+    private static readonly TimeSpan StandardProviderTimeout = TimeSpan.FromSeconds(100);
+
+    private static readonly TimeSpan UbagFacadeTimeout = TimeSpan.FromSeconds(300);
+
+    private static bool IsUbagFacadeRequest(string baseUrl, AiProviderRequest request)
+        => string.Equals(request.ProviderCode, "ubag", StringComparison.OrdinalIgnoreCase)
+            || (Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri)
+                && string.Equals(uri.Host, "ubag-vps-gateway-1", StringComparison.OrdinalIgnoreCase));
+
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
         var (baseUrl, apiKey, reasoningEffort) = await ResolveCredentialsAsync(request, ct);
@@ -149,6 +158,7 @@ public sealed class RegistryBackedProvider(
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        client.Timeout = IsUbagFacadeRequest(baseUrl, request) ? UbagFacadeTimeout : StandardProviderTimeout;
 
         var model = request.Model;
         var maxTokens = request.MaxTokens ?? 4096;
@@ -186,7 +196,11 @@ public sealed class RegistryBackedProvider(
 
         var body = await response.Content.ReadAsStringAsync(ct);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure("AI provider", (int)response.StatusCode, response.ReasonPhrase));
+            throw new InvalidOperationException(AiProviderErrorMessages.HttpFailure(
+                IsUbagFacadeRequest(baseUrl, request) ? "UBAG provider" : "AI provider",
+                (int)response.StatusCode,
+                response.ReasonPhrase,
+                ExtractUbagErrorDetail(body)));
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
@@ -211,6 +225,44 @@ public sealed class RegistryBackedProvider(
 
         var finishReason = choice.TryGetProperty("finish_reason", out var finish) ? finish.GetString() : null;
         return new AiProviderCompletion { Text = text, Usage = usage, ToolCalls = toolCalls, FinishReason = finishReason, ServedModel = servedModel };
+    }
+
+    /// <summary>Pulls the facade's machine-readable error detail out of a
+    /// non-2xx OpenAI-facade body (<c>error.message</c>, else <c>error.code</c>,
+    /// else the raw body truncated). Lets learners/admins see WHY the browser
+    /// job failed (login drift, wait timeout, cancelled) instead of a bare
+    /// "HTTP 503" with the reason phrase.</summary>
+    public static string? ExtractUbagErrorDetail(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("error", out var error)
+                && error.ValueKind == JsonValueKind.Object)
+            {
+                if (error.TryGetProperty("message", out var message)
+                    && message.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(message.GetString()))
+                {
+                    var text = message.GetString()!.Trim();
+                    return text.Length <= 512 ? text : text[..512];
+                }
+                if (error.TryGetProperty("code", out var code)
+                    && code.ValueKind == JsonValueKind.String
+                    && !string.IsNullOrWhiteSpace(code.GetString()))
+                {
+                    return $"UBAG error code: {code.GetString()!.Trim()}";
+                }
+            }
+        }
+        catch (JsonException)
+        {
+        }
+        var trimmed = body.Trim();
+        return trimmed.Length <= 512 ? trimmed : trimmed[..512];
     }
 
     private static bool IsReasoningCapable(string model)

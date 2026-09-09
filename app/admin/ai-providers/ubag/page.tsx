@@ -838,13 +838,18 @@ export default function UbagBoardPage() {
                         </Badge>
                         <span className="font-mono text-xs text-muted-foreground">{modelTestResult.latencyMs} ms</span>
                       </div>
+                      {modelTestResult.status === 'rate_limited' && (
+                        <p className="text-xs text-amber-800 dark:text-amber-200 break-words">
+                          Provider busy or browser job still running — auth + connectivity passed. Retry the test or check the UBAG dashboard job queue.
+                        </p>
+                      )}
                       {modelTestResult.errorMessage && (
                         <p className="text-xs text-danger break-words">{modelTestResult.errorMessage}</p>
                       )}
                       <ul className="space-y-1">
                         {modelTestResult.steps.map((step) => (
                           <li key={step.step} className="flex items-start gap-2 text-xs">
-                            <span className={step.ok ? 'text-success' : step.step === 'model' ? 'text-warning' : 'text-danger'}>
+                            <span className={step.ok ? 'text-success' : step.step === 'model' ? 'text-warning' : step.step === 'provider' ? 'text-warning' : 'text-danger'}>
                               {step.ok ? '●' : step.step === 'model' ? '◐' : '○'}
                             </span>
                             <span className="font-mono font-semibold text-navy">{step.step}</span>

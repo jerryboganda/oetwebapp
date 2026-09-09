@@ -37,7 +37,8 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
     [InlineData(HttpStatusCode.Unauthorized, AiProviderTestStatuses.Auth)]
     [InlineData(HttpStatusCode.Forbidden, AiProviderTestStatuses.Auth)]
     [InlineData(HttpStatusCode.TooManyRequests, AiProviderTestStatuses.RateLimited)]
-    [InlineData(HttpStatusCode.ServiceUnavailable, AiProviderTestStatuses.Network)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, AiProviderTestStatuses.RateLimited)]
+    [InlineData(HttpStatusCode.GatewayTimeout, AiProviderTestStatuses.RateLimited)]
     [InlineData(HttpStatusCode.InternalServerError, AiProviderTestStatuses.Network)]
     [InlineData((HttpStatusCode)418, AiProviderTestStatuses.Unknown)]
     public async Task ClassifierMatrix_MapsHttpStatusToVocabulary(HttpStatusCode http, string expected)
@@ -445,6 +446,37 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         Assert.Equal(AiProviderTestStatuses.Network, result.Status);
         Assert.NotNull(result.ErrorMessage);
         Assert.DoesNotContain(liveKey, result.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task ModelTest_MapsUbagProviderFailureToProviderStepWithDetail()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var tester = NewTester(db, _ => Task.FromResult(BuildJsonError(
+            HttpStatusCode.ServiceUnavailable,
+            "Selector drift detected; all fallbacks failed.")));
+
+        var result = await tester.TestProviderModelAsync("copilot", "openai/gpt-5", default);
+
+        Assert.Equal(AiProviderTestStatuses.RateLimited, result.Status);
+        Assert.Contains("Selector drift", result.ErrorMessage);
+        Assert.Contains(result.Steps, s => s.Step == "provider" && !s.Ok);
+    }
+
+    [Fact]
+    public async Task ModelTest_MapsUbagAuthFailureToAuthStep()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var tester = NewTester(db, _ => Task.FromResult(BuildJsonError(
+            HttpStatusCode.Unauthorized,
+            "missing or invalid credentials")));
+
+        var result = await tester.TestProviderModelAsync("copilot", "openai/gpt-5", default);
+
+        Assert.Equal(AiProviderTestStatuses.Auth, result.Status);
+        Assert.Contains(result.Steps, s => s.Step == "auth" && !s.Ok);
     }
 
     // ── Helpers ────────────────────────────────────────────────────

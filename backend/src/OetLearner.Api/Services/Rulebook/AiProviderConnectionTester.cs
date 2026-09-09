@@ -88,9 +88,11 @@ public sealed class AiProviderConnectionTester(
 
     /// <summary>Budget for a full end-to-end model test. Real browser-backed
     /// pipelines (UBAG facade → worker → browser session → model) legitimately
-    /// take 10–60s, so this must allow the whole job to complete rather than
-    /// cutting off at the auth-probe timeout.</summary>
-    private static readonly TimeSpan ModelProbeTimeout = TimeSpan.FromSeconds(75);
+    /// take 10–60s (live chatgpt_web/gemini_web probes measured 48–50s), and
+    /// the facade itself waits up to 110s per call. 300s keeps the admin Test
+    /// button slower than the facade deadline but faster than a hung client,
+    /// so a browser-job completion is never reported as "Request timed out".</summary>
+    private static readonly TimeSpan ModelProbeTimeout = TimeSpan.FromSeconds(300);
 
     public async Task<AiProviderTestResult> TestProviderAsync(string providerCode, CancellationToken ct, bool deep = false)
     {
@@ -203,8 +205,13 @@ public sealed class AiProviderConnectionTester(
             if (!response.IsSuccessStatusCode)
             {
                 var relResult = await ClassifyResponseAsync(response, latencyMs, startedAt, apiKey, ct);
+                var failedStep = relResult.Status == AiProviderTestStatuses.Auth
+                    ? "auth"
+                    : relResult.Status == AiProviderTestStatuses.RateLimited
+                        ? "provider"
+                        : "completion";
                 steps.Add(new AiModelTestStep(
-                    "completion",
+                    failedStep,
                     $"HTTP {(int)response.StatusCode}: {relResult.ErrorMessage ?? response.ReasonPhrase}",
                     false));
                 return new AiProviderModelTestResult(
@@ -417,6 +424,13 @@ public sealed class AiProviderConnectionTester(
             HttpStatusCode.Unauthorized => AiProviderTestStatuses.Auth,
             HttpStatusCode.Forbidden => AiProviderTestStatuses.Auth,
             HttpStatusCode.TooManyRequests => AiProviderTestStatuses.RateLimited,
+            // The UBAG facade reports terminal browser-job failures as 503
+            // (provider_transient / provider_login_required) and wait-budget
+            // overruns as 504: the pipeline is reachable + authenticated, so
+            // this is a provider-side condition, not an OET network fault.
+            // Surface the facade's own detail (login drift, wait timeout)
+            // instead of a bare HTTP status.
+            HttpStatusCode.ServiceUnavailable or HttpStatusCode.GatewayTimeout => AiProviderTestStatuses.RateLimited,
             >= HttpStatusCode.InternalServerError => AiProviderTestStatuses.Network,
             _ => AiProviderTestStatuses.Unknown,
         };
