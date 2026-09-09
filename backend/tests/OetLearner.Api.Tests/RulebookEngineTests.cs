@@ -304,12 +304,20 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.content_requires_smoking_drinking");
     }
 
+    // Was R03_4_Fires_When_Smoking_Missing, asserting the opposite of current
+    // behavior. Per the FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026) §8
+    // provenance audit recorded directly on DetectSmokingDrinking below,
+    // R03.4 is OVERRIDDEN_OR_CORRECTED to a permanent no-op — smoking/alcohol
+    // relevance is judged by the AI assessor from the case notes, never by a
+    // blanket deterministic detector. This test predates that governance
+    // decision and was never updated; it now locks in the override instead
+    // of contradicting it.
     [Fact]
-    public void R03_4_Fires_When_Smoking_Missing()
+    public void R03_4_Stays_A_NoOp_Per_31Aug2026_Governance_Override()
     {
         var text = LetterWithBoth.Replace("Mr Jones smokes 10 cigarettes per day and ", "");
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.Contains(findings, f => f.RuleId == "BUILTIN.content_requires_smoking_drinking");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.content_requires_smoking_drinking");
     }
 
     [Fact]
@@ -320,6 +328,29 @@ Doctor";
         var findings = _engine.Lint(new WritingLintInput(
             text, "non_medical_referral", RecipientSpecialty: "Occupational Therapist"));
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.content_requires_smoking_drinking");
+    }
+
+    // Regression: ParseLetter's date-line regex previously only matched
+    // "day month" with no year (\d{1,2}[\/\s-]\w+), so a whole-line
+    // "D Month YYYY" date — the Global Formatting Addendum's own lead
+    // example, e.g. "5 September 2026" — never set DateIndex. That
+    // false-negative cascaded into a spurious "missing Date" structure
+    // finding and starved every other check gated on DateIndex (date
+    // format consistency, smoking/drinking, jargon, etc. all read the
+    // wrong body boundary). Covers every accepted style family from the
+    // addendum: written (day-first and month-first), slash, and dot.
+    [Theory]
+    [InlineData("1 January 2026")]
+    [InlineData("5 September 2026")]
+    [InlineData("September 5, 2026")]
+    [InlineData("September 5 2026")]
+    [InlineData("01/09/2026")]
+    [InlineData("05.09.2026")]
+    public void ParseLetter_RecognisesEveryAddendumDateStyle_AsTheDateLine(string dateLine)
+    {
+        var text = LetterWithBoth.Replace("1 January 2026", dateLine);
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.letter_structure_order");
     }
 
     [Fact]
@@ -454,13 +485,21 @@ Doctor";
         Assert.Contains(findings, f => f.RuleId == "BUILTIN.treatment_for_not_from");
     }
 
+    // Was R15_2_Flags_Jargon_In_Non_Medical_Referral, asserting the opposite
+    // of current behavior. Per the FINAL MASTER Writing Rulebook v1.0
+    // (31 Aug 2026) §8 provenance audit recorded directly on
+    // DetectNonMedicalJargon below, R15.2 is OVERRIDDEN_OR_CORRECTED to a
+    // permanent no-op — a fixed word list can't judge whether the actual
+    // recipient will understand a term, so register is judged by the AI
+    // assessor instead. This test predates that governance decision and was
+    // never updated; it now locks in the override instead of contradicting it.
     [Fact]
-    public void R15_2_Flags_Jargon_In_Non_Medical_Referral()
+    public void R15_2_Stays_A_NoOp_Per_31Aug2026_Governance_Override()
     {
         var text = "Dear Sir/Madam,\nRe: Ms A\n\nMs A has hypertension and diabetes.\n\nYours faithfully,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(
             text, "non_medical_referral", RecipientSpecialty: "Occupational Therapist"));
-        Assert.Contains(findings, f => f.RuleId == "BUILTIN.non_medical_no_jargon");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.non_medical_no_jargon");
     }
 
     [Fact]

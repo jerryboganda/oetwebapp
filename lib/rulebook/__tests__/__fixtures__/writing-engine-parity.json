@@ -1,5 +1,5 @@
 {
-  "$schema-note": "Frozen parity corpus for WritingRuleEngine.cs (.NET, sole runtime since R-a retired the TS engine). Expected sets use BUILTIN.<checkId> ids (renamed from R-ids when canonical content dropped checkIds). Asserted by backend/tests/OetLearner.Api.Tests/Rulebook/WritingEngineParityTests.cs. R12.3 was dropped (no current rule forbids smoker/drinker labels). BUILTIN.signoff_no_invented_name is expected on all five fixtures: the battery supports a detector the retired JSON lacked, and every fixture signs 'Dr A B' with no case-notes writer name.",
+  "$schema-note": "Frozen parity corpus for WritingRuleEngine.cs (.NET, sole runtime since R-a retired the TS engine). Expected sets use BUILTIN.<checkId> ids (renamed from R-ids when canonical content dropped checkIds). Asserted by backend/tests/OetLearner.Api.Tests/Rulebook/WritingEngineParityTests.cs. R12.3 was dropped (no current rule forbids smoker/drinker labels). BUILTIN.signoff_no_invented_name is expected on all five fixtures: the battery supports a detector the retired JSON lacked, and every fixture signs 'Dr A B' with no case-notes writer name. 2026-09-09: dropped BUILTIN.letter_structure_order from all five fixtures. Root cause: ParseLetter's date regex only matched 'day month' with no year, so every fixture's '1 January 2026' header (the Addendum's own lead date example) never set DateIndex, producing a false 'missing Date' finding that this retired-engine snapshot had frozen in unnoticed. Not a governed rulebook change — the date-format rules (R.2.2 in the Global Formatting Addendum) already required 'D Month YYYY' to be a recognised style; the parser was simply wrong. Fixed in WritingRuleEngine.ParseLetter; see ParseLetter_RecognisesEveryAddendumDateStyle_AsTheDateLine in RulebookEngineTests.cs for the regression coverage. Every other expected id is unchanged (confirmed via full assertion diff — the fix touches only date-line detection, nothing else).",
   "fixtures": [
     {
       "id": "A-clean-routine",
@@ -15,7 +15,6 @@
       },
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his recurrent chest pain.\n\nMr Jones is a non-smoker and consumes alcohol occasionally within recommended limits. He presented today with central chest tightness on exertion lasting two weeks. His blood pressure was 140 over 90 and his pulse was regular.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
-        "BUILTIN.letter_structure_order",
         "BUILTIN.numerical_values_have_units",
         "BUILTIN.signoff_no_invented_name"
       ]
@@ -34,7 +33,6 @@
       },
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his recurrent chest pain.\n\nMr Jones presented today with central chest tightness on exertion lasting two weeks. His blood pressure was 140 over 90 and his pulse was regular. Examination was otherwise unremarkable.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
-        "BUILTIN.letter_structure_order",
         "BUILTIN.numerical_values_have_units",
         "BUILTIN.signoff_no_invented_name"
       ]
@@ -53,7 +51,6 @@
       },
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his chest pain.\n\nThe patient is a non-smoker and consumes alcohol occasionally. On the next visit, he reported worsening symptoms. Yesterday he experienced palpitations at rest. His blood pressure was 150 over 95.\n\nPlease see him ASAP. I would appreciate your specialist review.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
-        "BUILTIN.letter_structure_order",
         "BUILTIN.body_forbidden_phrase_yesterday",
         "BUILTIN.numerical_values_have_units",
         "BUILTIN.no_asap_in_letter",
@@ -74,7 +71,6 @@
       },
       "letter": "Dr A B\nCardiology Clinic\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to refer Mr Jones for your assessment of his chest pain.\n\nMr Jones is a non-smoker and consumes alcohol occasionally. He has been compliant with treatment, However, she reported worsening symptoms over the past week. His most recent review was on 01/01/'25 and his blood pressure was 150 over 95.\n\nI would appreciate your specialist review. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
-        "BUILTIN.letter_structure_order",
         "BUILTIN.year_not_abbreviated",
         "BUILTIN.numerical_values_have_units",
         "BUILTIN.linker_however_punctuation",
@@ -95,7 +91,6 @@
       },
       "letter": "Dr A B\nGeneral Hospital\nMain Street\nCity\n\n1 January 2026\n\nDear Dr Smith,\nRe: Mr John Jones aged 45\n\nI am writing to update you regarding Mr Jones who was discharged from our ward today.\n\nMr Jones was presented with central chest pain and shortness of breath on admission. Initial investigations confirmed a non-ST-elevation myocardial infarction. He was managed with dual antiplatelet therapy and underwent coronary angiography during his admission.\n\nHis condition stabilised and he was discharged in good general condition. Please contact me if further information is required.\n\nYours sincerely,\n\nDr A B",
       "expectedRuleIds": [
-        "BUILTIN.letter_structure_order",
         "BUILTIN.discharge_admitted_with_past_simple",
         "BUILTIN.discharge_plan_present",
         "BUILTIN.signoff_no_invented_name"

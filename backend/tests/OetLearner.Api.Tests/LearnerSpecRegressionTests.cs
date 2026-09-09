@@ -631,8 +631,11 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var findings = json.RootElement.GetProperty("findings").EnumerateArray().ToArray();
-        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "R09.7");
-        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "R09.8");
+        // R09.7/R09.8 were renamed to the BUILTIN.* id scheme; the checks
+        // themselves are unchanged (consent/patient-request must appear in
+        // the closure when the case notes flag them).
+        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "BUILTIN.closure_mentions_consent_if_flagged");
+        Assert.Contains(findings, finding => finding.GetProperty("ruleId").GetString() == "BUILTIN.closure_mentions_patient_request_if_flagged");
         Assert.All(findings, finding =>
         {
             var severity = finding.GetProperty("severity");
