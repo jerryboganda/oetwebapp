@@ -10,7 +10,7 @@ import { SPEAKING_INTRO_QUESTIONS } from '@/lib/speaking-candidate-resources';
 export const metadata: Metadata = {
   title: 'Speaking Intro Questions | OET with Dr Hesham',
   description:
-    'Candidate reference: 11 common OET Speaking introductory questions with adaptable sample answers for all professions.',
+    'Candidate reference: 12 common OET Speaking introductory questions with adaptable sample answers for all professions.',
 };
 
 /** Render [bracketed fields] and (parenthetical cues) as visible highlighted personalisation markers. */
@@ -46,9 +46,9 @@ export default function SpeakingIntroQuestionsPage() {
           icon={<MessageCircleQuestion />}
           accent="purple"
           title="Speaking Intro Questions"
-          description="Eleven common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own."
+          description="12 common introductory questions with adaptable sample answers for all professions. Each answer sits directly beneath its question — replace the highlighted details with your own."
           highlights={[
-            { icon: <MessageCircleQuestion />, label: 'Questions', value: '11 with sample answers' },
+            { icon: <MessageCircleQuestion />, label: 'Questions', value: '12 with sample answers' },
             { icon: <Users />, label: 'Works for', value: 'Every profession' },
           ]}
         />
@@ -78,7 +78,7 @@ export default function SpeakingIntroQuestionsPage() {
                 </h2>
               </div>
               <p className="mt-3 text-xs font-black uppercase tracking-wider text-purple-800 dark:text-purple-300">
-                Sample answer — personalise the bracketed and parenthetical details:
+                Sample answer — personalise the bracketed details:
               </p>
               <p className="mt-1.5 text-sm leading-7 text-navy/85 dark:text-white/85">
                 {renderWithPlaceholders(item.sampleAnswer)}

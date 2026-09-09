@@ -56,7 +56,7 @@ export const SPEAKING_LINGUISTIC_CRITERIA: LinguisticCriterion[] =
 export const SPEAKING_CLINICAL_CRITERIA: ClinicalCriterion[] =
   data.clinicalCriteria as ClinicalCriterion[];
 
-/** 11 common introductory questions with adaptable sample answers. */
+/** 12 common introductory questions with adaptable sample answers, global/profession-neutral. */
 export const SPEAKING_INTRO_QUESTIONS: SpeakingIntroQuestion[] =
   data.introQuestions as SpeakingIntroQuestion[];
 

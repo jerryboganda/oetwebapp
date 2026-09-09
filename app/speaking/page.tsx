@@ -163,9 +163,9 @@ export default function SpeakingHome() {
               eyebrow: 'Reference · All professions',
               eyebrowIcon: MessageCircleQuestion,
               title: 'Speaking Intro Questions',
-              description: '11 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
+              description: '12 common introductory questions with adaptable sample answers for every profession. Personalise the highlighted details.',
               metaItems: [
-                { icon: MessageCircleQuestion, label: '11 questions' },
+                { icon: MessageCircleQuestion, label: '12 questions' },
                 { icon: MessageCircleQuestion, label: 'All professions' },
               ],
               primaryAction: {

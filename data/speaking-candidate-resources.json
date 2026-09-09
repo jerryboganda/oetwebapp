@@ -375,57 +375,64 @@
     {
       "no": 1,
       "question": "What is your name?",
-      "sampleAnswer": "My name is (your first name + last name)"
+      "sampleAnswer": "My name is [full name], but you can call me [preferred name]."
     },
     {
       "no": 2,
       "question": "What is your profession?",
-      "sampleAnswer": "My profession is medicine"
+      "sampleAnswer": "I am a [profession]. I have been working in this field for [number of years], mainly in [area / setting]."
     },
     {
       "no": 3,
       "question": "Why are you taking the OET?",
-      "sampleAnswer": "Honestly I'm taking the OET to complete Australian medical council registration process because it is one of the two tests required to practice medicine in Australia. Practicing medicine in Australia is one of my dreams to upgrade myself in my career. In Australia i can get advanced training and recent modalities of diagnosis and treatment. I am also searching for a better chance of education for my children who are an essential part of my life so I hope to pass the OET as soon as possible to start practicing medicine in Australia."
+      "sampleAnswer": "I am taking the OET because I need to demonstrate my English proficiency for [professional registration / work / study] in [country or organisation]. Passing the test will help me move forward with my career plans and communicate safely and confidently in an English-speaking healthcare environment."
     },
     {
       "no": 4,
-      "question": "How long have you been working as a physician?",
-      "sampleAnswer": "I've been working as a physician for 10 years. 5 years were in Egypt and the other 5 years were in United Arab Emirates."
+      "question": "How long have you been working in your profession?",
+      "sampleAnswer": "I have been working as a [profession] for [number of years]. Most of my experience has been in [main workplace / specialty / area], where I have developed experience in [brief example of your work]."
     },
     {
       "no": 5,
-      "question": "What about your working hours?",
-      "sampleAnswer": "I'm working for 8 hours daily from Saturday to Thursday so I'm working about 48 hours per week. Unfortunately, I've no enough time to spend with my family."
+      "question": "What are your usual working hours?",
+      "sampleAnswer": "I usually work around [number] hours a day, [number] days a week. My schedule is generally [daytime / evening / shift-based], although it can vary depending on the workload, appointments, and any urgent cases."
     },
     {
       "no": 6,
-      "question": "Why did you choose medicine as a career?",
-      "sampleAnswer": "Actually, it was my childhood dream and it was also a dream of my family especially my mother so I studied hard to achieve my target. My first day in the faculty of medicine was one of the happiest days in my life. I like medicine a lot because it gives me the chance to help the others."
+      "question": "Why did you choose your profession as a career?",
+      "sampleAnswer": "I chose [profession] because I wanted a career that combines professional knowledge, communication, and the opportunity to make a meaningful difference to people's health and quality of life. I also particularly enjoy [specific aspect of your profession]."
     },
     {
       "no": 7,
-      "question": "What about your specialty? And why?",
-      "sampleAnswer": "I like all branches of medicine so I was hesitated to choose a specific specialty and leave the others. Finally I found my target in family medicine because it allows me to practice all branches of medicine and to deal with a variety of cases which in turn help me to feel satisfied."
+      "question": "What is your specialty / main area of practice, and why did you choose it?",
+      "sampleAnswer": "My main area of practice is [specialty / area]. I chose it because [personal or professional reason]. I particularly enjoy [specific feature of the work], and I feel that it suits my interests and strengths.",
+      "note": "If your profession does not use formal specialties, answer using your main area of practice, workplace, or clinical focus."
     },
     {
       "no": 8,
-      "question": "What is your advice for fresh graduates?",
-      "sampleAnswer": "Ooh! the most important advice I give to them is to choose their specialty carefully by choosing what they actually like because they will spend the rest of their life practicing it. I also advise them to outline their target at an early stage to avoid wasting their time so I recommend them to find out the different styles of post graduation qualifications before choosing a specific one and to keep updated with the recent guidelines to help people well."
+      "question": "What advice would you give to fresh graduates in your profession?",
+      "sampleAnswer": "I would advise new graduates to keep learning, ask for feedback, communicate clearly, and never be afraid to seek help when they need it. It is also important to stay up to date, work well with the wider team, and treat every patient or client with respect and empathy."
     },
     {
       "no": 9,
-      "question": "How to be a successful physician?",
-      "sampleAnswer": "Ooh! What a difficult question! from my point of view I think that success in the field of medicine mainly depends on early and proper planning for your career pathway. You should fulfill two elements. The first element is the good planning which will save time and effort for you and the second one is hard continuous working. You should also have a lot of skills like being a good listener, showing sympathy to your patients, respecting the patients' time and confidentiality, building a trust bond between you and the patients and continuously updating yourself with the new guidelines"
+      "question": "What do you think makes someone successful in your profession?",
+      "sampleAnswer": "I think success comes from a combination of strong professional knowledge, good communication, empathy, teamwork, reliability, and continuous learning. A successful professional should also know their limits, ask for support when necessary, and always put safety and quality of care first."
     },
     {
       "no": 10,
-      "question": "What was the last training you had?",
-      "sampleAnswer": "I'm keen to get frequent training courses. The last one that I had was about \"advanced cardiac life support\" which was about one month ago and implied how to perform a cardiac and respiratory support in case of cardiac arrest. It also taught us how to deal with the cases of life threatening arrhythmias. It was really a valuable course."
+      "question": "What was the last professional training or course you completed?",
+      "sampleAnswer": "The most recent training I completed was [course / workshop / programme]. It focused on [topic]. I found it very useful because it improved my knowledge and confidence in [area], and I have been able to apply what I learned in my daily work."
     },
     {
       "no": 11,
-      "question": "What is the most recent medical advance you heard about?",
-      "sampleAnswer": "No doubt that the medical field is one of the fastest developing fields in the world. Nearly every month there are new researches, theories and guidelines. Diabetes mellitus treatment is one of the most important tasks that is developing rapidly. I heard about a new trend of the treatment of diabetic patients by putting a pump of insulin under their skin to release proper amounts of insulin according to their need which will help them to get rid of the needles pricks and gain a good control of their blood glucose level all over the day."
+      "question": "What is the most recent advance in your profession that you have heard about?",
+      "sampleAnswer": "One recent development I have been interested in is [new technology / treatment / guideline / professional development]. It may improve [patient outcome / safety / efficiency / quality of care]. I find it interesting because it shows how quickly the profession is evolving, so I try to keep up to date through guidelines, courses, and professional literature."
+    },
+    {
+      "no": 12,
+      "question": "What does a typical working day look like for you?",
+      "sampleAnswer": "A typical working day usually starts with [handover / reviewing appointments / preparing the clinic]. I then spend most of the day [main clinical or professional duties]. I also spend time documenting my work, communicating with colleagues, and supporting or educating patients and clients. Every day is slightly different, which is one of the things I enjoy about my profession.",
+      "note": "If you are not currently working, adapt this answer to your most recent role, internship, placement, or usual clinical training day."
     }
   ]
 }
