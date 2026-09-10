@@ -73,6 +73,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+import uuid
 
 BASE = os.environ["UBAG_BASE"].rstrip("/")
 PAT = os.environ["UBAG_PAT"]
@@ -83,13 +84,15 @@ TIMEOUT = int(os.environ.get("UBAG_PROBE_TIMEOUT", "300"))
 results = []
 
 
-def call(method, path, body=None, timeout=60):
+def call(method, path, body=None, timeout=60, extra_headers=None):
     data = json.dumps(body).encode("utf-8") if body is not None else None
     req = urllib.request.Request(BASE + path, data=data, method=method)
     req.add_header("Authorization", "Bearer " + PAT)
     req.add_header("Accept", "application/json")
     if data is not None:
         req.add_header("Content-Type", "application/json")
+    for key, value in (extra_headers or {}).items():
+        req.add_header(key, value)
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status, resp.read().decode("utf-8", "replace")
@@ -161,7 +164,10 @@ def run_target(target):
             },
         },
     }
-    status, raw = call("POST", "/v1/jobs", body, timeout=60)
+    # The raw job API (unlike the OpenAI facade) requires a client-supplied
+    # idempotency key: ^[A-Za-z0-9._:-]{16,128}$.
+    idem = "oet-ci-probe-%s-%s" % (target, uuid.uuid4())
+    status, raw = call("POST", "/v1/jobs", body, timeout=60, extra_headers={"Idempotency-Key": idem})
     job_id = ""
     try:
         job_id = json.loads(raw).get("job_id", "")
