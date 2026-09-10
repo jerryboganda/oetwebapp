@@ -143,6 +143,7 @@ if (-not $SkipVpsSsh) {
     try {
         $remote = @"
 docker inspect oet-web-blue oet-web-green oet-api-blue oet-api-green oet-agent-gateway --format 'NAME={{.Name}} HEALTH={{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} IMAGE={{.Config.Image}}' 2>/dev/null
+docker exec oet-api sh -c 'echo ROUTER_ACTIVE_SLOT=`$ACTIVE_SLOT' 2>/dev/null
 "@
         $inspect = & ssh -o BatchMode=yes -o ConnectTimeout=12 -o StrictHostKeyChecking=accept-new root@185.252.233.186 $remote
         Write-Output $inspect
@@ -151,13 +152,34 @@ docker inspect oet-web-blue oet-web-green oet-api-blue oet-api-green oet-agent-g
         # already carries this SHA.
         $inspectText = @($inspect | ForEach-Object { [string]$_ }) -join "`n"
         $escaped = [regex]::Escape($Sha)
-        $hasWeb = $inspectText -match ("NAME=/oet-web-(blue|green).*" + $escaped)
-        $hasApi = $inspectText -match ("NAME=/oet-api-(blue|green).*" + $escaped)
-        if (-not ($hasWeb -and $hasApi)) {
-            Write-Output "LIVE_SHA_MISMATCH expected a web+api slot tagged $Sha"
+
+        # Root-cause fix (Writing Rule Enforcement Addendum Rev5, 10 Sep
+        # 2026): checking "does EITHER blue or green carry this SHA" only
+        # proves the image was PULLED, not that the router (oet-api/oet-web,
+        # which reads $ACTIVE_SLOT to pick learner-api-<slot>/web-<slot> as
+        # its proxy_pass target) is actually SENDING PUBLIC TRAFFIC to that
+        # slot. Confirmed live 10 Sep 2026: auto-deploy-ghcr.sh reported
+        # "AUTO_DEPLOY_DONE: live on green" and this exact check reported
+        # LIVE_SHA_OK, while oet-api's baked ACTIVE_SLOT env var was actually
+        # "blue" (the router recreate step's `ACTIVE_SLOT="$slot" docker
+        # compose ... -f "$COMPOSE_FILE" up ...` resolved the compose
+        # file's `${ACTIVE_SLOT:-blue}` to its fallback default) — the OLD
+        # commit kept serving all public traffic while this script reported
+        # success. Now require the slot the router is ACTUALLY pointed at,
+        # per ROUTER_ACTIVE_SLOT above, to carry this SHA — not just any slot.
+        if ($inspectText -notmatch 'ROUTER_ACTIVE_SLOT=(blue|green)') {
+            Write-Output "LIVE_SHA_MISMATCH could not read the router's active slot"
             $healthFailed = $true
         } else {
-            Write-Output "LIVE_SHA_OK $Sha"
+            $activeSlot = $Matches[1]
+            $hasWeb = $inspectText -match ("NAME=/oet-web-$activeSlot.*" + $escaped)
+            $hasApi = $inspectText -match ("NAME=/oet-api-$activeSlot.*" + $escaped)
+            if (-not ($hasWeb -and $hasApi)) {
+                Write-Output "LIVE_SHA_MISMATCH router is serving slot '$activeSlot', which is not tagged $Sha — traffic is still on the OLD build"
+                $healthFailed = $true
+            } else {
+                Write-Output "LIVE_SHA_OK $Sha (serving slot: $activeSlot)"
+            }
         }
     } catch {
         Write-Output "VPS_SSH_SKIPPED: $($_.Exception.Message)"
