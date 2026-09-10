@@ -616,8 +616,16 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     // smoker, drinker, noncompliant, anxious). Use factual forms such as
     // 'has asthma', 'has hypertension', 'smokes ...', or 'reported
     // difficulty adhering ...'."
+    //
+    // "anxious" deliberately excluded from the pattern: source-coverage
+    // audit spot-check (10 Sep 2026) found it firing on genuine transient
+    // clinical findings ("she was anxious" alongside fever/tachycardia as
+    // signs of sepsis), which is standard, correct clinical English, not a
+    // person-trait label — flagging it would violate the addendum's own
+    // "do not falsely penalise standard-correct English" instruction. The
+    // other four have no such legitimate transient-finding usage.
     private static readonly Regex JudgmentalLabelRe = new(
-        @"\b(asthmatic|hypertensive|(?:non-?compliant)|anxious)\b|\ba\s+(smoker|drinker)\b",
+        @"\b(asthmatic|hypertensive|(?:non-?compliant))\b|\ba\s+(smoker|drinker)\b",
         RegexOptions.IgnoreCase);
 
     private static IEnumerable<LintFinding> DetectJudgmentalLabels(OetRule rule, WritingLintInput input, LetterStructure s)
