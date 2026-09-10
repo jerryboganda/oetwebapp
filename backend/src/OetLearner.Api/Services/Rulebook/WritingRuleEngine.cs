@@ -16,6 +16,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     private static readonly HashSet<string> SupportedCheckIdSet = new(StringComparer.Ordinal)
     {
         "address_punctuation",
+        "age_not_duplicated_in_intro",
         "ago_requires_past_simple",
         "blank_before_closing_phrase",
         "blank_line_after_re_line",
@@ -41,14 +42,17 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "discharge_all_investigations_listed",
         "discharge_omits_knownto_gp",
         "discharge_plan_present",
+        "emotional_wording",
         "enclosure_results_phrase",
         "for_duration_requires_present_perfect",
         "intro_contains_purpose",
         "intro_sentence_count",
+        "judgmental_labels",
         "latin_abbreviations_translated",
         "letter_body_length",
         "letter_paragraph_count",
         "letter_structure_order",
+        "linker_avoid_words",
         "linker_density",
         "linker_however_punctuation",
         "linker_in_addition_punctuation",
@@ -59,7 +63,9 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "no_contractions",
         "no_date_prefix",
         "no_brackets_in_letter",
+        "no_duplicated_request",
         "non_medical_no_jargon",
+        "number_style_words_vs_digits",
         "numerical_values_have_units",
         "re_line_age_dob",
         "salutation_last_name_only",
@@ -97,6 +103,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         ["letter_structure_order"] = RuleSeverity.Major,
         ["salutation_re_adjacent"] = RuleSeverity.Critical,
         ["blank_line_after_re_line"] = RuleSeverity.Critical,
+        ["age_not_duplicated_in_intro"] = RuleSeverity.Major,
         ["blank_line_between_paragraphs"] = RuleSeverity.Major,
         ["address_punctuation"] = RuleSeverity.Critical,
         ["date_format_consistent"] = RuleSeverity.Major,
@@ -152,6 +159,19 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         ["no_brackets_in_letter"] = RuleSeverity.Critical,
         ["dob_age_forbidden_phrase"] = RuleSeverity.Critical,
         ["signoff_no_invented_name"] = RuleSeverity.Critical,
+        ["emotional_wording"] = RuleSeverity.Major,
+        ["judgmental_labels"] = RuleSeverity.Major,
+        ["linker_avoid_words"] = RuleSeverity.Major,
+        ["no_duplicated_request"] = RuleSeverity.Major,
+        // Deliberately inert (same rationale as DetectDischargeOmits /
+        // DetectNonMedicalJargon above): "descriptive numbers as words,
+        // digits only for clinical values" requires judging whether a given
+        // number is clinical (age/date/vital/lab/dose/measurement) or
+        // descriptive from context a regex cannot reliably classify without
+        // a large false-positive rate. AI-grounded professions already
+        // carry this instruction in their prompt; kept registered (not
+        // ORPHANED) rather than silently dropped. See DetectNumberStyle.
+        ["number_style_words_vs_digits"] = RuleSeverity.Minor,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -368,6 +388,12 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "letter_structure_order" => DetectStructureOrder,
         "salutation_re_adjacent" => DetectSalutationReAdjacency,
         "blank_line_after_re_line" => DetectBlankLineAfterReLine,
+        "age_not_duplicated_in_intro" => DetectAgeNotDuplicatedInIntro,
+        "emotional_wording" => DetectEmotionalWording,
+        "judgmental_labels" => DetectJudgmentalLabels,
+        "linker_avoid_words" => DetectLinkerAvoidWords,
+        "no_duplicated_request" => DetectNoDuplicatedRequest,
+        "number_style_words_vs_digits" => DetectNumberStyle,
         "blank_line_between_paragraphs" => DetectBlankBetweenParagraphs,
         "no_date_prefix" => DetectNoDatePrefix,
         "date_blank_line_sandwich" => DetectDateBlankSandwich,
@@ -550,6 +576,116 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         if (s.Lines[nextIdx].Trim().Length != 0)
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Leave one blank line between the Re: line and the introduction.");
+    }
+
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+    // 2026, §6): "Re: line and introduction: do not duplicate age. If age is
+    // already in the Re: line, do not repeat the same age in the
+    // introduction." re_line_age_dob (above) only checks the Re: line's own
+    // "Age:"/"aged" formatting; this is the separate duplication check.
+    private static IEnumerable<LintFinding> DetectAgeNotDuplicatedInIntro(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.ReLineIndex is null || s.BodyParagraphs.Count == 0) yield break;
+        var reLine = s.Lines[s.ReLineIndex.Value];
+        var reAge = Regex.Match(reLine, @"\b(?:aged\s+(\d{1,3})|(\d{1,3})[\s-]year[\s-]old)\b", RegexOptions.IgnoreCase);
+        if (!reAge.Success) yield break;
+        var age = reAge.Groups[1].Success ? reAge.Groups[1].Value : reAge.Groups[2].Value;
+        var intro = s.BodyParagraphs[0];
+        if (Regex.IsMatch(intro, $@"\b(?:aged\s+{age}\b|{age}[\s-]year[\s-]old\b)", RegexOptions.IgnoreCase))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                $"Age {age} is already in the Re: line — do not repeat it in the introduction.");
+    }
+
+    // Owner clarification (same addendum, §2 "Emotional wording"): "Do not
+    // use emotional/editorial words such as suffering/suffered,
+    // unfortunately, fortunately, regrettably, sadly or equivalent emotional
+    // commentary. Keep wording factual and neutral."
+    private static readonly Regex EmotionalWordingRe = new(
+        @"\b(suffering|suffered|unfortunately|fortunately|regrettably|sadly)\b", RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectEmotionalWording(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        foreach (Match m in EmotionalWordingRe.Matches(s.Body))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                $"Avoid emotional/editorial wording (\"{m.Value}\"). Keep the letter factual and neutral.",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+    }
+
+    // Owner clarification (same addendum, §2 "Judgmental labels"): "Do not
+    // label a person by a disease/behaviour (e.g. asthmatic, hypertensive,
+    // smoker, drinker, noncompliant, anxious). Use factual forms such as
+    // 'has asthma', 'has hypertension', 'smokes ...', or 'reported
+    // difficulty adhering ...'."
+    private static readonly Regex JudgmentalLabelRe = new(
+        @"\b(asthmatic|hypertensive|(?:non-?compliant)|anxious)\b|\ba\s+(smoker|drinker)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectJudgmentalLabels(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        foreach (Match m in JudgmentalLabelRe.Matches(s.Body))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                $"Do not label the person by disease/behaviour (\"{m.Value}\"). Use a factual form instead (e.g. 'has asthma', 'smokes ...').",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+    }
+
+    // Owner clarification (same addendum, §3 "Linker policy"): "but; so;
+    // hence; furthermore; moreover; also ... Do not use these as the normal
+    // connective choices." Restricted to sentence-initial use (the actual
+    // connective position) so mid-sentence uses of common words like "so" /
+    // "also" as ordinary adverbs are not flagged.
+    private static readonly Regex AvoidLinkerSentenceStartRe = new(
+        @"(?:^|[.!?]\s+)(But|So|Hence|Furthermore|Moreover|Also)\b", RegexOptions.Multiline);
+
+    private static IEnumerable<LintFinding> DetectLinkerAvoidWords(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        foreach (Match m in AvoidLinkerSentenceStartRe.Matches(s.Body))
+        {
+            var word = m.Groups[1].Value;
+            yield return new LintFinding(rule.Id, rule.Severity,
+                $"Avoid starting a sentence with \"{word}\" as a connective — prefer however/therefore/thus/subsequently/consequently/in addition, or a direct sentence.",
+                Quote: word, Start: m.Groups[1].Index, End: m.Groups[1].Index + word.Length);
+        }
+    }
+
+    // Owner clarification (same addendum, §2 "No duplicated request"): "The
+    // introduction must state the purpose/request clearly. The closure must
+    // not repeat the same request wording/content verbatim." Flags a 4+
+    // consecutive-word phrase shared verbatim between the introduction and
+    // the closure paragraph.
+    private static IEnumerable<LintFinding> DetectNoDuplicatedRequest(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.BodyParagraphs.Count < 2) yield break;
+        var intro = s.BodyParagraphs[0];
+        var closure = s.BodyParagraphs[^1];
+        const int n = 4;
+        var introWords = Regex.Matches(intro.ToLowerInvariant(), @"[a-z']+").Select(m => m.Value).ToArray();
+        var closureNorm = " " + Regex.Replace(closure.ToLowerInvariant(), @"[^a-z' ]+", " ") + " ";
+        for (int i = 0; i + n <= introWords.Length; i++)
+        {
+            var phrase = string.Join(' ', introWords.Skip(i).Take(n));
+            if (closureNorm.Contains(" " + phrase + " ", StringComparison.Ordinal))
+            {
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    $"The closure repeats the introduction's request wording verbatim (\"{phrase}\"). Close the letter without restating the same phrase.",
+                    Quote: phrase);
+                yield break;
+            }
+        }
+    }
+
+    // Owner clarification (same addendum, §2 "General number style"):
+    // "Write descriptive/general numbers as words. Use digits only for age,
+    // dates, vital signs, investigations/lab values, medication doses and
+    // clinical measurements." Deliberately inert — see the
+    // number_style_words_vs_digits severity-map comment above for why a
+    // deterministic detector cannot reliably classify "descriptive" vs
+    // "clinical" numeric context without a high false-positive rate; this
+    // stays an AI-grounded judgment call (already in the grounded prompt for
+    // canonical-rulebook professions), same pattern as DetectDischargeOmits
+    // and DetectNonMedicalJargon.
+    private static IEnumerable<LintFinding> DetectNumberStyle(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        yield break;
     }
 
     private static IEnumerable<LintFinding> DetectBlankBetweenParagraphs(OetRule rule, WritingLintInput input, LetterStructure s)

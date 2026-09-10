@@ -27,10 +27,20 @@ physiotherapy, radiography). This **replaces** the legacy 172-rule-per-professio
 marks `never_load_as_scoring_truth`.
 
 The other 7 profession folders (veterinary, optometry, occupational-therapy,
-speech-pathology, podiatry, dietetics, other-allied-health) are untouched — they have zero
-live Writing tasks and stay on the legacy content until/unless the platform launches Writing
-for them, at which point this same build script should be extended to cover them once a
-canonical pack exists.
+speech-pathology, podiatry, dietetics, other-allied-health) are untouched and stay on the
+legacy content until/unless the platform launches Writing for them, at which point this same
+build script should be extended to cover them once a canonical pack exists.
+
+**Correction (10 Sep 2026, Writing Rule Enforcement Addendum Rev5 source-coverage audit):**
+the "zero live Writing tasks" claim above is stale/wrong for 5 of these 7. A direct production
+query (`WritingTaskModelAnswers` joined to `WritingScenarios`, `IsCandidateVisible = true`)
+confirmed real, currently candidate-facing Model Answers on the legacy `R##.#` rulebook for
+dietetics (12), occupational-therapy (5), optometry (5), podiatry (5), and speech-pathology
+(5) — 32 letters total, none migrated. Only veterinary and other-allied-health genuinely have
+no live content. Treat this doc's "5 live professions" framing as outdated wherever it appears
+(also `docs/RULEBOOKS.md`, which still shows only the single `medicine/rulebook.v1.json`
+example and doesn't mention the canonical `OW-`/`DH-W-`/`G-W-` id scheme at all) until those 5
+professions are migrated or this note is otherwise superseded.
 
 ## Severity mapping (registry has no severity field — derived, not invented)
 

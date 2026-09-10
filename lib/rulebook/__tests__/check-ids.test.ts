@@ -12,10 +12,20 @@ import { LISTENING_EXAM_MODE_ENFORCERS, READING_EXAM_MODE_ENFORCERS } from '../e
 
 describe('rulebook check-id registry', () => {
   it('pins the frozen writing detector check-ids (R-a reviewed truth)', () => {
-    expect(WRITING_CHECK_IDS.size).toBe(59);
+    // 59 original + 4 from the 2026-09-06/07 Global Model Answer Formatting
+    // addendum (blank_line_after_re_line, dob_age_forbidden_phrase,
+    // no_brackets_in_letter, signoff_no_invented_name) + 6 from the Writing
+    // Rule Enforcement Addendum Rev5 (2026-09-10: age_not_duplicated_in_intro,
+    // emotional_wording, judgmental_labels, linker_avoid_words,
+    // no_duplicated_request, number_style_words_vs_digits) = 69. Keep this
+    // in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) — see that
+    // file's own header comment.
+    expect(WRITING_CHECK_IDS.size).toBe(69);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
+    expect(WRITING_CHECK_IDS.has('blank_line_after_re_line')).toBe(true);
+    expect(WRITING_CHECK_IDS.has('no_duplicated_request')).toBe(true);
   });
 
   it('exposes the speaking detector check-ids', () => {

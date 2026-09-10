@@ -459,6 +459,89 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.blank_line_after_re_line");
     }
 
+    // Owner clarification (same addendum, §6 "Re: line and introduction: do
+    // not duplicate age"). Distinct from re_line_age_dob (Re: line's own
+    // "Age:"/"aged" formatting) — this is the cross-location duplication.
+    [Fact]
+    public void AgeNotDuplicatedInIntro_Fires_When_Same_Age_Repeated()
+    {
+        var text = "Dear Dr Smith,\nRe: Mr David Taylor, aged 55\n\nI am writing to refer Mr Taylor, aged 55, for assessment.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.age_not_duplicated_in_intro");
+    }
+
+    [Fact]
+    public void AgeNotDuplicatedInIntro_Passes_When_Age_Only_In_ReLine()
+    {
+        var text = "Dear Dr Smith,\nRe: Mr David Taylor, aged 55\n\nI am writing to refer Mr Taylor for assessment.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.age_not_duplicated_in_intro");
+    }
+
+    // Owner clarification (same addendum, §2 "Emotional wording").
+    [Theory]
+    [InlineData("He suffered a severe attack.")]
+    [InlineData("Unfortunately, his symptoms worsened.")]
+    [InlineData("Regrettably, treatment was delayed.")]
+    public void EmotionalWording_Fires_On_Banned_Words(string bodyLine)
+    {
+        var text = $"Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\n{bodyLine}\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.emotional_wording");
+    }
+
+    // Owner clarification (same addendum, §2 "Judgmental labels").
+    [Fact]
+    public void JudgmentalLabels_Fires_On_Disease_As_Person_Label()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe is asthmatic and hypertensive.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.judgmental_labels");
+    }
+
+    [Fact]
+    public void JudgmentalLabels_Passes_On_Factual_Form()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe has asthma and hypertension.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.judgmental_labels");
+    }
+
+    // Owner clarification (same addendum, §3 "Linker policy") — restricted
+    // to sentence-initial use, the actual connective position.
+    [Fact]
+    public void LinkerAvoidWords_Fires_On_Sentence_Initial_But()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe improved with treatment. But her pain returned.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.linker_avoid_words");
+    }
+
+    [Fact]
+    public void LinkerAvoidWords_Passes_On_MidSentence_So()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nHer pain was not so severe today.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_avoid_words");
+    }
+
+    // Owner clarification (same addendum, §2 "No duplicated request").
+    [Fact]
+    public void NoDuplicatedRequest_Fires_When_Closure_Repeats_Intro_Phrase()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for urgent cardiology assessment.\n\nBackground details here.\n\nI would be grateful for urgent cardiology assessment at your earliest convenience.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.no_duplicated_request");
+    }
+
+    [Fact]
+    public void NoDuplicatedRequest_Passes_When_Closure_Is_Distinct()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for urgent cardiology assessment.\n\nBackground details here.\n\nI would be grateful for your review at your earliest convenience.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.no_duplicated_request");
+    }
+
     [Fact]
     public void R11_1_Flags_Latin_Abbreviation_bd()
     {
