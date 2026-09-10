@@ -163,10 +163,10 @@ docker exec oet-api sh -c 'echo ROUTER_ACTIVE_SLOT=`$ACTIVE_SLOT' 2>/dev/null
         # LIVE_SHA_OK, while oet-api's baked ACTIVE_SLOT env var was actually
         # "blue" (the router recreate step's `ACTIVE_SLOT="$slot" docker
         # compose ... -f "$COMPOSE_FILE" up ...` resolved the compose
-        # file's `${ACTIVE_SLOT:-blue}` to its fallback default) — the OLD
+        # file's `${ACTIVE_SLOT:-blue}` to its fallback default) - the OLD
         # commit kept serving all public traffic while this script reported
         # success. Now require the slot the router is ACTUALLY pointed at,
-        # per ROUTER_ACTIVE_SLOT above, to carry this SHA — not just any slot.
+        # per ROUTER_ACTIVE_SLOT above, to carry this SHA - not just any slot.
         if ($inspectText -notmatch 'ROUTER_ACTIVE_SLOT=(blue|green)') {
             Write-Output "LIVE_SHA_MISMATCH could not read the router's active slot"
             $healthFailed = $true
@@ -175,7 +175,7 @@ docker exec oet-api sh -c 'echo ROUTER_ACTIVE_SLOT=`$ACTIVE_SLOT' 2>/dev/null
             $hasWeb = $inspectText -match ("NAME=/oet-web-$activeSlot.*" + $escaped)
             $hasApi = $inspectText -match ("NAME=/oet-api-$activeSlot.*" + $escaped)
             if (-not ($hasWeb -and $hasApi)) {
-                Write-Output "LIVE_SHA_MISMATCH router is serving slot '$activeSlot', which is not tagged $Sha — traffic is still on the OLD build"
+                Write-Output "LIVE_SHA_MISMATCH router is serving slot '$activeSlot', which is not tagged $Sha - traffic is still on the OLD build"
                 $healthFailed = $true
             } else {
                 Write-Output "LIVE_SHA_OK $Sha (serving slot: $activeSlot)"
