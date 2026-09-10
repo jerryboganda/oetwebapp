@@ -1074,7 +1074,11 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                     "Discharge plan paragraph must contain post-discharge instructions.");
             yield break;
         }
-        var hasMeds = Regex.IsMatch(s.Body, @"\b(mg|mcg|tablet|capsule|ml|prescribed|discharged? with|dose)\b", RegexOptions.IgnoreCase);
+        // \bmg\b never matched the no-space dose notation used throughout the
+        // catalogue ("Neurontin 100mg") — \b requires a \w/\W transition, and
+        // digit->letter inside "100mg" isn't one. Root-cause fix (Rev5 audit,
+        // 10 Sep 2026): match the unit directly after a number too.
+        var hasMeds = Regex.IsMatch(s.Body, @"\d+\s*(mg|mcg|ml)\b|\b(tablet|capsule|prescribed|discharged? with|dose)\b", RegexOptions.IgnoreCase);
         if (!hasMeds || !hasInstr)
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Discharge plan paragraph must contain medications with doses AND post-discharge instructions.");

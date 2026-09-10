@@ -608,6 +608,18 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.discharge_plan_present");
     }
 
+    // \bmg\b never matched no-space dose notation ("100mg") since digit->
+    // letter isn't a \b transition — found via a real held production letter
+    // (OET test 11 / Ling Wu) whose discharge meds ("Neurontin 100mg every
+    // 8 hours") were genuinely present but never detected.
+    [Fact]
+    public void DischargePlanPresent_Passes_On_NoSpace_Dose_Notation()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to update you.\n\nShe was discharged today.\n\nContinue Neurontin 100mg every 8 hours and she should review with her GP.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "discharge", Profession: ExamProfession.Medicine));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.discharge_plan_present");
+    }
+
     [Fact]
     public void DischargePlanPresent_Still_Fires_For_Medicine_Without_Medication()
     {
