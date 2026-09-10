@@ -26,6 +26,7 @@ on:
     paths:
       - ".github/workflows/ubag-integration-e2e.yml"
       - "scripts/deploy/ubag-e2e-from-ci.sh"
+      - "app/admin/ai-providers/**"
   workflow_dispatch:
     inputs:
       mode:
@@ -86,10 +87,11 @@ jobs:
             app/admin/ai-providers/ubag/page.test.tsx \
             app/admin/ai-providers/page.test.tsx
 
+  # Deliberately independent of contract-tests: a unit-test failure must not
+  # suppress the live integration evidence.
   live-e2e:
     name: Live facade and browser target probes
     runs-on: ubuntu-latest
-    needs: [contract-tests]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
