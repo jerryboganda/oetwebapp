@@ -598,6 +598,24 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.emotional_wording");
     }
 
+    // Owner-directed follow-up (Rev5 audit, 10 Sep 2026): dietetics/OT/
+    // speech-pathology discharge plans are legitimately non-pharmacological.
+    [Fact]
+    public void DischargePlanPresent_Passes_For_NonPrescribing_Profession_Without_Medication()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to inform you Ms A was discharged today.\n\nShe was seen for dietetic review.\n\nShe should continue her meal plan and follow-up in clinic.\n\nYours sincerely,\nDietitian";
+        var findings = _engine.Lint(new WritingLintInput(text, "discharge", Profession: ExamProfession.Dietetics));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.discharge_plan_present");
+    }
+
+    [Fact]
+    public void DischargePlanPresent_Still_Fires_For_Medicine_Without_Medication()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to inform you Ms A was discharged today.\n\nShe was seen for review.\n\nShe should follow up in clinic.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "discharge", Profession: ExamProfession.Medicine));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.discharge_plan_present");
+    }
+
     [Fact]
     public void EmotionalWording_Fires_On_Suffered_With_Dramatising_Intensifier()
     {

@@ -1051,11 +1051,30 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
+    // Non-prescribing allied-health professions (Rev5 audit, 10 Sep 2026):
+    // dietetics, occupational therapy and speech pathology discharge plans
+    // are legitimately non-pharmacological (diet/exercise/equipment plans,
+    // not medication doses) — 5 real production discharge letters across
+    // these 3 professions were flagged for lacking "medications with doses"
+    // that were never clinically relevant to their discharge plan. Only the
+    // post-discharge-instructions half of the check applies to them.
+    private static readonly HashSet<ExamProfession> NonPrescribingProfessions = new()
+    {
+        ExamProfession.Dietetics, ExamProfession.OccupationalTherapy, ExamProfession.SpeechPathology,
+    };
+
     private static IEnumerable<LintFinding> DetectDischargePlanPresent(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)) yield break;
-        var hasMeds = Regex.IsMatch(s.Body, @"\b(mg|mcg|tablet|capsule|ml|prescribed|discharged? with|dose)\b", RegexOptions.IgnoreCase);
         var hasInstr = Regex.IsMatch(s.Body, @"\b(follow[- ]up|review|advised|should|must|recommend)", RegexOptions.IgnoreCase);
+        if (NonPrescribingProfessions.Contains(input.Profession))
+        {
+            if (!hasInstr)
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    "Discharge plan paragraph must contain post-discharge instructions.");
+            yield break;
+        }
+        var hasMeds = Regex.IsMatch(s.Body, @"\b(mg|mcg|tablet|capsule|ml|prescribed|discharged? with|dose)\b", RegexOptions.IgnoreCase);
         if (!hasMeds || !hasInstr)
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Discharge plan paragraph must contain medications with doses AND post-discharge instructions.");
