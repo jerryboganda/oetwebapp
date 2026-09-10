@@ -1,11 +1,11 @@
-# Speaking Module — Local Docker Quickstart
+# Speaking Module — Local Quickstart
 
-This guide gets a developer to a working local Speaking stack using the repo's Docker-first workflow.
+This guide gets a developer to a working local Speaking stack using the repo's containerized local stack.
 
 ## Prereqs
 
-- Docker Desktop
-- Node.js only for lightweight repo scripts if needed
+- Node.js 22.x + pnpm 10.x, and .NET 10.x — the host toolchain this repo installs and validates with (see `AGENTS.md`)
+- Docker Desktop — required for the containerized stack in steps 3–7
 - Git
 - (Optional) Anthropic API key — without it, the local stack runs against mock AI
 
@@ -14,9 +14,10 @@ This guide gets a developer to a working local Speaking stack using the repo's D
 ```bash
 git clone https://github.com/<org>/oet-web-app.git
 cd oet-web-app
+pnpm install
 ```
 
-Do not run dependency installs on the Windows host. Validation dependencies are managed through the Docker-backed `node_modules` volume.
+Run `pnpm install` on the host; the compose stack below mounts the resulting `node_modules`.
 
 ## 2. Configure env
 

@@ -3,7 +3,7 @@
   "kind": "speaking",
   "profession": "radiography",
   "publishedAt": "2026-04-18T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham â€” The Tutor Book â€” OET Speaking Comprehensive Rulebook (AI Training Edition)",
+  "authoritySource": "Dr. Ahmed Hesham — The Tutor Book — OET Speaking Comprehensive Rulebook (AI Training Edition)",
   "sections": [
     {
       "id": "01",
@@ -52,7 +52,7 @@
       "section": "01",
       "severity": "info",
       "title": "Two-card exam structure",
-      "body": "The OET Speaking sub-test consists of exactly two role-play cards: Card 1 and Card 2. Each card: 3 minutes preparation + 5 minutes discussion = 8 minutes per card. Total exam duration: approximately 20â€“22 minutes. Warm-up questions precede the cards and are NOT counted in the final score.",
+      "body": "The OET Speaking sub-test consists of exactly two role-play cards: Card 1 and Card 2. Each card: 3 minutes preparation + 5 minutes discussion = 8 minutes per card. Total exam duration: approximately 20–22 minutes. Warm-up questions precede the cards and are NOT counted in the final score.",
       "appliesTo": "all",
       "params": {
         "prepMinutes": 3,
@@ -64,7 +64,7 @@
       "section": "01",
       "severity": "info",
       "title": "Recording-based assessment (audio is the graded artefact)",
-      "body": "The OET Assessor grades the AUDIO RECORDING after the exam â€” not the live interaction. Paper-based exam: audio-only recording, no camera. Computer-based exam: the webcam is on for proctoring and to verify paper destruction at the end (see RULE_62), but eye contact, hand gestures, and facial expressions are STILL NOT assessed â€” only the audio recording is scored.",
+      "body": "The OET Assessor grades the AUDIO RECORDING after the exam — not the live interaction. Paper-based exam: audio-only recording, no camera. Computer-based exam: the webcam is on for proctoring and to verify paper destruction at the end (see RULE_62), but eye contact, hand gestures, and facial expressions are STILL NOT assessed — only the audio recording is scored.",
       "appliesTo": "all"
     },
     {
@@ -88,7 +88,7 @@
       "section": "01",
       "severity": "major",
       "title": "Card tasks are guides, not scripts",
-      "body": "The tasks listed on the card are NOT obligatory â€” they are guides. Task order is NOT obligatory â€” follow the patient's lead. Never treat the card as a lecture script; the conversation must be a ping-pong dialogue.",
+      "body": "The tasks listed on the card are NOT obligatory — they are guides. Task order is NOT obligatory — follow the patient's lead. Never treat the card as a lecture script; the conversation must be a ping-pong dialogue.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },
@@ -96,7 +96,7 @@
       "id": "RULE_06",
       "section": "02",
       "severity": "critical",
-      "title": "Core language rule â€” no jargon",
+      "title": "Core language rule — no jargon",
       "body": "Never use medical jargon or abbreviations with patients. Replace every technical term with its plain English equivalent. Two approaches: (a) layman's term only, or (b) medical term + ask for feedback + explain.",
       "appliesTo": "all",
       "checkId": "speaking_jargon_detector"
@@ -106,7 +106,7 @@
       "section": "02",
       "severity": "critical",
       "title": "Imaging investigations",
-      "body": "CT scan â†’ imaging scan. MRI scan â†’ imaging scan. Ultrasound â†’ gel scan or tummy scan. X-ray â†’ X-ray (acceptable as-is). All endoscopy types â†’ camera test.",
+      "body": "CT scan → imaging scan. MRI scan → imaging scan. Ultrasound → gel scan or tummy scan. X-ray → X-ray (acceptable as-is). All endoscopy types → camera test.",
       "appliesTo": "all",
       "checkId": "speaking_jargon_detector"
     },
@@ -115,7 +115,7 @@
       "section": "02",
       "severity": "major",
       "title": "Injections",
-      "body": "IV/IM injection â†’ a jab. Subcutaneous injection â†’ a tiny injection just under the skin. Spinal injection â†’ a tiny injection in your back.",
+      "body": "IV/IM injection → a jab. Subcutaneous injection → a tiny injection just under the skin. Spinal injection → a tiny injection in your back.",
       "appliesTo": "all",
       "checkId": "speaking_jargon_detector"
     },
@@ -124,7 +124,7 @@
       "section": "02",
       "severity": "major",
       "title": "Monitoring & investigations",
-      "body": "Blood pressure (BP) â†’ measure the pressure in your blood vessels. ECG â†’ a tracing of your heartbeat. EEG â†’ measuring the electrical activity in your brain.",
+      "body": "Blood pressure (BP) → measure the pressure in your blood vessels. ECG → a tracing of your heartbeat. EEG → measuring the electrical activity in your brain.",
       "appliesTo": "all",
       "checkId": "speaking_jargon_detector"
     },
@@ -133,7 +133,7 @@
       "section": "02",
       "severity": "major",
       "title": "Body parts",
-      "body": "Abdomen â†’ tummy. Oesophagus â†’ food pipe. Trachea â†’ windpipe. Uterus â†’ womb.",
+      "body": "Abdomen → tummy. Oesophagus → food pipe. Trachea → windpipe. Uterus → womb.",
       "appliesTo": "all",
       "checkId": "speaking_jargon_detector"
     },
@@ -142,7 +142,7 @@
       "section": "02",
       "severity": "minor",
       "title": "Medical specialists",
-      "body": "Paediatrician â†’ children's specialist. Gynaecologist â†’ women's health specialist. Endocrinologist â†’ hormone specialist. General principle: [specialty] + 'specialist'.",
+      "body": "Paediatrician → children's specialist. Gynaecologist → women's health specialist. Endocrinologist → hormone specialist. General principle: [specialty] + 'specialist'.",
       "appliesTo": "all"
     },
     {
@@ -150,23 +150,23 @@
       "section": "02",
       "severity": "info",
       "title": "Feedback approach",
-      "body": "If you use a medical term, immediately ask for feedback: 'I'm sorry for the medical term â€” have you heard of [condition] before?' Then explain in plain English regardless. The safest approach is to use layman's language directly.",
+      "body": "If you use a medical term, immediately ask for feedback: 'I'm sorry for the medical term — have you heard of [condition] before?' Then explain in plain English regardless. The safest approach is to use layman's language directly.",
       "appliesTo": "all",
       "exemplarPhrases": [
-        "I'm sorry for the medical term â€” have you heard of {condition} before?"
+        "I'm sorry for the medical term — have you heard of {condition} before?"
       ]
     },
     {
       "id": "RULE_13",
       "section": "03",
       "severity": "major",
-      "title": "Opening â€” greeting and introduction",
+      "title": "Opening — greeting and introduction",
       "body": "Begin with a professional greeting. State your name and role, invite the patient to sit. Ask an open-ended opening question.",
       "appliesTo": "all",
       "turnStage": "greeting",
       "exemplarPhrases": [
         "Hello, Mr Jones. I'm Dr Smith. Nice to meet you. Please take a seat. How can I help you today?",
-        "Hello, nice to see you again. As a reminder, I'm Dr Smith â€” I looked after you for {condition}."
+        "Hello, nice to see you again. As a reminder, I'm Dr Smith — I looked after you for {condition}."
       ],
       "enforcement": "ai-grounded"
     },
@@ -211,11 +211,11 @@
       "section": "03",
       "severity": "major",
       "title": "Establishing the diagnosis",
-      "body": "Check the patient's prior knowledge before delivering a diagnosis. Present in plain language â€” never cause unnecessary alarm.",
+      "body": "Check the patient's prior knowledge before delivering a diagnosis. Present in plain language — never cause unnecessary alarm.",
       "appliesTo": "all",
       "turnStage": "diagnosis",
       "exemplarPhrases": [
-        "Based on what you've told me, it seems you may have a condition called {condition} â€” have you heard of it before?"
+        "Based on what you've told me, it seems you may have a condition called {condition} — have you heard of it before?"
       ],
       "enforcement": "ai-grounded"
     },
@@ -273,7 +273,7 @@
       "section": "03",
       "severity": "critical",
       "title": "Ping-pong conversation rule",
-      "body": "The conversation MUST be a two-way dialogue â€” never a monologue. Speak, then let the patient respond. Continuous speaking without patient input is penalised.",
+      "body": "The conversation MUST be a two-way dialogue — never a monologue. Speak, then let the patient respond. Continuous speaking without patient input is penalised.",
       "appliesTo": "all",
       "checkId": "speaking_monologue_detector",
       "params": {
@@ -284,8 +284,8 @@
       "id": "RULE_23",
       "section": "04",
       "severity": "critical",
-      "title": "Weight â€” ask sensitively",
-      "body": "NEVER ask 'What is your weight?' directly â€” blunt and disrespectful. Approach sensitively. Asking weight directly is a communication failure in OET.",
+      "title": "Weight — ask sensitively",
+      "body": "NEVER ask 'What is your weight?' directly — blunt and disrespectful. Approach sensitively. Asking weight directly is a communication failure in OET.",
       "appliesTo": "all",
       "checkId": "speaking_weight_sensitivity",
       "forbiddenPatterns": [
@@ -301,7 +301,7 @@
       "id": "RULE_24",
       "section": "04",
       "severity": "minor",
-      "title": "Exercise â€” ask and advise",
+      "title": "Exercise — ask and advise",
       "body": "Ask about exercise habits before giving advice. Suggest specific, achievable targets.",
       "appliesTo": "all",
       "exemplarPhrases": [
@@ -313,7 +313,7 @@
       "id": "RULE_25",
       "section": "04",
       "severity": "minor",
-      "title": "Diet â€” ask and advise",
+      "title": "Diet — ask and advise",
       "body": "Ask about dietary habits using an open question. Advise on specific dietary changes relevant to their condition.",
       "appliesTo": "all",
       "exemplarPhrases": [
@@ -325,7 +325,7 @@
       "id": "RULE_26",
       "section": "04",
       "severity": "major",
-      "title": "Smoking â€” initial assessment",
+      "title": "Smoking — initial assessment",
       "body": "Always ask whether the patient smokes before giving advice. If yes, explore: what, how many per day, how long.",
       "appliesTo": "all",
       "exemplarPhrases": [
@@ -338,8 +338,8 @@
       "id": "RULE_27",
       "section": "04",
       "severity": "critical",
-      "title": "Smoking â€” graduated negotiation",
-      "body": "Use graduated negotiation â€” always start from the strongest recommendation. Step 1 (Black Area): Recommend complete cessation. Step 2 (if refused): Offer NRT alternatives. Step 3 (Grey Zone): Negotiate a reduction. NEVER start with Step 3 â€” you lose all negotiating leverage.",
+      "title": "Smoking — graduated negotiation",
+      "body": "Use graduated negotiation — always start from the strongest recommendation. Step 1 (Black Area): Recommend complete cessation. Step 2 (if refused): Offer NRT alternatives. Step 3 (Grey Zone): Negotiate a reduction. NEVER start with Step 3 — you lose all negotiating leverage.",
       "appliesTo": "all",
       "checkId": "speaking_smoking_ladder_order"
     },
@@ -347,7 +347,7 @@
       "id": "RULE_28",
       "section": "04",
       "severity": "major",
-      "title": "Smoking â€” empathy",
+      "title": "Smoking — empathy",
       "body": "Acknowledge that quitting is genuinely difficult. Show empathy while maintaining your clinical recommendation.",
       "appliesTo": "all",
       "exemplarPhrases": [
@@ -359,7 +359,7 @@
       "id": "RULE_29",
       "section": "04",
       "severity": "major",
-      "title": "Smoking â€” mention cessation support",
+      "title": "Smoking — mention cessation support",
       "body": "Always mention the smoking cessation clinic as a concrete resource.",
       "appliesTo": "all",
       "exemplarPhrases": [
@@ -371,8 +371,8 @@
       "id": "RULE_30",
       "section": "04",
       "severity": "major",
-      "title": "Alcohol â€” assessment and advice",
-      "body": "Ask about frequency and quantity (units per week). No 'alternatives' for alcohol â€” options are cessation or reduction only. Refer to an alcohol support service if appropriate.",
+      "title": "Alcohol — assessment and advice",
+      "body": "Ask about frequency and quantity (units per week). No 'alternatives' for alcohol — options are cessation or reduction only. Refer to an alcohol support service if appropriate.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },
@@ -381,10 +381,10 @@
       "section": "04",
       "severity": "major",
       "title": "Patient autonomy",
-      "body": "Always respect patient autonomy â€” you advise, not command.",
+      "body": "Always respect patient autonomy — you advise, not command.",
       "appliesTo": "all",
       "exemplarPhrases": [
-        "No one can force you to do anything. I can only advise you â€” the decision is entirely yours."
+        "No one can force you to do anything. I can only advise you — the decision is entirely yours."
       ],
       "enforcement": "ai-grounded"
     },
@@ -443,7 +443,7 @@
       ],
       "exemplarPhrases": [
         "Hello, it's lovely to see you again, Mr Jones.",
-        "Hello, good to have you back. As a reminder, I'm Dr Smith â€” I treated you for {condition}."
+        "Hello, good to have you back. As a reminder, I'm Dr Smith — I treated you for {condition}."
       ],
       "enforcement": "ai-grounded"
     },
@@ -492,7 +492,7 @@
       "id": "RULE_41",
       "section": "06",
       "severity": "critical",
-      "title": "Step 1 â€” support system",
+      "title": "Step 1 — support system",
       "body": "Before delivering any results, ask if the patient would like someone with them.",
       "appliesTo": [
         "breaking_bad_news"
@@ -509,7 +509,7 @@
       "id": "RULE_42",
       "section": "06",
       "severity": "critical",
-      "title": "Step 2 â€” warning shots",
+      "title": "Step 2 — warning shots",
       "body": "Do NOT deliver a serious diagnosis suddenly. Build up gradually with warning shots.",
       "appliesTo": [
         "breaking_bad_news"
@@ -527,7 +527,7 @@
       "id": "RULE_43",
       "section": "06",
       "severity": "critical",
-      "title": "Step 3 â€” deliver diagnosis",
+      "title": "Step 3 — deliver diagnosis",
       "body": "After warning shots, state the diagnosis directly but gently. Use plain language.",
       "appliesTo": [
         "breaking_bad_news"
@@ -537,15 +537,15 @@
         "step": 3
       },
       "exemplarPhrases": [
-        "I'm very sorry to tell you â€” the results are showing signs of cancer."
+        "I'm very sorry to tell you — the results are showing signs of cancer."
       ]
     },
     {
       "id": "RULE_44",
       "section": "06",
       "severity": "critical",
-      "title": "Step 4 â€” silence 3â€“4 seconds",
-      "body": "After stating the diagnosis, STOP SPEAKING for 3â€“4 seconds. Allow the patient to absorb the shock. Continuing to speak immediately after delivering serious news is one of the most common exam mistakes.",
+      "title": "Step 4 — silence 3–4 seconds",
+      "body": "After stating the diagnosis, STOP SPEAKING for 3–4 seconds. Allow the patient to absorb the shock. Continuing to speak immediately after delivering serious news is one of the most common exam mistakes.",
       "appliesTo": [
         "breaking_bad_news"
       ],
@@ -559,7 +559,7 @@
       "id": "RULE_45",
       "section": "06",
       "severity": "critical",
-      "title": "Step 5 â€” respond to emotion",
+      "title": "Step 5 — respond to emotion",
       "body": "After the silence, acknowledge whatever reaction the patient has. Never dismiss or minimise emotions.",
       "appliesTo": [
         "breaking_bad_news"
@@ -576,7 +576,7 @@
       "id": "RULE_46",
       "section": "06",
       "severity": "critical",
-      "title": "Step 6 â€” hope + next steps",
+      "title": "Step 6 — hope + next steps",
       "body": "After acknowledging emotions, provide forward-looking information. Mention early stage if applicable.",
       "appliesTo": [
         "breaking_bad_news"
@@ -593,7 +593,7 @@
       "id": "RULE_47",
       "section": "06",
       "severity": "critical",
-      "title": "Step 7 â€” end with support system",
+      "title": "Step 7 — end with support system",
       "body": "Return to the support system theme at the end.",
       "appliesTo": [
         "breaking_bad_news"
@@ -623,7 +623,7 @@
       "section": "07",
       "severity": "minor",
       "title": "3-minute prep strategy",
-      "body": "Read the entire card start to finish first. Underline key words. Write a brief 1â€“2 word label next to each task. During the 5-minute discussion, glance at notes â€” don't re-read the full card.",
+      "body": "Read the entire card start to finish first. Underline key words. Write a brief 1–2 word label next to each task. During the 5-minute discussion, glance at notes — don't re-read the full card.",
       "appliesTo": "all"
     },
     {
@@ -631,7 +631,7 @@
       "section": "07",
       "severity": "minor",
       "title": "Warm-up question prep",
-      "body": "Typical warm-ups: your name, where you work, why you're taking OET, specialty, career advice. Do NOT memorise scripts â€” adapt naturally. Speak confidently.",
+      "body": "Typical warm-ups: your name, where you work, why you're taking OET, specialty, career advice. Do NOT memorise scripts — adapt naturally. Speak confidently.",
       "appliesTo": "all"
     },
     {
@@ -681,8 +681,8 @@
       "id": "RULE_56",
       "section": "08",
       "severity": "critical",
-      "title": "9 scoreable criteria â€” scored separately",
-      "body": "The OET Speaking recording is scored against NINE criteria, not six. Linguistic criteria (4, each 0â€“6): Intelligibility, Fluency, Appropriateness of Language, Resources of Grammar & Expression. Clinical Communication criteria (5, each 0â€“3 â€” descriptors: Adept / Competent / Partially effective / Ineffective): Relationship Building; Understanding & Incorporating the Patient's Perspective; Providing Structure; Information Gathering; Information Giving. Grouping Clinical Communication into a single aggregate score is WRONG â€” every feedback item must cite one of the nine criterion codes AND a rule ID.",
+      "title": "9 scoreable criteria — scored separately",
+      "body": "The OET Speaking recording is scored against NINE criteria, not six. Linguistic criteria (4, each 0–6): Intelligibility, Fluency, Appropriateness of Language, Resources of Grammar & Expression. Clinical Communication criteria (5, each 0–3 — descriptors: Adept / Competent / Partially effective / Ineffective): Relationship Building; Understanding & Incorporating the Patient's Perspective; Providing Structure; Information Gathering; Information Giving. Grouping Clinical Communication into a single aggregate score is WRONG — every feedback item must cite one of the nine criterion codes AND a rule ID.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },
@@ -709,7 +709,7 @@
       "section": "08",
       "severity": "critical",
       "title": "Computer-based Speaking is always at home",
-      "body": "In the computer-based OET, Speaking is always taken at home â€” never at a test centre. The device check and mic check flow must enforce or clearly inform the candidate of the full environment requirement list (RULE_60) before the exam can start.",
+      "body": "In the computer-based OET, Speaking is always taken at home — never at a test centre. The device check and mic check flow must enforce or clearly inform the candidate of the full environment requirement list (RULE_60) before the exam can start.",
       "appliesTo": "all",
       "enforcement": "human-review-only"
     },
@@ -718,7 +718,7 @@
       "section": "08",
       "severity": "critical",
       "title": "Computer-based environment requirements",
-      "body": "Location: at home only. Room: indoors, well-lit, solid walls (no glass panels or transparent partitions). Other people: candidate must be completely alone â€” if anyone enters the room, the exam is stopped. Monitors: single monitor only. Webcam: wired or built-in webcam that can move; Bluetooth webcam NOT permitted. Microphone & speakers: built-in or USB plug-in only; Bluetooth NOT allowed; NO headsets during Speaking. Power: device plugged directly into power; no docking station; no battery-only. VPN / Virtual machines: fully disabled before the exam starts. Extra screens: all other screens (TV, second monitor) unplugged.",
+      "body": "Location: at home only. Room: indoors, well-lit, solid walls (no glass panels or transparent partitions). Other people: candidate must be completely alone — if anyone enters the room, the exam is stopped. Monitors: single monitor only. Webcam: wired or built-in webcam that can move; Bluetooth webcam NOT permitted. Microphone & speakers: built-in or USB plug-in only; Bluetooth NOT allowed; NO headsets during Speaking. Power: device plugged directly into power; no docking station; no battery-only. VPN / Virtual machines: fully disabled before the exam starts. Extra screens: all other screens (TV, second monitor) unplugged.",
       "appliesTo": "all",
       "enforcement": "human-review-only"
     },
@@ -988,7 +988,7 @@
         "step": 4,
         "rule": "RULE_44",
         "name": "silence",
-        "what": "Stop speaking for 3â€“4 seconds."
+        "what": "Stop speaking for 3–4 seconds."
       },
       {
         "step": 5,

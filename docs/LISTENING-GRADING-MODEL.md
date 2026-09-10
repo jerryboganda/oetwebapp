@@ -114,7 +114,6 @@ switch:
 
 ## Citations
 
-- `PRD-LISTENING-V2.md` — full product spec.
 - `docs/LISTENING.md` — module overview.
 - `docs/LISTENING-RULEBOOK-CITATIONS.md` — rulebook references.
 - `backend/src/OetLearner.Api/Services/OetScoring.cs` — scaled-score anchors.

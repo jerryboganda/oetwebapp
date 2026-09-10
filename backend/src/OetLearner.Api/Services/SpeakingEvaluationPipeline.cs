@@ -698,7 +698,7 @@ public sealed class SpeakingEvaluationPipeline(
     private static string CriterionFromFinding(UnifiedFinding finding)
     {
         var text = $"{finding.RuleId} {finding.Message}".ToLowerInvariant();
-        // Clinical Communication (5 criteria, 0â€“3) â€” route first so clinical cues win over generic linguistic keywords.
+        // Clinical Communication (5 criteria, 0–3) — route first so clinical cues win over generic linguistic keywords.
         if (text.Contains("empathy") || text.Contains("rapport") || text.Contains("greeting") || text.Contains("introduc") || text.Contains("judgemental") || text.Contains("respectful") || text.Contains("attitude"))
             return "relationshipBuilding";
         if (text.Contains("patient's perspective") || text.Contains("patient perspective") || text.Contains("concerns") || text.Contains("expectations") || text.Contains("cue") || text.Contains("ideas"))
@@ -709,7 +709,7 @@ public sealed class SpeakingEvaluationPipeline(
             return "informationGathering";
         if (text.Contains("check") && text.Contains("understanding") || text.Contains("information giving") || text.Contains("pause") || text.Contains("silence") || text.Contains("warning shot") || text.Contains("feedback") || text.Contains("explain"))
             return "informationGiving";
-        // Linguistic (4 criteria, 0â€“6)
+        // Linguistic (4 criteria, 0–6)
         if (text.Contains("jargon") || text.Contains("plain") || text.Contains("grammar") || text.Contains("expression"))
             return "grammar";
         if (text.Contains("sensitive") || text.Contains("tone") || text.Contains("register") || text.Contains("appropriate"))

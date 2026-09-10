@@ -2,8 +2,7 @@
 
 This folder documents the OET Listening exam-prep module: domain, services,
 endpoints, frontend, and the cross-skill integrations (Mocks, Pathway,
-Teacher Classes). For the **product** requirements see `PRD-LISTENING-V2.md`
-at repo root; for **rollout state** see `PROGRESS-LISTENING-V2.md`.
+Teacher Classes).
 
 ## What ships today
 

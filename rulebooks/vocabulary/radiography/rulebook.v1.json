@@ -3,7 +3,7 @@
   "kind": "vocabulary",
   "profession": "radiography",
   "publishedAt": "2026-05-28T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham â€” OET Medical Vocabulary Rulebook for Healthcare Professionals v1 â€” Other Allied Health variant derived from medicine; the rule bodies are profession-agnostic and identical, only the profession field changes.",
+  "authoritySource": "Dr. Ahmed Hesham — OET Medical Vocabulary Rulebook for Healthcare Professionals v1 — Radiography variant derived from medicine; the rule bodies are profession-agnostic and identical, only the profession field changes.",
   "sections": [
     {
       "id": "V01",
@@ -56,10 +56,10 @@
       "appliesTo": "all",
       "examples": {
         "good": [
-          "Atelectasis â€” partial or complete collapse of a lung or a section (lobe) of the lung."
+          "Atelectasis — partial or complete collapse of a lung or a section (lobe) of the lung."
         ],
         "bad": [
-          "Senile dementia â€” confusion in old age."
+          "Senile dementia — confusion in old age."
         ]
       }
     },
@@ -68,7 +68,7 @@
       "section": "V01",
       "severity": "critical",
       "title": "No brand names as primary term",
-      "body": "Primary terms MUST use generic names (INN) not brand names. Brand names may appear as synonyms with the Â® stripped.",
+      "body": "Primary terms MUST use generic names (INN) not brand names. Brand names may appear as synonyms with the ® stripped.",
       "appliesTo": "all",
       "examples": {
         "good": [
@@ -84,7 +84,7 @@
       "section": "V01",
       "severity": "major",
       "title": "Abbreviations expanded",
-      "body": "Every abbreviation term must include its expansion. e.g. 'ECG â€” electrocardiogram, a recording of the heart's electrical activity.'",
+      "body": "Every abbreviation term must include its expansion. e.g. 'ECG — electrocardiogram, a recording of the heart's electrical activity.'",
       "appliesTo": "all"
     },
     {
@@ -126,8 +126,8 @@
       "id": "V03.1",
       "section": "V03",
       "severity": "critical",
-      "title": "Definition â‰¤ 25 words",
-      "body": "Definitions must be concise: target 12â€“20 words, hard cap 25 words. Use noun phrases where possible.",
+      "title": "Definition ≤ 25 words",
+      "body": "Definitions must be concise: target 12–20 words, hard cap 25 words. Use noun phrases where possible.",
       "appliesTo": "all",
       "params": {
         "maxWords": 25
@@ -138,7 +138,7 @@
       "section": "V03",
       "severity": "major",
       "title": "No circular definitions",
-      "body": "A definition must not repeat the term it is defining. 'Analgesia â€” the use of analgesics' is forbidden.",
+      "body": "A definition must not repeat the term it is defining. 'Analgesia — the use of analgesics' is forbidden.",
       "appliesTo": "all"
     },
     {
@@ -165,7 +165,7 @@
       "id": "V04.3",
       "section": "V04",
       "severity": "minor",
-      "title": "Collocations 2â€“5 entries, realistic",
+      "title": "Collocations 2–5 entries, realistic",
       "body": "Collocations should reflect authentic clinical phrases ('administer medication', 'elevate the head of the bed').",
       "appliesTo": "all",
       "params": {
@@ -178,7 +178,7 @@
       "section": "V05",
       "severity": "major",
       "title": "IPA in British Received Pronunciation",
-      "body": "When IPA is provided, use British RP conventions; mark primary stress with Ëˆ and secondary stress with ËŒ.",
+      "body": "When IPA is provided, use British RP conventions; mark primary stress with ˈ and secondary stress with ˌ.",
       "appliesTo": "all"
     },
     {
@@ -186,7 +186,7 @@
       "section": "V05",
       "severity": "minor",
       "title": "Audio recommended for polysyllabic or Latin-root terms",
-      "body": "Terms with â‰¥3 syllables or Greek/Latin roots benefit from audio pronunciation.",
+      "body": "Terms with ≥3 syllables or Greek/Latin roots benefit from audio pronunciation.",
       "appliesTo": "all"
     },
     {
@@ -214,7 +214,7 @@
       "section": "V06",
       "severity": "minor",
       "title": "Difficulty tiered A2/B1/B2/C1 or easy/medium/hard",
-      "body": "Difficulty must be one of the documented tiers. Map A2â†’easy, B1â†’medium, B2â†’medium, C1â†’hard.",
+      "body": "Difficulty must be one of the documented tiers. Map A2→easy, B1→medium, B2→medium, C1→hard.",
       "appliesTo": "all",
       "params": {
         "allowed": [

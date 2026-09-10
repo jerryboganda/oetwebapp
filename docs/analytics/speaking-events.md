@@ -32,7 +32,7 @@ Typed catalog: `lib/analytics/speaking-events.ts`. Use `trackSpeaking('name', { 
 
 ## Downstream consumers
 
-- **Funnel dashboard** (`ops/dashboards/speaking-funnel.json` — pending) — entry → warmup_finished → roleplay_ended → assessment_viewed.
+- **Funnel dashboard** (`ops/dashboards/speaking-funnel.json`) — entry → warmup_finished → roleplay_ended → assessment_viewed.
 - **Quality dashboard** — AI vs tutor delta histograms by criterion.
 - **LiveKit health** — connect rate, disconnect reasons, cue volume.
 

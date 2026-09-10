@@ -6,7 +6,7 @@ This file is always loaded by coding agents. Keep it compact. Do not restore lar
 
 - Frontend: Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS v4, motion v12.
 - Backend: ASP.NET Core Minimal API, EF Core, PostgreSQL, SignalR.
-- Desktop/mobile: Electron and Capacitor.
+- Desktop/mobile: Tauri 2 and Capacitor.
 - Key folders: `app/`, `components/`, `contexts/`, `hooks/`, `lib/`, `backend/`, `tests/`, `docs/`, `rulebooks/`.
 
 ## 🚢 Ship-It Workflow — COMPULSORY (owner directive 2026-07-05, tightened 2026-08-24)

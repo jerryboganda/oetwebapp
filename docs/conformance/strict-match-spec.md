@@ -1,6 +1,6 @@
 # StrictMatch — Answer-Matching Contract (decision 4)
 
-**Status:** specification (Phase 0). Implemented per-service in Phase 2.
+**Status:** implemented — enforced in `ReadingGradingService` and `ListeningGradingService`.
 **Owner:** rulebook-governance. **Drives:** Reading + Listening grading.
 
 ## Why

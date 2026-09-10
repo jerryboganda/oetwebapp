@@ -369,7 +369,7 @@ public class ListeningAudioCheckGateTests
     {
         await using var db = NewDb();
         await SeedRelationalPaperWithAudioAsync(db, jsonBacked: true);
-        // No profile â€” the legacy JSON-backed route must fail closed too.
+        // No profile — the legacy JSON-backed route must fail closed too.
         var svc = new ListeningLearnerService(db, new AllowAllContentEntitlementService());
 
         var ex = await Assert.ThrowsAsync<ApiException>(() =>

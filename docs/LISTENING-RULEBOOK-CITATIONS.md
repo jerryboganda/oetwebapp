@@ -4,8 +4,7 @@
 implements it (production code) and the test that pins the behavior.
 Any change to the rulebook MUST be reflected here.
 
-Source rulebooks: the Listening V2 source documents captured in
-[`PRD-LISTENING-V2.md`](../PRD-LISTENING-V2.md) plus `Project Real Content/Listening/`
+Source rulebooks: the Listening V2 source documents in `Project Real Content/Listening/`
 academy content.
 
 |R-Code|Topic|Implementation|Pinned by test|

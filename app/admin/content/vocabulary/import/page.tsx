@@ -591,7 +591,7 @@ export default function AdminVocabularyImportPage() {
                       {/* Progress bar */}
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between text-xs text-admin-fg-muted">
-                          <span>{audioReadyCount} of {knownRowCount} generated Â· {queued} queued/pending</span>
+                          <span>{audioReadyCount} of {knownRowCount} generated · {queued} queued/pending</span>
                           <span className="font-bold text-sm text-navy">{percentage}%</span>
                         </div>
                         <div className="h-4 w-full rounded-full bg-navy/10 overflow-hidden">

@@ -10,11 +10,8 @@
 > `docs/READING-UPLOAD-AGENT-HANDOFF.md`
 >
 > **Status:** authoritative for save / import / validate / publish as of
-> 2026-08-20. Older notes in `docs/reading-ingestion/READING-MODULE-KNOWLEDGE-BASE.md`
-> and `docs/runbooks/local-reading-sample-import.md` are **stale** on Part A
-> last-block, EvidenceSentence import, write path, and learner exam routes.
-> This file wins on the contract. The handoff wins on the current live
-> inventory and next book.
+> 2026-08-20. This file wins on the contract. The handoff wins on the current
+> live inventory and next book.
 
 ---
 
