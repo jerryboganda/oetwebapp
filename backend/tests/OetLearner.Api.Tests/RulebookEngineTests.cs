@@ -478,9 +478,15 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.age_not_duplicated_in_intro");
     }
 
-    // Owner clarification (same addendum, §2 "Emotional wording").
+    // Owner clarification (same addendum, §2 "Emotional wording"). "He
+    // suffered a severe attack." was replaced by a genuinely-dramatised
+    // example — the bulk audit found plain "suffered [clinical event]" is
+    // standard factual medical English, not banned (see the narrowed §1
+    // "G-W-116" governance decision and the dedicated
+    // EmotionalWording_Passes_On_Suffered_As_Factual_Clinical_Event /
+    // _Fires_On_Suffered_With_Dramatising_Intensifier tests above).
     [Theory]
-    [InlineData("He suffered a severe attack.")]
+    [InlineData("The poor patient suffered terribly.")]
     [InlineData("Unfortunately, his symptoms worsened.")]
     [InlineData("Regrettably, treatment was delayed.")]
     public void EmotionalWording_Fires_On_Banned_Words(string bodyLine)
@@ -540,6 +546,64 @@ Doctor";
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for urgent cardiology assessment.\n\nBackground details here.\n\nI would be grateful for your review at your earliest convenience.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.no_duplicated_request");
+    }
+
+    // Owner governance decision (Writing Rule Enforcement Addendum Rev5
+    // reply, 10 Sep 2026, §5 "Maximum paragraphs"): the closing/request
+    // paragraph is not a body paragraph. 5 total paragraphs (intro + 3 body
+    // + closure) is 4 real body paragraphs — must pass, not fail at max=4.
+    [Fact]
+    public void ParagraphCount_Passes_When_Closure_Paragraph_Pushes_Total_To_Five()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph.\n\nBody one.\n\nBody two.\n\nBody three.\n\nI would be grateful for your review.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.letter_paragraph_count");
+    }
+
+    [Fact]
+    public void ParagraphCount_Fires_When_Real_Body_Exceeds_Four_Excluding_Closure()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro paragraph.\n\nBody one.\n\nBody two.\n\nBody three.\n\nBody four.\n\nBody five.\n\nI would be grateful for your review.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.letter_paragraph_count" && f.Message.Contains("Maximum"));
+    }
+
+    // Owner governance decision (same reply, §6 "Discharge introduction"):
+    // equivalent professional wording must pass without the exact template
+    // sentence.
+    [Fact]
+    public void DischargeIntroTemplate_Passes_On_Equivalent_Wording()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to inform you that Ms A was discharged today following treatment for pneumonia.\n\nDetails.\n\nPlease review as needed.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "discharge"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.discharge_intro_template");
+    }
+
+    [Fact]
+    public void DischargeIntroTemplate_Fires_On_Routine_Referral_Wording_With_No_Discharge_Context()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for further assessment.\n\nDetails.\n\nPlease review.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "discharge"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.discharge_intro_template");
+    }
+
+    // Owner governance decision (same reply, §1 "G-W-116"): "suffered" is
+    // standard factual clinical English for a diagnosed event and must not
+    // be flagged — only genuinely emotional/dramatised use should be.
+    [Fact]
+    public void EmotionalWording_Passes_On_Suffered_As_Factual_Clinical_Event()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nShe suffered a myocardial infarction on 3 June 2020.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.emotional_wording");
+    }
+
+    [Fact]
+    public void EmotionalWording_Fires_On_Suffered_With_Dramatising_Intensifier()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nThe poor patient suffered terribly during the admission.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.emotional_wording");
     }
 
     [Fact]

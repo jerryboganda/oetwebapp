@@ -526,9 +526,20 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
             if (rule.Params.Value.TryGetProperty("min", out var mn) && mn.TryGetInt32(out var m)) min = m;
             if (rule.Params.Value.TryGetProperty("max", out var mx) && mx.TryGetInt32(out var x)) max = x;
         }
-        var n = s.BodyParagraphs.Count;
-        if (n < min) yield return new LintFinding(rule.Id, rule.Severity, $"Body has {n} paragraph(s). Minimum is {min}.");
-        if (n > max) yield return new LintFinding(rule.Id, rule.Severity, $"Body has {n} paragraphs. Maximum is {max}.");
+        // Owner decision (Writing Rule Enforcement Addendum Rev5 governance
+        // reply, 10 Sep 2026, §5 "Maximum paragraphs"): "BODY paragraphs
+        // only" — the closing/request paragraph is not a body paragraph (it
+        // is separately regulated by urgent_closure_phrase,
+        // closure_mentions_*, no_duplicated_request). It is always the last
+        // paragraph before "Yours sincerely" — same positional convention
+        // DetectNoDuplicatedRequest already uses for `closure`. Counting it
+        // here silently inflated every letter's total by one, confirmed as
+        // the root cause of 68 of the 77 audit flags (letters with 5 total
+        // paragraphs = intro + up to 3 body + closure, i.e. 4 real body
+        // paragraphs, previously misreported as 5).
+        var n = Math.Max(s.BodyParagraphs.Count - 1, 0);
+        if (n < min) yield return new LintFinding(rule.Id, rule.Severity, $"Body has {n} paragraph(s) excluding the closing paragraph. Minimum is {min}.");
+        if (n > max) yield return new LintFinding(rule.Id, rule.Severity, $"Body has {n} paragraphs excluding the closing paragraph. Maximum is {max}.");
     }
 
     private static IEnumerable<LintFinding> DetectMinBodyParagraphs(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -596,18 +607,35 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 $"Age {age} is already in the Re: line — do not repeat it in the introduction.");
     }
 
-    // Owner clarification (same addendum, §2 "Emotional wording"): "Do not
-    // use emotional/editorial words such as suffering/suffered,
-    // unfortunately, fortunately, regrettably, sadly or equivalent emotional
-    // commentary. Keep wording factual and neutral."
+    // Owner clarification (same addendum, §2 "Emotional wording"; narrowed by
+    // the owner's 10 Sep 2026 governance reply, §1 "G-W-116"): "Do not use
+    // emotional/editorial words such as unfortunately, fortunately,
+    // regrettably, or suffering/suffered WHERE USED AS EMOTIONAL WORDING."
+    // These four have no legitimate factual/clinical usage — always banned.
     private static readonly Regex EmotionalWordingRe = new(
-        @"\b(suffering|suffered|unfortunately|fortunately|regrettably|sadly)\b", RegexOptions.IgnoreCase);
+        @"\b(unfortunately|fortunately|regrettably|sadly)\b", RegexOptions.IgnoreCase);
+
+    // "suffering"/"suffered" is NOT banned outright: the Rev5 bulk audit
+    // found 3 real production letters using it as the standard, factual
+    // clinical verb for a diagnosed event ("suffered a myocardial
+    // infarction", "suffered attacks on 1 June") — correct medical English,
+    // not emotional commentary — the same false-positive shape as the
+    // "anxious" fix in judgmental_labels above. Only flag it alongside an
+    // explicit dramatising intensifier, which the audit found zero of.
+    private static readonly Regex SufferingEmotionalRe = new(
+        @"\b(poor|terribly|greatly|badly|immensely|unbearably|tragically)\b[^.!?]{0,40}\bsuffer(?:ing|ed)?\b" +
+        @"|\bsuffer(?:ing|ed)?\b[^.!?]{0,40}\b(terribly|greatly|badly|immensely|unbearably|tragically)\b",
+        RegexOptions.IgnoreCase);
 
     private static IEnumerable<LintFinding> DetectEmotionalWording(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         foreach (Match m in EmotionalWordingRe.Matches(s.Body))
             yield return new LintFinding(rule.Id, rule.Severity,
                 $"Avoid emotional/editorial wording (\"{m.Value}\"). Keep the letter factual and neutral.",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        foreach (Match m in SufferingEmotionalRe.Matches(s.Body))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Avoid dramatising suffering/suffered with an emotional intensifier - state the clinical event factually.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
@@ -970,13 +998,37 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         }
     }
 
+    // Owner decision (Writing Rule Enforcement Addendum Rev5 governance
+    // reply, 10 Sep 2026, §6 "Discharge introduction"): do not require one
+    // exact verbatim sentence. The intro must (a) function as an
+    // update/discharge communication — mentioning discharge/admission or an
+    // explicit "update" framing is enough; the word "discharge" itself is
+    // not mandatory when admission/date-range context already makes the
+    // episode's conclusion clear — and (b) not rely on routine-referral-only
+    // phrasing ("I am writing to refer...") with no discharge/admission
+    // framing at all. Verified against all 21 audit-flagged discharge
+    // letters under the old exact-phrase rule: every one already uses
+    // equivalent professional wording and passes this check; none was a
+    // genuine violation.
+    private static readonly Regex DischargeFunctionRe = new(
+        @"\b(discharg\w*|writing to update|admitted|admission)\b", RegexOptions.IgnoreCase);
+
+    private static readonly Regex RoutineReferralOnlyPhraseRe = new(
+        @"^\s*I am writing to refer\b", RegexOptions.IgnoreCase);
+
     private static IEnumerable<LintFinding> DetectDischargeIntroTemplate(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)) yield break;
         var intro = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[0] : "";
-        if (!Regex.IsMatch(intro, @"I am writing to update you regarding", RegexOptions.IgnoreCase))
+        if (RoutineReferralOnlyPhraseRe.IsMatch(intro) && !DischargeFunctionRe.IsMatch(intro))
+        {
             yield return new LintFinding(rule.Id, rule.Severity,
-                "Discharge intro must start 'I am writing to update you regarding...' — do not use routine-referral phrasing.");
+                "Discharge intro uses routine-referral wording ('I am writing to refer...') without identifying this as a discharge/update communication.");
+            yield break;
+        }
+        if (!DischargeFunctionRe.IsMatch(intro))
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Discharge intro must clearly identify this as an update/discharge communication (mention discharge, admission, or 'writing to update ...'). Equivalent professional wording is fine — an exact template sentence is not required.");
     }
 
     // FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance audit:

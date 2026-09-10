@@ -15,6 +15,20 @@ legacy Medicine rule audit are **not** vendored here — only the streaming regi
 contract/manifest are needed to build the runtime rulebooks. The full handoff package remains
 at the source path above for audit.
 
+**Amendment (10 Sep 2026, owner governance decision on the Rev5 audit, item 1 "G-W-116"):**
+the six `G-W-116` rows (one per canonical profession) were edited in place — the SHA-256 above
+no longer matches the file and is retained only as the original-release provenance pointer, not
+a current integrity check. `G-W-116` previously read "unfortunately/fortunately are not banned
+by grammar... do not auto-penalise the word itself," which directly contradicted the addendum's
+emotional-wording ban. Per the addendum's own precedence rule (the newer clarification
+supersedes older conflicting content) and the owner's explicit instruction, it now bans
+unfortunately/fortunately/regrettably outright and bans suffering/suffered only when paired with
+a dramatising intensifier — factual clinical usage ("suffered a myocardial infarction") remains
+correct English and is not flagged. `classification`/`authority` were promoted to
+`Hard Rule`/`OET_OFFICIAL` to match. Rebuilt via
+`node scripts/rulebooks/build-canonical-writing-rulebooks.mjs` immediately after editing — the 6
+`rulebooks/writing/<profession>/rulebook.v1.json` files reflect this edit.
+
 ## What this is for
 
 `scripts/rulebooks/build-canonical-writing-rulebooks.mjs` reads `OET_AI_Rules_Master.jsonl`,
@@ -41,6 +55,24 @@ no live content. Treat this doc's "5 live professions" framing as outdated where
 (also `docs/RULEBOOKS.md`, which still shows only the single `medicine/rulebook.v1.json`
 example and doesn't mention the canonical `OW-`/`DH-W-`/`G-W-` id scheme at all) until those 5
 professions are migrated or this note is otherwise superseded.
+
+**Migration status (10 Sep 2026, owner governance decision, item 2 "The 5 additional
+professions"):** checked the registry directly — `OET_AI_Rules_Master.jsonl` has **zero** rows
+for Dietetics, Occupational Therapy, Optometry, Podiatry, or Speech Pathology, for either skill
+(only Medicine/Nursing/Dentistry/Pharmacy/Physiotherapy/Radiography exist, ~230-240 Writing rows
+each). There is no vendored canonical content for these 5 professions to migrate — this build
+script cannot construct a "canonical" AI-grounded profession pack out of nothing, and
+hand-authoring 5 new profession-specific clinical/register rule packs is a content-authorship
+task requiring real subject-matter review, not a safe autonomous code change. What genuinely
+**is** already true, and was confirmed by re-running the full audit after today's fixes: every
+deterministic check in `WritingRuleEngine.SupportedCheckIdSet` (all 69 check-ids, including
+every rule this addendum added — `emotional_wording`, `judgmental_labels`,
+`blank_line_after_re_line`, etc.) fires uniformly for **all 11** professions regardless of which
+rulebook is loaded, via the "always-on builtin battery" in `WritingRuleEngine.Lint()`. So the 32
+legacy-rulebook letters already get the full corrected deterministic rule set live; the gap is
+narrowly the richer AI-grounded contextual judgement layer these 6 professions get from their
+canonical registry rows. Closing that gap needs an updated content release from the same source
+as the original 31-Aug-2026 handoff, covering the 5 missing professions.
 
 ## Severity mapping (registry has no severity field — derived, not invented)
 

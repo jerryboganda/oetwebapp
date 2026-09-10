@@ -3965,20 +3965,20 @@
     {
       "id": "G-W-116",
       "section": "Lexis and register",
-      "severity": "major",
-      "title": "Unfortunately/fortunately are not banned by grammar",
-      "body": "Emotive adverbs are grammatically valid but often unnecessary in objective professional letters; use only when the genre/context warrants them.",
+      "severity": "critical",
+      "title": "Unfortunately/fortunately/regrettably are banned as emotional wording",
+      "body": "Emotive/editorialising adverbs (unfortunately, fortunately, regrettably) and dramatised suffering/suffered must not appear in OET Writing Model Answers; state clinical facts and outcomes factually and objectively. Standard clinical usage of suffering/suffered for a diagnosed event (e.g. \"suffered a myocardial infarction\") is not emotional wording and remains acceptable.",
       "appliesTo": "all",
       "enforcement": "ai-grounded",
       "exemplarPhrases": [
         "The scan could not be completed because of severe claustrophobia."
       ],
       "params": {
-        "classification": "Language Rule",
-        "authority": "GENERAL_ENGLISH_VALIDATED",
-        "evidence": "Standard English grammar; OET Language / Resources of Grammar & Expression alignment",
-        "aiGradingLogic": "Flag only when the form is ungrammatical, changes meaning, reduces clarity, or is repeatedly inappropriate for formal healthcare communication.",
-        "notes": "Do not auto-penalise the word itself; assess tone and necessity."
+        "classification": "Hard Rule",
+        "authority": "OET_OFFICIAL",
+        "evidence": "Writing Rule Enforcement Addendum Rev5 (10 Sep 2026) owner governance decision, item 1 \"G-W-116\": the newer clarification supersedes this rule's prior general-English framing per the addendum's own precedence rule.",
+        "aiGradingLogic": "Flag any use of unfortunately/fortunately/regrettably, and flag suffering/suffered only when paired with a dramatising intensifier (e.g. \"suffered terribly\", \"the poor patient suffered\"). Do not flag suffering/suffered used as the standard factual clinical verb for a diagnosed event.",
+        "notes": "Superseded the original \"do not auto-penalise the word itself\" framing on 10 Sep 2026 per explicit owner governance decision; see docs/canonical-rules/README.md change log."
       }
     },
     {
