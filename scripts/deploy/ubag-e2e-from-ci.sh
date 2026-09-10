@@ -182,6 +182,7 @@ def run_target(target):
     deadline = time.time() + TIMEOUT
     state = "unknown"
     text = ""
+    reason = ""
     while time.time() < deadline:
         time.sleep(5)
         s2, r2 = call("GET", "/v1/jobs/%s" % job_id, timeout=30)
@@ -192,16 +193,18 @@ def run_target(target):
         except Exception:  # noqa: BLE001
             continue
         state = doc.get("status", "unknown")
-        if state in ("completed", "failed", "cancelled", "expired", "dead"):
+        # Terminal states: completed, any failed_* variant, cancelled/expired/dead.
+        if state == "completed" or state.startswith("failed") or state in ("cancelled", "expired", "dead"):
             output = (doc.get("result") or {}).get("output") or {}
-            text = (output.get("plain_text") or output.get("text") or "").replace("\n", " ")[:160]
+            text = (output.get("plain_text") or output.get("text") or "").replace("\n", " ")[:120]
+            reason = (doc.get("error") or "")[:220]
             break
 
     ok = state == "completed"
     record(
         "target %s: terminal status" % target,
         ok,
-        "job=%s status=%s elapsed<=%ss output=%r" % (job_id, state, TIMEOUT, text),
+        "job=%s status=%s output=%r error=%r" % (job_id, state, text, reason),
     )
     return ok
 
