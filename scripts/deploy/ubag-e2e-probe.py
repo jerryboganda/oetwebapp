@@ -1,96 +1,34 @@
-#!/usr/bin/env bash
-# OET <-> UBAG integration end-to-end probe.
-#
-# Executed ON the production VPS, fed to `bash -s` over SSH by
-# .github/workflows/ubag-integration-e2e.yml. Compute stays on GitHub runners;
-# this script only performs HTTP calls, so the shared host is not loaded.
-#
-# The HTTP client runs in a throwaway container attached to the OET internal
-# network, exercising the exact production path the API uses
-# (oet-api -> ubag-vps-gateway-1) instead of a public ingress.
-#
-# Why submit-all-then-poll-all: the live worker runs with
-# UBAG_WORKER_CONCURRENCY=1, so provider jobs are processed strictly one at a
-# time. Submitting a batch and then polling all of them lets the queue drain
-# serially while the probe waits on a single global budget, instead of each
-# probe burning its own timeout while stuck behind the queue.
-#
-# Contract note (learned the hard way): the facade ALWAYS injects
-# options.provider_config._enabled=false (apps/gateway/internal/httpapi/
-# openai_facade.go). That marker makes the picker config "best effort": a
-# drifted provider model menu is skipped instead of failing the job. A raw
-# POST /v1/jobs that omits the marker is treated as REQUIRING the picker, and
-# drift then surfaces as UBAG-ADAPTER-DRIFT-014. This probe sends the marker so
-# it reproduces the facade contract rather than inventing a stricter one.
-#
-# Result classification per provider:
-#   PASS     terminal `completed` with an answer
-#   SIGNIN   terminal failure with error_class=provider_login_required. This is
-#            an OPERATOR action - sign in via the dashboard Browser Sessions
-#            widget - not a defect. Does not fail the job.
-#   FAIL     any other terminal failure (drift, protocol, transport)
-#   TIMEOUT  never reached a terminal state inside the budget -> indeterminate
-#
-# Usage: bash ubag-e2e-from-ci.sh <core|providers|all> [targets] [budget_s]
-# Exit codes: 0 = contract held (sign-ins pending are surfaced, not fatal),
-#             1 = core contract or a genuine provider defect,
-#             2 = core held but every provider probe failed.
-set -uo pipefail
+#!/usr/bin/env python3
+"""OET <-> UBAG integration end-to-end probe (runner-side).
 
-MODE="${1:-all}"
-TARGETS="${2:-deepseek_web,chatgpt_web,claude_web,gemini_web,mistral_lechat,perplexity_web,duckai_web}"
-BUDGET_S="${3:-1800}"
+Runs ENTIRELY on the GitHub Actions runner. Per the project's compute-isolation
+policy, the production VPS performs no computation; it only forwards bytes for
+an SSH local port-forward and answers ordinary HTTP requests on the gateway.
 
-ENV_FILE="${OET_ENV_FILE:-/opt/oetwebapp/.env.production}"
-NET="${OET_INTERNAL_NETWORK:-oetwebsite_internal}"
-GATEWAY_CONTAINER="${UBAG_GATEWAY_CONTAINER:-ubag-vps-gateway-1}"
-GATEWAY_ADDR="${UBAG_GATEWAY_ADDR:-ubag-vps-gateway-1:8080}"
-PY_IMAGE="${UBAG_PROBE_PY_IMAGE:-python:3.12-alpine}"
+Usage:
+    UBAG_BASE=http://127.0.0.1:18080 UBAG_PAT=... \
+        python3 ubag-e2e-probe.py <core|providers|all> [targets] [budget_s]
 
-echo "[info] mode=${MODE} budget=${BUDGET_S}s"
-echo "[info] targets=${TARGETS}"
-echo "[info] env_file=${ENV_FILE} network=${NET} gateway=${GATEWAY_ADDR}"
+Exit codes:
+    0  contract held (pending operator sign-ins are surfaced, not fatal)
+    1  core contract breached, or a genuine provider defect
+    2  core held but every provider probe failed
 
-if [ ! -r "$ENV_FILE" ]; then
-  echo "[FAIL] cannot read ${ENV_FILE}"
-  exit 1
-fi
+Contract note (learned the hard way): the facade ALWAYS injects
+options.provider_config._enabled=false (apps/gateway/internal/httpapi/
+openai_facade.go). That marker makes the picker config "best effort": a drifted
+provider model menu is skipped instead of failing the job. A raw POST /v1/jobs
+that omits the marker is treated as REQUIRING the picker, and drift then
+surfaces as UBAG-ADAPTER-DRIFT-014. This probe sends the marker so it
+reproduces the facade contract rather than inventing a stricter one.
 
-PAT="$(grep -m1 '^UBAG_OET_PAT=' "$ENV_FILE" | sed -e 's/^UBAG_OET_PAT=//' -e 's/\r$//' -e 's/^"//' -e 's/"$//')"
-if [ -z "$PAT" ]; then
-  echo "[FAIL] UBAG_OET_PAT is not set in ${ENV_FILE}"
-  exit 1
-fi
-echo "[info] UBAG_OET_PAT loaded: prefix=${PAT:0:9}... length=${#PAT}"
+Why submit-all-then-poll-all: the live worker runs with
+UBAG_WORKER_CONCURRENCY=1, so provider jobs are processed strictly one at a
+time. Submitting a batch and then polling all of them lets the queue drain
+serially while the probe waits on a single global budget, instead of each probe
+burning its own timeout while stuck behind the queue.
+"""
 
-# --- read-only topology checks -------------------------------------------
-if ! docker inspect "$GATEWAY_CONTAINER" >/dev/null 2>&1; then
-  echo "[FAIL] container ${GATEWAY_CONTAINER} does not exist"
-  exit 1
-fi
-GATEWAY_STATE="$(docker inspect "$GATEWAY_CONTAINER" --format '{{.State.Status}}' 2>/dev/null)"
-echo "[info] ${GATEWAY_CONTAINER} state=${GATEWAY_STATE}"
-
-NET_MEMBERS="$(docker network inspect "$NET" --format '{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null)"
-if printf '%s' "$NET_MEMBERS" | grep -qw "$GATEWAY_CONTAINER"; then
-  echo "[PASS] ${GATEWAY_CONTAINER} is attached to ${NET}"
-else
-  echo "[FAIL] ${GATEWAY_CONTAINER} is NOT attached to ${NET}"
-  echo "[info] members: ${NET_MEMBERS}"
-  exit 1
-fi
-
-# --- live HTTP probes (inside the OET network) ---------------------------
-export UBAG_PAT="$PAT"
-export UBAG_BASE="http://${GATEWAY_ADDR}"
-export UBAG_PROBE_MODE="$MODE"
-export UBAG_PROBE_TARGETS="$TARGETS"
-export UBAG_PROBE_BUDGET="$BUDGET_S"
-
-docker run --rm -i \
-  --network "$NET" \
-  -e UBAG_PAT -e UBAG_BASE -e UBAG_PROBE_MODE -e UBAG_PROBE_TARGETS -e UBAG_PROBE_BUDGET \
-  "$PY_IMAGE" python3 - <<'PYPROBE'
 import json
 import os
 import re
@@ -100,11 +38,15 @@ import urllib.error
 import urllib.request
 import uuid
 
-BASE = os.environ["UBAG_BASE"].rstrip("/")
-PAT = os.environ["UBAG_PAT"]
-MODE = os.environ.get("UBAG_PROBE_MODE", "all")
-TARGETS = [t.strip() for t in os.environ.get("UBAG_PROBE_TARGETS", "").split(",") if t.strip()]
-BUDGET = int(os.environ.get("UBAG_PROBE_BUDGET", "1800"))
+BASE = os.environ.get("UBAG_BASE", "http://127.0.0.1:18080").rstrip("/")
+PAT = os.environ.get("UBAG_PAT", "")
+MODE = sys.argv[1] if len(sys.argv) > 1 else "all"
+TARGETS = [t.strip() for t in (sys.argv[2] if len(sys.argv) > 2 else "").split(",") if t.strip()]
+BUDGET = int(sys.argv[3]) if len(sys.argv) > 3 else 1800
+
+if not TARGETS:
+    TARGETS = ["deepseek_web", "chatgpt_web", "claude_web", "gemini_web",
+               "mistral_lechat", "perplexity_web", "duckai_web"]
 
 results = []
 
@@ -254,8 +196,6 @@ def submit(target):
 
 
 def run_providers():
-    # Submit the whole batch first: the worker is single-concurrency, so jobs
-    # queue and drain one at a time while we poll them all under one budget.
     submitted = []
     for t in TARGETS:
         jid = submit(t)
@@ -264,7 +204,6 @@ def run_providers():
 
     deadline = time.time() + BUDGET
     pending = {jid: t for t, jid in submitted}
-    final = {}
     while pending and time.time() < deadline:
         for jid in list(pending):
             status, raw = call("GET", "/v1/jobs/%s" % jid, timeout=30)
@@ -275,24 +214,24 @@ def run_providers():
             except Exception:  # noqa: BLE001
                 continue
             state = doc.get("status", "unknown")
+            verdict = None
             if state == "completed":
                 out = (doc.get("result") or {}).get("output") or {}
                 text = (out.get("plain_text") or out.get("text") or "").replace("\n", " ")[:60]
-                final[jid] = ("PASS", "job=%s completed output=%r" % (jid, text))
+                verdict = ("PASS", "job=%s completed output=%r" % (jid, text))
             elif state.startswith("failed") or state in ("cancelled", "expired", "dead"):
                 cls = doc.get("error_class") or ""
                 err = doc.get("error") or ""
                 manual = doc.get("manual_action") or ""
                 if cls == "provider_login_required" or manual:
-                    final[jid] = ("SIGNIN", "job=%s %s -- %s"
-                                  % (jid, state, (manual or err or "sign-in required")[:130]))
+                    verdict = ("SIGNIN", "job=%s %s -- %s"
+                               % (jid, state, (manual or err or "sign-in required")[:130]))
                 else:
-                    final[jid] = ("FAIL", "job=%s %s error_class=%s error=%s"
-                                  % (jid, state, cls or "-", (err or "-")[:140]))
-            if jid in final:
+                    verdict = ("FAIL", "job=%s %s error_class=%s error=%s"
+                               % (jid, state, cls or "-", (err or "-")[:140]))
+            if verdict:
                 t = pending.pop(jid)
-                v, d = final[jid]
-                record("provider %s" % t, v, d)
+                record("provider %s" % t, verdict[0], verdict[1])
         if pending:
             time.sleep(5)
 
@@ -303,44 +242,50 @@ def run_providers():
             state = json.loads(raw).get("status", "unknown")
         except Exception:  # noqa: BLE001
             pass
-        record("provider %s" % t, "TIMEOUT",
-               "job=%s still %s after %ss budget" % (jid, state, BUDGET))
+        record("provider %s" % t, "TIMEOUT", "job=%s still %s after %ss budget" % (jid, state, BUDGET))
 
 
-if MODE in ("core", "all"):
-    run_core()
-if MODE in ("providers", "all"):
-    run_facade_spotcheck()
-    run_providers()
+def main():
+    print("[info] base=%s mode=%s budget=%ss" % (BASE, MODE, BUDGET), flush=True)
+    print("[info] targets=%s" % ",".join(TARGETS), flush=True)
+    if not PAT:
+        print("[FAIL] UBAG_PAT is not set in the runner environment")
+        return 1
+    print("[info] UBAG_PAT loaded: length=%d" % len(PAT), flush=True)
 
-print("", flush=True)
-print("=== UBAG PROBE SUMMARY ===")
-for name, verdict, detail in results:
-    print("%-7s | %s | %s" % (verdict, name, detail))
-print("=== END SUMMARY ===")
+    if MODE in ("core", "all"):
+        run_core()
+    if MODE in ("providers", "all"):
+        run_facade_spotcheck()
+        run_providers()
 
-core = [v for n, v, _ in results if n.startswith("core ")]
-prov = [(n, v) for n, v, _ in results if n.startswith("provider ") or "OET path" in n]
-passed = [n for n, v in prov if v == "PASS"]
-signin = [n for n, v in prov if v == "SIGNIN"]
-failed = [n for n, v in prov if v == "FAIL"]
-timeouts = [n for n, v in prov if v == "TIMEOUT"]
+    print("", flush=True)
+    print("=== UBAG PROBE SUMMARY ===")
+    for name, verdict, detail in results:
+        print("%-7s | %s | %s" % (verdict, name, detail))
+    print("=== END SUMMARY ===")
 
-print("")
-print("providers probed=%d completed=%d signin_required=%d failed=%d timeout=%d"
-      % (len(prov), len(passed), len(signin), len(failed), len(timeouts)))
+    core = [v for n, v, _ in results if n.startswith("core ")]
+    prov = [(n, v) for n, v, _ in results if n.startswith("provider ") or "OET path" in n]
+    passed = [n for n, v in prov if v == "PASS"]
+    signin = [n for n, v in prov if v == "SIGNIN"]
+    failed = [n for n, v in prov if v == "FAIL"]
+    timeouts = [n for n, v in prov if v == "TIMEOUT"]
 
-if "FAIL" in core:
-    sys.exit(1)
-if prov and not passed and not signin:
-    sys.exit(2)
-if failed or timeouts:
-    sys.exit(1)
-if signin:
-    print("OPERATOR-ACTION-REQUIRED: %s" % ", ".join(signin))
-sys.exit(0)
-PYPROBE
+    print("")
+    print("providers probed=%d completed=%d signin_required=%d failed=%d timeout=%d"
+          % (len(prov), len(passed), len(signin), len(failed), len(timeouts)))
 
-rc=$?
-echo "[info] probe exit code: ${rc}"
-exit "$rc"
+    if "FAIL" in core:
+        return 1
+    if prov and not passed and not signin:
+        return 2
+    if failed or timeouts:
+        return 1
+    if signin:
+        print("OPERATOR-ACTION-REQUIRED: %s" % ", ".join(signin))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

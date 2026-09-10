@@ -2,39 +2,35 @@ name: UBAG integration end-to-end
 
 # Verifies the OET <-> UBAG bridge end to end.
 #
-# Compute boundary: every build/test/probe runs on GitHub runners. The shared
-# production VPS only executes a script that issues HTTP calls, so no source
-# build, package install, or test run happens on it. This keeps the
-# scripts/deploy/verify-compute-offload.sh contract intact.
+# COMPUTE ISOLATION: every build, install, test and probe executes on the GitHub
+# Actions runner. The production VPS performs NO computation: it answers one
+# read-only docker inspect, one read-only file read, and forwards bytes for an
+# SSH local port-forward. No image is pulled, no script is executed and no test
+# runs on the VPS.
 #
 # Coverage:
 #   1. OET-side contract tests: UBAG provider seeder, registry-backed provider
 #      resolution, provider connection tester, assistant model catalog, and the
 #      admin AI-provider board components.
-#   2. Live facade contract from inside oetwebsite_internal:
-#      GET /v1/openai/models and POST /v1/openai/chat/completions (mock).
-#   3. Browser target probes through the raw job API, which returns a job id
-#      immediately instead of holding a 240 s facade long-poll open. This is the
-#      chatgpt_web re-test, with deepseek_web as a working control so a target
-#      specific failure is distinguishable from a systemic one.
+#   2. Live facade contract + a per-provider sweep across every browser provider,
+#      reached through an SSH local port-forward to the gateway on the OET
+#      internal network (the same path oet-api uses).
 #
 # Uses pre-existing repo secrets: PROD_SSH_KEY (and VPS_* for reference).
 on:
-  # Runs whenever this workflow or its probe script changes, on any branch, so
-  # the bridge is re-verified as part of reviewing a change to it.
   push:
     paths:
       - ".github/workflows/ubag-integration-e2e.yml"
-      - "scripts/deploy/ubag-e2e-from-ci.sh"
+      - "scripts/deploy/ubag-e2e-probe.py"
       - "app/admin/ai-providers/**"
   workflow_dispatch:
     inputs:
       mode:
-        description: "Probe mode: core (facade only), browser (targets only), all"
+        description: "Probe mode: core (facade only), providers (targets only), all"
         required: false
         default: "all"
         type: choice
-        options: [all, core, browser]
+        options: [all, core, providers]
       targets:
         description: "Comma-separated browser targets to probe"
         required: false
@@ -98,8 +94,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run live UBAG probes from inside the OET network
-        id: probe
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Probe every provider from this runner over an SSH port-forward
         env:
           # Dedicated CI deploy key, same one the production rollout uses.
           SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
@@ -109,6 +108,7 @@ jobs:
           PROBE_MODE: ${{ inputs.mode || 'all' }}
           PROBE_TARGETS: ${{ inputs.targets || 'deepseek_web,chatgpt_web,claude_web,gemini_web,mistral_lechat,perplexity_web,duckai_web' }}
           PROBE_BUDGET: ${{ inputs.probe_budget_s || '1800' }}
+          LOCAL_PORT: "18080"
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
@@ -124,15 +124,48 @@ jobs:
             -o ServerAliveCountMax=20
           )
 
+          # --- read-only lookup: the gateway's address on the OET network -----
+          # `docker inspect` is a state query; nothing is executed on the host.
+          read -r -d '' REMOTE_INSPECT <<'EOS' || true
+          docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}} {{end}}' ubag-vps-gateway-1
+          EOS
+          NET_LINE="$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "$REMOTE_INSPECT" | tr ' ' '\n' | grep '^oetwebsite_internal=' || true)"
+          GW_IP="${NET_LINE#oetwebsite_internal=}"
+          if [ -z "$GW_IP" ]; then
+            echo "::error::ubag-vps-gateway-1 is not attached to oetwebsite_internal (got: $NET_LINE)"
+            exit 1
+          fi
+          echo "[PASS   ] ubag-vps-gateway-1 is attached to oetwebsite_internal (${GW_IP})"
+
+          # --- read-only lookup: the tenant PAT ------------------------------
+          read -r -d '' REMOTE_PAT <<'EOS' || true
+          grep -m1 '^UBAG_OET_PAT=' /opt/oetwebapp/.env.production
+          EOS
+          PAT="$(ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" "$REMOTE_PAT" \
+            | sed -e 's/^UBAG_OET_PAT=//' -e 's/\r$//' -e 's/^"//' -e 's/"$//')"
+          if [ -z "$PAT" ]; then
+            echo "::error::UBAG_OET_PAT is not set in /opt/oetwebapp/.env.production"
+            exit 1
+          fi
+          echo "::add-mask::$PAT"
+
+          # --- pure TCP transport; the VPS computes nothing ------------------
+          ssh -f -N -o ExitOnForwardFailure=yes "${ssh_opts[@]}" \
+            -L "127.0.0.1:${LOCAL_PORT}:${GW_IP}:8080" "$VPS_USER@$VPS_HOST"
+
+          cleanup() { pkill -f "ssh .*-L 127.0.0.1:${LOCAL_PORT}:" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          # --- all computation happens here, on the runner -------------------
           set +e
-          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-            "bash -s" -- "$PROBE_MODE" "$PROBE_TARGETS" "$PROBE_BUDGET" \
-            < scripts/deploy/ubag-e2e-from-ci.sh 2>&1 | tee probe.log
+          UBAG_BASE="http://127.0.0.1:${LOCAL_PORT}" UBAG_PAT="$PAT" \
+            python3 scripts/deploy/ubag-e2e-probe.py "$PROBE_MODE" "$PROBE_TARGETS" "$PROBE_BUDGET" \
+            2>&1 | tee probe.log
           rc="${PIPESTATUS[0]}"
           set -e
 
           {
-            echo "### Live UBAG probes"
+            echo "### Live UBAG probes (executed on the runner)"
             echo '```'
             sed -n '/=== UBAG PROBE SUMMARY ===/,/=== END SUMMARY ===/p' probe.log
             echo '```'
