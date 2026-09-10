@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Volume2, Plus, CheckCircle2, Trash2, Lock } from 'lucide-react';
@@ -20,6 +20,8 @@ import {
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { cleanExampleSentence } from '@/lib/vocabulary-example-sentence';
+import { PracticeSpelling } from '@/components/domain/recalls/practice-spelling';
 import type { VocabularyTerm, LearnerVocabulary } from '@/lib/types/vocabulary';
 
 const MASTERY_COLORS: Record<string, string> = {
@@ -40,6 +42,18 @@ export default function VocabularyTermDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
+
+  // §3A — suppress template/filler example copy so the block simply disappears
+  // instead of showing a sentence that teaches nothing.
+  const exampleText = useMemo(
+    () => cleanExampleSentence(term?.term, term?.exampleSentence),
+    [term?.term, term?.exampleSentence],
+  );
+
+  // §3B — while Practice Spelling is open this card must not reveal the answer:
+  // the word, its pronunciation hint, the definition and the example are all
+  // masked, leaving the audio as the only cue.
+  const [spellingOpen, setSpellingOpen] = useState(false);
 
   useEffect(() => {
     if (!termId) return;
@@ -186,8 +200,12 @@ export default function VocabularyTermDetailPage() {
         </Link>
         <LearnerPageHero
           eyebrow="Vocabulary"
-          title={term.term}
-          description={term.ipaPronunciation ?? term.category.replace(/_/g, ' ')}
+          title={spellingOpen ? 'Listen and spell the word' : term.term}
+          description={
+            spellingOpen
+              ? 'Practice spelling'
+              : (term.ipaPronunciation ?? term.category.replace(/_/g, ' '))
+          }
           icon={BookOpen}
           highlights={[
             { icon: BookOpen, label: 'Category', value: term.category.replace(/_/g, ' ') },
@@ -204,8 +222,8 @@ export default function VocabularyTermDetailPage() {
           <Card className="border-border bg-surface p-6">
             <LearnerSurfaceSectionHeader
               eyebrow="Definition"
-              title={term.term}
-              description={term.ipaPronunciation ?? undefined}
+              title={spellingOpen ? 'Listen and spell the word' : term.term}
+              description={spellingOpen ? undefined : (term.ipaPronunciation ?? undefined)}
               className="mb-3"
             />
             <div className="flex flex-wrap items-center gap-3">
@@ -218,17 +236,23 @@ export default function VocabularyTermDetailPage() {
               </button>
               <RecallTierBadge count={term.examFrequencyCount ?? 0} occurrences={term.recallSetOccurrences} />
             </div>
-            <p className="mt-4 text-base text-navy">{term.definition}</p>
-            {term.contextNotes && (
+            {!spellingOpen && <p className="mt-4 text-base text-navy">{term.definition}</p>}
+            {!spellingOpen && term.contextNotes && (
               <div className="mt-4 rounded-2xl bg-info/10 p-4 text-sm text-info">
                 <div className="mb-1 text-xs font-semibold uppercase text-info">Usage notes</div>
                 {term.contextNotes}
               </div>
             )}
+            <PracticeSpelling
+              termId={term.id}
+              open={spellingOpen}
+              onOpenChange={setSpellingOpen}
+            />
           </Card>
 
-          {/* Example */}
-          {term.exampleSentence && (
+          {/* Example — §3A: only rendered when the sentence actually demonstrates
+              the term; template/filler copy is suppressed by the shared guard. */}
+          {!spellingOpen && exampleText && (
             <Card className="border-border bg-surface p-6">
               <LearnerSurfaceSectionHeader
                 eyebrow="Example"
@@ -237,7 +261,7 @@ export default function VocabularyTermDetailPage() {
                 className="mb-3"
               />
               <blockquote className="rounded-lg bg-primary/5 px-4 py-2 text-base italic text-navy">
-                &quot;{term.exampleSentence}&quot;
+                &quot;{exampleText}&quot;
               </blockquote>
             </Card>
           )}

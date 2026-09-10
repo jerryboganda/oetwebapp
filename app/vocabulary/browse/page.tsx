@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft, Volume2, Lock } from 'lucide-react';
@@ -26,6 +26,7 @@ import { analytics } from '@/lib/analytics';
 import { queryKeys } from '@/lib/query/hooks';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { cleanExampleSentencesForList } from '@/lib/vocabulary-example-sentence';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
 // Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
@@ -56,6 +57,13 @@ export default function BrowseVocabularyPage() {
   // opens this modal with the canonical subscribe prompt.
   const [showLockedModal, setShowLockedModal] = useState(false);
   const { guardAudio, modal: audioUpgradeModal } = useRecallsAudioUpgrade();
+
+  // §3A — drop template/filler example copy, and any sentence shared verbatim by
+  // several different words, so the list never repeats a meaningless line.
+  const exampleSentences = useMemo(() => {
+    const cleaned = cleanExampleSentencesForList(terms);
+    return new Map(terms.map((term, index) => [term.id, cleaned[index] ?? '']));
+  }, [terms]);
   const authContext = useContext(AuthContext);
   const queryUserId = authContext?.user?.userId ?? 'current';
   const referenceQueriesEnabled = authContext ? !authContext.loading && authContext.isAuthenticated : true;
@@ -307,7 +315,7 @@ export default function BrowseVocabularyPage() {
                       <CategoryBadge category={term.category} size="sm" />
                     </div>
                     <p className="text-sm leading-relaxed text-muted">{term.definition}</p>
-                    {term.exampleSentence && <p className="mt-1.5 text-xs italic leading-relaxed text-muted/80">&quot;{term.exampleSentence}&quot;</p>}
+                    {(exampleSentences.get(term.id) ?? '') && <p className="mt-1.5 text-xs italic leading-relaxed text-muted/80">&quot;{exampleSentences.get(term.id)}&quot;</p>}
                   </div>
                   <button
                     onClick={() => handleAdd(term.id)}

@@ -291,6 +291,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<UserNote> UserNotes => Set<UserNote>();
     public DbSet<RecallBookmark> RecallBookmarks => Set<RecallBookmark>();
 
+    // Recall spelling — per-learner missed words for Practice Spelling and the
+    // mini Spelling Test. References the existing VocabularyTerm only (no word
+    // or audio duplication); removed on a correct answer.
+    public DbSet<RecallSpellingMistake> RecallSpellingMistakes => Set<RecallSpellingMistake>();
+
     // Content Paper subsystem (Content Upload, Slice 1). Curatorial papers
     // that bundle typed assets pointing at MediaAsset rows.
     public DbSet<ContentPaper> ContentPapers => Set<ContentPaper>();

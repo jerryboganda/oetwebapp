@@ -58,6 +58,9 @@ vi.mock('@/lib/api', () => ({
   fetchMyVocabulary: mockFetchMyVocabulary,
   addToMyVocabulary: mockAddToMyVocabulary,
   removeFromMyVocabulary: mockRemoveFromMyVocabulary,
+  fetchRecallsAudio: vi.fn(),
+  checkRecallSpelling: vi.fn(),
+  isApiError: (error: unknown) => Boolean(error && typeof error === 'object' && 'status' in error),
 }));
 
 import VocabularyTermDetailPage from './page';
@@ -137,5 +140,36 @@ describe('Vocabulary term detail page', () => {
       expect(mockAddToMyVocabulary).toHaveBeenCalledWith('vt-001', { sourceRef: 'detail' });
     });
     expect(mockTrack).toHaveBeenCalledWith('vocab_added', { termId: 'vt-001', source: 'detail' });
+  });
+});
+
+describe('Vocabulary term detail — Practice Spelling (§3B, §3C scope)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchVocabularyTerm.mockResolvedValue(fullTerm);
+    mockFetchMyVocabulary.mockResolvedValue([]);
+  });
+
+  it('offers Practice Spelling from the study card', async () => {
+    render(<VocabularyTermDetailPage />);
+    expect(await screen.findByRole('button', { name: 'Practice Spelling' })).toBeInTheDocument();
+  });
+
+  it('masks the word, pronunciation, definition and example while practice is open', async () => {
+    const user = userEvent.setup();
+    render(<VocabularyTermDetailPage />);
+
+    // The word is on the page twice (hero title + definition card heading).
+    expect(await screen.findAllByText('dyspnoea')).not.toHaveLength(0);
+    expect(screen.getByText('Difficulty or laboured breathing.')).toBeInTheDocument();
+    expect(screen.getByText(/She presented with acute dyspnoea on exertion/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Practice Spelling' }));
+
+    // The page no longer gives the answer away.
+    expect(await screen.findAllByText('Listen and spell the word')).not.toHaveLength(0);
+    expect(screen.queryAllByText('dyspnoea')).toHaveLength(0);
+    expect(screen.queryByText('Difficulty or laboured breathing.')).not.toBeInTheDocument();
+    expect(screen.queryByText(/She presented with acute dyspnoea on exertion/i)).not.toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'motion/react';
 import { ChevronDown, Heart, Lock, Sparkles, Star, Volume2 } from 'lucide-react';
@@ -28,6 +28,10 @@ import {
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { cleanExampleSentencesForList } from '@/lib/vocabulary-example-sentence';
+import { PracticeSpelling } from '@/components/domain/recalls/practice-spelling';
+import { SpellingTest } from '@/components/domain/recalls/spelling-test';
+import { ReviewMistakesList } from '@/components/domain/recalls/review-mistakes-list';
 import { toast } from 'sonner';
 import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
 import { Pagination } from '@/components/ui/pagination';
@@ -121,6 +125,24 @@ export default function RecallsWordsPage() {
   // non-subscribed learners (`term.isLocked === true`). Clicking a locked term
   // opens this modal with the canonical subscribe prompt.
   const [showLockedModal, setShowLockedModal] = useState(false);
+  // §3B — the card whose Practice Spelling panel is open. While it is open that
+  // card hides its target word and its example sentence, so the only cue is the
+  // audio. Only one panel is open at a time.
+  const [spellingOpenFor, setSpellingOpenFor] = useState<string | null>(null);
+  // Bumped after every graded answer so the Review Mistakes list re-fetches and a
+  // word spelled correctly disappears immediately.
+  const [mistakesVersion, setMistakesVersion] = useState(0);
+
+  // §3A — example sentences are shown only when they actually demonstrate the
+  // word. Template/filler text ("The term X was reviewed as part of OET
+  // vocabulary practice.") is suppressed here rather than in the database, so
+  // the fix covers every existing row and any future generator, and the card
+  // simply loses the line instead of showing noise. Sentences shared verbatim
+  // by several different words are treated as filler too.
+  const catalogExampleSentences = useMemo(() => {
+    const cleaned = cleanExampleSentencesForList(catalogTerms);
+    return new Map(catalogTerms.map((term, index) => [term.id, cleaned[index] ?? '']));
+  }, [catalogTerms]);
 
   useEffect(() => {
     analytics.track('recalls_words_viewed');
@@ -508,9 +530,12 @@ export default function RecallsWordsPage() {
           ) : catalogTerms.length > 0 ? (
             <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-2">
-                {catalogTerms.map((term) => {
+                {catalogTerms.map((term, termIndex) => {
                   const definitionText =
                     term.definition && !/^\s*\(\s*pending\b/i.test(term.definition) ? term.definition : null;
+                  const exampleText = catalogExampleSentences.get(term.id) ?? '';
+                  const spellingPracticeOpen = spellingOpenFor === term.id;
+                  const nextTerm = catalogTerms[termIndex + 1];
                   if (term.isLocked) {
                     return (
                       <article
@@ -563,7 +588,15 @@ export default function RecallsWordsPage() {
                       className="group rounded-2xl border border-border bg-surface p-5 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:border-primary/30 hover:shadow-md hoverable:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-base font-bold text-navy">{term.term}</h3>
+                        {/* §3B: while Practice Spelling is open the target word is
+                            hidden, so the learner has to produce it from the audio. */}
+                        {spellingPracticeOpen ? (
+                          <h3 className="text-base font-bold text-navy">
+                            Listen and spell the word
+                          </h3>
+                        ) : (
+                          <h3 className="text-base font-bold text-navy">{term.term}</h3>
+                        )}
                         <button
                           type="button"
                           onClick={() => playTerm(term)}
@@ -601,10 +634,22 @@ export default function RecallsWordsPage() {
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         <CategoryBadge category={term.category} size="sm" />
                       </div>
-                      {definitionText && <p className="mt-3 text-sm leading-relaxed text-muted">{definitionText}</p>}
-                      {term.exampleSentence && (
-                        <p className="mt-2 text-xs italic leading-relaxed text-muted/80">{term.exampleSentence}</p>
+                      {/* §3B: the definition and example are masked while Practice
+                          Spelling is open — the example almost always contains the
+                          answer, and the definition usually identifies the word. */}
+                      {!spellingPracticeOpen && definitionText && (
+                        <p className="mt-3 text-sm leading-relaxed text-muted">{definitionText}</p>
                       )}
+                      {!spellingPracticeOpen && exampleText && (
+                        <p className="mt-2 text-xs italic leading-relaxed text-muted/80">{exampleText}</p>
+                      )}
+                      <PracticeSpelling
+                        termId={term.id}
+                        open={spellingPracticeOpen}
+                        onOpenChange={(open) => setSpellingOpenFor(open ? term.id : null)}
+                        onAnswered={() => setMistakesVersion((v) => v + 1)}
+                        onNext={nextTerm ? () => setSpellingOpenFor(nextTerm.id) : undefined}
+                      />
                     </article>
                   );
                 })}
@@ -631,6 +676,21 @@ export default function RecallsWordsPage() {
                   : 'No active terms match this category yet.'}
             </div>
           )}
+        </section>
+
+        {/* §3C / §3D — the mini spelling test and the persisted Review Mistakes
+            list. Both reuse the stored recall audio and grade server-side against
+            the canonical word, so neither consumes AI credits. */}
+        <section className="space-y-4" aria-label="Spelling">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Spelling"
+            title="Spelling test and review mistakes"
+            description="Hear a word, type it, get an instant result. Missed words are saved to your account so you can review them on any device."
+          />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SpellingTest onMistakesChanged={() => setMistakesVersion((v) => v + 1)} />
+            <ReviewMistakesList refreshToken={mistakesVersion} />
+          </div>
         </section>
 
         <LearnerSurfaceSectionHeader

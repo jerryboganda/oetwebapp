@@ -92,6 +92,39 @@ public static class RecallsEndpoints
             Results.Ok(await svc.GetLibraryAsync(
                 http.UserId(), bucket, topic, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
 
+        // ── Spelling practice / test (§3B, §3C, §3D) ──────────────────────────
+        // Grading is a direct string comparison against the stored recall word —
+        // no AI gateway, no TTS, no credit ledger. Open to every logged-in learner
+        // (non-premium learners are scoped to free-preview words inside the
+        // service), so a spelling answer never deducts AI credits.
+        recalls.MapPost("/spelling/check", async (
+            HttpContext http,
+            RecallSpellingCheckRequest request,
+            IEffectiveEntitlementResolver entitlements,
+            RecallSpellingService svc, CancellationToken ct) =>
+            Results.Ok(await svc.CheckAsync(
+                http.UserId(), request, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
+
+        // Review Mistakes list — persisted per learner, so it survives logout,
+        // app restart and switching device.
+        recalls.MapGet("/spelling/mistakes", async (
+            HttpContext http,
+            IEffectiveEntitlementResolver entitlements,
+            RecallSpellingService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetMistakesAsync(
+                http.UserId(), await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
+
+        // Word set for a mini Spelling Test. Returns ids only — the canonical
+        // spelling is withheld until Check so the answer stays hidden.
+        recalls.MapGet("/spelling/set", async (
+            HttpContext http,
+            [FromQuery] string? size,
+            [FromQuery] string? source,
+            IEffectiveEntitlementResolver entitlements,
+            RecallSpellingService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetSetAsync(
+                http.UserId(), size, source, await ResolveIsPremiumAsync(http, entitlements, ct), ct)));
+
         recalls.MapGet("/report/week", async (
             HttpContext http, IEffectiveEntitlementResolver entitlements, RecallsService svc, CancellationToken ct) =>
         {

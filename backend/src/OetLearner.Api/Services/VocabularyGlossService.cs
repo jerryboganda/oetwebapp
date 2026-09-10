@@ -103,7 +103,12 @@ public sealed class VocabularyGlossService(
             Term: word,
             IpaPronunciation: null,
             ShortDefinition: $"{word}: concise medical definition unavailable from the AI provider right now.",
-            ExampleSentence: $"The patient's notes referenced {word}.",
+            // Spec §3A: never fabricate an example sentence. This used to be
+            // "The patient's notes referenced {word}." — a template that names the
+            // word without demonstrating it, so every degraded gloss showed the
+            // same meaningless line. An empty string tells the client to drop the
+            // example block entirely.
+            ExampleSentence: string.Empty,
             ContextNotes: string.IsNullOrWhiteSpace(request.Context) ? null : $"Requested with context: {Truncate(request.Context!, 160)}",
             Synonyms: Array.Empty<string>(),
             Register: "clinical",

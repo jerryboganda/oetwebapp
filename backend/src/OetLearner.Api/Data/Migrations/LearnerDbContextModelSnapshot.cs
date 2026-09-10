@@ -20054,6 +20054,41 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("RecallSetTags");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.RecallSpellingMistake", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("LastWrongAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("VocabularyTermId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("WrongAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "LastWrongAt");
+
+                    b.HasIndex("UserId", "VocabularyTermId")
+                        .IsUnique();
+
+                    b.ToTable("RecallSpellingMistakes");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.Referral", b =>
                 {
                     b.Property<string>("Id")

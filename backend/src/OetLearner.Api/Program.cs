@@ -1071,6 +1071,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Content.MaterialAccessService
 builder.Services.AddScoped<IMockEntitlementService, MockEntitlementService>();
 builder.Services.AddScoped<MockItemAnalysisService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Recalls.RecallSpellingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.RefundService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.IWritingRulebookCoverageValidator,

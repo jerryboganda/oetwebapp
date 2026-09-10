@@ -10,6 +10,9 @@ const {
   mockFetchVocabularyTerms,
   mockPlayTransientAudio,
   mockTrack,
+  mockCheckRecallSpelling,
+  mockFetchRecallSpellingMistakes,
+  mockFetchRecallSpellingSet,
 } = vi.hoisted(() => ({
   mockFetchRecallsToday: vi.fn(),
   mockFetchRecallsQueue: vi.fn(),
@@ -19,6 +22,9 @@ const {
   mockFetchVocabularyTerms: vi.fn(),
   mockPlayTransientAudio: vi.fn(),
   mockTrack: vi.fn(),
+  mockCheckRecallSpelling: vi.fn(),
+  mockFetchRecallSpellingMistakes: vi.fn(),
+  mockFetchRecallSpellingSet: vi.fn(),
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -78,6 +84,9 @@ vi.mock('@/lib/api', () => ({
   fetchVocabularyCategories: mockFetchVocabularyCategories,
   fetchVocabularyTerms: mockFetchVocabularyTerms,
   fetchVocabularyRecallSets: mockFetchVocabularyRecallSets,
+  checkRecallSpelling: mockCheckRecallSpelling,
+  fetchRecallSpellingMistakes: mockFetchRecallSpellingMistakes,
+  fetchRecallSpellingSet: mockFetchRecallSpellingSet,
   isApiError: (error: unknown) => Boolean(error && typeof error === 'object' && 'status' in error),
 }));
 
@@ -117,6 +126,15 @@ describe('Recalls words page audio playback', () => {
     mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [catalogTerm] });
     mockFetchRecallsAudio.mockResolvedValue({ url: '/v1/recalls/audio/term-dyspnoea?speed=normal' });
     mockPlayTransientAudio.mockReturnValue({ addEventListener: vi.fn() });
+    mockFetchRecallSpellingMistakes.mockResolvedValue({ items: [], total: 0 });
+    mockFetchRecallSpellingSet.mockResolvedValue({ items: [], total: 0, source: 'all', size: '10' });
+    mockCheckRecallSpelling.mockResolvedValue({
+      correct: false,
+      canonical: 'dyspnoea',
+      wrongAttemptCount: 1,
+      addedToMistakes: true,
+      removedFromMistakes: false,
+    });
   });
 
   it('plays catalog pronunciations through the authenticated recalls audio endpoint', async () => {
@@ -175,5 +193,154 @@ describe('Recalls words page audio playback', () => {
         expect.objectContaining({ freePreviewOnly: true }),
       );
     });
+  });
+});
+
+describe('Recalls words page example sentences (§3A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchRecallsToday.mockResolvedValue({ starred: 0, dueToday: 0, mastered: 0 });
+    mockFetchRecallsQueue.mockResolvedValue([]);
+    mockFetchVocabularyCategories.mockResolvedValue({ categories: [] });
+    mockFetchVocabularyRecallSets.mockResolvedValue({ sets: [] });
+    mockFetchRecallSpellingMistakes.mockResolvedValue({ items: [], total: 0 });
+  });
+
+  it('shows a real example sentence on the recall card', async () => {
+    mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [catalogTerm] });
+    render(<RecallsWordsPage />);
+
+    expect(await screen.findByText('The patient reported dyspnoea overnight.')).toBeInTheDocument();
+  });
+
+  it('hides the meaningless repeated filler sentence instead of rendering it', async () => {
+    mockFetchVocabularyTerms.mockResolvedValue({
+      total: 1,
+      terms: [
+        {
+          ...catalogTerm,
+          exampleSentence: 'The term dyspnoea was reviewed as part of OET vocabulary practice.',
+        },
+      ],
+    });
+    render(<RecallsWordsPage />);
+
+    await screen.findByText('dyspnoea');
+    expect(
+      screen.queryByText(/was reviewed as part of OET vocabulary practice/),
+    ).not.toBeInTheDocument();
+  });
+
+  it('hides a sentence that is reused verbatim across different words', async () => {
+    mockFetchVocabularyTerms.mockResolvedValue({
+      total: 2,
+      terms: [
+        { ...catalogTerm, exampleSentence: 'Generic filler text for every card.' },
+        {
+          ...catalogTerm,
+          id: 'term-hypertension',
+          term: 'hypertension',
+          exampleSentence: 'Generic filler text for every card.',
+        },
+      ],
+    });
+    render(<RecallsWordsPage />);
+
+    await screen.findByText('dyspnoea');
+    await screen.findByText('hypertension');
+    expect(screen.queryByText('Generic filler text for every card.')).not.toBeInTheDocument();
+  });
+
+  it('keeps two different real examples that happen to share a word', async () => {
+    mockFetchVocabularyTerms.mockResolvedValue({
+      total: 2,
+      terms: [
+        { ...catalogTerm, exampleSentence: 'She had dyspnoea overnight.' },
+        {
+          ...catalogTerm,
+          id: 'term-hypertension',
+          term: 'hypertension',
+          exampleSentence: 'He has hypertension.',
+        },
+      ],
+    });
+    render(<RecallsWordsPage />);
+
+    expect(await screen.findByText('She had dyspnoea overnight.')).toBeInTheDocument();
+    expect(screen.getByText('He has hypertension.')).toBeInTheDocument();
+  });
+});
+describe('Recalls words page spelling practice and test (§3B, §3C)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchRecallsToday.mockResolvedValue({ starred: 0, dueToday: 0, mastered: 0 });
+    mockFetchRecallsQueue.mockResolvedValue([]);
+    mockFetchVocabularyCategories.mockResolvedValue({ categories: [] });
+    mockFetchVocabularyRecallSets.mockResolvedValue({ sets: [] });
+    mockFetchVocabularyTerms.mockResolvedValue({ total: 1, terms: [catalogTerm] });
+    mockFetchRecallsAudio.mockResolvedValue({ url: '/v1/recalls/audio/term-dyspnoea?speed=normal' });
+    mockPlayTransientAudio.mockReturnValue({ addEventListener: vi.fn() });
+    mockFetchRecallSpellingMistakes.mockResolvedValue({ items: [], total: 0 });
+    mockFetchRecallSpellingSet.mockResolvedValue({ items: [], total: 0, source: 'all', size: '10' });
+  });
+
+  it('renders the spelling test launcher and the review mistakes list', async () => {
+    render(<RecallsWordsPage />);
+
+    expect(await screen.findByRole('button', { name: 'Start spelling test' })).toBeInTheDocument();
+    expect(await screen.findByText('Review mistakes')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Practice Spelling' })).toBeInTheDocument();
+  });
+
+  it('hides the word, definition and example while Practice Spelling is open', async () => {
+    const user = userEvent.setup();
+    render(<RecallsWordsPage />);
+
+    // All three are visible on the card before practice mode.
+    expect(await screen.findByText('dyspnoea')).toBeInTheDocument();
+    expect(screen.getByText('Difficulty breathing.')).toBeInTheDocument();
+    expect(screen.getByText('The patient reported dyspnoea overnight.')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Practice Spelling' }));
+
+    // The card no longer reveals the answer, and the prompt is neutral.
+    await screen.findByText('Listen and spell the word');
+    expect(screen.queryByText('dyspnoea')).not.toBeInTheDocument();
+    expect(screen.queryByText('Difficulty breathing.')).not.toBeInTheDocument();
+    expect(screen.queryByText('The patient reported dyspnoea overnight.')).not.toBeInTheDocument();
+  });
+
+  it('records a miss and refreshes the review mistakes list', async () => {
+    mockCheckRecallSpelling.mockResolvedValue({
+      correct: false,
+      canonical: 'dyspnoea',
+      wrongAttemptCount: 1,
+      addedToMistakes: true,
+      removedFromMistakes: false,
+    });
+    const user = userEvent.setup();
+    render(<RecallsWordsPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Practice Spelling' }));
+    await user.type(screen.getByPlaceholderText('Type the word you hear'), 'dyspnea');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+
+    await screen.findByText('Incorrect');
+    expect(mockCheckRecallSpelling).toHaveBeenCalledWith('term-dyspnoea', 'dyspnea');
+    // The list re-fetches so a corrected word disappears without a manual reload.
+    await waitFor(() => expect(mockFetchRecallSpellingMistakes).toHaveBeenCalledTimes(2));
+  });
+
+  it('never deducts AI credits for spelling: grading goes to the spelling endpoint only', async () => {
+    const user = userEvent.setup();
+    render(<RecallsWordsPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Practice Spelling' }));
+    await user.type(screen.getByPlaceholderText('Type the word you hear'), 'dyspnea');
+    await user.click(screen.getByRole('button', { name: 'Check' }));
+
+    await waitFor(() => expect(mockCheckRecallSpelling).toHaveBeenCalledTimes(1));
+    // Audio came from the existing recalls endpoint — no regeneration call exists.
+    expect(mockFetchRecallsAudio).toHaveBeenCalledWith('term-dyspnoea', 'normal');
   });
 });

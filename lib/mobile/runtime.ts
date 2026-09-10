@@ -80,6 +80,40 @@ function scheduleViewportMetrics() {
   });
 }
 
+interface NativeSafeAreaInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/**
+ * Android WebView has no `env(safe-area-inset-*)` support, so MainActivity pushes
+ * the real insets in as CSS custom properties and mirrors them onto
+ * `window.__oetSafeAreaInsets`. That push happens natively while the WebView is
+ * still on its initial document, and this app loads its page from a remote URL —
+ * so on a cold launch the document that received the values is discarded and the
+ * header ends up under the status bar until the next inset change. Re-apply the
+ * mirrored values here, once the app has hydrated and on every resume.
+ * See android/app/src/main/java/com/oetwithdrhesham/app/MainActivity.java.
+ */
+function setSafeAreaInsets() {
+  if (!isBrowser()) {
+    return;
+  }
+
+  const insets = (window as unknown as { __oetSafeAreaInsets?: NativeSafeAreaInsets }).__oetSafeAreaInsets;
+  if (!insets) {
+    return;
+  }
+
+  const root = document.documentElement.style;
+  root.setProperty('--safe-area-inset-top', `${insets.top}px`);
+  root.setProperty('--safe-area-inset-right', `${insets.right}px`);
+  root.setProperty('--safe-area-inset-bottom', `${insets.bottom}px`);
+  root.setProperty('--safe-area-inset-left', `${insets.left}px`);
+}
+
 async function syncNativeChrome() {
   if (!isBrowser() || !Capacitor.isNativePlatform()) {
     return;
@@ -138,6 +172,7 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   }
 
   setViewportMetrics();
+  setSafeAreaInsets();
   document.documentElement.dataset.runtimeKind = 'capacitor-native';
   document.documentElement.dataset.colorScheme = getPreferredColorScheme();
   document.documentElement.dataset.capacitorPlatform = Capacitor.getPlatform();
@@ -235,6 +270,7 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
       document.documentElement.dataset.windowMinimized = state.isActive ? 'false' : 'true';
       if (state.isActive) {
         scheduleViewportMetrics();
+        setSafeAreaInsets();
         void syncNativeChrome();
         handlers.onResume?.();
       } else {

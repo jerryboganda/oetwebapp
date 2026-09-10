@@ -104,7 +104,12 @@ describe('mobile runtime', () => {
     delete document.documentElement.dataset.keyboardVisible;
     document.documentElement.style.removeProperty('--app-viewport-height');
     document.documentElement.style.removeProperty('--app-keyboard-offset');
+    document.documentElement.style.removeProperty('--safe-area-inset-top');
+    document.documentElement.style.removeProperty('--safe-area-inset-right');
+    document.documentElement.style.removeProperty('--safe-area-inset-bottom');
+    document.documentElement.style.removeProperty('--safe-area-inset-left');
     document.documentElement.style.removeProperty('color-scheme');
+    delete (window as unknown as { __oetSafeAreaInsets?: unknown }).__oetSafeAreaInsets;
   });
 
   it('does not overwrite desktop runtime signals', async () => {
@@ -226,5 +231,50 @@ describe('mobile runtime', () => {
     expect(mobileMocks.handles.network.remove).toHaveBeenCalledTimes(1);
     expect(mobileMocks.handles.appState.remove).toHaveBeenCalledTimes(1);
     expect(mobileMocks.handles.backButton.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-applies the native safe-area insets on init and again on resume', async () => {
+    // Regression: on a cold launch the native bridge writes the insets onto the
+    // WebView's initial document, which the remote page then replaces — so the
+    // header sat under the status bar until the next inset change (i.e. until
+    // the app was backgrounded and reopened). The runtime must re-apply the
+    // mirrored values itself.
+    mobileMocks.native = true;
+    (window as unknown as { __oetSafeAreaInsets?: unknown }).__oetSafeAreaInsets = {
+      top: 24,
+      right: 0,
+      bottom: 48,
+      left: 0,
+    };
+
+    const cleanup = await initializeMobileRuntime();
+    const root = document.documentElement.style;
+    expect(root.getPropertyValue('--safe-area-inset-top')).toBe('24px');
+    expect(root.getPropertyValue('--safe-area-inset-right')).toBe('0px');
+    expect(root.getPropertyValue('--safe-area-inset-bottom')).toBe('48px');
+    expect(root.getPropertyValue('--safe-area-inset-left')).toBe('0px');
+
+    // Simulate the lost document, then a resume onto the live one.
+    root.removeProperty('--safe-area-inset-top');
+    const appStateCall = mobileMocks.app.addListener.mock.calls.find(
+      (call) => call[0] === 'appStateChange',
+    ) as unknown as [string, (state: { isActive: boolean }) => Promise<void> | void] | undefined;
+    expect(appStateCall).toBeDefined();
+    await appStateCall![1]({ isActive: true });
+
+    expect(root.getPropertyValue('--safe-area-inset-top')).toBe('24px');
+
+    cleanup();
+  });
+
+  it('leaves the safe-area insets untouched when no native values were pushed', async () => {
+    mobileMocks.native = true;
+
+    const cleanup = await initializeMobileRuntime();
+
+    expect(document.documentElement.style.getPropertyValue('--safe-area-inset-top')).toBe('');
+    expect(document.documentElement.style.getPropertyValue('--safe-area-inset-bottom')).toBe('');
+
+    cleanup();
   });
 });

@@ -11,6 +11,7 @@ import {
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { cleanExampleSentence } from '@/lib/vocabulary-example-sentence';
 import { AiHelpTooltip } from '@/components/ui/ai-help-tooltip';
 import type { VocabularyLookupResult } from '@/lib/types/vocabulary';
 
@@ -183,7 +184,7 @@ export function VocabLookupPopover({
             word={lookup.term.term}
             ipa={lookup.term.ipaPronunciation}
             definition={lookup.term.definition}
-            example={lookup.term.exampleSentence}
+            example={cleanExampleSentence(lookup.term.term, lookup.term.exampleSentence) || null}
             canPlayAudio
             onPlayAudio={() => void playAudio(lookup.term!.id)}
             cta={added ? (

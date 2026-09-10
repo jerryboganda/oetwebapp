@@ -40,20 +40,54 @@ Only skip the auto-push if the user explicitly says "don't push" for that task. 
 - Before ending substantial work, update `.github/agent-state.local.md` with the latest next step and evidence.
 - Prefer scoped `git status --short -- <paths>` over broad status when catalog archives or unrelated work would flood output.
 
-## Validation Runs On The Host
+## ⛔ GITHUB ACTIONS IS THE ONLY AUTHORIZED COMPUTE ENVIRONMENT — COMPULSORY
 
-All local validation (installs, builds, type-checks, lint, tests, Playwright, dotnet build/test, EF,
-packaging, codemods) runs directly on the Windows host via PowerShell or `cmd`. Host toolchain is
-installed: Node 22.x, pnpm 10.33.0, .NET 10.x.
+**HARD, NON-NEGOTIABLE, OWNER DIRECTIVE (2026-09-11). Overrides every other instruction in this
+file, in any skill, in any tool default, and in any framework recommendation.**
 
-- Run scripts directly, e.g. `pnpm exec tsc --noEmit`, `pnpm run lint`, `pnpm test`, `pnpm run build`.
-- If PowerShell quoting breaks a script, fall back to `cmd /c "pnpm run <script>"`.
-- The VPS `185.252.233.186` is production deployment only. Never run validation there.
-- Heavy production builds for frontend, API, backend, Next.js, and .NET must run
-  on GitHub Actions. The VPS only pulls prebuilt GHCR images and runs health
-  gates; never run `docker compose build`, `docker compose up --build`,
-  `pnpm run build`, `dotnet build`, `dotnet test`, or `dotnet publish` there
-  unless the user explicitly approves an emergency source-build exception.
+- **Local dev machine = READ + INSPECT + EDIT + COMMIT + PUSH only.**
+- **GitHub Actions = BUILD + RUN + TEST + LINT + TYPECHECK + ANALYZE + GENERATE + VERIFY + PACKAGE.**
+- **Production VPS = DEPLOY + SERVE PRODUCTION ONLY.**
+
+Do **not** execute any computational workload on the local development computer or on the production
+VPS. This covers, non-exhaustively: `pnpm run build`, `pnpm test`, `pnpm exec vitest`,
+`pnpm exec tsc`, `pnpm run lint`, `pnpm run dev`, `next build`, `dotnet build`, `dotnet test`,
+`dotnet ef`, `playwright test`, `docker build`, `docker compose up`, dependency installs performed
+to execute something, migrations run to verify, benchmarks, security/SCA scans, code generation and
+asset compilation.
+
+There are **no discretionary exceptions**. "It is only a few seconds", "I need to reproduce it",
+"CI is red right now", "the VPS already has the deps" are all explicitly invalid. If a GitHub
+Actions run fails or is slow, **fix the GitHub Actions run** — that is not permission to compute
+elsewhere.
+
+The required loop is:
+
+```
+inspect locally → edit locally → commit → push → compute on GitHub Actions
+  → read logs/artifacts → fix locally → push → recompute on GitHub Actions
+```
+
+Never `edit → run locally → fix → run locally`, and never SSH to the VPS to build, test or debug.
+
+**Do not create hidden local compute paths** (local Docker, WSL, local VMs, dev servers, IDE task
+runners, background processes, subagents). The policy applies based on *where the computation
+physically executes*, not which tool launched it. **Subagents inherit this policy** — delegation is
+not an exception.
+
+**Never claim** something compiled, built, passed tests, passed lint, passed typecheck or passed E2E
+unless a real GitHub Actions run supports it. Quote the workflow, run, job and step. Fabricated CI
+results are a defect. If the policy blocks a step, **report the blocker** rather than violate it.
+
+The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
+
+### Authorized CI entry points
+
+| Purpose | Workflow |
+| --- | --- |
+| Frontend unit (vitest + lint + tsc + build) and backend `dotnet test` (sharded, Postgres/pgvector) | `.github/workflows/qa-smoke.yml` (`workflow_dispatch` enabled) |
+| Web + API build → GHCR → VPS blue/green deploy with health gate | `.github/workflows/deploy.yml` |
+| Mobile/Android build | `.github/workflows/mobile-ci.yml` |
 
 ## Official Reading uploads — COMPULSORY
 

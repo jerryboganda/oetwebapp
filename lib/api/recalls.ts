@@ -75,7 +75,39 @@ export async function starRecall(kind: 'vocab' | 'term' | 'review', id: string, 
   });
 }
 
+/**
+ * §3D — reuse the stored audio instead of paying for it twice.
+ *
+ * The server already serves the existing ElevenLabs asset without regenerating it
+ * (`RecallsService.EnsureAudioAsync` returns the stored `MediaAsset`), but every
+ * play used to re-download the blob. Practice Spelling, the mini Spelling Test and
+ * Replay all hit the same word repeatedly, so the bytes are cached here.
+ *
+ * The cache holds the **Blob**, not the object URL: `playTransientAudio` revokes
+ * object URLs when playback ends, so a cached URL would be dead on the second
+ * play. A fresh URL is minted per play from the cached bytes.
+ *
+ * Bounded so an "All Words" test cannot pin the whole bank in memory; the Map's
+ * insertion order gives cheap FIFO eviction.
+ */
+const AUDIO_CACHE_LIMIT = 64;
+const audioCache = new Map<string, { blob: Blob; provider: string }>();
+
+/** Test/teardown hook — the cache is module-level and would otherwise leak between cases. */
+export function clearRecallsAudioCache() {
+  audioCache.clear();
+}
+
 export async function fetchRecallsAudio(termId: string, speed: 'normal' | 'slow' | 'sentence' = 'normal') {
+  const cacheKey = `${termId}:${speed}`;
+  const cached = audioCache.get(cacheKey);
+  if (cached) {
+    // Re-insert so this entry becomes the most recently used.
+    audioCache.delete(cacheKey);
+    audioCache.set(cacheKey, cached);
+    return { url: URL.createObjectURL(cached.blob), provider: cached.provider };
+  }
+
   const path = `/v1/recalls/audio/${encodeURIComponent(termId)}?speed=${speed}`;
   const response = await fetchWithTimeout(resolveApiUrl(path), {
     headers: await getHeaders(path, undefined, { json: false }),
@@ -95,10 +127,87 @@ export async function fetchRecallsAudio(termId: string, speed: 'normal' | 'slow'
   }
 
   const blob = await response.blob();
-  return {
-    url: URL.createObjectURL(blob),
-    provider: response.headers.get('x-recalls-tts-provider') ?? 'stream',
-  };
+  const provider = response.headers.get('x-recalls-tts-provider') ?? 'stream';
+
+  audioCache.set(cacheKey, { blob, provider });
+  if (audioCache.size > AUDIO_CACHE_LIMIT) {
+    const oldest = audioCache.keys().next().value;
+    if (oldest !== undefined) audioCache.delete(oldest);
+  }
+
+  return { url: URL.createObjectURL(blob), provider };
+}
+
+// ── Spelling practice / test (§3B, §3C) ──────────────────────────────────────
+// Grading is a direct comparison against the stored canonical spelling on the
+// server — no LLM tokens, no TTS, no AI-credit deduction.
+
+export interface RecallsSpellingCheckResponse {
+  correct: boolean;
+  /** The stored canonical spelling. Only meaningful after Check. */
+  canonical: string;
+  wrongAttemptCount: number;
+  addedToMistakes: boolean;
+  removedFromMistakes: boolean;
+}
+
+export interface RecallsSpellingMistakeItem {
+  termId: string;
+  term: string;
+  category: string;
+  definition: string;
+  ipa: string | null;
+  hasAudio: boolean;
+  wrongAttemptCount: number;
+  lastWrongAt: string;
+}
+
+export interface RecallsSpellingMistakesResponse {
+  items: RecallsSpellingMistakeItem[];
+  total: number;
+}
+
+/**
+ * One word in a spelling test. Carries no canonical spelling on purpose — the
+ * answer must not be in the payload before Check.
+ */
+export interface RecallsSpellingSetItem {
+  termId: string;
+  category: string;
+  examFrequencyCount: number;
+  fromMistakes: boolean;
+}
+
+export interface RecallsSpellingSetResponse {
+  items: RecallsSpellingSetItem[];
+  total: number;
+  source: 'all' | 'favorites' | 'mistakes';
+  size: string;
+}
+
+export type RecallsSpellingTestSize = '10' | '20' | '30' | 'all';
+export type RecallsSpellingTestSource = 'all' | 'favorites' | 'mistakes';
+
+/** Grade one typed answer. Incorrect answers are recorded against the learner. */
+export async function checkRecallSpelling(termId: string, typed: string) {
+  return apiRequest<RecallsSpellingCheckResponse>('/v1/recalls/spelling/check', {
+    method: 'POST',
+    body: JSON.stringify({ termId, typed }),
+  });
+}
+
+/** The learner's persisted Review Mistakes list (survives logout / other devices). */
+export async function fetchRecallSpellingMistakes() {
+  return apiRequest<RecallsSpellingMistakesResponse>('/v1/recalls/spelling/mistakes');
+}
+
+/** Build a spelling-test word set. Answers are withheld until Check. */
+export async function fetchRecallSpellingSet(
+  size: RecallsSpellingTestSize = '10',
+  source: RecallsSpellingTestSource = 'all',
+) {
+  const p = new URLSearchParams({ size, source });
+  return apiRequest<RecallsSpellingSetResponse>(`/v1/recalls/spelling/set?${p.toString()}`);
 }
 
 export async function fetchRecallsLibrary(opts?: { bucket?: 'starred' | 'weak' | 'mastered' | 'new'; topic?: string }) {

@@ -76,6 +76,12 @@ const TRACKED_EVENTS = [
   'recalls_term_unfavourited',
   'recalls_word_audio_played',
   'recalls_word_audio_blocked',
+  // Spelling practice / mini spelling test (brief §3B, §3C). Grading is a direct
+  // comparison on the server — these events exist for product visibility only and
+  // never carry an AI cost.
+  'recalls_spelling_practised',
+  'recalls_spelling_test_started',
+  'recalls_spelling_test_completed',
   'flashcards_viewed',
   'vocab_quiz_viewed',
   'vocab_browse_viewed',

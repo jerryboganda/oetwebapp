@@ -17,6 +17,7 @@ import { fetchDueFlashcards, fetchRecallsAudio, submitFlashcardReview } from '@/
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { cleanExampleSentence } from '@/lib/vocabulary-example-sentence';
 import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
 
 const QUALITY_OPTIONS = [
@@ -52,6 +53,10 @@ export default function FlashcardsPage() {
   }, []);
 
   const card = cards[current];
+
+  // §3A — the flashcard shows an example only when it genuinely demonstrates the
+  // word; template/filler copy is dropped by the shared guard.
+  const cardExampleText = cleanExampleSentence(card?.term, card?.exampleSentence);
 
   async function handleRate(quality: number) {
     if (!card || submitting) return;
@@ -195,9 +200,9 @@ export default function FlashcardsPage() {
                 <>
                   <div className="mb-4 text-xs font-medium uppercase text-success">Definition</div>
                   <div className="mb-4 text-lg text-navy">{card.definition}</div>
-                  {card.exampleSentence && (
+                  {cardExampleText && (
                     <div className="mt-2 w-full border-t border-border pt-3 text-sm italic text-muted">
-                      &quot;{card.exampleSentence}&quot;
+                      &quot;{cardExampleText}&quot;
                     </div>
                   )}
                   {card.synonyms?.length > 0 && (

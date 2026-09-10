@@ -35,6 +35,13 @@ export default defineConfig({
       // to start a worker in each before failing (see writing rulebook PR).
       'pdf-policy-release/**',
       'pdf-policy-release2/**',
+      // Next.js build output. `.next/standalone/` is a full copy of the app —
+      // including every test file — so after a local `pnpm run build` the suite
+      // silently triples (248 duplicate files) and reports failures from paths
+      // like `.next/standalone/app/...`. CI is unaffected only because its
+      // frontend-unit job runs vitest *before* `pnpm run build`; a developer (or
+      // agent) running tests after a build sees ~88 spurious failures.
+      '.next/**',
     ],
   },
   resolve: {
