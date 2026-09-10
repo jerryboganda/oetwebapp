@@ -305,6 +305,8 @@ describe('UbagBoardPage', () => {
     expect(Array.from(select.options).some((o) => o.value === 'duckai_web|GPT-5.6 Luna')).toBeTruthy();
     expect(Array.from(select.options).some((o) => o.value === 'duckai_web|Reasoning')).toBeTruthy();
     expect(Array.from(select.options).some((o) => o.value === 'gemini_web|3.8 Flash')).toBeTruthy();
+    expect(Array.from(select.options).some((o) => o.value === 'generic_form')).toBeFalsy();
+    expect(Array.from(select.options).some((o) => o.value === 'whisper-1')).toBeFalsy();
 
     // Picking the curated entry + clicking Test calls the full-pipeline endpoint.
     fireEvent.change(select, { target: { value: 'chatgpt_web|GPT-5.6 Sol + Medium' } });

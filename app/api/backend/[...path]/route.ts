@@ -63,6 +63,7 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
     headers,
     body: hasBody ? body : undefined,
     redirect: 'manual',
+    signal: request.signal,
   });
 
   const responseHeaders = sanitizeProxyResponseHeaders(upstreamResponse.headers);

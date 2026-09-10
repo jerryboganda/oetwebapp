@@ -248,7 +248,7 @@ function readCsrfCookie(): string | null {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-async function aiApi<T>(path: string, init?: RequestInit): Promise<T> {
+async function aiApi<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
   const token = await ensureFreshAccessToken();
   const headers = new Headers(init?.headers);
   headers.set('Accept', 'application/json');
@@ -265,7 +265,7 @@ async function aiApi<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers,
     credentials: init?.credentials ?? 'include',
-  });
+  }, timeoutMs);
   if (!response.ok) {
     let detail: unknown = null;
     try {
@@ -410,7 +410,7 @@ export const testAiProviderModel = (code: string, model: string) =>
   aiApi<AiProviderModelTestResult>(`/v1/admin/ai/providers/${code}/test-model`, {
     method: 'POST',
     body: JSON.stringify({ model }),
-  });
+  }, 270_000);
 
 /**
  * Calls the provider's OpenAI-compatible `GET /models` endpoint via the

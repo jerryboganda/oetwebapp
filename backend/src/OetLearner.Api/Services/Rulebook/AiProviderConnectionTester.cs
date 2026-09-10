@@ -89,8 +89,8 @@ public sealed class AiProviderConnectionTester(
     /// <summary>Budget for a full end-to-end model test. Real browser-backed
     /// pipelines (UBAG facade → worker → browser session → model) legitimately
     /// take 10–60s (live chatgpt_web/gemini_web probes measured 48–50s), and
-    /// the facade itself waits up to 110s per call. 300s keeps the admin Test
-    /// button slower than the facade deadline but faster than a hung client,
+    /// the facade itself waits up to 240s per call. The 300s API budget stays
+    /// above the browser's 270s request budget and below a truly hung client,
     /// so a browser-job completion is never reported as "Request timed out".</summary>
     private static readonly TimeSpan ModelProbeTimeout = TimeSpan.FromSeconds(300);
 
@@ -142,6 +142,16 @@ public sealed class AiProviderConnectionTester(
             .FirstOrDefaultAsync(p => p.Code == providerCode, ct)
             ?? throw new InvalidOperationException($"Unknown AI provider code '{providerCode}'.");
 
+        async Task<AiProviderModelTestResult> CompleteAsync(AiProviderModelTestResult result)
+        {
+            provider.LastTestedAt = result.TestedAt;
+            provider.LastTestStatus = result.Status;
+            provider.LastTestError = result.ErrorMessage;
+            provider.UpdatedAt = result.TestedAt;
+            await db.SaveChangesAsync(CancellationToken.None);
+            return result;
+        }
+
         var steps = new List<AiModelTestStep>();
         var startedAt = clock.GetUtcNow();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -155,11 +165,11 @@ public sealed class AiProviderConnectionTester(
         {
             steps.Add(new AiModelTestStep("credential", "No API key configured.", false));
             stopwatch.Stop();
-            return new AiProviderModelTestResult(
+            return await CompleteAsync(new AiProviderModelTestResult(
                 AiProviderTestStatuses.Auth,
                 "No API key configured.",
                 (int)stopwatch.ElapsedMilliseconds,
-                startedAt, model, steps);
+                startedAt, model, steps));
         }
 
         var unsafeReason = GetUnsafeBaseUrlReason(provider.BaseUrl);
@@ -167,11 +177,11 @@ public sealed class AiProviderConnectionTester(
         {
             steps.Add(new AiModelTestStep("endpoint", unsafeReason, false));
             stopwatch.Stop();
-            return new AiProviderModelTestResult(
+            return await CompleteAsync(new AiProviderModelTestResult(
                 AiProviderTestStatuses.Unknown,
                 unsafeReason,
                 (int)stopwatch.ElapsedMilliseconds,
-                startedAt, model, steps);
+                startedAt, model, steps));
         }
 
         var targetModel = string.IsNullOrWhiteSpace(model)
@@ -184,11 +194,11 @@ public sealed class AiProviderConnectionTester(
             steps.Add(new AiModelTestStep("pipeline",
                 $"Full-pipeline model test is only available for text-chat OpenAI-compatible/Copilot/Anthropic providers.", false));
             stopwatch.Stop();
-            return new AiProviderModelTestResult(
+            return await CompleteAsync(new AiProviderModelTestResult(
                 AiProviderTestStatuses.Unknown,
                 "Full-pipeline model test is not available for this provider category/dialect.",
                 (int)stopwatch.ElapsedMilliseconds,
-                startedAt, targetModel, steps);
+                startedAt, targetModel, steps));
         }
 
         try
@@ -214,8 +224,8 @@ public sealed class AiProviderConnectionTester(
                     failedStep,
                     $"HTTP {(int)response.StatusCode}: {relResult.ErrorMessage ?? response.ReasonPhrase}",
                     false));
-                return new AiProviderModelTestResult(
-                    relResult.Status, relResult.ErrorMessage, latencyMs, startedAt, targetModel, steps);
+                return await CompleteAsync(new AiProviderModelTestResult(
+                    relResult.Status, relResult.ErrorMessage, latencyMs, startedAt, targetModel, steps));
             }
 
             var body = await response.Content.ReadAsStringAsync(ct);
@@ -225,11 +235,11 @@ public sealed class AiProviderConnectionTester(
                 steps.Add(new AiModelTestStep("completion", "chat completion returned a 2xx response", true));
                 var emptyMessage = $"The provider returned an empty completion for '{targetModel}' (finish_reason={emptyFinish}). The browser job finished but produced no text — retry the test.";
                 steps.Add(new AiModelTestStep("model", emptyMessage, false));
-                return new AiProviderModelTestResult(
+                return await CompleteAsync(new AiProviderModelTestResult(
                     AiProviderTestStatuses.RateLimited,
                     emptyMessage,
                     latencyMs,
-                    startedAt, targetModel, steps);
+                    startedAt, targetModel, steps));
             }
             steps.Add(new AiModelTestStep("completion", "chat completion returned a 2xx response", true));
 
@@ -249,12 +259,7 @@ public sealed class AiProviderConnectionTester(
                 targetModel,
                 steps);
 
-            provider.LastTestedAt = result.TestedAt;
-            provider.LastTestStatus = result.Status;
-            provider.LastTestError = result.ErrorMessage;
-            provider.UpdatedAt = result.TestedAt;
-            await db.SaveChangesAsync(ct);
-            return result;
+            return await CompleteAsync(result);
         }
         catch (HttpRequestException ex)
         {
@@ -262,33 +267,37 @@ public sealed class AiProviderConnectionTester(
             logger.LogInformation(ex, "AI provider model test network failure for {Provider}/{Model}", provider.Code, targetModel);
             var message = Truncate(RedactSecrets(ex.Message, apiKey), 512);
             steps.Add(new AiModelTestStep("completion", message, false));
-            return new AiProviderModelTestResult(
+            return await CompleteAsync(new AiProviderModelTestResult(
                 AiProviderTestStatuses.Network,
                 message,
                 (int)stopwatch.ElapsedMilliseconds,
-                startedAt, targetModel, steps);
+                startedAt, targetModel, steps));
         }
         catch (TaskCanceledException) when (!ct.IsCancellationRequested)
         {
             stopwatch.Stop();
             steps.Add(new AiModelTestStep("completion", "Request timed out.", false));
-            return new AiProviderModelTestResult(
+            return await CompleteAsync(new AiProviderModelTestResult(
                 AiProviderTestStatuses.Network,
                 "Request timed out.",
                 (int)stopwatch.ElapsedMilliseconds,
-                startedAt, targetModel, steps);
+                startedAt, targetModel, steps));
         }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
         catch (Exception ex)
         {
             stopwatch.Stop();
             logger.LogWarning(ex, "AI provider model test unknown failure for {Provider}/{Model}", provider.Code, targetModel);
             var message = Truncate(RedactSecrets(ex.Message, apiKey), 512);
             steps.Add(new AiModelTestStep("completion", message, false));
-            return new AiProviderModelTestResult(
+            return await CompleteAsync(new AiProviderModelTestResult(
                 AiProviderTestStatuses.Unknown,
                 message,
                 (int)stopwatch.ElapsedMilliseconds,
-                startedAt, targetModel, steps);
+                startedAt, targetModel, steps));
         }
     }
 

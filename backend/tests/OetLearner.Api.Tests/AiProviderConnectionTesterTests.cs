@@ -465,6 +465,55 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ModelTest_FailureReplacesStaleSuccessfulProviderStatus()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var provider = await db.AiProviders.FirstAsync(p => p.Code == "copilot");
+        provider.LastTestedAt = _clock.GetUtcNow().AddMinutes(-5);
+        provider.LastTestStatus = AiProviderTestStatuses.Ok;
+        provider.LastTestError = null;
+        await db.SaveChangesAsync();
+        var tester = NewTester(db, _ => Task.FromResult(BuildJsonError(
+            HttpStatusCode.GatewayTimeout,
+            "job did not finish within the facade deadline")));
+
+        var result = await tester.TestProviderModelAsync("copilot", "openai/gpt-5", default);
+
+        Assert.Equal(AiProviderTestStatuses.RateLimited, result.Status);
+        db.ChangeTracker.Clear();
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(AiProviderTestStatuses.RateLimited, persisted.LastTestStatus);
+        Assert.Contains("facade deadline", persisted.LastTestError);
+        Assert.Equal(result.TestedAt, persisted.LastTestedAt);
+    }
+
+    [Fact]
+    public async Task ModelTest_CallerCancellationDoesNotOverwriteProviderStatus()
+    {
+        await using var db = new LearnerDbContext(_options);
+        await SeedProviderAsync(db, "secret-key-1234567890");
+        var provider = await db.AiProviders.FirstAsync(p => p.Code == "copilot");
+        provider.LastTestedAt = _clock.GetUtcNow().AddMinutes(-5);
+        provider.LastTestStatus = AiProviderTestStatuses.Ok;
+        await db.SaveChangesAsync();
+        using var cts = new CancellationTokenSource();
+        var tester = NewTester(db, (_, token) =>
+        {
+            cts.Cancel();
+            return Task.FromCanceled<HttpResponseMessage>(token);
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            tester.TestProviderModelAsync("copilot", "openai/gpt-5", cts.Token));
+
+        db.ChangeTracker.Clear();
+        var persisted = await db.AiProviders.AsNoTracking().FirstAsync(p => p.Code == "copilot");
+        Assert.Equal(AiProviderTestStatuses.Ok, persisted.LastTestStatus);
+        Assert.Null(persisted.LastTestError);
+    }
+
+    [Fact]
     public async Task ModelTest_MapsUbagAuthFailureToAuthStep()
     {
         await using var db = new LearnerDbContext(_options);
@@ -504,6 +553,11 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
     private AiProviderConnectionTester NewTester(
         LearnerDbContext db,
         Func<HttpRequestMessage, Task<HttpResponseMessage>> responder)
+        => NewTester(db, (request, _) => responder(request));
+
+    private AiProviderConnectionTester NewTester(
+        LearnerDbContext db,
+        Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder)
     {
         var stub = new StubHandler(responder);
         var factory = new SingleClientFactory(new HttpClient(stub));
@@ -579,10 +633,10 @@ public sealed class AiProviderConnectionTesterTests : IAsyncDisposable
         };
     }
 
-    private sealed class StubHandler(Func<HttpRequestMessage, Task<HttpResponseMessage>> responder) : HttpMessageHandler
+    private sealed class StubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> responder) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            => responder(request);
+            => responder(request, cancellationToken);
     }
 
     private sealed class SingleClientFactory(HttpClient client) : IHttpClientFactory

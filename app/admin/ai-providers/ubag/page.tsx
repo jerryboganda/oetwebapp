@@ -381,6 +381,13 @@ export default function UbagBoardPage() {
     [allUbagModels],
   );
 
+  const facadeTestModelOptions = useMemo(
+    () => allUbagModels
+      .filter((model) => model !== 'whisper-1' && model !== 'generic_form')
+      .map((model) => ({ value: model, label: modelLabel(model) })),
+    [allUbagModels],
+  );
+
   // Per-part rollups derived from the live routes: a part reads ON when every
   // feature under its heading is routed to UBAG, OFF when none is, and mixed
   // otherwise. The group switch + model selector write through the same
@@ -815,7 +822,7 @@ export default function UbagBoardPage() {
                         className="w-full"
                         value={testModel}
                         disabled={testingModel || !ubagReady}
-                        options={modelOptionsFor(testModel)}
+                        options={facadeTestModelOptions}
                         onChange={(e) => setTestModel(e.target.value)}
                       />
                     </div>
