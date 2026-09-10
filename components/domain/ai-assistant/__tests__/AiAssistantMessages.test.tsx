@@ -11,6 +11,15 @@ const makeMessage = (overrides: Partial<AiMessage> = {}): AiMessage => ({
   ...overrides,
 });
 
+// A tool-role message's name rides the wire DTO's scalar `toolName` field
+// (AiAssistantMessageDto), never `toolCalls` -- that array is only ever
+// populated on the preceding assistant message that issued the call.
+// `AiMessage` doesn't model this scalar (the component reads it off the raw
+// payload via a cast), so fixtures attach it the same untyped way real API
+// data arrives instead of the `toolCalls` shape that never occurs in practice.
+const makeToolMessage = (toolName: string, overrides: Partial<AiMessage> = {}): AiMessage =>
+  ({ ...makeMessage({ role: 'tool', ...overrides }), toolName }) as AiMessage;
+
 describe('AiAssistantMessages', () => {
   it('shows empty state when no messages and no streaming', () => {
     render(<AiAssistantMessages messages={[]} />);
@@ -37,12 +46,7 @@ describe('AiAssistantMessages', () => {
 
   it('renders tool call cards', () => {
     const messages = [
-      makeMessage({
-        id: 'm1',
-        role: 'tool',
-        content: '{"result": "found 3 items"}',
-        toolCalls: [{ id: 'tc-1', toolName: 'search_content', arguments: '{}' }],
-      }),
+      makeToolMessage('search_content', { id: 'm1', content: '{"result": "found 3 items"}' }),
     ];
     render(<AiAssistantMessages messages={messages} />);
 
@@ -84,12 +88,17 @@ describe('AiAssistantMessages', () => {
     expect(allText & 4).toBe(4);
   });
 
-  it('renders tool card with toolName from first toolCall', () => {
-    const messages = [
-      makeMessage({ id: 'm1', role: 'tool', content: '{}', toolCalls: [{ id: 'tc-abc', toolName: 'unknown_tool', arguments: '{}' }] }),
-    ];
+  it('renders tool card with toolName from the message', () => {
+    const messages = [makeToolMessage('unknown_tool', { id: 'm1', content: '{}' })];
     render(<AiAssistantMessages messages={messages} />);
 
     expect(screen.getByText(/unknown_tool/)).toBeInTheDocument();
+  });
+
+  it('falls back to "unknown" when a tool message carries no toolName', () => {
+    const messages = [makeMessage({ id: 'm1', role: 'tool', content: '{}' })];
+    render(<AiAssistantMessages messages={messages} />);
+
+    expect(screen.getByTestId('tool-call-card')).toHaveTextContent('Tool: unknown');
   });
 });

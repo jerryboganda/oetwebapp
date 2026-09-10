@@ -90,22 +90,48 @@ const ubagRow = {
 
 function seed(routes: Array<{ featureCode: string; providerCode: string; model?: string | null }>) {
   mockProviders.mockResolvedValue([ubagRow]);
-  mockRoutes.mockResolvedValue({
-    rows: routes.map((r, i) => ({
-      id: `route-${i}`,
-      featureCode: r.featureCode,
-      providerCode: r.providerCode,
-      model: r.model ?? null,
+
+  // Reactive, not a fixed snapshot: setGroupUbag/setFeatureUbag act, then
+  // call load() to refetch -- a static mockResolvedValue would make every
+  // post-action state check (e.g. "the switch now reads ON") hang forever,
+  // since the refetch would keep returning the pre-action seed. Mutating
+  // this array from the upsert/delete mocks mirrors what the real backend
+  // does: the next GET reflects the writes that already landed.
+  const currentRows = routes.map((r, i) => ({
+    id: `route-${i}`,
+    featureCode: r.featureCode,
+    providerCode: r.providerCode,
+    model: r.model ?? null,
+    isActive: true,
+    createdAt: '',
+    updatedAt: '',
+    updatedByAdminId: null,
+  }));
+
+  mockRoutes.mockImplementation(async () => ({
+    rows: [...currentRows],
+    knownFeatureCodes: ['vocabulary.gloss', 'writing.grade', 'ocr.listening.parta'],
+    copilotBulkRouteTargets: [],
+  }));
+  mockUpsert.mockImplementation(async (req: { featureCode: string; providerCode: string; model?: string | null }) => {
+    const idx = currentRows.findIndex((r) => r.featureCode === req.featureCode);
+    const row = {
+      id: idx >= 0 ? currentRows[idx].id : `route-new-${req.featureCode}`,
+      featureCode: req.featureCode,
+      providerCode: req.providerCode,
+      model: req.model ?? null,
       isActive: true,
       createdAt: '',
       updatedAt: '',
       updatedByAdminId: null,
-    })),
-    knownFeatureCodes: ['vocabulary.gloss', 'writing.grade', 'ocr.listening.parta'],
-    copilotBulkRouteTargets: [],
+    };
+    if (idx >= 0) currentRows[idx] = row; else currentRows.push(row);
+    return {};
   });
-  mockUpsert.mockResolvedValue({});
-  mockDelete.mockResolvedValue(undefined);
+  mockDelete.mockImplementation(async (featureCode: string) => {
+    const idx = currentRows.findIndex((r) => r.featureCode === featureCode);
+    if (idx >= 0) currentRows.splice(idx, 1);
+  });
 }
 
 describe('UbagBoardPage', () => {
