@@ -1,0 +1,148 @@
+name: UBAG integration end-to-end
+
+# Verifies the OET <-> UBAG bridge end to end.
+#
+# Compute boundary: every build/test/probe runs on GitHub runners. The shared
+# production VPS only executes a script that issues HTTP calls, so no source
+# build, package install, or test run happens on it. This keeps the
+# scripts/deploy/verify-compute-offload.sh contract intact.
+#
+# Coverage:
+#   1. OET-side contract tests: UBAG provider seeder, registry-backed provider
+#      resolution, provider connection tester, assistant model catalog, and the
+#      admin AI-provider board components.
+#   2. Live facade contract from inside oetwebsite_internal:
+#      GET /v1/openai/models and POST /v1/openai/chat/completions (mock).
+#   3. Browser target probes through the raw job API, which returns a job id
+#      immediately instead of holding a 240 s facade long-poll open. This is the
+#      chatgpt_web re-test, with deepseek_web as a working control so a target
+#      specific failure is distinguishable from a systemic one.
+#
+# Uses pre-existing repo secrets: PROD_SSH_KEY (and VPS_* for reference).
+on:
+  # Runs whenever this workflow or its probe script changes, on any branch, so
+  # the bridge is re-verified as part of reviewing a change to it.
+  push:
+    paths:
+      - ".github/workflows/ubag-integration-e2e.yml"
+      - "scripts/deploy/ubag-e2e-from-ci.sh"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Probe mode: core (facade only), browser (targets only), all"
+        required: false
+        default: "all"
+        type: choice
+        options: [all, core, browser]
+      targets:
+        description: "Comma-separated browser targets to probe"
+        required: false
+        default: "chatgpt_web,deepseek_web"
+      probe_timeout_s:
+        description: "Per-target probe timeout in seconds"
+        required: false
+        default: "300"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ubag-integration-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  contract-tests:
+    name: OET-side UBAG contract tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Backend tests covering the UBAG bridge surface
+        run: >
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+          -p:RunAnalyzers=false
+          --filter "FullyQualifiedName~UbagProviderSeederTests|FullyQualifiedName~RegistryBackedProviderTests|FullyQualifiedName~AiProviderConnectionTesterTests|FullyQualifiedName~AssistantModelCatalogTests"
+          --verbosity minimal
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Frontend tests covering the UBAG admin board
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm exec vitest run \
+            app/admin/ai-providers/ubag/page.test.tsx \
+            app/admin/ai-providers/page.test.tsx
+
+  live-e2e:
+    name: Live facade and browser target probes
+    runs-on: ubuntu-latest
+    needs: [contract-tests]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run live UBAG probes from inside the OET network
+        id: probe
+        env:
+          # Dedicated CI deploy key, same one the production rollout uses.
+          SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          VPS_HOST: "185.252.233.186"
+          VPS_USER: "root"
+          VPS_PORT: "22"
+          PROBE_MODE: ${{ inputs.mode || 'all' }}
+          PROBE_TARGETS: ${{ inputs.targets || 'chatgpt_web,deepseek_web' }}
+          PROBE_TIMEOUT: ${{ inputs.probe_timeout_s || '300' }}
+        run: |
+          set -euo pipefail
+          PORT="${VPS_PORT:-22}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "$PORT" "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh_opts=(
+            -i ~/.ssh/deploy_key -p "$PORT"
+            -o IdentitiesOnly=yes -o PreferredAuthentications=publickey
+            -o PasswordAuthentication=no -o BatchMode=yes
+            -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+          )
+
+          set +e
+          ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
+            "bash -s" -- "$PROBE_MODE" "$PROBE_TARGETS" "$PROBE_TIMEOUT" \
+            < scripts/deploy/ubag-e2e-from-ci.sh 2>&1 | tee probe.log
+          rc="${PIPESTATUS[0]}"
+          set -e
+
+          {
+            echo "### Live UBAG probes"
+            echo '```'
+            sed -n '/=== UBAG PROBE SUMMARY ===/,/=== END SUMMARY ===/p' probe.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$rc" -eq 1 ]; then
+            echo "::error::Core facade contract breached (models or chat completions)."
+            exit 1
+          fi
+          if [ "$rc" -eq 2 ]; then
+            echo "::error::Core contract held but every browser target probe failed."
+            exit 1
+          fi
+          if grep -q '^FAIL' probe.log; then
+            echo "::warning::Core contract held; at least one browser target probe did not complete. See the job summary."
+          fi
+          echo "Core facade contract held."
