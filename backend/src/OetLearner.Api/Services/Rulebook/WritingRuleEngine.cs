@@ -1052,15 +1052,18 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     }
 
     // Non-prescribing allied-health professions (Rev5 audit, 10 Sep 2026):
-    // dietetics, occupational therapy and speech pathology discharge plans
-    // are legitimately non-pharmacological (diet/exercise/equipment plans,
-    // not medication doses) — 5 real production discharge letters across
-    // these 3 professions were flagged for lacking "medications with doses"
-    // that were never clinically relevant to their discharge plan. Only the
+    // dietetics, occupational therapy, speech pathology and physiotherapy
+    // discharge plans are legitimately non-pharmacological (diet/exercise/
+    // equipment plans, not medication doses) — 6 real production discharge
+    // letters across these 4 professions were flagged for lacking
+    // "medications with doses" that were never clinically relevant to their
+    // discharge plan (physiotherapy example added after the same pattern
+    // recurred for Mr Ryan Cooper's exercise-only discharge). Only the
     // post-discharge-instructions half of the check applies to them.
     private static readonly HashSet<ExamProfession> NonPrescribingProfessions = new()
     {
         ExamProfession.Dietetics, ExamProfession.OccupationalTherapy, ExamProfession.SpeechPathology,
+        ExamProfession.Physiotherapy,
     };
 
     private static IEnumerable<LintFinding> DetectDischargePlanPresent(OetRule rule, WritingLintInput input, LetterStructure s)

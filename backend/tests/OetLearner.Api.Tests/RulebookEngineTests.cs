@@ -620,6 +620,17 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.discharge_plan_present");
     }
 
+    // Real held production letter (Mr Ryan Cooper, physiotherapy discharge
+    // after ACL reconstruction): an exercise-only plan with no medications
+    // at all — the same non-pharmacological pattern as dietetics/OT/speech.
+    [Fact]
+    public void DischargePlanPresent_Passes_For_Physiotherapy_Without_Medication()
+    {
+        var text = "Dear Dr Smith,\nRe: Mr A\n\nI am writing to update you.\n\nHe was discharged today from physiotherapy.\n\nHe should continue strengthening exercises and review if pain increases.\n\nYours sincerely,\nPhysiotherapist";
+        var findings = _engine.Lint(new WritingLintInput(text, "discharge", Profession: ExamProfession.Physiotherapy));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.discharge_plan_present");
+    }
+
     [Fact]
     public void DischargePlanPresent_Still_Fires_For_Medicine_Without_Medication()
     {
