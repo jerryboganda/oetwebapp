@@ -1,6 +1,5 @@
 /**
  * Quick Grant preset definitions — pure data consumed by QuickGrantModal.
- * See docs/superpowers/specs/2026-07-29-quick-grant-access-presets-design.md.
  */
 
 import { BookOpen, FolderOpen, Video, Sparkles } from 'lucide-react';

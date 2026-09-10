@@ -2,7 +2,7 @@
 
 > Date: 2026-05-12 (Track B closure addendum)
 > Owner: Mocks Platform team
-> Source: `docs/mocks/PROGRESS.md` V2 Wave 8 — Medium #6
+> Source: Mocks V2 Wave 8 — Medium #6
 > Status: **planned wave (v1.1)** — not blocking v1 launch
 
 ## Why this exists
@@ -93,7 +93,7 @@ The author-supplied **letter** (`A`/`B`/`C`/`D`) is preserved alongside the ID a
 - [`MOCKS-RANDOMISATION.md`](./MOCKS-RANDOMISATION.md) — the helper that this migration unblocks.
 - `backend/src/OetLearner.Api/Services/Reading/ReadingGradingService.cs`
 - `backend/src/OetLearner.Api/Services/Listening/ListeningGradingService.cs`
-- `docs/mocks/PROGRESS.md` Gap Register — V2 Med #6.
+- `backend/src/OetLearner.Api/Services/RandomisationHelper.cs`.
 
 ## Decision
 

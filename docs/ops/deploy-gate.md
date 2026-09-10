@@ -1,7 +1,6 @@
 # Production Deploy Gate
 
-Status: **active** — adopted 2026-05-10 to close `RW-016` against
-`docs/STATUS/remaining-work.yaml`.
+Status: **active** — adopted 2026-05-10.
 
 ## Approval Owner
 
@@ -148,5 +147,3 @@ provider is selected before deploy (admin AI config console +
 - `docs/ops/incident-response-runbook.md` — SEV severity ladder.
 - `docs/ops/observability-slo-checklist.md` — SLOs that drive the
   rollback trigger thresholds above.
-- `docs/STATUS/remaining-work.yaml` — canonical register; this file
-  closes `RW-016`.

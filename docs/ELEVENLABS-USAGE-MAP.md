@@ -148,8 +148,7 @@ These are the main code areas, written in plain language.
 | Audio storage | Saves conversation audio files safely. | `backend/src/OetLearner.Api/Services/Conversation/ConversationAudioService.cs` |
 | Provider list | Names ElevenLabs as a text-to-speech provider. | `backend/src/OetLearner.Api/Domain/AiProviderEntities.cs` |
 | Seeder test | Tests that ElevenLabs can be added to the provider list. | `backend/tests/OetLearner.Api.Tests/AiVoiceProviderSeederTests.cs` |
-| Realtime STT plan | Tracks server-mediated ElevenLabs Scribe implementation. | `docs/ELEVENLABS-REALTIME-STT-PRD.md` |
-| Realtime STT progress | Tracks what is complete and what remains. | `docs/ELEVENLABS-REALTIME-STT-PROGRESS.md` |
+| Realtime STT plan | Canonical production gate for server-mediated ElevenLabs Scribe implementation. | `docs/ELEVENLABS-REALTIME-STT-PRODUCTION-PLAN.md` |
 
 ## 8. Important Note About The API Key
 

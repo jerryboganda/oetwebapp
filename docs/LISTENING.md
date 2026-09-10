@@ -197,8 +197,7 @@ mapping in `LearnerDbContext.OnModelCreating`) and **never LINQ-queried**
 - Reusable Part A renderer:
   [`components/domain/listening/PartARenderer.tsx`](../components/domain/listening/PartARenderer.tsx).
 - Component workbench: opt-in Storybook config and Listening V2 player stories
-  live in [`.storybook/main.ts`](../.storybook/main.ts),
-  [`docs/STORYBOOK.md`](STORYBOOK.md), and
+  live in [`.storybook/main.ts`](../.storybook/main.ts) and
   [`components/domain/listening/player/__stories__/`](../components/domain/listening/player/__stories__/).
 
 ## 8. Admin analytics surfaces

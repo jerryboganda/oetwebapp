@@ -67,8 +67,6 @@ The Mocks module must let admins assemble authentic OET-style mock exams from pu
 
 ## Source Documents
 
-- `docs/MOCKS-MODULE-PLAN.md`
-- `docs/MOCKS-MODULE-PLAN-V2.md`
 - `docs/CONTENT-UPLOAD-PLAN.md`
 - `docs/SCORING.md`
 - `docs/OET-RESULT-CARD-SPEC.md`

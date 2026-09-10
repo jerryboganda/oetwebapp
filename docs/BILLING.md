@@ -1,6 +1,6 @@
 # Billing Module — Canonical Reference
 
-> Status: living document. Owner: Billing slice (see `docs/billing-hardening/README.md`).
+> Status: living document. Owner: Billing slice.
 > Last reviewed: 2026-05-10.
 
 This document is the canonical reference for the OET Prep billing subsystem.
@@ -10,9 +10,8 @@ provider integration boundary, the RBAC surface, and the PII / retention
 policy. It is the contract between the billing slice owners and every other
 subagent / human contributor.
 
-If a behaviour described here is not yet implemented, the gap is recorded in
-[`docs/billing-hardening/I-docs.md`](./billing-hardening/I-docs.md) and tracked
-against the owning slice. Do **not** silently weaken this document to match
+If a behaviour described here is not yet implemented, record the gap against
+the owning slice. Do **not** silently weaken this document to match
 current code — fix the code or escalate.
 
 ## Known v1 limitation: sponsor billing is heuristic-attributed
@@ -21,8 +20,7 @@ The sponsor billing read model in `SponsorService.ComputeBillingAsync`
 attributes any **completed** `PaymentTransaction` row whose `LearnerUserId`
 matches a learner inside an **active** sponsorship window
 (`Sponsorship.CreatedAt..RevokedAt ?? now`) to that sponsor. This is a
-**heuristic for the v1 launch** (decision recorded 2026-05-10 against
-`RW-013` in `docs/STATUS/remaining-work.yaml`), not a true sponsor-paid
+**heuristic for the v1 launch** (decision recorded 2026-05-10), not a true sponsor-paid
 invoice link. Practical implication:
 
 - If a sponsored learner pays for an upgrade themselves while a sponsorship
@@ -241,7 +239,7 @@ stateDiagram-v2
 ## 5. Invariants
 
 Each invariant must be protected by at least one named test. Where a test
-does not yet exist, it is flagged in `docs/billing-hardening/I-docs.md`.
+does not yet exist, flag it against the owning slice.
 
 | # | Invariant | Protecting test |
 | - | --------- | --------------- |
@@ -360,8 +358,5 @@ strips request bodies, headers, and query params known to carry PII.
 
 ## 10. Related documents
 
-* [`docs/billing-hardening/README.md`](./billing-hardening/README.md) — slice ownership matrix.
 * [`docs/runbooks/billing-incident.md`](./runbooks/billing-incident.md) — operational runbook.
 * [`docs/AI-USAGE-POLICY.md`](./AI-USAGE-POLICY.md) — billing → AI quota mapping.
-* [`docs/subscription-system-hardening/`](./subscription-system-hardening/) — historical audit + target-state series.
-* [`mission-critical-execution-ledger.md`](../mission-critical-execution-ledger.md) — escalation ledger.

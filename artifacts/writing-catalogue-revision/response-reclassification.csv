@@ -1,3 +1,0 @@
-task_id,profession,title,old_letter_type,new_letter_type,reason
-<PENDING-AT-DEPLOY>,medicine,Medicine - Ms Isabel Garcia,LT-RP,LT-DG,explicit business correction in brief (migration statement 1)
-<PENDING-AT-DEPLOY>,*,*,LT-RP|RESPONSE|UPDATE,LT-OT,uncertain-case fallback policy - never force into a known category (migration statement 2)
