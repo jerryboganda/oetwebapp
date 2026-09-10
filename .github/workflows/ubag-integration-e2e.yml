@@ -38,11 +38,11 @@ on:
       targets:
         description: "Comma-separated browser targets to probe"
         required: false
-        default: "chatgpt_web,deepseek_web"
-      probe_timeout_s:
-        description: "Per-target probe timeout in seconds"
+        default: "deepseek_web,chatgpt_web,claude_web,gemini_web,mistral_lechat,perplexity_web,duckai_web"
+      probe_budget_s:
+        description: "Total seconds to let the single-concurrency provider queue drain"
         required: false
-        default: "300"
+        default: "1800"
 
 permissions:
   contents: read
@@ -92,7 +92,9 @@ jobs:
   live-e2e:
     name: Live facade and browser target probes
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Generous: the live worker is single-concurrency, and a provider awaiting
+    # sign-in can take ~5-8 minutes to surface that state.
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
@@ -105,8 +107,8 @@ jobs:
           VPS_USER: "root"
           VPS_PORT: "22"
           PROBE_MODE: ${{ inputs.mode || 'all' }}
-          PROBE_TARGETS: ${{ inputs.targets || 'chatgpt_web,deepseek_web' }}
-          PROBE_TIMEOUT: ${{ inputs.probe_timeout_s || '300' }}
+          PROBE_TARGETS: ${{ inputs.targets || 'deepseek_web,chatgpt_web,claude_web,gemini_web,mistral_lechat,perplexity_web,duckai_web' }}
+          PROBE_BUDGET: ${{ inputs.probe_budget_s || '1800' }}
         run: |
           set -euo pipefail
           PORT="${VPS_PORT:-22}"
@@ -124,7 +126,7 @@ jobs:
 
           set +e
           ssh "${ssh_opts[@]}" "$VPS_USER@$VPS_HOST" \
-            "bash -s" -- "$PROBE_MODE" "$PROBE_TARGETS" "$PROBE_TIMEOUT" \
+            "bash -s" -- "$PROBE_MODE" "$PROBE_TARGETS" "$PROBE_BUDGET" \
             < scripts/deploy/ubag-e2e-from-ci.sh 2>&1 | tee probe.log
           rc="${PIPESTATUS[0]}"
           set -e
@@ -137,14 +139,14 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           if [ "$rc" -eq 1 ]; then
-            echo "::error::Core facade contract breached (models or chat completions)."
+            echo "::error::Core facade contract breached, or a provider reported a genuine defect."
             exit 1
           fi
           if [ "$rc" -eq 2 ]; then
-            echo "::error::Core contract held but every browser target probe failed."
+            echo "::error::Core contract held but every provider probe failed."
             exit 1
           fi
-          if grep -q '^FAIL' probe.log; then
-            echo "::warning::Core contract held; at least one browser target probe did not complete. See the job summary."
+          if grep -q '^OPERATOR-ACTION-REQUIRED' probe.log; then
+            echo "::warning::One or more providers need an operator sign-in (dashboard Browser Sessions widget). This is not a code defect."
           fi
           echo "Core facade contract held."
