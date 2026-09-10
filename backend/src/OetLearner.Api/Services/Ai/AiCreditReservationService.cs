@@ -80,19 +80,32 @@ public sealed class AiCreditReservationService(
         // re-verifies and decides the funding bucket. This method holds no
         // cost math: no bucket-pick, no Shared/2.
         var snapshot = await packageCredits.GetSnapshotAsync(userId, 0, ct);
+
+        // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+        // 2026, §12): "If Writing Credits are Unlimited and valid, authorise
+        // the attempt immediately with no decrement. The unlimited
+        // entitlement itself is sufficient; a zero balance in another pool
+        // must not block the attempt." WritingUnlimited must therefore be
+        // checked BEFORE the generic account-expiry/insufficient-balance
+        // throw below — previously that throw ran unconditionally first, so
+        // an account-level expiry/zero-balance state on the shared ledger
+        // could block Submit for Grading even while the dashboard still
+        // showed Writing Credits as Unlimited (the exact production
+        // contradiction reported: "No AI credits remaining" / "Not enough
+        // credits" despite an active Unlimited Writing entitlement).
+        if (snapshot.WritingUnlimited)
+        {
+            await EnsureOperationAsync(operationId, userId, businessReference, ct);
+            return await InsertRowAsync(
+                userId, operationId, businessReference, bucketKind: "writing", units: 0, ct);
+        }
+
         if (snapshot.ExpiredBecausePassed
             || (snapshot.ExpiresAt is { } expires && expires <= clock.GetUtcNow()))
         {
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
                 "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
-        }
-
-        if (snapshot.WritingUnlimited)
-        {
-            await EnsureOperationAsync(operationId, userId, businessReference, ct);
-            return await InsertRowAsync(
-                userId, operationId, businessReference, bucketKind: "writing", units: 0, ct);
         }
 
         if (!snapshot.HasWritingActivity)
@@ -131,20 +144,22 @@ public sealed class AiCreditReservationService(
 
         // Admission policy (proven codes, kept verbatim): see ReserveWritingAsync.
         // This method holds no cost math: no bucket-pick, no Shared/2.
+        // Unlimited checked before the account-expiry throw for the same
+        // reason as ReserveWritingAsync above — keep the two symmetric.
         var snapshot = await packageCredits.GetSnapshotAsync(userId, 0, ct);
+        if (snapshot.SpeakingUnlimited)
+        {
+            await EnsureSpeakingOperationAsync(operationId, userId, businessReference, ct);
+            return await InsertRowAsync(
+                userId, operationId, businessReference, bucketKind: "speaking", units: 0, ct);
+        }
+
         if (snapshot.ExpiredBecausePassed
             || (snapshot.ExpiresAt is { } expires && expires <= clock.GetUtcNow()))
         {
             throw ApiException.PaymentRequired(
                 "ai_credits_insufficient",
                 "You have no AI grading credits remaining. Purchase an AI Credits package to continue.");
-        }
-
-        if (snapshot.SpeakingUnlimited)
-        {
-            await EnsureSpeakingOperationAsync(operationId, userId, businessReference, ct);
-            return await InsertRowAsync(
-                userId, operationId, businessReference, bucketKind: "speaking", units: 0, ct);
         }
 
         if (!snapshot.HasSpeakingActivity)

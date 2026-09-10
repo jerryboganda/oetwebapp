@@ -154,6 +154,74 @@ public sealed class AiCreditReservationFundingTests
         Assert.Equal(0, snapshot.WritingOnlyCredits);
     }
 
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+    // 2026, §12): "If Writing Credits are Unlimited and valid, authorise the
+    // attempt immediately with no decrement... a zero balance in another
+    // pool must not block the attempt." Reproduces the production
+    // contradiction the addendum reports (dashboard shows Writing Credits =
+    // Unlimited; Submit for Grading throws "No AI credits remaining" /
+    // "Not enough credits"): AiPackageCreditAccount.ExpiredBecausePassed is a
+    // cached, account-wide flag on the credit LEDGER that is independent of
+    // an active Mastery subscription (WritingUnlimited's real source —
+    // HasActiveUnlimitedGradingAsync checks SubscriptionItems, not the
+    // ledger account). Before the fix, ReserveWritingAsync checked that
+    // stale ledger flag before ever checking WritingUnlimited, so a valid
+    // Mastery subscriber with an expired/never-granted credit ledger row
+    // would be denied despite an active Unlimited entitlement.
+    [Fact]
+    public async Task ReserveWriting_UnlimitedGrading_AuthorisesEvenWithStaleAccountExpiredFlag()
+    {
+        await using var db = NewContext();
+        var ledger = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        var now = DateTimeOffset.UtcNow;
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-mastery",
+            UserId = "learner-1",
+            PlanId = "plan-free",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now,
+            NextRenewalAt = now.AddDays(180),
+            ExpiresAt = now.AddDays(180),
+            PriceAmount = 0,
+            Currency = "GBP",
+            Interval = "one_time",
+        });
+        db.SubscriptionItems.Add(new SubscriptionItem
+        {
+            Id = "item-mastery",
+            SubscriptionId = "sub-mastery",
+            ItemCode = "pkg_oet_mastery",
+            ItemType = "addon",
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now,
+            EndsAt = now.AddDays(180),
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        // Force the credit-ledger account row into existence (normally
+        // lazily created on first read) so it can be put into the stale
+        // state below.
+        await ledger.GetSnapshotAsync("learner-1", 0, CancellationToken.None);
+
+        // Simulate the exact staleness the addendum describes: the credit
+        // ledger's cached "expired" flag is stuck true (e.g. never renewed
+        // alongside the subscription) even though the Mastery subscription
+        // itself is live.
+        var account = await db.AiPackageCreditAccounts.SingleAsync(a => a.UserId == "learner-1");
+        account.ExpiredBecausePassed = true;
+        await db.SaveChangesAsync(CancellationToken.None);
+
+        var ticket = await NewReservations(db, ledger)
+            .ReserveWritingAsync("learner-1", "op-1", "biz-1", CancellationToken.None);
+
+        Assert.Equal("writing", ticket.BucketKind);
+        Assert.Equal(0, ticket.Units);
+    }
+
     [Fact]
     public async Task ReserveSpeaking_DedicatedPool_RecordsSpeakingBucket_TwoUnits()
     {

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -17,6 +18,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "address_punctuation",
         "ago_requires_past_simple",
         "blank_before_closing_phrase",
+        "blank_line_after_re_line",
         "blank_line_between_paragraphs",
         "body_forbidden_phrase_next_visit",
         "body_forbidden_phrase_the_patient",
@@ -94,6 +96,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         ["letter_paragraph_count"] = RuleSeverity.Major,
         ["letter_structure_order"] = RuleSeverity.Major,
         ["salutation_re_adjacent"] = RuleSeverity.Critical,
+        ["blank_line_after_re_line"] = RuleSeverity.Critical,
         ["blank_line_between_paragraphs"] = RuleSeverity.Major,
         ["address_punctuation"] = RuleSeverity.Critical,
         ["date_format_consistent"] = RuleSeverity.Major,
@@ -168,6 +171,21 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
 
     public IReadOnlyList<LintFinding> Lint(WritingLintInput input)
     {
+        // Root-cause fix (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026):
+        // callers (WritingTaskModelAnswerService, etc.) pass the raw catalogue
+        // code stored on WritingScenario.LetterType (e.g. "LT-UR"), but every
+        // urgent/discharge-specific detector below compares against the legacy
+        // token ("urgent_referral"/"discharge"/...). Without this normalisation
+        // the comparison silently fails and the entire urgent-referral battery
+        // (urgent_closure_phrase, urgent_token_not_repeated, urgent_body_starts_today)
+        // no-ops for any task classified with an LT-* code — the confirmed cause
+        // of the live "Mr David Taylor" urgent referral (task 07d56634-dc0f-4afc-
+        // 9b3d-ae1d527f1314) passing as clean despite missing "at your earliest
+        // convenience" and repeating "urgent" in the closure. Normalise once,
+        // here, so every current and future caller is covered regardless of
+        // which token form (LT-UR, urgent_referral, URGENT, ...) it passes.
+        input = input with { LetterType = WritingLetterTypeTaxonomy.ToLegacyLetterType(input.LetterType) };
+
         var book = loader.Load(RuleKind.Writing, input.Profession);
         var structure = ParseLetter(input.LetterText);
         var applicable = RulesApplicableTo(book, input.LetterType);
@@ -349,6 +367,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "min_body_paragraphs" => DetectMinBodyParagraphs,
         "letter_structure_order" => DetectStructureOrder,
         "salutation_re_adjacent" => DetectSalutationReAdjacency,
+        "blank_line_after_re_line" => DetectBlankLineAfterReLine,
         "blank_line_between_paragraphs" => DetectBlankBetweenParagraphs,
         "no_date_prefix" => DetectNoDatePrefix,
         "date_blank_line_sandwich" => DetectDateBlankSandwich,
@@ -517,6 +536,20 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         if (s.ReLineIndex!.Value - s.SalutationIndex!.Value != 1)
             yield return new LintFinding(rule.Id, rule.Severity,
                 "No blank line allowed between 'Dear ...' and 'Re:'. They must be on consecutive lines.");
+    }
+
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026):
+    // "After the Re: line, there MUST be one blank line before the introduction."
+    // Salutation and Re: stay consecutive (see DetectSalutationReAdjacency); this
+    // is the opposite-direction check for the line straight after Re:.
+    private static IEnumerable<LintFinding> DetectBlankLineAfterReLine(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.ReLineIndex is null) yield break;
+        var nextIdx = s.ReLineIndex.Value + 1;
+        if (nextIdx >= s.Lines.Length) yield break;
+        if (s.Lines[nextIdx].Trim().Length != 0)
+            yield return new LintFinding(rule.Id, rule.Severity,
+                "Leave one blank line between the Re: line and the introduction.");
     }
 
     private static IEnumerable<LintFinding> DetectBlankBetweenParagraphs(OetRule rule, WritingLintInput input, LetterStructure s)

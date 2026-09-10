@@ -770,14 +770,20 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
             return new(true, "already_debited", "This grading job has already consumed a credit.", referenceId);
         }
 
-        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
-        {
-            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
-        }
-
+        // Unlimited checked before the account-level expiry/package-expired
+        // throw (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026, §12.1:
+        // "the unlimited entitlement itself is sufficient; a zero balance in
+        // another pool must not block the attempt") — this is the actual
+        // "Practice this" gate (called directly by WritingScenarioEndpoints),
+        // so it must agree with the reservation service and the dashboard.
         if (await HasActiveUnlimitedGradingAsync(userId, now, ct))
         {
             return new(true, null, null, referenceId, BalanceSource: "unlimited");
+        }
+
+        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
+        {
+            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
         }
 
         if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
@@ -849,14 +855,17 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         await ExpireIfNeededAsync(account, now, ct);
         await db.SaveChangesAsync(ct);
 
-        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
-        {
-            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
-        }
-
+        // Same reorder as DeductGradingCreditAsync above — keep the two in
+        // lockstep so a check-only call and the debit it precedes never
+        // disagree.
         if (await HasActiveUnlimitedGradingAsync(userId, now, ct))
         {
             return new(true, null, null, null, BalanceSource: "unlimited");
+        }
+
+        if (account.ExpiredBecausePassed || (account.ExpiresAt is not null && account.ExpiresAt <= now))
+        {
+            return new(false, "ai_package_expired", "Your AI package has expired. Purchase a package to continue.", null);
         }
 
         if (await ShouldBypassGradingDebitForLegacyAccountAsync(account, ct))
@@ -1897,6 +1906,25 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         // Evaluate the date window in memory. EF InMemory does not reliably
         // translate `EndsAt == null || EndsAt > now`, and standalone Mastery
         // grants can persist a null EndsAt when DurationDays was 0.
+        //
+        // Investigated for the Writing Rule Enforcement Addendum Rev5 (10 Sep
+        // 2026, §12) credit contradiction and deliberately NOT changed to
+        // also trust AiPackageCreditLot.UnlimitedGrading directly: every real
+        // unlimited_grading grant in the catalog (see
+        // Data/Migrations/20260820090000_AlignWebsiteCoursePackageDescriptions.cs
+        // and .../20260905100000_AlignAiPackageSkillEntitlements.cs) is
+        // package_type "full" (Mastery/full-course), and
+        // OetMastery_BypassesWritingAndSpeakingOnlyWhilePurchaseItemIsActive
+        // (AiPackageCreditServiceTests.cs) locks in that cancelling the
+        // SubscriptionItem must immediately revoke access even while that
+        // lot's own fixed-duration grant is still technically unexpired —
+        // trusting the lot directly would silently re-open that revocation
+        // hole. The real gap is more likely a desync between the AI-package
+        // grant (GrantPackageAsync, fired on "ai_package" purchases) and the
+        // Subscription/SubscriptionItem rows a full-course purchase should
+        // also provision — that needs tracing through the actual purchase/
+        // webhook pipeline against a real affected account, not a rule
+        // change here.
         return endsAtValues.Any(endsAt => endsAt is null || endsAt > now);
     }
 

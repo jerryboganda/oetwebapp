@@ -25,7 +25,6 @@ import {
   getWritingSubmissionCaseNotes,
   getWritingSubmissionGrade,
   publishToShowcase,
-  requestTutorReview,
 } from '@/lib/writing/api';
 import { parseHighlights } from '@/lib/writing/highlights';
 import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
@@ -119,17 +118,6 @@ export default function WritingSubmissionResultsPage() {
         setCaseNotes(notes ?? null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : t('writing.submissions.results.error.load')));
-  }, [submissionId, t]);
-
-  const onTutorReview = useCallback(async () => {
-    if (!submissionId) return;
-    setActionStatus(t('writing.submissions.results.actions.tutorRequesting'));
-    try {
-      await requestTutorReview(submissionId, { priority: 'standard' });
-      setActionStatus(t('writing.submissions.results.actions.tutorRequested'));
-    } catch (err) {
-      setActionStatus(err instanceof Error ? err.message : t('writing.submissions.results.actions.tutorError'));
-    }
   }, [submissionId, t]);
 
   const onAppeal = useCallback(async () => {
@@ -412,19 +400,26 @@ export default function WritingSubmissionResultsPage() {
           <h2 id="actions-heading" className="text-lg font-bold text-navy">{t('writing.submissions.results.next.heading')}</h2>
           <p className="mt-1 text-sm text-muted">{t('writing.submissions.results.next.description')}</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {offerRevision || (submission && !submission.isRevision) ? (
+            {/* "Practice this again" is a genuinely new attempt — links to the
+                scenario's practice session so it runs the same entitlement
+                gate as any other new attempt (Writing Rule Enforcement
+                Addendum Rev5, 10 Sep 2026, §13). This submission's own
+                letter/score/feedback stay reviewable, unchanged, above. */}
+            {submission ? (
               <Button asChild>
-                <Link href={`/writing/submissions/${encodeURIComponent(submissionId)}/revise`}>
-                  <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.revise')}
+                <Link href={`/writing/practice/session/${encodeURIComponent(submission.scenarioId)}`}>
+                  <RefreshCw className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.practiceAgain')}
                 </Link>
               </Button>
             ) : null}
             <Button variant="outline" onClick={() => void onAppeal()}>
               <Flag className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.appeal')}
             </Button>
-            <Button variant="outline" onClick={() => void onTutorReview()}>
-              <UserRoundCheck className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.tutorReview')}
-            </Button>
+            {/* Request tutor review removed from this AI result flow (Writing
+                Rule Enforcement Addendum Rev5, 10 Sep 2026, §13) — tutor
+                review is a separate product/workflow. Already-completed
+                tutor feedback (fetched via getTutorReview above) still
+                displays read-only where present. */}
             {isA ? (
               <Button variant="outline" onClick={() => void onShowcase()}>
                 <Share2 className="h-4 w-4" aria-hidden="true" /> {t('writing.submissions.results.actions.showcase')}

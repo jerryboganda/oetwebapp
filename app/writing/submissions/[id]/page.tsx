@@ -83,10 +83,10 @@ export default function WritingSubmissionDetailPage() {
                   </Link>
                 </Button>
               ) : null}
-              {submission.status === 'graded' && !submission.isRevision ? (
+              {submission.status === 'graded' ? (
                 <Button asChild variant="outline">
-                  <Link href={`/writing/submissions/${encodeURIComponent(submission.id)}/revise`}>
-                    {t('writing.submissions.detail.reviseThis')}
+                  <Link href={`/writing/practice/session/${encodeURIComponent(submission.scenarioId)}`}>
+                    {t('writing.submissions.results.actions.practiceAgain')}
                   </Link>
                 </Button>
               ) : null}

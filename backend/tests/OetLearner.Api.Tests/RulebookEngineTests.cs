@@ -419,6 +419,46 @@ Doctor";
         Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_closure_phrase" || f.RuleId == "BUILTIN.urgent_closure_phrase");
     }
 
+    // Regression fixture for the live "Mr David Taylor" urgent rheumatology
+    // referral (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026 — task
+    // 07d56634-dc0f-4afc-9b3d-ae1d527f1314). Root cause: WritingScenario.
+    // LetterType stores the catalogue code ("LT-UR"), not the legacy token
+    // ("urgent_referral") every urgent-specific detector compares against —
+    // so the entire urgent battery silently no-op'd for any task passed
+    // straight through with its raw catalogue code, exactly as
+    // WritingTaskModelAnswerService did. Confirmed clean/candidate-visible
+    // in production with a missing "at your earliest convenience" closure
+    // and a repeated "urgently" outside the introduction. Fixed by
+    // normalising LetterType once, inside Lint() itself, via
+    // WritingLetterTypeTaxonomy.ToLegacyLetterType.
+    [Fact]
+    public void UrgentBattery_Fires_When_LetterType_Is_The_Raw_LTUR_Catalogue_Code()
+    {
+        var text = "Dear Dr Still,\nRe: Mr David Taylor, aged 55\nI am writing to refer Mr David Taylor for urgent rheumatological assessment of an acute gout flare.\n\nHe presented on today's visit with severe pain.\n\nI would be grateful if you could urgently assess Mr Taylor's gout.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "LT-UR"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_closure_phrase");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_token_not_repeated");
+    }
+
+    // Owner clarification (same addendum, §2 "Blank line after Re: line"):
+    // "After the Re: line, there MUST be one blank line before the
+    // introduction." New detector — was previously unenforced.
+    [Fact]
+    public void BlankLineAfterReLine_Fires_When_Intro_Immediately_Follows_Re()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\nI am writing to refer Ms A for assessment.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.blank_line_after_re_line");
+    }
+
+    [Fact]
+    public void BlankLineAfterReLine_Passes_When_Blank_Line_Present()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for assessment.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.blank_line_after_re_line");
+    }
+
     [Fact]
     public void R11_1_Flags_Latin_Abbreviation_bd()
     {
