@@ -1,6 +1,6 @@
 # Accessibility Evidence Checklist
 
-Use this checklist alongside each T0/T1 route scorecard. Reference RW IDs from `docs/STATUS/remaining-work.yaml`; do not duplicate ticket details here.
+Use this checklist alongside each T0/T1 route scorecard. Do not duplicate ticket details here.
 
 ## Metadata
 

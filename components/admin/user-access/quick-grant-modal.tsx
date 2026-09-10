@@ -42,8 +42,7 @@ interface QuickGrantModalProps {
 
 /**
  * One-click access presets (Recalls Only, Materials Only, Videos Only, Full
- * Access) layered on top of the full Access & Allocation panel. See
- * docs/superpowers/specs/2026-07-29-quick-grant-access-presets-design.md.
+ * Access) layered on top of the full Access & Allocation panel.
  */
 export function QuickGrantModal({
   userId,

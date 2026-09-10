@@ -43,8 +43,8 @@ Package `com.oetwithdrhesham.app`. Keep the SAME application record for testing 
 - [ ] Package stays `com.oetwithdrhesham.app` (Android + assetlinks + `validate-mobile-release-inputs.mjs` + CI + tests aligned). **Correction:** iOS bundle ID is deliberately unchanged at `com.oetprep.learner` — the Android rename was Android-only by owner decision; do not touch iOS bundle ID as part of Play Store work (see `docs/play-store-automation.md`).
 - [ ] Firebase: `google-services.json` was removed during the rename (FCM registration disabled via `FCM_REGISTRATION_ENABLED=false` to stop fresh-install crash). Before re-enabling push: create the Firebase Android app for `com.oetwithdrhesham.app`, download the new `google-services.json`, re-enable registration, re-declare in Data Safety.
 - [ ] `apple-app-site-association` still contains `TEAM_ID` placeholder — replace with the real Apple Team ID at release (preflight `validate-mobile-release-inputs.mjs` blocks while placeholders remain).
-- [ ] Large-phone top-bar/icon alignment fixed (edge-to-edge `WindowInsetsCompat` bridge in `MainActivity`, safe-area split in `top-nav.tsx`, `globals.css` vars — see `docs/mobile-performance/`). Verified on S24 Ultra-class device before production.
-- [ ] Dashboard slowness fixed (TanStack dedupe, `staleTime` with explicit invalidation — see `docs/mobile-performance/04*`). Screenshots from corrected build.
+- [ ] Large-phone top-bar/icon alignment fixed (edge-to-edge `WindowInsetsCompat` bridge in `MainActivity`, safe-area split in `top-nav.tsx`, `globals.css` vars). Verified on S24 Ultra-class device before production.
+- [ ] Dashboard slowness fixed (TanStack dedupe, `staleTime` with explicit invalidation). Screenshots from corrected build.
 - [ ] Tablets tested before claiming/showcasing tablet support (`configChanges` covers resize; exam pages already advise tablet/desktop + headphones).
 
 ## F. Testing → production

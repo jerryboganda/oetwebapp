@@ -25,7 +25,7 @@ The collection is installed locally from https://github.com/github/awesome-copil
 
 ## Priority Order
 1. User/system/developer instructions.
-2. OET repo instructions: `AGENTS.md`, `.github/copilot-instructions.md`, matching `.github/instructions/*.instructions.md`, `docs/agent-operating-model.md`, and repo memory files.
+2. OET repo instructions: `AGENTS.md`, `.github/copilot-instructions.md`, matching `.github/instructions/*.instructions.md`, and repo memory files.
 3. OET domain docs for scoring, rulebooks, AI, uploads, auth, runtime settings, deployment, frontend, backend, and tests.
 4. Relevant Awesome Copilot skills, agents, archived instructions, or marketplace plugins.
 5. Generic model defaults.

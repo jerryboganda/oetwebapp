@@ -1,6 +1,6 @@
 # OET Prep Platform
 
-OET preparation platform with a Next.js 15 web app, ASP.NET Core 10 API, a Tauri 2 desktop shell (remote-only thin client), and a Capacitor 6 mobile shell.
+OET preparation platform with a Next.js 16 web app, ASP.NET Core 10 API, a Tauri 2 desktop shell (remote-only thin client), and a Capacitor 7 mobile shell.
 
 ## Stack
 
@@ -135,17 +135,17 @@ pnpm run test:e2e:report
 ## Key Docs
 
 - [AGENTS.md](./AGENTS.md)
-- [Agent Operating Model](docs/agent-operating-model.md)
-- [Agentic Bootstrap Plan](docs/superpowers/plans/2026-04-19-agentic-bootstrap.md)
 - [Scoring](docs/SCORING.md)
 - [Rulebooks](docs/RULEBOOKS.md)
 - [AI Usage Policy](docs/AI-USAGE-POLICY.md)
 - [Content Upload Plan](docs/CONTENT-UPLOAD-PLAN.md)
 - [Result Card Spec](docs/OET-RESULT-CARD-SPEC.md)
+- [Product Manual](docs/product-manual/README.md)
+- [App Release Playbook](docs/app-release-playbook.md)
 
 ## Working Model
 
-- Use the root AGENTS file and the operating model doc as the first stop for any agentic work.
+- Use the root AGENTS file as the first stop for any agentic work.
 - Keep unrelated edits intact.
 - Prefer isolated worktrees for multi-file changes.
 - Keep shared-contract surfaces tight: scoring, rulebooks, auth, backend bootstrap, and the statement-of-results card.

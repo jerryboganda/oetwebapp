@@ -1,7 +1,6 @@
 // Mobile / Capacitor-aware checkout opener.
 //
-// Decision recorded 2026-05-10 against `RW-014` in
-// `docs/STATUS/remaining-work.yaml`: payment processing on Capacitor builds
+// Decision recorded 2026-05-10: payment processing on Capacitor builds
 // is performed entirely on the web via Stripe Checkout. We do NOT use Apple
 // or Google in-app purchases. To keep store-policy compliance simple the
 // checkout URL is launched in the **system browser** rather than the

@@ -1,7 +1,7 @@
 # Mocks — Randomisation Helper
 
 > Date: 2026-05-12 (Track B closure addendum)
-> Source: `docs/mocks/PROGRESS.md` V2 Wave 8 — Medium #4
+> Source: Mocks V2 Wave 8 — Medium #4
 
 ## Purpose
 
@@ -76,6 +76,5 @@ dotnet test backend/OetLearner.sln --filter "FullyQualifiedName~RandomisationHel
 ## Cross-links
 
 - [`MOCKS-OPTION-ID-MIGRATION.md`](./MOCKS-OPTION-ID-MIGRATION.md) — structural migration plan (Wave 1.1).
-- [`docs/mocks/PROGRESS.md`](./mocks/PROGRESS.md) — V2 Wave 8 entry.
 - `backend/src/OetLearner.Api/Services/RandomisationHelper.cs`.
 - `backend/tests/OetLearner.Api.Tests/RandomisationHelperTests.cs`.
