@@ -349,6 +349,9 @@ export interface ReadingHomePaperDto {
   totalPoints: number;
   partATimerMinutes: number;
   partBCTimerMinutes: number;
+  /** True once this candidate has opened/attempted this paper at least once —
+   *  the Untimed Practice eligibility gate (Final Developer Brief item 7). */
+  hasPriorAttempt?: boolean;
   entitlement?: {
     allowed: boolean;
     reason: string;
@@ -1188,6 +1191,8 @@ export const getReadingAttempt = (attemptId: string) =>
     mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
     /** Subset modes only — question IDs the player should expose. */
     scopeQuestionIds: string[] | null;
+    /** Untimed Practice (Final Developer Brief item 7) — no timer widget. */
+    isUntimed?: boolean;
     startedAt: string; deadlineAt: string | null; submittedAt: string | null;
     rawScore: number | null; scaledScore: number | null; maxRawScore: number;
     partADeadlineAt: string; partBCDeadlineAt: string;
@@ -1314,6 +1319,8 @@ export interface ReadingPracticeStartedDto {
   drill?: { code: string; title: string; partCode: 'A' | 'B' | 'C' };
   /** Part practice mode only. */
   partPractice?: { partCode: ReadingPartCode; title: string };
+  /** True for an Untimed Practice launch — no timer is enforced. */
+  isUntimed?: boolean;
   playerRoute: string;
   feedbackMessage?: string | null;
 }
@@ -1353,15 +1360,31 @@ export interface ReadingErrorBankDto {
   entries: ReadingErrorBankEntryDto[];
 }
 
-export const startReadingLearningAttempt = (paperId: string) =>
+export interface ReadingPerformanceSnapshotDto {
+  available: boolean;
+  weakestPart?: ReadingPartCode;
+  accuracyByPart?: Array<{ partCode: ReadingPartCode; accuracyPct: number }>;
+  mainIssue?: string | null;
+}
+
+/** AI Reading Performance Snapshot (Final Developer Brief item 8) — real
+ *  per-Part accuracy computed from the candidate's own graded attempts. */
+export const getReadingPerformanceSnapshot = () =>
+  api<ReadingPerformanceSnapshotDto>('/v1/reading-papers/practice/performance-snapshot');
+
+export const startReadingLearningAttempt = (paperId: string, options?: { untimed?: boolean }) =>
   api<ReadingPracticeStartedDto>(
-    `/v1/reading-papers/papers/${paperId}/practice/learning`,
+    `/v1/reading-papers/papers/${paperId}/practice/learning${options?.untimed ? '?untimed=true' : ''}`,
     { method: 'POST' },
   );
 
-export const startReadingPartPracticeAttempt = (paperId: string, partCode: ReadingPartCode) =>
+export const startReadingPartPracticeAttempt = (
+  paperId: string,
+  partCode: ReadingPartCode,
+  options?: { untimed?: boolean },
+) =>
   api<ReadingPracticeStartedDto>(
-    `/v1/reading-papers/papers/${paperId}/practice/parts/${partCode}`,
+    `/v1/reading-papers/papers/${paperId}/practice/parts/${partCode}${options?.untimed ? '?untimed=true' : ''}`,
     { method: 'POST' },
   ).then((started) => {
     // Rule E: the backend returns the authoritative consumption copy in

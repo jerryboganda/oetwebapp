@@ -45,6 +45,9 @@ public interface IReadingAttemptService
     /// When <paramref name="billObjectivePractice"/> is false the per-paper
     /// objective-practice credit is not consumed (used for mock sections, which
     /// bill a mock credit instead).
+    /// When <paramref name="untimed"/> is true this is a Final Developer Brief
+    /// item-7 Untimed Practice run: no timer is enforced, and the caller must
+    /// already have a prior attempt on this paper or the call throws.
     /// </summary>
     Task<ReadingAttemptStarted> StartInModeAsync(
         string userId,
@@ -52,7 +55,8 @@ public interface IReadingAttemptService
         ReadingAttemptMode mode,
         string? scopeJson,
         CancellationToken ct,
-        bool billObjectivePractice = true);
+        bool billObjectivePractice = true,
+        bool untimed = false);
 
     Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct);
 
@@ -157,7 +161,8 @@ public sealed record ReadingAttemptStarted(
     int PartBCPausedSeconds,
     int PartABreakMaxSeconds,
     DateTimeOffset ServerNow,
-    string? FeedbackMessage = null);
+    string? FeedbackMessage = null,
+    bool IsUntimed = false);
 
 public sealed record ReadingAttemptBreakState(
     string AttemptId,
@@ -188,15 +193,37 @@ public sealed class ReadingAttemptService(
     public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct, bool isMockSection = false)
         => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct, billObjectivePractice: !isMockSection);
 
+    /// <summary>Effectively-forever timer budget for Untimed Practice (Final
+    /// Developer Brief item 7) — long enough that neither the visible deadline
+    /// nor the hourly expiry sweep ever fires, without needing a nullable
+    /// DeadlineAt column.</summary>
+    private const int UntimedBudgetMinutes = 60 * 24 * 365 * 10;
+
     public async Task<ReadingAttemptStarted> StartInModeAsync(
         string userId,
         string paperId,
         ReadingAttemptMode mode,
         string? scopeJson,
         CancellationToken ct,
-        bool billObjectivePractice = true)
+        bool billObjectivePractice = true,
+        bool untimed = false)
     {
         if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId required");
+
+        // Untimed Practice eligibility: only a paper the candidate has already
+        // opened/attempted (i.e. the normal 1 Reading credit is already spent)
+        // may be reopened untimed — never the full, unattempted library.
+        if (untimed)
+        {
+            var hasPriorAttempt = await db.ReadingAttempts
+                .AnyAsync(a => a.UserId == userId && a.PaperId == paperId, ct);
+            if (!hasPriorAttempt)
+            {
+                throw new ReadingAttemptException(
+                    "untimed_practice_requires_prior_attempt",
+                    "Untimed Practice is only available for papers you have already opened.");
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(scopeJson))
         {
@@ -353,21 +380,28 @@ public sealed class ReadingAttemptService(
         // their minutes from ScopeJson when present.
         int totalMinutes;
         var miniTestMinutes = TryReadMinutesFromScope(scopeJson);
-        switch (mode)
+        if (untimed)
         {
-            case ReadingAttemptMode.Learning:
-                totalMinutes = Math.Max(60, policy.PartATimerMinutes + policy.PartBCTimerMinutes) * 4;
-                break;
-            case ReadingAttemptMode.MiniTest when miniTestMinutes is int m && m > 0:
-                totalMinutes = m;
-                break;
-            case ReadingAttemptMode.Drill:
-            case ReadingAttemptMode.ErrorBank:
-                totalMinutes = miniTestMinutes ?? Math.Max(15, policy.PartATimerMinutes);
-                break;
-            default:
-                totalMinutes = policy.PartATimerMinutes + policy.PartBCTimerMinutes;
-                break;
+            totalMinutes = UntimedBudgetMinutes;
+        }
+        else
+        {
+            switch (mode)
+            {
+                case ReadingAttemptMode.Learning:
+                    totalMinutes = Math.Max(60, policy.PartATimerMinutes + policy.PartBCTimerMinutes) * 4;
+                    break;
+                case ReadingAttemptMode.MiniTest when miniTestMinutes is int m && m > 0:
+                    totalMinutes = m;
+                    break;
+                case ReadingAttemptMode.Drill:
+                case ReadingAttemptMode.ErrorBank:
+                    totalMinutes = miniTestMinutes ?? Math.Max(15, policy.PartATimerMinutes);
+                    break;
+                default:
+                    totalMinutes = policy.PartATimerMinutes + policy.PartBCTimerMinutes;
+                    break;
+            }
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -440,7 +474,8 @@ public sealed class ReadingAttemptService(
             PartBCPausedSeconds: attempt.PartBCPausedSeconds,
             PartABreakMaxSeconds: mode == ReadingAttemptMode.Exam ? PartABreakMaxSeconds : 0,
             ServerNow: DateTimeOffset.UtcNow,
-            FeedbackMessage: feedbackMessage);
+            FeedbackMessage: feedbackMessage,
+            IsUntimed: untimed);
     }
 
     private async Task<string> ResolveReadingRulebookVersionAsync(CancellationToken ct)

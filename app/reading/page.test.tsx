@@ -190,7 +190,7 @@ describe('Reading hub', () => {
 
     const grid = await screen.findByTestId('reading-hub-cards');
     expect(within(grid).getAllByRole('link')).toHaveLength(4);
-    expect(await screen.findByText('Tutor tasks')).toBeInTheDocument();
+    expect(await screen.findByText('Practice Hub')).toBeInTheDocument();
     expect(screen.getAllByText('Reading Sample Paper 1').length).toBeGreaterThan(0);
     expect(screen.getByText('Retake after feedback')).toBeInTheDocument();
     expect(screen.getByText(/30\/42/)).toBeInTheDocument();

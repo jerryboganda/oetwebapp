@@ -292,8 +292,8 @@ function ReadingSecondaryDashboard({
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <DashboardPanelHeader
           icon={ClipboardCheck}
-          eyebrow="Assigned work"
-          title="Tutor tasks"
+          eyebrow="Practice"
+          title="Practice Hub"
           href="/reading/practice"
         />
         {assignments.length > 0 ? (
@@ -414,7 +414,7 @@ function DashboardPanelHeader({
           <Icon className="h-3.5 w-3.5" aria-hidden />
           {eyebrow}
         </p>
-        <h2 id={title === 'Tutor tasks' ? 'reading-workspace-heading' : undefined} className="mt-1 text-base font-bold text-navy">
+        <h2 id={title === 'Practice Hub' ? 'reading-workspace-heading' : undefined} className="mt-1 text-base font-bold text-navy">
           {title}
         </h2>
       </div>

@@ -67,7 +67,14 @@ describe('Manual payment page', () => {
     expect((await screen.findAllByText('InstaPay QR / link')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('QNB Egypt bank transfer').length).toBeGreaterThan(0);
     expect(screen.getByText('International payment')).toBeInTheDocument();
-    expect(screen.getByText('PayPal Business')).toBeInTheDocument();
+    expect(screen.getAllByText('Whop').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Fawaterak').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('HSBC bank transfer - Inside the UK').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('HSBC bank transfer - International').length).toBeGreaterThan(0);
+    // Retired payment routes must never render on this candidate-facing page.
+    expect(screen.queryByText(/stripe/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/paypal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/monzo/i)).not.toBeInTheDocument();
   });
 
   it('submits an auto-derived payload and opens the WhatsApp confirmation', async () => {

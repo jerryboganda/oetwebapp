@@ -567,6 +567,7 @@ public static class ReadingLearnerEndpoints
                 && !attempt.PartABreakUsed
                 && now < partADeadline.AddSeconds(ReadingAttemptService.PartABreakMaxSeconds);
             var hasApprovedConversion = HasApprovedScoreConversion(attempt);
+            var isUntimed = ReadingAttemptScope.FromJson(attempt.ScopeJson).IsUntimed;
 
             return Results.Ok(new
             {
@@ -575,6 +576,7 @@ public static class ReadingLearnerEndpoints
                 serverNow = now,
                 status = attempt.Status.ToString(),
                 mode = attempt.Mode.ToString(),
+                isUntimed,
                 scopeQuestionIds = scopeIds,
                 attempt.StartedAt,
                 attempt.DeadlineAt,
@@ -978,16 +980,20 @@ public static class ReadingLearnerEndpoints
         // ════════════════════════════════════════════════════════════════
 
         // ── Start a Learning-mode attempt against a published paper ──────
+        // `untimed=true` is the Final Developer Brief item-7 "Untimed Practice —
+        // Full Exam" launcher: no timer, and StartInModeAsync rejects it unless
+        // the candidate already has a prior attempt on this paper.
         group.MapPost("/papers/{paperId}/practice/learning", async (
-            string paperId, IReadingAttemptService svc, HttpContext http, CancellationToken ct) =>
+            string paperId, bool? untimed, IReadingAttemptService svc, HttpContext http, CancellationToken ct) =>
         {
             var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("auth required");
             try
             {
-                var scopeJson = JsonSerializer.Serialize(new { kind = "learning" });
+                var isUntimed = untimed ?? false;
+                var scopeJson = JsonSerializer.Serialize(new { kind = "learning", untimed = isUntimed });
                 var started = await svc.StartInModeAsync(
-                    userId, paperId, ReadingAttemptMode.Learning, scopeJson, ct);
+                    userId, paperId, ReadingAttemptMode.Learning, scopeJson, ct, untimed: isUntimed);
                 return Results.Ok(new
                 {
                     mode = "Learning",
@@ -999,8 +1005,9 @@ public static class ReadingLearnerEndpoints
                     started.PaperTitle,
                     started.PartATimerMinutes,
                     started.PartBCTimerMinutes,
+                    started.IsUntimed,
                     started.FeedbackMessage,
-                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=learning",
+                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=learning{(isUntimed ? "&untimed=true" : "")}",
                 });
             }
             catch (ReadingAttemptException ex)
@@ -1014,9 +1021,13 @@ public static class ReadingLearnerEndpoints
         }).RequireRateLimiting("PerUserWrite");
 
         // ── Start a Part-scoped practice attempt against a paper ─────────
+        // `untimed=true` is the Final Developer Brief item-7 "Untimed Practice —
+        // Part A/B/C only" launcher: no timer, and StartInModeAsync rejects it
+        // unless the candidate already has a prior attempt on this paper.
         group.MapPost("/papers/{paperId}/practice/parts/{partCode}", async (
             string paperId,
             string partCode,
+            bool? untimed,
             IReadingAttemptService svc,
             LearnerDbContext db,
             IReadingPolicyService policyService,
@@ -1061,6 +1072,7 @@ public static class ReadingLearnerEndpoints
                     message = $"No Part {parsedPart} questions are authored for this paper.",
                 });
 
+            var isUntimed = untimed ?? false;
             var minutes = parsedPart switch
             {
                 ReadingPartCode.A => 15,
@@ -1075,13 +1087,14 @@ public static class ReadingLearnerEndpoints
                 partCode = parsedPart.ToString(),
                 minutes,
                 questionIds,
+                untimed = isUntimed,
             };
 
             try
             {
                 var started = await svc.StartInModeAsync(
                     userId, paperId, ReadingAttemptMode.Drill,
-                    JsonSerializer.Serialize(scope), ct);
+                    JsonSerializer.Serialize(scope), ct, untimed: isUntimed);
                 return Results.Ok(new
                 {
                     mode = "Drill",
@@ -1089,11 +1102,12 @@ public static class ReadingLearnerEndpoints
                     started.StartedAt,
                     started.DeadlineAt,
                     started.PaperTitle,
-                    minutes,
+                    minutes = isUntimed ? (int?)null : minutes,
+                    started.IsUntimed,
                     questionCount = questionIds.Count,
                     partPractice = new { partCode = parsedPart.ToString(), title = $"Part {parsedPart} practice" },
                     started.FeedbackMessage,
-                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=part-practice&part={parsedPart}",
+                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=part-practice&part={parsedPart}{(isUntimed ? "&untimed=true" : "")}",
                 });
             }
             catch (ReadingAttemptException ex)
@@ -1105,6 +1119,66 @@ public static class ReadingLearnerEndpoints
                 return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
             }
         }).RequireRateLimiting("PerUserWrite");
+
+        // ── AI Reading Performance Snapshot (Final Developer Brief item 8) ──
+        // Real per-Part accuracy computed from the candidate's own graded
+        // answers — no separate pathway/drill system, just the weakest Part
+        // and its most common missed skill/question type.
+        group.MapGet("/practice/performance-snapshot", async (
+            HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+
+            var attemptIds = await db.ReadingAttempts.AsNoTracking()
+                .Where(a => a.UserId == userId && a.Status == ReadingAttemptStatus.Submitted)
+                .Select(a => a.Id)
+                .ToListAsync(ct);
+
+            var graded = await db.ReadingAnswers.AsNoTracking()
+                .Where(ans => attemptIds.Contains(ans.ReadingAttemptId) && ans.IsCorrect != null)
+                .Join(db.ReadingQuestions.AsNoTracking(), ans => ans.ReadingQuestionId, q => q.Id,
+                    (ans, q) => new { ans.IsCorrect, q.ReadingPartId, q.SkillTag, q.QuestionType })
+                .Join(db.ReadingParts.AsNoTracking(), x => x.ReadingPartId, p => p.Id,
+                    (x, p) => new { x.IsCorrect, x.SkillTag, x.QuestionType, p.PartCode })
+                .ToListAsync(ct);
+
+            var byPart = graded
+                .GroupBy(x => x.PartCode)
+                .Select(g => new
+                {
+                    partCode = g.Key,
+                    total = g.Count(),
+                    correct = g.Count(x => x.IsCorrect == true),
+                    accuracyPct = (int)Math.Round(100.0 * g.Count(x => x.IsCorrect == true) / g.Count()),
+                })
+                .OrderBy(x => x.partCode)
+                .ToList();
+
+            // Keep this concise and practical (brief item 8) — don't show a
+            // snapshot until there's enough graded history to mean something.
+            const int MinAnsweredForSnapshot = 5;
+            if (graded.Count < MinAnsweredForSnapshot || byPart.Count == 0)
+            {
+                return Results.Ok(new { available = false });
+            }
+
+            var weakest = byPart.OrderBy(x => x.accuracyPct).First();
+            var mainIssue = graded
+                .Where(x => x.PartCode == weakest.partCode && x.IsCorrect == false)
+                .GroupBy(x => string.IsNullOrWhiteSpace(x.SkillTag) ? x.QuestionType.ToString() : x.SkillTag)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault();
+
+            return Results.Ok(new
+            {
+                available = true,
+                weakestPart = weakest.partCode.ToString(),
+                accuracyByPart = byPart.Select(x => new { partCode = x.partCode.ToString(), accuracyPct = x.accuracyPct }),
+                mainIssue = mainIssue is null ? null : HumanizeSkillTag(mainIssue),
+            });
+        });
 
         // ── List the learner's current Error Bank ────────────────────────
         group.MapGet("/practice/error-bank", async (
@@ -1509,6 +1583,20 @@ public static class ReadingLearnerEndpoints
         }
 
         return null;
+    }
+
+    /// <summary>Turns an authored SkillTag ("writer_attitude") or a PascalCase
+    /// ReadingQuestionType name ("SentenceCompletion") into a short, readable
+    /// phrase ("Writer attitude questions") for the AI performance snapshot
+    /// (Final Developer Brief item 8) — no invented copy, just the real tag.</summary>
+    private static string HumanizeSkillTag(string raw)
+    {
+        var spaced = System.Text.RegularExpressions.Regex
+            .Replace(raw.Replace('_', ' ').Replace('-', ' '), "(?<=[a-z])(?=[A-Z])", " ")
+            .Trim();
+        var lower = spaced.ToLowerInvariant();
+        var phrase = lower.Length > 0 ? char.ToUpperInvariant(lower[0]) + lower[1..] : lower;
+        return phrase.EndsWith("questions", StringComparison.OrdinalIgnoreCase) ? phrase : $"{phrase} questions";
     }
 
     private static object? SafeParseJson(string? json)

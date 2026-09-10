@@ -34,7 +34,9 @@ describe('Writing landing page', () => {
     render(<WritingHome />);
 
     expect(screen.getByRole('link', { name: /writing\.hub\.cards\.practice\.cta/ })).toHaveAttribute('href', '/writing/practice/library');
-    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.submissions\.cta/ })).toHaveAttribute('href', '/submissions');
+    // Past Submissions must never open the global all-subtest history — it opens
+    // pre-filtered to Writing only (brief item 5).
+    expect(screen.getByRole('link', { name: /writing\.hub\.cards\.submissions\.cta/ })).toHaveAttribute('href', '/submissions?subtest=writing');
   });
 
   it('no longer surfaces mock exams or model answers', () => {

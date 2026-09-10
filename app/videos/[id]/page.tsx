@@ -64,6 +64,9 @@ export default function VideoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<VideoPlayerHandle | null>(null);
   const lowBandwidth = useLowBandwidthMode();
+  // The "app required" panel needs more height than a 16:9 crop allows on
+  // narrow phones — see the aspect-video toggle below.
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
 
   useEffect(() => {
     if (!videoId) return;
@@ -220,7 +223,11 @@ export default function VideoDetailPage() {
               </div>
             ) : (
               <div className="overflow-hidden rounded-2xl bg-background-dark shadow-sm">
-                <div className="aspect-video">
+                {/* aspect-video only while the real player is up — the "app required"
+                    state (WebNotAllowedNotice, rendered by VideoPlayer itself) needs to
+                    grow taller than 16:9 on narrow phones instead of being cropped by a
+                    fixed-ratio, overflow-hidden box. */}
+                <div className={playbackBlocked ? undefined : 'aspect-video'}>
                   <VideoPlayer
                     ref={playerRef}
                     videoId={video.id}
@@ -230,6 +237,7 @@ export default function VideoDetailPage() {
                     chapters={video.chapters}
                     onProgressPersisted={handleProgressPersisted}
                     lowBandwidth={lowBandwidth}
+                    onPlaybackBlockedChange={setPlaybackBlocked}
                   />
                 </div>
               </div>

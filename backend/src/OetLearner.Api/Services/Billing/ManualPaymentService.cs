@@ -73,16 +73,23 @@ public sealed class ManualPaymentService : IManualPaymentService
     private readonly IAiPackageCreditService? _aiPackageCredits;
 
     /// <summary>Fallback method allowlist used only when the PaymentMethodConfigs
-    /// table is empty. Mirrors the seed in 20260620120000_AddPaymentMethodConfig.</summary>
+    /// table is empty. Mirrors the seed in 20260620120000_AddPaymentMethodConfig,
+    /// as updated by 20261227090000_FinalDeveloperBriefPaymentMethods (Stripe,
+    /// PayPal Business and Monzo retired; Whop/Fawaterak manual proof and the
+    /// HSBC/Lloyds/Barclays UK+International bank-transfer routes added).</summary>
     private static readonly string[] KnownMethodKeys =
     {
         "instapay_qr_link",
         "vodafone_cash_fawry",
         "qnb_egypt",
-        "stripe_card",
-        "paypal_business",
-        "uk_monzo_transfer",
-        "international_monzo_transfer",
+        "whop_manual",
+        "fawaterak_manual",
+        "hsbc_uk_transfer",
+        "hsbc_international_transfer",
+        "lloyds_uk_transfer",
+        "lloyds_international_transfer",
+        "barclays_uk_transfer",
+        "barclays_international_transfer",
     };
 
     public ManualPaymentService(

@@ -297,12 +297,6 @@ export function MobileRuntimeBridge() {
           // Clear badge notifications when app is resumed
           void removeAllDeliveredNotifications();
         },
-        onPause: () => {
-          // Snapshot the current route before the OS may kill the WebView
-          // renderer/process in the background — this is what makes recovery
-          // after a true reload land on the same screen.
-          rememberCurrentRoute();
-        },
       });
       cleanupFns.push(runtimeCleanup);
 

@@ -875,6 +875,10 @@ public static class LearnerEndpoints
             var access = accessByPaper.TryGetValue(p.Id, out var resolvedAccess)
                 ? resolvedAccess
                 : new ContentEntitlementResult(false, "plan_does_not_grant", null, $"subtest:{p.SubtestCode}");
+            // Untimed Practice eligibility (Final Developer Brief item 7): a paper is
+            // eligible once the candidate has opened/attempted it at least once —
+            // any ReadingAttempt row means the normal 1-credit deduction already ran.
+            var hasPriorAttempt = attemptsByPaper.TryGetValue(p.Id, out var attemptsForPaper) && attemptsForPaper.Count > 0;
             papers.Add(new
             {
                 id = p.Id,
@@ -891,6 +895,7 @@ public static class LearnerEndpoints
                 totalPoints = paperParts.Sum(part => part.Questions.Sum(q => q.Points)),
                 partATimerMinutes = policy.PartATimerMinutes,
                 partBCTimerMinutes = policy.PartBCTimerMinutes,
+                hasPriorAttempt,
                 entitlement = new
                 {
                     allowed = access.Allowed,

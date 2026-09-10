@@ -115,6 +115,8 @@ interface ActiveAttempt {
   mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
   /** Subset modes only — in-scope question IDs (filter the structure to these). */
   scopeQuestionIds: string[] | null;
+  /** Untimed Practice (Final Developer Brief item 7) — no timer widget. */
+  isUntimed?: boolean;
 }
 
 function getSectionsForPart(part: ReadingLearnerStructureDto['parts'][number]) {
@@ -451,6 +453,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           status: saved.status,
           mode: saved.mode,
           scopeQuestionIds: saved.scopeQuestionIds,
+          isUntimed: saved.isUntimed,
           // Pre-existing omission: `serverNow` is required on ActiveAttempt
           // and every other setAttempt call supplies it, so a resumed attempt
           // was the one path that left it undefined.
@@ -1447,17 +1450,24 @@ function AttemptToolbar({
     <section className="rounded-[20px] border border-border bg-surface p-4 shadow-sm" aria-label="Attempt status">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          <div
-            className="flex items-center gap-2 rounded-xl bg-background-light px-3 py-2"
-            role="timer"
-            aria-live="polite"
-            aria-atomic="true"
-            aria-label={`${timerLabel}, ${formatCountdown(secondsLeft)} remaining`}
-          >
-            <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
-            <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{timerLabel}</span>
-            <span className="font-mono text-base font-bold text-navy">{formatCountdown(secondsLeft)}</span>
-          </div>
+          {attempt.isUntimed ? (
+            <div className="flex items-center gap-2 rounded-xl bg-background-light px-3 py-2">
+              <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">Untimed Practice — no timer</span>
+            </div>
+          ) : (
+            <div
+              className="flex items-center gap-2 rounded-xl bg-background-light px-3 py-2"
+              role="timer"
+              aria-live="polite"
+              aria-atomic="true"
+              aria-label={`${timerLabel}, ${formatCountdown(secondsLeft)} remaining`}
+            >
+              <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
+              <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{timerLabel}</span>
+              <span className="font-mono text-base font-bold text-navy">{formatCountdown(secondsLeft)}</span>
+            </div>
+          )}
           {partALocked ? <Badge variant="warning">Part A locked</Badge> : null}
           {breakPending ? <Badge variant="info">B/C paused</Badge> : null}
           {paperExpired ? <Badge variant="danger">Time expired</Badge> : null}
