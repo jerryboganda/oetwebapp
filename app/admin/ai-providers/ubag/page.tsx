@@ -303,7 +303,6 @@ export default function UbagBoardPage() {
   // The group model seeds every row without its own draft; the group switch
   // routes (or un-routes) every feature under that heading in one action.
   const [groupModels, setGroupModels] = useState<Record<string, string>>({});
-  const [groupUbagOn, setGroupUbagOn] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [confirmScoring, setConfirmScoring] = useState<BoardFeature[] | null>(null);
@@ -466,7 +465,6 @@ export default function UbagBoardPage() {
               isActive: true,
             });
           }
-          setGroupUbagOn((g) => ({ ...g, [group.id]: true }));
           setModelDrafts((d) => {
             const next = { ...d };
             for (const f of group.features) {
@@ -482,7 +480,6 @@ export default function UbagBoardPage() {
           for (const f of routed) {
             await deleteAiFeatureRoute(f.code);
           }
-          setGroupUbagOn((g) => ({ ...g, [group.id]: false }));
           setToast({
             variant: 'success',
             message: routed.length > 0
@@ -552,7 +549,6 @@ export default function UbagBoardPage() {
           isActive: true,
         });
       }
-      setGroupUbagOn((g) => ({ ...g, [group.id]: true }));
       setToast({ variant: 'success', message: `${group.title}: ${group.features.length} features → UBAG.` });
       await load();
     } catch (e) {
@@ -585,7 +581,6 @@ export default function UbagBoardPage() {
           isActive: true,
         });
       }
-      if (scoringGroup) setGroupUbagOn((g) => ({ ...g, [scoringGroup.id]: true }));
       setToast({ variant: 'success', message: `${features.length} scoring features → UBAG. Watch grading quality.` });
       await load();
     } catch (e) {
@@ -601,7 +596,6 @@ export default function UbagBoardPage() {
       for (const f of group.features) {
         if (routesByCode.has(f.code)) await deleteAiFeatureRoute(f.code);
       }
-      setGroupUbagOn((g) => ({ ...g, [group.id]: false }));
       setToast({ variant: 'success', message: `${group.title} back to defaults.` });
       await load();
     } catch (e) {
@@ -897,18 +891,17 @@ export default function UbagBoardPage() {
                 </div>
                 {(() => {
                   const st = groupStatus(group);
-                  const override = groupUbagOn[group.id];
-                  const on = override ?? st === 'on';
+                  const on = st === 'on';
                   return on ? (
                     <Button
                       variant="primary"
                       size="sm"
                       aria-pressed="true"
-                      aria-label={`UBAG for ${group.title}: on${st === 'mixed' ? ' (mixed)' : ''}`}
+                      aria-label={`UBAG for ${group.title}: on`}
                       disabled={busy === `group:${group.id}`}
                       onClick={() => void setGroupUbag(group, false)}
                     >
-                      UBAG ON{st === 'mixed' ? ' *' : ''}
+                      UBAG ON
                     </Button>
                   ) : (
                     <Button

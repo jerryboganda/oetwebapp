@@ -274,8 +274,16 @@ public sealed class DirectAiCallRecorder(
                     // reaches this branch, so it never holds a reservation.
                     // Same fail-closed rule as the operation store itself: a
                     // denied/unavailable reservation means zero provider calls.
+                    //
+                    // Owner directive 2026-09-10: the admin AI Assistant carries
+                    // no spend restriction of any kind -- skip the reservation
+                    // entirely (same as "no budget service configured"). This is
+                    // the ONLY feature code exempted; do not widen this set.
+                    // Mirrored by the quota bypass in AiQuotaService.TryReserveAsync.
+                    var isBudgetExempt = string.Equals(
+                        request.FeatureCode, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase);
                     var reservation = AiBudgetReservation.Unmetered;
-                    if (budgetService is not null)
+                    if (budgetService is not null && !isBudgetExempt)
                     {
                         reservation = await budgetService.ReserveForCallAsync(
                             operationClass, AiBudgetService.DefaultReservationEstimateUsd, ct);

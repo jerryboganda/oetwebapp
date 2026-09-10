@@ -251,15 +251,22 @@ export function AiAssistantPanel({ onClose }: AiAssistantPanelProps) {
         >
           <option value="">Default</option>
           {modelGroups.length > 0
-            ? modelGroups.map((group) => (
-                <optgroup key={group.provider || group.label} label={group.label}>
-                  {group.models.map((model) => (
-                    <option key={`${group.provider}:${model}`} value={model}>
-                      {model}
-                    </option>
+            ? (
+                <>
+                  {modelGroups.map((group) => (
+                    <optgroup key={group.provider || group.label} label={group.label}>
+                      {group.models.map((model) => (
+                        <option key={`${group.provider}:${model}`} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
-                </optgroup>
-              ))
+                  {threadModel && !modelGroups.some((group) => group.models.includes(threadModel)) && (
+                    <option value={threadModel}>{threadModel} (unavailable)</option>
+                  )}
+                </>
+              )
             : (availableModels.length > 0 ? availableModels : threadModel ? [threadModel] : []).map((model) => (
                 <option key={model} value={model}>
                   {model}

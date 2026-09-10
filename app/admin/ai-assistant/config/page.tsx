@@ -184,7 +184,9 @@ export default function AiAssistantConfigPage() {
                             value={rc.maxTokensPerRequest}
                             onChange={(e) => updateRoleConfig(rc.role, { maxTokensPerRequest: Number(e.target.value) })}
                             className="h-8 text-xs"
+                            disabled
                           />
+                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Max Tokens/Day</label>
@@ -193,7 +195,9 @@ export default function AiAssistantConfigPage() {
                             value={rc.maxTokensPerDay}
                             onChange={(e) => updateRoleConfig(rc.role, { maxTokensPerDay: Number(e.target.value) })}
                             className="h-8 text-xs"
+                            disabled
                           />
+                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Max Iterations</label>
@@ -202,7 +206,9 @@ export default function AiAssistantConfigPage() {
                             value={rc.maxIterations}
                             onChange={(e) => updateRoleConfig(rc.role, { maxIterations: Number(e.target.value) })}
                             className="h-8 text-xs"
+                            disabled
                           />
+                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                       </div>
                     </CardContent>
@@ -252,15 +258,17 @@ export default function AiAssistantConfigPage() {
                       <div className="mb-3 flex items-center gap-2">
                         <Badge variant="primary" intensity="tinted">{rc.role}</Badge>
                         <span className="text-sm font-bold text-admin-fg-strong">System Prompt</span>
+                        <Badge variant="warning" intensity="tinted" size="sm">Not yet implemented</Badge>
                       </div>
                       <textarea
                         value={rc.systemPrompt}
                         onChange={(e) => updateRoleConfig(rc.role, { systemPrompt: e.target.value })}
                         rows={8}
-                        className="w-full rounded-admin border border-admin-border bg-admin-bg-surface p-3 text-sm text-admin-fg-strong placeholder:text-admin-fg-muted focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)]"
+                        disabled
+                        className="w-full rounded-admin border border-admin-border bg-admin-bg-surface p-3 text-sm text-admin-fg-strong placeholder:text-admin-fg-muted focus:border-[var(--admin-primary)] focus:outline-none focus:ring-1 focus:ring-[var(--admin-primary)] disabled:opacity-60"
                         placeholder={`System prompt for ${rc.role} role…`}
                       />
-                      <p className="mt-1 text-xs text-admin-fg-muted">{rc.systemPrompt.length} characters</p>
+                      <p className="mt-1 text-xs text-admin-fg-muted">{rc.systemPrompt.length} characters — editing here has no effect; this tab is not wired to storage yet.</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -275,6 +283,7 @@ export default function AiAssistantConfigPage() {
                       <div className="mb-3 flex items-center gap-2">
                         <Badge variant="primary" intensity="tinted">{rc.role}</Badge>
                         <span className="text-sm font-bold text-admin-fg-strong">Rate Limiting</span>
+                        <Badge variant="warning" intensity="tinted" size="sm">Not yet implemented</Badge>
                       </div>
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <div>
@@ -284,7 +293,9 @@ export default function AiAssistantConfigPage() {
                             value={rc.rateLimitPerMinute}
                             onChange={(e) => updateRoleConfig(rc.role, { rateLimitPerMinute: Number(e.target.value) })}
                             className="h-8 text-xs"
+                            disabled
                           />
+                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                         <div>
                           <label className="mb-1 block text-xs font-medium text-admin-fg-muted">Requests per Hour</label>
@@ -293,7 +304,9 @@ export default function AiAssistantConfigPage() {
                             value={rc.rateLimitPerHour}
                             onChange={(e) => updateRoleConfig(rc.role, { rateLimitPerHour: Number(e.target.value) })}
                             className="h-8 text-xs"
+                            disabled
                           />
+                          <p className="mt-1 text-[10px] text-admin-fg-muted">Not yet implemented — not saved.</p>
                         </div>
                       </div>
                     </CardContent>

@@ -23,7 +23,7 @@ public sealed class AiAssistantOrchestrator(
     IRuntimeSettingsProvider settingsProvider,
     ILogger<AiAssistantOrchestrator> logger) : IAiAssistantOrchestrator
 {
-    private static readonly ConcurrentDictionary<string, CancellationTokenSource> _activeTurns = new();
+    private static readonly ConcurrentDictionary<string, (string UserId, CancellationTokenSource Cts)> _activeTurns = new();
 
     public async Task<AiAssistantThreadDto> CreateThreadAsync(
         string userId, string role, string? title, CancellationToken ct)
@@ -94,7 +94,7 @@ public sealed class AiAssistantOrchestrator(
         AiProviderDocumentAttachment? documentAttachment = null)
     {
         using var turnCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _activeTurns[threadId] = turnCts;
+        _activeTurns[threadId] = (userId, turnCts);
 
         try
         {
@@ -362,14 +362,21 @@ public sealed class AiAssistantOrchestrator(
         }
     }
 
-    public Task CancelTurnAsync(string threadId, string userId, CancellationToken ct)
+    public Task<bool> CancelTurnAsync(string threadId, string userId, CancellationToken ct)
     {
-        if (_activeTurns.TryRemove(threadId, out var cts))
+        // Ownership check mirrors RunTurnAsync/SetThreadModelAsync's `t.Id == threadId &&
+        // t.UserId == userId` filter — _activeTurns is keyed only by threadId, so without
+        // this any caller who knows a threadId could cancel another user's turn.
+        if (_activeTurns.TryGetValue(threadId, out var turn) && turn.UserId == userId)
         {
-            cts.Cancel();
-            cts.Dispose();
+            // Cancel only — RunTurnAsync's own `using var turnCts` disposes this CTS
+            // exactly once when the turn actually finishes. Disposing it here would
+            // race that still-running consumer and risk an ObjectDisposedException
+            // from an unrelated in-flight call.
+            turn.Cts.Cancel();
+            return Task.FromResult(true);
         }
-        return Task.CompletedTask;
+        return Task.FromResult(false);
     }
 
     public async Task<List<AiAssistantMessageDto>> GetMessagesAsync(

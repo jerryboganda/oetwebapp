@@ -21,7 +21,14 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ICodeChunker _chunker;
     private readonly IEmbeddingService _embeddingService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<CodebaseIndexer> _logger;
+
+    // Logged once per process lifetime (not per 6-hour cycle) so a
+    // permanently-missing root (e.g. the production image, which ships
+    // compiled output only — see FindRepositoryRoot) reads as one informative
+    // line instead of recurring "failure" spam in the logs.
+    private static int _missingRootWarned;
 
     private static readonly HashSet<string> SupportedExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -55,11 +62,13 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
         IServiceScopeFactory scopeFactory,
         ICodeChunker chunker,
         IEmbeddingService embeddingService,
+        IConfiguration configuration,
         ILogger<CodebaseIndexer> logger)
     {
         _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         _chunker = chunker ?? throw new ArgumentNullException(nameof(chunker));
         _embeddingService = embeddingService ?? throw new ArgumentNullException(nameof(embeddingService));
+        _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -84,7 +93,7 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
             var repoRoot = FindRepositoryRoot();
             if (repoRoot == null)
             {
-                _logger.LogWarning("Could not locate repository root for indexing.");
+                LogMissingRepositoryRootOnce();
                 return;
             }
 
@@ -126,7 +135,7 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
         var repoRoot = FindRepositoryRoot();
         if (repoRoot == null)
         {
-            _logger.LogWarning("Could not locate repository root for single file indexing.");
+            LogMissingRepositoryRootOnce();
             return;
         }
 
@@ -273,9 +282,32 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
         return files;
     }
 
-    private static string? FindRepositoryRoot()
+    /// <summary>
+    /// Resolves the source tree to scan. The production image is a multi-stage
+    /// `dotnet publish` output (see backend/Dockerfile's `final` stage) — it
+    /// contains only compiled DLLs, never a .git directory or the repo's .cs/.ts
+    /// source, so the walk-up-for-.git heuristic below can never succeed there.
+    /// CODEBASE_INDEX_ROOT is the explicit escape hatch: set it (env var, or any
+    /// IConfiguration source) to a source checkout mounted into the container to
+    /// make indexing work outside local dev. Unset in production today because
+    /// no such checkout is mounted (see auto-deploy-ghcr.sh — the VPS only
+    /// receives compose/deploy files, not a full repo clone); wiring it up needs
+    /// a deploy-time source sync plus a volume mount, which is a separate infra
+    /// decision, not made here.
+    /// </summary>
+    private string? FindRepositoryRoot()
     {
-        // Walk up from the current directory looking for .git
+        var configuredRoot = _configuration["CODEBASE_INDEX_ROOT"];
+        if (!string.IsNullOrWhiteSpace(configuredRoot))
+        {
+            if (Directory.Exists(configuredRoot))
+                return configuredRoot;
+            _logger.LogWarning(
+                "CODEBASE_INDEX_ROOT is set to {ConfiguredRoot} but that directory does not exist — falling back to .git discovery.",
+                configuredRoot);
+        }
+
+        // Local dev fallback: walk up from the current directory looking for .git
         var dir = AppContext.BaseDirectory;
         while (dir != null)
         {
@@ -284,7 +316,6 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
             dir = Directory.GetParent(dir)?.FullName;
         }
 
-        // Fallback: check common dev paths
         var cwd = Directory.GetCurrentDirectory();
         while (cwd != null)
         {
@@ -294,6 +325,21 @@ public sealed class CodebaseIndexer : ICodebaseIndexer
         }
 
         return null;
+    }
+
+    /// <summary>Warns once per process lifetime instead of every indexing
+    /// cycle (every 6h, per CodebaseIndexerHostedService) when no root can be
+    /// resolved — see FindRepositoryRoot for why this is expected in production
+    /// today rather than a transient failure.</summary>
+    private void LogMissingRepositoryRootOnce()
+    {
+        if (Interlocked.Exchange(ref _missingRootWarned, 1) == 0)
+        {
+            _logger.LogWarning(
+                "Could not locate a codebase repository root for indexing (no CODEBASE_INDEX_ROOT configured and no .git ancestor found). " +
+                "This is expected in the production image, which ships compiled output only — the admin codebase-search index will stay empty " +
+                "until CODEBASE_INDEX_ROOT points at a mounted source checkout. This warning will not repeat.");
+        }
     }
 
     private static string GetLanguageFromExtension(string extension) => extension.ToLowerInvariant() switch

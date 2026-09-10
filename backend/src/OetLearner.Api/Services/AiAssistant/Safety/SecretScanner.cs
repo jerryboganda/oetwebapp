@@ -10,7 +10,8 @@ public sealed class SecretScanner : ISecretScanner
 {
     private static readonly (string Type, Regex Pattern)[] Patterns =
     [
-        ("OpenAI API Key", new Regex(@"sk-[A-Za-z0-9]{20,}", RegexOptions.Compiled)),
+        ("OpenAI API Key", new Regex(@"sk-(?!ant-)[A-Za-z0-9_-]{20,}", RegexOptions.Compiled)),
+        ("Anthropic API Key", new Regex(@"sk-ant-[A-Za-z0-9_-]{20,}", RegexOptions.Compiled)),
         ("GitHub PAT", new Regex(@"ghp_[A-Za-z0-9]{36,}", RegexOptions.Compiled)),
         ("GitHub OAuth", new Regex(@"gho_[A-Za-z0-9]{36,}", RegexOptions.Compiled)),
         ("AWS Access Key", new Regex(@"AKIA[0-9A-Z]{16}", RegexOptions.Compiled)),

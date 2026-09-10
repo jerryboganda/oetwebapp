@@ -560,6 +560,17 @@ public static class AiAssistantEndpoints
 
                 if (!string.IsNullOrWhiteSpace(roleConfig.Model))
                 {
+                    // Same guardrail PATCH /threads/{threadId}/model already
+                    // enforces: AssistantModelCatalog.cs's "two catalogs,
+                    // never mixed" contract (Claude Anthropic ids vs UBAG
+                    // browser ids) wasn't checked at this entry point, so an
+                    // unrecognized model string could be persisted with no
+                    // rejection, silently breaking the role's assistant.
+                    if (!AssistantModelCatalog.IsSelectable(roleConfig.Model.Trim()))
+                    {
+                        return Results.BadRequest(new { error = $"Unknown assistant model '{roleConfig.Model}' for role '{role}'." });
+                    }
+
                     var route = await db.AiFeatureRoutes
                         .FirstOrDefaultAsync(r => r.FeatureCode == featureCode && r.IsActive, ct);
                     if (route is not null && !string.Equals(route.Model, roleConfig.Model, StringComparison.Ordinal))

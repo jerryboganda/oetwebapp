@@ -178,6 +178,12 @@ builder.Services.AddSignalR(options =>
     // Keep under Nginx Proxy Manager's default 60s proxy_read_timeout to prevent 504s
     options.ClientTimeoutInterval = TimeSpan.FromSeconds(45);
     options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    // Default of 1 means a CancelTurn invocation queues behind an in-flight
+    // StartTurn on the same connection (StartTurn streams manually via
+    // Clients.Caller.SendAsync rather than returning IAsyncEnumerable, so it
+    // isn't exempt as a "streaming hub method"). Raise to 2 so Cancel can run
+    // concurrently with the turn it's meant to interrupt.
+    options.MaximumParallelInvocationsPerClient = 2;
 });
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
 builder.Services.AddHttpClient<IMobilePushDispatcher, MobilePushDispatcher>();

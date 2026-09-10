@@ -17,7 +17,6 @@ namespace OetLearner.Api.Hubs;
 ///   StartTurn(threadId, userMessage, context?) — begins an assistant turn with streaming response
 ///   CancelTurn(threadId) — cancels a running turn
 ///   CreateThread(title?) — creates a new thread
-///   ListThreads(skip, take) — lists user's threads
 ///
 /// Server → Client events:
 ///   MessageDelta(threadId, chunk) — streaming text chunk
@@ -57,7 +56,10 @@ public class AiAssistantHub(
 
         // Add to user-specific group for targeted notifications
         await Groups.AddToGroupAsync(Context.ConnectionId, $"user:{userId}");
-        logger.LogInformation("AI Assistant hub connected: {UserId} ({Role})",
+        // Debug, not Information: fires on every reconnect (mobile background/
+        // foreground, network blips) -- high-frequency, high-cardinality, and
+        // not actionable at connect-time severity.
+        logger.LogDebug("AI Assistant hub connected: {UserId} ({Role})",
             userId, GetUserRole(Context));
         await base.OnConnectedAsync();
     }
@@ -239,8 +241,11 @@ public class AiAssistantHub(
         var userId = GetUserId(Context);
         if (string.IsNullOrWhiteSpace(userId)) return;
 
-        await orchestrator.CancelTurnAsync(threadId, userId, Context.ConnectionAborted);
-        await Clients.Caller.SendAsync("TurnCancelled", threadId);
+        var cancelled = await orchestrator.CancelTurnAsync(threadId, userId, Context.ConnectionAborted);
+        if (cancelled)
+        {
+            await Clients.Caller.SendAsync("TurnCancelled", threadId);
+        }
     }
 }
 

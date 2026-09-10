@@ -37,10 +37,12 @@ public sealed class SearchCodebaseTool : IAiToolExecutor
     private const int AbsoluteMaxResults = 50;
     private const int ContextLines = 2;
 
+    private readonly IConfiguration _configuration;
     private readonly ILogger<SearchCodebaseTool> _logger;
 
-    public SearchCodebaseTool(ILogger<SearchCodebaseTool> logger)
+    public SearchCodebaseTool(IConfiguration configuration, ILogger<SearchCodebaseTool> logger)
     {
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -58,7 +60,7 @@ public sealed class SearchCodebaseTool : IAiToolExecutor
                 AiToolOutcome.ArgsInvalid, null, "empty_query", "Query cannot be empty."));
         }
 
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRootResolver.Resolve(_configuration);
         var matches = new List<object>();
 
         try
@@ -175,17 +177,6 @@ public sealed class SearchCodebaseTool : IAiToolExecutor
         ".tar" or ".pdf" or ".mp3" or ".mp4" or ".avi" or ".mov" => true,
         _ => false
     };
-
-    private static string FindRepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir != null)
-        {
-            if (Directory.Exists(Path.Combine(dir, ".git"))) return dir;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        return Directory.GetCurrentDirectory();
-    }
 
     private static JsonElement ToJson(object payload) =>
         JsonDocument.Parse(JsonSerializer.Serialize(payload)).RootElement.Clone();

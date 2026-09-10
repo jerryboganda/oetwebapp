@@ -253,6 +253,32 @@ public sealed class AiAssistantGateway(
             DocumentAttachment = documentAttachment,
         };
 
+        // UBAG's browser facade cannot serve tool calls (see
+        // RegistryBackedProvider.CallOpenAiCompatibleAsync) — every assistant
+        // turn resolves tools for its feature, so a UBAG-routed thread would
+        // always burn a budget-reserved round trip only to fail. Refuse
+        // up front with an actionable message instead.
+        if (tools.Count > 0 && string.Equals(providerCode, "ubag", StringComparison.OrdinalIgnoreCase))
+        {
+            await RecordFailureAsync(
+                featureCode,
+                userId,
+                providerCode,
+                model,
+                AiCallOutcome.GatewayRefused,
+                "ubag_tools_unsupported",
+                "The selected model does not support the assistant's tools.",
+                requestSystemPrompt: null,
+                requestUserPrompt: messages.LastOrDefault(m => m.Role == "user")?.Content,
+                startedAt,
+                stopwatch,
+                CancellationToken.None,
+                policyTrace: quotaDecision?.PolicyTrace);
+            yield return new LlmTextChunk(
+                "The selected model doesn't support this assistant's tools. Pick a Claude model instead.");
+            yield break;
+        }
+
         AiProviderCompletion? completion = null;
         string? errorMessage = null;
         DirectAiOperationLease? lease = null;
@@ -266,7 +292,12 @@ public sealed class AiAssistantGateway(
                 ResourceId = $"{featureCode}:{userId ?? "anon"}:{startedAt.ToUnixTimeMilliseconds()}",
                 ResourceType = "assistant_turn",
                 RequestHash = $"{providerCode}:{model}:{featureCode}",
-                OperationClass = AiOperationClass.InteractiveLearning,
+                // Classified per-feature (admin assistant is AdminBatch, not
+                // the learner-shared InteractiveLearning pool) — see
+                // AiBudgetClasses.ClassForFeature. Only a fallback: the DB/
+                // static AiFeaturePolicy row resolved inside BeginOperationAsync
+                // takes precedence whenever one exists.
+                OperationClass = AiBudgetClasses.ClassForFeature(featureCode),
                 AllowRetryAfterFailure = true,
             }, ct);
             if (!lease.CanProceed)

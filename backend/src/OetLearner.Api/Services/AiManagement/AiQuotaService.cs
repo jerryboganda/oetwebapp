@@ -115,6 +115,22 @@ public sealed class AiQuotaService(
     {
         var global = await GetGlobalPolicyAsync(ct);
 
+        // Owner directive 2026-09-10: the admin AI Assistant carries no
+        // usage or spend restriction of any kind -- exempt from the
+        // per-feature kill list, the global kill switch, the platform
+        // budget hard-kill, and every plan/token quota below. This is the
+        // ONLY feature code exempted; do not widen this set. (Mirrored by
+        // the budget-reservation bypass in DirectAiCallRecorder.BeginOperationAsync.)
+        if (string.Equals(featureCode, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            return new AiQuotaDecision(
+                Allowed: true,
+                ErrorCode: null, ErrorMessage: null,
+                PolicyTrace: "ai_assistant.admin.unrestricted",
+                GlobalPolicy: global, Plan: null, Override: null,
+                TokensUsedThisPeriod: 0, TokensCapThisPeriod: int.MaxValue);
+        }
+
         // ── Per-feature kill list ───────────────────────────────────────────
         // Admins can disable specific feature codes without tripping the full
         // kill-switch. Evaluated FIRST so a disabled feature refuses before we

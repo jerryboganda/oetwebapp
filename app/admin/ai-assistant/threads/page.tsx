@@ -11,9 +11,12 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { apiClient } from '@/lib/api';
 import { BulkActionBar } from '@/components/ui/bulk-action-bar';
+
+type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 interface ThreadRow {
   id: string;
@@ -61,6 +64,8 @@ export default function AiAssistantThreadsPage() {
   const [archiveTarget, setArchiveTarget] = useState<ThreadRow | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkArchiving, setBulkArchiving] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
 
   const loadThreads = useCallback(async () => {
     try {
@@ -93,12 +98,34 @@ export default function AiAssistantThreadsPage() {
       await apiClient.delete(`/v1/admin/ai-assistant/threads/${archiveTarget.id}`);
       setArchiveTarget(null);
       loadThreads();
-    } catch {
-      // silent
+    } catch (e) {
+      setToast({ variant: 'error', message: `Failed to archive thread: ${(e as Error).message}` });
     } finally {
       setArchiving(false);
     }
   }, [archiveTarget, loadThreads]);
+
+  const handleBulkArchive = useCallback(async () => {
+    const ids = Array.from(selectedKeys);
+    if (ids.length === 0) return;
+    setBulkArchiving(true);
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await apiClient.delete(`/v1/admin/ai-assistant/threads/${id}`);
+      } catch {
+        failures.push(id);
+      }
+    }
+    setBulkArchiving(false);
+    setSelectedKeys(new Set());
+    loadThreads();
+    setToast(
+      failures.length === 0
+        ? { variant: 'success', message: `Archived ${ids.length} thread${ids.length === 1 ? '' : 's'}.` }
+        : { variant: 'error', message: `Archived ${ids.length - failures.length}/${ids.length}; ${failures.length} failed.` }
+    );
+  }, [selectedKeys, loadThreads]);
 
   const breadcrumbs = [
     { label: 'Admin', href: '/admin' },
@@ -236,10 +263,17 @@ export default function AiAssistantThreadsPage() {
           selectedCount={selectedKeys.size}
           onClearSelection={() => setSelectedKeys(new Set())}
           actions={[
-            { key: 'archive', label: 'Archive selected', variant: 'danger', onClick: () => {} },
+            {
+              key: 'archive',
+              label: bulkArchiving ? 'Archiving…' : 'Archive selected',
+              variant: 'danger',
+              onClick: handleBulkArchive,
+            },
           ]}
         />
       </AsyncStateWrapper>
+
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       {archiveTarget && (
         <Modal open onClose={() => setArchiveTarget(null)} title="Archive Thread">

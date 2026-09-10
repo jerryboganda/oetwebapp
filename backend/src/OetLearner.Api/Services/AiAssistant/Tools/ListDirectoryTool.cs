@@ -36,10 +36,12 @@ public sealed class ListDirectoryTool : IAiToolExecutor
     private const int DefaultMaxDepth = 2;
     private const int AbsoluteMaxDepth = 3;
 
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ListDirectoryTool> _logger;
 
-    public ListDirectoryTool(ILogger<ListDirectoryTool> logger)
+    public ListDirectoryTool(IConfiguration configuration, ILogger<ListDirectoryTool> logger)
     {
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -83,7 +85,7 @@ public sealed class ListDirectoryTool : IAiToolExecutor
             }
         }
 
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRootResolver.Resolve(_configuration);
         var fullPath = Path.GetFullPath(Path.Combine(repoRoot, path));
 
         if (!fullPath.StartsWith(repoRoot, StringComparison.OrdinalIgnoreCase))
@@ -144,17 +146,6 @@ public sealed class ListDirectoryTool : IAiToolExecutor
             var fi = new FileInfo(file);
             entries.Add(new { name = relativePath, type = "file", size = (long?)fi.Length });
         }
-    }
-
-    private static string FindRepoRoot()
-    {
-        var dir = AppContext.BaseDirectory;
-        while (dir != null)
-        {
-            if (Directory.Exists(Path.Combine(dir, ".git"))) return dir;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        return Directory.GetCurrentDirectory();
     }
 
     private static JsonElement ToJson(object payload) =>

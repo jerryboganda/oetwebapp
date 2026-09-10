@@ -9,8 +9,12 @@ import { Button } from '@/components/admin/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+import { Modal } from '@/components/ui/modal';
+import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { apiClient } from '@/lib/api';
+
+type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 interface ThreadMessage {
   id: string;
@@ -117,6 +121,8 @@ export default function AiAssistantThreadDetailPage() {
   const [thread, setThread] = useState<ThreadDetail | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [archiving, setArchiving] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
 
   const loadThread = useCallback(async () => {
     try {
@@ -144,9 +150,10 @@ export default function AiAssistantThreadDetailPage() {
     try {
       setArchiving(true);
       await apiClient.delete(`/v1/admin/ai-assistant/threads/${thread.id}`);
+      setConfirmArchive(false);
       loadThread();
-    } catch {
-      // silent
+    } catch (e) {
+      setToast({ variant: 'error', message: `Failed to archive thread: ${(e as Error).message}` });
     } finally {
       setArchiving(false);
     }
@@ -208,7 +215,7 @@ export default function AiAssistantThreadDetailPage() {
               Export
             </Button>
             {thread.status === 'active' && (
-              <Button variant="destructive" size="sm" onClick={handleArchive} disabled={archiving}>
+              <Button variant="destructive" size="sm" onClick={() => setConfirmArchive(true)} disabled={archiving}>
                 <Archive className="h-4 w-4" />
                 {archiving ? 'Archiving…' : 'Archive'}
               </Button>
@@ -296,6 +303,28 @@ export default function AiAssistantThreadDetailPage() {
           )}
         </AsyncStateWrapper>
       }
-    />
+    >
+      <>
+        {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+        {thread && confirmArchive && (
+          <Modal open onClose={() => setConfirmArchive(false)} title="Archive Thread">
+            <div className="p-4">
+              <p className="text-sm text-admin-fg-strong">
+                Are you sure you want to archive the thread <span className="font-semibold">&ldquo;{thread.title || 'Untitled'}&rdquo;</span> by {thread.userName}?
+              </p>
+              <p className="mt-2 text-xs text-admin-fg-muted">
+                This will terminate any active session and mark the thread as archived.
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setConfirmArchive(false)}>Cancel</Button>
+                <Button variant="destructive" size="sm" onClick={handleArchive} disabled={archiving}>
+                  {archiving ? 'Archiving…' : 'Archive Thread'}
+                </Button>
+              </div>
+            </div>
+          </Modal>
+        )}
+      </>
+    </AdminOperationsLayout>
   );
 }

@@ -96,6 +96,30 @@ public sealed class AiToolRegistry : IAiToolRegistry
         "companion_add_plan_item",
     };
 
+    /// <summary>
+    /// Owner directive 2026-09-10: the admin AI Assistant carries no
+    /// project-write capability of any kind -- it may inspect the codebase
+    /// (read_file, search_codebase, retrieve_codebase, list_directory,
+    /// query_database, web_search) but never write files, run commands,
+    /// touch git, or deploy. Mirrors SafetyGuard.MutationToolCodes, which
+    /// already hard-denies these four tool codes at execution time for this
+    /// feature (including git_operations' read subcommands -- git_operations
+    /// is gated on toolCode alone, before the operation arg is even parsed,
+    /// so status/diff/log/branch are blocked too, not just commit). This
+    /// registry-level filter additionally keeps them out of the tool list
+    /// the model is even offered, so a call is never attempted only to be
+    /// refused a turn later. Enforced here (whatever AiFeatureToolGrant rows
+    /// say) exactly like <see cref="LearnerSafeToolCodes"/> is enforced for
+    /// learner features.
+    /// </summary>
+    private static readonly HashSet<string> AdminAssistantDeniedToolCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "write_file",
+        "run_command",
+        "git_operations",
+        "deploy",
+    };
+
     /// <summary>True when the feature code is reachable by a learner.</summary>
     public static bool IsLearnerFacingFeature(string featureCode) =>
         LearnerFacingFeatureCodes.Contains(featureCode);
@@ -152,6 +176,11 @@ public sealed class AiToolRegistry : IAiToolRegistry
             }
 
             permitted = permitted.Where(r => LearnerSafeToolCodes.Contains(r.Code));
+        }
+
+        if (string.Equals(featureCode, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            permitted = permitted.Where(r => !AdminAssistantDeniedToolCodes.Contains(r.Code));
         }
 
         var defs = permitted

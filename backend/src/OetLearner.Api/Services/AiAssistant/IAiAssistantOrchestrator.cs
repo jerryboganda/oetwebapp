@@ -55,8 +55,10 @@ public interface IAiAssistantOrchestrator
         IReadOnlyList<AiProviderImageAttachment>? imageAttachments = null,
         AiProviderDocumentAttachment? documentAttachment = null);
 
-    /// <summary>Cancels a running turn for the given thread.</summary>
-    Task CancelTurnAsync(string threadId, string userId, CancellationToken ct);
+    /// <summary>Cancels a running turn for the given thread. Returns false
+    /// when there was no active turn for that thread, or it belongs to
+    /// someone else -- callers must not report success in either case.</summary>
+    Task<bool> CancelTurnAsync(string threadId, string userId, CancellationToken ct);
 
     /// <summary>Gets message history for a thread.</summary>
     Task<List<AiAssistantMessageDto>> GetMessagesAsync(

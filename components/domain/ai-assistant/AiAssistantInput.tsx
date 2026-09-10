@@ -46,10 +46,18 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const imagesRef = useRef<PendingImage[]>(images);
+  imagesRef.current = images;
 
   // A live microphone stream is not something to leave running because a
   // component unmounted mid-recording.
   useEffect(() => () => stopTracks(recorderRef.current), []);
+
+  // Pending image previews are object URLs; if the panel closes before the
+  // user sends or removes them, revoke whatever is still outstanding.
+  useEffect(() => () => {
+    for (const img of imagesRef.current) URL.revokeObjectURL(img.previewUrl);
+  }, []);
 
   const busy = disabled || isStreaming || extracting || recording;
   const canSend =
@@ -83,11 +91,15 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
     e.target.value = '';
     if (files.length === 0 || busy) return;
     setAttachError(null);
+    // Local running count -- `images` is a snapshot from this render and
+    // never changes across iterations of this loop, so the cap has to be
+    // tracked here rather than re-read from state on every file.
+    let pendingCount = images.length;
     for (const file of files) {
       const ext = (file.name.split('.').pop() ?? '').toLowerCase();
       const mime = (file.type || '').toLowerCase();
       if (IMAGE_MIMES.has(mime) || IMAGE_EXTENSIONS.has(ext)) {
-        if (images.length >= MAX_IMAGES) {
+        if (pendingCount >= MAX_IMAGES) {
           setAttachError(`Up to ${MAX_IMAGES} images per message.`);
           break;
         }
@@ -97,6 +109,7 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
         }
         const buffer = new Uint8Array(await file.arrayBuffer());
         const resolvedMime = IMAGE_MIMES.has(mime) ? mime : ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'png' ? 'image/png' : ext === 'gif' ? 'image/gif' : 'image/webp';
+        pendingCount += 1;
         setImages((prev) =>
           prev.length >= MAX_IMAGES
             ? prev
@@ -153,6 +166,10 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
       };
 
       recorder.onstop = async () => {
+        // This fires however the recorder stopped -- the Stop button, an
+        // externally-ended track, or a browser-initiated stop -- so it is
+        // the one place that can reliably clear `recording`.
+        setRecording(false);
         stopTracks(recorder);
         const blob = new Blob(parts, { type: recorder.mimeType || 'audio/webm' });
 
@@ -171,6 +188,12 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
         });
       };
 
+      recorder.onerror = () => {
+        setRecording(false);
+        stopTracks(recorder);
+        setAttachError('Voice recording failed. Try again.');
+      };
+
       recorderRef.current = recorder;
       recorder.start();
       setRecording(true);
@@ -182,8 +205,15 @@ export function AiAssistantInput({ onSend, onCancel, isStreaming, disabled = fal
   };
 
   const stopRecording = () => {
-    recorderRef.current?.stop();
-    setRecording(false);
+    try {
+      recorderRef.current?.stop();
+    } catch {
+      // Already inactive (e.g. it auto-stopped once already, or this is a
+      // duplicate click) -- onstop won't fire again, so clear the UI here
+      // instead of leaving `recording` stuck true.
+    } finally {
+      setRecording(false);
+    }
   };
 
   const removeImage = (index: number) => {

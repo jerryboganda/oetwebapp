@@ -92,6 +92,17 @@ public sealed class QueryDatabaseTool : IAiToolExecutor
             await using var transaction = await connection.BeginTransactionAsync(ct);
             try
             {
+                // Belt-and-suspenders on top of the keyword blocklist above: this makes
+                // Postgres itself reject anything with side effects (including
+                // nextval()/setval() sequence advances, which are NOT undone by the
+                // rollback below) instead of relying on enumerating dangerous functions.
+                await using (var readOnlyGuard = connection.CreateCommand())
+                {
+                    readOnlyGuard.Transaction = transaction;
+                    readOnlyGuard.CommandText = "SET TRANSACTION READ ONLY";
+                    await readOnlyGuard.ExecuteNonQueryAsync(ct);
+                }
+
                 await using var command = connection.CreateCommand();
                 command.Transaction = transaction;
                 command.CommandText = $"SELECT * FROM ({sql}) AS __q LIMIT {MaxRows}";

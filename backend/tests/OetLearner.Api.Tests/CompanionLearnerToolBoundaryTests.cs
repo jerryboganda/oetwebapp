@@ -139,7 +139,15 @@ public sealed class CompanionLearnerToolBoundaryTests : IAsyncDisposable
     [Fact]
     public async Task AdminFeature_IsUnaffected_ByTheLearnerGuard()
     {
-        // The guard must not regress the developer assistant: admin keeps its tools.
+        // The LEARNER-facing guard (LearnerSafeToolCodes) must not regress the
+        // developer assistant: admin is never restricted down to the
+        // learner-safe allowlist. It IS still subject to its own, separate
+        // guard -- owner directive 2026-09-10, the admin assistant is
+        // project-wise read only, so write_file/run_command/git_operations/
+        // deploy never resolve for it regardless of grants (see
+        // AiToolRegistry.AdminAssistantDeniedToolCodes and
+        // AdminAssistantToolAccessTests). Of the 10 developer tools granted
+        // here, the 6 non-mutating ones should still resolve.
         await SeedToolsAsync(DeveloperToolCodes);
         await GrantAsync(AiFeatureCodes.AiAssistantAdmin, DeveloperToolCodes);
 
@@ -148,7 +156,8 @@ public sealed class CompanionLearnerToolBoundaryTests : IAsyncDisposable
         var resolved = await registry.ResolveForFeatureAsync(
             AiFeatureCodes.AiAssistantAdmin, CancellationToken.None);
 
-        Assert.Equal(DeveloperToolCodes.Length, resolved.Count);
+        var expected = DeveloperToolCodes.Except(["run_command", "deploy", "write_file", "git_operations"]);
+        Assert.Equal(expected.OrderBy(c => c), resolved.Select(r => r.Code).OrderBy(c => c));
     }
 
     [Fact]

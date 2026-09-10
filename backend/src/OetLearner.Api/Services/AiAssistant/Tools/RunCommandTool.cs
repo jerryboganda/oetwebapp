@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiAssistant.Safety;
 using OetLearner.Api.Services.AiTools;
@@ -62,6 +63,18 @@ public sealed class RunCommandTool : IAiToolExecutor
 
     public async Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
     {
+        // Owner directive 2026-09-10: the admin AI Assistant is project-wise
+        // read only -- it may inspect the codebase but never execute
+        // commands against it, even allowlisted ones (build/test output is
+        // still a write). Registry-level filtering (AiToolRegistry) already
+        // keeps this tool out of the admin assistant's resolved tool list;
+        // this is defence-in-depth against a stray AiFeatureToolGrant row.
+        if (string.Equals(ctx.FeatureCode, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            return new AiToolExecutionResult(AiToolOutcome.RbacDenied, null,
+                "read_only_assistant", "The AI Assistant has read-only project access and cannot run commands.");
+        }
+
         // Circuit breaker check
         if (await _circuitBreaker.IsOpenAsync(Code, ct))
         {
@@ -127,8 +140,22 @@ public sealed class RunCommandTool : IAiToolExecutor
         }
     }
 
+    /// <summary>
+    /// The command still runs through a real shell (cmd.exe /c / bin/sh -c), so even a command that
+    /// starts with an allowlisted prefix must not contain shell metacharacters -- otherwise
+    /// "git status &amp;&amp; rm -rf /" would pass the prefix check and chain an arbitrary second command.
+    /// Allowlist the characters actual allowed commands and their args need (paths, flags, git refs)
+    /// instead of trying to blocklist every dangerous one.
+    /// </summary>
+    private static readonly Regex SafeCommandCharacters = new(@"^[A-Za-z0-9 ._/\\:=~^-]+$", RegexOptions.Compiled);
+
     private static bool IsCommandAllowed(string command)
     {
+        if (!SafeCommandCharacters.IsMatch(command))
+        {
+            return false;
+        }
+
         return AllowedCommands.Any(allowed =>
             command.Equals(allowed, StringComparison.OrdinalIgnoreCase) ||
             command.StartsWith(allowed + " ", StringComparison.OrdinalIgnoreCase));

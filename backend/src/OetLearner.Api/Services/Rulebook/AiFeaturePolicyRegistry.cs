@@ -173,6 +173,17 @@ public static class AiFeaturePolicyDefaults
         // that class's $1/day cap after a single generation. This is content
         // authoring, not learner interaction.
         [AiFeatureCodes.WritingModelAnswerPregenerate] = AiOperationClass.AdminBatch,
+        // Same failure shape as the override above, found diagnosing the
+        // admin AI Assistant returning "temporarily unavailable": the
+        // "ai_assistant." prefix isn't admin./class./tutor., so this fell
+        // through to the InteractiveLearning default and shared the $1/day
+        // pool with every learner AI Companion chat — exhausted by learner
+        // traffic long before the admin sent a single message. AiBudgetClasses
+        // .IsAdminBatchFeature already treats this feature as admin-batch;
+        // this override brings the policy default in line with that intent.
+        // See also 20261228090000_FixAiAssistantAdminBudgetClass.cs, which
+        // corrects the already-seeded DB policy row the same way.
+        [AiFeatureCodes.AiAssistantAdmin] = AiOperationClass.AdminBatch,
     };
 
     private static readonly Dictionary<string, string> ModuleOverrides = new(StringComparer.OrdinalIgnoreCase)

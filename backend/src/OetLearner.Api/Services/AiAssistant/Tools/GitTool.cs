@@ -101,6 +101,16 @@ public sealed class GitTool : IAiToolExecutor
         // Write operations require confirmation
         if (WriteOperations.Contains(operation))
         {
+            // Owner directive 2026-09-10: the admin AI Assistant is
+            // project-wise read only -- status/diff/log/branch stay
+            // available, but commit (the only write op this tool exposes)
+            // is refused for this feature regardless of confirmation.
+            if (string.Equals(ctx.FeatureCode, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase))
+            {
+                return new AiToolExecutionResult(AiToolOutcome.RbacDenied, null,
+                    "read_only_assistant", "The AI Assistant has read-only project access and cannot commit.");
+            }
+
             var confirmed = args.TryGetProperty("confirmed", out var confirmElem) && confirmElem.GetBoolean();
             if (!confirmed)
             {
@@ -158,7 +168,17 @@ public sealed class GitTool : IAiToolExecutor
                         return new AiToolExecutionResult(AiToolOutcome.RbacDenied, null,
                             "path_traversal", "Path traversal (..) not allowed in file paths.");
                     }
-                    await RunGitRawAsync($"add \"{file.Replace("\"", "\\\"")}\"", ct);
+                    // A leading '-' makes git treat the entry as an option
+                    // (e.g. "-A" stages the whole working tree, not a file
+                    // literally named "-A"), silently widening what gets
+                    // staged beyond the confirmed file list. Quoting only
+                    // affects shell tokenization, not git's own argv parsing.
+                    if (file.StartsWith('-'))
+                    {
+                        return new AiToolExecutionResult(AiToolOutcome.RbacDenied, null,
+                            "invalid_file_argument", $"File path '{file}' cannot start with '-'.");
+                    }
+                    await RunGitRawAsync($"add -- \"{file.Replace("\"", "\\\"")}\"", ct);
                 }
             }
         }

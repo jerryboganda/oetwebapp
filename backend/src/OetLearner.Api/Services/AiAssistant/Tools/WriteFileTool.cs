@@ -37,22 +37,36 @@ public sealed class WriteFileTool : IAiToolExecutor
     private readonly ISafetyGuard _safetyGuard;
     private readonly IBackupService _backupService;
     private readonly ICircuitBreaker _circuitBreaker;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<WriteFileTool> _logger;
 
     public WriteFileTool(
         ISafetyGuard safetyGuard,
         IBackupService backupService,
         ICircuitBreaker circuitBreaker,
+        IConfiguration configuration,
         ILogger<WriteFileTool> logger)
     {
         _safetyGuard = safetyGuard;
         _backupService = backupService;
         _circuitBreaker = circuitBreaker;
+        _configuration = configuration;
         _logger = logger;
     }
 
     public async Task<AiToolExecutionResult> ExecuteAsync(JsonElement args, AiToolContext ctx, CancellationToken ct)
     {
+        // Owner directive 2026-09-10: the admin AI Assistant is project-wise
+        // read only -- it may inspect the codebase but never write to it.
+        // Registry-level filtering (AiToolRegistry) already keeps this tool
+        // out of the admin assistant's resolved tool list; this is
+        // defence-in-depth against a stray AiFeatureToolGrant row.
+        if (string.Equals(ctx.FeatureCode, AiFeatureCodes.AiAssistantAdmin, StringComparison.OrdinalIgnoreCase))
+        {
+            return new AiToolExecutionResult(AiToolOutcome.RbacDenied, null,
+                "read_only_assistant", "The AI Assistant has read-only project access and cannot write files.");
+        }
+
         // Circuit breaker check
         if (await _circuitBreaker.IsOpenAsync(Code, ct))
         {
@@ -98,8 +112,21 @@ public sealed class WriteFileTool : IAiToolExecutor
 
         try
         {
-            // Resolve full path (relative to working directory)
-            var fullPath = Path.GetFullPath(relativePath);
+            // Resolve full path anchored to the repo root -- same
+            // RepoRootResolver every sibling read tool uses -- and re-check
+            // containment after resolution. Unlike ReadFileTool/
+            // ListDirectoryTool, this previously resolved a bare
+            // Path.GetFullPath(relativePath) against the process's current
+            // working directory with no root and no post-resolution check,
+            // so filesystem safety depended entirely on SafetyGuard with no
+            // second line of defense inside the tool that actually writes.
+            var repoRoot = RepoRootResolver.Resolve(_configuration);
+            var fullPath = Path.GetFullPath(Path.Combine(repoRoot, relativePath));
+            if (!fullPath.StartsWith(repoRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return new AiToolExecutionResult(AiToolOutcome.RbacDenied, null,
+                    "path_escape", "Resolved path escapes the repository root.");
+            }
 
             // Create backup if file exists
             string? backupId = null;

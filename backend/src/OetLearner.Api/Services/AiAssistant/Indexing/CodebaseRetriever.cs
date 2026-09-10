@@ -91,7 +91,7 @@ public sealed class CodebaseRetriever : ICodebaseRetriever
 
         // Use raw SQL with pgvector's cosine distance operator
         var sql = @"
-            SELECT ""Id"", ""FilePath"", ""StartLine"", ""EndLine"", ""Content"", ""Symbol"",
+            SELECT ""Id"", ""FilePath"", ""StartLine"", ""EndLine"", ""Content"", ""SymbolName"",
                    1 - (""Embedding"" <=> @queryEmbedding::vector) AS ""Score""
             FROM ""AiCodebaseChunks""
             ORDER BY ""Embedding"" <=> @queryEmbedding::vector
@@ -125,7 +125,7 @@ public sealed class CodebaseRetriever : ICodebaseRetriever
                     StartLine: reader.GetInt32(reader.GetOrdinal("StartLine")),
                     EndLine: reader.GetInt32(reader.GetOrdinal("EndLine")),
                     Content: reader.GetString(reader.GetOrdinal("Content")),
-                    Symbol: reader.IsDBNull(reader.GetOrdinal("Symbol")) ? null : reader.GetString(reader.GetOrdinal("Symbol")),
+                    Symbol: reader.IsDBNull(reader.GetOrdinal("SymbolName")) ? null : reader.GetString(reader.GetOrdinal("SymbolName")),
                     Score: reader.GetFloat(reader.GetOrdinal("Score"))
                 ));
             }
@@ -146,7 +146,7 @@ public sealed class CodebaseRetriever : ICodebaseRetriever
         var tsQuery = BuildTsQuery(query);
 
         var sql = @"
-            SELECT ""FilePath"", ""StartLine"", ""EndLine"", ""Content"", ""Symbol"",
+            SELECT ""FilePath"", ""StartLine"", ""EndLine"", ""Content"", ""SymbolName"",
                    ts_rank(to_tsvector('english', ""Content""), to_tsquery('english', @tsQuery)) AS ""Score""
             FROM ""AiCodebaseChunks""
             WHERE to_tsvector('english', ""Content"") @@ to_tsquery('english', @tsQuery)
@@ -181,7 +181,7 @@ public sealed class CodebaseRetriever : ICodebaseRetriever
                     StartLine: reader.GetInt32(reader.GetOrdinal("StartLine")),
                     EndLine: reader.GetInt32(reader.GetOrdinal("EndLine")),
                     Content: reader.GetString(reader.GetOrdinal("Content")),
-                    Symbol: reader.IsDBNull(reader.GetOrdinal("Symbol")) ? null : reader.GetString(reader.GetOrdinal("Symbol")),
+                    Symbol: reader.IsDBNull(reader.GetOrdinal("SymbolName")) ? null : reader.GetString(reader.GetOrdinal("SymbolName")),
                     Score: reader.GetFloat(reader.GetOrdinal("Score"))
                 ));
             }

@@ -61,11 +61,16 @@ function MessageBubble({ message }: { message: AiMessage }) {
   const isTool = message.role === 'tool';
 
   if (isTool) {
-    const firstTool = message.toolCalls?.[0];
+    // A tool-role message carries its name on the wire DTO's scalar `toolName`
+    // field (AiAssistantMessageDto), not on `toolCalls` — that array is only
+    // ever populated on the preceding assistant message that issued the call.
+    // `AiMessage` doesn't model this scalar, so it's read off the raw payload
+    // rather than the always-empty `toolCalls[0]`.
+    const toolName = (message as AiMessage & { toolName?: string }).toolName;
     return (
       <div className="rounded-lg border border-border bg-background-light p-3" data-testid="tool-call-card">
         <div className="text-xs font-medium text-muted mb-1">
-          Tool: {firstTool?.toolName ?? 'unknown'}
+          Tool: {toolName ?? 'unknown'}
         </div>
         <pre className="text-xs overflow-x-auto">{message.content}</pre>
       </div>

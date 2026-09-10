@@ -36,10 +36,12 @@ public sealed class ReadFileTool : IAiToolExecutor
     private static readonly string[] BlockedSegments = { ".env", "secrets", "node_modules", ".git", ".next", "dist", "coverage", "bin", "obj" };
     private const int MaxLines = 500;
 
+    private readonly IConfiguration _configuration;
     private readonly ILogger<ReadFileTool> _logger;
 
-    public ReadFileTool(ILogger<ReadFileTool> logger)
+    public ReadFileTool(IConfiguration configuration, ILogger<ReadFileTool> logger)
     {
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -82,7 +84,7 @@ public sealed class ReadFileTool : IAiToolExecutor
         }
 
         // Resolve relative to repository root
-        var repoRoot = FindRepoRoot();
+        var repoRoot = RepoRootResolver.Resolve(_configuration);
         var fullPath = Path.GetFullPath(Path.Combine(repoRoot, path));
 
         // Ensure resolved path is still within repo
@@ -144,19 +146,6 @@ public sealed class ReadFileTool : IAiToolExecutor
             return Task.FromResult(new AiToolExecutionResult(
                 AiToolOutcome.ProviderError, null, "read_error", ex.Message));
         }
-    }
-
-    private static string FindRepoRoot()
-    {
-        // Walk up from the executing assembly to find a directory containing .git
-        var dir = AppContext.BaseDirectory;
-        while (dir != null)
-        {
-            if (Directory.Exists(Path.Combine(dir, ".git"))) return dir;
-            dir = Directory.GetParent(dir)?.FullName;
-        }
-        // Fallback: use current directory
-        return Directory.GetCurrentDirectory();
     }
 
     private static JsonElement ToJson(object payload) =>

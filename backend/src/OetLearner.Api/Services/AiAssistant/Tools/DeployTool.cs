@@ -114,8 +114,14 @@ public sealed class DeployTool : IAiToolExecutor
     }
 
     /// <summary>
-    /// Returns current deployment status. In production, this would query
-    /// the actual VPS/container health endpoints. For now, returns mock data.
+    /// This tool has no real VPS/container health check wired up (that's a
+    /// separate infra decision — the codebase already has SSH access
+    /// elsewhere, this tool just doesn't use it). Previously this fabricated
+    /// an always-"healthy" status with invented uptime/port/health-check
+    /// values indistinguishable from a real check, so an admin asking "is
+    /// production healthy?" during a genuine outage got a plausible-looking
+    /// false positive. Return "unknown" and omit the invented fields instead
+    /// of guessing.
     /// </summary>
     private static object GetDeploymentStatus(string environment)
     {
@@ -123,22 +129,8 @@ public sealed class DeployTool : IAiToolExecutor
         {
             action = "status",
             environment,
-            status = "healthy",
-            last_deploy = DateTimeOffset.UtcNow.AddHours(-6).ToString("o"),
-            uptime_hours = 168,
-            services = new[]
-            {
-                new { name = "web", status = "running", port = 3000 },
-                new { name = "api", status = "running", port = 5000 },
-                new { name = "postgres", status = "running", port = 5432 },
-            },
-            health_checks = new
-            {
-                api = "pass",
-                database = "pass",
-                redis = "pass",
-            },
-            note = "This is read-only status information. Actual deployments require manual VPS access via SSH.",
+            status = "unknown",
+            note = "This tool does not check real deployment health. Use the DeployTool 'preview' action for pending-changes info, or check the VPS directly via SSH for actual status.",
         };
     }
 
