@@ -89,13 +89,21 @@ const ubagRow = {
 };
 
 function seed(routes: Array<{ featureCode: string; providerCode: string; model?: string | null }>) {
+  // The board re-fetches routes after every write, so the mock is backed by a
+  // mutable store: upserts/deletes must be visible to that re-fetch, exactly
+  // like the server would reflect them.
+  const store = new Map<string, { featureCode: string; providerCode: string; model: string | null }>();
+  for (const r of routes) {
+    store.set(r.featureCode, { featureCode: r.featureCode, providerCode: r.providerCode, model: r.model ?? null });
+  }
+
   mockProviders.mockResolvedValue([ubagRow]);
-  mockRoutes.mockResolvedValue({
-    rows: routes.map((r, i) => ({
+  mockRoutes.mockImplementation(async () => ({
+    rows: Array.from(store.values()).map((r, i) => ({
       id: `route-${i}`,
       featureCode: r.featureCode,
       providerCode: r.providerCode,
-      model: r.model ?? null,
+      model: r.model,
       isActive: true,
       createdAt: '',
       updatedAt: '',
@@ -103,9 +111,18 @@ function seed(routes: Array<{ featureCode: string; providerCode: string; model?:
     })),
     knownFeatureCodes: ['vocabulary.gloss', 'writing.grade', 'ocr.listening.parta'],
     copilotBulkRouteTargets: [],
+  }));
+  mockUpsert.mockImplementation(async (input: { featureCode: string; providerCode: string; model?: string | null }) => {
+    store.set(input.featureCode, {
+      featureCode: input.featureCode,
+      providerCode: input.providerCode,
+      model: input.model ?? null,
+    });
+    return {};
   });
-  mockUpsert.mockResolvedValue({});
-  mockDelete.mockResolvedValue(undefined);
+  mockDelete.mockImplementation(async (featureCode: string) => {
+    store.delete(featureCode);
+  });
 }
 
 describe('UbagBoardPage', () => {
