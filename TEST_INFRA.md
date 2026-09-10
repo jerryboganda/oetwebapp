@@ -9,7 +9,7 @@ The OET Preparation Platform test infrastructure is engineered around **four cor
    - Subjective Writing: 6 criteria with Purpose on a 0–3 scale and 5 other criteria on a 0–7 scale (max raw $38 \equiv 500$). Country-dependent pass threshold ($350$ for UK/IE/AU/NZ/CA vs $300$ for US/QA vs null for missing/unsupported).
    - Subjective Speaking: 9 criteria with Linguistic (4 criteria 0–6, max 24) and Clinical (5 criteria 0–3, max 15) combining to max raw $39 \equiv 500$. Universal $350$ pass threshold.
 3. **Single-Turn Audit & Safety Invariants**: Every external AI execution must route through a centralized server-side gateway (`IAiGatewayService`) producing exactly one immutable `AiUsageRecord` per turn with SHA-256 fingerprinting, token metering, and circuit-breaker fallbacks.
-4. **Zero-Deviation Content & Persistence Governance**: Official Reading papers must strictly enforce the 20/6/16=42 structure, Part A last block starting at 15 or 16, part-only PDFs, `texts: []`, printed answer keys, and fail-closed publication gating.
+4. **Zero-Deviation Content & Persistence Governance**: Official Reading papers must strictly enforce the 20/6/16=42 structure, Part A matching ending at 5/6/7/8 with the last block starting at 13, 14, 15, or 16, part-only PDFs, `texts: []`, printed answer keys, and fail-closed publication gating.
 
 ---
 

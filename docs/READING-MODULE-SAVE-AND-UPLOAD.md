@@ -88,7 +88,7 @@ That is **8 official layouts**. Source of truth:
 
 - TS: `lib/reading-part-a-layout.ts`
 - C#: `backend/src/OetLearner.Api/Services/Reading/ReadingPartALayout.cs`
-- Unique publish error: `Part A last block must start at question 15 or 16.`
+- Unique publish error: `Part A last block must start at question 13, 14, 15, or 16.`
 
 ### 2.1 Booklet cues (classify in this order)
 

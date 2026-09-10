@@ -75,4 +75,4 @@ pnpm exec vitest run -c vitest.e2e.config.ts
 3. **Audit & Safety Invariant**:
    - Every physical AI invocation generates exactly one `AiUsageRecord` with SHA-256 fingerprint, model, token counts, and cost estimate.
 4. **Zero-Deviation Content Invariant**:
-   - Official Reading papers enforce 20/6/16=42, Part A last block starting at 15 or 16, part-only PDFs, and fail-closed candidate visibility gating (`CandidateVisible: false` until QA approval).
+   - Official Reading papers enforce 20/6/16=42, Part A matching ending at 5/6/7/8 with the last block starting at 13, 14, 15, or 16, part-only PDFs, and fail-closed candidate visibility gating (`CandidateVisible: false` until QA approval).
