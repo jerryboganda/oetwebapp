@@ -25,6 +25,7 @@ import { fetchVideo, toggleVideoBookmark } from '@/lib/api/videos';
 import type { VideoDetail } from '@/lib/types/videos';
 import { VideoPlayer, type VideoPlayerHandle } from '@/components/videos/video-player';
 import { useLowBandwidthMode } from '@/hooks/use-media-preferences';
+import { getAppRuntimeKind } from '@/lib/runtime-signals';
 
 const SUBTEST_LABELS: Record<string, string> = {
   writing: 'Writing',
@@ -64,9 +65,15 @@ export default function VideoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const playerRef = useRef<VideoPlayerHandle | null>(null);
   const lowBandwidth = useLowBandwidthMode();
-  // The "app required" panel needs more height than a 16:9 crop allows on
-  // narrow phones — see the aspect-video toggle below.
-  const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  // The "app required" panel (WebNotAllowedNotice) needs more height than a
+  // 16:9 crop allows on narrow phones — see the aspect-video toggle below.
+  // Derived synchronously (not via a child callback + effect): VideoPlayer's
+  // own boot effect gates on this exact same runtime check before it ever
+  // calls the API, so computing it here directly means this render already
+  // agrees with the child's about-to-happen WEB_NOT_ALLOWED phase — no frame
+  // where the wrapper is still aspect-video-cropped while the ~650px notice
+  // is already mounted inside it.
+  const playbackBlocked = getAppRuntimeKind() === 'web';
 
   useEffect(() => {
     if (!videoId) return;
@@ -237,7 +244,6 @@ export default function VideoDetailPage() {
                     chapters={video.chapters}
                     onProgressPersisted={handleProgressPersisted}
                     lowBandwidth={lowBandwidth}
-                    onPlaybackBlockedChange={setPlaybackBlocked}
                   />
                 </div>
               </div>

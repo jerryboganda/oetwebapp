@@ -164,9 +164,6 @@ export interface VideoPlayerProps {
   onProgressPersisted?: (progress: { percentComplete: number; completed: boolean; positionSeconds: number }) => void;
   /** When true, pin the lowest available quality instead of adaptive ABR (Settings → Audio → Low-bandwidth). */
   lowBandwidth?: boolean;
-  /** Fires whenever the "app required" (WebNotAllowedNotice) state opens or
-   *  clears, so the page can drop its 16:9 crop for that taller panel. */
-  onPlaybackBlockedChange?: (blocked: boolean) => void;
 }
 
 /**
@@ -176,7 +173,7 @@ export interface VideoPlayerProps {
  * media element, enters fullscreen so the forensic watermark remains visible.
  */
 export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer(
-  { videoId, userId, durationSeconds, initialProgress, chapters, onProgressPersisted, lowBandwidth = false, onPlaybackBlockedChange },
+  { videoId, userId, durationSeconds, initialProgress, chapters, onProgressPersisted, lowBandwidth = false },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -194,10 +191,6 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const watermarkTamperCountRef = useRef(0);
 
   const [phase, setPhase] = useState<PlayerPhase>({ kind: 'attesting' });
-
-  useEffect(() => {
-    onPlaybackBlockedChange?.(phase.kind === 'error' && phase.code === 'WEB_NOT_ALLOWED');
-  }, [phase, onPlaybackBlockedChange]);
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
