@@ -1,0 +1,2534 @@
+{
+ "summary": {
+  "sources_checked": {
+   "Rev8/Rev7 addendum (11 Sep 2026) owner rules": 38,
+   "Rev5 addendum (10 Sep 2026) Writing rule rows (identical to Rev8 §2-§6)": 17,
+   "Global Model Answer Formatting & Sign-Off addendum rules": 6,
+   "OET Writing Comprehensive Rulebook R-codes (Appendix A list)": 104,
+   "Canonical registry Writing rows (FINAL/MASTER profession rulebooks, v1.0 handoff + Rev8)": 1649,
+   "Writing Revision Handbook points named in Appendix A": 4
+  },
+  "orphans_found": 18,
+  "orphans_resolved": 18,
+  "unresolved_orphans": [],
+  "owner_rules_missing_detectors": [],
+  "owner_rules_without_tests": [],
+  "owner_rules_missing_from_rulebooks": [],
+  "superseded_registry_rows_amended": [
+   "DH-W-012",
+   "DH-W-014",
+   "DH-W-041",
+   "DH-W-042",
+   "DH-W-045",
+   "G-W-089",
+   "G-W-094",
+   "G-W-110",
+   "G-W-112",
+   "G-W-113",
+   "G-W-115",
+   "G-W-116",
+   "G-W-131"
+  ],
+  "registry_rows_per_profession": {
+   "Medicine": 268,
+   "Nursing": 275,
+   "Pharmacy": 278,
+   "Physiotherapy": 278,
+   "Dentistry": 275,
+   "Radiography": 275
+  },
+  "rulebook_versions": {
+   "dentistry": "2.1.0-canonical-rev8",
+   "dietetics": "1.1.0-rev8",
+   "medicine": "2.1.0-canonical-rev8",
+   "nursing": "2.1.0-canonical-rev8",
+   "occupational-therapy": "1.1.0-rev8",
+   "optometry": "1.1.0-rev8",
+   "other-allied-health": "1.1.0-rev8",
+   "pharmacy": "2.1.0-canonical-rev8",
+   "physiotherapy": "2.1.0-canonical-rev8",
+   "podiatry": "1.1.0-rev8",
+   "radiography": "2.1.0-canonical-rev8",
+   "speech-pathology": "1.1.0-rev8",
+   "veterinary": "1.1.0-rev8"
+  },
+  "registry_sha256": "f0ff3ce01873ceb5d53c6736fed658fca5bab47b5d2bf9753a7d73cb3d153d84",
+  "validator_version": "writing-rules.rev8.2026-09-11.1",
+  "house_style_version": "owner-rev8-2026-09-11",
+  "unresolved_conflicts": []
+ },
+ "owner_rules": [
+  {
+   "source": "Rev8 §2 Blank line after Re: line; Rev8 §12.3; R04.1-R04.4",
+   "id": "OWN-W-001",
+   "title": "One blank line after the Re: line",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic blank_line_after_re_line, model_answer_layout + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "superseded: DH-W-041",
+   "check_ids": [
+    "blank_line_after_re_line",
+    "model_answer_layout"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.AgeNotDuplicatedInIntro_Fires_When_Same_Age_Repeated",
+    "RulebookEngineTests.BlankLineAfterReLine_Fires_When_Intro_Immediately_Follows_Re",
+    "RulebookEngineTests.BlankLineAfterReLine_Passes_When_Blank_Line_Present",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.ModelAnswerLayout_Fires_On_Exactly_Two_Blank_Lines_Between_Paragraphs",
+    "WritingRev8RuleTests.ModelAnswerLayout_Fires_On_Layout_Defects_For_Model_Answers_Only",
+    "WritingRev8RuleTests.ModelAnswerLayout_Passes_On_A_Correctly_Laid_Out_Letter",
+    "WritingRev8RuleTests.YearNotAbbreviated_Fires_On_Two_Digit_Years"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §12.3; R04.2",
+   "id": "OWN-W-002",
+   "title": "Salutation and Re: line consecutive",
+   "classification": "Hard Rule",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic salutation_re_adjacent + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "superseded: DH-W-041",
+   "check_ids": [
+    "salutation_re_adjacent"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R04_2_Fires_On_Blank_Between_Salutation_And_Re",
+    "RulebookEngineTests.R05_8_Fires_On_Date_Prefix",
+    "RulebookEngineTests.R06_10_Fires_On_Minor_With_Title"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Date consistency; Rev8 §14; R05.5-R05.6",
+   "id": "OWN-W-003",
+   "title": "One date-format family and four-digit years",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic date_format_consistent, year_not_abbreviated + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "date_format_consistent",
+    "year_not_abbreviated"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.NoBrackets_Fires_On_Round_Square_Or_Curly_Brackets",
+    "RulebookEngineTests.R05_5_Fires_On_Mixed_Date_Formats",
+    "RulebookEngineTests.R05_5_Passes_With_Single_Date_Format",
+    "RulebookEngineTests.R05_6_Fires_On_Two_Digit_Year",
+    "RulebookEngineTests.R05_6_Passes_On_Four_Digit_Year",
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.DateFormatConsistent_Fires_On_Mixed_Date_Families",
+    "WritingRev8RuleTests.DateFormatConsistent_Passes_On_One_Written_Date_Family",
+    "WritingRev8RuleTests.JudgmentalLabels_Fires_On_Person_Labels",
+    "WritingRev8RuleTests.YearNotAbbreviated_Fires_On_Two_Digit_Years",
+    "WritingRev8RuleTests.YearNotAbbreviated_Passes_On_Four_Digit_Years"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §6; Rev8 §15.2; Rev8 §15.4",
+   "id": "OWN-W-004",
+   "title": "DOB written as \"DOB:\" + date",
+   "classification": "Owner Override",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic dob_colon_format, dob_age_forbidden_phrase + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "dob_colon_format",
+    "dob_age_forbidden_phrase"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Wright_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.CanonicalOpening_ModelAnswer_Fires_On_Relationship_Opening_Candidate_Never_Checked",
+    "WritingRev8RuleTests.DobColonFormat_Fires_On_Dotted_Or_Colonless_Dob",
+    "WritingRev8RuleTests.DobColonFormat_ModelAnswer_Fires_On_Date_Of_Birth_In_ReLine_Candidate_Passes",
+    "WritingRev8RuleTests.DobColonFormat_Passes_On_Canonical_Dob_Colon"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 No brackets / placeholders",
+   "id": "OWN-W-005",
+   "title": "No brackets or placeholders",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic no_brackets_in_letter + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "no_brackets_in_letter"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.NoBrackets_Fires_On_Round_Square_Or_Curly_Brackets",
+    "RulebookEngineTests.NoBrackets_Passes_On_Letter_With_No_Bracket_Characters",
+    "RulebookEngineTests.NumberStyle_Flags_Descriptive_Count_Per_Owner_Rev8"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 General number style",
+   "id": "OWN-W-006",
+   "title": "Descriptive numbers as words",
+   "classification": "Owner Override",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic number_style_words_vs_digits + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "detected (Major), clinical-number exceptions never flagged",
+   "conflict": "superseded: G-W-110, R12.8",
+   "check_ids": [
+    "number_style_words_vs_digits"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.NumberStyle_Flags_Descriptive_Count_Per_Owner_Rev8",
+    "RulebookEngineTests.NumberStyle_Ignores_Clinical_Numbers_Per_Owner_Rev8",
+    "RulebookEngineTests.UrgentBodyStartsToday_Passes_Even_When_Todays_Visit_Paragraph_Is_Minimal",
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.NumberStyle_Fires_On_Descriptive_Counts_And_Durations",
+    "WritingRev8RuleTests.NumberStyle_Passes_On_Ages_Dates_Vitals_And_Doses",
+    "WritingRev8RuleTests.RegisterColloquial_Is_Critical_For_Model_Answers_And_Minor_For_Candidates"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Emotional wording",
+   "id": "OWN-W-007",
+   "title": "No emotional or editorial wording",
+   "classification": "Owner Override",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic emotional_wording + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard (any suffer/suffered/suffering)",
+   "candidate": "unfortunately/fortunately/regrettably/sadly always; suffered only when used as emotional editorialising",
+   "conflict": "superseded: G-W-116 (prior 'not banned' wording)",
+   "check_ids": [
+    "emotional_wording"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.DischargePlanPresent_Passes_For_NonPrescribing_Profession_Without_Medication",
+    "RulebookEngineTests.EmotionalWording_Fires_On_Banned_Words",
+    "RulebookEngineTests.EmotionalWording_Fires_On_Suffered_With_Dramatising_Intensifier",
+    "RulebookEngineTests.EmotionalWording_Passes_On_Suffered_As_Factual_Clinical_Event",
+    "RulebookEngineTests.JudgmentalLabels_Fires_On_Disease_As_Person_Label",
+    "RulebookEngineTests.JudgmentalLabels_Passes_On_Factual_Form",
+    "RulebookEngineTests.R11_1_Flags_Latin_Abbreviation_bd",
+    "RulebookEngineTests.R11_1_Latin_Abbreviation_Is_Advisory_Minor_Not_Blocking",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.EmotionalWording_Fires_On_Unfortunately_In_Both_Modes",
+    "WritingRev8RuleTests.EmotionalWording_ModelAnswer_Bans_Suffered_Candidate_Accepts_Factual_Use",
+    "WritingRev8RuleTests.UrgentBodyStartsToday_ModelAnswer_Fires_On_Remote_History_Year_Candidate_Passes"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Judgmental labels; R12.3; R12.22",
+   "id": "OWN-W-008",
+   "title": "No judgmental disease or behaviour labels",
+   "classification": "Owner Override",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic judgmental_labels + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "superseded: G-W-113, G-W-115",
+   "check_ids": [
+    "judgmental_labels"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.JudgmentalLabels_Fires_On_Disease_As_Person_Label",
+    "RulebookEngineTests.JudgmentalLabels_Passes_On_Factual_Form",
+    "RulebookEngineTests.LinkerAvoidWords_Fires_On_Sentence_Initial_But",
+    "RulebookEngineTests.LinkerAvoidWords_Passes_On_MidSentence_So",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.EmotionalWording_ModelAnswer_Bans_Suffered_Candidate_Accepts_Factual_Use",
+    "WritingRev8RuleTests.JudgmentalLabels_Fires_On_Person_Labels",
+    "WritingRev8RuleTests.JudgmentalLabels_ModelAnswer_Fires_On_A_Bare_Smoker_Label_Candidate_Passes",
+    "WritingRev8RuleTests.JudgmentalLabels_Passes_On_Article_Plus_Clinical_Adjective",
+    "WritingRev8RuleTests.JudgmentalLabels_Passes_On_Clinical_Adjectives_And_Transient_Findings"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Patient reference; R08.14; R12.2",
+   "id": "OWN-W-009",
+   "title": "Never \"the patient\" as the person reference",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic body_forbidden_phrase_the_patient + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "superseded: G-W-112",
+   "check_ids": [
+    "body_forbidden_phrase_the_patient"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R08_14_Flags_The_Patient_Per_Owner_Rev8",
+    "RulebookEngineTests.R09_2_Fires_On_Urgent_Missing_Earliest_Convenience",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.FullName_Fires_When_Repeated_In_The_Introduction",
+    "WritingRev8RuleTests.ParagraphStartName_Leaves_The_Patient_To_Its_Own_Check",
+    "WritingRev8RuleTests.ThePatient_Is_Critical_In_A_Model_Answer",
+    "WritingRev8RuleTests.ThePatient_Is_Flagged_As_A_Person_Reference"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Patient naming rule - exact operational form; R08.15",
+   "id": "OWN-W-010",
+   "title": "Name at the first mention of every body paragraph",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic paragraph_start_patient_name + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard (every paragraph after the introduction, closure included)",
+   "candidate": "hard (body paragraphs between introduction and closure)",
+   "conflict": "superseded: DH-W-042",
+   "check_ids": [
+    "paragraph_start_patient_name"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Minor_re_line_with_a_title_is_flagged_by_the_engine_naming_rule",
+    "WritingAssessmentV11RuleEngineTests.Rev8_adult_re_line_and_paragraph_naming_are_not_flagged",
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Wright_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.ParagraphStartName_Checks_The_Closure_For_Model_Answers_Only",
+    "WritingRev8RuleTests.ParagraphStartName_Fires_When_A_Body_Paragraph_Opens_With_A_Pronoun",
+    "WritingRev8RuleTests.ParagraphStartName_Leaves_The_Patient_To_Its_Own_Check",
+    "WritingRev8RuleTests.ParagraphStartName_Passes_When_Each_Paragraph_Opens_With_Title_And_Surname",
+    "WritingRev8RuleTests.ParagraphStartName_Passes_When_ReLine_Has_Dob_Without_A_Comma",
+    "WritingRev8RuleTests.ParagraphStartName_Uses_The_First_Name_For_A_Child"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Patient naming rule; Rev8 §15.1; R06.7",
+   "id": "OWN-W-011",
+   "title": "Do not repeat the full name after the Re: line",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic body_uses_last_name_only + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "body_uses_last_name_only"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Minor_re_line_with_a_title_is_flagged_by_the_engine_naming_rule",
+    "WritingAssessmentV11RuleEngineTests.Rev8_adult_re_line_and_paragraph_naming_are_not_flagged",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.FullName_Fires_On_A_Repeated_Child_Full_Name",
+    "WritingRev8RuleTests.FullName_Fires_When_Repeated_In_The_Introduction",
+    "WritingRev8RuleTests.FullName_Passes_On_Title_And_Surname",
+    "WritingRev8RuleTests.SignoffDesignation_Fires_When_The_Designation_Is_Missing"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Family/relationship references; Rev7 §13 Patient naming in family-recipient letters; Rev8 §15.3",
+   "id": "OWN-W-012",
+   "title": "No relationship label for a named patient",
+   "classification": "Owner Clarification",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic relationship_label_patient_reference + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "relationship_label_patient_reference"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.ParagraphStartName_Fires_When_A_Body_Paragraph_Opens_With_A_Pronoun",
+    "WritingRev8RuleTests.RelationshipLabel_Fires_When_The_Patient_Is_Named",
+    "WritingRev8RuleTests.RelationshipLabel_Passes_When_The_ReLine_Does_Not_Name_The_Patient"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Canonical Model Answer opening; Rev7 §13; R07.1-R07.8",
+   "id": "OWN-W-013",
+   "title": "Model Answer opens with \"I am writing to ...\"",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic intro_opens_i_am_writing_to + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "never required (Acceptable Alternative)",
+   "conflict": "none",
+   "check_ids": [
+    "intro_opens_i_am_writing_to"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion",
+    "WritingAssessmentV11RuleEngineTests.Every_supported_check_id_has_an_explicit_primary_criterion",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8RuleTests.CanonicalOpening_ModelAnswer_Fires_On_Relationship_Opening_Candidate_Never_Checked",
+    "WritingRev8RuleTests.CanonicalOpening_ModelAnswer_Passes_On_I_Am_Writing_To",
+    "WritingRev8RuleTests.LinkerCommaAndCase_Fires_On_Missing_Comma_Or_Capital_After_Semicolon"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Universal final closure sentence; Rev7 §13 Universal closure; R09.1",
+   "id": "OWN-W-014",
+   "title": "Universal contact-offer closure",
+   "classification": "Owner Override",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic closure_contact_offer + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard (final sentence of the closure)",
+   "candidate": "meaning required anywhere in the closure; any professional wording",
+   "conflict": "none",
+   "check_ids": [
+    "closure_contact_offer"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Wright_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.ClosureContactOffer_Candidate_Fires_Major_When_Closure_Offers_No_Contact",
+    "WritingRev8RuleTests.ClosureContactOffer_ModelAnswer_Fires_When_Offer_Is_Not_The_Final_Sentence_Candidate_Passes",
+    "WritingRev8RuleTests.ClosureContactOffer_ModelAnswer_Requires_An_Explicit_Offer_To_Contact_The_Writer",
+    "WritingRev8RuleTests.ClosureContactOffer_Passes_On_Canonical_Or_Equivalent_Offer",
+    "WritingRev8RuleTests.ClosureContainsManagement_Fires_When_Management_Follows_The_Request"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Urgent closure; Rev8 §5; Rev8 §11; R09.2; R13.3",
+   "id": "OWN-W-015",
+   "title": "Urgent closure: \"at your earliest convenience\" then contact offer",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "urgent_referral",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic urgent_closure_phrase + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "Acceptable Alternative: any clear urgent closure wording",
+   "conflict": "none",
+   "check_ids": [
+    "urgent_closure_phrase"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.BlankLineAfterReLine_Fires_When_Intro_Immediately_Follows_Re",
+    "RulebookEngineTests.Candidate_UrgentClosure_Accepts_Urgently_And_Does_Not_Penalise_Repetition",
+    "RulebookEngineTests.ModelAnswer_UrgentClosure_Still_Requires_Exact_Phrase_And_Forbids_Repeated_Urgent",
+    "RulebookEngineTests.R09_2_Fires_On_Urgent_Missing_Earliest_Convenience",
+    "RulebookEngineTests.UrgentBattery_Fires_When_LetterType_Is_The_Raw_LTUR_Catalogue_Code",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.ModelAnswerBlockingFindings_Blocks_Every_Severity_Except_Info",
+    "WritingRev8RuleTests.UrgentClosure_ModelAnswer_Fires_When_Earliest_Convenience_Is_The_Final_Sentence",
+    "WritingRev8RuleTests.UrgentClosure_ModelAnswer_Passes_When_Earliest_Convenience_Precedes_The_Contact_Offer"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §11; R09.3",
+   "id": "OWN-W-016",
+   "title": "\"Urgent\" only in the introduction (Model Answer)",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "urgent_referral",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic urgent_token_not_repeated + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "never penalised",
+   "conflict": "none",
+   "check_ids": [
+    "urgent_token_not_repeated"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.BlankLineAfterReLine_Fires_When_Intro_Immediately_Follows_Re",
+    "RulebookEngineTests.Candidate_UrgentClosure_Accepts_Urgently_And_Does_Not_Penalise_Repetition",
+    "RulebookEngineTests.ModelAnswer_UrgentClosure_Still_Requires_Exact_Phrase_And_Forbids_Repeated_Urgent",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §5 Urgent referral - mandatory structure; Rev8 §5 Latest owner override: minimal information in today's visit; R08.5; R13.4",
+   "id": "OWN-W-017",
+   "title": "Urgent referral: today/current presentation first, even if brief",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "urgent_referral",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic urgent_body_starts_today + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard (paragraph 1 current presentation only)",
+   "candidate": "hard",
+   "conflict": "superseded: DH-W-012 (adapt wording), old minimal-today exception",
+   "check_ids": [
+    "urgent_body_starts_today"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.Jargon_Detector_Flags_CT_Scan",
+    "RulebookEngineTests.UrgentBodyStartsToday_Fires_When_Today_Paragraph_Is_Skipped_Even_Though_Minimal",
+    "RulebookEngineTests.UrgentBodyStartsToday_Passes_Even_When_Todays_Visit_Paragraph_Is_Minimal",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.UrgentBodyStartsToday_ModelAnswer_Fires_On_Remote_History_Year_Candidate_Passes",
+    "WritingRev8RuleTests.UrgentBodyStartsToday_ModelAnswer_Passes_On_The_Letter_Year",
+    "WritingRev8RuleTests.UrgentClosure_ModelAnswer_Fires_When_Earliest_Convenience_Is_The_Final_Sentence"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §5 Introduction; R07.6; R13.2",
+   "id": "OWN-W-018",
+   "title": "Urgent purpose explicit in the introduction",
+   "classification": "Hard Rule",
+   "severity": "critical",
+   "applies_to": "urgent_referral",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic urgent_intro_contains_urgent + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "purpose and urgency must be clear",
+   "conflict": "none",
+   "check_ids": [
+    "urgent_intro_contains_urgent"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R07_6_Fires_On_Urgent_Without_Urgent_Word",
+    "RulebookEngineTests.R08_7_Does_Not_Flag_Next_Visit",
+    "WritingRev8RuleTests.Lint_Runs_A_CheckId_Shared_By_Two_Legacy_Rules_Only_Once"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §5 Hospital urgent referral; R13.5-R13.8",
+   "id": "OWN-W-019",
+   "title": "Hospital urgent referral: active conditions with current medication",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "urgent_referral",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (semantic validator); candidate grader (rulebook prompt)",
+   "model": "hard (semantic validator)",
+   "candidate": "AI-graded content",
+   "conflict": "none",
+   "check_ids": [],
+   "detectors_missing": [],
+   "tests": [],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 No duplicated request; Rev7 §13 Closure/request duplication",
+   "id": "OWN-W-020",
+   "title": "Closure does not duplicate the introduction's request",
+   "classification": "Owner Clarification",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic no_duplicated_request + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard (verbatim repetition only)",
+   "conflict": "none",
+   "check_ids": [
+    "no_duplicated_request"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.NoDuplicatedRequest_Fires_When_Closure_Repeats_Intro_Phrase",
+    "RulebookEngineTests.NoDuplicatedRequest_Passes_When_Closure_Is_Distinct",
+    "RulebookEngineTests.ParagraphCount_Passes_When_Closure_Paragraph_Pushes_Total_To_Five"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §3 Linker policy; Rev7 §13 Linker vocabulary; R12.20",
+   "id": "OWN-W-021",
+   "title": "Linker vocabulary",
+   "classification": "Avoid",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic linker_avoid_words, linker_density + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard (any occurrence)",
+   "candidate": "hence/furthermore/moreover and clause-joining but/so detected; 'also' advisory only",
+   "conflict": "superseded: G-W-089, G-W-094",
+   "check_ids": [
+    "linker_avoid_words",
+    "linker_density"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.LinkerAvoidWords_Fires_On_Sentence_Initial_But",
+    "RulebookEngineTests.LinkerAvoidWords_Passes_On_MidSentence_So",
+    "RulebookEngineTests.NoDuplicatedRequest_Fires_When_Closure_Repeats_Intro_Phrase",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Wright_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8ModelAnswerGateTests.Contact_Offer_Courtesy_Sentence_Is_Not_An_Unmapped_Fact",
+    "WritingRev8ModelAnswerGateTests.Generate_Never_Stores_When_Every_Attempt_Fails",
+    "WritingRev8ModelAnswerGateTests.Generate_Repairs_Only_Failed_Rules_Then_Stores_The_Passing_Text",
+    "WritingRev8ModelAnswerGateTests.Import_Holds_A_Letter_With_Only_Major_Violations_And_Records_The_Report",
+    "WritingRev8ModelAnswerGateTests.Import_Of_Compliant_Letter_Is_Verified_Under_Current_Validator_Then_Approvable",
+    "WritingRev8ModelAnswerGateTests.Validate_Reports_Without_Storing_Anything",
+    "WritingRev8RuleTests.LinkerAvoidWords_Candidate_Also_Is_An_Advisory_Minor",
+    "WritingRev8RuleTests.LinkerAvoidWords_Candidate_Flags_Routine_Connectives_As_Major",
+    "WritingRev8RuleTests.LinkerAvoidWords_Candidate_Passes_On_Adverbial_So",
+    "WritingRev8RuleTests.LinkerAvoidWords_ModelAnswer_Fires_On_MidSentence_Also_Or_But",
+    "WritingRev8RuleTests.LinkerAvoidWords_Passes_On_Also_Known_As",
+    "WritingRev8RuleTests.MedicationListPunctuation_Fires_On_Missing_Comma_With_Fix"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §3 Sentence-initial punctuation; Rev8 §3 Mid-sentence clause linking; Rev7 §13 Linker punctuation; R12.9-R12.11",
+   "id": "OWN-W-022",
+   "title": "Linker punctuation",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic linker_comma_and_case, linker_however_punctuation, linker_therefore_punctuation, linker_in_addition_punctuation + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard (genuine run-ons/comma splices only; adverbial use never flagged)",
+   "conflict": "superseded: v1.1 house-style R12.9/R12.10/R12.11 semicolon-only wording, R12.16, R12.17",
+   "check_ids": [
+    "linker_comma_and_case",
+    "linker_however_punctuation",
+    "linker_therefore_punctuation",
+    "linker_in_addition_punctuation"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R05_5_Fires_On_Mixed_Date_Formats",
+    "RulebookEngineTests.R05_5_Passes_With_Single_Date_Format",
+    "RulebookEngineTests.R12_10_Fires_On_Therefore_Without_Semicolon",
+    "RulebookEngineTests.R12_10_Passes_On_Therefore_Starting_New_Sentence",
+    "RulebookEngineTests.R12_10_Passes_On_Therefore_With_Semicolon",
+    "RulebookEngineTests.R12_11_Fires_On_In_Addition_Without_Semicolon",
+    "RulebookEngineTests.R12_11_Passes_On_In_Addition_Starting_New_Sentence",
+    "RulebookEngineTests.R12_11_Passes_On_In_Addition_To",
+    "RulebookEngineTests.R12_11_Passes_On_In_Addition_With",
+    "RulebookEngineTests.R12_9_Fires_On_However_Without_Semicolon_Or_Sentence_Boundary",
+    "RulebookEngineTests.R12_9_Passes_On_However_Starting_New_Sentence",
+    "RulebookEngineTests.R12_9_Passes_On_However_With_Semicolon",
+    "WritingAssessmentV11RuleEngineTests.Correct_owner_linker_punctuation_is_not_flagged",
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion",
+    "WritingAssessmentV11RuleEngineTests.Every_supported_check_id_has_an_explicit_primary_criterion",
+    "WritingAssessmentV11RuleEngineTests.Linker_joining_two_clauses_with_a_comma_is_still_flagged_under_language",
+    "WritingAssessmentV11RuleEngineTests.Rev8_adult_re_line_and_paragraph_naming_are_not_flagged",
+    "WritingRev8RuleTests.LinkerCommaAndCase_Fires_On_Missing_Comma_Or_Capital_After_Semicolon",
+    "WritingRev8RuleTests.LinkerCommaAndCase_Passes_On_Canonical_Punctuation",
+    "WritingRev8RuleTests.LinkerRunOn_Fires_On_Run_On_Or_Comma_Splice",
+    "WritingRev8RuleTests.LinkerRunOn_Passes_On_Adverbial_Parenthetical_Or_Correctly_Punctuated_Use"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §2 Medication-list punctuation; Rev7 §13 Medication syntax; R11.1-R11.5",
+   "id": "OWN-W-023",
+   "title": "Medication-list syntax",
+   "classification": "Owner Override",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic medication_list_punctuation, latin_abbreviations_translated + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "superseded: G-W-131 ('punctuation is flexible')",
+   "check_ids": [
+    "medication_list_punctuation",
+    "latin_abbreviations_translated"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R11_1_Flags_Latin_Abbreviation_bd",
+    "RulebookEngineTests.R11_1_Latin_Abbreviation_Is_Advisory_Minor_Not_Blocking",
+    "RulebookEngineTests.R12_1_Contraction_Is_Advisory_Minor_Not_Blocking",
+    "RulebookEngineTests.R12_1_Flags_Contractions",
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.MedicationListPunctuation_Fires_On_Missing_Comma_With_Fix",
+    "WritingRev8RuleTests.MedicationListPunctuation_Fires_On_Three_Items_Separated_By_Commas",
+    "WritingRev8RuleTests.MedicationListPunctuation_Passes_On_Canonical_Lists_And_Non_Medication_Values",
+    "WritingRev8RuleTests.ValueUnitSpacing_Fires_With_Spaced_Fix"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev7 §13 Medication syntax; Rev8 §14; Rev8 §15.1-15.3",
+   "id": "OWN-W-024",
+   "title": "Space between value and unit",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic value_unit_spacing + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "value_unit_spacing"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.NumberStyle_Fires_On_Descriptive_Counts_And_Durations",
+    "WritingRev8RuleTests.ValueUnitSpacing_Fires_With_Spaced_Fix",
+    "WritingRev8RuleTests.ValueUnitSpacing_Passes_On_Spaced_Values_Degrees_And_Percentages"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §6; R06.8",
+   "id": "OWN-W-025",
+   "title": "Age not duplicated between Re: line and introduction",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic age_not_duplicated_in_intro, re_line_age_dob + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "age_not_duplicated_in_intro",
+    "re_line_age_dob"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.AgeNotDuplicatedInIntro_Fires_When_Same_Age_Repeated",
+    "RulebookEngineTests.AgeNotDuplicatedInIntro_Passes_When_Age_Only_In_ReLine",
+    "RulebookEngineTests.R06_12_Fires_On_Lowercase_Yours",
+    "RulebookEngineTests.R06_12_Fires_On_Misspelled_Sincerely",
+    "RulebookEngineTests.R06_8_Allows_Lowercase_Aged_In_Re_Line",
+    "RulebookEngineTests.R06_8_Fires_On_Capitalised_Age_Colon_In_Re_Line",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §6; R06.11-R06.13",
+   "id": "OWN-W-026",
+   "title": "Sign-off: professional designation only",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic signoff_no_invented_name, signoff_designation_present, yours_sincerely_vs_faithfully, yours_sincerely_capitalisation + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard (designation missing = advisory)",
+   "conflict": "none",
+   "check_ids": [
+    "signoff_no_invented_name",
+    "signoff_designation_present",
+    "yours_sincerely_vs_faithfully",
+    "yours_sincerely_capitalisation"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R06_11_Fires_On_SirMadam_With_Sincerely",
+    "RulebookEngineTests.R06_12_Fires_On_Lowercase_Yours",
+    "RulebookEngineTests.R06_12_Fires_On_Misspelled_Sincerely",
+    "RulebookEngineTests.R07_1_Fires_When_Intro_Has_Too_Many_Sentences",
+    "RulebookEngineTests.R07_1_Passes_When_Intro_Has_Three_Or_Fewer_Sentences",
+    "RulebookEngineTests.R07_6_Fires_On_Urgent_Without_Urgent_Word",
+    "RulebookEngineTests.R08_7_Does_Not_Flag_Next_Visit",
+    "WritingMutationProbeTests.Probe07_AllCaps_Fires_SignoffCapitalisation",
+    "WritingMutationProbeTests.Probe08_EmptyLetter_Yields_Findings_Not_Exception",
+    "WritingMutationProbeTests.Probe09_TrailingWhitespace_DoesNot_Change_Findings",
+    "WritingRev8LiveFixtureTests.Garcia_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.ModelAnswerLayout_Fires_On_Layout_Defects_For_Model_Answers_Only",
+    "WritingRev8RuleTests.SignoffDesignation_Fires_When_The_Designation_Is_Missing",
+    "WritingRev8RuleTests.SignoffDesignation_ModelAnswer_Fires_With_No_Blank_Line_Before_The_Designation",
+    "WritingRev8RuleTests.SignoffDesignation_Passes_With_One_Blank_Line"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §4; R03.8",
+   "id": "OWN-W-027",
+   "title": "Body 180-200 words (body only)",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic letter_body_length + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "advisory",
+   "conflict": "none",
+   "check_ids": [
+    "letter_body_length"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.Findings_Are_Ordered_Critical_Then_Major_Then_Minor",
+    "RulebookEngineTests.R03_8_Body_Length_Advisory_When_Too_Long",
+    "RulebookEngineTests.R03_8_Body_Length_Advisory_When_Too_Short",
+    "RulebookEngineTests.R03_8_Body_Length_Suppressed_Below_80_Words"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §4; R08.1; R03.9",
+   "id": "OWN-W-028",
+   "title": "At least two body paragraphs",
+   "classification": "Hard Rule",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic min_body_paragraphs, letter_paragraph_count + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "min_body_paragraphs",
+    "letter_paragraph_count"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.DischargeIntroTemplate_Passes_On_Equivalent_Wording",
+    "RulebookEngineTests.ParagraphCount_Fires_When_Real_Body_Exceeds_Four_Excluding_Closure",
+    "RulebookEngineTests.ParagraphCount_Passes_When_Closure_Paragraph_Pushes_Total_To_Five"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §4; R08.8; R08.9",
+   "id": "OWN-W-029",
+   "title": "No today's exact date and no \"yesterday\" in the body",
+   "classification": "Hard Rule",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic body_no_todays_date, body_forbidden_phrase_yesterday + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "body_no_todays_date",
+    "body_forbidden_phrase_yesterday"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §4; R12.1",
+   "id": "OWN-W-030",
+   "title": "No contractions",
+   "classification": "Hard Rule",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic no_contractions + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "advisory (Genre/Style note)",
+   "conflict": "none",
+   "check_ids": [
+    "no_contractions"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R12_1_Contraction_Is_Advisory_Minor_Not_Blocking",
+    "RulebookEngineTests.R12_1_Flags_Contractions",
+    "RulebookEngineTests.R13_10_Flags_ASAP",
+    "RulebookEngineTests.R14_6_Flags_Was_Presented_In_Discharge",
+    "WritingMutationProbeTests.Probe02_Contraction_Fires_NoContractions",
+    "WritingMutationProbeTests.Probe03_DatePrefix_Fires_NoDatePrefix",
+    "WritingMutationProbeTests.Probe04_MissingSalutation_Fires_Critical",
+    "WritingMutationProbeTests.Probe05_MissingSignoff_Fires_Critical"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §4 Routine / non-urgent referral structure; Rev8 §15.1; Rev8 §15.4",
+   "id": "OWN-W-031",
+   "title": "Routine referral order and background placement",
+   "classification": "Owner Clarification",
+   "severity": "major",
+   "applies_to": "routine_referral, non_medical_referral, other_letters",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (semantic validator); candidate grader (rulebook prompt)",
+   "model": "hard (semantic validator)",
+   "candidate": "AI-graded organisation",
+   "conflict": "none",
+   "check_ids": [],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8ModelAnswerGateTests.Semantic_Validator_Violations_Block_Storage_And_Unavailability_Is_Transient"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §4 Important letter-type exception; R14.2-R14.10",
+   "id": "OWN-W-032",
+   "title": "Discharge/update letter-type exceptions",
+   "classification": "Exception",
+   "severity": "major",
+   "applies_to": "discharge, transfer_letter",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic discharge_intro_template, discharge_intro_no_identity, discharge_plan_present, discharge_admitted_with_past_simple + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard (semantic validator)",
+   "candidate": "AI-graded relevance",
+   "conflict": "none",
+   "check_ids": [
+    "discharge_intro_template",
+    "discharge_intro_no_identity",
+    "discharge_plan_present",
+    "discharge_admitted_with_past_simple"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.DischargeIntroTemplate_Fires_On_Routine_Referral_Wording_With_No_Discharge_Context",
+    "RulebookEngineTests.DischargeIntroTemplate_Passes_On_Equivalent_Wording",
+    "RulebookEngineTests.DischargePlanPresent_Passes_For_NonPrescribing_Profession_Without_Medication",
+    "RulebookEngineTests.DischargePlanPresent_Passes_For_Physiotherapy_Without_Medication",
+    "RulebookEngineTests.DischargePlanPresent_Passes_On_NoSpace_Dose_Notation",
+    "RulebookEngineTests.DischargePlanPresent_Still_Fires_For_Medicine_Without_Medication",
+    "RulebookEngineTests.EmotionalWording_Fires_On_Suffered_With_Dramatising_Intensifier",
+    "RulebookEngineTests.EmotionalWording_Passes_On_Suffered_As_Factual_Clinical_Event",
+    "RulebookEngineTests.R11_1_Flags_Latin_Abbreviation_bd",
+    "RulebookEngineTests.R14_12_Flags_Treated_From",
+    "RulebookEngineTests.R14_6_Flags_Was_Presented_In_Discharge"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §15.1; Rev8 §15.4",
+   "id": "OWN-W-033",
+   "title": "Professional clinical register",
+   "classification": "Preferred Style",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic register_colloquial + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "advisory",
+   "conflict": "none",
+   "check_ids": [
+    "register_colloquial"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Wright_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.RegisterColloquial_Is_Critical_For_Model_Answers_And_Minor_For_Candidates",
+    "WritingRev8RuleTests.RelationshipLabel_Fires_When_The_Patient_Is_Named"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §15.4; Rev8 §19.3",
+   "id": "OWN-W-034",
+   "title": "The closure remains a closure",
+   "classification": "Owner Clarification",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic closure_contains_management + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "hard",
+   "conflict": "none",
+   "check_ids": [
+    "closure_contains_management"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "WritingRev8LiveFixtureTests.Wright_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.ClosureContainsManagement_Fires_When_Management_Follows_The_Request",
+    "WritingRev8RuleTests.ClosureContainsManagement_Passes_When_Management_Is_In_The_Body",
+    "WritingRev8RuleTests.DobColonFormat_Fires_On_Dotted_Or_Colonless_Dob"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §3 Introduction tense; R10.1-R10.13",
+   "id": "OWN-W-035",
+   "title": "Introduction tense",
+   "classification": "Acceptable Alternative",
+   "severity": "major",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (semantic validator); candidate grader (rulebook prompt)",
+   "model": "hard (semantic validator)",
+   "candidate": "never penalised",
+   "conflict": "none",
+   "check_ids": [],
+   "detectors_missing": [],
+   "tests": [],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §12.3; Rev8 §14; R04.1-R04.4",
+   "id": "OWN-W-036",
+   "title": "Paragraph spacing survives storage and rendering",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (deterministic model_answer_layout, blank_line_between_paragraphs, blank_before_closing_phrase, date_blank_line_sandwich + semantic); candidate grader (rulebook prompt, deterministic candidate mode)",
+   "model": "hard",
+   "candidate": "layout rules as listed",
+   "conflict": "superseded: DH-W-041",
+   "check_ids": [
+    "model_answer_layout",
+    "blank_line_between_paragraphs",
+    "blank_before_closing_phrase",
+    "date_blank_line_sandwich"
+   ],
+   "detectors_missing": [],
+   "tests": [
+    "RulebookEngineTests.R09_9_Fires_When_No_Blank_Line_Before_Yours",
+    "RulebookEngineTests.R09_9_Passes_With_Blank_Line_Before_Yours",
+    "RulebookEngineTests.R10_5_Fires_On_Past_Simple_With_Since",
+    "RulebookEngineTests.R10_6_Fires_On_Past_Simple_With_For_Duration",
+    "WritingRev8RuleTests.ModelAnswerLayout_Fires_On_Exactly_Two_Blank_Lines_Between_Paragraphs",
+    "WritingRev8RuleTests.ModelAnswerLayout_Fires_On_Layout_Defects_For_Model_Answers_Only",
+    "WritingRev8RuleTests.ModelAnswerLayout_Passes_On_A_Correctly_Laid_Out_Letter",
+    "WritingRev8RuleTests.YearNotAbbreviated_Fires_On_Two_Digit_Years"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §14; Rev8 §15.2; Rev8 §15.3; Rev8 §19.3",
+   "id": "OWN-W-037",
+   "title": "Factual fidelity and certainty level",
+   "classification": "Hard Rule",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (semantic validator); candidate grader (rulebook prompt)",
+   "model": "hard (grounding + semantic validator)",
+   "candidate": "AI-graded content",
+   "conflict": "none",
+   "check_ids": [],
+   "detectors_missing": [],
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion",
+    "WritingAssessmentV11RuleEngineTests.Every_supported_check_id_has_an_explicit_primary_criterion"
+   ],
+   "in_books": 13
+  },
+  {
+   "source": "Rev8 §7; Rev8 §11; Rev8 §12.4; Rev8 §19.4",
+   "id": "OWN-W-038",
+   "title": "Candidate grading: zero Model Answer similarity",
+   "classification": "Owner Override",
+   "severity": "critical",
+   "applies_to": "all",
+   "professions": "all 13 Writing rulebooks (13/13)",
+   "consumers": "generator (house style + rulebook prompt); validator (semantic validator); candidate grader (rulebook prompt)",
+   "model": "n/a",
+   "candidate": "policy",
+   "conflict": "none",
+   "check_ids": [],
+   "detectors_missing": [],
+   "tests": [],
+   "in_books": 13
+  }
+ ],
+ "r_codes": [
+  {
+   "id": "R03.8",
+   "legacy_status": "SUPPORTED_CORE_RECAST",
+   "text": "Letter length guide: 180–200 words (body only). Too long = semi-relevant data included. Too short = relevant data missing. OET Writing Comprehensive Rulebook · ",
+   "severity": "major",
+   "canonical": "OWN-W-027, OW-027, OW-034",
+   "detector": "letter_body_length (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.Findings_Are_Ordered_Critical_Then_Major_Then_Minor",
+    "RulebookEngineTests.R03_8_Body_Length_Advisory_When_Too_Long",
+    "RulebookEngineTests.R03_8_Body_Length_Advisory_When_Too_Short",
+    "RulebookEngineTests.R03_8_Body_Length_Suppressed_Below_80_Words"
+   ]
+  },
+  {
+   "id": "R04.1",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Letter structure order: Address → [blank line] → Date → [blank line] → Salutation → Re: line → Introduction → [blank line] → Body paragraphs (each separated by ",
+   "severity": "major",
+   "canonical": "OWN-W-001, OWN-W-036, DH-W-041, OW-023, OW-030",
+   "detector": "letter_structure_order (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.ParseLetter_RecognisesEveryAddendumDateStyle_AsTheDateLine",
+    "RulebookEngineTests.R04_2_Fires_On_Blank_Between_Salutation_And_Re",
+    "RulebookEngineTests.R05_8_Fires_On_Date_Prefix"
+   ]
+  },
+  {
+   "id": "R04.2",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — NO blank line between the Salutation and the Re: line. They are on consecutive lines. ■ Salutation and Re: line are the ONLY two consecutive lines wi",
+   "severity": "critical",
+   "canonical": "OWN-W-001, OWN-W-002, OWN-W-036, DH-W-041",
+   "detector": "salutation_re_adjacent (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R04_2_Fires_On_Blank_Between_Salutation_And_Re",
+    "RulebookEngineTests.R05_8_Fires_On_Date_Prefix",
+    "RulebookEngineTests.R06_10_Fires_On_Minor_With_Title"
+   ]
+  },
+  {
+   "id": "R04.3",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Computer-based exam: two Enter presses = one blank line. \"Space\" or \"blank line\" throughout this rulebook means 1–2 Enters on the keyboard.",
+   "severity": "info",
+   "canonical": "OWN-W-001, OWN-W-036, OWN-W-001, OWN-W-036",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "Keyboard note (two Enter presses = one blank line); not a letter-output rule. The blank-line rules it explains are OWN-W-001/036.",
+   "tests": []
+  },
+  {
+   "id": "R04.4",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Each body paragraph is separated from the next by exactly one blank line. OET Writing Comprehensive Rulebook · The Tutor Book · Dr. Ahmed Hesham · @DrAhmedHesha",
+   "severity": "major",
+   "canonical": "OWN-W-001, OWN-W-036, DH-W-041",
+   "detector": "blank_line_between_paragraphs (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R05.5",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Date format must be consistent throughout the letter. Acceptable formats: DD/MM/YYYY, 1 January 2024, 01/01/2024, 1st January 2024.",
+   "severity": "major",
+   "canonical": "OWN-W-003",
+   "detector": "date_format_consistent (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R05_5_Fires_On_Mixed_Date_Formats",
+    "RulebookEngineTests.R05_5_Passes_With_Single_Date_Format",
+    "RulebookEngineTests.R05_6_Fires_On_Two_Digit_Year",
+    "RulebookEngineTests.R05_6_Passes_On_Four_Digit_Year"
+   ]
+  },
+  {
+   "id": "R05.6",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Never abbreviate the year (write 2024, not '24).",
+   "severity": "major",
+   "canonical": "OWN-W-003, OWN-W-003",
+   "detector": "year_not_abbreviated (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "Four-digit year, now an owner rule.",
+   "tests": [
+    "RulebookEngineTests.NoBrackets_Fires_On_Round_Square_Or_Curly_Brackets",
+    "RulebookEngineTests.R05_6_Fires_On_Two_Digit_Year",
+    "RulebookEngineTests.R05_6_Passes_On_Four_Digit_Year",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule"
+   ]
+  },
+  {
+   "id": "R05.7",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Numbers 1–9 in dates: always add a leading zero (01, 02 … 09).",
+   "severity": "minor",
+   "canonical": "OWN-W-003",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "Superseded: Model Answers use the written date family (d Month yyyy), so a leading zero cannot occur. Candidates keep any one consistent family (Global addendum §2).",
+   "tests": []
+  },
+  {
+   "id": "R05.8",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Do NOT write the word \"Date:\" before the date.",
+   "severity": "critical",
+   "canonical": "DH-W-041",
+   "detector": "no_date_prefix (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R05_8_Fires_On_Date_Prefix",
+    "RulebookEngineTests.R06_10_Fires_On_Minor_With_Title",
+    "RulebookEngineTests.R06_11_Fires_On_SirMadam_With_Sincerely",
+    "WritingMutationProbeTests.Probe03_DatePrefix_Fires_NoDatePrefix"
+   ]
+  },
+  {
+   "id": "R05.9",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "The date has exactly ONE blank line above it and ONE blank line below it. ■ ONE blank line above date → date → ONE blank line below date → Salutation. 06 SALUTA",
+   "severity": "major",
+   "canonical": "DH-W-041",
+   "detector": "date_blank_line_sandwich (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R06.6",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Re: line format: Re: [Title] [Full Name] D.O.B: [date]. Both \"Re:\" and \"RE:\" are acceptable.",
+   "severity": "info",
+   "canonical": "DH-W-042, G-W-049",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R06.7",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Re: line = full name (first + last). In body: LAST NAME + TITLE only (e.g., Ms Miller). Never repeat full name in body.",
+   "severity": "critical",
+   "canonical": "OWN-W-011, DH-W-042, G-W-049",
+   "detector": "body_uses_last_name_only (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Minor_re_line_with_a_title_is_flagged_by_the_engine_naming_rule",
+    "WritingAssessmentV11RuleEngineTests.Rev8_adult_re_line_and_paragraph_naming_are_not_flagged",
+    "WritingRev8LiveFixtureTests.Ramsey_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording"
+   ]
+  },
+  {
+   "id": "R06.8",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "When only DOB is given → write DOB in Re: line. When only age is given → write \"aged [X]\" (lowercase, no colon) after the full name. Do NOT write the age again ",
+   "severity": "major",
+   "canonical": "OWN-W-025",
+   "detector": "re_line_age_dob (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R06_12_Fires_On_Lowercase_Yours",
+    "RulebookEngineTests.R06_12_Fires_On_Misspelled_Sincerely",
+    "RulebookEngineTests.R06_8_Allows_Lowercase_Aged_In_Re_Line",
+    "RulebookEngineTests.R06_8_Fires_On_Capitalised_Age_Colon_In_Re_Line"
+   ]
+  },
+  {
+   "id": "R06.9",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Age in running text (three acceptable forms): \"Age: 25\" / \"25 years old\" / \"25 years of age\". OET Writing Comprehensive Rulebook · The Tutor Book · Dr. Ahmed He",
+   "severity": "minor",
+   "canonical": "G-W-099, G-W-100",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R06.10",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Children (Day 1 of life up to and including 17 years old): NO title in Re: line — write full name only. In the body: use FIRST NAME only. At 18 years",
+   "severity": "critical",
+   "canonical": "OWN-W-010, OWN-W-011",
+   "detector": "minor_naming_convention (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "Child naming (first name, no title) is part of the owner naming rule.",
+   "tests": [
+    "RulebookEngineTests.R06_10_Fires_On_Minor_With_Title",
+    "RulebookEngineTests.R06_11_Fires_On_SirMadam_With_Sincerely",
+    "RulebookEngineTests.R07_6_Fires_On_Urgent_Without_Urgent_Word",
+    "WritingAssessmentV11RuleEngineTests.Minor_re_line_with_a_title_is_flagged_by_the_engine_naming_rule"
+   ]
+  },
+  {
+   "id": "R06.11",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — \"Yours sincerely\" when recipient name is known. \"Yours faithfully\" when no name (Dear Sir/Madam, Dear Doctor).",
+   "severity": "critical",
+   "canonical": "OWN-W-026, DH-W-043",
+   "detector": "yours_sincerely_vs_faithfully (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R06_11_Fires_On_SirMadam_With_Sincerely",
+    "RulebookEngineTests.R07_6_Fires_On_Urgent_Without_Urgent_Word",
+    "RulebookEngineTests.R08_7_Does_Not_Flag_Next_Visit",
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion"
+   ]
+  },
+  {
+   "id": "R06.12",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Capitalisation: Yours (capital Y), sincerely (lowercase s). Spelling: S-I-N-C-E-R-E-L-Y.",
+   "severity": "minor",
+   "canonical": "OWN-W-026, G-W-101",
+   "detector": "yours_sincerely_capitalisation (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R06_12_Fires_On_Lowercase_Yours",
+    "RulebookEngineTests.R06_12_Fires_On_Misspelled_Sincerely",
+    "RulebookEngineTests.R07_1_Fires_When_Intro_Has_Too_Many_Sentences",
+    "RulebookEngineTests.R07_1_Passes_When_Intro_Has_Three_Or_Fewer_Sentences"
+   ]
+  },
+  {
+   "id": "R06.13",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Write \"Doctor\" (capital D) below closing phrase. Allow 1–2 blank lines between closing phrase and \"Doctor\". 07 INTRODUCTION",
+   "severity": "minor",
+   "canonical": "OWN-W-026",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R07.1",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Introduction must be concise: 2–3 sentences maximum, fewest words possible.",
+   "severity": "major",
+   "canonical": "OWN-W-013, DH-W-007, DH-W-008, OW-002, OW-003",
+   "detector": "intro_sentence_count (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R07_1_Fires_When_Intro_Has_Too_Many_Sentences",
+    "RulebookEngineTests.R07_1_Passes_When_Intro_Has_Three_Or_Fewer_Sentences",
+    "RulebookEngineTests.R09_7_Fires_When_Patient_Initiated_Without_Request_Phrase"
+   ]
+  },
+  {
+   "id": "R07.2",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Introduction must contain: (a) Unique Identity of the patient, and (b) Purpose / Request.",
+   "severity": "major",
+   "canonical": "OWN-W-013, DH-W-007, DH-W-008, OW-002, OW-003",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R07.3",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Purpose/Request = MOST IMPORTANT element. Never omit it.",
+   "severity": "critical",
+   "canonical": "OWN-W-013, DH-W-007, DH-W-008, OW-002, OW-003",
+   "detector": "intro_contains_purpose (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion",
+    "WritingMutationProbeTests.Probe06_PurposeStripped_Fires_IntroPurpose",
+    "WritingMutationProbeTests.Probe07_AllCaps_Fires_SignoffCapitalisation",
+    "WritingMutationProbeTests.Probe08_EmptyLetter_Yields_Findings_Not_Exception"
+   ]
+  },
+  {
+   "id": "R07.4",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Unique identity elements: name, age (if not in header), occupation, summary of main condition.",
+   "severity": "minor",
+   "canonical": "OWN-W-013, DH-W-007, DH-W-008, OW-002, OW-003",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R07.5",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Routine referral template: \"I am writing to refer [Title Last Name], a [age]-year-old [occupation], for [specialist] assessment and management of [condition].\"",
+   "severity": "info",
+   "canonical": "OWN-W-013, OW-003, OW-006, DH-W-025",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R07.6",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Urgent referral: MUST contain the word \"urgent\" — \"I am writing to urgently refer...\" / \"I am writing to request urgent assessment of...\"",
+   "severity": "critical",
+   "canonical": "OWN-W-013, OWN-W-018, DH-W-009",
+   "detector": "urgent_intro_contains_urgent (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R07_6_Fires_On_Urgent_Without_Urgent_Word",
+    "RulebookEngineTests.R08_7_Does_Not_Flag_Next_Visit",
+    "WritingRev8RuleTests.Lint_Runs_A_CheckId_Shared_By_Two_Legacy_Rules_Only_Once"
+   ]
+  },
+  {
+   "id": "R07.7",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Discharge letter to GP: Do NOT describe patient identity in introduction — GP knows the patient.",
+   "severity": "critical",
+   "canonical": "OWN-W-013, OW-009",
+   "detector": "discharge_intro_no_identity (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R07.8",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Discharge introduction template: \"I am writing to update you regarding Mr Jones, who underwent [procedure] at [hospital] and is now ready for discharge, for who",
+   "severity": "info",
+   "canonical": "OWN-W-013, DH-W-010",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.1",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Minimum 2 body paragraphs. NEVER write the entire letter in one paragraph.",
+   "severity": "critical",
+   "canonical": "OWN-W-028, OW-021",
+   "detector": "min_body_paragraphs (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.2",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Today's visit must always have its own paragraph. Exception: only one item of information today → may combine with adjacent visit.",
+   "severity": "major",
+   "canonical": "DH-W-014",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.3",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Previous visits may be combined or summarised. Do NOT give every visit its own paragraph.",
+   "severity": "critical",
+   "canonical": "DH-W-013, OW-014",
+   "detector": "visit_paragraphization_check (inert by design: overridden / AI-graded)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.4",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Visit structure: Subjective (symptoms) + Objective (examination) + Management.",
+   "severity": "info",
+   "canonical": "DH-W-015",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.5",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Urgent referral: ALWAYS begin body with TODAY'S VISIT (most acute presentation), then background chronologically.",
+   "severity": "critical",
+   "canonical": "OWN-W-017, DH-W-012",
+   "detector": "urgent_body_starts_today (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.Jargon_Detector_Flags_CT_Scan",
+    "RulebookEngineTests.UrgentBodyStartsToday_Fires_When_Today_Paragraph_Is_Skipped_Even_Though_Minimal",
+    "RulebookEngineTests.UrgentBodyStartsToday_Passes_Even_When_Todays_Visit_Paragraph_Is_Minimal",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording"
+   ]
+  },
+  {
+   "id": "R08.6",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Visit referencing: prefer elapsed time over exact dates — \"3 months ago\" preferred over the exact date.",
+   "severity": "minor",
+   "canonical": "G-W-123",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.7",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "CRITICAL — Next visit reference: \"on the following visit\" / \"later on\" / \"later that month\". NEVER \"next visit\".",
+   "severity": "critical",
+   "canonical": "RETIRED (OVERRIDDEN_OR_CORRECTED)",
+   "detector": "body_forbidden_phrase_next_visit (inert by design: overridden / AI-graded)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "Not a valid instruction: 'next visit' is standard English (legacy audit). The detector is inert by design and nothing is penalised.",
+   "tests": [
+    "RulebookEngineTests.R08_14_Flags_The_Patient_Per_Owner_Rev8",
+    "RulebookEngineTests.R08_7_Does_Not_Flag_Next_Visit"
+   ]
+  },
+  {
+   "id": "R08.8",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — NEVER write today's date in the body. Use \"On today's visit\" or \"On today's presentation\" instead.",
+   "severity": "critical",
+   "canonical": "OWN-W-029, OWN-W-029",
+   "detector": "body_no_todays_date (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "No exact date of today in the body.",
+   "tests": [
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule"
+   ]
+  },
+  {
+   "id": "R08.9",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "\"Yesterday\" never used in a medical letter. Write \"one day prior\" or \"one day ago\" instead.",
+   "severity": "major",
+   "canonical": "OWN-W-029",
+   "detector": "body_forbidden_phrase_yesterday (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.10",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "\"Over the last [X time]\": summarises multiple visits with the same complaint. Requires present perfect. Use only to START a paragraph.",
+   "severity": "minor",
+   "canonical": "G-W-019",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.11",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Duration as adjective (before noun): hyphenate, no plural: \"a 6-month history of acne\". Duration standalone: plural: \"For 6 months, she has had acne.\"",
+   "severity": "major",
+   "canonical": "G-W-099, G-W-100",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.12",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Condition unchanged: \"persisted\" / \"remained unchanged\". Improved: \"there was partial improvement\". Worsened: \"deteriorated\" / \"worsened\".",
+   "severity": "minor",
+   "canonical": "OWN-W-033",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "Progression vocabulary (persisted / remained unchanged / deteriorated) is a Preferred Style under professional clinical register.",
+   "tests": []
+  },
+  {
+   "id": "R08.13",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Advice: \"She was advised to adopt lifestyle changes.\" / \"She was counselled regarding...\" (never \"instructed to adopt\").",
+   "severity": "minor",
+   "canonical": "G-W-028",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R08.14",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — In body: last name + title only (Ms Miller). Never use full name again. Never use \"the patient\".",
+   "severity": "critical",
+   "canonical": "OWN-W-009, G-W-112",
+   "detector": "body_forbidden_phrase_the_patient (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R08_14_Flags_The_Patient_Per_Owner_Rev8",
+    "RulebookEngineTests.R09_2_Fires_On_Urgent_Missing_Earliest_Convenience",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.FullName_Fires_When_Repeated_In_The_Introduction"
+   ]
+  },
+  {
+   "id": "R08.15",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Name vs. Pronoun within paragraphs: Use the patient's name (title + last name for adults; first name for children) at the FIRST mention in each paragraph. For A",
+   "severity": "major",
+   "canonical": "OWN-W-010, G-W-049",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R09.1",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Standard phrases: \"I trust this information will be of use.\" / \"Please do not hesitate to contact me should you require further information.\"",
+   "severity": "info",
+   "canonical": "OWN-W-014, OWN-W-014",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "The contact-offer phrase is now mandatory for Model Answers (Rev7 §13).",
+   "tests": []
+  },
+  {
+   "id": "R09.2",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Urgent closure MUST include \"at your earliest convenience.\" Spelling: C-O-N-V-E-N-I-E-N-C-E. OET Writing Comprehensive Rulebook · The Tutor Book · Dr",
+   "severity": "critical",
+   "canonical": "OWN-W-015",
+   "detector": "urgent_closure_phrase (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.BlankLineAfterReLine_Fires_When_Intro_Immediately_Follows_Re",
+    "RulebookEngineTests.Candidate_UrgentClosure_Accepts_Urgently_And_Does_Not_Penalise_Repetition",
+    "RulebookEngineTests.ModelAnswer_UrgentClosure_Still_Requires_Exact_Phrase_And_Forbids_Repeated_Urgent",
+    "RulebookEngineTests.R09_2_Fires_On_Urgent_Missing_Earliest_Convenience"
+   ]
+  },
+  {
+   "id": "R09.3",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Use \"urgent\" once in introduction only; use \"at your earliest convenience\" in closure to imply urgency — do not repeat \"urgent\" throughout.",
+   "severity": "major",
+   "canonical": "OWN-W-016, OWN-W-016",
+   "detector": "urgent_token_not_repeated (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "'urgent' only in the introduction (Model Answer); never penalised for candidates.",
+   "tests": [
+    "RulebookEngineTests.BlankLineAfterReLine_Fires_When_Intro_Immediately_Follows_Re",
+    "RulebookEngineTests.Candidate_UrgentClosure_Accepts_Urgently_And_Does_Not_Penalise_Repetition",
+    "RulebookEngineTests.ModelAnswer_UrgentClosure_Still_Requires_Exact_Phrase_And_Forbids_Repeated_Urgent",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording"
+   ]
+  },
+  {
+   "id": "R10.1",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Introduction: present simple or present perfect (both acceptable).",
+   "severity": "info",
+   "canonical": "OWN-W-035, OWN-W-035",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "Introduction tense (Rev8 §3).",
+   "tests": []
+  },
+  {
+   "id": "R10.2",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — All visits (today and previous): PAST SIMPLE. Safest choice; never wrong for visit content.",
+   "severity": "critical",
+   "canonical": "OWN-W-035, G-W-013, DH-W-030",
+   "detector": "visit_content_tense_basic_check (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.3",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Present perfect for a visit: acceptable only if the symptom is still present at time of writing. CANNOT use present perfect for vital signs.",
+   "severity": "major",
+   "canonical": "OWN-W-035, G-W-015",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.4",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Medical/social/family history — ongoing facts: present simple. \"She has hypertension.\"",
+   "severity": "major",
+   "canonical": "OWN-W-035, G-W-014",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.5",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — \"Since\" + starting point → present perfect: \"She has had hypertension since 2010.\"",
+   "severity": "critical",
+   "canonical": "OWN-W-035, G-W-016, G-W-017, DH-W-031",
+   "detector": "since_requires_present_perfect (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R10_5_Fires_On_Past_Simple_With_Since",
+    "RulebookEngineTests.R10_6_Fires_On_Past_Simple_With_For_Duration",
+    "RulebookEngineTests.R10_8_Fires_On_Present_Perfect_For_Surgery_With_Finished_Time_Marker",
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion"
+   ]
+  },
+  {
+   "id": "R10.6",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — \"For\" + duration → present perfect: \"She has had hypertension for 5 years.\"",
+   "severity": "critical",
+   "canonical": "OWN-W-035, G-W-016, G-W-017, DH-W-031",
+   "detector": "for_duration_requires_present_perfect (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R10_6_Fires_On_Past_Simple_With_For_Duration",
+    "RulebookEngineTests.R10_8_Fires_On_Present_Perfect_For_Surgery_With_Finished_Time_Marker"
+   ]
+  },
+  {
+   "id": "R10.7",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Smoking/drinking with duration → present perfect continuous: \"She has been smoking for 20 years.\" Without duration → present simple: \"She smokes.\"",
+   "severity": "major",
+   "canonical": "OWN-W-035",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.8",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "CRITICAL — Resolved conditions and surgery → PAST SIMPLE. \"She had a cholecystectomy in 2018.\" Never use present perfect for surgery.",
+   "severity": "critical",
+   "canonical": "OWN-W-035, G-W-021, G-W-027",
+   "detector": "surgery_past_simple (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R10_10_Fires_On_Present_Perfect_With_Ago",
+    "RulebookEngineTests.R10_8_Fires_On_Present_Perfect_For_Surgery_With_Finished_Time_Marker",
+    "RulebookEngineTests.R10_8_Passes_On_Past_Simple_For_Surgery",
+    "RulebookEngineTests.R10_8_Passes_On_Present_Perfect_For_Surgery_Without_Finished_Time_Marker"
+   ]
+  },
+  {
+   "id": "R10.9",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "\"Over the last [X]\": first sentence → present perfect; remaining sentences in same paragraph → past simple acceptable.",
+   "severity": "minor",
+   "canonical": "OWN-W-035, G-W-019",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.10",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — \"[X] ago\" → always past simple. \"She has presented 3 weeks ago\" = WRONG. \"She presented 3 weeks ago\" = CORRECT.",
+   "severity": "critical",
+   "canonical": "OWN-W-035, G-W-018",
+   "detector": "ago_requires_past_simple (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R10_10_Fires_On_Present_Perfect_With_Ago",
+    "RulebookEngineTests.R12_9_Fires_On_However_Without_Semicolon_Or_Sentence_Boundary",
+    "RulebookEngineTests.R12_9_Passes_On_However_With_Semicolon"
+   ]
+  },
+  {
+   "id": "R10.11",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Medical records: \"Mr Jones' medical records reveal/show that he has [condition].\" Use present simple for reveal/show.",
+   "severity": "minor",
+   "canonical": "OWN-W-035, G-W-033",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.12",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "Past perfect (had + past participle): AVOID in OET. Alternative: ING form or noun. \"She reported non-compliance with the advice given.\"",
+   "severity": "major",
+   "canonical": "OWN-W-035, G-W-020, DH-W-032",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.13",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "Reported speech — after reported/mentioned/stated/described: use ING or noun. \"She reported having headaches.\" NOT \"...that she had had headaches.\"",
+   "severity": "major",
+   "canonical": "OWN-W-035, G-W-129, DH-W-033",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R10.14",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "\"Next visit\" in past narrative → \"on the following visit.\" Never use \"next.\" 11 MEDICATIONS & INVESTIGATIONS",
+   "severity": "critical",
+   "canonical": "RETIRED (provenance only)",
+   "detector": "body_forbidden_phrase_next_visit (inert by design: overridden / AI-graded)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "Same concept as R08.7. The legacy audit keeps it as provenance only; 'next visit' is accepted.",
+   "tests": [
+    "RulebookEngineTests.R08_14_Flags_The_Patient_Per_Owner_Rev8",
+    "RulebookEngineTests.R08_7_Does_Not_Flag_Next_Visit"
+   ]
+  },
+  {
+   "id": "R11.1",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Latin abbreviations MUST be translated: od/om → once a day; bd/bid → twice a day; tds/tid → three times a day; qds/qid → four times a day; stat → imm",
+   "severity": "critical",
+   "canonical": "OWN-W-023, G-W-105",
+   "detector": "latin_abbreviations_translated (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R11_1_Flags_Latin_Abbreviation_bd",
+    "RulebookEngineTests.R11_1_Latin_Abbreviation_Is_Advisory_Minor_Not_Blocking",
+    "RulebookEngineTests.R12_1_Contraction_Is_Advisory_Minor_Not_Blocking",
+    "RulebookEngineTests.R12_1_Flags_Contractions"
+   ]
+  },
+  {
+   "id": "R11.2",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Single medication: Drug, dose. Example: \"Panadol, 500 mg.\"",
+   "severity": "minor",
+   "canonical": "OWN-W-023, G-W-131",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R11.3",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Multiple medications: Drug, dose; Drug, dose; and Drug, dose. (comma: drug-dose; semicolon: between pairs; \"and\" before last drug.)",
+   "severity": "minor",
+   "canonical": "OWN-W-023, G-W-131",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R11.4",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Trade name: Capitalise (Panadol, Augmentin). Generic: lowercase (paracetamol, amoxicillin). Use one type consistently.",
+   "severity": "minor",
+   "canonical": "OWN-W-023, G-W-103",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R11.5",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Routes: \"oral\" in full (never \"PO\"); IM, IV, SC, SL abbreviations acceptable. Route before drug: \"oral Panadol, 500 mg.\"",
+   "severity": "minor",
+   "canonical": "OWN-W-023, G-W-104, G-W-105",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.1",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — NO contractions: \"do not\" not \"don't\"; \"I am\" not \"I'm\"; \"cannot\" not \"can't\".",
+   "severity": "critical",
+   "canonical": "OWN-W-030, G-W-117, DH-W-044",
+   "detector": "no_contractions (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R12_1_Contraction_Is_Advisory_Minor_Not_Blocking",
+    "RulebookEngineTests.R12_1_Flags_Contractions",
+    "RulebookEngineTests.R13_10_Flags_ASAP",
+    "RulebookEngineTests.R14_6_Flags_Was_Presented_In_Discharge"
+   ]
+  },
+  {
+   "id": "R12.2",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "CRITICAL — Never use the word \"patient\" in the body. Use last name + title, or a pronoun.",
+   "severity": "critical",
+   "canonical": "OWN-W-009, G-W-112",
+   "detector": "body_forbidden_phrase_the_patient (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R08_14_Flags_The_Patient_Per_Owner_Rev8",
+    "RulebookEngineTests.R09_2_Fires_On_Urgent_Missing_Earliest_Convenience",
+    "WritingRev8LiveFixtureTests.Weir_LiveDefect_ModelAnswer_Fails_Every_Documented_Rule",
+    "WritingRev8RuleTests.FullName_Fires_When_Repeated_In_The_Introduction"
+   ]
+  },
+  {
+   "id": "R12.3",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Never use \"smoker/drinker\" as labels. Write \"she smokes\" / \"she drinks alcohol.\"",
+   "severity": "major",
+   "canonical": "OWN-W-008, G-W-111, G-W-113, DH-W-023",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.4",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "Replace \"tired\" with \"fatigue.\" Replace \"bad\" with \"poor\" or \"inadequate.\" No colloquial language.",
+   "severity": "minor",
+   "canonical": "G-W-114, G-W-118",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.5",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Medical conditions: LOWERCASE. bronchial asthma, myocardial infarction, hypertension, gastroenteritis. Capitalising these is an error.",
+   "severity": "critical",
+   "canonical": "G-W-102",
+   "detector": "conditions_lowercase (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.6",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Named (eponymous) diseases: CAPITALS. Parkinson's, Crohn's, Alzheimer's, Graves', Doppler.",
+   "severity": "minor",
+   "canonical": "G-W-101",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.7",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Trade medication names: capitalise. Bacteria: first word capital, second lowercase (Staphylococcus aureus). Abbreviations: all capitals (MRI, CT, ECG, A&E;).",
+   "severity": "minor",
+   "canonical": "G-W-101",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.8",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Numbers 1–9 in running text: write as words. Numbers 10+: numerals. Exception: always numerals with units (\"500 mg\").",
+   "severity": "minor",
+   "canonical": "G-W-110",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.9",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "CRITICAL — \"However\": always preceded by semicolon; comma follows. Pattern: \"[clause]; however, [clause].\"",
+   "severity": "critical",
+   "canonical": "OWN-W-022, G-W-081, DH-W-038",
+   "detector": "linker_however_punctuation (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R12_10_Fires_On_Therefore_Without_Semicolon",
+    "RulebookEngineTests.R12_10_Passes_On_Therefore_With_Semicolon",
+    "RulebookEngineTests.R12_9_Fires_On_However_Without_Semicolon_Or_Sentence_Boundary",
+    "RulebookEngineTests.R12_9_Passes_On_However_Starting_New_Sentence"
+   ]
+  },
+  {
+   "id": "R12.10",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "\"Therefore\" / \"Thus\": preceded by semicolon; comma follows. Pattern: \"[clause]; therefore, [clause].\"",
+   "severity": "major",
+   "canonical": "OWN-W-022, G-W-082",
+   "detector": "linker_therefore_punctuation (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R12_10_Fires_On_Therefore_Without_Semicolon",
+    "RulebookEngineTests.R12_10_Passes_On_Therefore_Starting_New_Sentence",
+    "RulebookEngineTests.R12_10_Passes_On_Therefore_With_Semicolon",
+    "RulebookEngineTests.R12_11_Fires_On_In_Addition_Without_Semicolon"
+   ]
+  },
+  {
+   "id": "R12.11",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "\"In addition\" (joining two complete clauses): semicolon before + comma after. \"[Clause]; in addition, [clause].\"",
+   "severity": "major",
+   "canonical": "OWN-W-022, G-W-087",
+   "detector": "linker_in_addition_punctuation (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R05_5_Fires_On_Mixed_Date_Formats",
+    "RulebookEngineTests.R05_5_Passes_With_Single_Date_Format",
+    "RulebookEngineTests.R12_11_Fires_On_In_Addition_Without_Semicolon",
+    "RulebookEngineTests.R12_11_Passes_On_In_Addition_Starting_New_Sentence"
+   ]
+  },
+  {
+   "id": "R12.12",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "\"In addition to\" / \"together with\" / \"along with\" / \"as well as\": NO preceding punctuation; followed by noun or ING. \"In addition to vomiting, she reported naus",
+   "severity": "minor",
+   "canonical": "G-W-087",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.13",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Proximity rule (negative sentence with \"or\"): verb agrees with CLOSEST subject. \"No orthopnoea or ankle swelling was reported.\" (swelling = singular → was).",
+   "severity": "minor",
+   "canonical": "G-W-010",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.14",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Reverse rule (\"along with\" / \"together with\" / \"in addition to\"): verb agrees with word BEFORE the linker. \"The rash, along with the fever, was noted.\" (rash = ",
+   "severity": "minor",
+   "canonical": "G-W-009",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.15",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "\"Despite\" + noun/ING (not a full clause). \"Although\" + full clause. Both acceptable.",
+   "severity": "minor",
+   "canonical": "G-W-083, G-W-084, DH-W-039, DH-W-040",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.16",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "\"As\" (meaning because) in mid-sentence: comma before. \"Treatment was changed, as the patient showed no improvement.\"",
+   "severity": "minor",
+   "canonical": "G-W-086",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Correct_owner_linker_punctuation_is_not_flagged",
+    "WritingAssessmentV11RuleEngineTests.Linker_joining_two_clauses_with_a_comma_is_still_flagged_under_language"
+   ]
+  },
+  {
+   "id": "R12.17",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "\"For which\": comma before. \"She has hypertension, for which she was commenced on amlodipine.\"",
+   "severity": "minor",
+   "canonical": "G-W-053",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Correct_owner_linker_punctuation_is_not_flagged",
+    "WritingAssessmentV11RuleEngineTests.Linker_joining_two_clauses_with_a_comma_is_still_flagged_under_language"
+   ]
+  },
+  {
+   "id": "R12.18",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Coordinating adjectives (same noun): comma between them. \"He had a severe, persistent headache.\"",
+   "severity": "minor",
+   "canonical": "G-W-127",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.19",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Sentence length: 15–25 words target. Do not chain 3+ clauses. No comma splices.",
+   "severity": "major",
+   "canonical": "OWN-W-022 (run-ons / comma splices); G-W sentence rows",
+   "detector": "sentence_length_guard (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "The 15-25 word target is teacher preference (legacy audit TPO), advisory only. Comma splices are enforced by OWN-W-022 (linker run-on detectors). sentence_length_guard stays advisory.",
+   "tests": []
+  },
+  {
+   "id": "R12.20",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Max 1–2 linkers per paragraph. Excessive linkers reduce Conciseness and Clarity score.",
+   "severity": "major",
+   "canonical": "OWN-W-021, G-W-088, DH-W-037, G-W-089",
+   "detector": "linker_density (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.21",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "Appositive: between two commas. \"Ms Miller, a 25-year-old teacher, presented with...\" Use \"gentleman\" / \"lady\" (not man/woman).",
+   "severity": "minor",
+   "canonical": "G-W-092",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R12.22",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Never label patients: \"anxious\", \"non-compliant.\" Write: \"she expressed concern about...\" / \"he reported difficulty adhering to...\" 13 URGENT REFERRAL",
+   "severity": "major",
+   "canonical": "OWN-W-008, G-W-115, G-W-119, OW-019",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R13.1",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "Three elements change in an urgent referral: (1) Introduction contains \"urgent\", (2) Closure contains \"at your earliest convenience\", (3) Body starts with today",
+   "severity": "info",
+   "canonical": "OWN-W-015, OWN-W-017, OWN-W-018",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "The three urgent-referral elements (urgent intro, today-first body, AEYC closure) are owner rules.",
+   "tests": []
+  },
+  {
+   "id": "R13.2",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Introduction MUST contain \"urgent\": \"I am writing to urgently refer...\" / \"I am writing to request urgent assessment of...\"",
+   "severity": "critical",
+   "canonical": "OWN-W-018",
+   "detector": "urgent_intro_contains_urgent (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R07_6_Fires_On_Urgent_Without_Urgent_Word",
+    "RulebookEngineTests.R08_7_Does_Not_Flag_Next_Visit",
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion",
+    "WritingAssessmentV11RuleEngineTests.Every_supported_check_id_has_an_explicit_primary_criterion"
+   ]
+  },
+  {
+   "id": "R13.3",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Closure MUST include \"at your earliest convenience.\" Spelling: C-O-N-V-E-N-I-E-N-C-E. Do not repeat \"urgent\" after the introduction.",
+   "severity": "critical",
+   "canonical": "OWN-W-015",
+   "detector": "urgent_closure_phrase (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.BlankLineAfterReLine_Fires_When_Intro_Immediately_Follows_Re",
+    "RulebookEngineTests.Candidate_UrgentClosure_Accepts_Urgently_And_Does_Not_Penalise_Repetition",
+    "RulebookEngineTests.ModelAnswer_UrgentClosure_Still_Requires_Exact_Phrase_And_Forbids_Repeated_Urgent",
+    "RulebookEngineTests.R09_2_Fires_On_Urgent_Missing_Earliest_Convenience"
+   ]
+  },
+  {
+   "id": "R13.4",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Body: ALWAYS start with TODAY'S VISIT (acute presentation), then background chronologically. Exception: minimal info today → start with preceding vis",
+   "severity": "critical",
+   "canonical": "OWN-W-017",
+   "detector": "urgent_body_starts_today (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.Jargon_Detector_Flags_CT_Scan",
+    "RulebookEngineTests.UrgentBodyStartsToday_Fires_When_Today_Paragraph_Is_Skipped_Even_Though_Minimal",
+    "RulebookEngineTests.UrgentBodyStartsToday_Passes_Even_When_Todays_Visit_Paragraph_Is_Minimal",
+    "WritingRev8LiveFixtureTests.Taylor_LiveDefect_As_A_Candidate_Letter_Accepts_Professional_Urgent_Wording"
+   ]
+  },
+  {
+   "id": "R13.5",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Structure: P1 = today's emergency. P2+ = background history. Final paragraph = active medical conditions + current medications.",
+   "severity": "major",
+   "canonical": "OWN-W-019, DH-W-012",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R13.6",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "CRITICAL — Any ongoing medical condition with active medications MUST be mentioned, even if unrelated to the urgent issue.",
+   "severity": "critical",
+   "canonical": "OWN-W-019, OW-007, OW-008, OW-010, OW-013, OW-014",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R13.7",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Fully resolved conditions with no current medications: do NOT include.",
+   "severity": "major",
+   "canonical": "OWN-W-019, OW-007, OW-008, OW-010, OW-013, OW-014",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R13.8",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Penicillin allergy: include only if patient is receiving or needs antibiotics.",
+   "severity": "major",
+   "canonical": "OWN-W-019",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R13.9",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "No past medical history? Simply omit that paragraph.",
+   "severity": "info",
+   "canonical": "DH-W-029",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R13.10",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — \"ASAP\" in case notes → write \"at your earliest convenience\" in the letter. Never write \"ASAP.\"",
+   "severity": "critical",
+   "canonical": "OWN-W-015",
+   "detector": "no_asap_in_letter (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": true,
+   "resolution": "Model Answer urgent closures use 'at your earliest convenience' (which replaces 'ASAP'). no_asap_in_letter stays active. Candidates are not penalised for professional urgent wording (§11).",
+   "tests": [
+    "RulebookEngineTests.R13_10_Flags_ASAP",
+    "RulebookEngineTests.R14_12_Flags_Treated_From",
+    "RulebookEngineTests.R14_6_Flags_Was_Presented_In_Discharge"
+   ]
+  },
+  {
+   "id": "R14.2",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Introduction: \"I am writing to update you regarding Mr Jones, who underwent [procedure] at [hospital] and is now ready for discharge, for whom I am r",
+   "severity": "critical",
+   "canonical": "OWN-W-032, DH-W-010",
+   "detector": "discharge_intro_template (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.DischargeIntroTemplate_Fires_On_Routine_Referral_Wording_With_No_Discharge_Context",
+    "RulebookEngineTests.DischargeIntroTemplate_Passes_On_Equivalent_Wording",
+    "RulebookEngineTests.EmotionalWording_Passes_On_Suffered_As_Factual_Clinical_Event"
+   ]
+  },
+  {
+   "id": "R14.3",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Do NOT describe patient identity in introduction — GP knows the patient.",
+   "severity": "critical",
+   "canonical": "OWN-W-032",
+   "detector": "discharge_intro_no_identity (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R14.4",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "CRITICAL — Do NOT include: family history, social history, smoking/drinking, previous medical history, occupation. GP knows all of this.",
+   "severity": "critical",
+   "canonical": "OWN-W-032, OW-007, OW-008, OW-010, OW-013, OW-014",
+   "detector": "discharge_omits_knownto_gp (inert by design: overridden / AI-graded)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "WritingAssessmentV11RuleEngineTests.Every_error_category_has_one_primary_criterion",
+    "WritingAssessmentV11RuleEngineTests.Every_supported_check_id_has_an_explicit_primary_criterion"
+   ]
+  },
+  {
+   "id": "R14.5",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Exception: mention allergy only if it directly influenced treatment. \"Due to the documented penicillin allergy, [alternative] was prescribed.\"",
+   "severity": "major",
+   "canonical": "OWN-W-032",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R14.6",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Admission: \"Mr Jones was admitted to [hospital] with [symptoms/condition].\" Past simple. NEVER \"was presented\" (incorrect passive).",
+   "severity": "critical",
+   "canonical": "OWN-W-032, G-W-026",
+   "detector": "discharge_admitted_with_past_simple (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.R14_12_Flags_Treated_From",
+    "RulebookEngineTests.R14_6_Flags_Was_Presented_In_Discharge"
+   ]
+  },
+  {
+   "id": "R14.7",
+   "legacy_status": "TEACHER_PREFERENCE_ONLY",
+   "text": "CRITICAL — Discharge plan paragraph = most important. Must include: discharge medications with doses + post-discharge instructions.",
+   "severity": "critical",
+   "canonical": "OWN-W-032, DH-W-016, NUR-W-006, PHA-W-008",
+   "detector": "discharge_plan_present (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": [
+    "RulebookEngineTests.DischargePlanPresent_Passes_For_NonPrescribing_Profession_Without_Medication",
+    "RulebookEngineTests.DischargePlanPresent_Passes_For_Physiotherapy_Without_Medication",
+    "RulebookEngineTests.DischargePlanPresent_Passes_On_NoSpace_Dose_Notation",
+    "RulebookEngineTests.DischargePlanPresent_Still_Fires_For_Medicine_Without_Medication"
+   ]
+  },
+  {
+   "id": "R14.8",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "Discharge medications: same format — Drug, dose; Drug, dose and Drug, dose.",
+   "severity": "minor",
+   "canonical": "OWN-W-032, G-W-131",
+   "detector": "AI-grounded (rulebook prompt)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R14.9",
+   "legacy_status": "OVERRIDDEN_OR_CORRECTED",
+   "text": "CRITICAL — All investigations performed during admission (including normal results) MUST be listed with values.",
+   "severity": "critical",
+   "canonical": "OWN-W-032, OW-007, OW-008, OW-010, OW-013, OW-014",
+   "detector": "discharge_all_investigations_listed (inert by design: overridden / AI-graded)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  },
+  {
+   "id": "R14.10",
+   "legacy_status": "HISTORICAL_TEACHING_RECAST",
+   "text": "CRITICAL — Follow-up / review dates: ALWAYS include if stated in case notes.",
+   "severity": "critical",
+   "canonical": "OWN-W-032, DH-W-016",
+   "detector": "closure_mentions_review_if_required (LIVE)",
+   "in_legacy_books": 7,
+   "orphan_before_rev8": false,
+   "resolution": "",
+   "tests": []
+  }
+ ]
+}

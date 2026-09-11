@@ -110,8 +110,8 @@ Doctor
             db, new ExemplarGateway(), new WritingRuleEngine(new RulebookLoader()),
             TimeProvider.System, NullLogger<WritingTaskModelAnswerService>.Instance);
 
-        var first = await svc.EnqueueMissingAsync("admin-1", limit: 10, CancellationToken.None);
-        var second = await svc.EnqueueMissingAsync("admin-1", limit: 10, CancellationToken.None);
+        var first = await svc.EnqueueMissingAsync("admin-1", 10, CancellationToken.None);
+        var second = await svc.EnqueueMissingAsync("admin-1", 10, CancellationToken.None);
 
         Assert.Equal(1, first.Enqueued);
         Assert.Equal(0, second.Enqueued);
@@ -187,7 +187,7 @@ Doctor
 
         var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
 
-        var first = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var first = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(1, first.Generated);
         Assert.Equal(0, first.Skipped);
         Assert.Equal("generated", first.Items.Single().Outcome);
@@ -199,7 +199,7 @@ Doctor
 
         // Awaiting approval: must NOT regenerate (would discard the pending
         // review and burn another provider call).
-        var second = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var second = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(0, second.Generated);
         Assert.Equal(1, second.Skipped);
         Assert.Equal("awaiting_approval", second.Items.Single().HoldReason);
@@ -207,7 +207,7 @@ Doctor
 
         // Approved + fresh: reused forever.
         await svc.ApproveAsync(scenarioId, "admin-1", CancellationToken.None);
-        var third = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var third = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(0, third.Generated);
         Assert.Equal("already_ready", third.Items.Single().HoldReason);
         Assert.Equal(1, gateway.Calls);
@@ -223,7 +223,7 @@ Doctor
             NullLogger<WritingTaskModelAnswerService>.Instance);
 
         var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
-        await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         await svc.ApproveAsync(scenarioId, "admin-1", CancellationToken.None);
         Assert.Equal(1, gateway.Calls);
 
@@ -232,12 +232,12 @@ Doctor
         scenario.TaskPromptMarkdown = "Write a routine referral for John Jones to City Clinic urgently.";
         await db.SaveChangesAsync();
 
-        var withoutStale = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var withoutStale = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(0, withoutStale.Generated);
         Assert.Equal("stale_refresh_not_requested", withoutStale.Items.Single().HoldReason);
         Assert.Equal(1, gateway.Calls);
 
-        var withStale = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: true, CancellationToken.None);
+        var withStale = await svc.GenerateMissingAsync("admin-1", 5, true, CancellationToken.None);
         Assert.Equal(1, withStale.Generated);
         Assert.Equal(2, gateway.Calls);
     }

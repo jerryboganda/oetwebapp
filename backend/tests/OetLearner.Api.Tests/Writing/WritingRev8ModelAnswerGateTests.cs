@@ -212,7 +212,7 @@ public sealed class WritingRev8ModelAnswerGateTests
         var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
         var svc = Service(db, new ScriptedGateway());
 
-        var report = await svc.ValidateAsync(scenarioId, MajorOnlyDefect(), includeSemantic: false, "admin-1");
+        var report = await svc.ValidateAsync(scenarioId, MajorOnlyDefect(), false, "admin-1");
 
         Assert.False(report.Passed);
         Assert.Contains(report.DeterministicFindings, f => f.RuleId == "BUILTIN.linker_avoid_words");

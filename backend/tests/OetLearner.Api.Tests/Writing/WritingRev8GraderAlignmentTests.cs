@@ -364,9 +364,9 @@ public sealed class WritingRev8GraderAlignmentTests : IAsyncDisposable
             new EmptyCanonEngine(),
             mistakeService: null!,
             events: new NoopWritingEventBus(),
-            TimeProvider.System,
-            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
-            NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
+            clock: TimeProvider.System,
+            settingsProvider: TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
+            logger: NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
             assessmentPreflight: new WritingAssessmentPreflightService(_db),
             assessmentRuleEngine: new WritingAssessmentV11RuleEngine(new WritingRuleEngine(new RulebookLoader())),
             calibrationReleaseService: new WritingCalibrationReleaseService(_db));
@@ -379,9 +379,9 @@ public sealed class WritingRev8GraderAlignmentTests : IAsyncDisposable
             new EmptyCanonEngine(),
             mistakeService: null!,
             events: new NoopWritingEventBus(),
-            TimeProvider.System,
-            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
-            NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
+            clock: TimeProvider.System,
+            settingsProvider: TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
+            logger: NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
             assessmentPreflight: new PassThroughPreflight());
 
     /// <summary>Records the grounding letter type and rubric input; counts provider calls.</summary>

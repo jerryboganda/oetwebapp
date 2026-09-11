@@ -325,9 +325,9 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
             // failure path never reaches it.
             mistakeService: null!,
             events: aiPathReached ? new NoopWritingEventBus() : null!,
-            TimeProvider.System,
-            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
-            NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
+            clock: TimeProvider.System,
+            settingsProvider: TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
+            logger: NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
             assessmentPreflight: new PassThroughPreflight());
 
     private sealed class FakeAiGateway : IAiGatewayService

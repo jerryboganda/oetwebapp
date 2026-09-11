@@ -577,9 +577,14 @@ public sealed partial class WritingRuleEngine
     private static IEnumerable<LintFinding> DetectModelAnswerLayout(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!input.IsModelAnswer) yield break;
-        if (s.DateIndex is null || s.DateIndex.Value == 0 || s.Lines.Take(s.DateIndex.Value).All(l => l.Trim().Length == 0))
+        // Global Model Answer addendum §2: address then date OR date then
+        // address are both acceptable — only a missing block is a defect.
+        var recipientBeforeDate = s.DateIndex is int d && s.Lines.Take(d).Any(l => l.Trim().Length > 0);
+        var recipientAfterDate = s.DateIndex is int d2 && s.SalutationIndex is int si && si > d2
+            && s.Lines.Skip(d2 + 1).Take(si - d2 - 1).Any(l => l.Trim().Length > 0);
+        if (s.DateIndex is null || !(recipientBeforeDate || recipientAfterDate))
             yield return new LintFinding(rule.Id, RuleSeverity.Critical,
-                "A Model Answer starts with the recipient's name/address block, then one blank line, then the date.");
+                "A Model Answer needs the recipient's name/address block and the date (in either order), separated by one blank line.");
         if (s.ReLineIndex is null || s.YoursIndex is null) yield break;
         var start = s.ReLineIndex.Value + 1;
         var end = s.YoursIndex.Value;
