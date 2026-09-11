@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   getAppRuntimeKind: vi.fn(() => 'web'),
   // Never calls any callback back to the parent — proving the wrapper's
   // aspect-video decision no longer depends on anything the child does.
-  videoPlayerStub: vi.fn(() => null),
+  videoPlayerStub: vi.fn((_props: Record<string, unknown>) => null),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -60,6 +60,8 @@ const baseVideo: VideoDetail = {
   language: null,
   tags: [],
   isFeatured: false,
+  publishedAt: null,
+  viewCount: 0,
   progress: null,
   bookmarked: false,
   categoryIds: [],
