@@ -88,6 +88,23 @@ interface NativeSafeAreaInsets {
 }
 
 /**
+ * Placeholder used ONLY until MainActivity's real push lands (see below).
+ * app/globals.css's :root default is `env(safe-area-inset-*)`, which Android's
+ * WebView never populates — MainActivity's native push is the sole source of
+ * truth there, and on a cold launch it can land after this module first runs,
+ * or (per the "stuck until the app is backgrounded" bug report) not land at
+ * all during the session. Without this, that whole window renders at a hard
+ * 0 — header under the status bar, bottom nav flush to the edge — instead of
+ * merely approximate. Portrait left/right stay 0 (matches reality on virtually
+ * every device); only top/bottom, the two edges phones actually cut into, get
+ * a non-zero guess.
+ * ponytail: hardcoded approximation, not a per-device measurement. Upgrade
+ * path if a wrong guess ever visibly clips on some device/nav-bar combo: read
+ * WindowInsets natively before first frame instead of guessing in JS.
+ */
+const ANDROID_FALLBACK_SAFE_AREA_INSETS: NativeSafeAreaInsets = { top: 24, right: 0, bottom: 16, left: 0 };
+
+/**
  * Android WebView has no `env(safe-area-inset-*)` support, so MainActivity pushes
  * the real insets in as CSS custom properties and mirrors them onto
  * `window.__oetSafeAreaInsets`. That push happens natively while the WebView is
@@ -96,13 +113,21 @@ interface NativeSafeAreaInsets {
  * header ends up under the status bar until the next inset change. Re-apply the
  * mirrored values here, once the app has hydrated and on every resume.
  * See android/app/src/main/java/com/oetwithdrhesham/app/MainActivity.java.
+ *
+ * When the native push hasn't landed yet (window.__oetSafeAreaInsets still
+ * undefined) fall back to ANDROID_FALLBACK_SAFE_AREA_INSETS on Android only —
+ * iOS's WKWebView resolves env() correctly on its own and needs no help. This
+ * never overwrites a real pushed value (checked first, every call) and is
+ * itself always overwritten once MainActivity's later push does land, since
+ * both write the same inline custom properties on the same element.
  */
-function setSafeAreaInsets() {
+export function setSafeAreaInsets() {
   if (!isBrowser()) {
     return;
   }
 
-  const insets = (window as unknown as { __oetSafeAreaInsets?: NativeSafeAreaInsets }).__oetSafeAreaInsets;
+  const insets = (window as unknown as { __oetSafeAreaInsets?: NativeSafeAreaInsets }).__oetSafeAreaInsets
+    ?? (Capacitor.getPlatform() === 'android' ? ANDROID_FALLBACK_SAFE_AREA_INSETS : undefined);
   if (!insets) {
     return;
   }
