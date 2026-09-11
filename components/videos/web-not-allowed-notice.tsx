@@ -18,7 +18,7 @@ const APP_DOWNLOAD_LINKS: AppDownloadLinks = {
 
 export function WebNotAllowedNotice() {
   return (
-    <div className="flex h-full min-h-[360px] w-full flex-col items-center justify-center gap-5 bg-gradient-to-b from-[#0F172A] via-[#0B1120] to-[#070A12] px-6 py-12 text-center text-white">
+    <div className="flex h-full max-h-full min-h-[240px] w-full flex-col items-center gap-5 overflow-y-auto bg-gradient-to-b from-[#0F172A] via-[#0B1120] to-[#070A12] px-6 py-8 text-center text-white sm:min-h-[360px] sm:py-12">
       <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 ring-1 ring-amber-500/20 backdrop-blur-md">
         <MonitorSmartphone className="h-8 w-8 text-amber-400" aria-hidden="true" />
         <span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-amber-500 text-black">

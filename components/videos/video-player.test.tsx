@@ -12,9 +12,10 @@ const mocks = vi.hoisted(() => ({
   setVideoScreenProtection: vi.fn(),
   addCaptureStateListener: vi.fn(),
   addScreenshotListener: vi.fn(),
+  getAppRuntimeKind: vi.fn(() => 'desktop'),
 }));
 
-vi.mock('@/lib/runtime-signals', () => ({ getAppRuntimeKind: () => 'desktop' }));
+vi.mock('@/lib/runtime-signals', () => ({ getAppRuntimeKind: mocks.getAppRuntimeKind }));
 vi.mock('@/lib/video/attestation', () => ({
   PlaybackGateError: class PlaybackGateError extends Error {
     code: string;
@@ -80,6 +81,7 @@ function renderPlayer() {
 describe('VideoPlayer presentation controls', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.getAppRuntimeKind.mockReturnValue('desktop');
     mocks.setVideoScreenProtection.mockResolvedValue(true);
     mocks.addCaptureStateListener.mockResolvedValue(() => {});
     mocks.addScreenshotListener.mockResolvedValue(() => {});
@@ -135,5 +137,17 @@ describe('VideoPlayer presentation controls', () => {
     await screen.findByRole('button', { name: 'Fullscreen' });
     expect(document.querySelector('video')).toHaveClass('object-contain');
     expect(screen.queryByRole('button', { name: /stretch|fit/i })).not.toBeInTheDocument();
+  });
+
+  // Mobile-gate regression (Final Developer Modification Brief item 2): the
+  // WEB_NOT_ALLOWED gate itself must stay untouched by the layout/timing fix
+  // — a web runtime still never attempts a playback session and still shows
+  // the "app required" notice.
+  it('shows the app-required notice on a web runtime without ever requesting a playback session', async () => {
+    mocks.getAppRuntimeKind.mockReturnValue('web');
+    renderPlayer();
+
+    expect(await screen.findByRole('heading', { name: 'App Required for Video Playback' })).toBeInTheDocument();
+    expect(mocks.requestPlaybackSession).not.toHaveBeenCalled();
   });
 });

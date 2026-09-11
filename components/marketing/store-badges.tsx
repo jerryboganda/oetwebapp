@@ -82,7 +82,11 @@ export function PlatformDownloadBadge({ platform, href, compact = false, classNa
       aria-label={ariaLabel}
       className={cn(
         badgeBaseClassName,
-        compact ? 'h-16 gap-3 px-5' : 'h-20 gap-3 sm:gap-4 px-4 sm:px-6',
+        // Full h-20 buttons only from sm: up — every real phone in portrait
+        // (360-430px) is below that, so 4 of these stacked (see
+        // AppDownloadGrid's 1-column fallback) must stay compact enough to
+        // fit a mobile viewport without being clipped by an ancestor.
+        compact ? 'h-16 gap-3 px-5' : 'h-14 gap-3 px-4 sm:h-20 sm:gap-4 sm:px-6',
         className
       )}
     >
