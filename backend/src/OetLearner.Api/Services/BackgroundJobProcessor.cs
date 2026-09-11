@@ -81,6 +81,22 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     /// more confusing than helpful, and bulk-recovering an old backlog must
     /// not blast stale notifications at real users.</summary>
     private static readonly TimeSpan StuckJobRetryMaxAge = TimeSpan.FromHours(24);
+    /// <summary>
+    /// Root-cause fix (Writing Rev8 release, 11-12 Sep 2026): the per-job
+    /// try/catch below has no timeout of its own, and <see cref="StuckJobRecoveryAsync"/>
+    /// runs only AFTER this foreach loop finishes - it exists to reap jobs
+    /// orphaned by a container restart, not to interrupt one that is actively
+    /// hanging in THIS pass. A single slow/hung external call (observed: a
+    /// high-thinking-effort AI provider call during Writing Model Answer
+    /// generation) therefore wedges the ENTIRE single-threaded worker for
+    /// every job type - evaluations, notifications, SLA alerts, everything -
+    /// for as long as the hang lasts, with no self-healing possible. Bound
+    /// every job to this wall-clock ceiling so one bad call can never again
+    /// block the whole pipeline; a job that legitimately needs longer keeps
+    /// working past this window on the retry queued at the bottom of the
+    /// loop's catch block, one pass call at a time.
+    /// </summary>
+    private static readonly TimeSpan MaxJobExecutionTime = TimeSpan.FromMinutes(20);
     private static readonly TimeSpan ExpertAutoAssignInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ExpertSlaCheckInterval = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReadinessRolloverInterval = TimeSpan.FromHours(24);
@@ -145,7 +161,21 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         {
             try
             {
-                await ExecuteJobAsync(scope.ServiceProvider, db, job, cancellationToken);
+                using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                jobCts.CancelAfter(MaxJobExecutionTime);
+                try
+                {
+                    await ExecuteJobAsync(scope.ServiceProvider, db, job, jobCts.Token);
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // jobCts's own timer fired (MaxJobExecutionTime elapsed), not a
+                    // real host shutdown - surface as an ordinary job failure so the
+                    // existing retry/backoff logic below handles it and the loop
+                    // moves on to the next job instead of hanging forever.
+                    throw new TimeoutException(
+                        $"Job {job.Id} ({job.Type}) exceeded the {MaxJobExecutionTime} execution ceiling.");
+                }
                 job.State = AsyncState.Completed;
                 job.StatusReasonCode = "completed";
                 job.StatusMessage = "Job completed successfully.";
