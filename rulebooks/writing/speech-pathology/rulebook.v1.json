@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
+  "version": "1.1.0-rev8",
   "kind": "writing",
   "profession": "speech-pathology",
   "publishedAt": "2026-04-18T00:00:00Z",
@@ -135,7 +135,7 @@
       "id": "R01.5",
       "section": "01",
       "severity": "critical",
-      "title": "Suspected cancer = urgent",
+      "title": "Suspected cancer: preserve urgency as supported",
       "body": "Suspected cancer does not automatically define task type independently of the task/context; preserve urgency exactly as supported.",
       "appliesTo": "all",
       "params": {
@@ -280,7 +280,7 @@
       "id": "R03.4",
       "section": "03",
       "severity": "critical",
-      "title": "Smoking and drinking always included (except OT)",
+      "title": "Smoking and drinking included when relevant",
       "body": "Smoking/alcohol are not universal always-include facts; relevance and reader needs control content.",
       "appliesTo": "all",
       "checkId": "content_requires_smoking_drinking",
@@ -304,7 +304,7 @@
       "id": "R03.6",
       "section": "03",
       "severity": "critical",
-      "title": "Allergy always included for atopic conditions",
+      "title": "Allergy inclusion is relevance/safety driven",
       "body": "Allergy inclusion is relevance/safety driven; the atopic-condition rule is a heuristic, not an official absolute.",
       "appliesTo": "all",
       "checkId": "content_requires_allergy_for_atopic",
@@ -358,7 +358,7 @@
       "section": "04",
       "severity": "major",
       "title": "Letter structure order",
-      "body": "Letter structure order: Address → [blank] → Date → [blank] → Salutation → Re: line → Introduction → [blank] → Body paragraphs (each separated by blank line) → [blank] → Closure → [blank] → Yours sincerely/faithfully → [1–2 blank lines] → Doctor.",
+      "body": "Letter structure order: Address → [blank] → Date → [blank] → Salutation → Re: line → Introduction → [blank] → Body paragraphs (each separated by blank line) → [blank] → Closure → [blank] → Yours sincerely/faithfully → [1–2 blank lines] → professional designation only, e.g. Doctor (owner Rev8, OWN-W-026).",
       "appliesTo": "all",
       "checkId": "letter_structure_order"
     },
@@ -527,7 +527,7 @@
       "section": "06",
       "severity": "critical",
       "title": "Re: line full name; body last name only",
-      "body": "Re: line = full name (first + last). In body: LAST NAME + TITLE only (e.g., Ms Miller). Never repeat full name in body.",
+      "body": "Re: line = full name (first + last). In body: LAST NAME + TITLE only (e.g., Ms Miller); children: first name only. Never repeat the full name after the Re: line, the introduction included (owner Rev8, OWN-W-011).",
       "appliesTo": "all",
       "checkId": "body_uses_last_name_only"
     },
@@ -579,8 +579,8 @@
       "id": "R06.13",
       "section": "06",
       "severity": "minor",
-      "title": "Signature 'Doctor' line",
-      "body": "Write 'Doctor' (capital D) below closing phrase. Allow 1–2 blank lines between closing phrase and 'Doctor'.",
+      "title": "Signature: professional designation only",
+      "body": "Write the professional designation only (the writer's profession, e.g. Doctor, Dietitian, Optometrist) below the closing phrase, unless the task supplies the exact writer name; never add a hospital, department, address, phone or email beneath it. Allow 1-2 blank lines between the closing phrase and the designation (owner Rev8, OWN-W-026).",
       "appliesTo": "all"
     },
     {
@@ -673,7 +673,7 @@
       "id": "R07.9",
       "section": "07",
       "severity": "minor",
-      "title": "Appositive uses gentleman/lady",
+      "title": "Avoid gentleman/lady appositives",
       "body": "Gentleman/lady is unnecessary and may be dated; use patient/person or an appropriate identifier.",
       "appliesTo": "all"
     },
@@ -694,7 +694,7 @@
       "section": "08",
       "severity": "major",
       "title": "Today's visit has its own paragraph",
-      "body": "Today's visit must always have its own paragraph. Exception: only one item of information today → may combine with adjacent visit.",
+      "body": "Today's visit must always have its own paragraph. In an urgent referral it is body paragraph 1 and stays its own paragraph even when today's visit contains very little information (owner Rev8, OWN-W-017). Other letter types only: a single item of information today may be combined with the adjacent visit.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
     },
@@ -738,7 +738,7 @@
       "id": "R08.7",
       "section": "08",
       "severity": "critical",
-      "title": "Never 'next visit'",
+      "title": "'Next visit' is acceptable English",
       "body": "Next visit is standard English; following visit may be stylistically preferable in some narratives but is not mandatory.",
       "appliesTo": "all",
       "checkId": "body_forbidden_phrase_next_visit",
@@ -804,8 +804,8 @@
       "id": "R08.14",
       "section": "08",
       "severity": "critical",
-      "title": "Never 'the patient'",
-      "body": "In body: last name + title only (Ms Miller). Never use full name again. Never use 'the patient'.",
+      "title": "Never 'the patient' as the person reference",
+      "body": "Never use 'the patient' (or 'a patient at this practice') as a substitute for the person in the letter; use the name form (adults: title + last name, e.g. Ms Miller; children: first name) or a pronoun. Never repeat the full name after the Re: line (owner Rev8, OWN-W-009, OWN-W-011).",
       "appliesTo": "all",
       "checkId": "body_forbidden_phrase_the_patient",
       "forbiddenPatterns": [
@@ -825,8 +825,8 @@
       "id": "R09.1",
       "section": "09",
       "severity": "info",
-      "title": "Standard closure phrases",
-      "body": "Standard phrases: 'I trust this information will be of use.' / 'Please do not hesitate to contact me should you require further information.'",
+      "title": "Closure ends with a contact offer",
+      "body": "Every Model Answer closure, in every letter type, ends with a professional offer of further contact, e.g. 'Should there be any queries, kindly do not hesitate to contact me.' or 'Please do not hesitate to contact me should you require further information.'; 'I trust this information will be of use.' may precede it (owner Rev8, OWN-W-014). Candidates: the same meaning anywhere in the closure, in any professional wording.",
       "appliesTo": "all",
       "exemplarPhrases": [
         "I trust this information will be of use.",
@@ -975,7 +975,7 @@
       "id": "R10.8",
       "section": "10",
       "severity": "critical",
-      "title": "Surgery = past simple",
+      "title": "Procedures: past simple or present perfect by time reference",
       "body": "Present perfect is valid with procedures when current relevance/no finished time supports it (has undergone).",
       "appliesTo": "all",
       "checkId": "surgery_past_simple"
@@ -1009,7 +1009,7 @@
       "id": "R10.12",
       "section": "10",
       "severity": "major",
-      "title": "Avoid past perfect",
+      "title": "Past perfect is valid for earlier-past chronology",
       "body": "Past perfect is valid when needed to establish earlier-past chronology; do not ban it.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
@@ -1018,7 +1018,7 @@
       "id": "R10.13",
       "section": "10",
       "severity": "major",
-      "title": "Reported speech uses ING or noun",
+      "title": "Reported speech: that-clause, ING or noun",
       "body": "That-clauses are grammatically valid after report/state/mention; gerund/noun forms are alternatives, not the only forms.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
@@ -1110,7 +1110,7 @@
       "id": "R11.8",
       "section": "11",
       "severity": "critical",
-      "title": "Include numerical values with units",
+      "title": "Relevant numerical values keep their units",
       "body": "Do not always include every numerical value; include values that are relevant to purpose/reader and preserve units accurately.",
       "appliesTo": "all",
       "checkId": "numerical_values_have_units"
@@ -1152,8 +1152,8 @@
       "id": "R12.2",
       "section": "12",
       "severity": "critical",
-      "title": "Never 'patient' in body",
-      "body": "The word patient is not grammatically or officially forbidden; use names/pronouns/patient according to clarity and style.",
+      "title": "Never 'the patient' in body",
+      "body": "Never use 'the patient' as the person reference in the letter; use the name form or a pronoun (owner Rev8, OWN-W-009, which supersedes the earlier 'patient is not forbidden' wording).",
       "appliesTo": "all",
       "checkId": "body_forbidden_phrase_the_patient"
     },
@@ -1173,7 +1173,7 @@
       "section": "12",
       "severity": "minor",
       "title": "Replace colloquial terms",
-      "body": "Do not replace tired with fatigue automatically; they can differ in meaning and register.",
+      "body": "Use supported clinical wording rather than weak, colloquial or redundant phrasing: fatigue not tired/sluggish; MRI not MRI imaging; felt a popping sensation not felt something pop; does not currently have a GP not with no GP. Mandatory in Model Answers; advisory for candidates (owner Rev8, OWN-W-033).",
       "appliesTo": "all"
     },
     {
@@ -1205,8 +1205,8 @@
       "id": "R12.8",
       "section": "12",
       "severity": "minor",
-      "title": "Numbers 1–9 as words",
-      "body": "Numbers 1–9 in running text: write as words. Numbers 10+: numerals. Exception: always numerals with units ('500 mg').",
+      "title": "Descriptive numbers as words",
+      "body": "Write descriptive/general numbers as words ('every six hours for four days', 'two weeks ago', 'three children'). Use digits only for age, dates, vital signs, investigation/lab values, medication doses and clinical measurements ('500 mg'). Owner Rev8 override OWN-W-006; replaces the old 1-9 words / 10+ numerals rule.",
       "appliesTo": "all"
     },
     {
@@ -1214,7 +1214,7 @@
       "section": "12",
       "severity": "critical",
       "title": "'However' punctuation",
-      "body": "However can start a sentence or follow a semicolon; no single punctuation pattern is mandatory.",
+      "body": "Sentence start: 'However,' (capital + comma). Joining two complete independent clauses: '...; however, ...' (semicolon before, lowercase, comma after). Do not apply the pattern mechanically when the grammar does not contain two complete clauses; adverbial use is not flagged for candidates (owner Rev8, OWN-W-022).",
       "appliesTo": "all",
       "checkId": "linker_however_punctuation"
     },
@@ -1223,7 +1223,7 @@
       "section": "12",
       "severity": "major",
       "title": "'Therefore' / 'Thus' punctuation",
-      "body": "Therefore/thus have more than one correct punctuation pattern; apply standard punctuation by sentence structure.",
+      "body": "Sentence start: 'Therefore,' / 'Thus,' (capital + comma). Joining two complete independent clauses: '...; therefore, ...' (semicolon before, lowercase, comma after). Adverbial use inside a clause (e.g. 'was therefore referred') is not flagged for candidates (owner Rev8, OWN-W-022).",
       "appliesTo": "all",
       "checkId": "linker_therefore_punctuation"
     },
@@ -1232,7 +1232,7 @@
       "section": "12",
       "severity": "major",
       "title": "'In addition' punctuation",
-      "body": "In addition can be sentence-initial or clause-linked; do not require a semicolon in every case.",
+      "body": "Sentence start: 'In addition,' / 'Additionally,' (capital + comma). Joining two complete independent clauses: '...; in addition, ...'. 'In addition to' + noun/ING takes no punctuation (R12.12) (owner Rev8, OWN-W-022).",
       "appliesTo": "all",
       "checkId": "linker_in_addition_punctuation"
     },
@@ -1395,7 +1395,7 @@
       "section": "13",
       "severity": "critical",
       "title": "Ongoing conditions on active meds must be mentioned",
-      "body": "Do not include every active condition/medicine automatically; relevance and continuity/safety govern inclusion.",
+      "body": "Hospital urgent referral: mention every ongoing medical condition for which the person takes active medication, with the relevant current medication and dose, using only facts from the case notes (owner Rev8, OWN-W-019). Fully resolved conditions with no current medication stay excluded (R13.7).",
       "appliesTo": [
         "urgent_referral"
       ],
@@ -1489,7 +1489,7 @@
       "id": "R14.4",
       "section": "14",
       "severity": "critical",
-      "title": "Discharge omits FH/SH/smoking/PMH/occupation",
+      "title": "Discharge: known history only if changed or relevant",
       "body": "Social/family/past history can be relevant to discharge if it changed or affects ongoing care; do not exclude categorically.",
       "appliesTo": [
         "discharge"
@@ -1537,7 +1537,7 @@
       "section": "14",
       "severity": "minor",
       "title": "Discharge meds format",
-      "body": "Discharge medications: same format — Drug, dose; Drug, dose and Drug, dose.",
+      "body": "Discharge medications use the R11.2-R11.3 format (owner Rev8, OWN-W-023): 'Drug, dose' for one item, 'Drug, dose and Drug, dose' for two, and 'Drug, dose; Drug, dose; and Drug, dose' for three or more.",
       "appliesTo": [
         "discharge"
       ]
@@ -1546,7 +1546,7 @@
       "id": "R14.9",
       "section": "14",
       "severity": "critical",
-      "title": "List all admission investigations (incl. normal)",
+      "title": "Select the admission investigations the reader needs",
       "body": "Do not list all investigations including all normal results; select what the reader needs.",
       "appliesTo": [
         "discharge"
@@ -1591,7 +1591,7 @@
       "id": "R14.13",
       "section": "14",
       "severity": "major",
-      "title": "Discharge past tense throughout",
+      "title": "Discharge tense follows time reference",
       "body": "Discharge letters use tense according to time: past for admission events, present for current status, future/modal for plan.",
       "appliesTo": [
         "discharge"
@@ -1623,7 +1623,7 @@
       "id": "R15.2",
       "section": "15",
       "severity": "critical",
-      "title": "Translate all jargon",
+      "title": "Match technicality to the recipient",
       "body": "Technicality should match the recipient. Allied-health professionals may understand clinical terminology; explain/simplify for the actual reader.",
       "appliesTo": [
         "non_medical_referral"
@@ -1713,7 +1713,7 @@
       "id": "R16.3",
       "section": "16",
       "severity": "critical",
-      "title": "Content + Conciseness dominate pass/fail",
+      "title": "No single criterion weighting decides pass/fail",
       "body": "OET does not publish a simple pass/fail weighting formula that makes two criteria universally decisive.",
       "appliesTo": "all",
       "enforcement": "ai-grounded"
@@ -1740,7 +1740,7 @@
       "id": "R16.6",
       "section": "16",
       "severity": "info",
-      "title": "Target Band 6+",
+      "title": "No universal regulator pass threshold",
       "body": "Do not convert descriptors into a universal regulator pass threshold; regulator requirements vary.",
       "appliesTo": "all"
     },
@@ -1760,6 +1760,909 @@
       "title": "Assessment is holistic",
       "body": "Assessment is holistic. Do not attempt to calculate an exact score.",
       "appliesTo": "all"
+    },
+    {
+      "id": "OWN-W-001",
+      "section": "04",
+      "severity": "critical",
+      "title": "One blank line after the Re: line",
+      "body": "Salutation and Re: line remain consecutive. After the Re: line there MUST be one blank line before the introduction. Preserve this spacing in stored text, rendering, exports and candidate view.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Dear Dr Still,\nRe: Mr David Taylor, aged 55\n\nI am writing to ..."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard; flag a missing blank line after the Re: line under Organisation & Layout. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Blank line after Re: line",
+          "Rev8 §12.3",
+          "R04.1-R04.4"
+        ],
+        "checkIds": [
+          "blank_line_after_re_line",
+          "model_answer_layout"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-002",
+      "section": "04",
+      "severity": "critical",
+      "title": "Salutation and Re: line consecutive",
+      "body": "No blank line between the salutation and the Re: line; they are the only two consecutive lines with no blank line between them.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Dear Dr Smith,\nRe: Ms Garcia, DOB: 1 January 1995"
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §12.3",
+          "R04.2"
+        ],
+        "checkIds": [
+          "salutation_re_adjacent"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-003",
+      "section": "05",
+      "severity": "major",
+      "title": "One date-format family and four-digit years",
+      "body": "Use one date-format family throughout each letter (written, slash or dot — never mixed) and always a four-digit year.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "13 June 2020 ... on 29 June 2014"
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard; any single date-format family is accepted when it is used consistently with four-digit years. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Date consistency",
+          "Rev8 §14",
+          "R05.5-R05.6"
+        ],
+        "checkIds": [
+          "date_format_consistent",
+          "year_not_abbreviated"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-004",
+      "section": "06",
+      "severity": "major",
+      "title": "DOB written as \"DOB:\" + date",
+      "body": "Write the date of birth as \"DOB:\" followed by the date in the letter's date family; never \"D.O.B\", \"DOB 01.01.1995\" or \"DOB not provided\".",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Re: Mrs Melanie Wright, DOB: 8 June 1973"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §6",
+          "Rev8 §15.2",
+          "Rev8 §15.4"
+        ],
+        "checkIds": [
+          "dob_colon_format",
+          "dob_age_forbidden_phrase"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-005",
+      "section": "04",
+      "severity": "critical",
+      "title": "No brackets or placeholders",
+      "body": "The final letter contains no round, square or curly brackets and no placeholder text such as [Name] or {Surname}.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "dalteparin, also known as Fragmin,"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 No brackets / placeholders"
+        ],
+        "checkIds": [
+          "no_brackets_in_letter"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-006",
+      "section": "12",
+      "severity": "major",
+      "title": "Descriptive numbers as words",
+      "body": "Write descriptive/general numbers as words. Use digits only for age, dates, vital signs, investigation/lab values, medication doses and clinical measurements.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "every six hours for four days"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: detected as a Major language point; the clinical-number exceptions (age, dates, vital signs, investigation/lab values, medication doses, clinical measurements) are never flagged. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 General number style"
+        ],
+        "checkIds": [
+          "number_style_words_vs_digits"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-007",
+      "section": "12",
+      "severity": "major",
+      "title": "No emotional or editorial wording",
+      "body": "Do not use emotional/editorial words such as suffering/suffered, unfortunately, fortunately, regrettably or sadly. Keep wording factual and neutral.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "He had attacks on 1 June 2010 and 1 September 2010."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard; any suffer/suffered/suffering, unfortunately, fortunately, regrettably or sadly blocks publication. CANDIDATE: unfortunately/fortunately/regrettably/sadly are always flagged; suffered/suffering is flagged only when used as emotional editorialising, never as the standard factual clinical verb for a diagnosed event. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Emotional wording"
+        ],
+        "checkIds": [
+          "emotional_wording"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-008",
+      "section": "12",
+      "severity": "major",
+      "title": "No judgmental disease or behaviour labels",
+      "body": "Do not label a person by a disease/behaviour (asthmatic, hypertensive, smoker, drinker, non-compliant, anxious). Use factual forms: has asthma, has hypertension, smokes ..., reported difficulty adhering ....",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Weir smokes twenty cigarettes a day."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard; the factual forms (has asthma, smokes ..., reported difficulty adhering to ...) are accepted in any professional wording. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Judgmental labels",
+          "R12.3",
+          "R12.22"
+        ],
+        "checkIds": [
+          "judgmental_labels"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-009",
+      "section": "08",
+      "severity": "major",
+      "title": "Never \"the patient\" as the person reference",
+      "body": "Do not use \"the patient\" (or \"a patient at this practice\") as a substitute for the person in the final letter prose. Use the name form or a pronoun.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Weir smokes ..."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard; the name form or a pronoun is required as the person reference. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Patient reference",
+          "R08.14",
+          "R12.2"
+        ],
+        "checkIds": [
+          "body_forbidden_phrase_the_patient"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-010",
+      "section": "08",
+      "severity": "major",
+      "title": "Name at the first mention of every body paragraph",
+      "body": "Adults: first mention in each body paragraph = title + surname; children: first name; later mentions in the same paragraph use he/she/him/her/his.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Weir first presented on 29 June 2014 ..."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard in every paragraph after the introduction, closure included. CANDIDATE: hard in the body paragraphs between the introduction and the closure; pronouns are correct for later mentions in the same paragraph. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Patient naming rule - exact operational form",
+          "R08.15"
+        ],
+        "checkIds": [
+          "paragraph_start_patient_name"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-011",
+      "section": "06",
+      "severity": "major",
+      "title": "Do not repeat the full name after the Re: line",
+      "body": "Do not repeat the full first + last name in the letter after it has been used in the Re: line (the introduction included).",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to refer Mr Taylor ..."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Patient naming rule",
+          "Rev8 §15.1",
+          "R06.7"
+        ],
+        "checkIds": [
+          "body_uses_last_name_only"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-012",
+      "section": "08",
+      "severity": "major",
+      "title": "No relationship label for a named patient",
+      "body": "When the patient is named, do not use \"your mother\", \"your father\" or another relationship label as the normal patient reference; use the approved name form at the first mention in each body paragraph, then pronouns.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mrs Ramsey will continue ranitidine, 150 mg twice daily ..."
+      ],
+      "params": {
+        "classification": "Owner Clarification",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard; a letter addressed to a relative still uses the approved name form (e.g. Mrs Ramsey). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Family/relationship references",
+          "Rev7 §13 Patient naming in family-recipient letters",
+          "Rev8 §15.3"
+        ],
+        "checkIds": [
+          "relationship_label_patient_reference"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-013",
+      "section": "07",
+      "severity": "critical",
+      "title": "Model Answer opens with \"I am writing to ...\"",
+      "body": "Every generated Model Answer introduction begins with \"I am writing to ...\" followed by the task purpose (refer, request, update, inform, transfer, outline). Candidate answers may use a different professional opening if the purpose is immediately clear; no template matching.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to outline the medication regime for Mrs Ramsey ..."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard; the introduction must begin with \"I am writing to ...\" followed by the task purpose. CANDIDATE: never required (Acceptable Alternative); any professional opening whose purpose is immediately clear is accepted and no template matching is applied. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Canonical Model Answer opening",
+          "Rev7 §13",
+          "R07.1-R07.8"
+        ],
+        "checkIds": [
+          "intro_opens_i_am_writing_to"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-014",
+      "section": "09",
+      "severity": "major",
+      "title": "Universal contact-offer closure",
+      "body": "Every Model Answer closure, in every profession and letter type, ends with a professional offer to contact the writer, e.g. \"Should there be any queries, kindly do not hesitate to contact me.\" Semantic equivalents are acceptable; candidate grading judges meaning, not exact wording.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Should there be any queries, kindly do not hesitate to contact me."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard; the contact offer is the final sentence of the closure. CANDIDATE: the meaning is required anywhere in the closure, in any professional wording; semantic equivalents are accepted and exact wording is never required. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Universal final closure sentence",
+          "Rev7 §13 Universal closure",
+          "R09.1"
+        ],
+        "checkIds": [
+          "closure_contact_offer"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-015",
+      "section": "13",
+      "severity": "critical",
+      "title": "Urgent closure: \"at your earliest convenience\" then contact offer",
+      "body": "An urgent-referral Model Answer closure includes the urgent action with the canonical phrase \"at your earliest convenience\" and then finishes with the universal contact-offer sentence. A candidate may use any clear professional urgent wording, including \"urgent\"/\"urgently\"; never penalised for not copying the Model Answer.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I would be grateful if you could assess Mr Taylor at your earliest convenience. Should there be any queries, kindly do not hesitate to contact me."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard; the closure request contains \"at your earliest convenience\" and is followed by the universal contact-offer sentence. CANDIDATE: Acceptable Alternative; any clear professional urgent closure wording, including \"urgent\"/\"urgently\", is accepted and a candidate is never penalised for not copying the Model Answer. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Urgent closure",
+          "Rev8 §5",
+          "Rev8 §11",
+          "R09.2",
+          "R13.3"
+        ],
+        "checkIds": [
+          "urgent_closure_phrase"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-016",
+      "section": "13",
+      "severity": "major",
+      "title": "\"Urgent\" only in the introduction (Model Answer)",
+      "body": "In an urgent-referral Model Answer use \"urgent/urgently\" in the introduction only; the closure implies urgency with \"at your earliest convenience\". Candidates are never penalised for repeating urgency.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to urgently refer ..."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard; \"urgent\"/\"urgently\" appears in the introduction only. CANDIDATE: never penalised for repeating urgency. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §11",
+          "R09.3"
+        ],
+        "checkIds": [
+          "urgent_token_not_repeated"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-017",
+      "section": "13",
+      "severity": "critical",
+      "title": "Urgent referral: today/current presentation first, even if brief",
+      "body": "Body paragraph 1 of an urgent referral is today's/the current acute presentation ONLY, kept as its own paragraph even when today's visit contains very little information; the next paragraph returns to the relevant earlier history in chronological order.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "On today's visit, Mr Taylor presented with ..."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard; body paragraph 1 is the current presentation only, kept as its own paragraph even if brief. CANDIDATE: hard; today's/current presentation first, then the relevant earlier history in chronological order. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §5 Urgent referral - mandatory structure",
+          "Rev8 §5 Latest owner override: minimal information in today's visit",
+          "R08.5",
+          "R13.4"
+        ],
+        "checkIds": [
+          "urgent_body_starts_today"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-018",
+      "section": "13",
+      "severity": "critical",
+      "title": "Urgent purpose explicit in the introduction",
+      "body": "An urgent referral introduction makes the urgent purpose explicit. Candidate grading assesses whether the purpose and urgency are clear, not exact template wording.",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to urgently refer Mr Taylor for rheumatological assessment of ..."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the purpose and the urgency must be clear; exact template wording is not required. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §5 Introduction",
+          "R07.6",
+          "R13.2"
+        ],
+        "checkIds": [
+          "urgent_intro_contains_urgent"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-019",
+      "section": "13",
+      "severity": "major",
+      "title": "Hospital urgent referral: active conditions with current medication",
+      "body": "In a hospital urgent referral mention every ongoing medical condition for which the person takes active medication, with the relevant current medication and dose (only from the case notes).",
+      "appliesTo": [
+        "urgent_referral"
+      ],
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Taylor has hypertension, for which he takes ramipril, 5 mg daily."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard, checked by the independent semantic Model Answer validator (no deterministic detector). CANDIDATE: AI-graded under Content, counting only conditions and medicines present in the case notes. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §5 Hospital urgent referral",
+          "R13.5-R13.8"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-020",
+      "section": "09",
+      "severity": "major",
+      "title": "Closure does not duplicate the introduction's request",
+      "body": "The introduction states the purpose/request clearly; the closure must not repeat the same request wording verbatim. It may restate the needed action concisely where functionally necessary. The final contact-offer sentence does not count as duplicate-request wording.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Intro: '... for rheumatological assessment of an acute gout flare.' Closure: 'I would be grateful if you could assess Mr Taylor at your earliest convenience.'"
+      ],
+      "params": {
+        "classification": "Owner Clarification",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard for verbatim repetition only; a concise restatement of the needed action and the final contact-offer sentence are not duplication. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 No duplicated request",
+          "Rev7 §13 Closure/request duplication"
+        ],
+        "checkIds": [
+          "no_duplicated_request"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-021",
+      "section": "12",
+      "severity": "major",
+      "title": "Linker vocabulary",
+      "body": "Generated Model Answers avoid but, so, hence, furthermore, moreover and also as routine linking devices. Prefer however, therefore, thus, consequently, subsequently, in addition, in addition to this/that, or additionally only when logically appropriate; direct sentences are preferable to unnecessary linkers (normally no more than 1-2 per paragraph).",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "In addition, his brother has gout."
+      ],
+      "params": {
+        "classification": "Avoid",
+        "aiGradingLogic": "MODEL ANSWER: hard; any occurrence of but, so, hence, furthermore, moreover or also blocks publication. CANDIDATE: hence/furthermore/moreover and clause-joining but/so are detected as vocabulary-preference feedback, not grammar errors; also is advisory only. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §3 Linker policy",
+          "Rev7 §13 Linker vocabulary",
+          "R12.20"
+        ],
+        "checkIds": [
+          "linker_avoid_words",
+          "linker_density"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-022",
+      "section": "12",
+      "severity": "major",
+      "title": "Linker punctuation",
+      "body": "At the beginning of a sentence capitalise the linker and place a comma after it (However, / Therefore, / Consequently, / Subsequently, / In addition, / Additionally,). When the linker joins two complete independent clauses use a semicolon before it, lowercase it and place a comma after it (...; however, ...). Do not apply the pattern mechanically when the grammar does not contain two complete clauses.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Her pain settled; however, she reported new swelling."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard for genuine run-ons and comma splices only; adverbial use (e.g. \"was therefore referred\") is never flagged. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §3 Sentence-initial punctuation",
+          "Rev8 §3 Mid-sentence clause linking",
+          "Rev7 §13 Linker punctuation",
+          "R12.9-R12.11"
+        ],
+        "checkIds": [
+          "linker_comma_and_case",
+          "linker_however_punctuation",
+          "linker_therefore_punctuation",
+          "linker_in_addition_punctuation"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-023",
+      "section": "11",
+      "severity": "major",
+      "title": "Medication-list syntax",
+      "body": "Single item: Drug, dose. Two items: Drug, dose and Drug, dose. Three or more: Drug, dose; Drug, dose; and Drug, dose. Keep a comma between medicine and dose, semicolons between items and \"and\" before the final item; translate Latin frequency abbreviations; capitalise trade names, generic names lowercase; never invent a dose absent from the case notes.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "ranitidine, 150 mg twice daily; atorvastatin, 20 mg each morning; and dalteparin, 2500 IU by injection"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §2 Medication-list punctuation",
+          "Rev7 §13 Medication syntax",
+          "R11.1-R11.5"
+        ],
+        "checkIds": [
+          "medication_list_punctuation",
+          "latin_abbreviations_translated"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-024",
+      "section": "11",
+      "severity": "major",
+      "title": "Space between value and unit",
+      "body": "Keep a space between a numeric dose/clinical value and its unit where standard (500 mg, 2 g, 1.8 g, 6.37 mmol/L).",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "6.37 mmol/L; 2 g; 10 mg"
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev7 §13 Medication syntax",
+          "Rev8 §14",
+          "Rev8 §15.1-15.3"
+        ],
+        "checkIds": [
+          "value_unit_spacing"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-025",
+      "section": "06",
+      "severity": "major",
+      "title": "Age not duplicated between Re: line and introduction",
+      "body": "If the age is already in the Re: line, do not repeat the same age in the introduction unless a specific approved exception applies.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Re: Mr David Taylor, aged 55 / I am writing to refer Mr Taylor for ..."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §6",
+          "R06.8"
+        ],
+        "checkIds": [
+          "age_not_duplicated_in_intro",
+          "re_line_age_dob"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-026",
+      "section": "06",
+      "severity": "critical",
+      "title": "Sign-off: professional designation only",
+      "body": "Yours sincerely when the recipient is named, Yours faithfully when genuinely unnamed. After the closing phrase use the professional designation only (Doctor, Nurse, Pharmacist, Physiotherapist ...) unless the task supplies the exact writer name; never hospital, department, address, phone or email beneath it. Leave the approved one (at most two) blank line(s) between the closing phrase and the designation.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Yours sincerely,\n\nPharmacist"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard; a missing designation is advisory only. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §6",
+          "R06.11-R06.13"
+        ],
+        "checkIds": [
+          "signoff_no_invented_name",
+          "signoff_designation_present",
+          "yours_sincerely_vs_faithfully",
+          "yours_sincerely_capitalisation"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-027",
+      "section": "03",
+      "severity": "major",
+      "title": "Body 180-200 words (body only)",
+      "body": "Body word-count guide remains 180-200 words, BODY ONLY (introduction to closure). Mandatory for generated Model Answers; advisory feedback for candidates.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard; 180-200 words counted from the introduction to the closure. CANDIDATE: advisory feedback only. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §4",
+          "R03.8"
+        ],
+        "checkIds": [
+          "letter_body_length"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-028",
+      "section": "08",
+      "severity": "critical",
+      "title": "At least two body paragraphs",
+      "body": "Use at least two body paragraphs, typically two to three; avoid one-paragraph letters and unnecessary fragmentation.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §4",
+          "R08.1",
+          "R03.9"
+        ],
+        "checkIds": [
+          "min_body_paragraphs",
+          "letter_paragraph_count"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-029",
+      "section": "08",
+      "severity": "critical",
+      "title": "No today's exact date and no \"yesterday\" in the body",
+      "body": "Do not write today's exact date in the body (use \"On today's visit\"/\"On today's presentation\"); avoid \"yesterday\" (use \"one day prior\"/\"one day ago\").",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "On today's visit, Mr Taylor presented with ..."
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §4",
+          "R08.8",
+          "R08.9"
+        ],
+        "checkIds": [
+          "body_no_todays_date",
+          "body_forbidden_phrase_yesterday"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-030",
+      "section": "12",
+      "severity": "major",
+      "title": "No contractions",
+      "body": "No contractions in formal OET letter output.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "does not"
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: advisory (Genre & Style note). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §4",
+          "R12.1"
+        ],
+        "checkIds": [
+          "no_contractions"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-031",
+      "section": "08",
+      "severity": "major",
+      "title": "Routine referral order and background placement",
+      "body": "Start with the main complaint/current reason for referral and organise subsequent paragraphs deliberately rather than copying case notes mechanically. Place relevant medical, family, social and special-habit background near the end, before the closure, when relevant and permitted by the letter type. Do not include irrelevant background merely to fill a category.",
+      "appliesTo": [
+        "routine_referral",
+        "non_medical_referral",
+        "other_letters"
+      ],
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Clarification",
+        "aiGradingLogic": "MODEL ANSWER: hard, checked by the independent semantic Model Answer validator. CANDIDATE: AI-graded organisation; different valid organisation is accepted. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §4 Routine / non-urgent referral structure",
+          "Rev8 §15.1",
+          "Rev8 §15.4"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-032",
+      "section": "14",
+      "severity": "major",
+      "title": "Discharge/update letter-type exceptions",
+      "body": "The background-placement rule does not force medical/family/social/special-habit history into every letter: discharge/update letters may exclude family history, social history, smoking/drinking, previous medical history or occupation because the recipient already knows the patient.",
+      "appliesTo": [
+        "discharge",
+        "transfer_letter"
+      ],
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Exception",
+        "aiGradingLogic": "MODEL ANSWER: hard, checked by the independent semantic Model Answer validator. CANDIDATE: AI-graded relevance. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §4 Important letter-type exception",
+          "R14.2-R14.10"
+        ],
+        "checkIds": [
+          "discharge_intro_template",
+          "discharge_intro_no_identity",
+          "discharge_plan_present",
+          "discharge_admitted_with_past_simple"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-033",
+      "section": "12",
+      "severity": "major",
+      "title": "Professional clinical register",
+      "body": "Use supported clinical wording rather than weak, colloquial or redundant phrasing (fatigue not tired/sluggish; MRI not MRI imaging; felt a popping sensation not felt something pop; does not currently have a GP not with no GP).",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "reported fatigue"
+      ],
+      "params": {
+        "classification": "Preferred Style",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: advisory. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §15.1",
+          "Rev8 §15.4"
+        ],
+        "checkIds": [
+          "register_colloquial"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-034",
+      "section": "09",
+      "severity": "major",
+      "title": "The closure remains a closure",
+      "body": "Management and history belong before the closure; after the closing request do not return to management advice (e.g. \"She was advised ...\").",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mrs Wright was advised to avoid weight-bearing ... (body). I would be grateful if you could arrange ... (closure)."
+      ],
+      "params": {
+        "classification": "Owner Clarification",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: hard. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §15.4",
+          "Rev8 §19.3"
+        ],
+        "checkIds": [
+          "closure_contains_management"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-035",
+      "section": "10",
+      "severity": "major",
+      "title": "Introduction tense",
+      "body": "Present simple and present perfect remain acceptable introduction tenses; present continuous is also acceptable when it correctly describes a current presentation (\"who is presenting with features suggestive of ...\"). The introduction stays concise and patient-specific with the purpose immediately clear.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to refer Mr Weir, who is presenting with features suggestive of multiple sclerosis, ..."
+      ],
+      "params": {
+        "classification": "Acceptable Alternative",
+        "aiGradingLogic": "MODEL ANSWER: hard, checked by the independent semantic Model Answer validator. CANDIDATE: never penalised for present simple, present perfect or (when it correctly describes a current presentation) present continuous. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §3 Introduction tense",
+          "R10.1-R10.13"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-036",
+      "section": "04",
+      "severity": "critical",
+      "title": "Paragraph spacing survives storage and rendering",
+      "body": "Address block, one blank line, date, one blank line, salutation + Re: line, one blank line, introduction, one blank line between every body paragraph, one blank line before the closure and before the closing phrase, approved spacing before the designation. The spacing must survive storage, API transport, HTML rendering and the candidate-facing Model Answer component; a rule-engine PASS with broken visual spacing is a FAIL.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: hard; a rule-engine PASS with broken visual spacing is a FAIL. CANDIDATE: the layout rules as listed. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §12.3",
+          "Rev8 §14",
+          "R04.1-R04.4"
+        ],
+        "checkIds": [
+          "model_answer_layout",
+          "blank_line_between_paragraphs",
+          "blank_before_closing_phrase",
+          "date_blank_line_sandwich"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-037",
+      "section": "03",
+      "severity": "critical",
+      "title": "Factual fidelity and certainty level",
+      "body": "Use only facts present in the exact case notes and task; never invent a diagnosis, test, treatment, dose, route, frequency, date or request, and preserve the certainty level (a prophylactic intention is never upgraded to a guarantee such as \"will prevent blood clots\").",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "dalteparin, 2500 IU by injection to reduce the risk of blood clots"
+      ],
+      "params": {
+        "classification": "Hard Rule",
+        "aiGradingLogic": "MODEL ANSWER: hard, enforced by grounding and the independent semantic Model Answer validator. CANDIDATE: AI-graded under Content. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §14",
+          "Rev8 §15.2",
+          "Rev8 §15.3",
+          "Rev8 §19.3"
+        ]
+      }
+    },
+    {
+      "id": "OWN-W-038",
+      "section": "16",
+      "severity": "critical",
+      "title": "Candidate grading: zero Model Answer similarity",
+      "body": "The candidate grader applies the same source-of-truth rules but never uses Model Answer similarity, phrase matching or template matching; genuinely correct alternative wording, synonyms, professional phrasing and different valid organisation are not penalised. Model Answer similarity contribution to the score is ZERO.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "aiGradingLogic": "MODEL ANSWER: not applicable. CANDIDATE: policy; the candidate grader applies the same source-of-truth rules but never uses Model Answer similarity, phrase matching or template matching, and genuinely correct alternative wording, synonyms, professional phrasing and different valid organisation are not penalised. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Rev8 §7",
+          "Rev8 §11",
+          "Rev8 §12.4",
+          "Rev8 §19.4"
+        ]
+      }
     }
   ],
   "tables": {

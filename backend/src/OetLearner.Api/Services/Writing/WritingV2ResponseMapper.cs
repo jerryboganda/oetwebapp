@@ -86,7 +86,15 @@ public static class WritingV2ResponseMapper
             CreatedAt: view.CreatedAt,
             UpdatedAt: view.CreatedAt,
             StimulusPdfMediaAssetId: pdfId,
-            StimulusPdfDownloadPath: string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content");
+            StimulusPdfDownloadPath: string.IsNullOrWhiteSpace(pdfId) ? null : $"/v1/media/{pdfId}/content",
+            TaskPromptMarkdown: view.TaskPromptMarkdown,
+            FixedInstructions: view.FixedInstructions,
+            ReadingTimeSeconds: view.ReadingTimeSeconds,
+            WritingTimeSeconds: view.WritingTimeSeconds,
+            WordGuideMin: view.WordGuideMin,
+            WordGuideMax: view.WordGuideMax,
+            WriterRole: view.WriterRole,
+            TodayDate: view.TodayDate);
     }
 
     public static WritingCanonRuleResponseV2 ToResponse(WritingCanonRuleView view)
@@ -251,12 +259,15 @@ public static class WritingV2ResponseMapper
                 int score = 0;
                 string feedback = string.Empty;
                 string? exemplar = null;
+                string? quote = null;
                 var cited = new List<string>();
                 if (el.ValueKind == JsonValueKind.Object)
                 {
                     if (el.TryGetProperty("score", out var sEl) && sEl.TryGetInt32(out var s)) score = s;
                     if (el.TryGetProperty("feedback", out var fEl) && fEl.ValueKind == JsonValueKind.String) feedback = fEl.GetString() ?? string.Empty;
                     if (el.TryGetProperty("exemplarFix", out var eEl) && eEl.ValueKind == JsonValueKind.String) exemplar = eEl.GetString();
+                    // Addendum Rev8 §19.4: the candidate's own wording the grader flagged.
+                    if (el.TryGetProperty("quote", out var qEl) && qEl.ValueKind == JsonValueKind.String) quote = qEl.GetString();
                     if (el.TryGetProperty("citedRuleIds", out var cEl) && cEl.ValueKind == JsonValueKind.Array)
                     {
                         foreach (var item in cEl.EnumerateArray())
@@ -269,7 +280,7 @@ public static class WritingV2ResponseMapper
                         }
                     }
                 }
-                perCriterion[key] = new WritingPerCriterionFeedbackResponse(score, feedback, exemplar, cited);
+                perCriterion[key] = new WritingPerCriterionFeedbackResponse(score, feedback, exemplar, cited, quote);
             }
         }
         catch (JsonException)

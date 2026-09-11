@@ -1,6 +1,7 @@
 {
   "schema_version": "1.0",
   "release_date": "2026-08-31",
+  "registry_revision": "v1.1-rev8 (2026-09-11): owner Rev8 rules OWN-W-001..038 added to every Writing registry (+38 active rules each)",
   "canonical_registry": "OET_AI_Rules_Master.json",
   "streaming_registry": "OET_AI_Rules_Master.jsonl",
   "evidence_corpus": "OET_Transcript_Evidence_Corpus.jsonl",
@@ -34,12 +35,13 @@
     "Do not reject a grammatically valid alternative solely because it differs from a teaching template.",
     "Do not invent clinical facts or turn OET Speaking into a medical-knowledge viva.",
     "Escalate clinically material factual distortions even when surface grammar is correct.",
-    "For volatile OET operational logistics, verify current official OET information when deploying a future release."
+    "For volatile OET operational logistics, verify current official OET information when deploying a future release.",
+    "Writing (owner Rev8): Model Answers follow the strict canonical house style; candidate grading accepts valid professional alternatives, and similarity to the Model Answer contributes zero to the score."
   ],
   "registries": {
     "Medicine": {
       "Writing": {
-        "active_rules": 230
+        "active_rules": 268
       },
       "Speaking": {
         "active_rules": 136
@@ -47,7 +49,7 @@
     },
     "Nursing": {
       "Writing": {
-        "active_rules": 237
+        "active_rules": 275
       },
       "Speaking": {
         "active_rules": 142
@@ -55,7 +57,7 @@
     },
     "Pharmacy": {
       "Writing": {
-        "active_rules": 240
+        "active_rules": 278
       },
       "Speaking": {
         "active_rules": 145
@@ -63,7 +65,7 @@
     },
     "Physiotherapy": {
       "Writing": {
-        "active_rules": 240
+        "active_rules": 278
       },
       "Speaking": {
         "active_rules": 144
@@ -71,7 +73,7 @@
     },
     "Dentistry": {
       "Writing": {
-        "active_rules": 237
+        "active_rules": 275
       },
       "Speaking": {
         "active_rules": 142
@@ -79,7 +81,7 @@
     },
     "Radiography": {
       "Writing": {
-        "active_rules": 237
+        "active_rules": 275
       },
       "Speaking": {
         "active_rules": 142

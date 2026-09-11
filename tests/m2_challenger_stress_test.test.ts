@@ -168,14 +168,15 @@ describe('CHALLENGER 1 M2 EMPIRICAL AUDIT: WRITING RUBRIC & 12 PROFESSIONS & COU
 
   // Migrated to the canonical OET_AI_Rules_Master.jsonl registry
   // (docs/canonical-rules/README.md); everything else stays on the legacy
-  // 172-rule baseline until a canonical pack exists for it.
+  // 172-rule baseline until a canonical pack exists for it. Owner Rev8
+  // (11 Sep 2026) adds OWN-W-001..038 to every Writing rulebook (+38).
   const CANONICAL_PROFESSION_COUNTS: Partial<Record<(typeof ALL_12_PROFESSIONS)[number], number>> = {
-    medicine: 230,
-    nursing: 237,
-    dentistry: 237,
-    pharmacy: 240,
-    physiotherapy: 240,
-    radiography: 237,
+    medicine: 268,
+    nursing: 275,
+    dentistry: 275,
+    pharmacy: 278,
+    physiotherapy: 278,
+    radiography: 275,
   };
 
   it('Rulebook integrity: All professions exist, load without error, and contain their expected rule baseline', () => {
@@ -188,7 +189,7 @@ describe('CHALLENGER 1 M2 EMPIRICAL AUDIT: WRITING RUBRIC & 12 PROFESSIONS & COU
       const book = loadRulebook('writing', p);
       expect(book.kind).toBe('writing');
       expect(book.profession).toBe(p);
-      expect(book.rules.length).toBe(CANONICAL_PROFESSION_COUNTS[p] ?? 172);
+      expect(book.rules.length).toBe(CANONICAL_PROFESSION_COUNTS[p] ?? 210);
       expect(book.sections.length).toBeGreaterThan(0);
     }
   });

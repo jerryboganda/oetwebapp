@@ -355,6 +355,7 @@ public sealed class WritingSubmitGradingPathTests : IAsyncDisposable
                 Status = WritingAssessmentModelAnswerStatus.Ready,
                 IsCandidateVisible = true,
                 ModelAnswerText = "Pregenerated exemplar text.",
+                ValidatorVersion = WritingRuleEngine.ValidatorVersion,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow,
             });

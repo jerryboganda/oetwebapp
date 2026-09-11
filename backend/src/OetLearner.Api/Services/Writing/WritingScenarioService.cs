@@ -30,12 +30,31 @@ public sealed record WritingScenarioView(
     bool IsDiagnostic,
     string Status,
     DateTimeOffset CreatedAt,
-    string? StimulusPdfMediaAssetId = null);
+    string? StimulusPdfMediaAssetId = null,
+    // Candidate-facing task-screen fields (Addendum Rev8 §16): without them
+    // the learner page could only show the PDF or "No task prompt available".
+    string? TaskPromptMarkdown = null,
+    IReadOnlyList<string>? FixedInstructions = null,
+    int? ReadingTimeSeconds = null,
+    int? WritingTimeSeconds = null,
+    int? WordGuideMin = null,
+    int? WordGuideMax = null,
+    string? WriterRole = null,
+    string? TodayDate = null);
 
 public interface IWritingScenarioService
 {
     Task<IReadOnlyList<WritingScenarioView>> ListAsync(string userId, WritingScenarioFilter filter, CancellationToken ct);
     Task<WritingScenarioView?> GetAsync(string userId, Guid id, CancellationToken ct);
+
+    /// <summary>
+    /// Pre-charge gate for the learner eligibility endpoint (Addendum Rev8
+    /// §16-§17): throws 404 <c>writing_scenario_not_found</c>, 409
+    /// <c>writing_task_unavailable</c> (not published) or 409
+    /// <c>writing_task_incomplete</c> (cannot render) so no credit is ever
+    /// debited for a task the learner cannot open.
+    /// </summary>
+    Task EnsureCandidateStartableAsync(Guid id, CancellationToken ct);
     Task<WritingScenarioView?> PickRandomAsync(string userId, WritingScenarioFilter filter, CancellationToken ct);
     Task<WritingScenarioView> CreateAsync(string userId, WritingScenarioView scenario, CancellationToken ct);
     Task<WritingScenarioView> UpdateAsync(string userId, Guid id, WritingScenarioView scenario, CancellationToken ct);
@@ -232,10 +251,10 @@ public sealed class WritingScenarioService(
                 blocking.Add("task_classification_conflict");
         }
 
+        // Rev8: "approved" means verified under the CURRENT validator version.
         var hasApprovedModelAnswer = await db.WritingTaskModelAnswers.AsNoTracking()
-            .AnyAsync(a => a.ScenarioId == entity.Id
-                && a.Status == WritingAssessmentModelAnswerStatus.Ready
-                && a.IsCandidateVisible, ct);
+            .Where(a => a.ScenarioId == entity.Id)
+            .AnyAsync(WritingTaskModelAnswerService.CandidateVisibleVerified, ct);
         if (!hasApprovedModelAnswer) blocking.Add("model_answer_not_approved");
 
         return blocking;
@@ -348,8 +367,37 @@ public sealed class WritingScenarioService(
             row.IsDiagnostic,
             row.Status,
             row.CreatedAt,
-            row.StimulusPdfMediaAssetId);
+            row.StimulusPdfMediaAssetId,
+            row.TaskPromptMarkdown,
+            // Null/blank entries dropped: the task screen trims every line.
+            SafeDeserializeList(row.FixedInstructionsJson).Where(line => !string.IsNullOrWhiteSpace(line)).ToList(),
+            row.ReadingTimeSeconds,
+            row.WritingTimeSeconds,
+            row.WordGuideMin,
+            row.WordGuideMax,
+            row.WriterRole,
+            row.TodayDate);
     }
+
+    /// <summary>
+    /// The exact learner task-screen projection served by
+    /// <c>GET /v1/writing/scenarios/{id}</c>. Shared with
+    /// <see cref="WritingTaskLoadIntegrityService"/> so the load-integrity
+    /// gate exercises the very code a candidate's page load runs.
+    /// </summary>
+    internal static WritingScenarioResponse ToLearnerResponse(
+        WritingScenario row,
+        IReadOnlyList<WritingScenarioStructuredSentence> sentences)
+        => WritingV2ResponseMapper.ToResponse(ToView(row, sentences));
+
+    /// <summary>
+    /// A task can render for a candidate when it has something to read (the
+    /// written prompt or the stimulus PDF) and at least one case-note
+    /// sentence. Same rule the eligibility gate enforces before charging.
+    /// </summary>
+    internal static bool IsCandidateLoadable(string? taskPromptMarkdown, string? stimulusPdfMediaAssetId, int caseNoteSentenceCount)
+        => (!string.IsNullOrWhiteSpace(taskPromptMarkdown) || !string.IsNullOrWhiteSpace(stimulusPdfMediaAssetId))
+           && caseNoteSentenceCount > 0;
 
     private static string NormalizeRelevance(string? value)
         => (value ?? string.Empty).Trim().ToLowerInvariant() switch
@@ -399,8 +447,45 @@ public sealed class WritingScenarioService(
 
     public async Task<WritingScenarioResponse?> GetScenarioAsync(string userId, Guid id, CancellationToken ct)
     {
-        var view = await GetAsync(userId, id, ct);
-        return view is null ? null : WritingV2ResponseMapper.ToResponse(view);
+        _ = userId;
+        // Learner route only: a draft/archived task is invisible (404), same
+        // as the library list. Admin reads use AdminGetScenarioAsync/GetAsync.
+        var row = await db.WritingScenarios.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == id && s.Status == "published", ct);
+        if (row is null) return null;
+        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .Where(s => s.ScenarioId == id)
+            .OrderBy(s => s.Ordinal)
+            .ToListAsync(ct);
+        return ToLearnerResponse(row, sentences);
+    }
+
+    public async Task EnsureCandidateStartableAsync(Guid id, CancellationToken ct)
+    {
+        var row = await db.WritingScenarios.AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => new { s.Status, s.TaskPromptMarkdown, s.StimulusPdfMediaAssetId })
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.NotFound("writing_scenario_not_found", "This writing task was not found.");
+        if (row.Status != "published")
+        {
+            throw ApiException.Conflict(
+                "writing_task_unavailable",
+                "This writing task is not available right now. Please choose another task.");
+        }
+
+        var sentenceCount = await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .CountAsync(s => s.ScenarioId == id, ct);
+        if (!IsCandidateLoadable(row.TaskPromptMarkdown, row.StimulusPdfMediaAssetId, sentenceCount))
+        {
+            // Logged for admins; the candidate only sees controlled copy.
+            logger?.LogWarning(
+                "Writing scenario {ScenarioId} is published but not candidate-loadable (prompt={HasPrompt}, pdf={HasPdf}, caseNotes={CaseNotes}).",
+                id, !string.IsNullOrWhiteSpace(row.TaskPromptMarkdown), !string.IsNullOrWhiteSpace(row.StimulusPdfMediaAssetId), sentenceCount);
+            throw ApiException.Conflict(
+                "writing_task_incomplete",
+                "This writing task is being updated and cannot be opened yet. You have not been charged. Please choose another task.");
+        }
     }
 
     public async Task<WritingScenarioResponse?> GetRandomScenarioAsync(string userId, string? profession, string? letterType, CancellationToken ct)

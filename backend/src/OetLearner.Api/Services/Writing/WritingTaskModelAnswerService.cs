@@ -21,15 +21,99 @@ public sealed record WritingTaskModelAnswerDto(
     DateTimeOffset? GeneratedAt,
     string? ApprovedByUserId,
     DateTimeOffset? ApprovedAt,
-    bool IsStale);
+    bool IsStale,
+    string? Title = null,
+    string? Profession = null,
+    string? LetterType = null,
+    string? ValidatorVersion = null,
+    string? RulePackHash = null,
+    DateTimeOffset? ValidatedAt = null,
+    int RepairCount = 0,
+    int? BodyWordCount = null,
+    string VerificationStatus = "unverified",
+    JsonElement? ValidationReport = null,
+    string? PromptVersion = null);
+
+public sealed record WritingModelAnswerFindingDto(
+    string RuleId,
+    string Severity,
+    string Message,
+    string? Quote,
+    string? FixSuggestion);
+
+/// <summary>
+/// The complete Model Answer gate outcome for one letter text (Addendum Rev8
+/// §14): body word count, case-note grounding, every deterministic
+/// Model-Answer-mode rule, and the independent semantic validator — all under
+/// one recorded validator version + rule-pack fingerprint.
+/// </summary>
+public sealed record WritingModelAnswerValidationReport(
+    Guid ScenarioId,
+    bool Passed,
+    string? HoldReason,
+    int BodyWordCount,
+    bool WordCountOk,
+    IReadOnlyList<string> UnmappedSentences,
+    IReadOnlyList<WritingModelAnswerFindingDto> DeterministicFindings,
+    bool SemanticChecked,
+    bool? SemanticPassed,
+    IReadOnlyList<WritingModelAnswerSemanticViolation> SemanticViolations,
+    string? SemanticError,
+    string ValidatorVersion,
+    string RulePackHash,
+    string? RulebookVersion,
+    string HouseStyleVersion,
+    DateTimeOffset CheckedAt);
+
+public sealed record WritingModelAnswerRevalidationRequest(
+    bool Apply,
+    bool IncludeSemantic,
+    string? Profession,
+    int Offset,
+    int Limit,
+    bool OnlyUnverified);
+
+public sealed record WritingModelAnswerRevalidationItem(
+    Guid ScenarioId,
+    string Title,
+    string Profession,
+    string LetterType,
+    string StatusBefore,
+    bool VisibleBefore,
+    string? ValidatorVersionBefore,
+    bool Passed,
+    string? HoldReason,
+    int BodyWordCount,
+    IReadOnlyList<WritingModelAnswerFindingDto> Findings,
+    IReadOnlyList<string> UnmappedSentences,
+    bool SemanticChecked,
+    IReadOnlyList<WritingModelAnswerSemanticViolation> SemanticViolations,
+    string? SemanticError);
+
+public sealed record WritingModelAnswerRevalidationResult(
+    string ValidatorVersion,
+    int TotalRows,
+    int Checked,
+    int Passed,
+    int Failed,
+    int Offset,
+    int Limit,
+    bool Applied,
+    bool IncludeSemantic,
+    IReadOnlyList<WritingModelAnswerRevalidationItem> Items);
 
 /// <summary>
 /// Generates and manages the ONE reusable, pre-generated Writing Model Answer
 /// per task (spec: "Model Answer — generate once, save permanently, reuse").
-/// Admin-triggered only; never called from the candidate submit path. Reuses
-/// <see cref="WritingModelAnswerGroundingValidator"/> — the same fact-grounding
-/// check the existing per-submission model-answer generator uses — so both
-/// paths refuse to publish a sentence that cannot be traced to the case notes.
+/// Admin-triggered only; never called from the candidate submit path.
+/// <para/>
+/// Addendum Rev8 (11 Sep 2026) generation workflow, enforced here for EVERY
+/// path that can store a candidate-facing answer (generate, background worker,
+/// offline import, revalidation): generate → deterministic lint → semantic
+/// validation → repair only the failed rules → re-run ALL validators → store
+/// only when remaining active-rule violations = 0. The exact validator version
+/// and rule-pack fingerprint are recorded; a stored answer is candidate-visible
+/// only while it matches the running validator (<see cref="CandidateVisibleVerified"/>).
 /// </summary>
 public sealed record WritingModelAnswerBatchItemResult(
     Guid ScenarioId,
@@ -53,23 +137,37 @@ public interface IWritingTaskModelAnswerService
     /// <summary>
     /// Certifies an offline-drafted Model Answer (the "platform validate" half
     /// of the hybrid generation route: draft outside the platform at no
-    /// provider spend, then run it through the SAME grounding + word-count +
-    /// deterministic-rule gate as <see cref="GenerateAsync"/> before it can
-    /// ever be marked Ready). Never bypasses any check GenerateAsync applies.
+    /// provider spend, then run it through the SAME full gate as
+    /// <see cref="GenerateAsync"/> — word count, grounding, every
+    /// deterministic rule and the semantic validator — before it can ever be
+    /// marked Ready). Never bypasses any check GenerateAsync applies.
     /// </summary>
     Task<WritingTaskModelAnswerDto> ImportAsync(Guid scenarioId, string letterText, string adminUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Runs the full Model Answer gate on a candidate text WITHOUT storing
+    /// anything (the deterministic lint → repair loop used while drafting).
+    /// </summary>
+    Task<WritingModelAnswerValidationReport> ValidateAsync(Guid scenarioId, string letterText, bool includeSemantic, string adminUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Re-runs the CURRENT validator over saved answers (Addendum Rev8 §9.5:
+    /// "Revalidate ALL current candidate-facing Model Answers with the
+    /// corrected validator. Do not trust old VERIFIED flags"). With
+    /// <c>Apply</c>: passing rows are stamped with the current validator
+    /// version; failing rows are held and hidden.
+    /// </summary>
+    Task<WritingModelAnswerRevalidationResult> RevalidateAsync(WritingModelAnswerRevalidationRequest request, string adminUserId, CancellationToken ct = default);
 
     Task<WritingTaskModelAnswerDto?> ApproveAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
     Task<WritingTaskModelAnswerDto?> RejectAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default);
 
     /// <summary>
     /// Preparation-time backfill across published tasks: generates the ONE
-    /// reusable Model Answer for every task that lacks a fresh approved one.
-    /// Resumable (re-run to continue), idempotent (Ready + fresh answers are
-    /// skipped, never regenerated), concurrency-safe (one row per task,
-    /// processed strictly sequentially), and rate-limit aware (sequential
-    /// provider calls, small bounded batch). Never called from the candidate
-    /// submit path.
+    /// reusable Model Answer for every task that lacks a fresh, verified
+    /// approved one. Resumable, idempotent, concurrency-safe and rate-limit
+    /// aware (sequential provider calls, small bounded batch). Never called
+    /// from the candidate submit path.
     /// </summary>
     Task<WritingModelAnswerBatchResult> GenerateMissingAsync(
         string adminUserId,
@@ -79,11 +177,8 @@ public interface IWritingTaskModelAnswerService
 
     /// <summary>
     /// Single-task worker step for the background exemplar queue (Option C).
-    /// Idempotent: a Ready + fresh answer is returned untouched with outcome
-    /// <c>ready-skipped</c> and ZERO provider calls, so queue redelivery or
-    /// stuck-job recovery after a restart can never trigger a duplicate paid
-    /// AI request. Otherwise generates exactly once via
-    /// <see cref="GenerateAsync"/>.
+    /// Idempotent: a Ready + fresh + verified answer is returned untouched with
+    /// outcome <c>ready-skipped</c> and ZERO provider calls.
     /// </summary>
     Task<WritingModelAnswerWorkItemResult> GenerateIfNeededAsync(
         Guid scenarioId,
@@ -92,10 +187,7 @@ public interface IWritingTaskModelAnswerService
 
     /// <summary>
     /// Enqueues background generation jobs (Option C) for published tasks
-    /// lacking a fresh approved Model Answer. Fast and side-effect free
-    /// beyond the job rows: the worker grinds through them without any HTTP
-    /// timeout pressure. Skips tasks that already have a queued/processing
-    /// job (no duplicate workflows) and tasks already Ready + fresh.
+    /// lacking a fresh, verified approved Model Answer.
     /// </summary>
     Task<WritingModelAnswerEnqueueResult> EnqueueMissingAsync(
         string adminUserId,
@@ -122,13 +214,33 @@ public sealed class WritingTaskModelAnswerService(
     IAiGatewayService gateway,
     WritingRuleEngine ruleEngine,
     TimeProvider clock,
-    ILogger<WritingTaskModelAnswerService> logger) : IWritingTaskModelAnswerService
+    ILogger<WritingTaskModelAnswerService> logger,
+    IWritingModelAnswerSemanticValidator? semanticValidator = null) : IWritingTaskModelAnswerService
 {
+    /// <summary>
+    /// The ONLY predicate that decides whether a saved Model Answer may be shown
+    /// to candidates: Ready + admin-approved + verified with zero violations
+    /// under the CURRENTLY RUNNING deterministic validator version (Addendum
+    /// Rev8 §14 — a stored VERIFIED flag is invalid after a validator/rule-pack
+    /// change until that exact saved answer is revalidated).
+    /// </summary>
+    public static System.Linq.Expressions.Expression<Func<WritingTaskModelAnswer, bool>> CandidateVisibleVerified
+        => a => a.Status == WritingAssessmentModelAnswerStatus.Ready
+                && a.IsCandidateVisible
+                && a.ValidatorVersion == WritingRuleEngine.ValidatorVersion;
+
+    public static bool IsVerifiedForCandidates(WritingTaskModelAnswer? row)
+        => row is not null
+           && row.Status == WritingAssessmentModelAnswerStatus.Ready
+           && row.IsCandidateVisible
+           && string.Equals(row.ValidatorVersion, WritingRuleEngine.ValidatorVersion, StringComparison.Ordinal);
+
     // Must fit AiOperation.PromptVersion, which is [MaxLength(32)] - confirmed
     // via production Npgsql exception (22001: value too long for type
     // character varying(32)) after the longer "writing.model-answer-pregenerate.v1"
     // (35 chars) broke every single pilot generation call.
-    private const string PromptVersion = "writing.model-answer-pregen.v1";
+    private const string PromptVersion = "writing.model-answer-pregen.v2";
+    private const string ImportPromptVersion = "writing.model-answer.offline-import.v2";
     // Pinned per owner instruction: Model Answers are candidate-facing exemplar
     // content, generated once per task, so quality is prioritised over the
     // platform's default (cheaper) provider. Provider/Model set explicitly on
@@ -139,17 +251,20 @@ public sealed class WritingTaskModelAnswerService(
     // grading, so pay for max reasoning quality/effort. claude-sonnet-5 uses
     // adaptive thinking (no manual token budget) - "max" is a valid
     // output_config.effort value, confirmed live against the Anthropic API.
-    // MaxTokens just needs generous headroom for thinking + the ~200-word
-    // letter + JSON wrapper; 32000 verified accepted for this model.
     private const string ThinkingEffort = "max";
     private const int MaxCompletionTokens = 32000;
+    // Addendum Rev8 §14: repair only the failed rules, then re-run ALL
+    // validators. One generation + up to three targeted repairs.
+    private const int MaxGenerationAttempts = 4;
+
+    private static readonly JsonSerializerOptions ReportJson = new(JsonSerializerDefaults.Web);
 
     public async Task<WritingTaskModelAnswerDto?> GetAsync(Guid scenarioId, CancellationToken ct = default)
     {
         var row = await db.WritingTaskModelAnswers.AsNoTracking().FirstOrDefaultAsync(x => x.ScenarioId == scenarioId, ct);
         if (row is null) return null;
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
-        return ToDto(row, scenario);
+        return ToDto(row, scenario, includeReport: true);
     }
 
     public async Task<(IReadOnlyList<WritingTaskModelAnswerDto> Items, int Total)> ListAsync(string? status, int page, int pageSize, CancellationToken ct = default)
@@ -170,7 +285,7 @@ public sealed class WritingTaskModelAnswerService(
             .Where(s => scenarioIds.Contains(s.Id))
             .ToDictionaryAsync(s => s.Id, ct);
 
-        var items = rows.Select(r => ToDto(r, scenarios.GetValueOrDefault(r.ScenarioId))).ToList();
+        var items = rows.Select(r => ToDto(r, scenarios.GetValueOrDefault(r.ScenarioId), includeReport: true)).ToList();
         return (items, total);
     }
 
@@ -179,10 +294,7 @@ public sealed class WritingTaskModelAnswerService(
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct)
             ?? throw ApiException.NotFound("writing_scenario_not_found", "Writing task was not found.");
 
-        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
-            .Where(s => s.ScenarioId == scenarioId)
-            .OrderBy(s => s.Ordinal)
-            .ToListAsync(ct);
+        var sentences = await LoadSentencesAsync(scenarioId, ct);
 
         var row = await db.WritingTaskModelAnswers.FirstOrDefaultAsync(x => x.ScenarioId == scenarioId, ct);
         var now = clock.GetUtcNow();
@@ -194,7 +306,6 @@ public sealed class WritingTaskModelAnswerService(
 
         var taskSnapshot = scenario.TaskPromptMarkdown ?? string.Empty;
         var caseNotesText = BuildCaseNotesText(sentences.Select(s => (s.SentenceText, s.RelevanceLabel)));
-        var allFacts = sentences.Select(s => s.SentenceText).ToArray();
         row.SourceContentHash = ComputeSourceContentHash(taskSnapshot, caseNotesText);
         row.UpdatedAt = now;
 
@@ -214,100 +325,82 @@ public sealed class WritingTaskModelAnswerService(
             {
                 Kind = RuleKind.Writing,
                 Profession = profession,
-                LetterType = scenario.LetterType,
+                // Rev8 D14 root cause: the raw "LT-UR" catalogue code never
+                // matched letter-type-scoped rulebook rules ("urgent_referral").
+                LetterType = WritingLetterTypeTaxonomy.ToLegacyLetterType(scenario.LetterType),
                 Task = AiTaskMode.GenerateContent,
             });
 
-            var result = await gateway.CompleteAsync(new AiGatewayRequest
+            string? letter = null;
+            WritingModelAnswerValidationReport? report = null;
+            IReadOnlyList<string> factRefs = [];
+            string? resolvedModel = null;
+            string? rulebookVersion = null;
+            var repairs = 0;
+            for (var attempt = 0; attempt < MaxGenerationAttempts; attempt++)
             {
-                Prompt = prompt,
-                Provider = PinnedProvider,
-                Model = PinnedModel,
-                Temperature = 0.1,
-                MaxTokens = MaxCompletionTokens,
-                EnableExtendedThinking = true,
-                ThinkingEffort = ThinkingEffort,
-                FeatureCode = AiFeatureCodes.WritingModelAnswerPregenerate,
-                PromptTemplateId = PromptVersion,
-                UserId = adminUserId,
-                AssessmentContext = AiAssessmentContext.Practice,
-                ResourceId = scenarioId.ToString("D"),
-                ResourceType = "writing_task_model_answer",
-                UserInput = $$"""
-                    Produce the ONE reusable OET Writing model answer for this task. It will be
-                    shown to every candidate who completes this exact task, so it must be a
-                    faithful, high-quality exemplar grounded ONLY in the case notes below.
-                    Return one JSON object only:
-                    {"modelAnswerText":"...","whyThisWorks":["..."],"groundedFactReferences":["..."]}
-                    The model answer must be approximately 180-200 words, recipient-appropriate
-                    per the writing task instruction, and use only facts present in the case
-                    notes. Do not add diagnoses, tests, treatment, dates, or requests that are
-                    not in the case notes.
+                var userInput = attempt == 0 || letter is null || report is null
+                    ? BuildGenerationInput(scenario, profession, taskSnapshot, caseNotesText)
+                    : BuildRepairInput(scenario, profession, taskSnapshot, caseNotesText, letter, report);
+                var result = await gateway.CompleteAsync(new AiGatewayRequest
+                {
+                    Prompt = prompt,
+                    Provider = PinnedProvider,
+                    Model = PinnedModel,
+                    Temperature = 0.1,
+                    MaxTokens = MaxCompletionTokens,
+                    EnableExtendedThinking = true,
+                    ThinkingEffort = ThinkingEffort,
+                    FeatureCode = AiFeatureCodes.WritingModelAnswerPregenerate,
+                    PromptTemplateId = PromptVersion,
+                    UserId = adminUserId,
+                    AssessmentContext = AiAssessmentContext.Practice,
+                    ResourceId = scenarioId.ToString("D"),
+                    ResourceType = "writing_task_model_answer",
+                    UserInput = userInput,
+                }, ct);
+                resolvedModel = string.IsNullOrWhiteSpace(result.ResolvedModel) ? PinnedModel : result.ResolvedModel;
+                rulebookVersion = string.IsNullOrWhiteSpace(result.RulebookVersion) ? rulebookVersion : result.RulebookVersion;
 
-                    Writing task:
-                    ---
-                    {{taskSnapshot}}
-                    ---
-                    Case notes:
-                    ---
-                    {{caseNotesText}}
-                    ---
-                    """,
-            }, ct);
+                var parsed = Parse(result.Completion);
+                if (parsed is null || string.IsNullOrWhiteSpace(parsed.ModelAnswerText))
+                {
+                    if (letter is null && attempt == MaxGenerationAttempts - 1)
+                    {
+                        return Hold(row, "model_answer_unreadable");
+                    }
+                    continue;
+                }
 
-            var parsed = Parse(result.Completion);
-            if (parsed is null || string.IsNullOrWhiteSpace(parsed.ModelAnswerText))
+                letter = NormaliseLetterText(parsed.ModelAnswerText);
+                factRefs = parsed.GroundedFactReferences ?? [];
+                report = await RunGateAsync(scenario, sentences, profession, letter, includeSemantic: true, adminUserId, ct);
+                if (report.Passed) break;
+                if (IsTransientHold(report.HoldReason)) break;
+                repairs = attempt + 1;
+            }
+
+            if (letter is null || report is null)
             {
                 return Hold(row, "model_answer_unreadable");
             }
 
-            var words = WritingModelAnswerWordCounter.CountBodyWords(parsed.ModelAnswerText);
-            if (words < 180 || words > 200)
-            {
-                return Hold(row, "model_answer_word_count_out_of_range");
-            }
-
-            var grounding = WritingModelAnswerGroundingValidator.Validate(parsed.ModelAnswerText, allFacts);
-            if (!grounding.IsGrounded)
-            {
-                return Hold(row, "model_answer_unmapped_sentence");
-            }
-
-            // Global Model Answer Formatting & Sign-Off Rules (owner addendum,
-            // 2026-09-06): "VERIFIED must mean zero unresolved violations" —
-            // a Model Answer must never be marked Ready while any Critical
-            // deterministic finding (brackets, invented sign-off name, date
-            // format, structural rules, etc.) remains. Never force Ready.
-            var lintFindings = ruleEngine.Lint(new WritingLintInput(
-                LetterText: parsed.ModelAnswerText,
-                LetterType: scenario.LetterType,
-                Profession: profession,
-                IsModelAnswer: true));
-            var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
-            if (criticalFindings.Count > 0)
+            if (!report.Passed)
             {
                 logger.LogWarning(
-                    "Model-answer rule violations for scenario {ScenarioId}: {Findings}",
-                    scenarioId, string.Join(" | ", criticalFindings.Select(f => $"{f.RuleId}: {f.Message}")));
-                return Hold(row, "model_answer_rule_violations");
+                    "Model-answer generation held for scenario {ScenarioId} after {Repairs} repair(s): {HoldReason}; findings {Findings}",
+                    scenarioId, repairs, report.HoldReason,
+                    string.Join(" | ", report.DeterministicFindings.Select(f => $"{f.RuleId}: {f.Message}")));
+                row.ValidationReportJson = SerializeReport(report, letter);
+                return Hold(row, report.HoldReason ?? "model_answer_rule_violations");
             }
 
-            row.Status = WritingAssessmentModelAnswerStatus.Ready;
-            row.IsCandidateVisible = false; // still needs an explicit admin approve
-            row.ModelAnswerText = parsed.ModelAnswerText.Trim();
-            row.GroundedFactReferencesJson = JsonSerializer.Serialize(parsed.GroundedFactReferences ?? []);
-            row.HoldReason = null;
-            row.RulebookVersion = string.IsNullOrWhiteSpace(result.RulebookVersion) ? null : result.RulebookVersion;
-            row.PromptVersion = PromptVersion;
-            row.ModelUsed = string.IsNullOrWhiteSpace(result.ResolvedModel) ? PinnedModel : result.ResolvedModel;
-            row.GeneratedAt = now;
-            row.ApprovedByUserId = null;
-            row.ApprovedAt = null;
-
+            StoreVerified(row, letter, report, now, resolvedModel, rulebookVersion, PromptVersion, repairs);
+            row.GroundedFactReferencesJson = JsonSerializer.Serialize(factRefs);
             await db.SaveChangesAsync(ct);
-            return ToDto(row, scenario);
+            return ToDto(row, scenario, includeReport: true);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Model-answer pregeneration failed for scenario {ScenarioId}", scenarioId);
             return Hold(row, "model_answer_generation_failed");
@@ -319,10 +412,7 @@ public sealed class WritingTaskModelAnswerService(
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct)
             ?? throw ApiException.NotFound("writing_scenario_not_found", "Writing task was not found.");
 
-        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
-            .Where(s => s.ScenarioId == scenarioId)
-            .OrderBy(s => s.Ordinal)
-            .ToListAsync(ct);
+        var sentences = await LoadSentencesAsync(scenarioId, ct);
 
         var row = await db.WritingTaskModelAnswers.FirstOrDefaultAsync(x => x.ScenarioId == scenarioId, ct);
         var now = clock.GetUtcNow();
@@ -334,7 +424,6 @@ public sealed class WritingTaskModelAnswerService(
 
         var taskSnapshot = scenario.TaskPromptMarkdown ?? string.Empty;
         var caseNotesText = BuildCaseNotesText(sentences.Select(s => (s.SentenceText, s.RelevanceLabel)));
-        var allFacts = sentences.Select(s => s.SentenceText).ToArray();
         row.SourceContentHash = ComputeSourceContentHash(taskSnapshot, caseNotesText);
         row.UpdatedAt = now;
 
@@ -351,47 +440,130 @@ public sealed class WritingTaskModelAnswerService(
             return Hold(row, "model_answer_unreadable");
         }
 
-        var trimmedLetter = letterText.Trim();
-        var words = WritingModelAnswerWordCounter.CountBodyWords(trimmedLetter);
-        if (words < 180 || words > 200)
-        {
-            return Hold(row, "model_answer_word_count_out_of_range");
-        }
-
-        var grounding = WritingModelAnswerGroundingValidator.Validate(trimmedLetter, allFacts);
-        if (!grounding.IsGrounded)
-        {
-            return Hold(row, "model_answer_unmapped_sentence");
-        }
-
-        var lintFindings = ruleEngine.Lint(new WritingLintInput(
-            LetterText: trimmedLetter,
-            LetterType: scenario.LetterType,
-            Profession: profession,
-            IsModelAnswer: true));
-        var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
-        if (criticalFindings.Count > 0)
+        var letter = NormaliseLetterText(letterText);
+        var report = await RunGateAsync(scenario, sentences, profession, letter, includeSemantic: true, adminUserId, ct);
+        if (!report.Passed)
         {
             logger.LogWarning(
-                "Imported model-answer rule violations for scenario {ScenarioId}: {Findings}",
-                scenarioId, string.Join(" | ", criticalFindings.Select(f => $"{f.RuleId}: {f.Message}")));
-            return Hold(row, "model_answer_rule_violations");
+                "Imported model-answer held for scenario {ScenarioId}: {HoldReason}; findings {Findings}",
+                scenarioId, report.HoldReason,
+                string.Join(" | ", report.DeterministicFindings.Select(f => $"{f.RuleId}: {f.Message}")));
+            row.ValidationReportJson = SerializeReport(report, letter);
+            return Hold(row, report.HoldReason ?? "model_answer_rule_violations");
         }
 
-        row.Status = WritingAssessmentModelAnswerStatus.Ready;
-        row.IsCandidateVisible = false; // still needs an explicit admin approve
-        row.ModelAnswerText = trimmedLetter;
+        StoreVerified(row, letter, report, now, "offline-import:claude-code", report.RulebookVersion, ImportPromptVersion, repairCount: 0);
         row.GroundedFactReferencesJson = "[]";
-        row.HoldReason = null;
-        row.RulebookVersion = null;
-        row.PromptVersion = "writing.model-answer.offline-import.v1";
-        row.ModelUsed = "offline-import:claude-code";
-        row.GeneratedAt = now;
-        row.ApprovedByUserId = null;
-        row.ApprovedAt = null;
-
         await db.SaveChangesAsync(ct);
-        return ToDto(row, scenario);
+        return ToDto(row, scenario, includeReport: true);
+    }
+
+    public async Task<WritingModelAnswerValidationReport> ValidateAsync(Guid scenarioId, string letterText, bool includeSemantic, string adminUserId, CancellationToken ct = default)
+    {
+        var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct)
+            ?? throw ApiException.NotFound("writing_scenario_not_found", "Writing task was not found.");
+        if (!RulebookProfessionParser.TryParse(scenario.Profession, out var profession))
+        {
+            throw ApiException.Validation("model_answer_profession_pack_unavailable", "The task's profession has no Writing rule pack.");
+        }
+        var sentences = await LoadSentencesAsync(scenarioId, ct);
+        return await RunGateAsync(scenario, sentences, profession, NormaliseLetterText(letterText ?? string.Empty), includeSemantic, adminUserId, ct);
+    }
+
+    public async Task<WritingModelAnswerRevalidationResult> RevalidateAsync(WritingModelAnswerRevalidationRequest request, string adminUserId, CancellationToken ct = default)
+    {
+        var limit = Math.Clamp(request.Limit, 1, request.IncludeSemantic ? 10 : 500);
+        var offset = Math.Max(0, request.Offset);
+
+        var scenarioQuery = db.WritingScenarios.AsNoTracking().Where(s => s.Status == "published");
+        if (!string.IsNullOrWhiteSpace(request.Profession))
+        {
+            var p = request.Profession.Trim().ToLowerInvariant();
+            scenarioQuery = scenarioQuery.Where(s => s.Profession.ToLower() == p);
+        }
+        var scenarios = await scenarioQuery.ToDictionaryAsync(s => s.Id, ct);
+        var ids = scenarios.Keys.ToList();
+
+        var rowQuery = db.WritingTaskModelAnswers.Where(a => ids.Contains(a.ScenarioId) && a.ModelAnswerText != null);
+        if (request.OnlyUnverified)
+        {
+            rowQuery = rowQuery.Where(a => a.ValidatorVersion != WritingRuleEngine.ValidatorVersion);
+        }
+        var total = await rowQuery.CountAsync(ct);
+        var rows = (await rowQuery.ToListAsync(ct))
+            .OrderBy(a => scenarios[a.ScenarioId].Profession, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => scenarios[a.ScenarioId].Title, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(a => a.ScenarioId)
+            .Skip(offset)
+            .Take(limit)
+            .ToList();
+
+        var items = new List<WritingModelAnswerRevalidationItem>();
+        var passed = 0;
+        foreach (var row in rows)
+        {
+            ct.ThrowIfCancellationRequested();
+            var scenario = scenarios[row.ScenarioId];
+            var statusBefore = row.Status.ToString();
+            var visibleBefore = row.IsCandidateVisible;
+            var versionBefore = row.ValidatorVersion;
+            WritingModelAnswerValidationReport report;
+            if (!RulebookProfessionParser.TryParse(scenario.Profession, out var profession))
+            {
+                report = FailedReport(row.ScenarioId, "model_answer_profession_pack_unavailable");
+            }
+            else
+            {
+                var sentences = await LoadSentencesAsync(row.ScenarioId, ct);
+                report = sentences.Count == 0
+                    ? FailedReport(row.ScenarioId, "model_answer_case_notes_unavailable")
+                    : await RunGateAsync(scenario, sentences, profession, row.ModelAnswerText!, request.IncludeSemantic, adminUserId, ct);
+            }
+
+            if (report.Passed) passed++;
+            items.Add(new WritingModelAnswerRevalidationItem(
+                row.ScenarioId, scenario.Title, scenario.Profession, scenario.LetterType,
+                statusBefore, visibleBefore, versionBefore, report.Passed, report.HoldReason, report.BodyWordCount,
+                report.DeterministicFindings, report.UnmappedSentences, report.SemanticChecked,
+                report.SemanticViolations, report.SemanticError));
+
+            if (!request.Apply) continue;
+            var now = clock.GetUtcNow();
+            row.ValidationReportJson = SerializeReport(report, null);
+            row.BodyWordCount = report.BodyWordCount;
+            row.UpdatedAt = now;
+            if (report.Passed && (request.IncludeSemantic || semanticValidator is null))
+            {
+                // Only a FULL pass (deterministic + semantic) re-verifies a row.
+                row.ValidatorVersion = WritingRuleEngine.ValidatorVersion;
+                row.RulePackHash = report.RulePackHash;
+                row.ValidatedAt = now;
+                if (row.Status == WritingAssessmentModelAnswerStatus.HeldForReview
+                    && string.Equals(row.HoldReason, "model_answer_revalidation_failed", StringComparison.Ordinal))
+                {
+                    row.Status = WritingAssessmentModelAnswerStatus.Ready;
+                    row.HoldReason = null;
+                }
+            }
+            else if (!report.Passed && !IsTransientHold(report.HoldReason))
+            {
+                // Never keep a failing answer candidate-visible (it already
+                // is not, by CandidateVisibleVerified — this makes the state
+                // explicit for admins and the catalogue gates).
+                row.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
+                row.IsCandidateVisible = false;
+                row.HoldReason = "model_answer_revalidation_failed";
+                row.ValidatorVersion = null;
+            }
+        }
+
+        if (request.Apply) await db.SaveChangesAsync(ct);
+        logger.LogInformation(
+            "Model-answer revalidation by {AdminUserId}: checked {Checked} (offset {Offset}), passed {Passed}, applied {Applied}, semantic {Semantic}.",
+            adminUserId, items.Count, offset, passed, request.Apply, request.IncludeSemantic);
+        return new WritingModelAnswerRevalidationResult(
+            WritingRuleEngine.ValidatorVersion, total, items.Count, passed, items.Count - passed,
+            offset, limit, request.Apply, request.IncludeSemantic, items);
     }
 
     public async Task<WritingModelAnswerBatchResult> GenerateMissingAsync(
@@ -405,7 +577,7 @@ public sealed class WritingTaskModelAnswerService(
             .Where(s => s.Status == "published")
             .OrderBy(s => s.UpdatedAt)
             .Select(s => s.Id)
-            .Take(200)
+            .Take(500)
             .ToListAsync(ct);
 
         var answers = await db.WritingTaskModelAnswers.AsNoTracking()
@@ -435,9 +607,9 @@ public sealed class WritingTaskModelAnswerService(
                 && existing.Status == WritingAssessmentModelAnswerStatus.Ready)
             {
                 // Ready answers are never regenerated blindly: a visible +
-                // fresh one is reused forever; a visible + stale one is
-                // refreshed only on explicit request; an invisible one is
-                // awaiting admin approval — regenerating would discard the
+                // fresh + verified one is reused forever; a visible + stale
+                // one is refreshed only on explicit request; an invisible one
+                // is awaiting admin approval — regenerating would discard the
                 // pending review and burn another provider call.
                 if (!existing.IsCandidateVisible)
                 {
@@ -445,7 +617,7 @@ public sealed class WritingTaskModelAnswerService(
                     items.Add(new WritingModelAnswerBatchItemResult(scenarioId, scenario.Title, "skipped", "awaiting_approval"));
                     continue;
                 }
-                var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing.SourceContentHash, ct);
+                var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing, ct);
                 if (fresh || !includeStale)
                 {
                     skipped++;
@@ -460,7 +632,7 @@ public sealed class WritingTaskModelAnswerService(
             {
                 outcome = await GenerateAsync(scenarioId, adminUserId, ct);
             }
-            catch (Exception ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "Model-answer batch generation threw for scenario {ScenarioId}; continuing batch.", scenarioId);
                 held++;
@@ -484,11 +656,12 @@ public sealed class WritingTaskModelAnswerService(
     }
 
     /// <summary>
-    /// Single-task background worker step (Option C). A Ready + fresh answer
-    /// is returned untouched with outcome <c>ready-skipped</c> and zero
-    /// provider calls, so queue redelivery or stuck-job recovery after a
-    /// restart can never trigger a duplicate paid AI request. Awaiting-approval
-    /// answers are likewise left alone. Otherwise generates exactly once.
+    /// Single-task background worker step (Option C). A Ready + fresh +
+    /// verified answer is returned untouched with outcome <c>ready-skipped</c>
+    /// and zero provider calls, so queue redelivery or stuck-job recovery
+    /// after a restart can never trigger a duplicate paid AI request.
+    /// Awaiting-approval answers are likewise left alone. Otherwise generates
+    /// exactly once (including its bounded repair loop).
     /// </summary>
     public async Task<WritingModelAnswerWorkItemResult> GenerateIfNeededAsync(
         Guid scenarioId,
@@ -506,16 +679,17 @@ public sealed class WritingTaskModelAnswerService(
             .FirstOrDefaultAsync(a => a.ScenarioId == scenarioId, ct);
         if (existing is not null && existing.Status == WritingAssessmentModelAnswerStatus.Ready)
         {
-            var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing.SourceContentHash, ct);
+            var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing, ct);
             if (fresh)
             {
                 logger.LogInformation(
-                    "Model-answer worker skipped scenario {ScenarioId}: answer already Ready and fresh, no provider call.",
+                    "Model-answer worker skipped scenario {ScenarioId}: answer already Ready, fresh and verified, no provider call.",
                     scenarioId);
                 return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "ready-skipped", "already_ready");
             }
 
-            if (!existing.IsCandidateVisible)
+            if (!existing.IsCandidateVisible
+                && string.Equals(existing.ValidatorVersion, WritingRuleEngine.ValidatorVersion, StringComparison.Ordinal))
             {
                 return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "skipped", "awaiting_approval");
             }
@@ -526,7 +700,7 @@ public sealed class WritingTaskModelAnswerService(
         {
             outcome = await GenerateAsync(scenarioId, adminUserId, ct);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Model-answer worker threw for scenario {ScenarioId}.", scenarioId);
             return new WritingModelAnswerWorkItemResult(scenarioId, scenario.Title, "held", "model_answer_generation_failed");
@@ -552,14 +726,15 @@ public sealed class WritingTaskModelAnswerService(
     /// quality verdict (retrying is pointless without a content change).
     /// </summary>
     internal static bool IsTransientHold(string? holdReason)
-        => string.Equals(holdReason, "model_answer_generation_failed", StringComparison.Ordinal);
+        => string.Equals(holdReason, "model_answer_generation_failed", StringComparison.Ordinal)
+           || string.Equals(holdReason, "model_answer_semantic_validator_unavailable", StringComparison.Ordinal);
 
     /// <summary>
     /// Enqueues background generation jobs (Option C) for published tasks
-    /// lacking a fresh approved Model Answer. Returns immediately: the
-    /// worker grinds through jobs with no HTTP timeout pressure. Skips tasks
-    /// with an already queued/processing job (no duplicate workflows) and
-    /// Ready + fresh tasks. Resumable: re-run to continue where it stopped.
+    /// lacking a fresh, verified approved Model Answer. Returns immediately:
+    /// the worker grinds through jobs with no HTTP timeout pressure. Skips
+    /// tasks with an already queued/processing job (no duplicate workflows)
+    /// and Ready + fresh + verified tasks. Resumable: re-run to continue.
     /// </summary>
     public async Task<WritingModelAnswerEnqueueResult> EnqueueMissingAsync(
         string adminUserId,
@@ -615,8 +790,10 @@ public sealed class WritingTaskModelAnswerService(
             if (answers.TryGetValue(scenarioId, out var existing)
                 && existing.Status == WritingAssessmentModelAnswerStatus.Ready)
             {
-                var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing.SourceContentHash, ct);
-                if (fresh || !existing.IsCandidateVisible)
+                var fresh = await IsFreshAsync(scenarioId, scenario.TaskPromptMarkdown ?? string.Empty, existing, ct);
+                var awaitingApprovalVerified = !existing.IsCandidateVisible
+                    && string.Equals(existing.ValidatorVersion, WritingRuleEngine.ValidatorVersion, StringComparison.Ordinal);
+                if (fresh || awaitingApprovalVerified)
                 {
                     skipped++;
                     continue;
@@ -662,21 +839,23 @@ public sealed class WritingTaskModelAnswerService(
         return new WritingModelAnswerEnqueueResult(candidateIds.Count, enqueued, skipped, items);
     }
 
+    /// <summary>
+    /// Fresh = generated from the CURRENT task + case notes AND verified under
+    /// the CURRENT validator version. Either drifting makes the answer stale.
+    /// </summary>
     private async Task<bool> IsFreshAsync(
         Guid scenarioId,
         string taskPrompt,
-        string? sourceContentHash,
+        WritingTaskModelAnswer existing,
         CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(sourceContentHash)) return false;
-        var sentences = await db.WritingScenarioStructuredSentences.AsNoTracking()
-            .Where(s => s.ScenarioId == scenarioId)
-            .OrderBy(s => s.Ordinal)
-            .ToListAsync(ct);
+        if (string.IsNullOrWhiteSpace(existing.SourceContentHash)) return false;
+        if (!string.Equals(existing.ValidatorVersion, WritingRuleEngine.ValidatorVersion, StringComparison.Ordinal)) return false;
+        var sentences = await LoadSentencesAsync(scenarioId, ct);
         var current = ComputeSourceContentHash(
             taskPrompt,
             sentences.Select(s => (s.SentenceText, s.RelevanceLabel)));
-        return string.Equals(sourceContentHash, current, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(existing.SourceContentHash, current, StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<WritingTaskModelAnswerDto?> ApproveAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default)
@@ -687,6 +866,13 @@ public sealed class WritingTaskModelAnswerService(
         {
             throw ApiException.Validation("model_answer_not_ready", "Only a Ready model answer can be approved.");
         }
+        if (!string.Equals(row.ValidatorVersion, WritingRuleEngine.ValidatorVersion, StringComparison.Ordinal))
+        {
+            // Addendum Rev8 §14: never publish an answer that has not passed the
+            // CURRENT validator with zero violations.
+            throw ApiException.Validation("model_answer_not_verified",
+                $"This model answer has not been verified under the current Writing validator ({WritingRuleEngine.ValidatorVersion}). Revalidate or regenerate it first.");
+        }
 
         row.IsCandidateVisible = true;
         row.ApprovedByUserId = adminUserId;
@@ -695,7 +881,7 @@ public sealed class WritingTaskModelAnswerService(
         await db.SaveChangesAsync(ct);
 
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
-        return ToDto(row, scenario);
+        return ToDto(row, scenario, includeReport: true);
     }
 
     public async Task<WritingTaskModelAnswerDto?> RejectAsync(Guid scenarioId, string adminUserId, CancellationToken ct = default)
@@ -712,7 +898,221 @@ public sealed class WritingTaskModelAnswerService(
         await db.SaveChangesAsync(ct);
 
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct);
-        return ToDto(row, scenario);
+        return ToDto(row, scenario, includeReport: true);
+    }
+
+    // ---------------------------------------------------------------------
+    // The full Model Answer gate (Addendum Rev8 §7, §14)
+    // ---------------------------------------------------------------------
+
+    private async Task<WritingModelAnswerValidationReport> RunGateAsync(
+        WritingScenario scenario,
+        IReadOnlyList<WritingScenarioStructuredSentence> sentences,
+        ExamProfession profession,
+        string letterText,
+        bool includeSemantic,
+        string adminUserId,
+        CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var words = WritingModelAnswerWordCounter.CountBodyWords(letterText);
+        var wordCountOk = words is >= 180 and <= 200;
+        var facts = sentences.Select(s => s.SentenceText).ToArray();
+        var grounding = WritingModelAnswerGroundingValidator.Validate(letterText, facts);
+        var caseNotesAll = string.Join("\n", facts);
+
+        var lint = WritingRuleEngine.ModelAnswerBlockingFindings(ruleEngine.Lint(new WritingLintInput(
+            LetterText: letterText,
+            LetterType: scenario.LetterType,
+            PatientAge: ExtractPatientAge(caseNotesAll),
+            PatientIsMinor: ExtractPatientAge(caseNotesAll) is < 18,
+            CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(caseNotesAll),
+            Profession: profession,
+            IsModelAnswer: true)));
+        var findings = lint.Select(f => new WritingModelAnswerFindingDto(
+            f.RuleId, f.Severity.ToString().ToLowerInvariant(), f.Message, f.Quote, f.FixSuggestion)).ToList();
+
+        var rulePackHash = ruleEngine.RulePackFingerprint(profession);
+        var rulebookVersion = ruleEngine.RulebookVersion(profession);
+        var deterministicOk = wordCountOk && grounding.IsGrounded && findings.Count == 0;
+
+        WritingModelAnswerSemanticResult? semantic = null;
+        if (includeSemantic && semanticValidator is not null && deterministicOk)
+        {
+            semantic = await semanticValidator.ValidateAsync(new WritingModelAnswerSemanticRequest(
+                scenario.Id,
+                profession,
+                scenario.LetterType,
+                scenario.TaskPromptMarkdown ?? string.Empty,
+                BuildCaseNotesText(sentences.Select(s => (s.SentenceText, s.RelevanceLabel))),
+                letterText,
+                rulePackHash,
+                adminUserId), ct);
+        }
+
+        string? hold = !wordCountOk ? "model_answer_word_count_out_of_range"
+            : !grounding.IsGrounded ? "model_answer_unmapped_sentence"
+            : findings.Count > 0 ? "model_answer_rule_violations"
+            : semantic is { Unavailable: true } ? "model_answer_semantic_validator_unavailable"
+            : semantic is { Passed: false } ? "model_answer_semantic_violations"
+            : null;
+
+        return new WritingModelAnswerValidationReport(
+            scenario.Id,
+            hold is null,
+            hold,
+            words,
+            wordCountOk,
+            grounding.UnmappedSentences,
+            findings,
+            semantic is not null,
+            semantic?.Passed,
+            semantic?.Violations ?? [],
+            semantic?.Error,
+            WritingRuleEngine.ValidatorVersion,
+            rulePackHash,
+            rulebookVersion,
+            WritingRev8HouseStyle.Version,
+            now);
+    }
+
+    private static WritingModelAnswerValidationReport FailedReport(Guid scenarioId, string holdReason)
+        => new(scenarioId, false, holdReason, 0, false, [], [], false, null, [], null,
+            WritingRuleEngine.ValidatorVersion, string.Empty, null, WritingRev8HouseStyle.Version, DateTimeOffset.UtcNow);
+
+    private void StoreVerified(
+        WritingTaskModelAnswer row,
+        string letter,
+        WritingModelAnswerValidationReport report,
+        DateTimeOffset now,
+        string? modelUsed,
+        string? rulebookVersion,
+        string promptVersion,
+        int repairCount)
+    {
+        row.Status = WritingAssessmentModelAnswerStatus.Ready;
+        row.IsCandidateVisible = false; // still needs an explicit admin approve
+        row.ModelAnswerText = letter;
+        row.HoldReason = null;
+        row.RulebookVersion = Truncate(rulebookVersion, 32);
+        row.PromptVersion = promptVersion;
+        row.ModelUsed = Truncate(modelUsed, 128);
+        row.GeneratedAt = now;
+        row.ApprovedByUserId = null;
+        row.ApprovedAt = null;
+        row.ValidatorVersion = WritingRuleEngine.ValidatorVersion;
+        row.RulePackHash = report.RulePackHash;
+        row.ValidatedAt = now;
+        row.ValidationReportJson = SerializeReport(report, null);
+        row.RepairCount = repairCount;
+        row.BodyWordCount = report.BodyWordCount;
+    }
+
+    private static string? Truncate(string? value, int max)
+        => value is null ? null : value.Length <= max ? value : value[..max];
+
+    private static string SerializeReport(WritingModelAnswerValidationReport report, string? lastDraft)
+        => JsonSerializer.Serialize(new { report, lastDraft }, ReportJson);
+
+    /// <summary>
+    /// Stored text is normalised to LF line endings with the outer whitespace
+    /// trimmed — interior blank lines (the owner's mandatory spacing) are
+    /// preserved exactly.
+    /// </summary>
+    internal static string NormaliseLetterText(string text)
+        => (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim();
+
+    private static int? ExtractPatientAge(string caseNotes)
+    {
+        var m = Regex.Match(caseNotes ?? string.Empty, @"\b(?:age|aged)\s*:?\s*(\d{1,3})\b|\b(\d{1,3})[\s-]*(?:years?|yrs?)[\s-]*old\b", RegexOptions.IgnoreCase);
+        if (!m.Success) return null;
+        var value = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
+        return int.TryParse(value, out var age) && age is > 0 and < 120 ? age : null;
+    }
+
+    private async Task<List<WritingScenarioStructuredSentence>> LoadSentencesAsync(Guid scenarioId, CancellationToken ct)
+        => await db.WritingScenarioStructuredSentences.AsNoTracking()
+            .Where(s => s.ScenarioId == scenarioId)
+            .OrderBy(s => s.Ordinal)
+            .ToListAsync(ct);
+
+    internal static string DesignationFor(ExamProfession profession) => profession switch
+    {
+        ExamProfession.Medicine => "Doctor",
+        ExamProfession.Nursing => "Nurse",
+        ExamProfession.Pharmacy => "Pharmacist",
+        ExamProfession.Physiotherapy => "Physiotherapist",
+        ExamProfession.Dentistry => "Dentist",
+        ExamProfession.Dietetics => "Dietitian",
+        ExamProfession.OccupationalTherapy => "Occupational Therapist",
+        ExamProfession.Optometry => "Optometrist",
+        ExamProfession.Podiatry => "Podiatrist",
+        ExamProfession.Radiography => "Radiographer",
+        ExamProfession.SpeechPathology => "Speech Pathologist",
+        ExamProfession.Veterinary => "Veterinarian",
+        _ => "the writer's professional designation",
+    };
+
+    private static string BuildGenerationInput(WritingScenario scenario, ExamProfession profession, string taskSnapshot, string caseNotesText)
+        => $$"""
+            Produce the ONE reusable OET Writing MODEL ANSWER for this task. It is shown to every candidate who
+            completes this exact task, so it must be a faithful, high-quality exemplar grounded ONLY in the case
+            notes below, and it must comply with EVERY owner rule below with zero exceptions.
+            Return ONE JSON object only (no prose before or after it):
+            {"modelAnswerText":"...","whyThisWorks":["..."],"groundedFactReferences":["..."]}
+            In modelAnswerText use \n for a line break and \n\n for a blank line.
+
+            Profession: {{profession}}
+            Letter type: {{WritingLetterTypeTaxonomy.ToLegacyLetterType(scenario.LetterType)}}
+            Writer role: {{scenario.WriterRole ?? "(see task)"}}
+            Date to use for the letter: {{scenario.TodayDate ?? "(see task)"}}
+            Recipient (admin-confirmed, if any): {{scenario.RecipientRawText ?? "(see task)"}}
+            Sign off after the closing phrase with exactly: {{DesignationFor(profession)}} (unless the task gives the writer's exact name).
+
+            {{WritingRev8HouseStyle.ModelAnswerCanonicalRules}}
+
+            Writing task:
+            ---
+            {{taskSnapshot}}
+            ---
+            Case notes (relevant and maybe-relevant sentences, in order):
+            ---
+            {{caseNotesText}}
+            ---
+            """;
+
+    private static string BuildRepairInput(
+        WritingScenario scenario,
+        ExamProfession profession,
+        string taskSnapshot,
+        string caseNotesText,
+        string previousDraft,
+        WritingModelAnswerValidationReport report)
+    {
+        var sb = new StringBuilder();
+        if (!report.WordCountOk)
+            sb.AppendLine($"- Body word count is {report.BodyWordCount}; it must be 180-200 (introduction to closure inclusive).");
+        foreach (var s in report.UnmappedSentences)
+            sb.AppendLine($"- Sentence not traceable to the case notes (rewrite it from case-note facts only or remove it): \"{s}\"");
+        foreach (var f in report.DeterministicFindings)
+            sb.AppendLine($"- [{f.RuleId}] {f.Message}{(string.IsNullOrWhiteSpace(f.Quote) ? "" : $" (at: \"{f.Quote}\")")}");
+        foreach (var v in report.SemanticViolations)
+            sb.AppendLine($"- [{v.RuleId}] {v.Message}{(string.IsNullOrWhiteSpace(v.Quote) ? "" : $" (at: \"{v.Quote}\")")}");
+        return $$"""
+            Your previous draft of this OET Writing Model Answer FAILED validation. Repair ONLY the violations
+            listed below; keep every other sentence, fact, paragraph and the layout unchanged. Then re-check the
+            WHOLE letter against every owner rule before answering. Return ONE JSON object only:
+            {"modelAnswerText":"...","whyThisWorks":["..."],"groundedFactReferences":["..."]}
+
+            Violations to repair:
+            {{sb}}
+            Previous draft:
+            ---
+            {{previousDraft}}
+            ---
+
+            {{BuildGenerationInput(scenario, profession, taskSnapshot, caseNotesText)}}
+            """;
     }
 
     private WritingTaskModelAnswerDto Hold(WritingTaskModelAnswer row, string reason)
@@ -720,19 +1120,30 @@ public sealed class WritingTaskModelAnswerService(
         row.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
         row.IsCandidateVisible = false;
         row.HoldReason = reason;
+        row.ValidatorVersion = null;
         row.UpdatedAt = clock.GetUtcNow();
         db.SaveChanges();
-        return ToDto(row, null);
+        return ToDto(row, null, includeReport: true);
     }
 
-    private static WritingTaskModelAnswerDto ToDto(WritingTaskModelAnswer row, WritingScenario? scenario)
+    private static WritingTaskModelAnswerDto ToDto(WritingTaskModelAnswer row, WritingScenario? scenario, bool includeReport)
     {
-        _ = scenario; // reserved: a full staleness check needs the current case-notes
-                      // text too (not just the scenario row), so it is intentionally
-                      // not computed on this cheap list/get projection today. The
-                      // stored SourceContentHash is enough for a future admin action
-                      // to detect drift by recomputing over the live case notes.
         var refs = ParseFactReferences(row.GroundedFactReferencesJson);
+        var verifiedCurrent = string.Equals(row.ValidatorVersion, WritingRuleEngine.ValidatorVersion, StringComparison.Ordinal);
+        var verification = row.Status switch
+        {
+            WritingAssessmentModelAnswerStatus.Ready when verifiedCurrent && row.IsCandidateVisible => "verified_published",
+            WritingAssessmentModelAnswerStatus.Ready when verifiedCurrent => "verified_awaiting_approval",
+            WritingAssessmentModelAnswerStatus.Ready => "unverified_current_rules",
+            WritingAssessmentModelAnswerStatus.Rejected => "rejected",
+            _ => "held",
+        };
+        JsonElement? report = null;
+        if (includeReport && !string.IsNullOrWhiteSpace(row.ValidationReportJson) && row.ValidationReportJson != "{}")
+        {
+            try { report = JsonDocument.Parse(row.ValidationReportJson).RootElement.Clone(); }
+            catch (JsonException) { report = null; }
+        }
         return new WritingTaskModelAnswerDto(
             row.ScenarioId,
             row.Status.ToString(),
@@ -745,7 +1156,18 @@ public sealed class WritingTaskModelAnswerService(
             row.GeneratedAt,
             row.ApprovedByUserId,
             row.ApprovedAt,
-            IsStale: false);
+            IsStale: row.Status == WritingAssessmentModelAnswerStatus.Ready && !verifiedCurrent,
+            Title: scenario?.Title,
+            Profession: scenario?.Profession,
+            LetterType: scenario?.LetterType,
+            ValidatorVersion: row.ValidatorVersion,
+            RulePackHash: row.RulePackHash,
+            ValidatedAt: row.ValidatedAt,
+            RepairCount: row.RepairCount,
+            BodyWordCount: row.BodyWordCount,
+            VerificationStatus: verification,
+            ValidationReport: report,
+            PromptVersion: row.PromptVersion);
     }
 
     private static IReadOnlyList<string> ParseFactReferences(string json)
@@ -768,8 +1190,9 @@ public sealed class WritingTaskModelAnswerService(
 
     /// <summary>
     /// Hash of the exact source content a Model Answer was (or would be)
-    /// generated from. Regeneration is justified only when this drifts —
-    /// never during normal candidate submissions.
+    /// generated from. Regeneration is justified only when this drifts (or
+    /// the validator version changes) — never during normal candidate
+    /// submissions.
     /// </summary>
     internal static string ComputeSourceContentHash(
         string taskSnapshot,
@@ -787,10 +1210,19 @@ public sealed class WritingTaskModelAnswerService(
         if (start < 0 || end <= start) return null;
         try
         {
-            return JsonSerializer.Deserialize<Draft>(completion[start..(end + 1)], new JsonSerializerOptions
+            var draft = JsonSerializer.Deserialize<Draft>(completion[start..(end + 1)], new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true,
             });
+            // Tolerate the grounded system prompt's generic GenerateContent
+            // envelope {"content": "..."} (either the letter itself or a
+            // nested JSON string carrying modelAnswerText).
+            if (draft is { ModelAnswerText: null, Content: { Length: > 0 } content })
+            {
+                var nested = content.TrimStart().StartsWith('{') ? Parse(content) : null;
+                return nested ?? draft with { ModelAnswerText = content };
+            }
+            return draft;
         }
         catch (JsonException)
         {
@@ -801,5 +1233,6 @@ public sealed class WritingTaskModelAnswerService(
     private sealed record Draft(
         string? ModelAnswerText,
         IReadOnlyList<string>? WhyThisWorks,
-        IReadOnlyList<string>? GroundedFactReferences);
+        IReadOnlyList<string>? GroundedFactReferences,
+        string? Content = null);
 }

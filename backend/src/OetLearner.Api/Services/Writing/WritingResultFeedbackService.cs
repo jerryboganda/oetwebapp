@@ -54,10 +54,10 @@ public sealed class WritingResultFeedbackService(
             .Include(x => x.Errors)
             .Include(x => x.Criteria)
             .SingleOrDefaultAsync(x => x.SubmissionId == submissionId, ct);
+        // Live verified task answer, never the grading-time snapshot (Rev8 §19.6).
         var modelAnswer = assessment is null
             ? null
-            : await db.WritingAssessmentModelAnswers.AsNoTracking()
-                .SingleOrDefaultAsync(x => x.ReportId == assessment.Id, ct);
+            : await WritingAssessmentV11ResultService.LoadVerifiedTaskModelAnswerAsync(db, submission.ScenarioId, ct);
         var assessmentCandidateVisible = assessment is not null
             && assessment.Status == WritingAssessmentV11Status.CandidateReady
             && assessment.CandidateNumericScoreEnabled

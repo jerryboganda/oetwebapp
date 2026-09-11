@@ -20,9 +20,16 @@ public sealed class WritingMutationProbeTests
 {
     private static readonly WritingRuleEngine Engine = new(new RulebookLoader());
 
+    // Intro + one body paragraph + closure. The body paragraph was added
+    // because the paragraph count excludes the closing paragraph (Rev5
+    // governance, 10 Sep 2026): the old intro + closure base counted as one
+    // paragraph (minimum two) and tripped the Critical min_body_paragraphs
+    // check, voiding Probe01/Probe09. Re-traced against the Owner Rev8
+    // (11 Sep 2026) candidate-mode battery: no Critical finding.
     private const string CleanLetter =
         "12 March 2025\nDear Dr Green,\nRe: Mrs Smith, review\n\n"
         + "I am writing to refer Mrs Smith for review of her ongoing condition. Please assess her at your earliest convenience.\n\n"
+        + "Mrs Smith reported no new symptoms at her last appointment.\n\n"
         + "She was seen recently with stable observations. Advise on further management if needed. Thank you for your continued care.\n\n"
         + "Yours sincerely,\nDoctor";
 

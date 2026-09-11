@@ -177,7 +177,8 @@ public sealed record WritingPerCriterionFeedbackResponse(
     int Score,
     string Feedback,
     string? ExemplarFix,
-    IReadOnlyList<string> CitedRuleIds);
+    IReadOnlyList<string> CitedRuleIds,
+    string? Quote = null);
 
 public sealed record WritingRevisionInviteResponse(bool ShouldOffer, string Reason);
 
@@ -338,7 +339,17 @@ public sealed record WritingScenarioResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
     string? StimulusPdfMediaAssetId = null,
-    string? StimulusPdfDownloadPath = null);
+    string? StimulusPdfDownloadPath = null,
+    // Candidate-facing task-screen fields (Writing Addendum Rev8 §16).
+    // Internal marking aids (ExpectedPurpose/ExpectedAction) never ship here.
+    string? TaskPromptMarkdown = null,
+    IReadOnlyList<string>? FixedInstructions = null,
+    int? ReadingTimeSeconds = null,
+    int? WritingTimeSeconds = null,
+    int? WordGuideMin = null,
+    int? WordGuideMax = null,
+    string? WriterRole = null,
+    string? TodayDate = null);
 
 public sealed record WritingScenarioListResponse(
     IReadOnlyList<WritingScenarioResponse> Items,

@@ -20,6 +20,10 @@ const INSUFFICIENT_CREDIT_CODES = new Set([
   'no_credits',
   'insufficient_review_credits',
   'speaking_exam_insufficient_credits',
+  // Writing entitlement refusals (WritingEntitlementService.AuthorizeStartAsync,
+  // 402): no subscription/package, or the free-tier window is used up.
+  'premium_required',
+  'quota_exceeded',
 ]);
 
 export function isInsufficientCreditsError(

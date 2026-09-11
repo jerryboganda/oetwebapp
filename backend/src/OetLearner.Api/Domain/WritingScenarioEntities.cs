@@ -226,6 +226,36 @@ public class WritingTaskModelAnswer
 
     public DateTimeOffset? ApprovedAt { get; set; }
 
+    /// <summary>
+    /// Deterministic validator version (<c>WritingRuleEngine.ValidatorVersion</c>)
+    /// this exact text last passed with zero violations. Addendum Rev8 §14: a
+    /// stored VERIFIED/CLEAN flag is invalid after a rule-pack or validator
+    /// version change until the saved answer is revalidated — so a row whose
+    /// value differs from the running engine's is never shown to candidates.
+    /// </summary>
+    [MaxLength(64)]
+    public string? ValidatorVersion { get; set; }
+
+    /// <summary>Fingerprint of the active profession rule pack at verification
+    /// (<c>WritingRuleEngine.RulePackFingerprint</c>).</summary>
+    [MaxLength(64)]
+    public string? RulePackHash { get; set; }
+
+    /// <summary>When the full gate (word count, grounding, deterministic rules,
+    /// semantic validator) last passed for the current text.</summary>
+    public DateTimeOffset? ValidatedAt { get; set; }
+
+    /// <summary>Last full validation report (deterministic findings, semantic
+    /// validator verdict, word count, versions) — the audit evidence for why
+    /// the row is Ready or held.</summary>
+    public string ValidationReportJson { get; set; } = "{}";
+
+    /// <summary>Repair iterations the generator needed before this text passed.</summary>
+    public int RepairCount { get; set; }
+
+    /// <summary>Body (introduction to closure) word count of the stored text.</summary>
+    public int? BodyWordCount { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

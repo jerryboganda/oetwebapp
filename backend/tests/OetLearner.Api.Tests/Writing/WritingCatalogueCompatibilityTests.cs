@@ -192,6 +192,7 @@ public sealed class WritingCatalogueCompatibilityTests
                     Status = WritingAssessmentModelAnswerStatus.Ready,
                     IsCandidateVisible = true,
                     ModelAnswerText = "Exemplar letter text.",
+                    ValidatorVersion = OetLearner.Api.Services.Rulebook.WritingRuleEngine.ValidatorVersion,
                     CreatedAt = DateTimeOffset.UtcNow,
                     UpdatedAt = DateTimeOffset.UtcNow,
                 });

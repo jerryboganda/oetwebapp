@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PenTool } from 'lucide-react';
@@ -42,6 +43,11 @@ import type {
 
 type ScenarioMode = Extract<WritingEditorMode, 'practice' | 'coached'>;
 
+/** The task's authored value when it is a sane positive number, else the exam default. */
+function positiveOr(value: number | null | undefined, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export default function WritingPracticeSessionPage() {
   const t = useTranslations();
   const params = useParams<{ scenarioId: string }>();
@@ -57,6 +63,10 @@ export default function WritingPracticeSessionPage() {
   const [submitting, setSubmitting] = useState(false);
   const [noCreditsOpen, setNoCreditsOpen] = useState(false);
   const [insufficientCreditsMessage, setInsufficientCreditsMessage] = useState<string | null>(null);
+  // A failed load is a real, recoverable state (Addendum Rev8 §16) — never a
+  // permanent "Loading scenario…" with an empty task. Bumping `loadAttempt` re-runs it.
+  const [loadError, setLoadError] = useState<{ cause: unknown } | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const startedAtRef = useRef<number>(Date.now());
   const lastAutosaveContent = useRef<string>('');
   // Latest content for auto-submit (timer expiry reads the current letter).
@@ -82,13 +92,18 @@ export default function WritingPracticeSessionPage() {
 
   const clockKey = `writing-practice-clock:${scenarioId}`;
 
-  const windowSeconds = scenario?.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS;
+  // Per-task timing and word guide from the authored task, exam defaults otherwise.
+  const windowSeconds = positiveOr(scenario?.readingTimeSeconds, WRITING_READING_WINDOW_SECONDS);
+  const writingWindowSeconds = positiveOr(scenario?.writingTimeSeconds, WRITING_WINDOW_SECONDS);
+  const wordGuideMin = positiveOr(scenario?.wordGuideMin, 180);
+  const wordGuideMax = positiveOr(scenario?.wordGuideMax, 220);
+  const wordTarget = wordGuideMax >= wordGuideMin ? { min: wordGuideMin, max: wordGuideMax } : { min: 180, max: 220 };
 
   // Resolve/initialise the exam clock once the scenario has loaded.
   useEffect(() => {
     if (typeof window === 'undefined' || !scenarioId || !scenario) return;
 
-    const readingSecs = scenario.readingTimeSeconds ?? WRITING_READING_WINDOW_SECONDS;
+    const readingSecs = windowSeconds;
     let readingDeadline: number;
     let writingDeadline: number;
 
@@ -107,7 +122,7 @@ export default function WritingPracticeSessionPage() {
       writingDeadline = parsed.writing;
     } else {
       readingDeadline = Date.now() + readingSecs * 1000;
-      writingDeadline = readingDeadline + WRITING_WINDOW_SECONDS * 1000;
+      writingDeadline = readingDeadline + writingWindowSeconds * 1000;
       sessionStorage.setItem(
         clockKey,
         JSON.stringify({ reading: readingDeadline, writing: writingDeadline }),
@@ -165,12 +180,30 @@ export default function WritingPracticeSessionPage() {
           setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
           return;
         }
-        setError(toCandidateSafeWritingErrorMessage(err, t('writing.practice.session.error.load')));
+        setLoadError({ cause: err });
       });
     return () => {
       cancelled = true;
     };
-  }, [scenarioId, mode, t]);
+  }, [scenarioId, mode, loadAttempt]);
+
+  // Retry re-runs eligibility too: it is idempotent on the attempt's
+  // reference id, so a retry never charges a second credit.
+  const retryLoad = useCallback(() => {
+    setLoadError(null);
+    setLoadAttempt((n) => n + 1);
+  }, []);
+
+  const describeLoadError = (cause: unknown): string => {
+    const { code, status } = (cause ?? {}) as { code?: string; status?: number };
+    if (code === 'writing_task_unavailable' || code === 'writing_scenario_not_found' || status === 404) {
+      return t('writing.practice.session.loadError.unavailable');
+    }
+    if (code === 'writing_task_incomplete') {
+      return t('writing.practice.session.loadError.incomplete');
+    }
+    return toCandidateSafeWritingErrorMessage(cause, t('writing.practice.session.error.load'));
+  };
 
   // ── Autosave (writing phase only) ────────────────────────────────────────────
   useEffect(() => {
@@ -340,6 +373,31 @@ export default function WritingPracticeSessionPage() {
     );
   }
 
+  if (loadError) {
+    return (
+      <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
+        <div className="mx-auto max-w-xl py-8">
+          <InlineAlert
+            variant="error"
+            title={t('writing.practice.session.loadError.title')}
+            action={
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={retryLoad}>
+                  {t('writing.practice.session.loadError.retry')}
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/writing/practice/library">{t('writing.practice.session.loadError.backToLibrary')}</Link>
+                </Button>
+              </div>
+            }
+          >
+            {describeLoadError(loadError.cause)}
+          </InlineAlert>
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
+
   return (
     <LearnerDashboardShell pageTitle={t('writing.practice.session.pageTitle')} distractionFree>
       {/* Forced 5-minute reading window — non-skippable. Auto-closes into the
@@ -376,13 +434,16 @@ export default function WritingPracticeSessionPage() {
                   </>
                 ) : null}
                 <span className="text-[11px] font-medium text-muted">
-                  5 min reading · 40 min writing · auto-submit
+                  {t('writing.practice.session.timing', {
+                    reading: Math.round(windowSeconds / 60),
+                    writing: Math.round(writingWindowSeconds / 60),
+                  })}
                 </span>
               </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <WordCounter count={wordCount} target={{ min: 180, max: 220 }} ariaLabelPrefix="Letter length" />
+            <WordCounter count={wordCount} target={wordTarget} ariaLabelPrefix="Letter length" />
             <WritingTimerV2
               phase={phase}
               readingSecondsRemaining={readingSeconds}
@@ -401,13 +462,17 @@ export default function WritingPracticeSessionPage() {
             className="min-h-[60vh] overflow-hidden rounded-2xl border border-border bg-surface"
             dir="ltr"
           >
-            <WritingStimulus
-              scenario={scenario}
-              locked={readingActive}
-              title={scenario?.title ?? undefined}
-              highlights={pdfHighlights}
-              onHighlightsChange={setPdfHighlights}
-            />
+            {scenario ? (
+              <WritingStimulus
+                scenario={scenario}
+                locked={readingActive}
+                title={scenario.title ?? undefined}
+                highlights={pdfHighlights}
+                onHighlightsChange={setPdfHighlights}
+              />
+            ) : (
+              <p className="p-4 text-sm text-muted">{t('writing.practice.session.caseNotesLoading')}</p>
+            )}
           </section>
 
           <section

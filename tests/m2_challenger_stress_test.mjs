@@ -185,14 +185,15 @@ const ALL_12_PROFESSIONS = [
 
 // Migrated to the canonical OET_AI_Rules_Master.jsonl registry
 // (docs/canonical-rules/README.md); everything else stays on the legacy
-// 172-rule baseline until a canonical pack exists for it.
+// 172-rule baseline until a canonical pack exists for it. Owner Rev8
+// (11 Sep 2026) adds OWN-W-001..038 to every Writing rulebook (+38).
 const CANONICAL_PROFESSION_COUNTS = {
-  medicine: 230,
-  nursing: 237,
-  dentistry: 237,
-  pharmacy: 240,
-  physiotherapy: 240,
-  radiography: 237,
+  medicine: 268,
+  nursing: 275,
+  dentistry: 275,
+  pharmacy: 278,
+  physiotherapy: 278,
+  radiography: 275,
 };
 
 test('Verify rulebook registration and expected rule baseline for all 12 professions', () => {
@@ -205,7 +206,7 @@ test('Verify rulebook registration and expected rule baseline for all 12 profess
     const book = loadRulebook('writing', p);
     assert.equal(book.kind, 'writing');
     assert.equal(book.profession, p);
-    const expected = CANONICAL_PROFESSION_COUNTS[p] ?? 172;
+    const expected = CANONICAL_PROFESSION_COUNTS[p] ?? 210;
     assert.equal(book.rules.length, expected, `Profession ${p} must have ${expected} rules baseline`);
     assert.ok(book.sections.length > 0, `Profession ${p} sections must not be empty`);
   }

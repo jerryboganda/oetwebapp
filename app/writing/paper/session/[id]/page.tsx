@@ -22,7 +22,7 @@ import {
   putWritingHighlights,
   submitWritingMock,
 } from '@/lib/writing/api';
-import { createSubmitIdempotencyKey } from '@/lib/writing/submit-keys';
+import { createSubmitIdempotencyKey, toCandidateSafeWritingErrorMessage } from '@/lib/writing/submit-keys';
 import { showCreditFeedback } from '@/lib/credit-feedback';
 import {
   InsufficientCreditsModal,
@@ -260,7 +260,9 @@ export default function WritingPaperSessionPage() {
           setInsufficientCreditsMessage(readInsufficientCreditsMessage(err));
           return;
         }
-        setError(err instanceof Error ? err.message : t('writing.paper.error.load'));
+        // Addendum Rev8 §16: never surface a raw server message; the task
+        // content is not shown when the start/eligibility check fails.
+        setError(toCandidateSafeWritingErrorMessage(err, t('writing.paper.error.load')));
       }
     });
 

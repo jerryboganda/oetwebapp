@@ -219,6 +219,9 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
             Status = WritingAssessmentModelAnswerStatus.Ready,
             IsCandidateVisible = true,
             ModelAnswerText = $"Dear Doctor, {canary} kindly review this patient. Yours sincerely, Doctor",
+            // Verified under the running validator, i.e. exactly the answer a
+            // candidate result would display — and still never a grading input.
+            ValidatorVersion = WritingRuleEngine.ValidatorVersion,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });

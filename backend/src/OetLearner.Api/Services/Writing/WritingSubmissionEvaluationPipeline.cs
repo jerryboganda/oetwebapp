@@ -475,44 +475,15 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 assessmentPreflightResult,
                 grade,
                 assessmentRuleEngine,
-                rubric.EstimatedScaledScore);
+                rubric.EstimatedScaledScore,
+                rubric.AiFindings);
             if (calibrationReleaseService is not null)
             {
                 var release = await calibrationReleaseService.ResolveAsync(
                     grade.ModelUsed,
                     "unreleased",
                     ct);
-                // Reuse the task's ONE pre-generated Model Answer when an admin
-                // has generated, quality-checked, and approved it for
-                // candidates. Normal Submit NEVER generates a Model Answer:
-                // no extra provider call, no per-candidate exemplar cost. A
-                // Ready-but-not-yet-approved answer stays held for admin
-                // review; a missing answer leaves the exemplar held WITHOUT
-                // blocking the candidate's own assessment (its absence is a
-                // publication-gate defect, reported there — not at submit).
-                var pregenerated = await db.WritingTaskModelAnswers.AsNoTracking()
-                    .FirstOrDefaultAsync(a => a.ScenarioId == submission.ScenarioId
-                        && a.Status == WritingAssessmentModelAnswerStatus.Ready
-                        && a.IsCandidateVisible, ct);
-                if (pregenerated is not null)
-                {
-                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.Ready;
-                    assessmentReport.ModelAnswer.ModelAnswerText = pregenerated.ModelAnswerText;
-                    assessmentReport.ModelAnswer.GroundedFactReferencesJson = pregenerated.GroundedFactReferencesJson;
-                    assessmentReport.ModelAnswer.HoldReason = null;
-                    assessmentReport.ModelAnswer.IsCandidateVisible = pregenerated.IsCandidateVisible;
-                    assessmentReport.ModelAnswer.UpdatedAt = clock.GetUtcNow();
-                }
-                else
-                {
-                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
-                    assessmentReport.ModelAnswer.HoldReason = "model_answer_not_pregenerated";
-                    assessmentReport.ModelAnswer.IsCandidateVisible = false;
-                    assessmentReport.ModelAnswer.UpdatedAt = clock.GetUtcNow();
-                    logger.LogWarning(
-                        "Writing submission {SubmissionId} scenario {ScenarioId} graded without a pre-generated Model Answer; exemplar held for admin backfill.",
-                        submission.Id, submission.ScenarioId);
-                }
+                await AttachTaskModelAnswerAsync(assessmentReport.ModelAnswer, submission, clock.GetUtcNow(), ct);
 
                 if (release.CandidateNumericScoreEnabled)
                 {
@@ -670,12 +641,100 @@ public sealed class WritingSubmissionEvaluationPipeline(
         }
     }
 
+    /// <summary>
+    /// Attaches the task's ONE pre-generated Model Answer to a submission's
+    /// report snapshot. Normal Submit NEVER generates one (no extra provider
+    /// call, no per-candidate exemplar cost). Only an answer that is Ready,
+    /// admin-approved AND verified under the running deterministic validator
+    /// (<see cref="WritingTaskModelAnswerService.IsVerifiedForCandidates"/>,
+    /// Addendum Rev8 §14/§19) is copied. An unverified/stale answer is held as
+    /// <c>model_answer_not_verified</c> and a missing one as
+    /// <c>model_answer_not_pregenerated</c>; neither blocks the candidate's own
+    /// assessment (both are publication-gate defects, reported there). This
+    /// snapshot is an audit record only: candidate result pages resolve the
+    /// LIVE verified answer at read time (<see cref="WritingAssessmentV11ResultService"/>).
+    /// </summary>
+    private async Task AttachTaskModelAnswerAsync(
+        WritingAssessmentModelAnswer target,
+        WritingSubmission submission,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        var taskAnswer = await db.WritingTaskModelAnswers.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.ScenarioId == submission.ScenarioId, ct);
+        target.UpdatedAt = now;
+        if (WritingTaskModelAnswerService.IsVerifiedForCandidates(taskAnswer))
+        {
+            target.Status = WritingAssessmentModelAnswerStatus.Ready;
+            target.ModelAnswerText = taskAnswer!.ModelAnswerText;
+            target.GroundedFactReferencesJson = taskAnswer.GroundedFactReferencesJson;
+            target.HoldReason = null;
+            target.IsCandidateVisible = true;
+            return;
+        }
+
+        target.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
+        target.HoldReason = taskAnswer is null ? "model_answer_not_pregenerated" : "model_answer_not_verified";
+        target.IsCandidateVisible = false;
+        logger.LogWarning(
+            "Writing submission {SubmissionId} scenario {ScenarioId} has no candidate-verified Model Answer ({HoldReason}); exemplar held for admin backfill.",
+            submission.Id, submission.ScenarioId, target.HoldReason);
+    }
+
+    /// <summary>
+    /// A reused grade must still give the new submission its own v1.1 report
+    /// and Model Answer row, otherwise both candidate result endpoints 404 for
+    /// the reusing attempt. The reuse key pins the same learner, task, letter
+    /// content and validator version, so the source report (findings, facts,
+    /// criteria) describes this exact letter and is cloned as-is; the Model
+    /// Answer is re-resolved from the task's live verified answer, never
+    /// copied from the source snapshot.
+    /// </summary>
+    private async Task CloneAssessmentReportAsync(Guid sourceSubmissionId, WritingSubmission submission, CancellationToken ct)
+    {
+        // ponytail: a retried submission that already holds a (preflight-blocked)
+        // report keeps it — the unique SubmissionId index allows only one.
+        if (await db.WritingAssessmentReportsV11.AsNoTracking().AnyAsync(x => x.SubmissionId == submission.Id, ct))
+            return;
+
+        // AsNoTracking yields detached copies: re-keying them and adding the
+        // graph inserts a clone without touching the source rows.
+        var report = await db.WritingAssessmentReportsV11.AsNoTracking()
+            .Include(x => x.Facts)
+            .Include(x => x.Errors)
+            .Include(x => x.Criteria)
+            .FirstOrDefaultAsync(x => x.SubmissionId == sourceSubmissionId, ct);
+        if (report is null) return;
+
+        var now = clock.GetUtcNow();
+        report.Id = Guid.NewGuid();
+        report.SubmissionId = submission.Id;
+        report.OriginalLetterHash = submission.LetterContentHash;
+        report.OriginalLetterSnapshot = submission.LetterContent;
+        report.CreatedAt = now;
+        report.UpdatedAt = now;
+        foreach (var fact in report.Facts) { fact.Id = Guid.NewGuid(); fact.ReportId = report.Id; }
+        foreach (var error in report.Errors) { error.Id = Guid.NewGuid(); error.ReportId = report.Id; }
+        foreach (var criterion in report.Criteria) { criterion.Id = Guid.NewGuid(); criterion.ReportId = report.Id; }
+
+        var modelAnswer = new WritingAssessmentModelAnswer
+        {
+            Id = Guid.NewGuid(),
+            ReportId = report.Id,
+            CreatedAt = now,
+        };
+        await AttachTaskModelAnswerAsync(modelAnswer, submission, now, ct);
+        db.WritingAssessmentReportsV11.Add(report);
+        db.WritingAssessmentModelAnswers.Add(modelAnswer);
+    }
+
     private static WritingAssessmentReportBuildResult BuildAssessmentReport(
         WritingSubmission submission,
         WritingAssessmentPreflightResult preflight,
         WritingGrade grade,
         WritingAssessmentV11RuleEngine ruleEngine,
-        int estimatedPracticeScore)
+        int estimatedPracticeScore,
+        IReadOnlyList<AiGradeFinding>? aiFindings = null)
     {
         if (!RulebookProfessionParser.TryParse(preflight.Profession, out var profession))
             throw ApiException.Conflict(
@@ -688,8 +747,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
             PatientAge: ExtractPatientAge(preflight.CaseNotesSnapshot),
             PatientIsMinor: ExtractPatientAge(preflight.CaseNotesSnapshot) is < 18,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(preflight.CaseNotesSnapshot),
-            Profession: profession),
-            preflight.CaseNotesSnapshot);
+            Profession: profession));
+        ruleFindings = ruleFindings
+            .Concat(ToReportFindings(aiFindings, ruleFindings, submission.LetterContent ?? string.Empty))
+            .ToList();
         var factMap = WritingFactMapService.Build(
             preflight.CaseNotesSnapshot,
             submission.LetterContent,
@@ -890,7 +951,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
                 rubric.EstimatedBand, rubric.EstimatedScaledScore,
                 rubric.PerCriterionFeedbackJson, rubric.TopThreePrioritiesJson,
-                rubric.ConfidenceFlag, rubric.ModelUsed));
+                rubric.ConfidenceFlag, rubric.ModelUsed, rubric.AiFindings));
             submission.GradeOperationId ??= operationId;
             await db.SaveChangesAsync(ct);
             return (rubric, reservationId);
@@ -922,7 +983,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 parsed.C1, parsed.C2, parsed.C3, parsed.C4, parsed.C5, parsed.C6,
                 parsed.EstimatedBand, parsed.EstimatedScaledScore,
                 parsed.PerCriterionFeedbackJson, parsed.TopThreePrioritiesJson,
-                parsed.ConfidenceFlag, parsed.ModelUsed);
+                parsed.ConfidenceFlag, parsed.ModelUsed, parsed.AiFindings);
             return true;
         }
         catch (JsonException)
@@ -960,6 +1021,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
             revision,
             "rubric:v11",
             "rulebook:active",
+            // A grade (and the report cloned with it) is only reusable under
+            // the rule set it was produced with: a validator bump (e.g. the
+            // Rev8 linker/naming rules) invalidates older grades.
+            $"rules:{WritingRuleEngine.ValidatorVersion}",
             "prompt:writing.score.v1",
             "model:canonical",
             settings.Writing.GradeIdempotencyTtlHours.ToString());
@@ -970,7 +1035,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
         int C1, int C2, int C3, int C4, int C5, int C6,
         int EstimatedBand, int EstimatedScaledScore,
         string PerCriterionFeedbackJson, string TopThreePrioritiesJson,
-        string ConfidenceFlag, string ModelUsed);
+        string ConfidenceFlag, string ModelUsed,
+        IReadOnlyList<AiGradeFinding>? AiFindings = null);
 
     private async Task<WritingSubmissionGradeOutcome?> TryReuseExistingGradeAsync(WritingSubmission submission, CancellationToken ct)
     {
@@ -1031,6 +1097,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 DetectedAt = violation.DetectedAt,
             });
         }
+        await CloneAssessmentReportAsync(existing.SubmissionId, submission, ct);
         submission.Status = "graded";
         await db.SaveChangesAsync(ct);
         await events.PublishAsync(new WritingGradeReady(
@@ -1116,26 +1183,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     ct);
                 // Blank submissions reuse the pre-generated exemplar only;
                 // never generate one (see the graded path above).
-                var pregenerated = await db.WritingTaskModelAnswers.AsNoTracking()
-                    .FirstOrDefaultAsync(a => a.ScenarioId == submission.ScenarioId
-                        && a.Status == WritingAssessmentModelAnswerStatus.Ready
-                        && a.IsCandidateVisible, ct);
-                if (pregenerated is not null)
-                {
-                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.Ready;
-                    assessmentReport.ModelAnswer.ModelAnswerText = pregenerated.ModelAnswerText;
-                    assessmentReport.ModelAnswer.GroundedFactReferencesJson = pregenerated.GroundedFactReferencesJson;
-                    assessmentReport.ModelAnswer.HoldReason = null;
-                    assessmentReport.ModelAnswer.IsCandidateVisible = pregenerated.IsCandidateVisible;
-                    assessmentReport.ModelAnswer.UpdatedAt = now;
-                }
-                else
-                {
-                    assessmentReport.ModelAnswer.Status = WritingAssessmentModelAnswerStatus.HeldForReview;
-                    assessmentReport.ModelAnswer.HoldReason = "model_answer_not_pregenerated";
-                    assessmentReport.ModelAnswer.IsCandidateVisible = false;
-                    assessmentReport.ModelAnswer.UpdatedAt = now;
-                }
+                await AttachTaskModelAnswerAsync(assessmentReport.ModelAnswer, submission, now, ct);
 
                 if (release.CandidateNumericScoreEnabled)
                 {
@@ -1163,14 +1211,15 @@ public sealed class WritingSubmissionEvaluationPipeline(
     {
         const string feedback =
             "No assessable content was submitted for this criterion. Submit a complete letter responding to the writing task to receive criterion feedback.";
+        var item = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>(), quote = (string?)null, quotes = Array.Empty<string>() };
         var dict = new Dictionary<string, object>
         {
-            ["c1"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
-            ["c2"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
-            ["c3"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
-            ["c4"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
-            ["c5"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
-            ["c6"] = new { score = 0, feedback, exemplarFix = (string?)null, citedRuleIds = Array.Empty<string>() },
+            ["c1"] = item,
+            ["c2"] = item,
+            ["c3"] = item,
+            ["c4"] = item,
+            ["c5"] = item,
+            ["c6"] = item,
         };
         return JsonSerializer.Serialize(dict);
     }
@@ -1338,6 +1387,12 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 sb.AppendLine("---");
             }
         }
+        // Addendum Rev8 §7/§11: the grader applies the SAME owner rules as the
+        // Model Answer generator and validator, with the candidate protections
+        // (professional alternatives accepted, Model Answer similarity ZERO).
+        // Rule text only — the Model Answer itself never enters this input.
+        sb.AppendLine();
+        sb.AppendLine(WritingRev8HouseStyle.CandidateGradingRules);
         sb.AppendLine();
         sb.AppendLine("Case notes (source of truth; do not invent facts):");
         sb.AppendLine("---");
@@ -1404,7 +1459,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
         // facing BandLabel is derived separately from EstimatedScaledScore via
         // OetScoring.OetGradeLetterFromScaled — never from this raw total.
         // A complete contract is high confidence.
-        return new RubricResult(c1, c2, c3, c4, c5, c6, rawTotal, ai.EstimatedScaledScore!.Value, perCriterion, topThree, "high", model);
+        return new RubricResult(c1, c2, c3, c4, c5, c6, rawTotal, ai.EstimatedScaledScore!.Value, perCriterion, topThree, "high", model,
+            ToAiGradeFindings(findings));
     }
 
     private static bool TryParseRubric(string? completion, IReadOnlyList<string> allowedRuleIds, out RubricAiResponse response)
@@ -1436,13 +1492,22 @@ public sealed class WritingSubmissionEvaluationPipeline(
             if (parsed is null || !HasCompleteScoringContract(parsed)) continue;
 
             // Grounding invariant: the AI must not cite rule IDs that are not in
-            // the active rulebook. Drop any that are not in the applied set.
+            // the active rulebook. An unknown/missing citation is STRIPPED (the
+            // finding keeps its quote, explanation and correction but carries
+            // no rule id) rather than the whole finding being dropped — a
+            // genuine grammar/content mistake the model could not map to a rule
+            // id must still reach the candidate (Addendum Rev8 §19.4: detect
+            // every error), while no fabricated rule citation is ever stored.
             if (parsed.Findings is { Count: > 0 } && allowedRuleIds.Count > 0)
             {
-                parsed.Findings = parsed.Findings
-                    .Where(f => !string.IsNullOrWhiteSpace(f.RuleId)
-                                && allowedRuleIds.Contains(f.RuleId!, StringComparer.OrdinalIgnoreCase))
-                    .ToList();
+                foreach (var f in parsed.Findings)
+                {
+                    if (!string.IsNullOrWhiteSpace(f.RuleId)
+                        && !allowedRuleIds.Contains(f.RuleId!, StringComparer.OrdinalIgnoreCase))
+                    {
+                        f.RuleId = null;
+                    }
+                }
             }
             else
             {
@@ -1655,15 +1720,26 @@ public sealed class WritingSubmissionEvaluationPipeline(
             var exemplar = linked
                 .Select(f => f.FixSuggestion)
                 .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+            // The candidate's own wording for each AI-detected mistake (was
+            // parsed but dropped), so the result can show where it occurred.
+            var quotes = linked
+                .Select(f => f.Quote)
+                .Where(q => !string.IsNullOrWhiteSpace(q))
+                .Select(q => q!)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
 
             // Shape consumed by WritingV2ResponseMapper.ToGradeResponse —
-            // keys c1..c6, each { score, feedback, exemplarFix, citedRuleIds }.
+            // keys c1..c6, each { score, feedback, exemplarFix, citedRuleIds,
+            // quote, quotes }.
             dict[key] = new
             {
                 score,
                 feedback,
                 exemplarFix = exemplar,
                 citedRuleIds = cited,
+                quote = quotes.FirstOrDefault(),
+                quotes,
             };
         }
 
@@ -1817,22 +1893,105 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 "Grading is not available for this writing task right now. Please try another task or contact support.");
 
     /// <summary>
-    /// Maps any stored letter-type token to the rulebook genre token consumed
-    /// by the grounded grading prompt. Routes through the canonical pack
-    /// vocabulary first so legacy ids (<c>transfer_letter</c>,
-    /// <c>update_discharge</c>, …) resolve exactly like their LT-* catalogue
-    /// equivalents. Response (LT-RP) is retired: no arm maps to the old
-    /// <c>advice_to_patient</c> genre. Other Letters uses the neutral genre
-    /// token so only generic rules apply — never a guessed type.
+    /// Maps any stored letter-type token (LT-* catalogue code or legacy id) to
+    /// the rulebook <c>appliesTo</c> token the grounded grading prompt filters
+    /// on — the same legacy vocabulary <see cref="WritingRuleEngine"/> uses
+    /// (routine_referral, urgent_referral, discharge, transfer_letter,
+    /// non_medical_referral, other_letters). LT-NM previously became
+    /// "non_medical", which matches no rulebook <c>appliesTo</c> value, so the
+    /// R15 non-medical rules never reached the grader. Response (LT-RP) is
+    /// retired and Other Letters matches only the generic ("all") rules —
+    /// never a guessed type.
     /// </summary>
     private static string NormaliseLetterTypeForRulebook(string? v)
-        => WritingLetterTypeTaxonomy.ToPackLetterType(v) switch
-        {
-            "non_medical_referral" => "non_medical",
-            var pack => pack,
-        };
+        => WritingLetterTypeTaxonomy.ToLegacyLetterType(v);
 
     private sealed record RubricResult(int C1, int C2, int C3, int C4, int C5, int C6, int EstimatedBand,
         int EstimatedScaledScore,
-        string PerCriterionFeedbackJson, string TopThreePrioritiesJson, string ConfidenceFlag, string ModelUsed);
+        string PerCriterionFeedbackJson, string TopThreePrioritiesJson, string ConfidenceFlag, string ModelUsed,
+        IReadOnlyList<AiGradeFinding>? AiFindings = null);
+
+    /// <summary>
+    /// One AI-detected mistake, carried from the rubric call into the v1.1
+    /// report so candidates see EVERY grader finding (location/wording,
+    /// explanation, correction, criterion) in "Complete corrections" —
+    /// Addendum Rev8 §19.4 — not only the deterministic rule findings.
+    /// </summary>
+    private sealed record AiGradeFinding(
+        string? RuleId,
+        string? Severity,
+        string? Quote,
+        string? Message,
+        string? FixSuggestion,
+        string Criterion);
+
+    private static readonly HashSet<string> SixCriteria = new(StringComparer.Ordinal)
+    {
+        "purpose", "content", "conciseness_clarity", "genre_style", "organisation_layout", "language",
+    };
+
+    private static IReadOnlyList<AiGradeFinding> ToAiGradeFindings(IEnumerable<RubricAiFinding> findings)
+        => findings
+            .Where(f => !string.IsNullOrWhiteSpace(f.Message) || !string.IsNullOrWhiteSpace(f.Quote))
+            .Select(f =>
+            {
+                var criterion = (f.CriterionCode ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
+                if (!SixCriteria.Contains(criterion)) criterion = CriterionFor(f.RuleId, f.Message);
+                return new AiGradeFinding(
+                    string.IsNullOrWhiteSpace(f.RuleId) ? null : f.RuleId!.Trim(),
+                    string.IsNullOrWhiteSpace(f.Severity) ? "major" : f.Severity!.Trim().ToLowerInvariant(),
+                    string.IsNullOrWhiteSpace(f.Quote) ? null : f.Quote!.Trim(),
+                    string.IsNullOrWhiteSpace(f.Message) ? null : f.Message!.Trim(),
+                    string.IsNullOrWhiteSpace(f.FixSuggestion) ? null : f.FixSuggestion!.Trim(),
+                    criterion);
+            })
+            .ToList();
+
+    /// <summary>Converts AI findings into v1.1 report rows (deduplicated
+    /// against deterministic findings that quote the same wording).</summary>
+    private static IReadOnlyList<WritingAssessmentRuleFinding> ToReportFindings(
+        IReadOnlyList<AiGradeFinding>? aiFindings,
+        IReadOnlyList<WritingAssessmentRuleFinding> deterministic,
+        string letter)
+    {
+        if (aiFindings is not { Count: > 0 }) return [];
+        var list = new List<WritingAssessmentRuleFinding>();
+        foreach (var f in aiFindings)
+        {
+            var quote = f.Quote;
+            if (!string.IsNullOrEmpty(quote)
+                && deterministic.Any(d => string.Equals(d.Quote, quote, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue; // the deterministic rule already reports this exact wording
+            }
+            int? start = null;
+            if (!string.IsNullOrEmpty(quote))
+            {
+                var idx = letter.IndexOf(quote, StringComparison.Ordinal);
+                if (idx < 0) idx = letter.IndexOf(quote, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0) start = idx;
+            }
+            var severity = f.Severity is "critical" or "major" or "minor" or "info" ? f.Severity : "major";
+            list.Add(new WritingAssessmentRuleFinding(
+                // The AI's grounded rule id when it cited one; never invented.
+                RuleId: string.IsNullOrWhiteSpace(f.RuleId) ? $"AI.{f.Criterion}" : $"AI:{f.RuleId}",
+                Category: f.Criterion switch
+                {
+                    "purpose" => "purpose",
+                    "content" => "content",
+                    "conciseness_clarity" => "irrelevant_excess",
+                    "genre_style" => "register_jargon",
+                    "organisation_layout" => "layout_format",
+                    _ => "language",
+                },
+                Severity: severity!,
+                Message: f.Message ?? "AI grader finding.",
+                Quote: quote,
+                FixSuggestion: f.FixSuggestion,
+                StartOffset: start,
+                EndOffset: start is { } s ? s + quote!.Length : null,
+                PrimaryCriterionCode: f.Criterion));
+        }
+        return list;
+    }
 }

@@ -52,6 +52,8 @@ public partial class LearnerDbContext
             e.HasKey(x => x.Id);
             e.HasIndex(x => x.ScenarioId).IsUnique();
             e.Property(x => x.GroundedFactReferencesJson).HasColumnType("jsonb").HasDefaultValue("[]");
+            e.Property(x => x.ValidationReportJson).HasColumnType("jsonb").HasDefaultValue("{}");
+            e.Property(x => x.RepairCount).HasDefaultValue(0);
         });
     }
 }

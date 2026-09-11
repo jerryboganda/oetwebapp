@@ -51,6 +51,15 @@ public static class WritingModelAnswerGroundingValidator
     /// with an already-established fact; the ClinicalTerms check below still
     /// catches a genuinely invented clinical claim regardless of length.
     /// </summary>
+    // Addendum Rev8 (11 Sep 2026) makes a professional contact-offer sentence
+    // MANDATORY at the end of every Model Answer closure ("Should there be any
+    // queries, kindly do not hesitate to contact me."). It is a courtesy
+    // formula, never a case-note claim, so it can never be traced to a case
+    // note and must not be treated as an unmapped (invented) fact.
+    private static readonly Regex ContactOfferCourtesy = new(
+        @"^(?:should there be any (?:further )?(?:queries|questions|concerns)|if (?:there are|you have|you require|you need) any (?:further )?(?:queries|questions|concerns|information)|please do not hesitate|kindly do not hesitate|do not hesitate)[^.!?]*\b(?:contact|call|telephone)\s+me\b[^.!?]*[.!?]?$",
+        RegexOptions.IgnoreCase);
+
     public static WritingModelAnswerGroundingResult Validate(string modelAnswer, IReadOnlyList<string> caseNoteFacts)
     {
         var source = string.Join(" ", caseNoteFacts ?? Array.Empty<string>());
@@ -60,6 +69,11 @@ public static class WritingModelAnswerGroundingValidator
         {
             var value = sentence.Trim();
             if (value.Length == 0) continue;
+            if (ContactOfferCourtesy.IsMatch(value)
+                && !ClinicalTerms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
             var terms = ClinicalTerms.Where(term => value.Contains(term, StringComparison.OrdinalIgnoreCase)).ToArray();
             if (terms.Any(term => !SourceSupportsTerm(term, source)))
             {

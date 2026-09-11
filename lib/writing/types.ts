@@ -308,6 +308,8 @@ export interface WritingPerCriterionFeedbackDto {
   feedback: string;
   exemplarFix: string | null;
   citedRuleIds: string[];
+  /** The candidate's own wording the AI grader flagged (Addendum Rev8 §19.4). */
+  quote?: string | null;
 }
 
 export interface WritingGradeDto {

@@ -208,9 +208,11 @@ public sealed class WritingCataloguePreflightService(
             var recipientReady = !string.Equals(understanding.RecipientCategory, "unknown", StringComparison.Ordinal);
 
             answers.TryGetValue(s.Id, out var answer);
-            var modelAnswerReady = answer is not null
-                && answer.Status == WritingAssessmentModelAnswerStatus.Ready
-                && answer.IsCandidateVisible;
+            // Addendum Rev8 §14/§19.6: "saved Model Answer ready" means verified
+            // with zero violations under the CURRENT validator, not merely an
+            // old Ready + visible flag (that stale flag is how "224 clean" was
+            // reported while live letters still broke known rules).
+            var modelAnswerReady = WritingTaskModelAnswerService.IsVerifiedForCandidates(answer);
 
             var blocking = new List<string>();
             if (string.IsNullOrWhiteSpace(s.Title)) blocking.Add("title_required");

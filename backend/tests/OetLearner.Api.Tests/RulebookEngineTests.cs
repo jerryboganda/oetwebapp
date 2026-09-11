@@ -15,7 +15,9 @@ public class RulebookLoaderTests
         var book = _loader.Load(RuleKind.Writing, ExamProfession.Medicine);
         Assert.Equal(RuleKind.Writing, book.Kind);
         Assert.Equal(ExamProfession.Medicine, book.Profession);
-        Assert.Equal("2.0.0-canonical", book.Version);
+        // Owner Rev8 (11 Sep 2026): canonical Writing rulebooks are regenerated
+        // with the Rev8 registry additions (OWN-W-001..038) under this version.
+        Assert.Equal("2.1.0-canonical-rev8", book.Version);
         Assert.Equal(43, book.Sections.Count);
         Assert.True(book.Rules.Count >= 90);
     }
@@ -402,13 +404,16 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_forbidden_phrase_next_visit" || f.RuleId == "BUILTIN.body_forbidden_phrase_next_visit");
     }
 
+    // Was R08_14_Does_Not_Flag_The_Patient (31 Aug 2026, G-W-112: "the
+    // patient" not forbidden). Owner Rev8 (11 Sep 2026), OWN-W-009, supersedes
+    // G-W-112 under the addendum's latest-rule-wins precedence: "the patient"
+    // as a substitute for the person is flagged again (Major for candidates).
     [Fact]
-    public void R08_14_Does_Not_Flag_The_Patient()
+    public void R08_14_Flags_The_Patient_Per_Owner_Rev8()
     {
-        // Rulebook update (31 Aug 2026, G-W-112): "the patient" is not a forbidden phrase.
         var text = "Dear Dr Smith,\nRe: Ms Miller\n\nIntro.\n\nThe patient presented with nausea.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
-        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_forbidden_phrase_the_patient" || f.RuleId == "BUILTIN.body_forbidden_phrase_the_patient");
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.body_forbidden_phrase_the_patient" && f.Severity == RuleSeverity.Major);
     }
 
     [Fact]
@@ -617,7 +622,9 @@ Doctor";
 
     // Owner governance decision (same reply, §1 "G-W-116"): "suffered" is
     // standard factual clinical English for a diagnosed event and must not
-    // be flagged — only genuinely emotional/dramatised use should be.
+    // be flagged — only genuinely emotional/dramatised use should be. Owner
+    // Rev8 (11 Sep 2026) keeps this for CANDIDATES only; Model Answers ban
+    // suffer/suffered outright (Rulebook/WritingRev8RuleTests.cs).
     [Fact]
     public void EmotionalWording_Passes_On_Suffered_As_Factual_Clinical_Event()
     {
@@ -1136,15 +1143,22 @@ Doctor";
 
     // Owner clarification (same addendum, §2 "General number style"):
     // descriptive numbers as words, digits only for age/dates/vitals/labs/
-    // doses/measurements. Deterministic detection cannot reliably classify
-    // "descriptive" vs "clinical" numeric context (see DetectNumberStyle's
-    // own comment) so this stays an intentional no-op — this test locks
-    // that it never fires, rather than silently regressing into false
-    // positives on ordinary descriptive numbers.
+    // doses/measurements. Was NumberStyle_Is_A_Deliberate_NoOp_...: Owner
+    // Rev8 (11 Sep 2026), OWN-W-006, overrides the no-op — the detector now
+    // fires on count/duration/frequency contexts ("3 children") and must
+    // still ignore clinical numbers (DetectNumberStyleRev8).
     [Fact]
-    public void NumberStyle_Is_A_Deliberate_NoOp_Even_With_Mixed_Descriptive_And_Clinical_Numbers()
+    public void NumberStyle_Flags_Descriptive_Count_Per_Owner_Rev8()
     {
         var text = "Dear Dr Smith,\nRe: Ms A, aged 45\n\nIntro.\n\nShe has 3 children and her blood pressure was 150/90 mmHg.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.number_style_words_vs_digits" && f.Quote == "3 children");
+    }
+
+    [Fact]
+    public void NumberStyle_Ignores_Clinical_Numbers_Per_Owner_Rev8()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A, aged 45\n\nIntro.\n\nHer blood pressure was 150/90 mmHg and her pulse was 88 bpm.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.number_style_words_vs_digits");
     }
@@ -1430,7 +1444,7 @@ public class AiGatewayAndPromptTests
         });
         var result = await gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt });
         Assert.False(string.IsNullOrWhiteSpace(result.Completion));
-        Assert.Equal("2.0.0-canonical", result.RulebookVersion);
+        Assert.Equal("2.1.0-canonical-rev8", result.RulebookVersion);
         Assert.NotEmpty(result.AppliedRuleIds);
     }
 

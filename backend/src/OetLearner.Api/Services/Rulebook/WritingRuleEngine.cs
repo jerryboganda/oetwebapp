@@ -4,14 +4,17 @@ using OetLearner.Api.Services.Writing;
 namespace OetLearner.Api.Services.Rulebook;
 
 /// <summary>
-/// .NET mirror of lib/rulebook/writing-rules.ts. Deterministic detectors
-/// keyed by each rule's CheckId in the rulebook JSON.
-///
-/// Behaviour MUST match the TypeScript engine. Every detector here has a
-/// sibling test case in WritingRulesTests.cs that mirrors the Vitest case
-/// in writing-rules.test.ts.
+/// Deterministic Writing detectors keyed by each rule's CheckId (rulebook
+/// JSON rules) plus an always-on BUILTIN battery. This is the sole runtime
+/// engine (the TypeScript engine was retired); it is shared by the Model
+/// Answer generator, the independent Model Answer validator
+/// (<see cref="WritingLintInput.IsModelAnswer"/> = true, stricter canonical
+/// house style) and the candidate grader (IsModelAnswer = false, professional
+/// alternatives accepted). Owner Revision 7-8 detectors live in
+/// WritingRuleEngine.Rev8.cs. Regression coverage: RulebookEngineTests.cs
+/// (WritingRuleEngineTests) and Rulebook/WritingRev8*Tests.cs.
 /// </summary>
-public sealed class WritingRuleEngine(IRulebookLoader loader)
+public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 {
     private static readonly HashSet<string> SupportedCheckIdSet = new(StringComparer.Ordinal)
     {
@@ -27,6 +30,8 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "body_no_todays_date",
         "body_uses_last_name_only",
         "cancer_suspected_flagged_urgent",
+        "closure_contact_offer",
+        "closure_contains_management",
         "closure_mentions_consent_if_flagged",
         "closure_mentions_patient_request_if_flagged",
         "closure_mentions_review_if_required",
@@ -36,6 +41,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "date_blank_line_sandwich",
         "date_format_consistent",
         "dob_age_forbidden_phrase",
+        "dob_colon_format",
         "discharge_admitted_with_past_simple",
         "discharge_intro_no_identity",
         "discharge_intro_template",
@@ -46,6 +52,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "enclosure_results_phrase",
         "for_duration_requires_present_perfect",
         "intro_contains_purpose",
+        "intro_opens_i_am_writing_to",
         "intro_sentence_count",
         "judgmental_labels",
         "latin_abbreviations_translated",
@@ -53,12 +60,15 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "letter_paragraph_count",
         "letter_structure_order",
         "linker_avoid_words",
+        "linker_comma_and_case",
         "linker_density",
         "linker_however_punctuation",
         "linker_in_addition_punctuation",
         "linker_therefore_punctuation",
+        "medication_list_punctuation",
         "min_body_paragraphs",
         "minor_naming_convention",
+        "model_answer_layout",
         "no_asap_in_letter",
         "no_contractions",
         "no_date_prefix",
@@ -67,10 +77,14 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "non_medical_no_jargon",
         "number_style_words_vs_digits",
         "numerical_values_have_units",
+        "paragraph_start_patient_name",
         "re_line_age_dob",
+        "register_colloquial",
+        "relationship_label_patient_reference",
         "salutation_last_name_only",
         "salutation_re_adjacent",
         "sentence_length_guard",
+        "signoff_designation_present",
         "signoff_no_invented_name",
         "since_requires_present_perfect",
         "surgery_past_simple",
@@ -79,6 +93,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "urgent_closure_phrase",
         "urgent_intro_contains_urgent",
         "urgent_token_not_repeated",
+        "value_unit_spacing",
         "visit_content_tense_basic_check",
         "visit_paragraphization_check",
         "year_not_abbreviated",
@@ -111,7 +126,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         ["no_date_prefix"] = RuleSeverity.Critical,
         ["date_blank_line_sandwich"] = RuleSeverity.Major,
         ["salutation_last_name_only"] = RuleSeverity.Critical,
-        ["body_uses_last_name_only"] = RuleSeverity.Critical,
+        ["body_uses_last_name_only"] = RuleSeverity.Major,
         ["re_line_age_dob"] = RuleSeverity.Major,
         ["minor_naming_convention"] = RuleSeverity.Critical,
         ["yours_sincerely_vs_faithfully"] = RuleSeverity.Critical,
@@ -126,7 +141,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         ["body_forbidden_phrase_next_visit"] = RuleSeverity.Critical,
         ["body_no_todays_date"] = RuleSeverity.Critical,
         ["body_forbidden_phrase_yesterday"] = RuleSeverity.Major,
-        ["body_forbidden_phrase_the_patient"] = RuleSeverity.Critical,
+        ["body_forbidden_phrase_the_patient"] = RuleSeverity.Major,
         ["urgent_closure_phrase"] = RuleSeverity.Critical,
         ["urgent_token_not_repeated"] = RuleSeverity.Major,
         ["closure_mentions_review_if_required"] = RuleSeverity.Critical,
@@ -163,15 +178,26 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         ["judgmental_labels"] = RuleSeverity.Major,
         ["linker_avoid_words"] = RuleSeverity.Major,
         ["no_duplicated_request"] = RuleSeverity.Major,
-        // Deliberately inert (same rationale as DetectDischargeOmits /
-        // DetectNonMedicalJargon above): "descriptive numbers as words,
-        // digits only for clinical values" requires judging whether a given
-        // number is clinical (age/date/vital/lab/dose/measurement) or
-        // descriptive from context a regex cannot reliably classify without
-        // a large false-positive rate. AI-grounded professions already
-        // carry this instruction in their prompt; kept registered (not
-        // ORPHANED) rather than silently dropped. See DetectNumberStyle.
-        ["number_style_words_vs_digits"] = RuleSeverity.Minor,
+        // Owner override (Addendum Rev7-8, 11 Sep 2026): descriptive/general
+        // numbers as words. Now enforced (was a deliberate no-op) on the
+        // count/duration/frequency contexts a regex classifies reliably —
+        // never ages, dates, vitals, lab values, doses or measurements.
+        ["number_style_words_vs_digits"] = RuleSeverity.Major,
+        // Owner Revision 7-8 battery (WritingRuleEngine.Rev8.cs). Candidate
+        // severity shown; Model Answer mode reports every finding as Critical
+        // and blocks on all of them (ModelAnswerBlockingFindings).
+        ["closure_contact_offer"] = RuleSeverity.Major,
+        ["closure_contains_management"] = RuleSeverity.Major,
+        ["dob_colon_format"] = RuleSeverity.Major,
+        ["intro_opens_i_am_writing_to"] = RuleSeverity.Critical,
+        ["linker_comma_and_case"] = RuleSeverity.Major,
+        ["medication_list_punctuation"] = RuleSeverity.Major,
+        ["model_answer_layout"] = RuleSeverity.Critical,
+        ["paragraph_start_patient_name"] = RuleSeverity.Major,
+        ["register_colloquial"] = RuleSeverity.Minor,
+        ["relationship_label_patient_reference"] = RuleSeverity.Major,
+        ["signoff_designation_present"] = RuleSeverity.Minor,
+        ["value_unit_spacing"] = RuleSeverity.Major,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -214,9 +240,11 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         var handledCheckIds = new HashSet<string>(StringComparer.Ordinal);
         foreach (var rule in applicable)
         {
-            if (!string.IsNullOrWhiteSpace(rule.CheckId))
+            // A checkId wired to more than one rulebook rule (legacy books pair
+            // e.g. R07.6/R13.2, R08.14/R12.2) runs once, under the first rule —
+            // the same letter defect must not be reported twice.
+            if (!string.IsNullOrWhiteSpace(rule.CheckId) && handledCheckIds.Add(rule.CheckId!))
             {
-                handledCheckIds.Add(rule.CheckId!);
                 var det = DetectorFor(rule.CheckId!);
                 if (det is not null) findings.AddRange(det(rule, input, structure));
             }
@@ -393,13 +421,25 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "judgmental_labels" => DetectJudgmentalLabels,
         "linker_avoid_words" => DetectLinkerAvoidWords,
         "no_duplicated_request" => DetectNoDuplicatedRequest,
-        "number_style_words_vs_digits" => DetectNumberStyle,
+        "number_style_words_vs_digits" => DetectNumberStyleRev8,
         "blank_line_between_paragraphs" => DetectBlankBetweenParagraphs,
         "no_date_prefix" => DetectNoDatePrefix,
         "date_blank_line_sandwich" => DetectDateBlankSandwich,
         "salutation_last_name_only" => DetectSalutationLastName,
-        "body_forbidden_phrase_the_patient" => DetectThePatient,
-        "body_uses_last_name_only" => DetectThePatient,
+        "body_forbidden_phrase_the_patient" => DetectThePatientRev8,
+        "body_uses_last_name_only" => DetectFullNameRepeated,
+        "paragraph_start_patient_name" => DetectParagraphStartPatientName,
+        "relationship_label_patient_reference" => DetectRelationshipLabel,
+        "intro_opens_i_am_writing_to" => DetectCanonicalOpening,
+        "closure_contact_offer" => DetectContactOfferClosure,
+        "closure_contains_management" => DetectClosureContainsManagement,
+        "medication_list_punctuation" => DetectMedicationListPunctuation,
+        "value_unit_spacing" => DetectValueUnitSpacing,
+        "dob_colon_format" => DetectDobColonFormat,
+        "register_colloquial" => DetectColloquialRegister,
+        "signoff_designation_present" => DetectSignoffDesignationPresent,
+        "model_answer_layout" => DetectModelAnswerLayout,
+        "linker_comma_and_case" => DetectLinkerCommaAndCase,
         "minor_naming_convention" => DetectMinorNaming,
         "yours_sincerely_vs_faithfully" => DetectSincerelyVsFaithfully,
         "intro_contains_purpose" => DetectIntroPurpose,
@@ -416,7 +456,7 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "latin_abbreviations_translated" => DetectLatinAbbreviations,
         "no_contractions" => DetectContractions,
         "conditions_lowercase" => DetectConditionsLowercase,
-        "linker_however_punctuation" => DetectHoweverPunctuation,
+        "linker_however_punctuation" => (r, i, s) => DetectLinkerRunOn(r, i, s, "however", "however"),
         "no_asap_in_letter" => DetectForbidden(@"\bASAP\b", "Never write 'ASAP'. Use 'at your earliest convenience'."),
         "address_punctuation" => DetectAddressPunctuation,
         "re_line_age_dob" => DetectReLineAgeDob,
@@ -429,8 +469,8 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         "for_duration_requires_present_perfect" => DetectForDurationRequiresPresentPerfect,
         "surgery_past_simple" => DetectSurgeryPastSimple,
         "ago_requires_past_simple" => DetectAgoRequiresPastSimple,
-        "linker_therefore_punctuation" => DetectThereforePunctuation,
-        "linker_in_addition_punctuation" => DetectInAdditionPunctuation,
+        "linker_therefore_punctuation" => (r, i, s) => DetectLinkerRunOn(r, i, s, "therefore|thus|consequently", "therefore"),
+        "linker_in_addition_punctuation" => (r, i, s) => DetectLinkerRunOn(r, i, s, "in addition", "in addition"),
         "date_format_consistent" => DetectDateFormatConsistent,
         "year_not_abbreviated" => DetectYearNotAbbreviated,
         "discharge_intro_template" => DetectDischargeIntroTemplate,
@@ -502,13 +542,24 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         string source = s.BodyParagraphs.Count > 0
             ? string.Join(" ", s.BodyParagraphs)
             : input.LetterText;
-        var count = Regex.Matches(source, @"\S+").Count;
+        // Model Answers use the SAME body counter as the Model Answer publish
+        // gate (WritingModelAnswerWordCounter) so the two can never disagree
+        // on a borderline letter, and are never exempt below 80 words.
+        var count = input.IsModelAnswer
+            ? WritingModelAnswerWordCounter.CountBodyWords(input.LetterText)
+            : Regex.Matches(source, @"\S+").Count;
 
         // Suppress noise during brainstorming / very early drafts.
-        if (count < 80) yield break;
+        if (!input.IsModelAnswer && count < 80) yield break;
         if (count >= min && count <= max) yield break;
 
         var direction = count < min ? "short" : "long";
+        if (input.IsModelAnswer)
+        {
+            yield return new LintFinding(rule.Id, RuleSeverity.Critical,
+                $"Model Answer body is {count} word(s); it must be {min}–{max} words (introduction to closure, body only).");
+            yield break;
+        }
         var hint = direction == "short"
             ? "you may be missing relevant data"
             : "you may be including semi-relevant data";
@@ -613,7 +664,15 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     // regrettably, or suffering/suffered WHERE USED AS EMOTIONAL WORDING."
     // These four have no legitimate factual/clinical usage — always banned.
     private static readonly Regex EmotionalWordingRe = new(
-        @"\b(unfortunately|fortunately|regrettably|sadly)\b", RegexOptions.IgnoreCase);
+        @"\b(unfortunately|fortunately|regrettably|sadly|luckily|thankfully|tragically|unluckily)\b", RegexOptions.IgnoreCase);
+
+    // Model Answer mode (Addendum Rev7-8 §2, latest owner wording, 11 Sep
+    // 2026): the canonical house style bans suffer/suffered/suffering
+    // outright — a generated exemplar always has a neutral alternative
+    // ("had", "experienced", "was diagnosed with", "sustained"). Candidates
+    // keep the narrower 10 Sep governance rule below (factual "suffered a
+    // myocardial infarction" is standard English and is not penalised).
+    private static readonly Regex SufferAnyRe = new(@"\bsuffer(?:s|ed|ing)?\b", RegexOptions.IgnoreCase);
 
     // "suffering"/"suffered" is NOT banned outright: the Rev5 bulk audit
     // found 3 real production letters using it as the standard, factual
@@ -633,6 +692,14 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
             yield return new LintFinding(rule.Id, rule.Severity,
                 $"Avoid emotional/editorial wording (\"{m.Value}\"). Keep the letter factual and neutral.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        if (input.IsModelAnswer)
+        {
+            foreach (Match m in SufferAnyRe.Matches(s.Body))
+                yield return new LintFinding(rule.Id, RuleSeverity.Critical,
+                    $"Model Answers use neutral factual wording, not \"{m.Value}\" (e.g. \"had\", \"experienced\", \"was diagnosed with\").",
+                    Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+            yield break;
+        }
         foreach (Match m in SufferingEmotionalRe.Matches(s.Body))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Avoid dramatising suffering/suffered with an emotional intensifier - state the clinical event factually.",
@@ -652,16 +719,40 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     // person-trait label — flagging it would violate the addendum's own
     // "do not falsely penalise standard-correct English" instruction. The
     // other four have no such legitimate transient-finding usage.
+    // Rev7-8 refinement: a disease/behaviour word is a LABEL only when it
+    // names the person ("is asthmatic", "a smoker", "hypertensive patient",
+    // "an anxious man"); clinical adjectives on a condition ("hypertensive
+    // crisis", "diabetic retinopathy") and transient findings ("she was
+    // anxious") are standard clinical English and are never flagged.
     private static readonly Regex JudgmentalLabelRe = new(
-        @"\b(asthmatic|hypertensive|(?:non-?compliant))\b|\ba\s+(smoker|drinker)\b",
+        @"\b(?:is|was|are|were|being|a|an|known|as)\s+(?:(?:known|heavy|chronic|former|current|social|lifelong|poorly\s+controlled)\s+)?" +
+        @"(asthmatic|hypertensive|diabetic|epileptic|alcoholic|(?:non-?|ex-?)?smoker|(?:heavy\s+)?drinker|non-?compliant|anxious\s+(?:person|patient|man|woman|lady|gentleman|individual|type))\b" +
+        // "a hypertensive crisis", "an epileptic seizure", "was hypertensive on arrival" = clinical English, not a label.
+        @"(?!\s+(?:crisis|emergency|urgency|retinopathy|nephropathy|neuropathy|foot|feet|ulcers?|ketoacidosis|seizures?|episodes?|attacks?|fits?|liver|cirrhosis|hepatitis|disease|control|medications?|exacerbation|coma|state|status|clinic|review|team|diet|on\s+arrival|at\s+(?:presentation|admission|triage))\b)" +
+        @"|\b(asthmatic|hypertensive|diabetic|epileptic|non-?compliant|anxious|obese)\s+(?:patient|man|woman|lady|gentleman|person|individual|boy|girl|child)\b" +
+        @"|\bnon-?compliant\b",
         RegexOptions.IgnoreCase);
+
+    private static readonly Regex SmokerDrinkerAnyRe = new(@"\b(?:non-?|ex-?)?(?:smoker|drinker)s?\b", RegexOptions.IgnoreCase);
 
     private static IEnumerable<LintFinding> DetectJudgmentalLabels(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        var reported = new HashSet<int>();
         foreach (Match m in JudgmentalLabelRe.Matches(s.Body))
-            yield return new LintFinding(rule.Id, rule.Severity,
-                $"Do not label the person by disease/behaviour (\"{m.Value}\"). Use a factual form instead (e.g. 'has asthma', 'smokes ...').",
+        {
+            reported.Add(m.Index);
+            yield return new LintFinding(rule.Id, input.IsModelAnswer ? RuleSeverity.Critical : rule.Severity,
+                $"Do not label the person by disease/behaviour (\"{m.Value}\"). Use a factual form instead (e.g. 'has asthma', 'smokes ...', 'reported difficulty adhering ...').",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        }
+        if (!input.IsModelAnswer) yield break;
+        foreach (Match m in SmokerDrinkerAnyRe.Matches(s.Body))
+        {
+            if (reported.Any(i => m.Index >= i && m.Index <= i + 30)) continue;
+            yield return new LintFinding(rule.Id, RuleSeverity.Critical,
+                $"Model Answers describe the behaviour, not the person (\"{m.Value}\"): e.g. 'smokes ten cigarettes a day', 'does not smoke', 'drinks alcohol socially'.",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+        }
     }
 
     // Owner clarification (same addendum, §3 "Linker policy"): "but; so;
@@ -672,14 +763,61 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     private static readonly Regex AvoidLinkerSentenceStartRe = new(
         @"(?:^|[.!?]\s+)(But|So|Hence|Furthermore|Moreover|Also)\b", RegexOptions.Multiline);
 
+    // Rev7-8 (§3, §13 "Linker vocabulary"): "Generated Model Answers must
+    // avoid but, so, hence, furthermore, moreover and also as routine linking
+    // devices" — enforced anywhere in a Model Answer. Candidate feedback
+    // applies the same vocabulary preference: hence/furthermore/moreover and
+    // clause-joining ", but"/", so" are Major; "also" is an advisory Minor
+    // note (it is ordinary English mid-sentence, so never a heavy penalty).
+    // "also known as" names a drug/condition (OWN-W-005 example "dalteparin,
+    // also known as Fragmin,"), it is not a linking device.
+    private static readonly Regex AvoidLinkerAnywhereRe = new(
+        @"\b(but|hence|furthermore|moreover|also(?!\s+known\s+as\b))\b|,\s*(so)\s+(?!that\b|as\b|far\b|much\b|many\b|long\b)",
+        RegexOptions.IgnoreCase);
+
+    private static readonly Regex AvoidLinkerCandidateMajorRe = new(
+        @"\b(hence|furthermore|moreover)\b|,\s*(but|so)\s+(?!that\b|as\b|far\b|much\b|many\b|long\b)|\s(but)\s+(?=(?:I|he|she|they|it|we|his|her|their|the|this|there|[A-Z][a-z]+\s+(?:was|is|has|had|were|are))\b)",
+        RegexOptions.IgnoreCase);
+
+    private static readonly Regex AlsoRe = new(@"\balso\b", RegexOptions.IgnoreCase);
+
     private static IEnumerable<LintFinding> DetectLinkerAvoidWords(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        var reported = new HashSet<int>();
         foreach (Match m in AvoidLinkerSentenceStartRe.Matches(s.Body))
         {
             var word = m.Groups[1].Value;
-            yield return new LintFinding(rule.Id, rule.Severity,
+            reported.Add(m.Groups[1].Index);
+            yield return new LintFinding(rule.Id, input.IsModelAnswer ? RuleSeverity.Critical : rule.Severity,
                 $"Avoid starting a sentence with \"{word}\" as a connective — prefer however/therefore/thus/subsequently/consequently/in addition, or a direct sentence.",
                 Quote: word, Start: m.Groups[1].Index, End: m.Groups[1].Index + word.Length);
+        }
+        if (input.IsModelAnswer)
+        {
+            foreach (Match m in AvoidLinkerAnywhereRe.Matches(s.Body))
+            {
+                var g = m.Groups[1].Success ? m.Groups[1] : m.Groups[2];
+                if (reported.Contains(g.Index)) continue;
+                yield return new LintFinding(rule.Id, RuleSeverity.Critical,
+                    $"Model Answers avoid \"{g.Value}\" as a linking device — use however/therefore/thus/consequently/subsequently/in addition/additionally where logically appropriate, or a direct sentence.",
+                    Quote: g.Value, Start: g.Index, End: g.Index + g.Length);
+            }
+            yield break;
+        }
+        foreach (Match m in AvoidLinkerCandidateMajorRe.Matches(s.Body))
+        {
+            var g = m.Groups[1].Success ? m.Groups[1] : m.Groups[2].Success ? m.Groups[2] : m.Groups[3];
+            if (!reported.Add(g.Index)) continue;
+            yield return new LintFinding(rule.Id, rule.Severity,
+                $"\"{g.Value}\" is an owner-disallowed routine connective. Prefer however/therefore/thus/consequently/subsequently/in addition (with correct punctuation), or a direct sentence.",
+                Quote: g.Value, Start: g.Index, End: g.Index + g.Length);
+        }
+        foreach (Match m in AlsoRe.Matches(s.Body))
+        {
+            if (!reported.Add(m.Index)) continue;
+            yield return new LintFinding(rule.Id, RuleSeverity.Minor,
+                "Style preference: avoid \"also\" as a routine linking word; \"in addition\"/\"additionally\" or a direct sentence reads more formally. Advisory only.",
+                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
         }
     }
 
@@ -707,21 +845,6 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 yield break;
             }
         }
-    }
-
-    // Owner clarification (same addendum, §2 "General number style"):
-    // "Write descriptive/general numbers as words. Use digits only for age,
-    // dates, vital signs, investigations/lab values, medication doses and
-    // clinical measurements." Deliberately inert — see the
-    // number_style_words_vs_digits severity-map comment above for why a
-    // deterministic detector cannot reliably classify "descriptive" vs
-    // "clinical" numeric context without a high false-positive rate; this
-    // stays an AI-grounded judgment call (already in the grounded prompt for
-    // canonical-rulebook professions), same pattern as DetectDischargeOmits
-    // and DetectNonMedicalJargon.
-    private static IEnumerable<LintFinding> DetectNumberStyle(OetRule rule, WritingLintInput input, LetterStructure s)
-    {
-        yield break;
     }
 
     private static IEnumerable<LintFinding> DetectBlankBetweenParagraphs(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -766,16 +889,9 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         }
     }
 
-    // Rulebook update (31 Aug 2026, G-W-112): "'Patient' is not a forbidden word ... this
-    // explicitly overrides the legacy blanket prohibition." The new PDF's own "correct"
-    // example letter itself uses "The patient was discharged with community follow-up".
-    // Intentionally inert no-op — kept (rather than removed) because it is still wired
-    // from the registry above for both "body_forbidden_phrase_the_patient" and
-    // "body_uses_last_name_only".
-    private static IEnumerable<LintFinding> DetectThePatient(OetRule rule, WritingLintInput input, LetterStructure s)
-    {
-        yield break;
-    }
+    // body_forbidden_phrase_the_patient / body_uses_last_name_only are live
+    // again (owner Rev7-8 supersedes the 31 Aug G-W-112 relaxation): see
+    // DetectThePatientRev8 and DetectFullNameRepeated in WritingRuleEngine.Rev8.cs.
 
     private static IEnumerable<LintFinding> DetectMinorNaming(OetRule rule, WritingLintInput input, LetterStructure s)
     {
@@ -888,10 +1004,10 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         if (!string.Equals(input.LetterType, "urgent_referral", StringComparison.OrdinalIgnoreCase)) yield break;
         if (input.IsModelAnswer)
         {
-            // Model Answer generator/validator: MAY require the exact phrase.
-            if (!Regex.IsMatch(input.LetterText, @"at your earliest convenience", RegexOptions.IgnoreCase))
-                yield return new LintFinding(rule.Id, rule.Severity,
-                    "Urgent closure must include 'at your earliest convenience.'");
+            // Model Answer generator/validator: the exact canonical phrase, IN
+            // THE CLOSURE, followed by the universal contact-offer sentence
+            // (Rev7 §13 "Urgent + universal closure").
+            foreach (var f in DetectUrgentClosureModelAnswer(rule, input, s)) yield return f;
             yield break;
         }
         // Candidate grader: do NOT require the exact phrase — accept any
@@ -922,13 +1038,35 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 "Use 'urgent' only in the introduction. Use 'at your earliest convenience' in the closure.");
     }
 
+    private static readonly Regex TodayMarkerRe = new(
+        @"\b(today|on today['’]?s|presented today|on this visit|this (?:morning|afternoon|evening)|tonight|currently|at present)\b",
+        RegexOptions.IgnoreCase);
+
+    // R08.5 / R13.4 / OWN-W-017 — urgent referral body paragraph 1 is today's /
+    // the current acute presentation, even when minimal (Rev8 "minimal-today"
+    // override). Model Answers additionally keep that paragraph to the current
+    // presentation only: remote history (a year other than the letter's own)
+    // belongs in the following paragraph(s).
     private static IEnumerable<LintFinding> DetectUrgentBodyStartsToday(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!string.Equals(input.LetterType, "urgent_referral", StringComparison.OrdinalIgnoreCase)) yield break;
         var firstVisit = s.BodyParagraphs.Count > 1 ? s.BodyParagraphs[1] : "";
-        if (!Regex.IsMatch(firstVisit, @"\b(today|on today'?s|presented today|on this visit)", RegexOptions.IgnoreCase))
-            yield return new LintFinding(rule.Id, rule.Severity,
-                "Urgent referrals must start the body with today's visit before background.");
+        if (!TodayMarkerRe.IsMatch(firstVisit))
+        {
+            yield return new LintFinding(rule.Id, input.IsModelAnswer ? RuleSeverity.Critical : rule.Severity,
+                "Urgent referrals must start the body with today's visit / the current acute presentation (as its own paragraph, even if brief) before earlier history.");
+            yield break;
+        }
+        if (!input.IsModelAnswer || s.DateIndex is null) yield break;
+        var headerYear = Regex.Match(s.Lines[s.DateIndex.Value], @"(19|20)\d{2}").Value;
+        foreach (Match y in Regex.Matches(firstVisit, @"\b(19|20)\d{2}\b"))
+        {
+            if (y.Value == headerYear) continue;
+            yield return new LintFinding(rule.Id, RuleSeverity.Critical,
+                $"Keep the first body paragraph of an urgent referral to today's / current presentation only; move earlier history (\"{y.Value}\") to the next paragraph.",
+                Quote: y.Value);
+            yield break;
+        }
     }
 
     private static IEnumerable<LintFinding> DetectReviewMention(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -1003,29 +1141,15 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         }
     }
 
-    // Conjunctive adverbs (however / therefore / thus / in addition) are correct either
-    // preceded by a semicolon within one sentence, or starting a brand-new sentence after
-    // a full stop (e.g. "... clause. However, ..."). Only a genuine run-on — the linker
-    // mid-clause with neither a semicolon nor a preceding sentence boundary — is an error.
-    private static bool PrecededBySemicolonOrSentenceBoundary(string clauseBeforeLinker)
-    {
-        var trimmed = clauseBeforeLinker.TrimEnd();
-        if (trimmed.Length == 0) return true;
-        var lastChar = trimmed[^1];
-        return lastChar == ';' || lastChar == '.' || lastChar == '!' || lastChar == '?';
-    }
-
-    private static IEnumerable<LintFinding> DetectHoweverPunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
-    {
-        var re = new Regex(@"([^\n;]{5,})\bhowever\b", RegexOptions.IgnoreCase);
-        foreach (Match m in re.Matches(s.Body))
-        {
-            if (!PrecededBySemicolonOrSentenceBoundary(m.Groups[1].Value))
-                yield return new LintFinding(rule.Id, rule.Severity,
-                    "Precede 'however' with either a semicolon, or start a new sentence: '...clause; however, ...' or '...clause. However, ...'.",
-                    Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
-        }
-    }
+    // however / therefore / thus / consequently / in addition as clause
+    // joiners: see DetectLinkerRunOn (Rev8.cs). Correct either after a
+    // semicolon ("...; however, ...") or starting a new sentence ("... .
+    // However, ..."); only a genuine run-on or comma splice joining two
+    // complete clauses is an error — adverbial/parenthetical use ("He was
+    // therefore referred", "He did not, however, attend") is standard English
+    // and is never flagged (Addendum Rev8 §3: "Do not mechanically apply this
+    // pattern when the surrounding grammar does not contain two complete
+    // clauses").
 
     // Owner decision (Writing Rule Enforcement Addendum Rev5 governance
     // reply, 10 Sep 2026, §6 "Discharge introduction"): do not require one
@@ -1345,54 +1469,39 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
-    // R12.10 — 'therefore' / 'thus' must be preceded by ';' OR start a new sentence after a full stop
-    private static IEnumerable<LintFinding> DetectThereforePunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
-    {
-        var re = new Regex(@"([^\n;]{5,})\b(therefore|thus)\b", RegexOptions.IgnoreCase);
-        foreach (Match m in re.Matches(s.Body))
-        {
-            if (!PrecededBySemicolonOrSentenceBoundary(m.Groups[1].Value))
-                yield return new LintFinding(rule.Id, rule.Severity,
-                    "Precede 'therefore'/'thus' with either a semicolon, or start a new sentence: '...clause; therefore, ...' or '...clause. Therefore, ...'.",
-                    Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
-        }
-    }
-
-    // R12.11 — 'in addition' (clause joiner; not 'in addition to/with') must be preceded by ';' OR start a new sentence after a full stop
-    private static IEnumerable<LintFinding> DetectInAdditionPunctuation(OetRule rule, WritingLintInput input, LetterStructure s)
-    {
-        var re = new Regex(@"([^\n;]{5,})\bin addition\b(?!\s+(to|with)\b)", RegexOptions.IgnoreCase);
-        foreach (Match m in re.Matches(s.Body))
-        {
-            if (!PrecededBySemicolonOrSentenceBoundary(m.Groups[1].Value))
-                yield return new LintFinding(rule.Id, rule.Severity,
-                    "Precede 'in addition' (as a clause joiner) with either a semicolon, or start a new sentence: '...clause; in addition, ...' or '...clause. In addition, ...'.",
-                    Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length);
-        }
-    }
-
     // R05.5 — date format consistency. Distinguishes DD/MM/YYYY (slash-numeric),
     // DD.MM.YYYY (dot-numeric), "1 January 2024" (day-first long), and
     // "January 1, 2024" (month-first long). Global Model Answer Formatting &
     // Sign-Off addendum (owner, 2026-09-06), §2: one consistent style per
     // letter; date/address ordering is unaffected. If two or more distinct
     // styles appear in the same letter, flag major.
+    // Month names only — "Hypertension 2010" or "Suite 32" must never be
+    // read as a written date.
+    private const string MonthNamePattern =
+        "(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)";
+
     private static IEnumerable<LintFinding> DetectDateFormatConsistent(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        // Rev8: two-digit-year numeric dates (the Weir "11.08.14" defect) are a
+        // style family too; previously only 4-digit years were classified, so
+        // "11.08.14" + "13 June 2020" in one letter went unflagged.
         var re = new Regex(
-            @"\b(\d{1,2}\/\d{1,2}\/\d{4}|\d{1,2}\.\d{1,2}\.\d{4}|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},?\s+\d{4})\b");
+            @"(?<![\d.\/\-])(\d{1,2}\/\d{1,2}\/'?\d{2,4}|\d{1,2}\.\d{1,2}\.'?\d{2,4}|\d{1,2}-\d{1,2}-'?\d{2,4}|\d{1,2}(?:st|nd|rd|th)?\s+" + MonthNamePattern + @",?\s+'?\d{2,4}|" + MonthNamePattern + @"\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})(?![\d.\/\-]\d)",
+            RegexOptions.IgnoreCase);
         var hasSlash = false;
         var hasDot = false;
+        var hasDash = false;
         var hasDayFirstLong = false;
         var hasMonthFirstLong = false;
         foreach (Match m in re.Matches(input.LetterText))
         {
             if (m.Value.Contains('/')) hasSlash = true;
-            else if (m.Value.Contains('.')) hasDot = true;
+            else if (Regex.IsMatch(m.Value, @"^\d{1,2}\.\d")) hasDot = true;
+            else if (Regex.IsMatch(m.Value, @"^\d{1,2}-\d")) hasDash = true;
             else if (char.IsDigit(m.Value[0])) hasDayFirstLong = true;
             else hasMonthFirstLong = true;
         }
-        var styles = (hasSlash ? 1 : 0) + (hasDot ? 1 : 0) + (hasDayFirstLong ? 1 : 0) + (hasMonthFirstLong ? 1 : 0);
+        var styles = (hasSlash ? 1 : 0) + (hasDot ? 1 : 0) + (hasDash ? 1 : 0) + (hasDayFirstLong ? 1 : 0) + (hasMonthFirstLong ? 1 : 0);
         if (styles > 1)
             yield return new LintFinding(rule.Id, RuleSeverity.Major,
                 "Date format must be consistent throughout the letter. Pick ONE style (fully written, slash, or dot) and use it for every date.");
@@ -1502,14 +1611,27 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
         }
     }
 
-    // R05.6 — year not abbreviated (e.g. 01/01/'24)
+    // R05.6 / OWN-W-003 — year not abbreviated. Rev8 root-cause fix: the old
+    // pattern only covered SLASH dates and then excused any match containing
+    // "19"/"20" anywhere (so "01/01/19" and "11/08/20" passed); dot dates
+    // ("11.08.14" — the live Weir Model Answer) and dash dates were never
+    // checked at all.
+    private static readonly Regex AbbreviatedYearRe = new(
+        @"(?<![\d.\/\-])\d{1,2}([\/.\-])\d{1,2}\1'?\d{2}(?![\d])" +
+        @"|\b" + MonthNamePattern + @"\s+'\d{2}\b" +
+        @"|\b\d{1,2}(?:st|nd|rd|th)?\s+" + MonthNamePattern + @",?\s+'?\d{2}(?!\d)",
+        RegexOptions.IgnoreCase);
+
     private static IEnumerable<LintFinding> DetectYearNotAbbreviated(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var m = Regex.Match(input.LetterText, @"\b\d{1,2}\/\d{1,2}\/'?\d{2}\b");
-        if (m.Success && !m.Value.Contains("19") && !m.Value.Contains("20"))
-            yield return new LintFinding(rule.Id, rule.Severity,
-                "Do not abbreviate the year (write 2024, not '24).",
+        var count = 0;
+        foreach (Match m in AbbreviatedYearRe.Matches(input.LetterText ?? string.Empty))
+        {
+            yield return new LintFinding(rule.Id, input.IsModelAnswer ? RuleSeverity.Critical : rule.Severity,
+                $"Do not abbreviate the year in \"{m.Value}\" — write the full four-digit year.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+            if (++count >= 5) yield break;
+        }
     }
 
     // FINAL MASTER Writing Rulebook v1.0 (31 Aug 2026), §8 provenance audit:
