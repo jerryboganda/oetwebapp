@@ -107,7 +107,9 @@ test.describe('Reading learner flow @reading @learner', () => {
     await expect(page.getByRole('link', { name: /practice part b/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /practice part c/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /full reading exam/i })).toBeVisible();
-    await expect(page.getByText('Tutor tasks')).toBeVisible();
+    // Final Developer Modification Brief items 6-8 renamed the "Tutor tasks"
+    // panel to "Practice Hub" (it now links to /reading/practice).
+    await expect(page.getByRole('heading', { name: 'Practice Hub' })).toBeVisible();
     await expect(page.getByText('Complete this launch-gate reading paper')).toBeVisible();
     await expect(page.getByText(/30\/42/)).toBeVisible();
 
@@ -116,7 +118,7 @@ test.describe('Reading learner flow @reading @learner', () => {
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('learner can open the Reading practice hub and see the pathway card', async ({ page }, testInfo) => {
+  test('learner can open the Reading practice hub and see only Untimed Practice and Mini-Tests, with no drill/error-bank/pathway UI', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();
     }
@@ -125,9 +127,15 @@ test.describe('Reading learner flow @reading @learner', () => {
 
     await page.goto('/reading/practice');
     await expect(page.getByRole('heading', { name: /practice hub/i })).toBeVisible();
-    // Pathway card is best-effort; the rest of the hub must render unconditionally.
-    await expect(page.getByText(/learning mode/i)).toBeVisible();
-    await expect(page.getByText(/error bank/i)).toBeVisible();
+    // Final Developer Modification Brief items 6-8: only Untimed Practice
+    // (eligible/previously-attempted papers, no timer) and the 5/10/15-minute
+    // Mini Tests remain — the drill/error-bank/pathway system is removed.
+    await expect(page.getByText(/untimed practice/i).first()).toBeVisible();
+    await expect(page.getByText(/mini-tests/i).first()).toBeVisible();
+    await expect(page.getByText(/learning mode/i)).not.toBeVisible();
+    await expect(page.getByText(/error bank/i)).not.toBeVisible();
+    await expect(page.getByText(/drill your weakest/i)).not.toBeVisible();
+    await expect(page.getByText(/pathway/i)).not.toBeVisible();
 
     expectNoSevereClientIssues(diagnostics, { allowNextDevNoise: true });
     diagnostics.detach();
