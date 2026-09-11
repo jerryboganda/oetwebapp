@@ -600,7 +600,7 @@ export default function RecallsWordsPage() {
                         <button
                           type="button"
                           onClick={() => playTerm(term)}
-                          aria-label={`Play pronunciation of ${term.term}`}
+                          aria-label={spellingPracticeOpen ? 'Play pronunciation' : `Play pronunciation of ${term.term}`}
                           aria-pressed={playingId === term.id}
                           title="Play pronunciation"
                           className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 p-1.5 text-primary transition-colors hover:bg-primary/20 group-hover:bg-primary/15"
@@ -620,7 +620,15 @@ export default function RecallsWordsPage() {
                           type="button"
                           onClick={() => handleToggleFavTerm(term)}
                           aria-pressed={favTermIds.has(term.id)}
-                          aria-label={favTermIds.has(term.id) ? `Remove ${term.term} from favourites` : `Favourite ${term.term}`}
+                          aria-label={
+                            spellingPracticeOpen
+                              ? favTermIds.has(term.id)
+                                ? 'Remove from favourites'
+                                : 'Favourite this word'
+                              : favTermIds.has(term.id)
+                                ? `Remove ${term.term} from favourites`
+                                : `Favourite ${term.term}`
+                          }
                           title={favTermIds.has(term.id) ? 'Remove from favourites' : 'Favourite'}
                           className={`ml-auto inline-flex h-7 w-7 items-center justify-center rounded-full transition-colors ${
                             favTermIds.has(term.id)

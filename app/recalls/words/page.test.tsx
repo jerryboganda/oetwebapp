@@ -308,6 +308,14 @@ describe('Recalls words page spelling practice and test (§3B, §3C)', () => {
     expect(screen.queryByText('dyspnoea')).not.toBeInTheDocument();
     expect(screen.queryByText('Difficulty breathing.')).not.toBeInTheDocument();
     expect(screen.queryByText('The patient reported dyspnoea overnight.')).not.toBeInTheDocument();
+
+    // The word must not leak through an accessible name either — a
+    // screen-reader user tabbing to the play/favourite buttons must not
+    // hear the answer announced before pressing Check.
+    expect(screen.queryByRole('button', { name: /play pronunciation of dyspnoea/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play pronunciation' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /favourite dyspnoea/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Favourite this word' })).toBeInTheDocument();
   });
 
   it('records a miss and refreshes the review mistakes list', async () => {
