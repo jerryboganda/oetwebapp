@@ -773,9 +773,12 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
         // Unlimited checked before the account-level expiry/package-expired
         // throw (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026, §12.1:
         // "the unlimited entitlement itself is sufficient; a zero balance in
-        // another pool must not block the attempt") — this is the actual
-        // "Practice this" gate (called directly by WritingScenarioEndpoints),
-        // so it must agree with the reservation service and the dashboard.
+        // another pool must not block the attempt"). As of §12's fix, both
+        // Writing "Practice this" surfaces (WritingScenarioEndpoints
+        // eligibility, LearnerService.CreateWritingAttemptAsync) reach this
+        // only via WritingEntitlementService.AuthorizeStartAsync — never
+        // directly — precisely so it stays in lockstep with the reservation
+        // service and the dashboard's free-tier fallback.
         if (await HasActiveUnlimitedGradingAsync(userId, now, ct))
         {
             return new(true, null, null, referenceId, BalanceSource: "unlimited");
