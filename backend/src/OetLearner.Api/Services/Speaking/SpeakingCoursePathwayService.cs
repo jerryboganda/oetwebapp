@@ -224,10 +224,12 @@ public sealed class SpeakingCoursePathwayService(LearnerDbContext db)
         Mock = 4,
     }
 
+    // OrientationVideo and GuidedReading fall through to the default "/speaking"
+    // hub (which surfaces the Assessment Criteria and Intro Questions tiles) —
+    // they used to deep-link into /speaking/rulebook, the internal grading
+    // rulebook page, which is not a candidate-facing route and no longer exists.
     private static string StageActionHref(SpeakingPathwayStage stage) => stage.ActivityKind switch
     {
-        SpeakingPathwayActivityKind.OrientationVideo => "/speaking/rulebook",
-        SpeakingPathwayActivityKind.GuidedReading => "/speaking/rulebook",
         SpeakingPathwayActivityKind.Drill => "/speaking/drills",
         SpeakingPathwayActivityKind.RolePlay => "/speaking/selection",
         SpeakingPathwayActivityKind.Mock => "/speaking/mocks",

@@ -54,7 +54,7 @@ Core preparation:
 OET sub-test and mock routes:
 
 - `/writing`, `/writing/library`, `/writing/player`, `/writing/result`, `/writing/feedback`, `/writing/revision`, `/writing/model`, `/writing/expert-request`, `/writing/analytics`, `/writing/compare`, `/writing/phrase-suggestions`, `/writing/rulebook`, `/writing/rulebook/[code]`, `/writing/drills`, `/writing/drills/[type]`, `/writing/drills/[type]/[id]`
-- `/speaking`, `/speaking/selection`, `/speaking/check`, `/speaking/roleplay/[id]`, `/speaking/task/[id]`, `/speaking/results/[id]`, `/speaking/transcript/[id]`, `/speaking/phrasing/[id]`, `/speaking/expert-review/[id]`, `/speaking/mocks`, `/speaking/mocks/[id]`, `/speaking/drills`, `/speaking/fluency-timeline`, `/speaking/rulebook`, `/speaking/rulebook/[code]`
+- `/speaking`, `/speaking/selection`, `/speaking/check`, `/speaking/roleplay/[id]`, `/speaking/task/[id]`, `/speaking/results/[id]`, `/speaking/transcript/[id]`, `/speaking/phrasing/[id]`, `/speaking/expert-review/[id]`, `/speaking/mocks`, `/speaking/mocks/[id]`, `/speaking/drills`, `/speaking/fluency-timeline`, `/speaking/assessment-criteria`, `/speaking/intro-questions`
 - `/reading`, `/reading/practice`, `/reading/player/[id]`, `/reading/results/[id]`, `/reading/paper/[paperId]`, `/reading/paper/[paperId]/results`
 - `/listening`, `/listening/player/[id]`, `/listening/results`, `/listening/results/[id]`, `/listening/review/[id]`, `/listening/drills/[id]`, `/listening/pathway`, `/listening/curriculum`, `/listening/classes`, `/listening/test-rules`, `/listening/analytics`
 - `/mocks`, `/mocks/setup`, `/mocks/player/[id]`, `/mocks/report/[id]`, `/mocks/[id]`, `/mocks/diagnostic`, `/mocks/simulation`, `/mocks/bookings`, `/mocks/speaking-room/[bookingId]`
