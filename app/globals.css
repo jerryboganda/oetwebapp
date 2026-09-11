@@ -248,12 +248,20 @@
     padding-right: max(1rem, var(--safe-area-inset-right));
   }
 
+  /* Fixed elements dock to the real bottom and must NOT be offset by the
+     keyboard height. Capacitor runs KeyboardResize.Body, which resizes the <body>
+     element WITHOUT changing the viewport — so `innerHeight - visualViewport.height`
+     reads as a full keyboard height, and adding it here threw the fixed bottom nav
+     into the middle of the screen over the Practice Spelling panel (issue report
+     11 Sep 2026). Docking is correct in both resize modes: under Body resize the
+     element stays at the true bottom (behind the keyboard, and faded out by the
+     rule below), while under native resize it lands just above the keyboard. */
   .keyboard-safe-bottom {
-    bottom: calc(var(--safe-area-inset-bottom) + var(--app-keyboard-offset, 0px));
+    bottom: var(--safe-area-inset-bottom);
   }
 
   .keyboard-safe-floating-bottom {
-    bottom: calc(var(--safe-area-inset-bottom) + var(--app-keyboard-offset, 0px) + 0.75rem);
+    bottom: calc(var(--safe-area-inset-bottom) + 0.75rem);
   }
 
   /* Hide bottom nav when virtual keyboard is open on mobile */

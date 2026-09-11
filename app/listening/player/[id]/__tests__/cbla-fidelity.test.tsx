@@ -462,7 +462,10 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
   it.each([
     { part: 'a' as const, focus: 'part-a', firstNumber: 1, lastNumber: 1 },
     { part: 'b' as const, focus: 'part-b', firstNumber: 25, lastNumber: 30 },
-    { part: 'c' as const, focus: 'part-c', firstNumber: 31, lastNumber: 42 },
+    // Part C shows Q31–Q42 as one workspace, but Q37–Q42 belong to the C2
+    // extract: jumping there is a section transition, not a card change, so the
+    // furthest plain jump inside C1 is Q36.
+    { part: 'c' as const, focus: 'part-c', firstNumber: 31, lastNumber: 36 },
   ])(
     'autoplays standalone Part $part and keeps playback stable while navigating its questions',
     async ({ part, focus, firstNumber, lastNumber }) => {
@@ -587,9 +590,9 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
       expect(screen.getByText('Standalone Part C source question 31')).toBeInTheDocument();
     });
 
-    // Part C shows Q31-Q42 in one workspace, so the section boundary control is
-    // only offered on the last card.
-    fireEvent.click(screen.getByRole('button', { name: 'Go to question 42' }));
+    // Part C shows Q31-Q42 in one workspace, but the audio boundary is at Q36 —
+    // the section control belongs there, not on the final card.
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 36' }));
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /Next Section/i })).toBeInTheDocument();
     });
@@ -716,7 +719,7 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     expect(playCalls).toBe(playbackCallsAfterInitialStart);
   });
 
-  it('loads the complete Full Exam Part C workspace across C1/C2 with next, jump, and answer persistence', async () => {
+  it('loads the complete Full Exam Part C workspace and holds C1 audio across next, jump, and answer persistence', async () => {
     mockUseSearchParams.mockReturnValue({
       get: (key: string) => {
         if (key === 'attemptId') return 'attempt-1';
@@ -741,25 +744,36 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     await waitFor(() => expect(screen.getByText('Standalone Part C source question 32')).toBeInTheDocument());
 
     const playbackCallsAfterInitialStart = playCalls;
-    fireEvent.click(screen.getByRole('button', { name: 'Go to question 40' }));
-    await waitFor(() => {
-      expect(screen.getByText('Standalone Part C source question 40')).toBeInTheDocument();
-      expect(screen.getByText('Part C — Extract 2')).toBeInTheDocument();
-    });
-    const q40Options = screen.getAllByRole('radio');
-    expect(q40Options).toHaveLength(3);
-    expect(q40Options[1]).not.toBeDisabled();
-    await userEvent.setup().click(q40Options[1]);
-    await waitFor(() => expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true'));
 
+    // Jumps inside C1 change only the card — the C1 audio keeps playing.
     fireEvent.click(screen.getByRole('button', { name: 'Go to question 34' }));
     await waitFor(() => expect(screen.getByText('Standalone Part C source question 34')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Go to question 42' }));
-    await waitFor(() => expect(screen.getByText('Standalone Part C source question 42')).toBeInTheDocument());
-    fireEvent.click(screen.getByRole('button', { name: 'Go to question 40' }));
-    await waitFor(() => expect(screen.getByText('Standalone Part C source question 40')).toBeInTheDocument());
+    expect(playCalls).toBe(playbackCallsAfterInitialStart);
+
+    const q34Options = screen.getAllByRole('radio');
+    expect(q34Options).toHaveLength(3);
+    expect(q34Options[1]).not.toBeDisabled();
+    await userEvent.setup().click(q34Options[1]);
+    await waitFor(() => expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true'));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 36' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part C source question 36')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 34' }));
+    await waitFor(() => expect(screen.getByText('Standalone Part C source question 34')).toBeInTheDocument());
     expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true');
     expect(playCalls).toBe(playbackCallsAfterInitialStart);
+
+    // A C2 card cannot be opened while C1 is still playing. The jump routes
+    // through the section transition, and that explains itself rather than
+    // showing a card whose audio has not started — the reported defect where the
+    // candidate sat on Q37+ in silence until the timer ran out.
+    fireEvent.click(screen.getByRole('button', { name: 'Go to question 40' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Lock & continue$/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/has not finished yet/i)).toBeInTheDocument();
+    });
+    expect(screen.queryByText('Standalone Part C source question 40')).not.toBeInTheDocument();
+    expect(screen.getByText('Standalone Part C source question 34')).toBeInTheDocument();
   });
 
   it('drops straight into the audio phase with no pre-audio reading window', async () => {

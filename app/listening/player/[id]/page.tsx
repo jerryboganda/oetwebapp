@@ -28,6 +28,7 @@ import {
   LISTENING_SECTION_LABEL,
   LISTENING_SECTION_SEQUENCE,
   groupQuestionsBySection,
+  workspaceBoundaryIndex,
   type ListeningSectionCode,
 } from '@/lib/listening-sections';
 import {
@@ -1105,19 +1106,40 @@ function PlayerContent() {
       ?? (currentSection ? sectionGroups?.[currentSection] ?? [] : []),
     [currentSection, partCQuestionWorkspace, sectionGroups],
   );
+  // Part C presents Q31–Q42 as one workspace across two audio extracts, so the
+  // card list runs past the audio cursor. The boundary is the last card owned by
+  // the current section: the furthest a plain "Next Question" may reach, and the
+  // card that must offer the section transition instead.
+  const currentSectionQuestionIds = useMemo(
+    () => new Set((currentSection ? sectionGroups?.[currentSection] ?? [] : [])
+      .map((question) => question.id)),
+    [currentSection, sectionGroups],
+  );
+  const workspaceBoundary = workspaceBoundaryIndex(currentQuestionWorkspace, currentSectionQuestionIds);
+  // Armed when a jump crosses that boundary. The section-entry reset below
+  // consumes it so the candidate lands on the card they tapped rather than at
+  // the start of the next extract.
+  const pendingJumpQuestionIdRef = useRef<string | null>(null);
   useEffect(() => {
     setCurrentPartBQuestionIndex(0);
     // The audio cursor and the visible card are separate concerns in strict
     // Part B. Reset both when the section is entered; a jump within the part
     // must not alter the one-play audio cue or leave a stale card selected.
+    // A cross-extract jump hands its target over here, exactly once.
+    const pendingIndex = pendingJumpQuestionIdRef.current
+      ? currentQuestionWorkspace.findIndex((question) => question.id === pendingJumpQuestionIdRef.current)
+      : -1;
+    pendingJumpQuestionIdRef.current = null;
     setActiveQuestionIndexBySection((previous) => ({
       ...previous,
       B: 0,
       ...(currentSection === 'C1' || currentSection === 'C2'
         ? {
-          [currentSection]: currentSection === 'C2'
-            ? Math.max(0, currentQuestionWorkspace.findIndex((question) => question.number >= 37))
-            : 0,
+          [currentSection]: pendingIndex >= 0
+            ? pendingIndex
+            : currentSection === 'C2'
+              ? Math.max(0, currentQuestionWorkspace.findIndex((question) => question.number >= 37))
+              : 0,
         }
         : {}),
     }));
@@ -1666,6 +1688,9 @@ function PlayerContent() {
     if (!canOpenReviewWindow) {
       // Never fail silently: a confirmed boundary that cannot be taken has to
       // say why, otherwise the candidate sees a dead button.
+      // Drop any cross-extract jump with it — the card it named is still out of
+      // reach, and leaving it armed would re-open it on a later advance.
+      pendingJumpQuestionIdRef.current = null;
       setAudioError(
         'The audio for this section has not finished yet. The next section opens as soon as it ends.',
       );
@@ -2293,6 +2318,15 @@ function PlayerContent() {
                             onClick={() => {
                               const index = navigationQuestions.findIndex((item) => item.id === question.id);
                               if (index >= 0 && currentSection) {
+                                // A card past the boundary belongs to the next extract, so
+                                // it cannot be shown without switching the audio first. Arm
+                                // the transition and let the section-entry reset land on this
+                                // card once the new section is live.
+                                if (index > workspaceBoundary) {
+                                  pendingJumpQuestionIdRef.current = question.id;
+                                  setShowNextConfirm(true);
+                                  return;
+                                }
                                 setActiveQuestionIndexBySection((previous) => ({
                                   ...previous,
                                   [currentSection]: index,
@@ -2462,7 +2496,7 @@ function PlayerContent() {
                                         ) : null}
                                       </div>
                                       <div>
-                                        {questions.length > 1 && activeIdx < questions.length - 1 ? (
+                                        {questions.length > 1 && activeIdx < workspaceBoundary ? (
                                           <Button
                                             variant="primary"
                                             onClick={() => {
@@ -2530,7 +2564,11 @@ function PlayerContent() {
             {/* Forward-only lock confirmation */}
             <Modal
               open={showNextConfirm}
-              onClose={() => setShowNextConfirm(false)}
+              onClose={() => {
+                setShowNextConfirm(false);
+                // Backing out must not leave a cross-extract jump armed.
+                pendingJumpQuestionIdRef.current = null;
+              }}
               title={shouldSlicePartB
                 ? currentPartBQuestionIndex + 1 < (sectionGroups?.B?.length ?? 0) ? 'Continue to the next Part B question?' : 'Lock Part B and continue?'
                 : phase === 'review'
@@ -2556,7 +2594,16 @@ function PlayerContent() {
                   </InlineAlert>
                 ) : null}
                 <div className="flex justify-end gap-3">
-                  <Button variant="outline" onClick={() => setShowNextConfirm(false)}>Keep listening</Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowNextConfirm(false);
+                      // Backing out must not leave a cross-extract jump armed.
+                      pendingJumpQuestionIdRef.current = null;
+                    }}
+                  >
+                    Keep listening
+                  </Button>
                   <Button
                     disabled={isAdvancingPhase}
                     onClick={async () => {

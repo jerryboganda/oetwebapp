@@ -57,6 +57,25 @@ function getPreferredColorScheme() {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+/**
+ * Marks whether the soft keyboard is covering the viewport. The bottom nav is
+ * hidden while this is true, so a missed plugin event would leave the learner
+ * with no navigation at all — which is why `setViewportMetrics` re-derives it.
+ */
+function setKeyboardVisible(visible: boolean) {
+  if (!isBrowser()) {
+    return;
+  }
+
+  document.documentElement.dataset.keyboardVisible = visible ? 'true' : 'false';
+}
+
+/**
+ * A viewport shortfall this large can only be the soft keyboard. Smaller
+ * differences are URL-bar and scroll noise and must not hide the navigation.
+ */
+const KEYBOARD_VISIBLE_THRESHOLD_PX = 120;
+
 function setViewportMetrics() {
   if (!isBrowser()) {
     return;
@@ -68,6 +87,11 @@ function setViewportMetrics() {
 
   document.documentElement.style.setProperty('--app-viewport-height', `${viewportHeight}px`);
   document.documentElement.style.setProperty('--app-keyboard-offset', `${keyboardOffset}px`);
+  // Re-derived on every metrics pass (resize, orientation change, visualViewport
+  // resize/scroll) so the state self-corrects: a keyboardWillHide that never
+  // arrives can no longer leave the bottom nav hidden, and a keyboardWillShow
+  // that never arrives can no longer leave it floating.
+  setKeyboardVisible(keyboardOffset > KEYBOARD_VISIBLE_THRESHOLD_PX);
 }
 
 function scheduleViewportMetrics() {
@@ -237,20 +261,37 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
 
   try {
     const { Keyboard } = await loadKeyboardModule();
-    const keyboardWillShow = await Keyboard.addListener('keyboardWillShow', (event) => {
-      document.documentElement.dataset.keyboardVisible = 'true';
-      document.documentElement.style.setProperty('--app-keyboard-offset', `${event.keyboardHeight}px`);
+    // Each keyboard transition is handled in both its will* and did* forms.
+    // Android emits the pair almost simultaneously, but which of the two is
+    // delivered varies by API level, and the nav's hide rule must not depend on
+    // that. The raw `event.keyboardHeight` is deliberately NOT written to
+    // `--app-keyboard-offset`: with KeyboardResize.Body the layout viewport does
+    // not change, so applying a keyboard height as a bottom offset threw the
+    // fixed bottom nav into the middle of the screen (issue report 11 Sep 2026).
+    const keyboardWillShow = await Keyboard.addListener('keyboardWillShow', () => {
+      setKeyboardVisible(true);
+      scheduleViewportMetrics();
+    });
+    const keyboardDidShow = await Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
       scheduleViewportMetrics();
     });
 
     const keyboardWillHide = await Keyboard.addListener('keyboardWillHide', () => {
-      document.documentElement.dataset.keyboardVisible = 'false';
+      setKeyboardVisible(false);
+      document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
+      scheduleViewportMetrics();
+    });
+    const keyboardDidHide = await Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
       document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
       scheduleViewportMetrics();
     });
 
     cleanup.push(() => keyboardWillShow.remove());
+    cleanup.push(() => keyboardDidShow.remove());
     cleanup.push(() => keyboardWillHide.remove());
+    cleanup.push(() => keyboardDidHide.remove());
   } catch {
     // Keyboard plugin is optional on web and some test environments.
   }

@@ -5,6 +5,7 @@ import {
   computeListeningSectionMap,
   formatReviewSeconds,
   groupQuestionsBySection,
+  workspaceBoundaryIndex,
 } from './listening-sections';
 
 type Q = { id: string; partCode: string; number: number };
@@ -83,5 +84,40 @@ describe('listening-sections', () => {
     expect(formatReviewSeconds(0)).toBe('00:00');
     expect(formatReviewSeconds(-5)).toBe('00:00');
     expect(formatReviewSeconds(5)).toBe('00:05');
+  });
+
+  describe('workspaceBoundaryIndex', () => {
+    // Part C is presented as one Q31–Q42 workspace while C1 and C2 are separate
+    // audio extracts, so the boundary — not the end of the workspace — is where
+    // the sub-section transition belongs.
+    const workspace = Array.from({ length: 12 }, (_, i) => ({ id: `q-${31 + i}` }));
+    const idsFor = (numbers: number[]) => new Set(numbers.map((n) => `q-${n}`));
+    const partC1 = idsFor([31, 32, 33, 34, 35, 36]);
+    const partC2 = idsFor([37, 38, 39, 40, 41, 42]);
+
+    it('puts the C1 boundary on Q36, not the end of the Q31–Q42 workspace', () => {
+      expect(workspaceBoundaryIndex(workspace, partC1)).toBe(5);
+      expect(workspace[workspaceBoundaryIndex(workspace, partC1)].id).toBe('q-36');
+    });
+
+    it('puts the C2 boundary on Q42, the final card', () => {
+      expect(workspaceBoundaryIndex(workspace, partC2)).toBe(11);
+      expect(workspace[workspaceBoundaryIndex(workspace, partC2)].id).toBe('q-42');
+    });
+
+    it('follows the real membership when an extract is short', () => {
+      expect(workspaceBoundaryIndex(workspace, idsFor([31, 32]))).toBe(1);
+      expect(workspaceBoundaryIndex(workspace, idsFor([37, 38, 39]))).toBe(8);
+    });
+
+    it('returns the last index for a section that owns the whole workspace', () => {
+      const allIds = idsFor(workspace.map((q) => Number(q.id.slice(2))));
+      expect(workspaceBoundaryIndex(workspace, allIds)).toBe(workspace.length - 1);
+      expect(workspaceBoundaryIndex([{ id: 'q-25' }, { id: 'q-30' }], idsFor([25, 30]))).toBe(1);
+    });
+
+    it('falls back to the last index when nothing in the workspace is owned', () => {
+      expect(workspaceBoundaryIndex(workspace, new Set<string>())).toBe(workspace.length - 1);
+    });
   });
 });

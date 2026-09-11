@@ -73,6 +73,7 @@ import {
   normalizeExamPartCode,
   type ListeningExamSubSection,
 } from '@/lib/listening-exam-sections';
+import { workspaceBoundaryIndex } from '@/lib/listening-sections';
 import { resolveBlockedSeekTarget, shouldResumeAfterBlockedPause } from '@/lib/listening/audio-integrity';
 import { correctedNowMs, readServerClockOffsetMs } from '@/lib/server-clock';
 
@@ -174,6 +175,10 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
   const [saveState, setSaveState] = useState<SaveState>('idle');
   // One-way cursor. Only ever increments (Next or timer auto-advance).
   const [currentIndex, setCurrentIndex] = useState(0);
+  // Part C only. The card a jump asked to land on once the C1→C2 transition has
+  // swapped the audio. It lives here because the transition remounts the
+  // sub-section panel, so panel-local state could not survive the swap.
+  const [pendingQuestionId, setPendingQuestionId] = useState<string | null>(null);
   const [showExamSubmitConfirm, setShowExamSubmitConfirm] = useState(false);
   // Per-paper question-paper annotations (Part B/C highlight/strikethrough).
   const [annotations, setAnnotations] = useState<ReadingPaperAnnotationDto[]>([]);
@@ -690,6 +695,8 @@ function ListeningPaperPlayerContent({ params }: { params: Promise<{ paperId: st
                 paperId={paperId}
                 subSection={activeSubSection}
                 questionNavigationQuestions={activeQuestionNavigationQuestions}
+                pendingQuestionId={pendingQuestionId}
+                onPendingQuestionChange={setPendingQuestionId}
                 questionPaperUrl={resolveQuestionPaperUrl(session, activeSubSection.partCode)}
                 annotations={annotations}
                 onCreateAnnotation={handleCreateAnnotation}
@@ -988,6 +995,8 @@ function ActiveSubSectionPanel({
   totalQuestions,
   onSubmit,
   questionNavigationQuestions,
+  pendingQuestionId,
+  onPendingQuestionChange,
 }: {
   attemptId: string;
   paperId: string;
@@ -1022,6 +1031,9 @@ function ActiveSubSectionPanel({
   onSubmit: () => void;
   /** Part C keeps C1/C2 audio sequential but exposes one Q31–Q42 workspace. */
   questionNavigationQuestions?: ListeningSessionQuestionDto[];
+  /** Card to open on after a jump crossed an extract boundary into this sub-section. */
+  pendingQuestionId?: string | null;
+  onPendingQuestionChange: (questionId: string | null) => void;
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [timerExpired, setTimerExpired] = useState(false);
@@ -1035,14 +1047,34 @@ function ActiveSubSectionPanel({
     questionNavigationQuestions?.length
       && (subSection.partCode === 'C1' || subSection.partCode === 'C2'),
   );
-  const firstQuestionIndexForSubSection = subSection.partCode === 'C2'
-    ? Math.max(0, questionList.findIndex((question) => question.number >= 37))
-    : 0;
+  // The last card owned by THIS sub-section. Part C shows one Q31–Q42 workspace
+  // across two audio extracts, so the workspace extends past the audio cursor —
+  // this is the card that must offer the sub-section transition, and the furthest
+  // a plain "Next Question" may reach.
+  const subSectionQuestionIds = useMemo(
+    () => new Set(subSection.questions.map((question) => question.id)),
+    [subSection.questions],
+  );
+  const boundaryIndex = workspaceBoundaryIndex(questionList, subSectionQuestionIds);
+  // A sub-section normally opens on its first card (Q37 for C2). A jump that
+  // crossed the extract boundary overrides that so the candidate lands on the
+  // card they tapped rather than at the start of the extract.
+  const pendingQuestionIndex = pendingQuestionId
+    ? questionList.findIndex((question) => question.id === pendingQuestionId)
+    : -1;
+  const entryQuestionIndex = pendingQuestionIndex >= 0
+    ? pendingQuestionIndex
+    : subSection.partCode === 'C2'
+      ? Math.max(0, questionList.findIndex((question) => question.number >= 37))
+      : 0;
 
   // Active question index within the candidate-visible question workspace.
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(
-    Math.max(0, Math.min(questionList.length - 1, resumeAudioQuestionIndex ?? firstQuestionIndexForSubSection)),
+    Math.max(0, Math.min(questionList.length - 1, resumeAudioQuestionIndex ?? entryQuestionIndex)),
   );
+  // Captured once per mount so consuming the pending target (below) cannot pull
+  // the candidate back to the default card.
+  const entryQuestionIndexRef = useRef(entryQuestionIndex);
   const [questionAnnotations, setQuestionAnnotations] = useState<Record<string, { flagged?: boolean; struckOptions?: string[] }>>({});
 
   const isPartA = subSection.partCode.startsWith('A');
@@ -1062,11 +1094,19 @@ function ActiveSubSectionPanel({
   useEffect(() => {
     setAudioFailure(false);
     setActiveQuestionIndex(
-      Math.max(0, Math.min(questionList.length - 1, subSection.partCode === 'C2'
-        ? Math.max(0, questionList.findIndex((question) => question.number >= 37))
-        : 0)),
+      Math.max(0, Math.min(questionList.length - 1, entryQuestionIndexRef.current)),
     );
   }, [questionList, subSection.index, subSection.partCode]);
+
+  // The landing target is a one-shot instruction. Consume it only once the
+  // sub-section that owns the card is mounted — while still on C1 it must stay
+  // armed, because that card belongs to C2. Clearing it keeps a later advance
+  // (timer expiry, or the Q36 control) from re-opening a stale card.
+  useEffect(() => {
+    if (pendingQuestionId && subSectionQuestionIds.has(pendingQuestionId)) {
+      onPendingQuestionChange(null);
+    }
+  }, [pendingQuestionId, subSectionQuestionIds, onPendingQuestionChange]);
 
   const { remaining, pause: pauseTimer, resume: resumeTimer } = useTimer(
     subSection.timeLimitSeconds > 0 ? subSection.timeLimitSeconds : LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
@@ -1083,11 +1123,20 @@ function ActiveSubSectionPanel({
     else resumeTimer();
   }, [audioBuffering, pauseTimer, resumeTimer]);
 
-  const unansweredInSection = questionList.filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
+  // Scoped to THIS sub-section: the modal warns about the extract being locked,
+  // so questions in the other Part C extract must not be counted.
+  const unansweredInSection = subSection.questions
+    .filter((q) => (answers[q.id] ?? '').trim().length === 0).length;
 
   const requestAdvance = () => {
     if (advancing || audioFailure) return;
     setShowConfirm(true);
+  };
+
+  const cancelAdvance = () => {
+    setShowConfirm(false);
+    // Backing out must not leave a jump target armed for the next advance.
+    if (pendingQuestionId) onPendingQuestionChange(null);
   };
 
   const currentQuestion = questionList[activeQuestionIndex] ?? questionList[0];
@@ -1172,6 +1221,14 @@ function ActiveSubSectionPanel({
                           const currentVal = answers[currentQuestion.id] ?? '';
                           if (currentVal) void onPersistAnswer(currentQuestion.id, currentVal);
                         }
+                        // A card past the boundary belongs to the next extract, so it
+                        // cannot be shown without switching the audio first. Route the
+                        // jump through the sub-section transition and land on it there.
+                        if (idx > boundaryIndex) {
+                          onPendingQuestionChange(q.id);
+                          requestAdvance();
+                          return;
+                        }
                         setActiveQuestionIndex(idx);
                       }}
                       className={cn(
@@ -1249,7 +1306,7 @@ function ActiveSubSectionPanel({
           </div>
 
           <div className="flex items-center gap-2">
-            {!showNotes && questionList.length > 1 && activeQuestionIndex < questionList.length - 1 ? (
+            {!showNotes && questionList.length > 1 && activeQuestionIndex < boundaryIndex ? (
               <Button
                 variant="primary"
                 onClick={() => {
@@ -1292,7 +1349,7 @@ function ActiveSubSectionPanel({
 
       <Modal
         open={showConfirm}
-        onClose={() => setShowConfirm(false)}
+        onClose={cancelAdvance}
         title={isLastSection ? 'Submit Listening attempt?' : 'Move to the next sub-section?'}
       >
         <div className="space-y-4">
@@ -1310,7 +1367,7 @@ function ActiveSubSectionPanel({
           ) : null}
         </div>
         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="ghost" onClick={() => setShowConfirm(false)}>Keep working</Button>
+          <Button variant="ghost" onClick={cancelAdvance}>Keep working</Button>
           <Button
             variant="primary"
             onClick={() => {

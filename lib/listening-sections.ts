@@ -149,6 +149,30 @@ export function groupQuestionsBySection<T extends { id: string; partCode: string
   return groups;
 }
 
+/**
+ * Part C is two sequential audio extracts (C1 = Q31–36, C2 = Q37–42) presented
+ * to the candidate as ONE Q31–Q42 workspace, so the visible card list spans more
+ * than the extract whose audio is currently playing.
+ *
+ * Returns the index within `workspace` of the LAST question owned by the active
+ * sub-section — the card the audio boundary sits on. That card is the furthest
+ * one reachable with a plain "Next Question" and the one that must offer the
+ * sub-section transition instead; any card past it belongs to a later extract and
+ * cannot be shown without switching the audio first.
+ *
+ * Falls back to the final workspace index when every card belongs to the active
+ * section, which keeps non-Part-C sections behaving exactly as before.
+ */
+export function workspaceBoundaryIndex(
+  workspace: readonly { id: string }[],
+  ownedIds: ReadonlySet<string>,
+): number {
+  for (let index = workspace.length - 1; index >= 0; index -= 1) {
+    if (ownedIds.has(workspace[index].id)) return index;
+  }
+  return workspace.length - 1;
+}
+
 export function formatReviewSeconds(remaining: number): string {
   const safe = Math.max(0, Math.floor(remaining));
   const m = Math.floor(safe / 60);

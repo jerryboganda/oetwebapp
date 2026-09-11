@@ -3,8 +3,10 @@ const mobileMocks = vi.hoisted(() => {
   const handles = {
     appState: createHandle(),
     backButton: createHandle(),
-    keyboardShow: createHandle(),
-    keyboardHide: createHandle(),
+    keyboardWillShow: createHandle(),
+    keyboardDidShow: createHandle(),
+    keyboardWillHide: createHandle(),
+    keyboardDidHide: createHandle(),
     network: createHandle(),
   };
 
@@ -24,9 +26,12 @@ const mobileMocks = vi.hoisted(() => {
       exitApp: vi.fn(async () => undefined),
     },
     keyboard: {
-      addListener: vi.fn(async (eventName: string) =>
-        eventName === 'keyboardWillShow' ? handles.keyboardShow : handles.keyboardHide,
-      ),
+      addListener: vi.fn(async (eventName: string) => {
+        if (eventName === 'keyboardWillShow') return handles.keyboardWillShow;
+        if (eventName === 'keyboardDidShow') return handles.keyboardDidShow;
+        if (eventName === 'keyboardWillHide') return handles.keyboardWillHide;
+        return handles.keyboardDidHide;
+      }),
     },
     network: {
       getStatus: vi.fn(async () => ({ connected: true, connectionType: 'wifi' as const })),
@@ -215,7 +220,7 @@ describe('mobile runtime', () => {
     expect(mobileMocks.factories.network).toHaveBeenCalledTimes(1);
     expect(mobileMocks.factories.splashScreen).toHaveBeenCalledTimes(1);
     expect(mobileMocks.factories.statusBar).toHaveBeenCalledTimes(1);
-    expect(mobileMocks.keyboard.addListener).toHaveBeenCalledTimes(2);
+    expect(mobileMocks.keyboard.addListener).toHaveBeenCalledTimes(4);
     expect(mobileMocks.network.getStatus).toHaveBeenCalledTimes(1);
     expect(mobileMocks.network.addListener).toHaveBeenCalledTimes(1);
     expect(mobileMocks.app.addListener).toHaveBeenCalledTimes(2);
@@ -226,8 +231,10 @@ describe('mobile runtime', () => {
 
     cleanup();
 
-    expect(mobileMocks.handles.keyboardShow.remove).toHaveBeenCalledTimes(1);
-    expect(mobileMocks.handles.keyboardHide.remove).toHaveBeenCalledTimes(1);
+    expect(mobileMocks.handles.keyboardWillShow.remove).toHaveBeenCalledTimes(1);
+    expect(mobileMocks.handles.keyboardDidShow.remove).toHaveBeenCalledTimes(1);
+    expect(mobileMocks.handles.keyboardWillHide.remove).toHaveBeenCalledTimes(1);
+    expect(mobileMocks.handles.keyboardDidHide.remove).toHaveBeenCalledTimes(1);
     expect(mobileMocks.handles.network.remove).toHaveBeenCalledTimes(1);
     expect(mobileMocks.handles.appState.remove).toHaveBeenCalledTimes(1);
     expect(mobileMocks.handles.backButton.remove).toHaveBeenCalledTimes(1);
@@ -276,5 +283,90 @@ describe('mobile runtime', () => {
     expect(document.documentElement.style.getPropertyValue('--safe-area-inset-bottom')).toBe('');
 
     cleanup();
+  });
+
+  // Issue report 11 Sep 2026 — the bottom nav is hidden purely by this flag, so
+  // it has to be correct in both directions and recover on its own.
+  describe('keyboard visibility flag', () => {
+    const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
+    const flushFrame = () => new Promise((resolve) => { requestAnimationFrame(() => resolve(null)); });
+
+    const setViewportHeight = (height: number) => {
+      Object.defineProperty(window, 'visualViewport', {
+        configurable: true,
+        value: { height, addEventListener: vi.fn(), removeEventListener: vi.fn() },
+      });
+    };
+
+    const listenerFor = (eventName: string) => {
+      const call = mobileMocks.keyboard.addListener.mock.calls.find(
+        (entry) => entry[0] === eventName,
+      ) as unknown as [string, () => void] | undefined;
+      expect(call).toBeDefined();
+      return call![1];
+    };
+
+    afterEach(() => {
+      if (originalVisualViewport) Object.defineProperty(window, 'visualViewport', originalVisualViewport);
+      else delete (window as unknown as { visualViewport?: unknown }).visualViewport;
+    });
+
+    it('sets the flag on show and clears it on hide, for both the will* and did* forms', async () => {
+      mobileMocks.native = true;
+      const cleanup = await initializeMobileRuntime();
+
+      // Android may deliver only one of each pair, so either must work alone.
+      setViewportHeight(window.innerHeight - 320);
+      listenerFor('keyboardWillShow')();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      setViewportHeight(window.innerHeight);
+      listenerFor('keyboardDidHide')();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+      mobileMocks.handles.keyboardWillShow.remove.mockClear();
+      setViewportHeight(window.innerHeight - 320);
+      listenerFor('keyboardDidShow')();
+      await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      setViewportHeight(window.innerHeight);
+      listenerFor('keyboardWillHide')();
+      await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+      cleanup();
+    });
+
+    it('self-heals from viewport metrics when the keyboard events never arrive', async () => {
+      mobileMocks.native = true;
+      const cleanup = await initializeMobileRuntime();
+
+      // Regression: a keyboardWillHide that is never delivered used to leave the
+      // nav hidden for the rest of the session (the "stale offset" symptom).
+      setViewportHeight(window.innerHeight - 320);
+      window.dispatchEvent(new Event('resize'));
+      await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      setViewportHeight(window.innerHeight);
+      window.dispatchEvent(new Event('resize'));
+      await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+      cleanup();
+    });
+
+    it('ignores small viewport shortfalls so scroll noise cannot hide the nav', async () => {
+      mobileMocks.native = true;
+      const cleanup = await initializeMobileRuntime();
+
+      setViewportHeight(window.innerHeight - 40);
+      window.dispatchEvent(new Event('resize'));
+      await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+      cleanup();
+    });
   });
 });

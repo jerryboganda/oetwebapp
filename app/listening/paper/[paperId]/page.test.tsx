@@ -321,7 +321,7 @@ describe('ListeningPaperPlayerPage', () => {
     expect(screen.getByText('To reduce fever')).toBeInTheDocument();
   });
 
-  it('exposes one complete Part C workspace across C1 and C2 with jump and answer persistence', async () => {
+  it('holds Q31–Q36 on C1 audio and moves the sub-section control to Q36', async () => {
     const session = makeMockSession({
       attempt: {
         attemptId: 'attempt-c-101',
@@ -335,6 +335,8 @@ describe('ListeningPaperPlayerPage', () => {
     });
     mockGetListeningSession.mockResolvedValue(session);
     mockSaveListeningAnswer.mockResolvedValue({ success: true });
+    // The server owns the one-way cursor; C2 sits at index 3.
+    mockAdvanceListeningSection.mockResolvedValue({ sectionCursor: 3 });
 
     const user = userEvent.setup();
     await act(async () => {
@@ -344,33 +346,113 @@ describe('ListeningPaperPlayerPage', () => {
     await waitFor(() => {
       expect(screen.getByText('What is the key point in question 31?')).toBeInTheDocument();
     });
-    expect(screen.getByRole('tab', { name: /Question 40/ })).toBeInTheDocument();
     expect(screen.getAllByRole('tab')).toHaveLength(12);
 
+    const audioSrcs = () => Array.from(document.querySelectorAll('audio'))
+      .map((element) => element.getAttribute('src'));
+
+    // Step Q31 → Q36. The whole extract stays on the single C1 source.
+    for (let number = 32; number <= 36; number += 1) {
+      await user.click(screen.getByRole('button', { name: /next question/i }));
+      await waitFor(() => {
+        expect(screen.getByText(`What is the key point in question ${number}?`)).toBeInTheDocument();
+      });
+      expect(audioSrcs()).toContain('https://cdn.example/c1.mp3');
+      expect(audioSrcs()).not.toContain('https://cdn.example/c2.mp3');
+    }
+
+    // Q36 is the boundary: the transition replaces "Next Question"…
+    expect(screen.queryByRole('button', { name: /next question/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /advance to next sub-section/i })).toBeInTheDocument();
+    // …and the exam is not submittable from here.
+    expect(screen.queryByRole('button', { name: /submit attempt/i })).not.toBeInTheDocument();
+
+    // The regression from the 11 Sep report: Q36 → Q37 used to move the card
+    // without starting C2, leaving the candidate in silence.
+    await user.click(screen.getByRole('button', { name: /advance to next sub-section/i }));
+    await user.click(await screen.findByRole('button', { name: /^continue$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 37?')).toBeInTheDocument();
+    });
+    expect(audioSrcs()).toContain('https://cdn.example/c2.mp3');
+    expect(audioSrcs()).not.toContain('https://cdn.example/c1.mp3');
+    expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-c-101', 3);
+  });
+
+  it('offers Submit Exam at Q42 instead of another sub-section transition', async () => {
+    const session = makeMockSession({
+      attempt: {
+        attemptId: 'attempt-c-202',
+        paperId: 'paper-1',
+        mode: 'exam',
+        // C2 is the final sub-section at index 3.
+        sectionCursor: 3,
+        answers: {},
+        serverNow: new Date().toISOString(),
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(session);
+    mockSaveListeningAnswer.mockResolvedValue({ success: true });
+
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 37?')).toBeInTheDocument();
+    });
+    // C2 audio is live from the moment the sub-section opens.
+    expect(Array.from(document.querySelectorAll('audio')).map((element) => element.getAttribute('src')))
+      .toContain('https://cdn.example/c2.mp3');
+
+    for (let number = 38; number <= 42; number += 1) {
+      await user.click(screen.getByRole('button', { name: /next question/i }));
+      await waitFor(() => {
+        expect(screen.getByText(`What is the key point in question ${number}?`)).toBeInTheDocument();
+      });
+    }
+
+    expect(screen.queryByRole('button', { name: /next question/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /advance to next sub-section/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit attempt/i })).toHaveTextContent('Submit Exam');
+  });
+
+  it('routes a jump into the next extract through the transition and lands on the tapped card', async () => {
+    const session = makeMockSession({
+      attempt: {
+        attemptId: 'attempt-c-303',
+        paperId: 'paper-1',
+        mode: 'exam',
+        sectionCursor: 2,
+        answers: {},
+        serverNow: new Date().toISOString(),
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(session);
+    mockSaveListeningAnswer.mockResolvedValue({ success: true });
+    mockAdvanceListeningSection.mockResolvedValue({ sectionCursor: 3 });
+
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('What is the key point in question 31?')).toBeInTheDocument();
+    });
+
+    // A Q31–Q42 workspace stays visible while C1 plays, but tapping a C2 card
+    // must not open it without the audio — it takes the same transition.
     await user.click(screen.getByRole('tab', { name: /Question 40/ }));
+    await user.click(await screen.findByRole('button', { name: /^continue$/i }));
+
     await waitFor(() => {
       expect(screen.getByText('What is the key point in question 40?')).toBeInTheDocument();
     });
-    expect(screen.getByText('Part C — Extract 2')).toBeInTheDocument();
-
-    const q40Option = screen.getByRole('radio', { name: /Option B for 40/ });
-    await user.click(q40Option);
-    expect(q40Option).toHaveAttribute('aria-checked', 'true');
-
-    await user.click(screen.getByRole('tab', { name: /Question 34/ }));
-    await waitFor(() => {
-      expect(screen.getByText('What is the key point in question 34?')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('tab', { name: /Question 42/ }));
-    await waitFor(() => {
-      expect(screen.getByText('What is the key point in question 42?')).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole('tab', { name: /Question 40/ }));
-    await waitFor(() => {
-      expect(screen.getByText('What is the key point in question 40?')).toBeInTheDocument();
-    });
-    expect(screen.getByRole('radio', { name: /Option B for 40/ })).toHaveAttribute('aria-checked', 'true');
+    expect(Array.from(document.querySelectorAll('audio')).map((element) => element.getAttribute('src')))
+      .toContain('https://cdn.example/c2.mp3');
+    expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-c-303', 3);
   });
 });
