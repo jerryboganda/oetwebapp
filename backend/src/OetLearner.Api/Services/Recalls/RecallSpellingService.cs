@@ -160,7 +160,10 @@ public sealed class RecallSpellingService(LearnerDbContext db)
         if (normalisedSource == "mistakes")
         {
             // Most recently missed first — this doubles as the review order.
-            var items = await db.RecallSpellingMistakes
+            // Named distinctly from the outer `items` below: C# forbids a nested
+            // scope from re-declaring a name that exists in an enclosing scope
+            // (CS0136), even when the nested declaration comes first.
+            var mistakeItems = await db.RecallSpellingMistakes
                 .AsNoTracking()
                 .Where(m => m.UserId == userId)
                 .Join(RecallTermScope(isPremium), m => m.VocabularyTermId, t => t.Id, (m, t) => new { m, t })
@@ -171,7 +174,7 @@ public sealed class RecallSpellingService(LearnerDbContext db)
                     x.t.Id, x.t.Category, x.t.ExamFrequencyCount, true))
                 .ToListAsync(ct);
 
-            return new RecallSpellingSetResponse(items, items.Count, normalisedSource, take?.ToString() ?? "all");
+            return new RecallSpellingSetResponse(mistakeItems, mistakeItems.Count, normalisedSource, take?.ToString() ?? "all");
         }
 
         var candidatesQuery = normalisedSource == "favorites"
