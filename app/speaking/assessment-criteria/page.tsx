@@ -46,7 +46,7 @@ export default function SpeakingAssessmentCriteriaPage() {
           icon={<ClipboardList />}
           accent="purple"
           title="Speaking Assessment Criteria"
-          description="Use the same page for all professions. There are 9 criteria in total: 4 linguistic (0–6) and 5 clinical communication (0–3)."
+          description="Use the same page for all professions."
           highlights={[
             { icon: <ClipboardList />, label: 'Criteria', value: '9 total' },
             { icon: <BadgeCheck />, label: 'Scales', value: '0–6 / 0–3' },

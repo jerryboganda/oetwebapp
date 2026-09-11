@@ -112,7 +112,7 @@
     },
     {
       "id": "appropriateness-of-language",
-      "name": "Appropriateness of Language",
+      "name": "Appropriateness of language",
       "maxBand": 6,
       "bands": [
         {
@@ -166,7 +166,7 @@
     },
     {
       "id": "resources-of-grammar-and-expression",
-      "name": "Resources of Grammar and Expression",
+      "name": "Grammar and expression",
       "maxBand": 6,
       "bands": [
         {
@@ -253,7 +253,7 @@
     {
       "id": "understanding-patient-perspective",
       "letter": "B",
-      "name": "Understanding & incorporating the patient's perspective",
+      "name": "Incorporating patient perspective",
       "maxScore": 3,
       "scale": [
         "Adept use",
