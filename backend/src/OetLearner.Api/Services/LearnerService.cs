@@ -1550,16 +1550,20 @@ public partial class LearnerService(
     }
 
     public Task<object> GetSubmissionsAsync(string userId, CancellationToken cancellationToken)
-        => GetSubmissionsAsync(userId, cursor: null, limit: null, cancellationToken);
+        => GetSubmissionsAsync(userId, cursor: null, limit: null, subtest: null, cancellationToken);
 
-    public async Task<object> GetSubmissionsAsync(string userId, string? cursor, int? limit, CancellationToken cancellationToken)
+    public async Task<object> GetSubmissionsAsync(string userId, string? cursor, int? limit, string? subtest, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
         var pageSize = CursorPagination.NormalizeLimit(limit);
+        // Applied before the cursor/limit page is taken, so "subtest=writing,
+        // limit=100" returns the 100 most recent WRITING attempts rather than
+        // the 100 most recent attempts of any subtest filtered down afterwards.
+        var subtestFilter = string.IsNullOrWhiteSpace(subtest) ? null : subtest.Trim().ToLowerInvariant();
         if (IsSqliteProvider(db))
         {
             return await BuildSubmissionsResponseAsync(
-                await GetSubmissionsSqlitePageAsync(userId, cursor, pageSize, cancellationToken),
+                await GetSubmissionsSqlitePageAsync(userId, cursor, pageSize, subtestFilter, cancellationToken),
                 pageSize,
                 cancellationToken);
         }
@@ -1567,6 +1571,11 @@ public partial class LearnerService(
         var query = db.Attempts
             .AsNoTracking()
             .Where(x => x.UserId == userId);
+
+        if (subtestFilter is not null)
+        {
+            query = query.Where(x => x.SubtestCode.ToLower() == subtestFilter);
+        }
 
         if (CursorPagination.TryDecode(cursor, out var decoded))
         {
@@ -1716,8 +1725,15 @@ public partial class LearnerService(
         string userId,
         string? cursor,
         int pageSize,
+        string? subtestFilter,
         CancellationToken cancellationToken)
     {
+        // Raw SQL (see cursor-ticks note below) can't reuse the LINQ .Where()
+        // the non-SQLite path uses, so the subtest filter is applied here as an
+        // extra AND clause — still ahead of the LIMIT, same as the other path.
+        // subtestFilter is bound as a real parameter (not string-concatenated),
+        // so a null value simply makes the "IS NULL" arm true rather than
+        // opening a SQL-injection hole.
         IQueryable<Attempt> query;
         if (CursorPagination.TryDecode(cursor, out var decoded))
         {
@@ -1736,6 +1752,7 @@ public partial class LearnerService(
                     COALESCE(""SubmittedAt"", ""StartedAt"") < {cursorTicks}
                     OR (COALESCE(""SubmittedAt"", ""StartedAt"") = {cursorTicks} AND ""Id"" < {decoded.Id})
                   )
+                  AND ({subtestFilter} IS NULL OR LOWER(""SubtestCode"") = {subtestFilter})
                 ORDER BY COALESCE(""SubmittedAt"", ""StartedAt"") DESC, ""Id"" DESC
                 LIMIT {pageSize + 1}");
         }
@@ -1745,6 +1762,7 @@ public partial class LearnerService(
                 SELECT *
                 FROM ""Attempts""
                 WHERE ""UserId"" = {userId}
+                  AND ({subtestFilter} IS NULL OR LOWER(""SubtestCode"") = {subtestFilter})
                 ORDER BY COALESCE(""SubmittedAt"", ""StartedAt"") DESC, ""Id"" DESC
                 LIMIT {pageSize + 1}");
         }

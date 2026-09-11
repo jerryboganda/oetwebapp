@@ -83,7 +83,7 @@ public static class LearnerEndpoints
         v1.MapPost("/study-plan/items/{itemId}/swap", async (HttpContext http, string itemId, StudyPlanSwapRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SwapStudyPlanItemAsync(http.UserId(), itemId, request, ct)));
         // /v1/readiness moved to dedicated ReadinessEndpoints.cs (full computation engine).
         v1.MapGet("/progress", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProgressAsync(http.UserId(), ct)));
-        v1.MapGet("/submissions", async (HttpContext http, [FromQuery] string? cursor, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubmissionsAsync(http.UserId(), cursor, limit, ct)));
+        v1.MapGet("/submissions", async (HttpContext http, [FromQuery] string? cursor, [FromQuery] int? limit, [FromQuery] string? subtest, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubmissionsAsync(http.UserId(), cursor, limit, subtest, ct)));
         v1.MapGet("/submissions/compare", async (HttpContext http, [FromQuery] string? leftId, [FromQuery] string? rightId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompareSubmissionsAsync(http.UserId(), leftId, rightId, ct)));
 
         var writing = v1.MapGroup("/writing");

@@ -9,8 +9,8 @@ public static class LearnerAttemptHistoryEndpoints
     {
         var v1 = app.MapGroup("/v1");
 
-        v1.MapGet("/me/attempts", async (HttpContext http, ILearnerAttemptHistoryService service, CancellationToken ct, int? limit) =>
-                Results.Ok(await service.GetHistoryAsync(http.UserId(), limit ?? 100, ct)))
+        v1.MapGet("/me/attempts", async (HttpContext http, ILearnerAttemptHistoryService service, CancellationToken ct, int? limit, string? subtest) =>
+                Results.Ok(await service.GetHistoryAsync(http.UserId(), limit ?? 100, subtest, ct)))
             .RequireAuthorization();
 
         return app;

@@ -104,16 +104,24 @@ function SubmissionHistoryInner() {
 
   useEffect(() => {
     analytics.track('evaluation_viewed', { type: 'submissions' });
-    fetchSubmissions()
+    // Server-side filter is the real fix: it applies before each endpoint's
+    // limit/cursor truncation, so a Writing-only view stays complete even
+    // once a learner has 100+ more-recent Reading/Listening/Speaking
+    // attempts (see brief item 5). The visible* filters below are kept as a
+    // defensive belt-and-suspenders pass, not the primary filter.
+    const subtestFilter = writingOnly ? 'writing' : undefined;
+    fetchSubmissions(subtestFilter ? { subtest: subtestFilter } : undefined)
       .then((data) => { setSubmissions(data); setLoading(false); })
       .catch(() => { setError('Failed to load submissions. Please try again.'); setLoading(false); });
     // Unified all-four-subtest attempt history (Master Catalogue §2). Best
     // effort: the review list below still renders if this endpoint fails.
-    fetchMyAttemptHistory()
+    fetchMyAttemptHistory(100, subtestFilter)
       .then((items) => setAttempts(items))
       .catch(() => setAttempts([]));
-  }, []);
+  }, [writingOnly]);
 
+  // Defensive only — the server-side subtest filter above is what actually
+  // keeps this correct once either list exceeds its page/limit size.
   const visibleSubmissions = useMemo(
     () => (writingOnly ? submissions.filter((sub) => sub.subTest === 'Writing') : submissions),
     [submissions, writingOnly],

@@ -48,6 +48,7 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
             "learner-submissions",
             cursor: null,
             limit: 3,
+            subtest: null,
             CancellationToken.None));
 
         AssertSubmissionPage(firstPage, expectedIds: ["attempt-00", "attempt-01", "attempt-02"], expectNextCursor: true);
@@ -60,6 +61,7 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
             "learner-submissions",
             cursor: nextCursor,
             limit: 3,
+            subtest: null,
             CancellationToken.None));
 
         AssertSubmissionPage(secondPage, expectedIds: ["attempt-03", "attempt-04", "attempt-05"], expectNextCursor: true);
@@ -140,6 +142,7 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
             userId,
             cursor: null,
             limit: 10,
+            subtest: null,
             CancellationToken.None));
 
         var items = page.GetProperty("items").EnumerateArray().ToArray();
@@ -154,6 +157,100 @@ public sealed class LearnerSubmissionsPaginationTests : IAsyncLifetime
         Assert.Equal("Removed practice item", orphan.GetProperty("taskName").GetString());
         Assert.Equal("writing", orphan.GetProperty("subtest").GetString());
         Assert.Equal("not_requested", orphan.GetProperty("reviewStatus").GetString());
+    }
+
+    [Fact]
+    public async Task GetSubmissionsAsync_SubtestFilter_ExcludesOtherSubtestsServerSide()
+    {
+        await using var db = new LearnerDbContext(_options);
+        var now = DateTimeOffset.UtcNow;
+        const string userId = "learner-subtest-filter";
+
+        db.Users.Add(new LearnerUser
+        {
+            Id = userId,
+            DisplayName = "Subtest Filter Learner",
+            Email = "subtest-filter@example.test",
+            CreatedAt = now,
+            LastActiveAt = now,
+            AccountStatus = "active",
+        });
+
+        db.ContentItems.Add(new ContentItem
+        {
+            Id = "content-writing",
+            ContentType = "writing_task",
+            SubtestCode = "writing",
+            Title = "Writing Letter",
+            Difficulty = "medium",
+            EstimatedDurationMinutes = 45,
+            CriteriaFocusJson = "[]",
+            ScenarioType = "referral",
+            ModeSupportJson = "[]",
+            PublishedRevisionId = "content-writing-r1",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.ContentItems.Add(new ContentItem
+        {
+            Id = "content-listening",
+            ContentType = "listening_task",
+            SubtestCode = "listening",
+            Title = "Listening Paper",
+            Difficulty = "medium",
+            EstimatedDurationMinutes = 45,
+            CriteriaFocusJson = "[]",
+            ScenarioType = "referral",
+            ModeSupportJson = "[]",
+            PublishedRevisionId = "content-listening-r1",
+            Status = ContentStatus.Published,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+
+        db.Attempts.Add(new Attempt
+        {
+            Id = "attempt-writing",
+            UserId = userId,
+            ContentId = "content-writing",
+            SubtestCode = "writing",
+            Context = "practice",
+            Mode = "exam",
+            State = AttemptState.Completed,
+            StartedAt = now.AddMinutes(-10),
+            SubmittedAt = now.AddMinutes(-9),
+        });
+        // Newer than the Writing attempt above — an unfiltered/after-the-fact
+        // filter would still find this, but it must never leak into a
+        // subtest=writing response.
+        db.Attempts.Add(new Attempt
+        {
+            Id = "attempt-listening",
+            UserId = userId,
+            ContentId = "content-listening",
+            SubtestCode = "listening",
+            Context = "practice",
+            Mode = "exam",
+            State = AttemptState.Completed,
+            StartedAt = now.AddMinutes(-1),
+            SubmittedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateLearnerService(db);
+
+        var page = JsonSerializer.SerializeToElement(await service.GetSubmissionsAsync(
+            userId,
+            cursor: null,
+            limit: 10,
+            subtest: "writing",
+            CancellationToken.None));
+
+        var items = page.GetProperty("items").EnumerateArray().ToArray();
+        Assert.Single(items);
+        Assert.Equal("attempt-writing", items[0].GetProperty("submissionId").GetString());
+        Assert.Equal("writing", items[0].GetProperty("subtest").GetString());
     }
 
     private void AssertSqlSidePageAndBatchLoad()

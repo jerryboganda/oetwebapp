@@ -80,4 +80,22 @@ describe('Submission history page', () => {
     expect(await screen.findByText('Health Policy - Hospital-Acquired Infections')).toBeInTheDocument();
     expect(screen.queryByText('2026-03-25T18:08:24.830217+00:00')).not.toBeInTheDocument();
   });
+
+  it('pushes the Writing filter to both APIs server-side when opened with ?subtest=writing, instead of relying on client-side filtering alone', async () => {
+    renderWithRouter(<SubmissionHistoryPage />, { searchParams: new URLSearchParams('subtest=writing') });
+
+    await screen.findByText('Reopen Writing letters that need review or comparison');
+
+    expect(mockFetchSubmissions).toHaveBeenCalledWith({ subtest: 'writing' });
+    expect(mockFetchMyAttemptHistory).toHaveBeenCalledWith(100, 'writing');
+  });
+
+  it('leaves both APIs unfiltered for the global (non-Writing) history view', async () => {
+    renderWithRouter(<SubmissionHistoryPage />);
+
+    await screen.findByText('Reopen the attempts that need review or comparison');
+
+    expect(mockFetchSubmissions).toHaveBeenCalledWith(undefined);
+    expect(mockFetchMyAttemptHistory).toHaveBeenCalledWith(100, undefined);
+  });
 });

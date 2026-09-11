@@ -11,15 +11,21 @@ import { type CriterionFeedback, Submission, SubmissionComparison, SubmissionDet
  * Learner submissions list, detail, comparison.
  * Extracted verbatim from `lib/api.ts`; re-exported there.
  */
-export async function fetchSubmissions(): Promise<Submission[]> {
+export async function fetchSubmissions(options?: { subtest?: string }): Promise<Submission[]> {
   // Follow the cursor until exhausted so callers that expect the full history
   // still get it, while the wire protocol uses the real cursor pagination
   // contract documented in the learner blueprint.
+  // Passing `subtest` pushes the filter to the server (see brief item 5) so a
+  // Writing-only caller pages through the 100 most recent WRITING items
+  // instead of the 100 most recent items of any subtest.
+  const subtestParam = options?.subtest ? `&subtest=${encodeURIComponent(options.subtest)}` : '';
   const collected: ApiRecord[] = [];
   let cursor: string | null = null;
   // Hard safety cap to prevent runaway loops if the server mis-behaves.
   for (let page = 0; page < 50; page += 1) {
-    const query: string = cursor ? `?cursor=${encodeURIComponent(cursor)}&limit=100` : '?limit=100';
+    const query: string = cursor
+      ? `?cursor=${encodeURIComponent(cursor)}&limit=100${subtestParam}`
+      : `?limit=100${subtestParam}`;
     const response: { items: ApiRecord[]; nextCursor?: string | null } = await apiRequest<{
       items: ApiRecord[];
       nextCursor?: string | null;
