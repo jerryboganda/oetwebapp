@@ -130,8 +130,8 @@ test.describe('Reading learner flow @reading @learner', () => {
     // Final Developer Modification Brief items 6-8: only Untimed Practice
     // (eligible/previously-attempted papers, no timer) and the 5/10/15-minute
     // Mini Tests remain — the drill/error-bank/pathway system is removed.
-    await expect(page.getByText(/untimed practice/i)).toBeVisible();
-    await expect(page.getByText(/mini-tests/i)).toBeVisible();
+    await expect(page.getByText(/untimed practice/i).first()).toBeVisible();
+    await expect(page.getByText(/mini-tests/i).first()).toBeVisible();
     await expect(page.getByText(/learning mode/i)).not.toBeVisible();
     await expect(page.getByText(/error bank/i)).not.toBeVisible();
     await expect(page.getByText(/drill your weakest/i)).not.toBeVisible();
