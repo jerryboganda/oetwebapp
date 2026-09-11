@@ -133,8 +133,9 @@ public sealed class CompanionSpeakingTaxonomyIndexer(
                 // a nurse and a doctor even though the clinical content is not.
                 source.ProfessionId = null;
                 source.SubtestCode = "speaking";
-                // Candidate-facing reference, already published at /speaking/rulebook and
-                // the intro-questions/assessment-criteria pages, so it is not gated and
+                // Candidate-facing reference (card-recognition teaching content, distinct
+                // from the internal grading rulebook), already published at the
+                // intro-questions/assessment-criteria pages, so it is not gated and
                 // not subject to the extraction budget.
                 source.IsProprietary = false;
                 source.RequiredEntitlementScope = null;

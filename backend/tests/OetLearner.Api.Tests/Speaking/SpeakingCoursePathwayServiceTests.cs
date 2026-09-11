@@ -100,6 +100,22 @@ public sealed class SpeakingCoursePathwayServiceTests : IAsyncLifetime
         Assert.Equal("/speaking/selection", rolePlayStage.GetProperty("actionHref").GetString());
     }
 
+    [Fact]
+    public async Task GetForLearnerAsync_NeverRoutesOrientationOrGuidedReadingToInternalRulebook()
+    {
+        // Regression: these two stages used to deep-link into /speaking/rulebook,
+        // the internal grading rulebook page that must not be candidate-facing.
+        using var document = JsonSerializer.SerializeToDocument(await _svc.GetForLearnerAsync(
+            "learner-route-orientation",
+            CancellationToken.None));
+
+        var orientationStage = FindStage(document.RootElement, 1);
+        var guidedReadingStage = FindStage(document.RootElement, 2);
+
+        Assert.Equal("/speaking", orientationStage.GetProperty("actionHref").GetString());
+        Assert.Equal("/speaking", guidedReadingStage.GetProperty("actionHref").GetString());
+    }
+
     private static SpeakingMockSession BuildCompletedMockSession(string id, string userId) => new()
     {
         Id = id,

@@ -1,6 +1,6 @@
 /**
  * Candidate-facing Speaking reference data: the 9 assessment criteria and the
- * 11 introductory questions.
+ * 12 introductory questions.
  *
  * The data itself lives in `data/speaking-candidate-resources.json`, not here.
  * That file is the single source of truth and the AI Learning Companion's

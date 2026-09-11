@@ -258,7 +258,6 @@ export default function SpeakingTranscriptPage() {
               subtitle={`Transcript-level checks grounded in Dr. Hesham's Speaking rulebook. Inferred card type: ${inferredCardType.replace(/_/g, ' ')}.`}
               findings={auditFindings}
               className="rounded-2xl"
-              ruleHref={(ruleId) => `/speaking/rulebook/${ruleId}`}
             />
 
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">

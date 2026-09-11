@@ -44,8 +44,14 @@ test.describe('Speaking — accessibility', () => {
     await runAxe(page);
   });
 
-  test('rulebook', async ({ page }) => {
-    await page.goto('/speaking/rulebook');
+  test('assessment-criteria', async ({ page }) => {
+    await page.goto('/speaking/assessment-criteria');
+    await page.waitForLoadState('networkidle');
+    await runAxe(page);
+  });
+
+  test('intro-questions', async ({ page }) => {
+    await page.goto('/speaking/intro-questions');
     await page.waitForLoadState('networkidle');
     await runAxe(page);
   });
