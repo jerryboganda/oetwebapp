@@ -23,7 +23,7 @@ public sealed class WritingModelAnswerBatchTests
         return new LearnerDbContext(options);
     }
 
-    private static async Task<Guid> SeedPublishedTaskAsync(LearnerDbContext db, string taskPrompt)
+    internal static async Task<Guid> SeedPublishedTaskAsync(LearnerDbContext db, string taskPrompt, string? exemplar = null)
     {
         var id = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -39,37 +39,65 @@ public sealed class WritingModelAnswerBatchTests
             CreatedAt = now,
             UpdatedAt = now,
         });
-        db.WritingScenarioStructuredSentences.Add(new WritingScenarioStructuredSentence
+        // Case notes = the exemplar's own body sentences, so the grounding
+        // gate (every body sentence traceable to a case-note fact) passes.
+        var ordinal = 1;
+        foreach (var sentence in CaseNoteSentencesFor(exemplar ?? ExemplarText()))
         {
-            Id = Guid.NewGuid(),
-            ScenarioId = id,
-            Ordinal = 1,
-            SentenceText = "John Jones is a 54 year old man with severe asthma attending City Clinic for respiratory review and ongoing management.",
-            RelevanceLabel = "relevant",
-            CreatedAt = now,
-        });
+            db.WritingScenarioStructuredSentences.Add(new WritingScenarioStructuredSentence
+            {
+                Id = Guid.NewGuid(),
+                ScenarioId = id,
+                Ordinal = ordinal++,
+                SentenceText = sentence,
+                RelevanceLabel = "relevant",
+                CreatedAt = now,
+            });
+        }
         await db.SaveChangesAsync();
         return id;
     }
 
+    internal static IEnumerable<string> CaseNoteSentencesFor(string letter)
+        => System.Text.RegularExpressions.Regex.Split(WritingModelAnswerWordCounter.ExtractBody(letter), @"(?<=[.!?])\s+")
+            .Select(s => s.Trim())
+            .Where(s => s.Length > 0);
+
     /// <summary>
-    /// Compliant exemplar: multi-paragraph formal letter, 180-200 BODY words,
-    /// every sentence grounded in the seed case-note fact, zero Critical
-    /// deterministic findings (Dear Doctor pairs with Yours faithfully; Re:
-    /// directly follows the salutation). Mirrors the production gate
-    /// (word-count, grounding, rule lint) the backfill must satisfy.
+    /// Owner-compliant exemplar (Addendum Rev8 house style): address, date,
+    /// consecutive salutation + Re:, one blank line after Re:, "I am writing
+    /// to ..." opening, name-first body paragraphs, clinical values with
+    /// spaced units, background before the closure, contact-offer final
+    /// sentence, designation-only sign-off; 180-200 BODY words; zero findings
+    /// of any severity in Model Answer mode (the same letter is the
+    /// WritingRev8LiveFixtureTests Weir correction).
     /// </summary>
-    private static string ExemplarText()
-        => "Dear Doctor,\n"
-            + "Re: John Jones, respiratory review\n"
-            + "\n"
-            + "I am writing to refer John Jones, a 54 year old man with severe asthma, for respiratory review and ongoing management at City Clinic. John Jones attends City Clinic and needs ongoing management of his severe asthma with regular respiratory review at City Clinic for his severe asthma.\n"
-            + "\n"
-            + "John Jones is a 54 year old man with severe asthma attending City Clinic for respiratory review and ongoing management. His severe asthma requires ongoing management and regular respiratory review at City Clinic. John Jones continues to attend City Clinic where his severe asthma is reviewed and ongoing management is provided. Regular respiratory review at City Clinic supports ongoing management of severe asthma for John Jones. John Jones values regular respiratory review and ongoing management of his severe asthma at City Clinic each visit.\n"
-            + "\n"
-            + "Ongoing management of severe asthma for John Jones at City Clinic includes regular respiratory review at City Clinic. I would be grateful if you would see John Jones for respiratory review and ongoing management of his severe asthma. Thank you for seeing John Jones for ongoing management and respiratory review.\n"
-            + "\n"
-            + "Yours faithfully,";
+    internal static string ExemplarText() => """
+Dr M McLaren
+Neurologist
+Suite 3
+67 The Crescent
+Newtown
+
+11 August 2014
+
+Dear Dr McLaren,
+Re: Mr Michael Weir
+
+I am writing to refer Mr Weir, who is presenting with features suggestive of multiple sclerosis, for a full neurological assessment.
+
+On 9 August 2014, Mr Weir reported dizziness, two blackouts lasting a few minutes each, tingling in his hands, ongoing left leg weakness, breathlessness and occasional constipation. Examination revealed bilateral sensory loss in his hands and a diminished left patellar reflex. A CT scan of the head and spine has been arranged to exclude central causes.
+
+Mr Weir first presented on 29 June 2014 with fatigue and stress, and blood tests were arranged. On review on 7 July 2014, he reported persistent fatigue and low mood and had developed left leg weakness. His cholesterol was 6.37 mmol/L, and his blood count showed a low white cell count, red cell count, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia and advised on lifestyle changes.
+
+Mr Weir has depression, treated with sertraline hydrochloride, known as Zoloft, since September 2012. He smokes and has been overweight long term.
+
+I would be grateful if you could assess Mr Weir, including MRI if indicated. Should there be any queries, kindly do not hesitate to contact me.
+
+Yours sincerely,
+
+Doctor
+""";
 
     // ── Option C background worker: enqueue + idempotent work items ──
 
@@ -82,8 +110,8 @@ public sealed class WritingModelAnswerBatchTests
             db, new ExemplarGateway(), new WritingRuleEngine(new RulebookLoader()),
             TimeProvider.System, NullLogger<WritingTaskModelAnswerService>.Instance);
 
-        var first = await svc.EnqueueMissingAsync("admin-1", limit: 10, CancellationToken.None);
-        var second = await svc.EnqueueMissingAsync("admin-1", limit: 10, CancellationToken.None);
+        var first = await svc.EnqueueMissingAsync("admin-1", 10, CancellationToken.None);
+        var second = await svc.EnqueueMissingAsync("admin-1", 10, CancellationToken.None);
 
         Assert.Equal(1, first.Enqueued);
         Assert.Equal(0, second.Enqueued);
@@ -159,7 +187,7 @@ public sealed class WritingModelAnswerBatchTests
 
         var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
 
-        var first = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var first = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(1, first.Generated);
         Assert.Equal(0, first.Skipped);
         Assert.Equal("generated", first.Items.Single().Outcome);
@@ -171,7 +199,7 @@ public sealed class WritingModelAnswerBatchTests
 
         // Awaiting approval: must NOT regenerate (would discard the pending
         // review and burn another provider call).
-        var second = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var second = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(0, second.Generated);
         Assert.Equal(1, second.Skipped);
         Assert.Equal("awaiting_approval", second.Items.Single().HoldReason);
@@ -179,7 +207,7 @@ public sealed class WritingModelAnswerBatchTests
 
         // Approved + fresh: reused forever.
         await svc.ApproveAsync(scenarioId, "admin-1", CancellationToken.None);
-        var third = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var third = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(0, third.Generated);
         Assert.Equal("already_ready", third.Items.Single().HoldReason);
         Assert.Equal(1, gateway.Calls);
@@ -195,7 +223,7 @@ public sealed class WritingModelAnswerBatchTests
             NullLogger<WritingTaskModelAnswerService>.Instance);
 
         var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
-        await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         await svc.ApproveAsync(scenarioId, "admin-1", CancellationToken.None);
         Assert.Equal(1, gateway.Calls);
 
@@ -204,12 +232,12 @@ public sealed class WritingModelAnswerBatchTests
         scenario.TaskPromptMarkdown = "Write a routine referral for John Jones to City Clinic urgently.";
         await db.SaveChangesAsync();
 
-        var withoutStale = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: false, CancellationToken.None);
+        var withoutStale = await svc.GenerateMissingAsync("admin-1", 5, false, CancellationToken.None);
         Assert.Equal(0, withoutStale.Generated);
         Assert.Equal("stale_refresh_not_requested", withoutStale.Items.Single().HoldReason);
         Assert.Equal(1, gateway.Calls);
 
-        var withStale = await svc.GenerateMissingAsync("admin-1", limit: 5, includeStale: true, CancellationToken.None);
+        var withStale = await svc.GenerateMissingAsync("admin-1", 5, true, CancellationToken.None);
         Assert.Equal(1, withStale.Generated);
         Assert.Equal(2, gateway.Calls);
     }

@@ -51,6 +51,12 @@ export function toCandidateSafeWritingErrorMessage(err: unknown, fallback: strin
     default:
       break;
   }
+  // A 5xx body ("An unexpected server error occurred.") is never useful
+  // learner copy — the caller's controlled fallback always is.
+  const status = (err as { status?: number } | null)?.status;
+  if (typeof status === 'number' && status >= 500) {
+    return fallback;
+  }
   const message = err instanceof Error ? err.message : '';
   if (
     /profession_pack|letter_type_pack|recipient_unknown|case_note_pages|task_classification|SqlException|Npgsql|NullReference|at OetLearner\.|Unhandled exception/i.test(

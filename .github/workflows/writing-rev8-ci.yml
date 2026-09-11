@@ -1,0 +1,169 @@
+name: Writing Rev8 CI
+
+# Validates the Writing "Rule Enforcement & Model Answer Validation Addendum,
+# Revision 8" branch on GitHub Actions (the only authorized compute
+# environment — see AGENTS.md) and regenerates the canonical Writing
+# rulebooks from docs/canonical-rules/OET_AI_Rules_Master.jsonl.
+#
+# The regenerated rulebooks are uploaded as an artifact and are ALSO what the
+# backend and frontend tests run against (the API embeds rulebooks/**/*.json at
+# build time; lib/rulebook imports them statically), so a green run describes
+# the tree as it will be once the regenerated files are committed.
+on:
+  push:
+    branches:
+      - 'ci/writing-rev8/**'
+      - 'fix/writing-rev8-rule-enforcement'
+  workflow_dispatch:
+    inputs:
+      dotnet_filter:
+        description: "dotnet test --filter expression (blank = Writing/Rulebook default scope)"
+        required: false
+        default: ""
+        type: string
+      vitest_paths:
+        description: "Space-separated vitest path filters (blank = Writing/rulebook default scope)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: writing-rev8-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rulebooks:
+    name: Canonical Writing rulebooks (build + --check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Regenerate canonical Writing rulebooks
+        run: node scripts/rulebooks/build-canonical-writing-rulebooks.mjs
+      - name: Verify regenerated output is stable (--check)
+        run: node scripts/rulebooks/build-canonical-writing-rulebooks.mjs --check
+      # Informational only: the regenerated files are expected to differ from
+      # the committed ones until they are committed.
+      - name: Diff vs committed rulebooks
+        run: git diff --stat -- rulebooks/writing
+      - uses: actions/upload-artifact@v4
+        with:
+          name: canonical-writing-rulebooks
+          path: rulebooks/writing/*/rulebook.v1.json
+          if-no-files-found: error
+          retention-days: 7
+
+  backend:
+    name: Backend Writing/Rulebook tests (.NET)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No Postgres service: [PostgreSqlFact] tests self-skip without
+    # OET_TEST_POSTGRES_CONNECTION.
+    env:
+      DOTNET_FILTER: ${{ inputs.dotnet_filter || 'FullyQualifiedName~OetLearner.Api.Tests.WritingRuleEngineTests|FullyQualifiedName~OetLearner.Api.Tests.WritingRulebookCoverageValidatorTests|FullyQualifiedName~OetLearner.Api.Tests.RulebookLoaderTests|FullyQualifiedName~OetLearner.Api.Tests.AiGatewayAndPromptTests|FullyQualifiedName~OetLearner.Api.Tests.Rulebook.|FullyQualifiedName~OetLearner.Api.Tests.Writing.|FullyQualifiedName~OetLearner.Api.Tests.WritingCoachServiceTests|FullyQualifiedName~OetLearner.Api.Tests.WritingEntitlementServiceTests|FullyQualifiedName~OetLearner.Api.Tests.WritingLearnerVisibilityTests' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore test project
+        run: dotnet restore backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Must run before the build below: the API embeds rulebooks/**/*.json.
+      - name: Regenerate canonical Writing rulebooks
+        run: node scripts/rulebooks/build-canonical-writing-rulebooks.mjs
+      - name: Test
+        run: |
+          set -euo pipefail
+          dotnet test backend/tests/OetLearner.Api.Tests/OetLearner.Api.Tests.csproj \
+            -c Release \
+            --no-restore \
+            --nologo \
+            -p:RunAnalyzers=false \
+            --filter "$DOTNET_FILTER" \
+            --logger "console;verbosity=normal" \
+            --logger "trx;LogFileName=results.trx" \
+            --results-directory test-results \
+            2>&1 | tee test.log
+          # A filter that matches nothing exits 0 — refuse that as a pass.
+          if ! grep -Eiq 'total( tests)?: *[1-9]' test.log; then
+            echo "::error::The test filter matched zero tests: $DOTNET_FILTER"
+            exit 1
+          fi
+      - name: Upload backend test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: writing-rev8-backend-test-results
+          path: |
+            test-results/
+            test.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  backend-build:
+    name: Backend compile gate (whole solution)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Build (API + all test code)
+        run: dotnet build backend/OetLearner.sln -c Release -p:RunAnalyzers=false --nologo
+
+  frontend:
+    name: Frontend (tsc + scoped vitest + changed-file lint)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      VITEST_PATHS: ${{ inputs.vitest_paths || 'lib/rulebook app/writing components/domain/writing components/domain/InsufficientCreditsModal' }}
+    steps:
+      # Full commit graph (blobless, so still cheap) for the merge-base diff
+      # that scopes the lint step to files this branch changed.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # lib/rulebook imports rulebooks/writing/*/rulebook.v1.json statically;
+      # type-check and test against the regenerated copies, like the backend.
+      - name: Regenerate canonical Writing rulebooks
+        run: node scripts/rulebooks/build-canonical-writing-rulebooks.mjs
+      - run: pnpm exec tsc --noEmit
+      # Vitest ORs its path filters and only fails when none match, so a filter
+      # with no test file yet (e.g. InsufficientCreditsModal) is harmless.
+      - name: Vitest (scoped)
+        run: |
+          set -euo pipefail
+          read -ra paths <<< "$VITEST_PATHS"
+          pnpm exec vitest run "${paths[@]}"
+      # Lints only frontend files this branch changed vs main, so pre-existing
+      # lint debt in untouched files never fails this workflow.
+      - name: ESLint (changed frontend files)
+        run: |
+          set -euo pipefail
+          base="$(git merge-base origin/main HEAD)"
+          mapfile -t files < <(git diff --name-only --no-renames --diff-filter=d "$base" HEAD -- app components contexts hooks lib | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' || true)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No changed frontend files to lint."
+            exit 0
+          fi
+          printf '%s\n' "${files[@]}"
+          pnpm exec eslint "${files[@]}"

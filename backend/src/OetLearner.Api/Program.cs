@@ -2143,12 +2143,19 @@ builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskAuthoring
     OetLearner.Api.Services.Writing.WritingTaskAuthoringService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskCaseNotesService,
     OetLearner.Api.Services.Writing.WritingTaskCaseNotesService>();
+// Addendum Rev8: the independent semantic Model Answer validator shares the
+// generator's rule pack and runs in every store path (generate/import/revalidate).
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingModelAnswerSemanticValidator,
+    OetLearner.Api.Services.Writing.WritingModelAnswerSemanticValidator>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskModelAnswerService,
     OetLearner.Api.Services.Writing.WritingTaskModelAnswerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskProjectionService,
     OetLearner.Api.Services.Writing.WritingTaskProjectionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingCataloguePreflightService,
     OetLearner.Api.Services.Writing.WritingCataloguePreflightService>();
+// Addendum Rev8 §16-§17: 100% published-task load-integrity scan (Nursing P0 gate).
+builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTaskLoadIntegrityService,
+    OetLearner.Api.Services.Writing.WritingTaskLoadIntegrityService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingAttemptEventService,
     OetLearner.Api.Services.Writing.WritingAttemptEventService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Writing.IWritingTutorReviewService,

@@ -331,16 +331,16 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
             var rulebookResolvable = !string.IsNullOrWhiteSpace(s.Profession)
                 && RulebookProfessionParser.TryParse(s.Profession, out _);
             answers.TryGetValue(s.Id, out var answer);
-            var answerApproved = answer is not null
-                && answer.Status == WritingAssessmentModelAnswerStatus.Ready
-                && answer.IsCandidateVisible;
+            // Rev8: approved == verified under the CURRENT validator version.
+            var answerApproved = WritingTaskModelAnswerService.IsVerifiedForCandidates(answer);
             bool? stale = null;
             if (answer is not null && !string.IsNullOrWhiteSpace(answer.SourceContentHash))
             {
                 var current = WritingTaskModelAnswerService.ComputeSourceContentHash(
                     s.TaskPromptMarkdown ?? string.Empty,
                     sentences.Select(x => (x.SentenceText, x.RelevanceLabel)));
-                stale = !string.Equals(answer.SourceContentHash, current, StringComparison.OrdinalIgnoreCase);
+                stale = !string.Equals(answer.SourceContentHash, current, StringComparison.OrdinalIgnoreCase)
+                        || !string.Equals(answer.ValidatorVersion, WritingRuleEngine.ValidatorVersion, StringComparison.Ordinal);
             }
 
             var normalizedProfession = (s.Profession ?? string.Empty).Trim().ToLowerInvariant().Replace('-', '_').Replace(' ', '_');
@@ -668,9 +668,8 @@ public sealed class WritingTaskAuthoringService(LearnerDbContext db, ILogger<Wri
         var rulebookResolvable = !string.IsNullOrWhiteSpace(scenario.Profession)
             && RulebookProfessionParser.TryParse(scenario.Profession, out _);
         var hasApprovedModelAnswer = await db.WritingTaskModelAnswers.AsNoTracking()
-            .AnyAsync(a => a.ScenarioId == scenario.Id
-                && a.Status == WritingAssessmentModelAnswerStatus.Ready
-                && a.IsCandidateVisible, ct);
+            .Where(a => a.ScenarioId == scenario.Id)
+            .AnyAsync(WritingTaskModelAnswerService.CandidateVisibleVerified, ct);
 
         // Same resolver the runtime grading path uses: a task is publishable
         // only if candidate grading can resolve a released pack for it.

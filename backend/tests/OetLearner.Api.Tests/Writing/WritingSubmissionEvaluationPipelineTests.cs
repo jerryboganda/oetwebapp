@@ -219,6 +219,9 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
             Status = WritingAssessmentModelAnswerStatus.Ready,
             IsCandidateVisible = true,
             ModelAnswerText = $"Dear Doctor, {canary} kindly review this patient. Yours sincerely, Doctor",
+            // Verified under the running validator, i.e. exactly the answer a
+            // candidate result would display — and still never a grading input.
+            ValidatorVersion = WritingRuleEngine.ValidatorVersion,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });
@@ -322,9 +325,9 @@ public sealed class WritingSubmissionEvaluationPipelineTests : IAsyncDisposable
             // failure path never reaches it.
             mistakeService: null!,
             events: aiPathReached ? new NoopWritingEventBus() : null!,
-            TimeProvider.System,
-            TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
-            NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
+            clock: TimeProvider.System,
+            settingsProvider: TestRuntimeSettingsProvider.FromWritingOptions(new WritingV2Options()),
+            logger: NullLogger<WritingSubmissionEvaluationPipeline>.Instance,
             assessmentPreflight: new PassThroughPreflight());
 
     private sealed class FakeAiGateway : IAiGatewayService

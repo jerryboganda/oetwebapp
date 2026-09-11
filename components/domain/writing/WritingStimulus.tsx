@@ -33,7 +33,7 @@ export interface WritingStimulusProps {
  *
  * Selection logic:
  *   - `scenario.stimulusPdfDownloadPath` non-null → WritingStimulusViewer (PDF)
- *   - otherwise                                   → prompt + fixed instructions
+ *   - otherwise                                   → case notes + prompt + fixed instructions
  */
 export function WritingStimulus({
   scenario,
@@ -59,7 +59,13 @@ export function WritingStimulus({
   }
 
   const prompt = scenario?.taskPromptMarkdown?.trim() || null;
-  const instructions = (scenario?.fixedInstructions ?? []).filter((l) => l.trim());
+  const instructions = (scenario?.fixedInstructions ?? []).filter((l) => l?.trim());
+  // Without a PDF the structured case notes ARE the stimulus — a task must
+  // never open with a writing task but nothing to read. Relevance labels are
+  // marking aids and are deliberately not shown.
+  const caseNotes = (scenario?.caseNotesStructured ?? [])
+    .map((s) => s.text?.trim())
+    .filter((text): text is string => !!text);
 
   return (
     <div
@@ -76,6 +82,19 @@ export function WritingStimulus({
           className="mx-auto rounded-sm border border-border bg-white px-8 py-9 text-navy shadow-[0_1px_3px_rgba(15,23,42,0.08),0_8px_24px_-12px_rgba(15,23,42,0.25)]"
           style={{ width: '100%', maxWidth: '640px' }}
         >
+          {caseNotes.length > 0 ? (
+            <section className="mb-6 space-y-2">
+              <h3 className="border-b border-border/70 pb-1 text-sm font-bold uppercase tracking-wide text-navy">
+                Case notes
+              </h3>
+              <ul className="space-y-1 text-[15px] leading-7">
+                {caseNotes.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
           {prompt ? (
             <section className="space-y-2">
               <h3 className="border-b border-border/70 pb-1 text-sm font-bold uppercase tracking-wide text-navy">

@@ -247,7 +247,8 @@ export function rulesApplicableTo(
 ): Rule[] {
   return book.rules.filter((rule) => {
     if (!rule.appliesTo || rule.appliesTo === 'all') return true;
-    if (Array.isArray(rule.appliesTo)) return rule.appliesTo.includes(context);
+    // Rulebooks use the backend token "transfer_letter"; the TS LetterType is "transfer".
+    if (Array.isArray(rule.appliesTo)) return rule.appliesTo.includes(context === 'transfer' ? 'transfer_letter' : context);
     return false;
   });
 }

@@ -34,7 +34,9 @@ import { LISTENING_EXAM_MODE_ENFORCERS, READING_EXAM_MODE_ENFORCERS } from './ex
  * Frozen review truth: the writing check-ids that had a deterministic
  * detector when the TypeScript writing engine was retired (R-a). The .NET
  * engine is the sole runtime now; the parity fixtures pin its behavior.
- * Any change here must land in WritingRuleEngine.SupportedCheckIdSet too.
+ * Any change here must land in WritingRuleEngine.SupportedCheckIdSet too
+ * (owner addenda since R-a: 2026-09-06/07 formatting, Rev5 2026-09-10,
+ * Rev8 2026-09-11 — see check-ids.test.ts for the per-addendum breakdown).
  */
 const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'address_punctuation',
@@ -49,6 +51,8 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'body_no_todays_date',
   'body_uses_last_name_only',
   'cancer_suspected_flagged_urgent',
+  'closure_contact_offer',
+  'closure_contains_management',
   'closure_mentions_consent_if_flagged',
   'closure_mentions_patient_request_if_flagged',
   'closure_mentions_review_if_required',
@@ -64,10 +68,12 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'discharge_omits_knownto_gp',
   'discharge_plan_present',
   'dob_age_forbidden_phrase',
+  'dob_colon_format',
   'emotional_wording',
   'enclosure_results_phrase',
   'for_duration_requires_present_perfect',
   'intro_contains_purpose',
+  'intro_opens_i_am_writing_to',
   'intro_sentence_count',
   'judgmental_labels',
   'latin_abbreviations_translated',
@@ -75,12 +81,15 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'letter_paragraph_count',
   'letter_structure_order',
   'linker_avoid_words',
+  'linker_comma_and_case',
   'linker_density',
   'linker_however_punctuation',
   'linker_in_addition_punctuation',
   'linker_therefore_punctuation',
+  'medication_list_punctuation',
   'min_body_paragraphs',
   'minor_naming_convention',
+  'model_answer_layout',
   'no_asap_in_letter',
   'no_brackets_in_letter',
   'no_contractions',
@@ -89,10 +98,14 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'non_medical_no_jargon',
   'number_style_words_vs_digits',
   'numerical_values_have_units',
+  'paragraph_start_patient_name',
   're_line_age_dob',
+  'register_colloquial',
+  'relationship_label_patient_reference',
   'salutation_last_name_only',
   'salutation_re_adjacent',
   'sentence_length_guard',
+  'signoff_designation_present',
   'signoff_no_invented_name',
   'since_requires_present_perfect',
   'surgery_past_simple',
@@ -101,6 +114,7 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'urgent_closure_phrase',
   'urgent_intro_contains_urgent',
   'urgent_token_not_repeated',
+  'value_unit_spacing',
   'visit_content_tense_basic_check',
   'visit_paragraphization_check',
   'year_not_abbreviated',

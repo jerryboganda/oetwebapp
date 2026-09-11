@@ -1,0 +1,53 @@
+name: Writing Rev8 render verify (production)
+
+# Owner Rev8 §12.3 / §19.2 Track A: opens the real production result page for
+# every profession x letter-type matrix cell as the disposable QA learner and
+# verifies the rendered Grounded Model Answer spacing (screenshots + rendered
+# text uploaded as an artifact). Read-only against production.
+on:
+  push:
+    branches:
+      - 'ci/writing-rev8-render/**'
+  workflow_dispatch:
+    inputs:
+      cells_json_b64:
+        description: "base64 JSON [{cell, submissionId, taskId}] (blank = tests/e2e/fixtures/writing-rev8-render-cells.json)"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: writing-rev8-render-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Verify rendered Model Answers on production
+        env:
+          WRITING_REV8_EMAIL: ${{ secrets.WRITING_REV8_QA_EMAIL }}
+          WRITING_REV8_PASSWORD: ${{ secrets.WRITING_REV8_QA_PASSWORD }}
+          WRITING_REV8_CELLS_B64: ${{ inputs.cells_json_b64 }}
+        run: pnpm exec playwright test -c playwright.writing-rev8-render.config.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: writing-rev8-render
+          path: output/playwright/writing-rev8-render/
+          if-no-files-found: warn
+          retention-days: 14

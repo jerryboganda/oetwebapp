@@ -21,16 +21,18 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
 /**
  * Professions migrated to the canonical `OET_AI_Rules_Master.jsonl` registry
  * (docs/canonical-rules/README.md). Everything else stays on the legacy
- * 172-rule baseline until a canonical pack exists for it.
+ * 172-rule baseline until a canonical pack exists for it. Every Writing
+ * rulebook also carries the 38 owner Rev8 rules OWN-W-001..038 (11 Sep 2026).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 230,
-  nursing: 237,
-  dentistry: 237,
-  pharmacy: 240,
-  physiotherapy: 240,
-  radiography: 237,
+  medicine: 268,
+  nursing: 275,
+  dentistry: 275,
+  pharmacy: 278,
+  physiotherapy: 278,
+  radiography: 275,
 };
+const LEGACY_RULE_COUNT = 172 + 38;
 
 describe('writing rulebooks — Phase D coverage', () => {
   it('registers a writing rulebook for every supported profession', () => {
@@ -63,8 +65,8 @@ describe('writing rulebooks — Phase D coverage', () => {
           expect(book.rules.length).toBe(canonicalCount);
         });
       } else {
-        it('has the legacy 172-rule baseline (locks against silent deletions)', () => {
-          expect(book.rules.length).toBe(172);
+        it('has the legacy 172-rule baseline + 38 owner Rev8 rules (locks against silent deletions)', () => {
+          expect(book.rules.length).toBe(LEGACY_RULE_COUNT);
         });
       }
 

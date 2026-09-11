@@ -17,15 +17,35 @@ describe('rulebook check-id registry', () => {
     // no_brackets_in_letter, signoff_no_invented_name) + 6 from the Writing
     // Rule Enforcement Addendum Rev5 (2026-09-10: age_not_duplicated_in_intro,
     // emotional_wording, judgmental_labels, linker_avoid_words,
-    // no_duplicated_request, number_style_words_vs_digits) = 69. Keep this
-    // in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) — see that
-    // file's own header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(69);
+    // no_duplicated_request, number_style_words_vs_digits) + 12 from the
+    // owner Rev8 addendum (2026-09-11, WritingRuleEngine.Rev8.cs; registry
+    // rows OWN-W-001..038) = 81. Keep this in lockstep with
+    // WritingRuleEngine.SupportedCheckIdSet (C#) — see that file's own
+    // header comment.
+    expect(WRITING_CHECK_IDS.size).toBe(81);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
     expect(WRITING_CHECK_IDS.has('blank_line_after_re_line')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_duplicated_request')).toBe(true);
+  });
+
+  it('includes every owner Rev8 (2026-09-11) detector check-id', () => {
+    const rev8 = [
+      'closure_contact_offer',
+      'closure_contains_management',
+      'dob_colon_format',
+      'intro_opens_i_am_writing_to',
+      'linker_comma_and_case',
+      'medication_list_punctuation',
+      'model_answer_layout',
+      'paragraph_start_patient_name',
+      'register_colloquial',
+      'relationship_label_patient_reference',
+      'signoff_designation_present',
+      'value_unit_spacing',
+    ];
+    expect(rev8.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
   });
 
   it('exposes the speaking detector check-ids', () => {

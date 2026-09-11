@@ -47,6 +47,11 @@ public static class WritingTaskAdminEndpoints
         // invalid count BLOCKS release. Machine-readable (§32) for CI/CD.
         group.MapGet("/catalogue-compatibility", CatalogueCompatibility).WithAdminRead("AdminContentRead");
 
+        // 100% task-load integrity gate (Addendum Rev8 §17/§19.6): runs the
+        // exact learner task projection plus every load-time dependency for
+        // EVERY published task. loadFailed must be 0 before release.
+        group.MapGet("/load-integrity", LoadIntegrity).WithAdminRead("AdminContentRead");
+
         // Quarantine for §23: archives (never deletes) published tasks that
         // cannot safely grade, so learners stop discovering them at submit
         // time. Dry-run by default; ambiguous tasks still need admin repair
@@ -247,6 +252,13 @@ public static class WritingTaskAdminEndpoints
             }),
         });
     }
+
+    // [FromServices]: an unregistered service then fails only this route at
+    // request time instead of breaking endpoint-table construction app-wide.
+    private static async Task<IResult> LoadIntegrity(
+        [FromServices] IWritingTaskLoadIntegrityService service,
+        CancellationToken ct)
+        => Results.Ok(await service.ScanPublishedAsync(ct));
 
     private static async Task<IResult> CatalogueQuarantine(
         IWritingCataloguePreflightService service,

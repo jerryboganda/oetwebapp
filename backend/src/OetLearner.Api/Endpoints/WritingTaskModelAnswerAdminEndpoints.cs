@@ -43,8 +43,51 @@ public static class WritingTaskModelAnswerAdminEndpoints
         // fresh-ready answers with zero provider calls on redelivery.
         group.MapPost("/model-answers/enqueue-missing", EnqueueMissingModelAnswers).WithAdminWrite("AdminContentWrite");
 
+        // Addendum Rev8 (11 Sep 2026) §14: run the FULL Model Answer gate
+        // (word count, grounding, every Model-Answer-mode rule, optional
+        // semantic validator) on a draft WITHOUT storing it — the
+        // "deterministic lint -> repair only the failed rules" loop.
+        group.MapPost("/tasks/{id:guid}/model-answer/validate", ValidateModelAnswer).WithAdminWrite("AdminContentWrite");
+
+        // Addendum Rev8 §9.5: revalidate saved candidate-facing answers with
+        // the CURRENT validator ("do not trust old VERIFIED flags"). Paged;
+        // apply=true stamps passing rows and holds/hides failing ones.
+        group.MapPost("/model-answers/revalidate", RevalidateModelAnswers).WithAdminWrite("AdminContentWrite");
+
         return app;
     }
+
+    private static async Task<IResult> ValidateModelAnswer(
+        IWritingTaskModelAnswerService service,
+        ClaimsPrincipal user,
+        Guid id,
+        ValidateModelAnswerRequest body,
+        CancellationToken ct)
+    {
+        var adminId = GetUserId(user) ?? "system";
+        var report = await service.ValidateAsync(id, body.LetterText ?? string.Empty, body.IncludeSemantic, adminId, ct);
+        return Results.Ok(report);
+    }
+
+    private static async Task<IResult> RevalidateModelAnswers(
+        IWritingTaskModelAnswerService service,
+        ClaimsPrincipal user,
+        [FromQuery] bool apply = false,
+        [FromQuery] bool includeSemantic = false,
+        [FromQuery] string? profession = null,
+        [FromQuery] int offset = 0,
+        [FromQuery] int limit = 250,
+        [FromQuery] bool onlyUnverified = false,
+        CancellationToken ct = default)
+    {
+        var adminId = GetUserId(user) ?? "system";
+        var result = await service.RevalidateAsync(
+            new WritingModelAnswerRevalidationRequest(apply, includeSemantic, profession, offset, limit, onlyUnverified),
+            adminId, ct);
+        return Results.Ok(result);
+    }
+
+    public sealed record ValidateModelAnswerRequest(string? LetterText, bool IncludeSemantic = false);
 
     private static async Task<IResult> ListModelAnswers(
         IWritingTaskModelAnswerService service,

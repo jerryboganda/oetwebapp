@@ -22,15 +22,19 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
   'other-allied-health',
 ];
 
-/** Migrated to the canonical registry (docs/canonical-rules/README.md); rest stay on legacy 172. */
+/**
+ * Migrated to the canonical registry (docs/canonical-rules/README.md); rest stay
+ * on legacy 172. Every book also carries the 38 owner Rev8 rules (OWN-W-001..038).
+ */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 230,
-  nursing: 237,
-  dentistry: 237,
-  pharmacy: 240,
-  physiotherapy: 240,
-  radiography: 237,
+  medicine: 268,
+  nursing: 275,
+  dentistry: 275,
+  pharmacy: 278,
+  physiotherapy: 278,
+  radiography: 275,
 };
+const LEGACY_RULE_COUNT = 172 + 38;
 
 describe('writing rulebook coverage matrix', () => {
   for (const profession of ALL_WRITING_PROFESSIONS) {
@@ -40,7 +44,7 @@ describe('writing rulebook coverage matrix', () => {
 
       const book = loadRulebook('writing', profession);
       const matrix = buildWritingRuleCoverageMatrix(profession);
-      expect(matrix).toHaveLength(CANONICAL_PROFESSION_COUNTS[profession] ?? 172);
+      expect(matrix).toHaveLength(CANONICAL_PROFESSION_COUNTS[profession] ?? LEGACY_RULE_COUNT);
       expect(matrix.map((row) => row.ruleId)).toEqual(book.rules.map((rule) => rule.id));
     });
   }

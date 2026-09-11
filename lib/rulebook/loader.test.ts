@@ -23,7 +23,7 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     const book = loadRulebook('writing', 'medicine');
     expect(book.kind).toBe('writing');
     expect(book.profession).toBe('medicine');
-    expect(book.version).toBe('2.0.0-canonical');
+    expect(book.version).toBe('2.1.0-canonical-rev8');
     expect(book.sections.length).toBe(43);
     expect(book.rules.length).toBeGreaterThan(90);
   });
@@ -66,10 +66,11 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
   });
 
   it('rulesApplicableTo filters on appliesTo context', () => {
-    // Canonical writing book: every rule appliesTo "all", so any context
-    // returns the full set.
+    // Canonical writing book: every rule appliesTo "all" except the two owner
+    // Rev8 rules scoped away from urgent referrals (OWN-W-031 routine order,
+    // OWN-W-032 discharge/update exceptions).
     const book = loadRulebook('writing', 'medicine');
-    expect(rulesApplicableTo(book, 'urgent_referral')).toHaveLength(book.rules.length);
+    expect(rulesApplicableTo(book, 'urgent_referral')).toHaveLength(book.rules.length - 2);
 
     // Exercise the array branch with a synthetic book.
     const mixed = {
@@ -94,7 +95,8 @@ describe('rulebook — critical rule coverage (canonical writing book)', () => {
   const book = loadRulebook('writing', 'medicine');
 
   it('has the canonical critical-rule count', () => {
-    expect(criticalRules(book)).toHaveLength(59);
+    // 60 canonical v1.0 + 13 critical owner Rev8 rules (OWN-W-001..038).
+    expect(criticalRules(book)).toHaveLength(73);
   });
 
   it.each(['OW-001', 'DH-W-001'])('%s exists and is severity=critical', (id) => {

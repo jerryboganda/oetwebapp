@@ -120,6 +120,7 @@ public class CriticalFlowsTests : IClassFixture<SeededTestWebApplicationFactory>
             Status = WritingAssessmentModelAnswerStatus.Ready,
             IsCandidateVisible = true,
             ModelAnswerText = "Dear Dr Green, Re: Mrs Vance. Thank you for the referral. ...",
+            ValidatorVersion = OetLearner.Api.Services.Rulebook.WritingRuleEngine.ValidatorVersion,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });

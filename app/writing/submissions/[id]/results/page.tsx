@@ -27,6 +27,13 @@ import {
   publishToShowcase,
 } from '@/lib/writing/api';
 import { parseHighlights } from '@/lib/writing/highlights';
+import {
+  OET_SCALED_MAX,
+  OET_SCALED_PASS_B,
+  OET_SCALED_PASS_C_PLUS,
+  WRITING_RAW_MAX,
+  writingRawTotalFromCriterionScores,
+} from '@/lib/scoring';
 import { TutorVoiceNotePlayer } from '@/components/domain/writing/TutorVoiceNotePlayer';
 import { WritingStimulusViewer } from '@/components/domain/writing/WritingStimulusViewer';
 import type {
@@ -35,6 +42,7 @@ import type {
   WritingCriterionCode,
   WritingGradeDto,
   WritingAssessmentV11ReportDto,
+  WritingPerCriterionFeedbackDto,
   WritingSubmissionDto,
   WritingTutorReviewDto,
 } from '@/lib/writing/types';
@@ -53,6 +61,23 @@ const CRITERION_NAMES: Record<WritingCriterionCode, string> = {
 const CRITERION_MAX: Record<WritingCriterionCode, number> = { c1: 3, c2: 7, c3: 7, c4: 7, c5: 7, c6: 7 };
 const CRITERION_TARGET: Record<WritingCriterionCode, number> = { c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 };
 
+// v1.1 assessment criterion codes → the c1..c6 keys used by the radar and labels.
+const V11_CRITERION_KEY: Record<string, WritingCriterionCode> = {
+  purpose: 'c1',
+  content: 'c2',
+  conciseness_clarity: 'c3',
+  genre_style: 'c4',
+  organisation_layout: 'c5',
+  language: 'c6',
+};
+
+// The grader may quote the candidate's exact wording per criterion (optional
+// `quote`, Writing Rule Enforcement Addendum Rev8) — rendered highlighted.
+type PerCriterionFeedbackWithQuote = WritingPerCriterionFeedbackDto & { quote?: string | null };
+
+/** Gauge fill on the value's own scale, clamped to 0–100%. */
+const gaugePercent = (value: number, max: number) => Math.min(100, Math.max(0, (value / max) * 100));
+
 function gradeToScores(g: WritingGradeDto): WritingCriteriaScoresDto {
   return {
     c1: g.c1Purpose,
@@ -66,16 +91,8 @@ function gradeToScores(g: WritingGradeDto): WritingCriteriaScoresDto {
 
 function assessmentToScores(report: WritingAssessmentV11ReportDto): WritingCriteriaScoresDto {
   const scores: WritingCriteriaScoresDto = { c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0 };
-  const map: Record<string, keyof WritingCriteriaScoresDto> = {
-    purpose: 'c1',
-    content: 'c2',
-    conciseness_clarity: 'c3',
-    genre_style: 'c4',
-    organisation_layout: 'c5',
-    language: 'c6',
-  };
   for (const criterion of report.criteria) {
-    const key = map[criterion.criterionCode];
+    const key = V11_CRITERION_KEY[criterion.criterionCode];
     if (key) scores[key] = criterion.score;
   }
   return scores;
@@ -170,42 +187,55 @@ export default function WritingSubmissionResultsPage() {
   // Mock writing is human-marked with zero AI: show the tutor's WRITTEN feedback and
   // voice note, and suppress every AI-flavoured section. Normal writing keeps AI feedback.
   const isMock = submission?.mode === 'mock';
+  // The AI Estimated Practice Score (/500) + grade band is the headline result
+  // whenever the v1.1 report is candidate-visible (Writing Rule Enforcement
+  // Addendum Rev8 §12.4/§19.4); the raw criteria total stays as secondary
+  // context. A mock keeps its tutor's human grade as the headline (zero AI).
+  const practiceScore = assessmentVisible && !(isMock && grade)
+    ? assessment?.estimatedPracticeScore ?? null
+    : null;
+  const practiceRawTotal = assessment
+    ? writingRawTotalFromCriterionScores(
+        Object.fromEntries(assessment.criteria.map((c) => [c.criterionCode, c.score] as const)),
+      )
+    : 0;
 
   return (
     <LearnerDashboardShell pageTitle={t('writing.submissions.results.pageTitle')}>
       <div className="space-y-6" aria-busy={!grade}>
-        {grade ? (
+        {practiceScore != null && assessment ? (
+          <ResultsScorePanel
+            eyebrow={t('writing.submissions.results.eyebrow')}
+            icon={Award}
+            title={assessment.scoreLabel}
+            subtitle="An AI-generated practice estimate, not an official OET result."
+            gaugeValue={gaugePercent(practiceScore, OET_SCALED_MAX)}
+            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{practiceScore}</span>}
+            gaugeLabel={assessment.scoreRange ?? assessment.gradeBand ?? 'AI estimate'}
+            gaugeColor={practiceScore >= OET_SCALED_PASS_B ? 'var(--color-success)' : practiceScore >= OET_SCALED_PASS_C_PLUS ? 'var(--color-warning)' : 'var(--color-danger)'}
+            stats={[
+              { label: 'Score', value: <span data-testid="ai-estimated-score">{practiceScore}/{OET_SCALED_MAX}</span>, tone: 'info', icon: <Award /> },
+              ...(assessment.gradeBand ? [{ label: 'Grade band', value: <span data-testid="ai-grade-band">{assessment.gradeBand}</span>, tone: 'info' as const, icon: <Award /> }] : []),
+              { label: t('writing.submissions.results.highlights.raw'), value: `${practiceRawTotal}/${WRITING_RAW_MAX}`, tone: 'default', icon: <FileText /> },
+              { label: 'Confidence', value: assessment.confidenceLabel ?? 'restricted', tone: 'default', icon: <Sparkles /> },
+            ]}
+          />
+        ) : grade ? (
           <ResultsScorePanel
             eyebrow={t('writing.submissions.results.eyebrow')}
             icon={Award}
             title={t('writing.submissions.results.estimatedBand', { band: grade.bandLabel })}
             subtitle={t('writing.submissions.results.description')}
-            gaugeValue={(grade.estimatedBand / 7) * 100}
+            // The ring fills on the raw /38 scale (estimatedBand is also stored
+            // in raw-total units, never a 0–7 band); bandLabel is the letter.
+            gaugeValue={gaugePercent(grade.rawTotal, WRITING_RAW_MAX)}
             gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{grade.bandLabel}</span>}
-            gaugeLabel={`${grade.rawTotal}/38`}
-            gaugeColor={grade.estimatedBand >= 6 ? 'var(--color-success)' : grade.estimatedBand >= 4 ? 'var(--color-warning)' : 'var(--color-danger)'}
+            gaugeLabel={`${grade.rawTotal}/${WRITING_RAW_MAX}`}
             stats={[
-              { label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/38`, tone: 'info', icon: <Award /> },
+              { label: t('writing.submissions.results.highlights.raw'), value: `${grade.rawTotal}/${WRITING_RAW_MAX}`, tone: 'info', icon: <Award /> },
               { label: t('writing.submissions.results.highlights.mode'), value: submission?.mode ?? '-', tone: 'default', icon: <FileText /> },
               // Confidence is an AI signal — hide it on mocks (human-marked, zero AI).
               ...(isMock ? [] : [{ label: t('writing.submissions.results.highlights.confidence'), value: grade.confidenceFlag, tone: 'default' as const, icon: <Sparkles /> }]),
-            ]}
-          />
-        ) : assessmentVisible && assessment?.estimatedPracticeScore != null ? (
-          <ResultsScorePanel
-            eyebrow="Writing assessment v1.1"
-            icon={Award}
-            title={assessment.scoreLabel}
-            subtitle="An AI-generated practice estimate, not an official OET result."
-            gaugeValue={(assessment.estimatedPracticeScore / 500) * 100}
-            gaugeCenter={<span className="text-2xl font-black text-navy dark:text-white">{assessment.estimatedPracticeScore}</span>}
-            gaugeLabel={assessment.scoreRange ?? assessment.gradeBand ?? 'AI estimate'}
-            gaugeColor={assessment.estimatedPracticeScore >= 350 ? 'var(--color-success)' : assessment.estimatedPracticeScore >= 300 ? 'var(--color-warning)' : 'var(--color-danger)'}
-            stats={[
-              { label: 'Score', value: `${assessment.estimatedPracticeScore}/500`, tone: 'info', icon: <Award /> },
-              ...(assessment.gradeBand ? [{ label: 'Grade band', value: assessment.gradeBand, tone: 'info' as const, icon: <Award /> }] : []),
-              { label: 'Confidence', value: assessment.confidenceLabel ?? 'restricted', tone: 'default', icon: <Sparkles /> },
-              { label: 'Version', value: assessment.calibrationSetVersion, tone: 'default', icon: <FileText /> },
             ]}
           />
         ) : (
@@ -254,38 +284,36 @@ export default function WritingSubmissionResultsPage() {
             </div>
             <details className="rounded-xl border border-border bg-background p-4" open>
               <summary className="cursor-pointer text-sm font-bold text-navy">{t('writing.submissions.results.criteria.perCriterion')}</summary>
-              <ul className="mt-3 space-y-3">
-                {isMock
-                  // Mock: iterate the fixed criteria so the tutor's human scores + written
-                  // comments always render, regardless of the AI feedback map. Zero AI.
-                  ? (Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code) => (
-                      <li key={code}>
-                        <CriterionScoreRow
-                          label={CRITERION_NAMES[code]}
-                          score={scores![code]}
-                          max={CRITERION_MAX[code]}
-                          target={CRITERION_TARGET[code]}
-                          feedback={tutorReview?.perCriterionComments?.[code] ?? null}
-                        />
-                      </li>
-                    ))
-                  : (Object.entries(grade!.perCriterion) as Array<[WritingCriterionCode, NonNullable<typeof grade>['perCriterion'][WritingCriterionCode]]>).map(([code, feedback]) => (
-                      <li key={code}>
-                        <CriterionScoreRow
-                          label={CRITERION_NAMES[code]}
-                          score={feedback.score}
-                          max={CRITERION_MAX[code]}
-                          target={CRITERION_TARGET[code]}
-                          feedback={feedback.feedback}
-                          exemplar={feedback.exemplarFix ? (
-                            <>
-                              <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
-                              <span dir="ltr">{feedback.exemplarFix}</span>
-                            </>
-                          ) : null}
-                        />
-                      </li>
-                    ))}
+              <ul className="mt-3 space-y-3" data-testid="criteria-list">
+                {/* Iterate the fixed six criteria so every one always renders
+                    with its persisted grade score (a tutor override included),
+                    regardless of the AI feedback map. Mock: the tutor's human
+                    written comments only (zero AI). Normal: the AI feedback. */}
+                {(Object.keys(CRITERION_NAMES) as WritingCriterionCode[]).map((code) => {
+                  const ai: PerCriterionFeedbackWithQuote | undefined = isMock ? undefined : grade?.perCriterion?.[code];
+                  return (
+                    <li key={code}>
+                      <CriterionScoreRow
+                        label={CRITERION_NAMES[code]}
+                        score={scores![code]}
+                        max={CRITERION_MAX[code]}
+                        target={CRITERION_TARGET[code]}
+                        feedback={isMock ? tutorReview?.perCriterionComments?.[code] ?? null : ai?.quote ? (
+                          <>
+                            <mark className="rounded bg-amber-100 px-0.5 text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">“{ai.quote}”</mark>{' '}
+                            {ai.feedback}
+                          </>
+                        ) : ai?.feedback}
+                        exemplar={ai?.exemplarFix ? (
+                          <>
+                            <span className="font-bold">{t('writing.submissions.results.criteria.exemplarFix')}</span>{' '}
+                            <span dir="ltr">{ai.exemplarFix}</span>
+                          </>
+                        ) : null}
+                      />
+                    </li>
+                  );
+                })}
               </ul>
             </details>
           </section>
@@ -298,11 +326,11 @@ export default function WritingSubmissionResultsPage() {
               <p className="mt-1 text-sm text-muted">Every finding is assigned to one primary criterion; secondary references are shown only as supporting context.</p>
             </div>
             <CriteriaRadar scores={assessmentScores} targetScores={{ c1: 3, c2: 6, c3: 6, c4: 6, c5: 6, c6: 6 }} />
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 md:grid-cols-2" data-testid="assessment-criteria-list">
               {assessment.criteria.map((criterion) => (
                 <article key={criterion.criterionCode} className="rounded-xl border border-border bg-background p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <h3 className="font-bold text-navy">{criterion.criterionCode}</h3>
+                    <h3 className="font-bold text-navy">{CRITERION_NAMES[V11_CRITERION_KEY[criterion.criterionCode]] ?? criterion.criterionCode}</h3>
                     <Badge variant="info" size="sm">{criterion.score}/{criterion.maximumScore}</Badge>
                   </div>
                   <p className="mt-2 text-sm text-navy">{criterion.strengthObservation}</p>
@@ -331,9 +359,12 @@ export default function WritingSubmissionResultsPage() {
               </div>
             ) : null}
             {assessment.modelAnswer?.modelAnswerText ? (
-              <article className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+              <article data-testid="grounded-model-answer-card" className="rounded-xl border border-primary/30 bg-primary/5 p-4">
                 <h3 className="font-bold text-navy">Grounded model answer</h3>
-                <p className="mt-2 whitespace-pre-line text-sm text-navy" dir="ltr">{assessment.modelAnswer.modelAnswerText}</p>
+                {/* Rendered exactly as stored: every line break and blank line is
+                    part of the letter layout (Addendum Rev8 §12.3/§19.2) — never
+                    trim, split, or collapse whitespace here. */}
+                <p data-testid="grounded-model-answer" className="mt-2 whitespace-pre-wrap font-sans text-sm text-navy" dir="ltr">{assessment.modelAnswer.modelAnswerText}</p>
                 {assessment.modelAnswer.whyThisWorks.length ? <p className="mt-2 text-sm text-muted">{assessment.modelAnswer.whyThisWorks.join(' ')}</p> : null}
               </article>
             ) : null}

@@ -1388,7 +1388,39 @@ public sealed class AiPackageCreditService(LearnerDbContext db, ILogger<AiPackag
     {
         row.UserId = account.UserId;
         row.AccountId = account.Id;
+        // Every ledger write routes through here, so the varchar(64) keys are
+        // fitted in ONE place (Writing Addendum Rev8 §16, P0 task-load
+        // failure): JobId used to receive the full Writing start reference
+        // "writing-v2:{userId}:{scenarioId:D}:{n}" (86-90 chars for real
+        // learner ids) → Postgres 22001 → generic 500 on every finite-balance
+        // "Practice this". EF InMemory ignores MaxLength, so no test caught it.
+        // ReferenceId (varchar 128) stays the full idempotency key — only the
+        // 64-char columns are fitted, deterministically, so retries still map
+        // to the same value.
+        row.JobId = FitColumn(row.JobId, 64);
+        row.PackageId = FitColumn(row.PackageId, 64);
+        row.CreatedByAdminId = FitColumn(row.CreatedByAdminId, 64);
         db.AiPackageCreditTransactions.Add(row);
+    }
+
+    /// <summary>
+    /// Deterministically fits <paramref name="value"/> to a column of
+    /// <paramref name="maxLength"/> chars: unchanged when it fits, otherwise a
+    /// readable prefix plus a 128-bit SHA-256 suffix.
+    /// <see cref="AddonGrantProcessor.FitDatabaseKey"/> cannot be used for
+    /// 64-char columns — its "-" + 64-hex suffix alone is 65 chars.
+    /// </summary>
+    private static string? FitColumn(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxLength)
+        {
+            return value;
+        }
+
+        var hash = Convert.ToHexString(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(value)))[..32]
+            .ToLowerInvariant();
+        return value[..(maxLength - hash.Length - 1)] + "-" + hash;
     }
 
     private async Task<bool> ReverseOneGrantAsync(string userId, string sourceReferenceId, CancellationToken ct)

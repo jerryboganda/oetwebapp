@@ -138,7 +138,8 @@ export default function ModelAnswerExplainer() {
                 <div className="sticky top-24">
                   <Card className="relative border-border bg-background-light p-6">
                     <div className="absolute -left-3 -top-3 w-8 h-8 bg-primary text-white dark:bg-violet-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-surface">{index + 1}</div>
-                    <p className="text-lg leading-relaxed text-navy font-serif">{paragraph.text}</p>
+                    {/* pre-line keeps in-paragraph line breaks (salutation / Re: line, address blocks). */}
+                    <p className="whitespace-pre-line text-lg leading-relaxed text-navy font-serif">{paragraph.text}</p>
                   </Card>
                 </div>
               </div>

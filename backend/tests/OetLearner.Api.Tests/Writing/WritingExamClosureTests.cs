@@ -224,6 +224,7 @@ public sealed class WritingExamClosureTests
             Status = WritingAssessmentModelAnswerStatus.Ready,
             IsCandidateVisible = true,
             ModelAnswerText = "Dear Doctor, …",
+            ValidatorVersion = OetLearner.Api.Services.Rulebook.WritingRuleEngine.ValidatorVersion,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });

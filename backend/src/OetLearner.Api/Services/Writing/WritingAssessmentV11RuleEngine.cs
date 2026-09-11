@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using OetLearner.Api.Services.Rulebook;
 
@@ -17,289 +16,218 @@ public sealed record WritingAssessmentRuleFinding(
     string SecondaryCriterionCodesJson = "[]");
 
 /// <summary>
-/// v1.1 adapter around the existing deterministic Writing Rulebook engine.
-/// It adds the PDF's punctuation authority and assigns exactly one primary
-/// scoring criterion to each finding.
+/// v1.1 adapter around the deterministic Writing Rulebook engine: assigns
+/// exactly one primary OET criterion (and a display category) to each
+/// <see cref="WritingRuleEngine"/> finding. It adds NO rules of its own, so
+/// the candidate grader, the Model Answer generator and the Model Answer
+/// validator share one rule set (Writing Rule Enforcement Addendum Rev8 §7).
+/// The former house-style battery (semicolon-only R12.9-R12.11, a comma
+/// before "for which"/causal "as", R06.10/R06.11 Re:-line naming) was
+/// removed: it flagged the owner-correct sentence-initial "However, ..." and
+/// the Rev8 Re: form "Mr David Taylor, aged 55". Linker and patient-naming
+/// rules are enforced by the engine's Rev8 detectors (linker_comma_and_case,
+/// linker_*_punctuation, paragraph_start_patient_name,
+/// body_uses_last_name_only, minor_naming_convention).
 /// </summary>
 public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
 {
     public IReadOnlyList<WritingAssessmentRuleFinding> Evaluate(WritingLintInput input)
-    {
-        var findings = ruleEngine.Lint(input)
-            .Select(f => ToFinding(f))
-            .Concat(EvaluateHouseStyle(input.LetterText))
-            .Concat(EvaluateNaming(input.LetterText, null, input.PatientAge))
-            .ToList();
+        => ruleEngine.Lint(input).Select(ToFinding).ToList();
 
-        var unique = new List<WritingAssessmentRuleFinding>();
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var finding in findings)
-        {
-            var key = $"{finding.RuleId}|{finding.Quote}|{finding.Message}";
-            if (seen.Add(key)) unique.Add(finding);
-        }
-        return unique;
-    }
-
+    /// <summary>
+    /// Kept for callers that still pass the case-note snapshot. Patient naming
+    /// is now enforced inside <see cref="WritingRuleEngine"/> from the letter
+    /// itself, so the snapshot is no longer needed.
+    /// </summary>
     public IReadOnlyList<WritingAssessmentRuleFinding> Evaluate(
         WritingLintInput input,
         string? caseNotesSnapshot)
+        => Evaluate(input);
+
+    public static string PrimaryCriterionFor(string? ruleId) => Classify(ruleId).Criterion;
+
+    private static readonly (string Criterion, string Category) Purpose = ("purpose", "purpose");
+    private static readonly (string Criterion, string Category) Content = ("content", "content");
+    private static readonly (string Criterion, string Category) Excess = ("conciseness_clarity", "irrelevant_excess");
+    private static readonly (string Criterion, string Category) Register = ("genre_style", "register_jargon");
+    private static readonly (string Criterion, string Category) Layout = ("organisation_layout", "layout_format");
+    private static readonly (string Criterion, string Category) Language = ("language", "language");
+    private static readonly (string Criterion, string Category) Grammar = ("language", "grammar");
+    private static readonly (string Criterion, string Category) Punctuation = ("language", "punctuation");
+
+    /// <summary>
+    /// Explicit criterion + category for every <see cref="WritingRuleEngine.SupportedCheckIds"/>
+    /// entry (the BUILTIN.* rule ids). Replaces the old substring heuristic,
+    /// which sent no_contractions, year_not_abbreviated and others to
+    /// "content" by accident. A new detector MUST be added here — the
+    /// regression test fails otherwise.
+    /// </summary>
+    internal static readonly IReadOnlyDictionary<string, (string Criterion, string Category)> CheckIdCriteria =
+        new Dictionary<string, (string Criterion, string Category)>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["address_punctuation"] = Layout,
+            ["age_not_duplicated_in_intro"] = Excess,
+            ["ago_requires_past_simple"] = Grammar,
+            ["blank_before_closing_phrase"] = Layout,
+            ["blank_line_after_re_line"] = Layout,
+            ["blank_line_between_paragraphs"] = Layout,
+            ["body_forbidden_phrase_next_visit"] = Language,
+            ["body_forbidden_phrase_the_patient"] = Register,
+            ["body_forbidden_phrase_yesterday"] = Language,
+            ["body_no_todays_date"] = Language,
+            ["body_uses_last_name_only"] = Register,
+            ["cancer_suspected_flagged_urgent"] = Purpose,
+            ["closure_contact_offer"] = Layout,
+            ["closure_contains_management"] = Layout,
+            ["closure_mentions_consent_if_flagged"] = Content,
+            ["closure_mentions_patient_request_if_flagged"] = Content,
+            ["closure_mentions_review_if_required"] = Purpose,
+            ["conditions_lowercase"] = Language,
+            ["content_requires_allergy_for_atopic"] = Content,
+            ["content_requires_smoking_drinking"] = Content,
+            ["date_blank_line_sandwich"] = Layout,
+            ["date_format_consistent"] = Layout,
+            ["dob_age_forbidden_phrase"] = Layout,
+            ["dob_colon_format"] = Layout,
+            ["discharge_admitted_with_past_simple"] = Grammar,
+            ["discharge_intro_no_identity"] = Excess,
+            ["discharge_intro_template"] = Purpose,
+            ["discharge_all_investigations_listed"] = Excess,
+            ["discharge_omits_knownto_gp"] = Content,
+            ["discharge_plan_present"] = Content,
+            ["emotional_wording"] = Register,
+            ["enclosure_results_phrase"] = Content,
+            ["for_duration_requires_present_perfect"] = Grammar,
+            ["intro_contains_purpose"] = Purpose,
+            ["intro_opens_i_am_writing_to"] = Purpose,
+            ["intro_sentence_count"] = Excess,
+            ["judgmental_labels"] = Register,
+            ["latin_abbreviations_translated"] = Language,
+            ["letter_body_length"] = Excess,
+            ["letter_paragraph_count"] = Layout,
+            ["letter_structure_order"] = Layout,
+            ["linker_avoid_words"] = Language,
+            ["linker_comma_and_case"] = Punctuation,
+            ["linker_density"] = Excess,
+            ["linker_however_punctuation"] = Punctuation,
+            ["linker_in_addition_punctuation"] = Punctuation,
+            ["linker_therefore_punctuation"] = Punctuation,
+            ["medication_list_punctuation"] = Punctuation,
+            ["min_body_paragraphs"] = Layout,
+            ["minor_naming_convention"] = Register,
+            ["model_answer_layout"] = Layout,
+            ["no_asap_in_letter"] = Register,
+            ["no_contractions"] = Register,
+            ["no_date_prefix"] = Layout,
+            ["no_brackets_in_letter"] = Layout,
+            ["no_duplicated_request"] = Excess,
+            ["non_medical_no_jargon"] = Register,
+            ["number_style_words_vs_digits"] = Language,
+            ["numerical_values_have_units"] = Language,
+            ["paragraph_start_patient_name"] = Register,
+            ["re_line_age_dob"] = Layout,
+            ["register_colloquial"] = Register,
+            ["relationship_label_patient_reference"] = Register,
+            ["salutation_last_name_only"] = Layout,
+            ["salutation_re_adjacent"] = Layout,
+            ["sentence_length_guard"] = ("conciseness_clarity", "language"),
+            ["signoff_designation_present"] = Layout,
+            ["signoff_no_invented_name"] = Layout,
+            ["since_requires_present_perfect"] = Grammar,
+            ["surgery_past_simple"] = Grammar,
+            ["treatment_for_not_from"] = Grammar,
+            ["urgent_body_starts_today"] = Layout,
+            ["urgent_closure_phrase"] = Purpose,
+            ["urgent_intro_contains_urgent"] = Purpose,
+            ["urgent_token_not_repeated"] = Excess,
+            ["value_unit_spacing"] = Punctuation,
+            ["visit_content_tense_basic_check"] = Grammar,
+            ["visit_paragraphization_check"] = Layout,
+            ["year_not_abbreviated"] = Layout,
+            ["yours_sincerely_capitalisation"] = Layout,
+            ["yours_sincerely_vs_faithfully"] = Layout,
+        };
+
+    /// <summary>
+    /// Owner registry rows (docs/writing-rev8/owner-rules-rev8.json) that carry
+    /// check_ids, mapped to their first check_id so they share its criterion.
+    /// Rows without a check_id (OWN-W-019/031/035/037/038) fall back to content.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> OwnerRuleCheckIds =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["OWN-W-001"] = "blank_line_after_re_line",
+            ["OWN-W-002"] = "salutation_re_adjacent",
+            ["OWN-W-003"] = "date_format_consistent",
+            ["OWN-W-004"] = "dob_colon_format",
+            ["OWN-W-005"] = "no_brackets_in_letter",
+            ["OWN-W-006"] = "number_style_words_vs_digits",
+            ["OWN-W-007"] = "emotional_wording",
+            ["OWN-W-008"] = "judgmental_labels",
+            ["OWN-W-009"] = "body_forbidden_phrase_the_patient",
+            ["OWN-W-010"] = "paragraph_start_patient_name",
+            ["OWN-W-011"] = "body_uses_last_name_only",
+            ["OWN-W-012"] = "relationship_label_patient_reference",
+            ["OWN-W-013"] = "intro_opens_i_am_writing_to",
+            ["OWN-W-014"] = "closure_contact_offer",
+            ["OWN-W-015"] = "urgent_closure_phrase",
+            ["OWN-W-016"] = "urgent_token_not_repeated",
+            ["OWN-W-017"] = "urgent_body_starts_today",
+            ["OWN-W-018"] = "urgent_intro_contains_urgent",
+            ["OWN-W-020"] = "no_duplicated_request",
+            ["OWN-W-021"] = "linker_avoid_words",
+            ["OWN-W-022"] = "linker_comma_and_case",
+            ["OWN-W-023"] = "medication_list_punctuation",
+            ["OWN-W-024"] = "value_unit_spacing",
+            ["OWN-W-025"] = "age_not_duplicated_in_intro",
+            ["OWN-W-026"] = "signoff_no_invented_name",
+            ["OWN-W-027"] = "letter_body_length",
+            ["OWN-W-028"] = "min_body_paragraphs",
+            ["OWN-W-029"] = "body_no_todays_date",
+            ["OWN-W-030"] = "no_contractions",
+            ["OWN-W-032"] = "discharge_intro_template",
+            ["OWN-W-033"] = "register_colloquial",
+            ["OWN-W-034"] = "closure_contains_management",
+            ["OWN-W-036"] = "model_answer_layout",
+        };
+
+    private static readonly Regex LegacySectionRe = new(@"^R(\d{1,2})\.", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static (string Criterion, string Category) Classify(string? ruleId)
     {
-        var findings = Evaluate(input).ToList();
-        findings.AddRange(EvaluateNaming(input.LetterText, caseNotesSnapshot, input.PatientAge));
-        return findings
-            .GroupBy(f => $"{f.RuleId}|{f.Quote}|{f.Message}", StringComparer.Ordinal)
-            .Select(g => g.First())
-            .ToArray();
-    }
+        var id = (ruleId ?? string.Empty).Trim();
+        if (id.StartsWith("BUILTIN.", StringComparison.OrdinalIgnoreCase)) id = id["BUILTIN.".Length..];
+        if (OwnerRuleCheckIds.TryGetValue(id, out var ownerCheckId)) id = ownerCheckId;
+        if (CheckIdCriteria.TryGetValue(id, out var mapped)) return mapped;
 
-    private static IReadOnlyList<WritingAssessmentRuleFinding> EvaluateNaming(
-        string letterText,
-        string? caseNotesSnapshot,
-        int? patientAge)
-    {
-        if (string.IsNullOrWhiteSpace(caseNotesSnapshot)) return [];
-        var nameMatch = Regex.Match(
-            caseNotesSnapshot,
-            @"(?im)^\s*(?:patient\s+name|patient|name)\s*[:\-]\s*(?<first>[A-Za-z][A-Za-z'’-]+)\s+(?<last>[A-Za-z][A-Za-z'’-]+)\b",
-            RegexOptions.IgnoreCase);
-        if (!nameMatch.Success || patientAge is null) return [];
-
-        var firstName = nameMatch.Groups["first"].Value;
-        var lastName = nameMatch.Groups["last"].Value;
-        var reLine = Regex.Match(letterText ?? string.Empty, @"(?im)^\s*Re\s*:\s*(?<value>[^\r\n]+)").Groups["value"].Value.Trim();
-        var findings = new List<WritingAssessmentRuleFinding>();
-        if (reLine.Length > 0)
+        // Legacy profession books (R03..R16) report the rule id, not the
+        // check id: map by rulebook section.
+        var section = LegacySectionRe.Match(id);
+        if (!section.Success) return Content;
+        return int.Parse(section.Groups[1].Value) switch
         {
-            if (patientAge < 18)
-            {
-                if (Regex.IsMatch(reLine, @"\b(?:Mr|Ms|Mrs|Miss|Dr|Master)\b", RegexOptions.IgnoreCase)
-                    || !reLine.Contains(firstName, StringComparison.OrdinalIgnoreCase)
-                    || !reLine.Contains(lastName, StringComparison.OrdinalIgnoreCase))
-                {
-                    findings.Add(CreateFinding(
-                        "R06.10",
-                        "For patients aged 1 day through 17 years, the Re: line must contain the full name with no title; never use Master.",
-                        reLine,
-                        "genre_style",
-                        Math.Max(0, letterText.IndexOf(reLine, StringComparison.OrdinalIgnoreCase)),
-                        Math.Max(0, letterText.IndexOf(reLine, StringComparison.OrdinalIgnoreCase)) + reLine.Length,
-                        $"Use 'Re: {firstName} {lastName}' with no title."));
-                }
-            }
-            else if (!Regex.IsMatch(reLine, $@"^(?:Mr|Ms|Mrs|Miss)\s+{Regex.Escape(lastName)}$", RegexOptions.IgnoreCase)
-                || Regex.IsMatch(reLine, @"\bMaster\b", RegexOptions.IgnoreCase))
-            {
-                findings.Add(CreateFinding(
-                    "R06.11",
-                    "At 18 years and older, use the patient's title plus last name in the Re: line; never use Master.",
-                    reLine,
-                    "genre_style",
-                    Math.Max(0, letterText.IndexOf(reLine, StringComparison.OrdinalIgnoreCase)),
-                    Math.Max(0, letterText.IndexOf(reLine, StringComparison.OrdinalIgnoreCase)) + reLine.Length,
-                    $"Use 'Re: Mr/Ms/Mrs/Miss {lastName}' with the correct title."));
-            }
-        }
-
-        if (Regex.IsMatch(letterText ?? string.Empty, @"\bMaster\b", RegexOptions.IgnoreCase))
-        {
-            findings.Add(CreateFinding(
-                "R06.11",
-                "Never use Master for a patient.",
-                Regex.Match(letterText, @"\bMaster\b", RegexOptions.IgnoreCase).Value,
-                "genre_style",
-                Regex.Match(letterText, @"\bMaster\b", RegexOptions.IgnoreCase).Index,
-                Regex.Match(letterText, @"\bMaster\b", RegexOptions.IgnoreCase).Index + 6,
-                "Replace Master with the required patient naming convention."));
-        }
-
-        var bodyStart = reLine.Length == 0
-            ? 0
-            : Math.Max(0, letterText.IndexOf(reLine, StringComparison.OrdinalIgnoreCase) + reLine.Length);
-        var body = letterText[bodyStart..];
-        var paragraphs = Regex.Split(body, @"\r?\n\s*\r?\n")
-            .Where(p => p.Trim().Length > 0)
-            .Where(p => !Regex.IsMatch(p, @"^\s*(?:Yours|Kind regards|Regards)", RegexOptions.IgnoreCase));
-        var expected = patientAge < 18 ? firstName : $"(?:Mr|Ms|Mrs|Miss)\\s+{Regex.Escape(lastName)}";
-        foreach (var paragraph in paragraphs)
-        {
-            var firstSentence = Regex.Split(paragraph.Trim(), @"(?<=[.!?])\s+").FirstOrDefault() ?? paragraph.Trim();
-            if (!Regex.IsMatch(firstSentence, $@"\b{expected}\b", RegexOptions.IgnoreCase))
-            {
-                findings.Add(CreateFinding(
-                    patientAge < 18 ? "R06.10" : "R06.11",
-                    "Use the required patient name at the first mention in each body paragraph.",
-                    firstSentence,
-                    "genre_style",
-                    Math.Max(0, letterText.IndexOf(firstSentence, StringComparison.OrdinalIgnoreCase)),
-                    Math.Max(0, letterText.IndexOf(firstSentence, StringComparison.OrdinalIgnoreCase)) + firstSentence.Length,
-                    patientAge < 18 ? $"Begin the paragraph with {firstName}." : $"Begin the paragraph with the patient's title and last name."));
-            }
-        }
-
-        return findings;
-    }
-
-    public static string PrimaryCriterionFor(string? ruleId)
-    {
-        var value = (ruleId ?? string.Empty).Trim().ToLowerInvariant();
-        if (value.Contains("purpose") || value.Contains("urgent_intro") || value.Contains("urgent_closure"))
-            return "purpose";
-        if (value.Contains("content") || value.Contains("discharge_omit") || value.Contains("fact"))
-            return "content";
-        if (value.Contains("conciseness") || value.Contains("length") || value.Contains("linker_density")
-            || value.Contains("sentence_length"))
-            return "conciseness_clarity";
-        if (value.Contains("genre") || value.Contains("register") || value.Contains("jargon")
-            || value.Contains("non_medical") || value.Contains("letter_type"))
-            return "genre_style";
-        if (value.Contains("address") || value.Contains("salutation") || value.Contains("re_line")
-            || value.Contains("blank") || value.Contains("paragraph") || value.Contains("structure")
-            || value.Contains("closure") || value.Contains("yours") || value.Contains("discharge_intro")
-            || value.Contains("no_brackets") || value.Contains("signoff") || value.Contains("dob_age"))
-            return "organisation_layout";
-        if (value.Contains("language") || value.Contains("grammar") || value.Contains("tense")
-            || value.Contains("punctuation") || value.Contains("linker_") || value.Contains("latin")
-            || value.Contains("ago_") || value.Contains("present_perfect") || value.StartsWith("r10")
-            || value.StartsWith("r11") || value.StartsWith("r12"))
-            return "language";
-        return "content";
-    }
-
-    public static IReadOnlyList<WritingAssessmentRuleFinding> EvaluateHouseStyle(string letterText)
-    {
-        var findings = new List<WritingAssessmentRuleFinding>();
-        AddLinkerFinding(findings, letterText, "however", "R12.9",
-            "Use '[clause]; however, [clause].'", requireCommaAfter: true);
-        AddLinkerFinding(findings, letterText, "therefore", "R12.10",
-            "Use '[clause]; therefore, [clause].'", requireCommaAfter: true);
-        AddLinkerFinding(findings, letterText, "thus", "R12.10",
-            "Use '[clause]; thus, [clause].'", requireCommaAfter: true);
-
-        foreach (Match match in Regex.Matches(letterText ?? string.Empty, @"\bin addition\b(?!\s+(?:to|together with|along with|as well as)\b)", RegexOptions.IgnoreCase))
-        {
-            var before = (letterText[..match.Index]).TrimEnd();
-            var afterEnd = match.Index + match.Length;
-            var after = letterText[afterEnd..].TrimStart();
-            if (!before.EndsWith(';') || !after.StartsWith(','))
-            {
-                findings.Add(CreateFinding(
-                    "R12.11",
-                    "in addition must use a semicolon before and a comma after when joining full clauses.",
-                    match.Value,
-                    "language",
-                    match.Index,
-                    afterEnd,
-                    "Use '[clause]; in addition, [clause].'"));
-            }
-        }
-
-        foreach (Match match in Regex.Matches(letterText ?? string.Empty, @"\bfor which\b", RegexOptions.IgnoreCase))
-        {
-            var before = (letterText[..match.Index]).TrimEnd();
-            if (!before.EndsWith(','))
-            {
-                findings.Add(CreateFinding(
-                    "R12.17",
-                    "Precede 'for which' with a comma.",
-                    match.Value,
-                    "language",
-                    match.Index,
-                    match.Index + match.Length,
-                    "Insert a comma before 'for which'."));
-            }
-        }
-
-        foreach (Match match in Regex.Matches(letterText ?? string.Empty, @"\bas\s+(?:he|she|it|they|we|you|the patient|the child|the patient’s|the patient's|this|that)\b", RegexOptions.IgnoreCase))
-        {
-            var before = (letterText[..match.Index]).TrimEnd();
-            if (before.Length > 0 && !before.EndsWith(','))
-            {
-                findings.Add(CreateFinding(
-                    "R12.16",
-                    "Use a comma before mid-sentence 'as' when it introduces a reason.",
-                    match.Value,
-                    "language",
-                    match.Index,
-                    match.Index + match.Length,
-                    "Insert a comma before 'as'."));
-            }
-        }
-
-        return findings;
-    }
-
-    private static void AddLinkerFinding(
-        ICollection<WritingAssessmentRuleFinding> findings,
-        string letterText,
-        string linker,
-        string ruleId,
-        string message,
-        bool requireCommaAfter)
-    {
-        foreach (Match match in Regex.Matches(letterText ?? string.Empty, $@"\b{linker}\b", RegexOptions.IgnoreCase))
-        {
-            var before = (letterText[..match.Index]).TrimEnd();
-            var after = letterText[(match.Index + match.Length)..].TrimStart();
-            if (!before.EndsWith(';') || (requireCommaAfter && !after.StartsWith(',')))
-            {
-                findings.Add(CreateFinding(
-                    ruleId,
-                    message,
-                    match.Value,
-                    "language",
-                    match.Index,
-                    match.Index + match.Length,
-                    $"Insert a semicolon before '{linker}' and a comma after it."));
-            }
-        }
+            3 or 14 or 16 => Content,          // content selection, discharge, assessment criteria
+            4 or 5 or 6 or 8 or 9 => Layout,   // layout, address/date, salutation/Re:, body, closure
+            7 or 13 => Purpose,                // introduction, urgent referral
+            10 => Grammar,                     // tenses
+            11 or 12 => Language,              // medications, grammar/vocabulary/linkers
+            15 => Register,                    // non-medical recipients
+            _ => Content,
+        };
     }
 
     private static WritingAssessmentRuleFinding ToFinding(LintFinding finding)
     {
-        var ruleId = finding.RuleId;
+        var (criterion, category) = Classify(finding.RuleId);
         return new WritingAssessmentRuleFinding(
-            ruleId,
-            CategoryFor(ruleId),
+            finding.RuleId,
+            category,
             finding.Severity.ToString().ToLowerInvariant(),
             finding.Message,
             finding.Quote,
             finding.FixSuggestion,
             finding.Start,
             finding.End,
-            PrimaryCriterionFor(ruleId));
-    }
-
-    private static WritingAssessmentRuleFinding CreateFinding(
-        string ruleId,
-        string message,
-        string quote,
-        string primaryCriterion,
-        int start,
-        int end,
-        string? fixSuggestion = null)
-        => new(
-            ruleId,
-            "punctuation",
-            "major",
-            message,
-            quote,
-            fixSuggestion,
-            start,
-            end,
-            primaryCriterion,
-            JsonSerializer.Serialize(Array.Empty<string>()));
-
-    private static string CategoryFor(string ruleId)
-    {
-        var value = ruleId.ToLowerInvariant();
-        if (value.Contains("purpose") || value.Contains("urgent")) return "purpose";
-        if (value.Contains("content") || value.Contains("discharge_omit")) return "content";
-        if (value.Contains("length") || value.Contains("conciseness") || value.Contains("linker_density")) return "irrelevant_excess";
-        if (value.Contains("genre") || value.Contains("jargon") || value.Contains("non_medical")) return "register_jargon";
-        if (value.Contains("punctuation") || value.StartsWith("r12")) return "punctuation";
-        if (value.Contains("address") || value.Contains("salutation") || value.Contains("layout") || value.Contains("blank")
-            || value.Contains("no_brackets") || value.Contains("signoff") || value.Contains("dob_age")) return "layout_format";
-        return "language";
+            criterion);
     }
 }

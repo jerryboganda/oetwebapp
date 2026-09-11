@@ -28,9 +28,11 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
         Guid submissionId,
         CancellationToken ct)
     {
-        var ownsSubmission = await db.WritingSubmissions.AsNoTracking()
-            .AnyAsync(x => x.Id == submissionId && x.UserId == userId, ct);
-        if (!ownsSubmission) return null;
+        var scenarioId = await db.WritingSubmissions.AsNoTracking()
+            .Where(x => x.Id == submissionId && x.UserId == userId)
+            .Select(x => (Guid?)x.ScenarioId)
+            .FirstOrDefaultAsync(ct);
+        if (scenarioId is null) return null;
 
         var report = await db.WritingAssessmentReportsV11.AsNoTracking()
             .Include(x => x.Facts)
@@ -39,14 +41,30 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
             .SingleOrDefaultAsync(x => x.SubmissionId == submissionId, ct);
         if (report is null) return null;
 
-        var modelAnswer = await db.WritingAssessmentModelAnswers.AsNoTracking()
-            .SingleOrDefaultAsync(x => x.ReportId == report.Id, ct);
-        return Map(report, modelAnswer);
+        return Map(report, await LoadVerifiedTaskModelAnswerAsync(db, scenarioId.Value, ct));
     }
+
+    /// <summary>
+    /// The Model Answer shown with a result is resolved at READ time: the task's
+    /// live saved answer, only while it is verified for candidates under the
+    /// running validator (<see cref="WritingTaskModelAnswerService.CandidateVisibleVerified"/>).
+    /// Never the per-submission snapshot copied at grading time, so a repaired
+    /// and republished answer instantly refreshes every existing result page
+    /// and an answer invalidated by a validator change disappears everywhere
+    /// (Addendum Rev8 §19.6).
+    /// </summary>
+    public static Task<WritingTaskModelAnswer?> LoadVerifiedTaskModelAnswerAsync(
+        LearnerDbContext db,
+        Guid scenarioId,
+        CancellationToken ct)
+        => db.WritingTaskModelAnswers.AsNoTracking()
+            .Where(a => a.ScenarioId == scenarioId)
+            .Where(WritingTaskModelAnswerService.CandidateVisibleVerified)
+            .FirstOrDefaultAsync(ct);
 
     public static WritingAssessmentV11ReportResponse Map(
         WritingAssessmentReportV11 report,
-        WritingAssessmentModelAnswer? modelAnswer)
+        WritingTaskModelAnswer? verifiedModelAnswer)
     {
         var candidateVisible = report.Status == WritingAssessmentV11Status.CandidateReady
             && report.CandidateReportVisible;
@@ -105,16 +123,14 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
             : [];
 
         WritingAssessmentV11ModelAnswerResponse? answer = null;
-        if (candidateVisible && modelAnswer is not null
-            && modelAnswer.Status == WritingAssessmentModelAnswerStatus.Ready
-            && modelAnswer.IsCandidateVisible)
+        if (candidateVisible && WritingTaskModelAnswerService.IsVerifiedForCandidates(verifiedModelAnswer))
         {
             answer = new WritingAssessmentV11ModelAnswerResponse(
-                modelAnswer.Status.ToString(),
-                modelAnswer.ModelAnswerText,
-                modelAnswer.CorrectedCandidateLetter,
-                ParseStringList(modelAnswer.WhyThisWorksJson),
-                ParseStringList(modelAnswer.GroundedFactReferencesJson),
+                verifiedModelAnswer!.Status.ToString(),
+                verifiedModelAnswer.ModelAnswerText,
+                null,
+                [],
+                ParseStringList(verifiedModelAnswer.GroundedFactReferencesJson),
                 true);
         }
 
