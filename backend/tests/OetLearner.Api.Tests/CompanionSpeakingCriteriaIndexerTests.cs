@@ -54,7 +54,7 @@ public sealed class CompanionSpeakingCriteriaIndexerTests : IAsyncDisposable
 
         Assert.Equal(4, resources.LinguisticCriteria.Count);
         Assert.Equal(5, resources.ClinicalCriteria.Count);
-        Assert.Equal(11, resources.IntroQuestions.Count);
+        Assert.Equal(12, resources.IntroQuestions.Count);
     }
 
     [Fact]

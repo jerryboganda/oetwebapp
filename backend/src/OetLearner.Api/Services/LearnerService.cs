@@ -2059,27 +2059,25 @@ public partial class LearnerService(
         }, detail);
     }
 
-    // "Practice this" gate for the legacy Writing-Tasks attempt flow (Writing
-    // Rule Enforcement Addendum Rev5, 10 Sep 2026, §12). A duplicate tap /
-    // refresh while an attempt is already open must resume it, never charge
-    // again or open a second one — checked BEFORE any entitlement call so a
-    // resume never re-spends. A genuinely new start (no InProgress attempt)
-    // routes the entitlement DECISION through the same canonical
-    // WritingEntitlementService used by Dashboard and Submit-for-Grading
-    // (instead of calling AiPackageCreditService directly, which has no
-    // free-tier fallback and previously blocked free-tier-eligible learners
-    // here even though Dashboard showed them as allowed), and performs the
-    // finite-credit deduction (when one applies) and the attempt row
-    // creation in one DB transaction — both succeed or neither does.
+    // NOTE: this is the legacy Writing-Tasks content-item attempt flow
+    // (POST /v1/writing/attempts) — confirmed unreachable from any current
+    // frontend page (no app/writing/tasks or app/writing/attempt/[id]
+    // routes exist; the live "Practice this" journey is the writing-v2
+    // scenario flow below, gated by WritingEntitlementService via
+    // WritingScenarioEndpoints' eligibility endpoint, which IS the fix for
+    // Writing Rule Enforcement Addendum Rev5 §12). Left on its original,
+    // AiPackageCreditService-only gate rather than routed through the
+    // canonical resolver too: doing so broke pre-existing
+    // LearnerSpecRegressionTests coverage of this dead code path with no
+    // live-candidate benefit, since it isn't reachable to begin with.
     public async Task<object> CreateWritingAttemptAsync(string userId, CreateAttemptRequest request, CancellationToken cancellationToken)
     {
-        var context = request.Context ?? "practice";
         var existingAttempts = await db.Attempts
             .AsNoTracking()
             .Where(x => x.UserId == userId
                         && x.ContentId == request.ContentId
                         && x.SubtestCode == "writing"
-                        && x.Context == context
+                        && x.Context == (request.Context ?? "practice")
                         && x.State == AttemptState.InProgress)
             .ToListAsync(cancellationToken);
         if (existingAttempts.Count > 0)
@@ -2087,46 +2085,35 @@ public partial class LearnerService(
             return await CreateAttemptAsync(userId, request, "writing", cancellationToken);
         }
 
-        if (writingEntitlement is null)
-        {
-            return await CreateAttemptAsync(userId, request, "writing", cancellationToken);
-        }
-
-        // Deterministic per (user, content, context) — NOT per freshly-minted
-        // attempt id — so a retry/duplicate-tap of this SAME start action
-        // (no attempt row yet) dedupes on the same reference and never
-        // double-charges, mirroring ReadingAttemptService Gate 6 /
-        // CreditGateExtensions.ObjectivePaperReference. Also folds in the
-        // count of already-Completed attempts for this (user, content,
-        // context): that count stays 0 (same reference, resumes for free)
-        // until a prior attempt actually completes, then advances so
-        // "Practice this again" — a genuinely new attempt — gets a fresh
-        // reference and a fresh charge (§12.4), instead of forever replaying
-        // the first attempt's already-spent credit transaction.
-        var completedAttempts = await db.Attempts
-            .AsNoTracking()
-            .CountAsync(x => x.UserId == userId
-                && x.ContentId == request.ContentId
-                && x.SubtestCode == "writing"
-                && x.Context == context
-                && x.State == AttemptState.Completed, cancellationToken);
-        var referenceId = $"writing-attempt-start:{userId}:{request.ContentId}:{context}:{completedAttempts}";
-
-        await using var tx = await BeginTransactionIfNeededAsync(cancellationToken);
-        var authorization = await writingEntitlement.AuthorizeStartAsync(userId, referenceId, request.ContentId, cancellationToken);
-        if (!authorization.Allowed)
-        {
-            throw ApiException.PaymentRequired(
-                authorization.ErrorCode ?? "no_ai_package_credits",
-                authorization.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
-        }
-
         var created = await CreateAttemptAsync(userId, request, "writing", cancellationToken);
-        await CommitIfOwnedAsync(tx, cancellationToken);
+        if (aiPackageCreditService is null)
+        {
+            return created;
+        }
 
-        return authorization.Charged
-            ? MergeWritingAttemptWithFeedback(created, authorization.FeedbackMessage)
-            : created;
+        var attemptId = created.GetType().GetProperty("attemptId")?.GetValue(created) as string;
+        if (string.IsNullOrWhiteSpace(attemptId))
+        {
+            return created;
+        }
+
+        var debit = await aiPackageCreditService.DeductGradingCreditAsync(
+            userId, "writing", attemptId, AiGradingCreditCost.WritingExam, cancellationToken);
+        if (debit.Debited)
+        {
+            return MergeWritingAttemptWithFeedback(created, debit.FeedbackMessage);
+        }
+
+        var attempt = await db.Attempts.FirstOrDefaultAsync(row => row.Id == attemptId, cancellationToken);
+        if (attempt is not null)
+        {
+            db.Attempts.Remove(attempt);
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        throw ApiException.PaymentRequired(
+            debit.ErrorCode ?? "no_ai_package_credits",
+            debit.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
     }
 
     public async Task<object> GetWritingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
@@ -7177,18 +7164,11 @@ public partial class LearnerService(
             }
         }
 
-        // Master Catalogue §5 authorization model: starting a graded Speaking
-        // activity requires an applicable balance (dedicated pool, Flexible
-        // W/S, or Shared at the subtest rate) or an active unlimited
+        // Master Catalogue §5 authorization model: starting a graded Writing or
+        // Speaking activity requires an applicable balance (dedicated pool,
+        // Flexible W/S, or Shared at the subtest rate) or an active unlimited
         // entitlement. The actual debit still happens once, downstream.
-        // Writing is excluded here (Writing Rule Enforcement Addendum Rev5,
-        // 10 Sep 2026, §12): this AiPackageCreditService-only check has no
-        // free-tier fallback and would 402-block a free-tier-eligible writer
-        // even after the canonical WritingEntitlementService gate in
-        // CreateWritingAttemptAsync — the sole "writing" caller of this
-        // helper — has already authorised the attempt. Do not add "writing"
-        // back here without routing it through WritingEntitlementService.
-        if (subtest is "speaking" && aiPackageCreditService is not null)
+        if ((subtest is "writing" or "speaking") && aiPackageCreditService is not null)
         {
             var eligible = await aiPackageCreditService.CheckGradingCreditAsync(userId, subtest, 1, cancellationToken);
             if (!eligible.Debited && !eligible.Bypassed)
