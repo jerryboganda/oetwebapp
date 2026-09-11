@@ -20,7 +20,7 @@ public sealed record LearnerAttemptHistoryResponse(IReadOnlyList<LearnerAttemptH
 
 public interface ILearnerAttemptHistoryService
 {
-    Task<LearnerAttemptHistoryResponse> GetHistoryAsync(string userId, int limit, CancellationToken ct);
+    Task<LearnerAttemptHistoryResponse> GetHistoryAsync(string userId, int limit, string? subtest, CancellationToken ct);
 }
 
 /// <summary>
@@ -32,22 +32,32 @@ public interface ILearnerAttemptHistoryService
 /// </summary>
 public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearnerAttemptHistoryService
 {
-    public async Task<LearnerAttemptHistoryResponse> GetHistoryAsync(string userId, int limit, CancellationToken ct)
+    public async Task<LearnerAttemptHistoryResponse> GetHistoryAsync(string userId, int limit, string? subtest, CancellationToken ct)
     {
         var take = Math.Clamp(limit, 1, 200);
         var now = DateTimeOffset.UtcNow;
+        // Normalized once and pushed into every per-table Where below, ahead of
+        // each table's own Take(take). This is the fix for the truncation bug:
+        // filtering AFTER the union (i.e. only in the final re-sort/Take) would
+        // let a subtest with >take unrelated attempts crowd the requested
+        // subtest's older rows out of the per-table page before they ever reach
+        // the filter.
+        var subtestFilter = string.IsNullOrWhiteSpace(subtest) ? null : subtest.Trim().ToLowerInvariant();
 
         // Generic attempts (legacy reading/listening + writing/speaking).
         var generic = await db.Attempts.AsNoTracking()
             .Where(row => row.UserId == userId)
+            .Where(row => subtestFilter == null || row.SubtestCode.ToLower() == subtestFilter)
             .OrderByDescending(row => row.StartedAt)
             .Take(take)
             .Select(row => new { row.Id, row.ContentId, row.SubtestCode, row.StartedAt, row.SubmittedAt, row.State })
             .ToListAsync(ct);
 
-        // Relational Reading attempts (paper-first module).
+        // Relational Reading attempts (paper-first module) — this table is only
+        // ever "reading", so any other filter value excludes it entirely.
         var readingAttempts = await db.ReadingAttempts.AsNoTracking()
             .Where(row => row.UserId == userId)
+            .Where(row => subtestFilter == null || subtestFilter == "reading")
             .OrderByDescending(row => row.StartedAt)
             .Take(take)
             .Select(row => new { row.Id, PaperId = row.PaperId, row.StartedAt, row.SubmittedAt, Status = (int)row.Status })
@@ -56,6 +66,7 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
         // Relational Listening attempts.
         var listeningAttempts = await db.ListeningAttempts.AsNoTracking()
             .Where(row => row.UserId == userId)
+            .Where(row => subtestFilter == null || subtestFilter == "listening")
             .OrderByDescending(row => row.StartedAt)
             .Take(take)
             .Select(row => new { row.Id, PaperId = row.PaperId, row.StartedAt, row.SubmittedAt, Status = (int)row.Status })
@@ -63,6 +74,7 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
 
         var mockAttempts = await db.MockAttempts.AsNoTracking()
             .Where(row => row.UserId == userId)
+            .Where(row => subtestFilter == null || subtestFilter == "mock")
             .OrderByDescending(row => row.StartedAt)
             .Take(take)
             .Select(row => new { row.Id, row.MockType, row.SubtestCode, row.StartedAt, row.SubmittedAt, State = (int)row.State })
@@ -106,18 +118,18 @@ public sealed class LearnerAttemptHistoryService(LearnerDbContext db) : ILearner
 
         foreach (var row in generic)
         {
-            var subtest = row.SubtestCode.ToLowerInvariant();
+            var subtestCode = row.SubtestCode.ToLowerInvariant();
             items.Add(new LearnerAttemptHistoryItem(
                 row.Id,
-                subtest,
+                subtestCode,
                 contentTitles.TryGetValue(row.ContentId, out var title) ? title : row.ContentId,
                 row.ContentId,
                 row.StartedAt,
                 row.SubmittedAt,
                 MapGenericState(row.State),
-                ResolveBalanceSource(debitRefs, subtest, row.ContentId),
-                CountDebitedCredits(debitRefs, subtest, row.ContentId),
-                RouteFor(subtest, row.ContentId, row.Id)));
+                ResolveBalanceSource(debitRefs, subtestCode, row.ContentId),
+                CountDebitedCredits(debitRefs, subtestCode, row.ContentId),
+                RouteFor(subtestCode, row.ContentId, row.Id)));
         }
 
         foreach (var row in readingAttempts)

@@ -331,9 +331,15 @@ export interface LearnerAttemptHistoryItem {
   route: string;
 }
 
-/** Unified all-four-subtest activity history (Master Catalogue §2). */
-export async function fetchMyAttemptHistory(limit = 100): Promise<LearnerAttemptHistoryItem[]> {
-  const data = await apiRequest<ApiRecord>(`/v1/me/attempts?limit=${limit}`);
+/**
+ * Unified all-four-subtest activity history (Master Catalogue §2). Passing
+ * `subtest` pushes the filter server-side (see brief item 5) so "Writing
+ * only, limit 100" returns the 100 most recent WRITING attempts rather than
+ * the 100 most recent attempts of any subtest filtered down afterwards.
+ */
+export async function fetchMyAttemptHistory(limit = 100, subtest?: string): Promise<LearnerAttemptHistoryItem[]> {
+  const subtestParam = subtest ? `&subtest=${encodeURIComponent(subtest)}` : '';
+  const data = await apiRequest<ApiRecord>(`/v1/me/attempts?limit=${limit}${subtestParam}`);
   return asArray((data as ApiRecord).items).map((item) => ({
     attemptId: String(item.attemptId ?? ''),
     subtest: String(item.subtest ?? ''),
