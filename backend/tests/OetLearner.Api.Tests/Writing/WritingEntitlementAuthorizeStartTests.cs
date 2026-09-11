@@ -15,13 +15,16 @@ namespace OetLearner.Api.Tests.Writing;
 /// Writing Rule Enforcement Addendum Rev5 (10 Sep 2026), §12 + §14 mandatory
 /// regression/acceptance tests for the "Practice this" gate.
 ///
-/// <see cref="WritingEntitlementService.AuthorizeStartAsync"/> is the single
-/// canonical entitlement DECISION-and-CHARGE call now shared by the
-/// GET /v1/writing/scenarios/{id}/eligibility endpoint and
-/// <c>LearnerService.CreateWritingAttemptAsync</c> — replacing the direct
+/// <see cref="WritingEntitlementService.AuthorizeStartAsync"/> is the
+/// canonical entitlement DECISION-and-CHARGE call now used by the
+/// GET /v1/writing/scenarios/{id}/eligibility endpoint — the live
+/// writing-v2 "Practice this" gate — replacing the direct
 /// <c>AiPackageCreditService.DeductGradingCreditAsync</c> bypass that had no
 /// free-tier fallback and could block a learner the Dashboard showed as
-/// Allowed/Unlimited.
+/// Allowed/Unlimited. (The legacy Writing-Tasks content-item flow,
+/// <c>LearnerService.CreateWritingAttemptAsync</c>, was deliberately left on
+/// its original gate — confirmed unreachable from any current frontend page
+/// — see LearnerService.cs for why.)
 ///
 /// Uses the REAL <see cref="AiPackageCreditService"/> (via
 /// <see cref="AiPackageCreditService.GrantPackageAsync"/>, mirroring
