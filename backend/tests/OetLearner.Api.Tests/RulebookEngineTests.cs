@@ -426,18 +426,46 @@ Doctor";
     // ("urgent_referral") every urgent-specific detector compares against —
     // so the entire urgent battery silently no-op'd for any task passed
     // straight through with its raw catalogue code, exactly as
-    // WritingTaskModelAnswerService did. Confirmed clean/candidate-visible
-    // in production with a missing "at your earliest convenience" closure
-    // and a repeated "urgently" outside the introduction. Fixed by
-    // normalising LetterType once, inside Lint() itself, via
-    // WritingLetterTypeTaxonomy.ToLegacyLetterType.
+    // WritingTaskModelAnswerService did. Fixed by normalising LetterType
+    // once, inside Lint() itself, via WritingLetterTypeTaxonomy.ToLegacyLetterType.
+    //
+    // This case (default/candidate mode, no closing urgency wording at all)
+    // still proves the battery is active for the raw "LT-UR" code.
+    // urgent_token_not_repeated is candidate-mode inert (see the §3
+    // Model-vs-Candidate tests below) so it is intentionally not asserted here.
     [Fact]
     public void UrgentBattery_Fires_When_LetterType_Is_The_Raw_LTUR_Catalogue_Code()
     {
-        var text = "Dear Dr Still,\nRe: Mr David Taylor, aged 55\nI am writing to refer Mr David Taylor for urgent rheumatological assessment of an acute gout flare.\n\nHe presented on today's visit with severe pain.\n\nI would be grateful if you could urgently assess Mr Taylor's gout.\n\nYours sincerely,\nDoctor";
+        var text = "Dear Dr Still,\nRe: Mr David Taylor, aged 55\nI am writing to refer Mr David Taylor for urgent rheumatological assessment of an acute gout flare.\n\nHe presented on today's visit with severe pain.\n\nI would be grateful if you could assess Mr Taylor's gout.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "LT-UR"));
         Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_closure_phrase");
+    }
+
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+    // 2026, §3 "Urgent closure"): the Model Answer generator/validator MAY
+    // require the exact "at your earliest convenience" phrase and MAY
+    // penalise repeating "urgent" outside the introduction.
+    [Fact]
+    public void ModelAnswer_UrgentClosure_Still_Requires_Exact_Phrase_And_Forbids_Repeated_Urgent()
+    {
+        var text = "Dear Dr Still,\nRe: Mr David Taylor, aged 55\nI am writing to refer Mr David Taylor for urgent rheumatological assessment of an acute gout flare.\n\nHe presented on today's visit with severe pain.\n\nI would be grateful if you could urgently assess Mr Taylor's gout.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral", IsModelAnswer: true));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_closure_phrase");
         Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_token_not_repeated");
+    }
+
+    // Owner clarification (same addendum, §3): this SUPERSEDES the prior
+    // candidate-facing hard penalty for repeating "urgent"/"urgently" — the
+    // candidate grader must accept any clear, professional closure that
+    // communicates the urgent requested action, without the exact phrase.
+    [Fact]
+    public void Candidate_UrgentClosure_Accepts_Urgently_And_Does_Not_Penalise_Repetition()
+    {
+        var text = "Dear Dr Still,\nRe: Mr David Taylor, aged 55\nI am writing to refer Mr David Taylor for urgent rheumatological assessment of an acute gout flare.\n\nHe presented on today's visit with severe pain.\n\nI would be grateful if you could urgently assess Mr Taylor's gout.\n\nYours sincerely,\nDoctor";
+        // Default IsModelAnswer is false — this is the candidate grader path.
+        var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.urgent_closure_phrase");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.urgent_token_not_repeated");
     }
 
     // Owner clarification (same addendum, §2 "Blank line after Re: line"):
@@ -1080,6 +1108,67 @@ Doctor";
         var text = "Dr A\n\n01/01/2026\n\nDear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.year_not_abbreviated");
+    }
+
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+    // 2026, §4 "No brackets/placeholders"): round/square/curly brackets are
+    // all zero-tolerance. Curly braces were a genuine gap in the original
+    // pattern (round/square only) — a template placeholder like "{Surname}"
+    // slipped past undetected.
+    [Theory]
+    [InlineData("Yours sincerely,\n\n(Doctor)")]
+    [InlineData("Re: [Surname]\n\nIntro.\n\nBody.")]
+    [InlineData("Re: Ms A\n\nIntro.\n\n{Surname} was seen today.")]
+    public void NoBrackets_Fires_On_Round_Square_Or_Curly_Brackets(string fragment)
+    {
+        var text = $"Dear Dr Smith,\n{fragment}\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.no_brackets_in_letter");
+    }
+
+    [Fact]
+    public void NoBrackets_Passes_On_Letter_With_No_Bracket_Characters()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nIntro.\n\nBody.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.no_brackets_in_letter");
+    }
+
+    // Owner clarification (same addendum, §2 "General number style"):
+    // descriptive numbers as words, digits only for age/dates/vitals/labs/
+    // doses/measurements. Deterministic detection cannot reliably classify
+    // "descriptive" vs "clinical" numeric context (see DetectNumberStyle's
+    // own comment) so this stays an intentional no-op — this test locks
+    // that it never fires, rather than silently regressing into false
+    // positives on ordinary descriptive numbers.
+    [Fact]
+    public void NumberStyle_Is_A_Deliberate_NoOp_Even_With_Mixed_Descriptive_And_Clinical_Numbers()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A, aged 45\n\nIntro.\n\nShe has 3 children and her blood pressure was 150/90 mmHg.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.number_style_words_vs_digits");
+    }
+
+    // Owner clarification (same addendum, §10 "Minimal-today urgent
+    // override"): even if today's visit has very little information, urgent
+    // referrals must STILL keep today/current presentation as the first
+    // separate body paragraph — this supersedes any old "skip today if
+    // minimal" exception. A one-line today paragraph must still satisfy the
+    // check; it must never be dropped for being short.
+    [Fact]
+    public void UrgentBodyStartsToday_Passes_Even_When_Todays_Visit_Paragraph_Is_Minimal()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to urgently refer Ms A for assessment.\n\nShe presented today.\n\nHer history dates back to a visit five years ago for the same complaint.\n\nI would be grateful if you could see her as soon as possible.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral"));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.urgent_body_starts_today");
+    }
+
+    [Fact]
+    public void UrgentBodyStartsToday_Fires_When_Today_Paragraph_Is_Skipped_Even_Though_Minimal()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to urgently refer Ms A for assessment.\n\nHer history dates back to a visit five years ago for the same complaint.\n\nI would be grateful if you could see her as soon as possible.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "urgent_referral"));
+        Assert.Contains(findings, f => f.RuleId == "BUILTIN.urgent_body_starts_today");
     }
 }
 

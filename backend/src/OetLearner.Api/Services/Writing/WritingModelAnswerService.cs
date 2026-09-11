@@ -227,7 +227,8 @@ public sealed class WritingModelAnswerService(
             var lintFindings = ruleEngine.Lint(new WritingLintInput(
                 LetterText: parsed.ModelAnswerText,
                 LetterType: report.LetterType,
-                Profession: profession));
+                Profession: profession,
+                IsModelAnswer: true));
             var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
             if (criticalFindings.Count > 0)
             {

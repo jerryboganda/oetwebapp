@@ -875,17 +875,46 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+    // 2026, §3 "Urgent closure"): accepted for a CANDIDATE closure — any
+    // clear, professional wording that communicates the urgent requested
+    // action, not only the exact Model Answer phrase.
+    private static readonly Regex CandidateUrgentClosurePhraseRe = new(
+        @"at your earliest convenience|as soon as possible|urgently|without delay|at the earliest opportunity|immediate(?:ly)?\s+(?:review|assessment|attention)",
+        RegexOptions.IgnoreCase);
+
     private static IEnumerable<LintFinding> DetectUrgentClosure(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!string.Equals(input.LetterType, "urgent_referral", StringComparison.OrdinalIgnoreCase)) yield break;
-        if (!Regex.IsMatch(input.LetterText, @"at your earliest convenience", RegexOptions.IgnoreCase))
+        if (input.IsModelAnswer)
+        {
+            // Model Answer generator/validator: MAY require the exact phrase.
+            if (!Regex.IsMatch(input.LetterText, @"at your earliest convenience", RegexOptions.IgnoreCase))
+                yield return new LintFinding(rule.Id, rule.Severity,
+                    "Urgent closure must include 'at your earliest convenience.'");
+            yield break;
+        }
+        // Candidate grader: do NOT require the exact phrase — accept any
+        // clear, professional closure that communicates the urgent
+        // requested action (this supersedes the old candidate-facing hard
+        // requirement for the exact wording). Checked against the CLOSURE
+        // paragraph only (not the whole letter) — an "urgently" used only in
+        // the introduction does not make the closure itself urgent.
+        var closure = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[^1] : input.LetterText;
+        if (!CandidateUrgentClosurePhraseRe.IsMatch(closure))
             yield return new LintFinding(rule.Id, rule.Severity,
-                "Urgent closure must include 'at your earliest convenience.'");
+                "Urgent referral closure must clearly request urgent action (e.g. 'at your earliest convenience', 'as soon as possible', or similar professional urgency wording).");
     }
 
     private static IEnumerable<LintFinding> DetectUrgentTokenNotRepeated(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!string.Equals(input.LetterType, "urgent_referral", StringComparison.OrdinalIgnoreCase)) yield break;
+        // Owner clarification (same addendum, §3): a CANDIDATE must never be
+        // penalised for repeating "urgent"/"urgently" in a professional
+        // closure — this supersedes the prior candidate-facing hard penalty.
+        // Only the Model Answer generator/validator still enforces
+        // "urgent only in the introduction".
+        if (!input.IsModelAnswer) yield break;
         var bodyLessIntro = string.Join("\n\n", s.BodyParagraphs.Skip(1));
         var count = Regex.Matches(bodyLessIntro, @"\burgent", RegexOptions.IgnoreCase).Count;
         if (count > 0)
@@ -1377,12 +1406,16 @@ public sealed class WritingRuleEngine(IRulebookLoader loader)
     // for every profession/letter-type without any rulebook-JSON change.
     // ---------------------------------------------------------------------
 
-    // §1 — no round/square brackets or placeholder brackets anywhere in the
-    // final letter (e.g. "[Name]", "(Medical Practitioner)"). Zero tolerance.
+    // §1 — no round/square/curly brackets or placeholder brackets anywhere in
+    // the final letter (e.g. "[Name]", "(Medical Practitioner)", "{Surname}").
+    // Zero tolerance. Owner clarification (Writing Rule Enforcement Addendum
+    // Rev5, 10 Sep 2026, §4): curly braces were missing from the original
+    // round/square-only pattern — a genuine gap, since a template
+    // placeholder like "{Surname}" slipped past undetected.
     private static IEnumerable<LintFinding> DetectNoBrackets(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var count = 0;
-        foreach (Match m in Regex.Matches(input.LetterText, @"[()\[\]]"))
+        foreach (Match m in Regex.Matches(input.LetterText, @"[()\[\]{}]"))
         {
             var start = Math.Max(0, m.Index - 20);
             var end = Math.Min(input.LetterText.Length, m.Index + 20);

@@ -67,4 +67,22 @@ public sealed class WritingAssessmentV11RuleEngineTests
 
         Assert.Contains(findings, x => x.RuleId == "R06.11");
     }
+
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+    // 2026, §8 "Patient reference/naming"): first mention in each body
+    // paragraph must use the correct name form (title+surname for an
+    // adult); later mentions in the same paragraph may use a pronoun.
+    [Fact]
+    public void Adult_paragraph_passes_when_first_mention_uses_title_and_later_mentions_use_pronoun()
+    {
+        var engine = new WritingAssessmentV11RuleEngine(new WritingRuleEngine(new RulebookLoader()));
+        var findings = engine.Evaluate(
+            new WritingLintInput(
+                "Re: Mr Smith\n\nMr Smith is stable. He reports no further pain and he is keen to return to work.",
+                "routine_referral",
+                PatientAge: 45),
+            "Patient: John Smith\nAge: 45\nDiagnosis: asthma.");
+
+        Assert.DoesNotContain(findings, x => x.RuleId == "R06.11");
+    }
 }

@@ -281,7 +281,8 @@ public sealed class WritingTaskModelAnswerService(
             var lintFindings = ruleEngine.Lint(new WritingLintInput(
                 LetterText: parsed.ModelAnswerText,
                 LetterType: scenario.LetterType,
-                Profession: profession));
+                Profession: profession,
+                IsModelAnswer: true));
             var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
             if (criticalFindings.Count > 0)
             {
@@ -366,7 +367,8 @@ public sealed class WritingTaskModelAnswerService(
         var lintFindings = ruleEngine.Lint(new WritingLintInput(
             LetterText: trimmedLetter,
             LetterType: scenario.LetterType,
-            Profession: profession));
+            Profession: profession,
+            IsModelAnswer: true));
         var criticalFindings = lintFindings.Where(f => f.Severity == RuleSeverity.Critical).ToList();
         if (criticalFindings.Count > 0)
         {

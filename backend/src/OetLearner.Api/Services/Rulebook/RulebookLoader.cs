@@ -346,7 +346,15 @@ public sealed record WritingLintInput(
     int? PatientAge = null,
     bool PatientIsMinor = false,
     WritingCaseNotesMarkers? CaseNotesMarkers = null,
-    ExamProfession Profession = ExamProfession.Medicine);
+    ExamProfession Profession = ExamProfession.Medicine,
+    // Owner clarification (Writing Rule Enforcement Addendum Rev5, 10 Sep
+    // 2026, §3 "Urgent closure"): the Model Answer generator/validator MAY
+    // require the exact "at your earliest convenience" phrase and MAY
+    // penalise repeating "urgent" outside the introduction; the CANDIDATE
+    // grader must NOT. Default false (candidate/grader) since every existing
+    // candidate-facing caller (coach, submission grading, lint endpoint)
+    // omits this; only the Model Answer generation paths pass true.
+    bool IsModelAnswer = false);
 
 public sealed record WritingCaseNotesMarkers(
     bool SmokingMentioned = false,
