@@ -779,7 +779,9 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         @"\b(hence|furthermore|moreover)\b|,\s*(but|so)\s+(?!that\b|as\b|far\b|much\b|many\b|long\b)|\s(but)\s+(?=(?:I|he|she|they|it|we|his|her|their|the|this|there|[A-Z][a-z]+\s+(?:was|is|has|had|were|are))\b)",
         RegexOptions.IgnoreCase);
 
-    private static readonly Regex AlsoRe = new(@"\balso\b", RegexOptions.IgnoreCase);
+    // "also known as" names a drug/condition (OWN-W-005 example "dalteparin,
+    // also known as Fragmin,"), it is not a linking device.
+    private static readonly Regex AlsoRe = new(@"\balso\b(?!\s+known\s+as\b)", RegexOptions.IgnoreCase);
 
     private static IEnumerable<LintFinding> DetectLinkerAvoidWords(OetRule rule, WritingLintInput input, LetterStructure s)
     {

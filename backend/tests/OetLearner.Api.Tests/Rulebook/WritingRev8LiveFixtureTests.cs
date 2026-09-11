@@ -177,8 +177,12 @@ Doctor
             "register_colloquial",                 // "tired", "sluggish", "MRI imaging"
             "value_unit_spacing",                  // "6.37mmol/L"
             "closure_contact_offer",
-            "linker_avoid_words",                  // "also known as"
             "signoff_designation_present");        // no blank line before the designation
+        // "also known as Zoloft" is NOT a linker violation: OWN-W-005's own
+        // good example ("dalteparin, also known as Fragmin,") is exactly this
+        // construction — the owner-endorsed way to name a trade name without
+        // brackets. linker_avoid_words correctly does not fire on it.
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_avoid_words");
     }
 
     private const string WeirCorrected = """
