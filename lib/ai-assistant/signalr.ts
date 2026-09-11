@@ -100,6 +100,17 @@ export async function createAssistantConnection(
     )
     .build();
 
+  // A long-running admin turn against a large codebase can go quiet for a
+  // while (a slow tool call, a long single LLM generation) with nothing to
+  // send but the server's own keepalive ping. The client library's default
+  // serverTimeoutInMilliseconds is tuned for a chatty connection, not this --
+  // set it generously so a stretch of legitimate silence is never mistaken
+  // for a dead server and torn down mid-turn. Comfortably above the server's
+  // own KeepAliveInterval (see AddSignalR in Program.cs) so a couple of
+  // missed/delayed pings under a flaky network don't trip it either.
+  connection.serverTimeoutInMilliseconds = 120_000;
+  connection.keepAliveIntervalInMilliseconds = 15_000;
+
   // Wire up lifecycle callbacks
   if (options?.onReconnecting) {
     connection.onreconnecting(options.onReconnecting);

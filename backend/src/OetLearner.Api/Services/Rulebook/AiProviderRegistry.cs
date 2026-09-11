@@ -79,7 +79,13 @@ public sealed class RegistryBackedProvider(
 {
     public string Name => "registry";
 
-    private static readonly TimeSpan StandardProviderTimeout = TimeSpan.FromSeconds(100);
+    // 100s was too short for a genuinely long single generation (a large code
+    // dump, deep multi-step reasoning) -- it fails the whole ReAct turn with a
+    // generic "error communicating with the AI service" mid-way through what
+    // looks to the learner/admin like a long-running task hanging. 300s gives
+    // real headroom without being unbounded; still comfortably under the
+    // reverse-proxy layers' own read/send timeouts (raised alongside this).
+    private static readonly TimeSpan StandardProviderTimeout = TimeSpan.FromSeconds(300);
 
     private static readonly TimeSpan UbagFacadeTimeout = TimeSpan.FromSeconds(300);
 

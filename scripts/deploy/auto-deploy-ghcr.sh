@@ -38,6 +38,14 @@ if [ -n "${NGINX_TEMPLATE_SRC:-}" ] && [ -f "$NGINX_TEMPLATE_SRC" ]; then
   mkdir -p "$APP_DIR/scripts/deploy/nginx"
   cp -f "$NGINX_TEMPLATE_SRC" "$APP_DIR/scripts/deploy/nginx/web-bluegreen.conf.template"
 fi
+# The API router (docker-compose.production.yml's learner-api service) bind-mounts
+# this same directory's api-bluegreen.conf.template. It was never synced here (only
+# the web template was), so an edit to it in the repo silently never reached
+# production -- the file on the VPS was whatever had been placed there once, by hand.
+if [ -n "${NGINX_API_TEMPLATE_SRC:-}" ] && [ -f "$NGINX_API_TEMPLATE_SRC" ]; then
+  mkdir -p "$APP_DIR/scripts/deploy/nginx"
+  cp -f "$NGINX_API_TEMPLATE_SRC" "$APP_DIR/scripts/deploy/nginx/api-bluegreen.conf.template"
+fi
 if [ "$COMPOSE_FILE" != "$APP_DIR/docker-compose.production.yml" ] && [ -f "$COMPOSE_FILE" ]; then
   cp -f "$COMPOSE_FILE" "$APP_DIR/docker-compose.production.yml"
 fi

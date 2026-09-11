@@ -794,7 +794,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         => new(
             GlobalEnabled: r.AiAssistantGlobalEnabled ?? env.GlobalEnabled,
             RequireApprovalAlways: r.AiAssistantRequireApprovalAlways ?? env.RequireApprovalAlways,
-            MaxIterations: PositiveOrDefault(r.AiAssistantMaxIterations, env.MaxIterations, 10),
+            MaxIterations: PositiveOrDefault(r.AiAssistantMaxIterations, env.MaxIterations, 25),
             MaxContextMessages: PositiveOrDefault(r.AiAssistantMaxContextMessages, env.MaxContextMessages, 50),
             BackupRetentionDays: PositiveOrDefault(r.AiAssistantBackupRetentionDays, env.BackupRetentionDays, 30),
             MaxWriteFileSizeBytes: PositiveLongOrDefault(r.AiAssistantMaxWriteFileSizeBytes, env.MaxWriteFileSizeBytes, 1_048_576),

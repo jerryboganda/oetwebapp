@@ -91,7 +91,14 @@ server {
         proxy_set_header X-Forwarded-Proto $public_forwarded_proto;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection $connection_upgrade;
-        proxy_read_timeout 300s;
-        proxy_send_timeout 300s;
+        # 300s was tighter than the outer NPM host's own timeout (raised to
+        # 1800s alongside this): a long, tool-heavy AI Assistant turn against
+        # a large codebase can legitimately run well past 5 minutes, and this
+        # router sits in the path for that traffic (proxies to the Next.js
+        # container, which in turn proxies the SignalR hub through to the API
+        # router below). Matched to the outer timeout so this hop is never
+        # the one that silently cuts a long turn off.
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
     }
 }

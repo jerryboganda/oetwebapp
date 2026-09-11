@@ -101,4 +101,57 @@ describe('AiAssistantMessages', () => {
 
     expect(screen.getByTestId('tool-call-card')).toHaveTextContent('Tool: unknown');
   });
+
+  // A long tool-heavy turn (e.g. a large-codebase admin task) can spend whole
+  // minutes with no text streamed at all. Without a visible "still working"
+  // signal during that gap, the screen looks indistinguishable from frozen.
+  it('shows a thinking indicator while streaming with no text yet', () => {
+    render(<AiAssistantMessages messages={[]} streamingContent="" streamingStatus="thinking" />);
+
+    expect(screen.getByTestId('thinking-indicator')).toBeInTheDocument();
+    expect(screen.queryByTestId('streaming-cursor')).not.toBeInTheDocument();
+  });
+
+  it('shows an in-progress card for a tool call still running', () => {
+    render(
+      <AiAssistantMessages
+        messages={[]}
+        streamingContent=""
+        streamingStatus="tool-calling"
+        activeToolCalls={[{ id: 'tc-1', toolName: 'search_codebase', arguments: '{}' }]}
+      />,
+    );
+
+    expect(screen.getByTestId('active-tool-calls')).toBeInTheDocument();
+    expect(screen.getByText(/Running: search_codebase/)).toBeInTheDocument();
+    // Tool-calling has its own per-call indicator; showing "Thinking…" too
+    // on top of it would be redundant noise on the same empty-content gap.
+    expect(screen.queryByTestId('thinking-indicator')).not.toBeInTheDocument();
+  });
+
+  it('shows a finished tool call once its result arrives', () => {
+    render(
+      <AiAssistantMessages
+        messages={[]}
+        streamingContent=""
+        streamingStatus="tool-calling"
+        activeToolCalls={[{ id: 'tc-1', toolName: 'search_codebase', arguments: '{}', result: '{"matches":3}' }]}
+      />,
+    );
+
+    expect(screen.getByText(/Ran: search_codebase/)).toBeInTheDocument();
+  });
+
+  it('marks a failed tool call distinctly', () => {
+    render(
+      <AiAssistantMessages
+        messages={[]}
+        streamingContent=""
+        streamingStatus="tool-calling"
+        activeToolCalls={[{ id: 'tc-1', toolName: 'write_file', arguments: '{}', result: '{}', isError: true }]}
+      />,
+    );
+
+    expect(screen.getByText(/Failed: write_file/)).toBeInTheDocument();
+  });
 });

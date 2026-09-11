@@ -15,8 +15,13 @@ public sealed class AiAssistantOptions
     /// before being applied. Defaults to true for safety.</summary>
     public bool RequireApprovalAlways { get; set; } = true;
 
-    /// <summary>Maximum ReAct loop iterations before forcing a response.</summary>
-    public int MaxIterations { get; set; } = 10;
+    /// <summary>Maximum ReAct loop iterations before forcing a response. 10 was
+    /// too low for a genuinely large-codebase admin task (each iteration is
+    /// one tool-call round-trip) -- exhausting it used to end the turn
+    /// silently with an empty answer, which looked exactly like the
+    /// assistant hanging. Still admin-configurable up to 1000 via Runtime
+    /// Settings; this is just a more realistic out-of-the-box default.</summary>
+    public int MaxIterations { get; set; } = 25;
 
     /// <summary>Maximum messages to include in context window.</summary>
     public int MaxContextMessages { get; set; } = 50;

@@ -1,13 +1,23 @@
 'use client';
 
 import { MarkdownContent } from '@/components/ui/markdown-content';
-import type { AiMessage, MessageCitation } from '@/lib/ai-assistant/types';
+import type { AiMessage, MessageCitation, StreamingStatus, ToolCallInfo } from '@/lib/ai-assistant/types';
 
 export interface AiAssistantMessagesProps {
   messages: AiMessage[];
   streamingContent?: string;
   /** Sources for the turn currently streaming. */
   streamingCitations?: MessageCitation[];
+  /**
+   * Live turn phase. A long admin task against a large codebase can spend
+   * whole minutes "thinking" or running one tool before any text streams —
+   * without this, that gap renders as nothing changing at all, which reads
+   * exactly like the assistant has frozen. Optional so the empty-state and
+   * plain-text-streaming test fixtures upstream keep working unchanged.
+   */
+  streamingStatus?: StreamingStatus;
+  /** Tool calls for the turn currently streaming, most recent last. */
+  activeToolCalls?: ToolCallInfo[];
 }
 
 /**
@@ -29,6 +39,8 @@ export function AiAssistantMessages({
   messages,
   streamingContent,
   streamingCitations,
+  streamingStatus,
+  activeToolCalls,
 }: AiAssistantMessagesProps) {
   const isStreaming = streamingContent !== undefined;
 
@@ -45,14 +57,67 @@ export function AiAssistantMessages({
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} />
       ))}
+      {isStreaming && activeToolCalls && activeToolCalls.length > 0 && (
+        <div className="space-y-2" data-testid="active-tool-calls">
+          {activeToolCalls.map((tc) => (
+            <ActiveToolCallCard key={tc.id} toolCall={tc} />
+          ))}
+        </div>
+      )}
       {streamingContent !== undefined && (
         <div className="rounded-lg bg-background-light p-3" data-testid="streaming-message">
-          <MarkdownContent markdown={streamingContent} className="prose prose-sm max-w-none" />
-          <span className="inline-block h-4 w-1 animate-pulse bg-primary" data-testid="streaming-cursor" />
+          {streamingContent === '' && streamingStatus !== 'tool-calling' ? (
+            <span className="flex items-center gap-2 text-sm text-muted" data-testid="thinking-indicator">
+              <ThinkingDots /> Thinking…
+            </span>
+          ) : (
+            <>
+              <MarkdownContent markdown={streamingContent} className="prose prose-sm max-w-none" />
+              <span className="inline-block h-4 w-1 animate-pulse bg-primary" data-testid="streaming-cursor" />
+            </>
+          )}
           <CitationList citations={streamingCitations} />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A tool call still in flight (or just finished) for the turn currently
+ * streaming. This is the only thing standing between a long tool run (e.g.
+ * search_codebase over a large repo) and a screen that looks identical to a
+ * frozen one for however long that tool takes.
+ */
+function ActiveToolCallCard({ toolCall }: { toolCall: ToolCallInfo }) {
+  const done = toolCall.result !== undefined;
+  return (
+    <div
+      className="rounded-lg border border-border bg-background-light p-3"
+      data-testid="active-tool-call-card"
+    >
+      <div className="flex items-center gap-2 text-xs font-medium text-muted">
+        {!done && <ThinkingDots />}
+        <span>
+          {done
+            ? `${toolCall.isError ? 'Failed' : 'Ran'}: ${toolCall.toolName}`
+            : `Running: ${toolCall.toolName}…`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/** Three-dot pulse — a cheap, unambiguous "still working" signal that reads
+ * as different from the idle empty state at a glance, not just on close
+ * inspection of a static cursor. */
+function ThinkingDots() {
+  return (
+    <span className="inline-flex gap-0.5" data-testid="thinking-dots" aria-hidden="true">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted [animation-delay:0ms]" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted [animation-delay:150ms]" />
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted [animation-delay:300ms]" />
+    </span>
   );
 }
 

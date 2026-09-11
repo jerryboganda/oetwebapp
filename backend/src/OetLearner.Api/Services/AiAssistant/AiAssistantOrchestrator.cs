@@ -178,6 +178,7 @@ public sealed class AiAssistantOrchestrator(
             // ReAct loop
             var fullResponse = new StringBuilder();
             string? finalMessageId = null;
+            var iterationsExhausted = true;
 
             for (int iteration = 0; iteration < maxReActIterations; iteration++)
             {
@@ -247,6 +248,7 @@ public sealed class AiAssistantOrchestrator(
                     };
                     db.AiAssistantMessages.Add(assistantMsg);
                     finalMessageId = assistantMsg.Id;
+                    iterationsExhausted = false;
                     break;
                 }
 
@@ -294,6 +296,35 @@ public sealed class AiAssistantOrchestrator(
                     db.AiAssistantMessages.Add(toolResultMsg);
                     history.Add(toolResultMsg);
                 }
+            }
+
+            // The loop above exits via `break` (a real final answer) or by
+            // running out of iterations while the model was still mid tool
+            // call. Falling through silently used to yield a completion event
+            // with empty/near-empty content and no stored message -- from the
+            // learner's side that looks exactly like the assistant hanging
+            // forever on a long, tool-heavy turn (a large-codebase admin task
+            // easily exhausts a low iteration cap). Make the exhaustion itself
+            // a real, persisted answer instead of a silent no-op.
+            if (iterationsExhausted)
+            {
+                var note = fullResponse.Length > 0
+                    ? $"{fullResponse}\n\n[This turn used all {maxReActIterations} tool-call steps available and stopped there. Ask me to continue and I'll pick up where I left off.]"
+                    : $"I used all {maxReActIterations} tool-call steps available for this turn without finishing. Ask me to continue and I'll pick up where I left off.";
+                fullResponse.Clear();
+                fullResponse.Append(note);
+
+                var exhaustedMsg = new AiAssistantMessage
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    ThreadId = threadId,
+                    Role = "assistant",
+                    Content = note,
+                    CitationsJson = citations.Count > 0 ? JsonSerializer.Serialize(citations) : null,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                };
+                db.AiAssistantMessages.Add(exhaustedMsg);
+                finalMessageId = exhaustedMsg.Id;
             }
 
             // Update thread timestamp and auto-title

@@ -266,7 +266,7 @@ services:
     restart: unless-stopped
     # Every deploy force-recreates this router (auto-deploy-ghcr.sh/rollout-release.sh
     # run `up -d --force-recreate`), and it proxies long-lived SignalR long-polling/WS
-    # connections (see api-bluegreen.conf.template's WS-upgrade + 300s timeouts). nginx
+    # connections (see api-bluegreen.conf.template's WS-upgrade + 1800s timeouts). nginx
     # sends a graceful SIGQUIT on stop, but Docker's ~10s default grace window is too
     # short to let in-flight long-polling requests complete before SIGKILL severs them
     # with no application-level close signal. 30s gives nginx's graceful shutdown a
