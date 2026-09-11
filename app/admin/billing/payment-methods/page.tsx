@@ -214,7 +214,7 @@ export default function AdminPaymentMethodsPage() {
   return (
     <AdminTableLayout
       title="Payment methods"
-      description="Manual payment methods shown to learners on the payment page (InstaPay, Vodafone, QNB, Stripe, PayPal, Monzo)."
+      description="Manual payment methods shown to learners on the payment page (InstaPay, Vodafone, QNB, Whop, Fawaterak, HSBC/Lloyds/Barclays)."
       breadcrumbs={[
         { label: 'Admin', href: '/admin' },
         { label: 'Billing', href: '/admin/billing' },
