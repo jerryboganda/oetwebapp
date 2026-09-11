@@ -1,5 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using OetLearner.Api.Services.Billing;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Writing;
 
 namespace OetLearner.Api.Endpoints;
@@ -60,22 +60,33 @@ public static class WritingScenarioEndpoints
 
         // Gate for AI-graded practice/paper sessions (NOT mock sessions —
         // mocks never touch the AI grading credit pool, see WritingMockService).
-        // Debit happens once at session start, idempotent on the scenario id,
-        // so a refresh cannot charge again. Submit must not debit.
+        // Routes through WritingEntitlementService.AuthorizeStartAsync — the
+        // SAME canonical entitlement decision as GET /v1/writing/entitlement
+        // (Dashboard) and Submit-for-Grading — instead of calling
+        // AiPackageCreditService directly, so a learner whose valid entitlement
+        // comes from the free-tier window (not an AI package/subscription) is
+        // never blocked here while every other surface shows them as allowed
+        // (Writing Rule Enforcement Addendum Rev5, 10 Sep 2026, §12). Debit
+        // (when one applies) happens once at session start, idempotent on the
+        // scenario id, so a refresh cannot charge again. Submit must not debit.
         group.MapGet("/{id:guid}/eligibility", async (
             Guid id,
             HttpContext http,
-            IAiPackageCreditService aiPackageCreditService,
+            IWritingEntitlementService writingEntitlement,
             CancellationToken ct) =>
         {
             var userId = http.WritingV2UserId();
-            var result = await aiPackageCreditService.DeductGradingCreditAsync(
+            var result = await writingEntitlement.AuthorizeStartAsync(
                 userId,
-                "writing",
                 $"writing-v2:{userId}:{id:D}",
-                AiGradingCreditCost.WritingExam,
+                id.ToString("D"),
                 ct);
-            result.EnsureDebited();
+            if (!result.Allowed)
+            {
+                throw ApiException.PaymentRequired(
+                    result.ErrorCode ?? "no_ai_package_credits",
+                    result.ErrorMessage ?? "You do not have enough credits to start this activity. Please purchase another package or upgrade your plan.");
+            }
             return Results.Ok(new { feedbackMessage = result.FeedbackMessage });
         })
         .WithName("CheckWritingScenarioEligibility");
