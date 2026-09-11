@@ -142,6 +142,23 @@ public sealed class WritingEntitlementService(
             Reason: $"{remaining} of {opts.FreeTierLimit} free writing attempts remaining this window.");
     }
 
+    public async Task<string> BuildScenarioStartReferenceIdAsync(string? userId, Guid scenarioId, CancellationToken ct)
+    {
+        // Terminal = Graded: a submission stuck in queued/preflight/grading/
+        // failed is still the SAME resumable attempt (RetryGradeAsync resumes
+        // it without a new charge), so it must not advance the count. Mock
+        // submissions never touch this credit pool (WritingMockService bills
+        // its own mock allowance), so they are excluded too.
+        var completedCount = string.IsNullOrWhiteSpace(userId)
+            ? 0
+            : await db.WritingSubmissions.AsNoTracking()
+                .CountAsync(s => s.UserId == userId
+                    && s.ScenarioId == scenarioId
+                    && s.Mode != "mock"
+                    && s.Status == WritingSubmissionStatuses.Graded, ct);
+        return $"writing-v2:{userId}:{scenarioId:D}:{completedCount}";
+    }
+
     public async Task<WritingStartAuthorization> AuthorizeStartAsync(string? userId, string referenceId, string? taskId, CancellationToken ct)
     {
         var entitlement = await CheckAsync(userId, ct);

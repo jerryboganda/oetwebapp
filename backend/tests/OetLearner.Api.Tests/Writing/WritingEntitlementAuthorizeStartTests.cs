@@ -222,6 +222,79 @@ public sealed class WritingEntitlementAuthorizeStartTests
         Assert.Empty(db.AiPackageCreditTransactions);
     }
 
+    /// <summary>
+    /// §12.4 regression: "Practice this again" after a completed submission
+    /// is a genuinely new attempt and must charge a NEW finite credit, while
+    /// every retry/refresh/duplicate start before that submission is graded
+    /// must keep resuming the SAME attempt for free. Exercises the real
+    /// <see cref="WritingEntitlementService.BuildScenarioStartReferenceIdAsync"/>
+    /// scheme end to end: (a) first start charges, (b) a pre-grading retry
+    /// recomputes the same reference and does not charge again, (c) the
+    /// attempt's submission is graded, (d) starting again recomputes a new
+    /// reference and charges a genuinely new credit.
+    /// </summary>
+    [Fact]
+    public async Task PracticeThisAgain_AfterGradedSubmission_ChargesASecondNewCredit()
+    {
+        await using var db = NewContext();
+        var (entitlement, credits, _) = BuildServices(db);
+        await credits.GrantPackageAsync(
+            "learner-practice-again",
+            AddOn("pkg_writing_starter", 30, 3, """{"package_type":"writing","writing_only_credits":6}"""),
+            1, "cs_writing_starter_practice_again", null, CancellationToken.None);
+        var scenarioId = Guid.NewGuid();
+
+        // (a) start attempt 1 — charges one credit.
+        var refA = await entitlement.BuildScenarioStartReferenceIdAsync("learner-practice-again", scenarioId, CancellationToken.None);
+        var start1 = await entitlement.AuthorizeStartAsync("learner-practice-again", refA, scenarioId.ToString("D"), CancellationToken.None);
+        Assert.True(start1.Allowed);
+        Assert.True(start1.Charged);
+
+        // (b) retry/refresh BEFORE the submission is graded — same reference, resumes, no second charge.
+        var refB = await entitlement.BuildScenarioStartReferenceIdAsync("learner-practice-again", scenarioId, CancellationToken.None);
+        Assert.Equal(refA, refB);
+        var retry = await entitlement.AuthorizeStartAsync("learner-practice-again", refB, scenarioId.ToString("D"), CancellationToken.None);
+        Assert.True(retry.Allowed);
+        Assert.Single(await db.AiPackageCreditTransactions
+            .Where(t => t.Reason == AiPackageCreditReason.GradingDeduct)
+            .ToListAsync());
+
+        // (c) attempt 1's submission reaches terminal (graded) state.
+        db.WritingSubmissions.Add(new WritingSubmission
+        {
+            Id = Guid.NewGuid(),
+            UserId = "learner-practice-again",
+            ScenarioId = scenarioId,
+            Mode = "practice",
+            LetterContent = "Dear Doctor, ...",
+            LetterContentHash = "hash-attempt-1",
+            Status = WritingSubmissionStatuses.Graded,
+            WordCount = 180,
+            TimeSpentSeconds = 900,
+            StartedAt = DateTimeOffset.UtcNow.AddMinutes(-15),
+            SubmittedAt = DateTimeOffset.UtcNow,
+            InputSource = "editor",
+            CaseNoteHighlightsJson = "{}",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        // (d) "Practice this again" on the same scenario — new reference, new charge, new attempt.
+        var refD = await entitlement.BuildScenarioStartReferenceIdAsync("learner-practice-again", scenarioId, CancellationToken.None);
+        Assert.NotEqual(refA, refD);
+        var again = await entitlement.AuthorizeStartAsync("learner-practice-again", refD, scenarioId.ToString("D"), CancellationToken.None);
+        Assert.True(again.Allowed);
+        Assert.True(again.Charged);
+
+        var deducts = await db.AiPackageCreditTransactions
+            .Where(t => t.Reason == AiPackageCreditReason.GradingDeduct)
+            .ToListAsync();
+        Assert.Equal(2, deducts.Count); // one for attempt 1, one for the new "Practice this again" attempt
+
+        var snapshot = await credits.GetSnapshotAsync("learner-practice-again", 0, CancellationToken.None);
+        Assert.Equal(2, snapshot.WritingOnlyCredits); // 6 - 2 - 2
+    }
+
     [Fact]
     public async Task AllowedStart_PersistsAttemptLevelBillingRecord()
     {

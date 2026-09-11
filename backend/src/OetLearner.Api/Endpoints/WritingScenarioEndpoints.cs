@@ -76,9 +76,14 @@ public static class WritingScenarioEndpoints
             CancellationToken ct) =>
         {
             var userId = http.WritingV2UserId();
+            // §12.4: the reference id must advance once this attempt's
+            // submission is actually graded, so "Practice this again" is
+            // billed as the genuinely new attempt it is — see
+            // BuildScenarioStartReferenceIdAsync.
+            var referenceId = await writingEntitlement.BuildScenarioStartReferenceIdAsync(userId, id, ct);
             var result = await writingEntitlement.AuthorizeStartAsync(
                 userId,
-                $"writing-v2:{userId}:{id:D}",
+                referenceId,
                 id.ToString("D"),
                 ct);
             if (!result.Allowed)

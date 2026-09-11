@@ -125,6 +125,50 @@ public sealed class CreateWritingAttemptEntitlementTests : IAsyncLifetime
         Assert.Equal(1, await _db.AiPackageCreditTransactions.CountAsync(t => t.Reason == AiPackageCreditReason.GradingDeduct));
     }
 
+    /// <summary>
+    /// §12.4 regression for the legacy content-item flow: (a) start attempt 1
+    /// charges one credit; (b) a retry/refresh before the attempt completes
+    /// resumes the SAME attempt and does not charge again (no regression of
+    /// <see cref="DoubleTap_BeforeAttemptExists_ResumesWithoutSecondDeduction"/>);
+    /// (c) attempt 1 reaches <see cref="AttemptState.Completed"/>; (d) starting
+    /// again ("Practice this again") creates a genuinely NEW attempt and
+    /// charges a second, new credit — it must not silently resume/reuse
+    /// attempt 1's already-spent credit transaction.
+    /// </summary>
+    [Fact]
+    public async Task PracticeThisAgain_AfterAttemptCompletes_CreatesNewAttemptAndChargesASecondCredit()
+    {
+        var userId = await SeedLearnerAsync();
+        await GrantFiniteWritingCreditsAsync(userId, activities: 3);
+        var request = new CreateAttemptRequest(ContentId, Context: null, Mode: null, DeviceType: null, ParentAttemptId: null);
+
+        // (a) start attempt 1 — charges one credit.
+        var first = await _learnerService.CreateWritingAttemptAsync(userId, request, CancellationToken.None);
+        var firstAttemptId = ExtractAttemptId(first);
+
+        // (b) retry/refresh BEFORE attempt 1 completes — resumes the same attempt, no second charge.
+        var retry = await _learnerService.CreateWritingAttemptAsync(userId, request, CancellationToken.None);
+        Assert.Equal(firstAttemptId, ExtractAttemptId(retry));
+        Assert.Equal(1, await _db.AiPackageCreditTransactions.CountAsync(t => t.Reason == AiPackageCreditReason.GradingDeduct));
+
+        // (c) attempt 1 reaches its terminal state.
+        var attempt1 = await _db.Attempts.SingleAsync(a => a.Id == firstAttemptId);
+        attempt1.State = AttemptState.Completed;
+        attempt1.CompletedAt = DateTimeOffset.UtcNow;
+        await _db.SaveChangesAsync();
+
+        // (d) "Practice this again" — a genuinely new attempt, charged a second, new credit.
+        var again = await _learnerService.CreateWritingAttemptAsync(userId, request, CancellationToken.None);
+        var secondAttemptId = ExtractAttemptId(again);
+        Assert.NotEqual(firstAttemptId, secondAttemptId);
+
+        Assert.Equal(2, await _db.Attempts.CountAsync(a => a.UserId == userId && a.SubtestCode == "writing"));
+        Assert.Equal(2, await _db.AiPackageCreditTransactions.CountAsync(t => t.Reason == AiPackageCreditReason.GradingDeduct));
+
+        var snapshot = await _credits.GetSnapshotAsync(userId, 0, CancellationToken.None);
+        Assert.Equal(2, snapshot.WritingOnlyCredits); // 6 - 2 - 2
+    }
+
     [Fact]
     public async Task ZeroBalanceNoFreeTier_BlocksBeforeAttemptCreated_NoAttemptNoDeduction()
     {

@@ -44,6 +44,22 @@ public interface IWritingEntitlementService
     /// attempt-level entitlement/billing record at start").
     /// </summary>
     Task<WritingStartAuthorization> AuthorizeStartAsync(string? userId, string referenceId, string? taskId, CancellationToken ct);
+
+    /// <summary>
+    /// Deterministic per-(user, scenario) start reference for the writing-v2
+    /// "Practice this" gate (§12.4). Folds in the count of already-graded,
+    /// non-mock <see cref="OetLearner.Api.Domain.WritingSubmission"/> rows for
+    /// this scenario: the count stays 0 while the learner's current attempt
+    /// has no graded submission yet, so a retry / refresh / duplicate start
+    /// before that point recomputes the SAME reference and
+    /// <see cref="AuthorizeStartAsync"/> dedupes it for free (no regression of
+    /// the already-fixed resume behaviour). The count advances the moment a
+    /// submission for this scenario reaches Graded, so "Practice this again"
+    /// afterwards gets a brand-new reference — and therefore a genuinely new,
+    /// charged authorisation — instead of replaying the first attempt's
+    /// already-spent credit transaction forever.
+    /// </summary>
+    Task<string> BuildScenarioStartReferenceIdAsync(string? userId, Guid scenarioId, CancellationToken ct);
 }
 
 public sealed record WritingEntitlement(
@@ -2062,8 +2078,21 @@ public partial class LearnerService(
         // attempt id — so a retry/duplicate-tap of this SAME start action
         // (no attempt row yet) dedupes on the same reference and never
         // double-charges, mirroring ReadingAttemptService Gate 6 /
-        // CreditGateExtensions.ObjectivePaperReference.
-        var referenceId = $"writing-attempt-start:{userId}:{request.ContentId}:{context}";
+        // CreditGateExtensions.ObjectivePaperReference. Also folds in the
+        // count of already-Completed attempts for this (user, content,
+        // context): that count stays 0 (same reference, resumes for free)
+        // until a prior attempt actually completes, then advances so
+        // "Practice this again" — a genuinely new attempt — gets a fresh
+        // reference and a fresh charge (§12.4), instead of forever replaying
+        // the first attempt's already-spent credit transaction.
+        var completedAttempts = await db.Attempts
+            .AsNoTracking()
+            .CountAsync(x => x.UserId == userId
+                && x.ContentId == request.ContentId
+                && x.SubtestCode == "writing"
+                && x.Context == context
+                && x.State == AttemptState.Completed, cancellationToken);
+        var referenceId = $"writing-attempt-start:{userId}:{request.ContentId}:{context}:{completedAttempts}";
 
         await using var tx = await BeginTransactionIfNeededAsync(cancellationToken);
         var authorization = await writingEntitlement.AuthorizeStartAsync(userId, referenceId, request.ContentId, cancellationToken);
