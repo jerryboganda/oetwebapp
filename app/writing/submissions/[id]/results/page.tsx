@@ -227,6 +227,25 @@ export default function WritingSubmissionResultsPage() {
           </InlineAlert>
         ) : null}
 
+        {/* "Revise / Review the Letter" for THIS completed attempt is simply
+            reopening this results page: it re-fetches the saved submission via
+            GET only (no grading call, no credit deducted, no editable
+            resubmission), so the exact original letter belongs in this same
+            report alongside the score/criteria below (Writing Rule Enforcement
+            Addendum Rev5, 10 Sep 2026, §13). */}
+        {submission?.letterContent ? (
+          <section aria-labelledby="your-letter-heading" className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 id="your-letter-heading" className="text-lg font-bold text-navy">Your submitted letter</h2>
+              <Badge variant="muted" size="sm">Reviewing your saved submission — no credit used</Badge>
+            </div>
+            {/* The submitted letter text is learner-authored English content. */}
+            <pre className="mt-3 whitespace-pre-wrap rounded-lg border border-border bg-background p-3 text-sm leading-relaxed font-sans" dir="ltr">
+              {submission.letterContent}
+            </pre>
+          </section>
+        ) : null}
+
         {scores ? (
           <section aria-labelledby="criteria-heading" className="grid gap-4 rounded-2xl border border-border bg-surface p-5 shadow-sm lg:grid-cols-2">
             <div>
