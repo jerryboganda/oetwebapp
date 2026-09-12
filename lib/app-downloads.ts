@@ -17,18 +17,45 @@ export const ANDROID_DOWNLOAD_URL = '/api/download/android';
 
 export const GET_APP_PATH = '/get-app';
 
-export const ANDROID_STORE_URL =
+/**
+ * Official Google Play listing. Google Play is now the primary Android
+ * distribution channel (Closed Testing today, production after), so this is
+ * the default in-app update destination: an app installed from Play must be
+ * sent to Play, never offered a manual APK download (12 Sep 2026 brief).
+ */
+export const ANDROID_PLAY_STORE_URL =
   process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL ||
-  ANDROID_DOWNLOAD_URL;
+  'https://play.google.com/store/apps/details?id=com.oetwithdrhesham.app';
 
+export const ANDROID_STORE_URL = ANDROID_PLAY_STORE_URL;
+
+/** Official App Store listing, once the release is live. */
 export const IOS_STORE_URL = process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
 
-/** Temporary direct IPA resolver used until the App Store listing is configured. */
+/** Public TestFlight external-testing link — the approved one-tap candidate
+ * path until the App Store release is live. */
+export const IOS_TESTFLIGHT_URL = process.env.NEXT_PUBLIC_IOS_TESTFLIGHT_URL || null;
+
+/**
+ * Direct IPA resolver. Retained for internal/administrative use only — it is
+ * deliberately NOT part of the candidate-facing chain below. iOS has no
+ * sideloading, so a raw .ipa cannot be installed by an ordinary candidate;
+ * publishing it as a download button is a dead end (12 Sep 2026 brief:
+ * "Do not publish a fake raw .ipa download button that ordinary candidates
+ * cannot [install]").
+ */
 export const IOS_DIRECT_DOWNLOAD_URL = '/api/download/ios';
 
-/** The current iOS destination: the official store when configured, otherwise
- * the trusted direct-release resolver. */
-export const IOS_DOWNLOAD_URL = IOS_STORE_URL || IOS_DIRECT_DOWNLOAD_URL;
+/**
+ * The candidate-facing iOS destination: the App Store listing when configured,
+ * otherwise the TestFlight public link. `null` when neither is available — the
+ * UI must then show a non-clickable "coming soon" state, never a fake download.
+ */
+export const IOS_DOWNLOAD_URL: string | null = IOS_STORE_URL || IOS_TESTFLIGHT_URL;
+
+/** Which approved channel `IOS_DOWNLOAD_URL` resolves to, for labelling. */
+export const IOS_DOWNLOAD_CHANNEL: 'app-store' | 'testflight' | null =
+  IOS_STORE_URL ? 'app-store' : IOS_TESTFLIGHT_URL ? 'testflight' : null;
 
 /**
  * Android ships as a direct APK (no Play Store listing yet), so app-download

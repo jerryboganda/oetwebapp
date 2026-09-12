@@ -19,18 +19,29 @@ export interface UpdateCheckResult {
 
 // ── Configuration ───────────────────────────────────────────────
 
-// A bare APK link only downloads a file — Android never auto-installs it, so
-// every fallback route points at the instructions page (which explains the
-// manual "tap the file, then Install" step) rather than the raw binary.
-const DEFAULT_ANDROID_UPDATE_URL = 'https://app.oetwithdrhesham.co.uk/get-app/android-install';
+// Google Play is the primary Android distribution channel, so a Play-installed
+// app is sent to the Play listing to update. The manual APK instructions page
+// remains reachable for true sideload installs, but it is no longer the
+// default — a bare APK link only downloads a file, Android never auto-installs
+// it (12 Sep 2026 brief: "the in-app update path must send the user to Google
+// Play. Manual APK installation should only be used for a true sideload").
+const DEFAULT_ANDROID_PLAY_STORE_URL =
+  'https://play.google.com/store/apps/details?id=com.oetwithdrhesham.app';
+const ANDROID_SIDELOAD_INSTRUCTIONS_URL =
+  'https://app.oetwithdrhesham.co.uk/get-app/android-install';
 
 function getStoreUrl(platform: 'android' | 'ios'): string | null {
   if (platform === 'android') {
-    return process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL || DEFAULT_ANDROID_UPDATE_URL;
+    return process.env.NEXT_PUBLIC_ANDROID_PLAY_STORE_URL || DEFAULT_ANDROID_PLAY_STORE_URL;
   }
 
-  return process.env.NEXT_PUBLIC_IOS_APP_STORE_URL || null;
+  return process.env.NEXT_PUBLIC_IOS_APP_STORE_URL
+    || process.env.NEXT_PUBLIC_IOS_TESTFLIGHT_URL
+    || null;
 }
+
+/** Sideload fallback — only for installs that did not come from Google Play. */
+export const ANDROID_SIDELOAD_URL = ANDROID_SIDELOAD_INSTRUCTIONS_URL;
 
 // ── Version Retrieval ───────────────────────────────────────────
 

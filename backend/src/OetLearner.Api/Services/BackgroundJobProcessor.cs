@@ -154,6 +154,17 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var now = DateTimeOffset.UtcNow;
+
+        // Recover orphaned Processing jobs BEFORE claiming new work. Running this
+        // after the dispatch pass meant a tick that spent its whole budget on a
+        // hung job (up to MaxJobExecutionTime) delayed recovery — and the stuck-job
+        // alert — by that same window. Doing it first bounds that delay to one tick.
+        if (now - _lastStuckJobRecoveryAt >= StuckJobRecoveryInterval)
+        {
+            _lastStuckJobRecoveryAt = now;
+            await RecoverStuckJobsAsync(scope.ServiceProvider, db, cancellationToken);
+        }
+
         var jobs = await ClaimQueuedJobsAsync(db, now, cancellationToken);
         _lastClaimedJobCount = jobs.Count;
 
@@ -213,11 +224,9 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        if (now - _lastStuckJobRecoveryAt >= StuckJobRecoveryInterval)
-        {
-            _lastStuckJobRecoveryAt = now;
-            await RecoverStuckJobsAsync(scope.ServiceProvider, db, cancellationToken);
-        }
+        // Stuck-job recovery runs before the claim loop (see the top of this
+        // method) so it is never starved by a hung job; it is deliberately not
+        // repeated here.
 
         await ReconcileFreezeLifecycleAsync(scope.ServiceProvider, db, cancellationToken);
 
@@ -2035,14 +2044,24 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             ? NotificationEventKey.AdminNotificationDeliveryFailureAlert
             : NotificationEventKey.AdminStuckJobAlert;
 
+        // Aggregate by job TYPE within an hourly bucket, not by the individual
+        // job id. The notification dedupe key embeds the entity id, so keying a
+        // stuck-job alert on job.Id emits one email per affected job — that is
+        // the alert flood reported on 11-12 Sep 2026, when a batch of Writing
+        // model-answer jobs wedged behind one hung AI call. Keying on
+        // (event, job type, hour) collapses that batch into a single admin alert
+        // per type per hour, while a different job type or a later hour still
+        // raises its own alert, so genuine warnings are preserved.
+        var incidentBucket = NotificationScheduling.BuildIncidentBucket(DateTimeOffset.UtcNow);
+
         await notifications.CreateForAdminsAsync(
             adminAlertKey,
-            "background_job",
-            job.Id,
-            failureVersion,
+            "background_job_type",
+            job.Type.ToString(),
+            incidentBucket,
             new Dictionary<string, object?>
             {
-                ["message"] = $"Background job {job.Id} ({job.Type}) failed after {job.RetryCount} attempts: {ex.Message}"
+                ["message"] = $"Background job type {job.Type} failed after {job.RetryCount} attempts (latest job {job.Id}): {ex.Message}"
             },
             cancellationToken);
     }

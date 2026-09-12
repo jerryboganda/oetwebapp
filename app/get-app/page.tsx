@@ -14,8 +14,8 @@ import {
 import {
   ANDROID_INSTALL_URL,
   detectVisitorOs,
+  IOS_DOWNLOAD_CHANNEL,
   IOS_DOWNLOAD_URL,
-  IOS_STORE_URL,
   MAC_DOWNLOAD_URL,
   WINDOWS_DOWNLOAD_URL,
   type DesktopOsKind,
@@ -28,7 +28,7 @@ import {
 
 const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
 
-const OS_CTA: Partial<Record<DesktopOsKind, { platform: PlatformKey; href: string }>> = {
+const OS_CTA: Partial<Record<DesktopOsKind, { platform: PlatformKey; href: string | null }>> = {
   windows: { platform: 'windows', href: WINDOWS_DOWNLOAD_URL },
   mac: { platform: 'mac', href: MAC_DOWNLOAD_URL },
   android: { platform: 'android', href: ANDROID_INSTALL_URL },
@@ -125,9 +125,13 @@ export default function GetAppPage() {
           <div className="group flex h-full flex-col items-center rounded-2xl border border-border bg-surface p-5 sm:p-6 text-center shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary hover:shadow-md hoverable:-translate-y-0.5">
             <PlatformGlyph platform="ios" className="h-8 w-8 text-primary shrink-0 transition-transform duration-200 group-hover:scale-105" />
             <div className="my-3 flex flex-1 flex-col items-center justify-start w-full min-h-[64px] sm:min-h-[76px]">
-              <h2 className="text-sm sm:text-base font-bold text-navy">iPhone & iPad</h2>
+              <h2 className="text-sm sm:text-base font-bold text-navy">iPhone &amp; iPad</h2>
               <p className="mt-1 text-xs text-muted leading-relaxed">
-                {IOS_STORE_URL ? 'Official App Store download' : 'Temporary direct IPA download'}
+                {IOS_DOWNLOAD_CHANNEL === 'app-store'
+                  ? 'Official App Store download'
+                  : IOS_DOWNLOAD_CHANNEL === 'testflight'
+                    ? 'TestFlight public beta — one-tap install'
+                    : 'Coming soon — App Store / TestFlight'}
               </p>
             </div>
             <PlatformDownloadBadge platform="ios" href={IOS_DOWNLOAD_URL} className="w-full max-w-[220px] mt-auto justify-center" />
