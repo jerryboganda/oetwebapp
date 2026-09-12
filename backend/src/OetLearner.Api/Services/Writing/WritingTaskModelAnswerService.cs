@@ -850,21 +850,38 @@ public sealed class WritingTaskModelAnswerService(
 
             // Deterministic job id (one per task): concurrent enqueuers
             // collapse onto the same row instead of duplicating paid work.
-            // Saved per row so one duplicate never rolls back the batch.
-            var job = new BackgroundJobItem
+            //
+            // Root-cause fix (12 Sep 2026): the id being fixed per scenario
+            // means a PRIOR job for this scenario -- however long ago, and
+            // regardless of whether it ended Completed or Failed -- still
+            // owns this exact row. The `busy` set above only excludes
+            // Queued/Processing rows, so a job that already ran its 3
+            // retries to a terminal state fell through to here and hit a
+            // primary-key conflict on every future sweep, forever: this
+            // scenario could never be re-enqueued again, with no visible
+            // error (the DbUpdateException below silently counted it as
+            // "skipped", indistinguishable from a legitimately busy job).
+            // Reuse and reset that row instead of blindly inserting.
+            var jobId = $"jb-wr-model-answer-{scenarioId:N}";
+            var job = await db.BackgroundJobs.FirstOrDefaultAsync(j => j.Id == jobId, ct);
+            if (job is null)
             {
-                Id = $"jb-wr-model-answer-{scenarioId:N}",
-                Type = JobType.WritingModelAnswerGeneration,
-                State = AsyncState.Queued,
-                ResourceId = key,
-                PayloadJson = JsonSerializer.Serialize(new { scenarioId = key, requestedBy = adminUserId, requestedAt = now }),
-                StatusReasonCode = "queued",
-                StatusMessage = $"Model Answer generation queued for '{scenario.Title}'.",
-                CreatedAt = now,
-                AvailableAt = now,
-                LastTransitionAt = now,
-            };
-            db.BackgroundJobs.Add(job);
+                job = new BackgroundJobItem { Id = jobId, CreatedAt = now };
+                db.BackgroundJobs.Add(job);
+            }
+
+            job.Type = JobType.WritingModelAnswerGeneration;
+            job.State = AsyncState.Queued;
+            job.ResourceId = key;
+            job.PayloadJson = JsonSerializer.Serialize(new { scenarioId = key, requestedBy = adminUserId, requestedAt = now });
+            job.StatusReasonCode = "queued";
+            job.StatusMessage = $"Model Answer generation queued for '{scenario.Title}'.";
+            job.AvailableAt = now;
+            job.LastTransitionAt = now;
+            job.RetryCount = 0;
+            job.RetryAfterMs = null;
+            job.AttemptId = null;
+
             try
             {
                 await db.SaveChangesAsync(ct);

@@ -119,6 +119,49 @@ Doctor
             j.Type == JobType.WritingModelAnswerGeneration));
     }
 
+    // Root-cause fix (12 Sep 2026): the enqueue job id is deterministic per
+    // scenario ("jb-wr-model-answer-{scenarioId}"), so a PRIOR job that ran
+    // its retries out to a terminal state (Failed/Completed) left a row
+    // occupying that exact id forever. EnqueueMissingAsync used to blindly
+    // INSERT a fresh row, hit a primary-key conflict, and silently count the
+    // scenario as "skipped" -- indistinguishable from a legitimately busy
+    // job, and with no way to ever try that scenario again. This asserts the
+    // fix: a terminal row is reused and reset to Queued, not permanently
+    // locked out.
+    [Fact]
+    public async Task EnqueueMissing_Resurrects_A_Scenario_Whose_Prior_Job_Went_Terminal()
+    {
+        await using var db = NewDb();
+        var scenarioId = await SeedPublishedTaskAsync(db, "Write a routine referral for John Jones to City Clinic.");
+        var jobId = $"jb-wr-model-answer-{scenarioId:N}";
+        db.BackgroundJobs.Add(new BackgroundJobItem
+        {
+            Id = jobId,
+            Type = JobType.WritingModelAnswerGeneration,
+            State = AsyncState.Failed,
+            ResourceId = scenarioId.ToString("D"),
+            StatusReasonCode = "processing_failed",
+            StatusMessage = "Failed after 3 attempts: simulated stale terminal job.",
+            RetryCount = 3,
+            RetryAfterMs = 0,
+            CreatedAt = DateTimeOffset.UtcNow.AddHours(-2),
+            AvailableAt = DateTimeOffset.UtcNow.AddHours(-2),
+            LastTransitionAt = DateTimeOffset.UtcNow.AddHours(-2),
+        });
+        await db.SaveChangesAsync();
+        var svc = new WritingTaskModelAnswerService(
+            db, new ExemplarGateway(), new WritingRuleEngine(new RulebookLoader()),
+            TimeProvider.System, NullLogger<WritingTaskModelAnswerService>.Instance);
+
+        var result = await svc.EnqueueMissingAsync("admin-1", 10, CancellationToken.None);
+
+        Assert.Equal(1, result.Enqueued);
+        Assert.Equal(0, result.Skipped);
+        var job = await db.BackgroundJobs.SingleAsync(j => j.Id == jobId);
+        Assert.Equal(AsyncState.Queued, job.State);
+        Assert.Equal(0, job.RetryCount);
+    }
+
     [Fact]
     public async Task GenerateIfNeeded_SkipsFreshReady_WithZeroProviderCalls()
     {
