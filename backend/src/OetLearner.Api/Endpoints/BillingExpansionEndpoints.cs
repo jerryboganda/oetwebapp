@@ -4,11 +4,13 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
+using Microsoft.Extensions.Options;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -29,26 +31,40 @@ public static class BillingExpansionEndpoints
     public static IEndpointRouteBuilder MapBillingExpansionEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/v1");
+        var markPaidStepUpRequired = app.ServiceProvider
+            .GetRequiredService<IOptions<StepUpOptions>>().Value.RequireForManualPaymentApproval;
 
         // ── Learner-facing ─────────────────────────────────────────
         var billing = v1.MapGroup("/billing").RequireAuthorization();
-        billing.MapPost("/manual-payments", SubmitManualPayment);
+        billing.MapPost("/manual-payments", SubmitManualPayment).RequireRateLimiting("PaymentVelocity");
         billing.MapGet("/manual-payments/mine", ListOwnManualPayments);
 
         // ── Admin: manual payments ─────────────────────────────────
         var adminMp = v1.MapGroup("/admin/billing/manual-payments");
         adminMp.MapGet("/", ListManualPayments).RequireAuthorization("AdminBillingRead");
         adminMp.MapGet("/{id}/proof", GetManualPaymentProof).RequireAuthorization("AdminBillingRead");
-        adminMp.MapPost("/{id}/approve", ApproveManualPayment).WithAdminWrite("AdminBillingRefundWrite");
+        var approveManualPayment = adminMp.MapPost("/{id}/approve", ApproveManualPayment).WithAdminWrite("AdminBillingMarkPaidWrite");
+        if (markPaidStepUpRequired)
+        {
+            approveManualPayment.WithStepUp("billing.mark_paid");
+        }
         adminMp.MapPost("/{id}/reject", RejectManualPayment).WithAdminWrite("AdminBillingRefundWrite");
         adminMp.MapPost("/{id}/status", SetManualPaymentStatus).WithAdminWrite("AdminBillingRefundWrite");
-        adminMp.MapPost("/{id}/waive-proof", WaiveManualPaymentProof).WithAdminWrite("AdminBillingRefundWrite");
+        var waiveManualPaymentProof = adminMp.MapPost("/{id}/waive-proof", WaiveManualPaymentProof).WithAdminWrite("AdminBillingMarkPaidWrite");
+        if (markPaidStepUpRequired)
+        {
+            waiveManualPaymentProof.WithStepUp("billing.mark_paid");
+        }
         adminMp.MapPost("/{id}/reopen", ReopenManualPayment).WithAdminWrite("AdminBillingRefundWrite");
 
         // ── Admin: manual fulfilment queue ─────────────────────────
         var adminFul = v1.MapGroup("/admin/billing/fulfilment");
         adminFul.MapGet("/", ListPendingFulfilment).RequireAuthorization("AdminBillingRead");
-        adminFul.MapPost("/subscriptions/{id}/mark-fulfilled", MarkSubscriptionFulfilled).WithAdminWrite("AdminBillingRefundWrite");
+        var markSubscriptionFulfilled = adminFul.MapPost("/subscriptions/{id}/mark-fulfilled", MarkSubscriptionFulfilled).WithAdminWrite("AdminBillingMarkPaidWrite");
+        if (markPaidStepUpRequired)
+        {
+            markSubscriptionFulfilled.WithStepUp("billing.mark_paid");
+        }
         adminFul.MapPost("/subscriptions/{id}/ensure-invoice", EnsureSubscriptionInvoice).RequireAuthorization("AdminBillingRead");
 
         // ── Admin: scholarships ────────────────────────────────────

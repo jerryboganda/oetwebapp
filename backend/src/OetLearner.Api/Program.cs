@@ -23,6 +23,7 @@ using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.LiveClasses;
+using OetLearner.Api.Services.StepUp;
 using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -159,8 +160,10 @@ builder.Services.Configure<AiProviderOptions>(builder.Configuration.GetSection(A
 builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
 builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuration.GetSection(NotificationProofHarnessOptions.SectionName));
 builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection("PasswordPolicy"));
+builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
+builder.Services.Configure<StepUpOptions>(builder.Configuration.GetSection(StepUpOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
 // No backplane (AddStackExchangeRedis/AddAzureSignalR) is configured — every
 // Clients.Group(...)/Clients.User(...) send only reaches connections held by THIS
@@ -187,7 +190,14 @@ builder.Services.AddSignalR(options =>
 });
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
 builder.Services.AddHttpClient<IMobilePushDispatcher, MobilePushDispatcher>();
-builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>, PasswordHasher<ApplicationUserAccount>>();
+    // IAM-01 / OWASP Password Storage Cheat Sheet: PBKDF2-HMAC-SHA512 at >= 220,000
+    // iterations, via Pbkdf2Sha512PasswordHasher (Identity v3 blob format, PRF-tagged —
+    // existing stock-hasher hashes keep verifying and migrate to the SHA-512 profile on
+    // the next successful sign-in through AuthService's SuccessRehashNeeded handling).
+    // PasswordHasherPolicy is the single source of truth; CI pins the profile
+    // (PasswordHasherPolicyTests).
+    builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>>(
+        OetLearner.Api.Security.PasswordHasherPolicy.CreateHasher<ApplicationUserAccount>());
 builder.Services.AddSingleton<AuthTokenService>();
 builder.Services.AddHttpClient<IExternalIdentityProviderClient, ExternalIdentityProviderClient>();
 builder.Services.AddSingleton<ExternalAuthTicketService>();
@@ -245,6 +255,8 @@ builder.Services.AddScoped<IIpIntelligenceService, IpinfoIpIntelligenceService>(
 builder.Services.AddScoped<IAuthorizationHandler, EmailVerifiedRequirementHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, EmailVerifiedAuthorizationResultHandler>();
 builder.Services.AddScoped<AuthService>();
+// PAY-16 / IAM-08: short-lived, single-scope step-up proof for money-moving admin actions.
+builder.Services.AddScoped<IStepUpService, StepUpService>();
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check
 // failure is fail-open (we do not want HIBP hiccups to block sign-ups).
@@ -494,6 +506,19 @@ builder.Services.AddRateLimiter(options =>
         return RateLimitPartition.GetFixedWindowLimiter($"device-pair-{key}", _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = devicePairingRedeemPermit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+    var paymentVelocityPermit = builder.Environment.IsDevelopment() ? 200 : 60;
+    options.AddPolicy("PaymentVelocity", httpContext =>
+    {
+        var userId = httpContext.User.Identity?.IsAuthenticated == true
+            ? httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? "anonymous"
+            : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"payment-velocity-{userId}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = paymentVelocityPermit,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });
@@ -884,13 +909,21 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
 
-    // Billing-hardening I-7: granular billing-write policies. Each accepts
-    // the specific granular permission OR the legacy billing:write superset
-    // OR system_admin, preserving backward compatibility for existing admins
-    // whose grants only include billing:write.
+    // Billing-hardening I-7: granular billing-write policies.
+    // PAY-20 (audit §4.7): refunds must NOT be reachable through the legacy
+    // billing:write superset — only the dedicated granular permission or the
+    // system_admin superuser (which AdminPermissions.All grants the granular
+    // permission anyway; naming it here keeps the intent explicit).
     options.AddPolicy("AdminBillingRefundWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
-        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:refund_write", "billing:write", "system_admin")));
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:refund_write", "system_admin")));
+    // PAY-20 (audit §4.7): money-moving decisions must NOT be reachable through
+    // the legacy billing:write superset — only the dedicated granular permission
+    // (granted to BillingAdmin) or system_admin. Step-up re-authentication is
+    // layered on top by WithStepUp, so the permission alone is not sufficient.
+    options.AddPolicy("AdminBillingMarkPaidWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:mark_paid_write", "system_admin")));
     options.AddPolicy("AdminBillingCatalogWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:catalog_write", "billing:write", "system_admin")));
@@ -1212,6 +1245,17 @@ builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoProtectionE
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryLearnerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.VideoLibraryAdminService>();
 builder.Services.AddScoped<OetLearner.Api.Services.VideoLibrary.BunnyCollectionAdminService>();
+// Device attestation (Play Integrity / App Attest) — advisory risk signal only.
+builder.Services.AddHttpClient<OetLearner.Api.Services.DeviceIntegrity.PlayIntegrityVerifier>(
+    c => c.Timeout = TimeSpan.FromSeconds(15));
+builder.Services.AddScoped<OetLearner.Api.Services.DeviceIntegrity.IDeviceIntegrityVerifier>(
+    sp => sp.GetRequiredService<OetLearner.Api.Services.DeviceIntegrity.PlayIntegrityVerifier>());
+builder.Services.AddScoped<OetLearner.Api.Services.DeviceIntegrity.IDeviceIntegrityVerifier,
+    OetLearner.Api.Services.DeviceIntegrity.AppAttestVerifier>();
+builder.Services.AddScoped<OetLearner.Api.Services.DeviceIntegrity.IDeviceIntegrityVerifierSelector,
+    OetLearner.Api.Services.DeviceIntegrity.DeviceIntegrityVerifierSelector>();
+builder.Services.AddScoped<OetLearner.Api.Services.DeviceIntegrity.IDeviceIntegrityService,
+    OetLearner.Api.Services.DeviceIntegrity.DeviceIntegrityService>();
 // Leader lock — only one replica runs the encode reconciliation + challenge
 // sweep. Postgres advisory lock in prod; always-leader otherwise.
 builder.Services.AddSingleton<OetLearner.Api.Services.VideoLibrary.IVideoWorkerLeaderLock>(sp =>
@@ -1353,6 +1397,7 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Billing.RetentionDispa
 builder.Services.AddHostedService<OetLearner.Api.Services.Billing.ExperimentConversionWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingMetricsService, OetLearner.Api.Services.Billing.BillingMetricsService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Billing.BillingMetricsRollupWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Billing.BillingReconciliationWorker>();
 builder.Services.AddScoped<WalletService>();
 builder.Services.AddScoped<EngagementService>();
 
@@ -2764,6 +2809,8 @@ app.MapGet("/health", async (LearnerDbContext db, CancellationToken ct) =>
 if (!oetRunModeIsWorker)
 {
 app.MapAuthEndpoints();
+app.MapStepUpEndpoints();
+app.MapDeviceAttestationEndpoints();
 app.MapProfessionCatalogEndpoints();
 app.MapPublicSupportEndpoints();
 app.MapAnalyticsEndpoints();

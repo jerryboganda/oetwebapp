@@ -115,6 +115,25 @@ public sealed class CheckoutComGateway : IPaymentGateway
 
         using var doc = JsonDocument.Parse(payload);
         var root = doc.RootElement;
+
+        // Replay-attack protection: Cko-Signature is an HMAC over the whole raw body, so
+        // the event created_on (or the payment data processed_on) is a signed value.
+        var eventData = root.TryGetProperty("data", out var dataRoot) ? dataRoot : default;
+        var createdOn = ReadScalar(root, "created_on")
+            ?? (eventData.ValueKind == JsonValueKind.Object
+                ? ReadScalar(eventData, "processed_on") ?? ReadScalar(eventData, "created_on")
+                : null);
+        if (IsOutsideReplayWindow(createdOn))
+        {
+            return new WebhookProcessResult(
+                EventId: "cko_stale_callback",
+                EventType: "signature_verification_failed",
+                Processed: false,
+                Error: "Checkout.com callback created_on is outside the accepted replay window.",
+                SafePayloadJson: "{}",
+                EventCategory: PaymentWebhookCategories.Other);
+        }
+
         var eventId = root.TryGetProperty("id", out var id) ? id.GetString() : null;
         var eventType = root.TryGetProperty("type", out var t) ? t.GetString() : "payment.unknown";
         var data = root.TryGetProperty("data", out var d) ? d : default;
@@ -127,10 +146,71 @@ public sealed class CheckoutComGateway : IPaymentGateway
             Processed: true,
             Error: null,
             GatewayTransactionId: paymentId,
-            NormalizedStatus: approved ? "succeeded" : (eventType?.Contains("refunded", StringComparison.OrdinalIgnoreCase) == true ? "refunded" : "failed"),
-            SafePayloadJson: payload,
+            NormalizedStatus: approved ? "completed" : (eventType?.Contains("refunded", StringComparison.OrdinalIgnoreCase) == true ? "refunded" : "failed"),
+            SafePayloadJson: ProjectCheckoutComSafePayload(root),
             EventCategory: eventType?.Contains("refund", StringComparison.OrdinalIgnoreCase) == true ? PaymentWebhookCategories.Refund : PaymentWebhookCategories.Payment,
             GatewayObjectId: paymentId);
+    }
+
+    /// <summary>
+    /// Server-to-server payment lookup (GET /payments/{id}). Route to this for
+    /// reconciliation and to confirm a callback before fulfilment. Returns null when
+    /// Checkout.com is unconfigured, unreachable, or the response is unusable —
+    /// callers must treat null as "unknown", never as "unpaid".
+    /// </summary>
+    public async Task<PaymentConfirmation?> GetTransactionConfirmationAsync(string paymentId, CancellationToken ct)
+    {
+        var opts = (await _runtimeSettings.GetAsync(ct)).CheckoutCom;
+        if (string.IsNullOrWhiteSpace(opts.SecretKey) || string.IsNullOrWhiteSpace(paymentId))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var message = new HttpRequestMessage(
+                HttpMethod.Get,
+                new Uri(new Uri(EnsureTrailingSlash(opts.ApiBaseUrl)), $"payments/{Uri.EscapeDataString(paymentId)}"));
+            message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", opts.SecretKey);
+
+            using var response = await _http.SendAsync(message, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var stream = await response.Content.ReadAsStreamAsync(ct);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+            var root = doc.RootElement;
+
+            var status = root.TryGetProperty("status", out var statusEl) && statusEl.ValueKind == JsonValueKind.String
+                ? statusEl.GetString()
+                : null;
+            var amountMinor = root.TryGetProperty("amount", out var amountEl) && amountEl.ValueKind == JsonValueKind.Number && amountEl.TryGetInt64(out var minor)
+                ? minor
+                : (long?)null;
+            var currency = root.TryGetProperty("currency", out var currencyEl) && currencyEl.ValueKind == JsonValueKind.String
+                ? currencyEl.GetString()
+                : null;
+            var providerTransactionId = root.TryGetProperty("id", out var idEl) && idEl.ValueKind == JsonValueKind.String
+                ? idEl.GetString()
+                : paymentId;
+
+            var paid = string.Equals(status, "captured", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "authorized", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(status, "paid", StringComparison.OrdinalIgnoreCase);
+
+            return new PaymentConfirmation(
+                Paid: paid,
+                Amount: (amountMinor ?? 0) / 100m,
+                Currency: currency ?? string.Empty,
+                ProviderTransactionId: providerTransactionId,
+                RawStatus: status);
+        }
+        catch (Exception ex) when (ex is JsonException or HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            return null;
+        }
     }
 
     public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
@@ -173,5 +253,81 @@ public sealed class CheckoutComGateway : IPaymentGateway
             AmountRefunded: amount);
     }
 
+    private static string ProjectCheckoutComSafePayload(JsonElement root)
+    {
+        var data = root.TryGetProperty("data", out var d) && d.ValueKind == JsonValueKind.Object ? d : default;
+        var safe = new Dictionary<string, object?>
+        {
+            ["id"] = ReadScalar(root, "id"),
+            ["type"] = ReadScalar(root, "type"),
+            ["payment_id"] = ReadScalar(data, "id"),
+            ["payment_status"] = ReadScalar(data, "status"),
+            ["amount"] = ReadScalar(data, "amount"),
+            ["currency"] = ReadScalar(data, "currency"),
+            ["reference"] = ReadScalar(data, "reference"),
+            ["approved"] = ReadScalar(data, "approved"),
+            ["response_code"] = ReadScalar(data, "response_code"),
+        };
+        return JsonSerializer.Serialize(safe);
+    }
+
+    private static string? ReadScalar(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.String => property.GetString(),
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => property.GetRawText(),
+            _ => null,
+        };
+    }
+
     private static string EnsureTrailingSlash(string url) => url.EndsWith('/') ? url : url + "/";
+
+    private bool IsOutsideReplayWindow(string? timestamp)
+    {
+        if (!TryParseTimestamp(timestamp, out var parsed))
+        {
+            return false;
+        }
+
+        // Checkout.com retries on a schedule whose first step already exceeds the
+        // default window, so this gateway resolves its own (wider) window; a rejected
+        // retry would otherwise make a lost first delivery unrecoverable.
+        var maxAge = Math.Max(1, _billing.Value.ResolveWebhookMaxAgeSeconds(GatewayName));
+        return Math.Abs((DateTimeOffset.UtcNow - parsed).TotalSeconds) > maxAge;
+    }
+
+    private static bool TryParseTimestamp(string? raw, out DateTimeOffset timestamp)
+    {
+        timestamp = default;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        raw = raw.Trim().Trim('"');
+        if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unix))
+        {
+            if (unix > 99_999_999_999)
+            {
+                unix /= 1000;
+            }
+
+            if (unix is < -62_135_596_800 or > 253_402_300_799)
+            {
+                return false;
+            }
+
+            timestamp = DateTimeOffset.FromUnixTimeSeconds(unix);
+            return true;
+        }
+
+        return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out timestamp);
+    }
 }

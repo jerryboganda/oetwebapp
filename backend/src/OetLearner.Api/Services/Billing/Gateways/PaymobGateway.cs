@@ -149,6 +149,22 @@ public sealed class PaymobGateway : IPaymentGateway
             return new WebhookProcessResult("paymob_bad_sig", "signature_invalid", false, "Signature mismatch");
         }
 
+        // Replay-attack protection: created_at is part of Paymob's HMAC field list, so
+        // the timestamp is signed and cannot be forged or refreshed without breaking
+        // the HMAC. It carries no offset (Cairo local time), so only a genuinely old
+        // reading is rejected — see IsStaleCallback.
+        var transactionObject = root.TryGetProperty("obj", out var objElement) ? objElement : default;
+        if (IsStaleCallback(ReadRawScalar(transactionObject, "created_at")))
+        {
+            return new WebhookProcessResult(
+                EventId: "paymob_stale_callback",
+                EventType: "signature_verification_failed",
+                Processed: false,
+                Error: "Paymob callback created_at is outside the accepted replay window.",
+                SafePayloadJson: "{}",
+                EventCategory: PaymentWebhookCategories.Other);
+        }
+
         var orderId = root.TryGetProperty("obj", out var obj) && obj.TryGetProperty("order", out var order)
             ? order.TryGetProperty("id", out var oid) ? oid.GetRawText() : null
             : null;
@@ -160,10 +176,89 @@ public sealed class PaymobGateway : IPaymentGateway
             Processed: true,
             Error: null,
             GatewayTransactionId: orderId,
-            NormalizedStatus: success ? "succeeded" : "failed",
-            SafePayloadJson: payload,
+            NormalizedStatus: success ? "completed" : "failed",
+            SafePayloadJson: ProjectPaymobSafePayload(root),
             EventCategory: PaymentWebhookCategories.Payment,
             GatewayObjectId: orderId);
+    }
+
+    /// <summary>
+    /// Server-to-server transaction lookup (GET /api/acceptance/transactions/{id}).
+    /// Route to this for reconciliation and to confirm a callback before fulfilment.
+    /// Returns null when Paymob is unconfigured, unreachable, or the response is
+    /// unusable — callers must treat null as "unknown", never as "unpaid".
+    /// </summary>
+    public async Task<PaymentConfirmation?> GetTransactionConfirmationAsync(string orderId, CancellationToken ct)
+    {
+        var opts = (await _runtimeSettings.GetAsync(ct)).Paymob;
+        if (string.IsNullOrWhiteSpace(opts.ApiKey) || string.IsNullOrWhiteSpace(orderId))
+        {
+            return null;
+        }
+
+        try
+        {
+            string? authToken;
+            using (var authMsg = new HttpRequestMessage(HttpMethod.Post, new Uri(new Uri(EnsureTrailingSlash(opts.ApiBaseUrl)), "api/auth/tokens")))
+            {
+                authMsg.Content = JsonContent.Create(new { api_key = opts.ApiKey });
+                using var authResp = await _http.SendAsync(authMsg, ct);
+                if (!authResp.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                using var authJson = JsonDocument.Parse(await authResp.Content.ReadAsStringAsync(ct));
+                authToken = authJson.RootElement.TryGetProperty("token", out var tokenEl) && tokenEl.ValueKind == JsonValueKind.String
+                    ? tokenEl.GetString()
+                    : null;
+            }
+
+            if (string.IsNullOrWhiteSpace(authToken))
+            {
+                return null;
+            }
+
+            using var message = new HttpRequestMessage(
+                HttpMethod.Get,
+                new Uri(new Uri(EnsureTrailingSlash(opts.ApiBaseUrl)), $"api/acceptance/transactions/{Uri.EscapeDataString(orderId)}"));
+            message.Headers.TryAddWithoutValidation("Authorization", "Bearer " + authToken);
+
+            using var response = await _http.SendAsync(message, ct);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+            if (!doc.RootElement.TryGetProperty("obj", out var obj) || obj.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            var paid = false;
+            string? rawStatus = null;
+            if (obj.TryGetProperty("success", out var successEl))
+            {
+                paid = successEl.ValueKind == JsonValueKind.True;
+                rawStatus = successEl.GetRawText();
+            }
+
+            var providerTransactionId = obj.TryGetProperty("order", out var order) && order.ValueKind == JsonValueKind.Object
+                ? ReadRawScalar(order, "id")
+                : null;
+
+            return new PaymentConfirmation(
+                Paid: paid,
+                Amount: (ReadAmountCents(obj, "amount_cents") ?? 0m) / 100m,
+                Currency: ReadRawScalar(obj, "currency") ?? string.Empty,
+                ProviderTransactionId: providerTransactionId,
+                RawStatus: rawStatus);
+        }
+        catch (Exception ex) when (ex is JsonException or HttpRequestException or InvalidOperationException or TaskCanceledException)
+        {
+            return null;
+        }
     }
 
     public async Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
@@ -220,7 +315,99 @@ public sealed class PaymobGateway : IPaymentGateway
         return new RefundResult(refundId.Trim('"'), success ? "succeeded" : "pending", amount);
     }
 
+    private static string ProjectPaymobSafePayload(JsonElement root)
+    {
+        var obj = root.TryGetProperty("obj", out var o) && o.ValueKind == JsonValueKind.Object ? o : default;
+        var order = obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty("order", out var ord) && ord.ValueKind == JsonValueKind.Object ? ord : default;
+        var safe = new Dictionary<string, object?>
+        {
+            ["transaction_id"] = ReadRawScalar(obj, "id"),
+            ["order_id"] = ReadRawScalar(order, "id"),
+            ["amount_cents"] = ReadRawScalar(obj, "amount_cents"),
+            ["currency"] = ReadRawScalar(obj, "currency"),
+            ["created_at"] = ReadRawScalar(obj, "created_at"),
+            ["integration_id"] = ReadRawScalar(obj, "integration_id"),
+            ["pending"] = ReadRawScalar(obj, "pending"),
+            ["success"] = ReadRawScalar(obj, "success"),
+        };
+        return JsonSerializer.Serialize(safe);
+    }
+
+    private static string? ReadRawScalar(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.String => property.GetString(),
+            JsonValueKind.Number or JsonValueKind.True or JsonValueKind.False => property.GetRawText(),
+            _ => null,
+        };
+    }
+
+    private static decimal? ReadAmountCents(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var property))
+        {
+            return null;
+        }
+
+        return property.ValueKind switch
+        {
+            JsonValueKind.Number when property.TryGetDecimal(out var number) => number,
+            JsonValueKind.String when decimal.TryParse(property.GetString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) => parsed,
+            _ => null,
+        };
+    }
+
     private static string EnsureTrailingSlash(string url) => url.EndsWith('/') ? url : url + "/";
+
+    private bool IsStaleCallback(string? timestamp)
+    {
+        if (!TryParseTimestamp(timestamp, out var parsed))
+        {
+            return false;
+        }
+
+        // Paymob's created_at is emitted without an offset in a local (Cairo) zone, so it
+        // can read up to a few hours ahead of UTC at delivery. Only a reading older than
+        // the window is a replay; rejecting future-skewed readings would drop every
+        // legitimate callback. Because created_at is signed, an attacker cannot advance it.
+        var maxAge = Math.Max(1, _billing.Value.WebhookMaxAgeSeconds);
+        return DateTimeOffset.UtcNow - parsed > TimeSpan.FromSeconds(maxAge);
+    }
+
+    private static bool TryParseTimestamp(string? raw, out DateTimeOffset timestamp)
+    {
+        timestamp = default;
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        raw = raw.Trim().Trim('"');
+        if (long.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out var unix))
+        {
+            if (unix > 99_999_999_999)
+            {
+                unix /= 1000;
+            }
+
+            if (unix is < -62_135_596_800 or > 253_402_300_799)
+            {
+                return false;
+            }
+
+            timestamp = DateTimeOffset.FromUnixTimeSeconds(unix);
+            return true;
+        }
+
+        return DateTimeOffset.TryParse(raw, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out timestamp);
+    }
 
     private static string ExtractPaymobHashableFields(JsonElement root)
     {

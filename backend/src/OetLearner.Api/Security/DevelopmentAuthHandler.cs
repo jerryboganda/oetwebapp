@@ -32,6 +32,10 @@ public class DevelopmentAuthHandler(
         var claims = new List<Claim>
         {
             new(ClaimTypes.NameIdentifier, userId),
+            // JWT authentication guarantees this claim (OnTokenValidated rejects a
+            // token without it), so development auth must mirror the same contract or
+            // any feature keyed on the account id behaves differently in tests.
+            new(AuthTokenService.AuthAccountIdClaimType, userId),
             new(ClaimTypes.Role, role),
             new(ClaimTypes.Email, email),
             new(ClaimTypes.Name, name),

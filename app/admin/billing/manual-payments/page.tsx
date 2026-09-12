@@ -49,6 +49,8 @@ import {
   type InvoiceEvidenceStatus,
   type InvoiceEvidenceTarget,
 } from '@/components/admin/billing/invoice-evidence-drawer';
+import { StepUpConfirmDialog } from '@/components/admin/step-up-confirm-dialog';
+import { useStepUpAction } from '@/components/admin/step-up/use-step-up-action';
 import { downloadAdminBillingInvoice, getAdminBillingInvoiceEvidenceData } from '@/lib/admin';
 import type { AdminBillingInvoiceEvidence } from '@/lib/types/admin';
 import {
@@ -59,6 +61,7 @@ import {
   waiveManualPaymentProof,
   reopenManualPayment,
   getManualPaymentProofBlob,
+  MANUAL_PAYMENT_STEP_UP_SCOPE,
   listPendingFulfilment,
   markSubscriptionFulfilled,
   ensureAdminBillingInvoiceForSubscription,
@@ -160,6 +163,7 @@ export default function AdminPaymentProofsPage() {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const stepUp = useStepUpAction(MANUAL_PAYMENT_STEP_UP_SCOPE);
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
   const [proofView, setProofView] = useState<ProofView | null>(null);
   const [fulfilmentDetails, setFulfilmentDetails] = useState<PendingFulfilmentDto | null>(null);
@@ -242,44 +246,53 @@ export default function AdminPaymentProofsPage() {
     }
   }
 
+  async function performDecision(active: Decision, submittedNotes: string) {
+    switch (active.kind) {
+      case 'approve':
+        await approveManualPayment(active.row.id, submittedNotes || undefined);
+        toast.success('Approved.');
+        await Promise.all([loadProofs(), loadFulfilment()]);
+        break;
+      case 'reject':
+        await rejectManualPayment(active.row.id, submittedNotes || 'Rejected.');
+        toast.success('Rejected.');
+        await Promise.all([loadProofs(), loadFulfilment()]);
+        break;
+      case 'waive':
+        await waiveManualPaymentProof(active.row.id, submittedNotes.trim());
+        toast.success('Proof requirement waived.');
+        await Promise.all([loadProofs(), loadFulfilment()]);
+        break;
+      case 'fulfil': {
+        const result = await markSubscriptionFulfilled(active.row.subscriptionId, submittedNotes || undefined);
+        toast.success(
+          result.webAccessReleased
+            ? 'Marked fulfilled — configured platform access released.'
+            : 'Marked delivered — no platform access released.',
+        );
+        await Promise.all([loadProofs(), loadFulfilment()]);
+        break;
+      }
+    }
+  }
+
   async function handleConfirmDecision() {
     if (!decision) return;
     if (decision.kind === 'waive' && !notes.trim()) {
       toast.error('A reason is required to waive the proof requirement.');
       return;
     }
+    const active = decision;
+    const submittedNotes = notes;
     setSubmitting(true);
     try {
-      switch (decision.kind) {
-        case 'approve':
-          await approveManualPayment(decision.row.id, notes || undefined);
-          toast.success('Approved.');
-          await Promise.all([loadProofs(), loadFulfilment()]);
-          break;
-        case 'reject':
-          await rejectManualPayment(decision.row.id, notes || 'Rejected.');
-          toast.success('Rejected.');
-          await Promise.all([loadProofs(), loadFulfilment()]);
-          break;
-        case 'waive':
-          await waiveManualPaymentProof(decision.row.id, notes.trim());
-          toast.success('Proof requirement waived.');
-          await Promise.all([loadProofs(), loadFulfilment()]);
-          break;
-        case 'fulfil':
-          {
-            const result = await markSubscriptionFulfilled(decision.row.subscriptionId, notes || undefined);
-            toast.success(
-              result.webAccessReleased
-                ? 'Marked fulfilled — configured platform access released.'
-                : 'Marked delivered — no platform access released.',
-            );
-          }
-          await Promise.all([loadProofs(), loadFulfilment()]);
-          break;
-      }
-      setDecision(null);
-      setNotes('');
+      await stepUp.run(
+        () => performDecision(active, submittedNotes),
+        () => {
+          setDecision(null);
+          setNotes('');
+        },
+      );
     } catch (err: any) {
       toast.error(err?.userMessage ?? err?.message ?? 'Action failed.');
     } finally {
@@ -1018,6 +1031,15 @@ export default function AdminPaymentProofsPage() {
           searchPlaceholder="Search the queue…"
         />
       )}
+
+      <StepUpConfirmDialog
+        open={stepUp.promptOpen}
+        scope={MANUAL_PAYMENT_STEP_UP_SCOPE}
+        loading={stepUp.pending}
+        error={stepUp.error}
+        onSubmit={stepUp.submitCode}
+        onCancel={stepUp.cancel}
+      />
 
       <Dialog
         open={decision !== null}

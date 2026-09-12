@@ -734,7 +734,9 @@ public static partial class SeedData
     private static void EnsureLocalAuthAccounts(LearnerDbContext db)
     {
         var now = DateTimeOffset.UtcNow;
-        var passwordHasher = new PasswordHasher<ApplicationUserAccount>();
+        // IAM-01: seed accounts are hashed with the same PBKDF2-HMAC-SHA512/>=220k
+        // profile the DI-configured hasher uses (PasswordHasherPolicy).
+        var passwordHasher = OetLearner.Api.Security.PasswordHasherPolicy.CreateHasher<ApplicationUserAccount>();
 
         var learner = db.Users.Single(x => x.Id == "mock-user-001");
         var expert = db.ExpertUsers.Single(x => x.Id == "expert-001");
@@ -832,7 +834,7 @@ public static partial class SeedData
 
     private static ApplicationUserAccount UpsertLocalAuthAccount(
         LearnerDbContext db,
-        PasswordHasher<ApplicationUserAccount> passwordHasher,
+        IPasswordHasher<ApplicationUserAccount> passwordHasher,
         string accountId,
         string email,
         string role,

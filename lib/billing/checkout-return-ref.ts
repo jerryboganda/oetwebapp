@@ -10,11 +10,13 @@ type SearchParamReader = {
   get(name: string): string | null;
 };
 
+const SAFE_REFERENCE_TOKEN = /^[A-Za-z0-9._:-]{1,128}$/;
+
 function firstNonEmpty(searchParams: SearchParamReader | null | undefined, names: string[]): string | null {
   if (!searchParams) return null;
   for (const name of names) {
     const value = searchParams.get(name)?.trim();
-    if (value) return value;
+    if (value && SAFE_REFERENCE_TOKEN.test(value)) return value;
   }
   return null;
 }

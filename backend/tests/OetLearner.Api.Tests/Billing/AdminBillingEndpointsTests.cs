@@ -228,6 +228,8 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
         }
 
         using var client = CreateClient(role: "admin", permissions: AdminPermissions.BillingRead + "," + AdminPermissions.BillingRefundWrite);
+        var stepUpToken = await IssueStepUpForAsync(client);
+        client.DefaultRequestHeaders.Add("X-OET-Step-Up", stepUpToken);
         var idempotencyKey = $"refund-{Guid.NewGuid():N}";
         var firstBody = new
         {
@@ -432,6 +434,23 @@ public sealed class AdminBillingEndpointsTests : IClassFixture<TestWebApplicatio
             client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", permissions);
         }
         return client;
+    }
+
+    /// <summary>
+    /// Step-up targets a real account row, so this creates the admin identity the
+    /// debug headers will present, enrols TOTP on it, and exchanges a live code for a
+    /// proof through the public endpoint.
+    /// </summary>
+    private async Task<string> IssueStepUpForAsync(HttpClient client)
+    {
+        var accountId = client.DefaultRequestHeaders.GetValues("X-Debug-UserId").Single();
+        await _factory.EnsureAuthAccountAsync(
+            accountId,
+            ApplicationUserRoles.Admin,
+            $"step-up-{accountId}@example.test",
+            [AdminPermissions.SystemAdmin]);
+        var secret = await _factory.EnrolAuthenticatorAsync(accountId);
+        return await TestWebApplicationFactory.IssueStepUpTokenAsync(client, secret, "billing.refund");
     }
 
     private sealed class DevAuthEnv : IDisposable

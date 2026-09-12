@@ -778,6 +778,13 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
 
     private static void SeedSubscriptionPaymentTransaction(LearnerDbContext db, FulfillmentContext ctx, DateTimeOffset now)
     {
+        // The payment transaction must agree with the authoritative quote on amount,
+        // currency and owner: fulfilment binds a webhook back to the order via exactly
+        // those three values (PAY-03/PAY-09), so a hard-coded amount here makes the
+        // fixture reject a payment the product would accept.
+        var quote = db.BillingQuotes.Local.FirstOrDefault(q => q.Id == ctx.QuoteId)
+            ?? db.BillingQuotes.AsNoTracking().First(q => q.Id == ctx.QuoteId);
+
         db.PaymentTransactions.Add(new PaymentTransaction
         {
             Id = Guid.NewGuid(),
@@ -786,8 +793,8 @@ public sealed class CheckoutEntitlementFulfillmentTests : IClassFixture<FirstPar
             GatewayTransactionId = ctx.GatewayTransactionId,
             TransactionType = "subscription_payment",
             Status = "pending",
-            Amount = 199m,
-            Currency = "AUD",
+            Amount = quote.TotalAmount,
+            Currency = quote.Currency,
             ProductType = "plan",
             ProductId = ctx.PlanCode,
             QuoteId = ctx.QuoteId,

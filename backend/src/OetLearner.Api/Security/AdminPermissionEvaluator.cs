@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Security;
 
@@ -19,6 +20,8 @@ namespace OetLearner.Api.Security;
 /// </summary>
 public static class AdminPermissionEvaluator
 {
+    public const string BillingMarkPaidWrite = AdminPermissions.BillingMarkPaidWrite;
+
     private static readonly char[] Separators = [','];
 
     /// <summary>

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -1034,16 +1035,18 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
                 && x.Status == SubscriptionStatus.Active));
         }
 
-        using (var admin = _factory.CreateClient())
+        using (var admin = _factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, ApplicationUserRoles.Admin))
         {
-            admin.DefaultRequestHeaders.Add("X-Debug-Role", ApplicationUserRoles.Admin);
-            admin.DefaultRequestHeaders.Add("X-Debug-UserId", $"snapshot-admin-{Guid.NewGuid():N}");
-            admin.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+            var stepUpSecret = await _factory.EnrolAuthenticatorAsync(SeedData.AdminAuthAccountId);
+            var stepUpToken = await TestWebApplicationFactory.IssueStepUpTokenAsync(admin, stepUpSecret, "billing.mark_paid");
+            admin.DefaultRequestHeaders.Add("X-OET-Step-Up", stepUpToken);
             using var fulfilResponse = await admin.PostAsJsonAsync(
                 $"/v1/admin/billing/fulfilment/subscriptions/{purchasedSubscriptionId}/mark-fulfilled",
                 new { notes = "Snapshot payment verified." });
             var fulfilBody = await fulfilResponse.Content.ReadAsStringAsync();
-            Assert.True(fulfilResponse.IsSuccessStatusCode, fulfilBody);
+            Assert.True(
+                fulfilResponse.IsSuccessStatusCode,
+                $"mark-fulfilled returned {(int)fulfilResponse.StatusCode} {fulfilResponse.StatusCode} for subscription '{purchasedSubscriptionId}': {fulfilBody}");
         }
         var completionFinishedAt = DateTimeOffset.UtcNow;
 

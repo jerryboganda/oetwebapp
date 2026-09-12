@@ -12,6 +12,37 @@ public sealed class BillingOptions
     public int WebhookMaxAgeSeconds { get; set; } = 300;
 
     /// <summary>
+    /// Per-gateway overrides for <see cref="WebhookMaxAgeSeconds"/>, keyed by gateway
+    /// name (case-insensitive). A gateway that signs an event-creation timestamp and
+    /// retries on a slower schedule than the default window needs a wider value: a
+    /// provider whose first retry lands after the window would have every retry
+    /// rejected, so a lost first delivery could never be recovered by redelivery.
+    /// Configure via <c>Billing__WebhookMaxAgeSecondsByGateway__camelcase__&lt;key&gt;</c>.
+    /// </summary>
+    public Dictionary<string, int> WebhookMaxAgeSecondsByGateway { get; set; } =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            ["checkoutcom"] = 86400,
+        };
+
+    /// <summary>
+    /// Resolves the replay window for one gateway, falling back to
+    /// <see cref="WebhookMaxAgeSeconds"/>.
+    /// </summary>
+    public int ResolveWebhookMaxAgeSeconds(string? gateway)
+    {
+        if (!string.IsNullOrWhiteSpace(gateway)
+            && WebhookMaxAgeSecondsByGateway is not null
+            && WebhookMaxAgeSecondsByGateway.TryGetValue(gateway, out var overrideSeconds)
+            && overrideSeconds > 0)
+        {
+            return overrideSeconds;
+        }
+
+        return WebhookMaxAgeSeconds;
+    }
+
+    /// <summary>
     /// Maximum number of local processing attempts before a verified webhook is
     /// promoted to the dead-letter status surface for admin attention.
     /// </summary>

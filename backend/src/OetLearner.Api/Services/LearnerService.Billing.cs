@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Domain.Billing;
 
 namespace OetLearner.Api.Services;
 
@@ -412,4 +413,211 @@ public partial class LearnerService
             couponVersionId = quoteEntity.CouponVersionId,
             checkoutUrl
         });
+
+    private static void EnsureWebhookMatchesAuthoritativeOrder(
+        PaymentWebhookEvent? webhookEvent,
+        BillingQuote quote,
+        PaymentTransaction transaction)
+    {
+        ArgumentNullException.ThrowIfNull(quote);
+        ArgumentNullException.ThrowIfNull(transaction);
+
+        if (!string.Equals(transaction.Currency, quote.Currency, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Conflict(
+                "payment_currency_mismatch",
+                $"Payment currency '{transaction.Currency}' does not match the quoted currency '{quote.Currency}'.");
+        }
+
+        if (transaction.Amount != quote.TotalAmount)
+        {
+            throw ApiException.Conflict(
+                "payment_amount_mismatch",
+                $"Payment amount {transaction.Amount} does not match the quoted total {quote.TotalAmount}.");
+        }
+
+        if (!string.Equals(transaction.LearnerUserId, quote.UserId, StringComparison.Ordinal))
+        {
+            throw ApiException.Conflict(
+                "payment_user_mismatch",
+                "Payment transaction does not belong to the learner who owns this quote.");
+        }
+
+        if (webhookEvent is null)
+        {
+            return;
+        }
+
+        var mismatch = FindWebhookProviderOrderMismatch(
+            webhookEvent.PayloadJson,
+            quote.TotalAmount,
+            quote.Currency,
+            webhookEvent.EventType);
+        if (mismatch is not null)
+        {
+            throw ApiException.Conflict("payment_amount_mismatch", mismatch);
+        }
+    }
+
+    private static bool RequiresWebhookOrderBinding(string? targetStatus, string? eventCategory)
+        => string.Equals(targetStatus, "completed", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(eventCategory, PaymentWebhookCategories.Refund, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(eventCategory, PaymentWebhookCategories.Dispute, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsWalletTopUpTransaction(PaymentTransaction transaction)
+        => string.Equals(transaction.TransactionType, "wallet_top_up", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsTerminalNonRestorableTransactionStatus(string? status)
+        => string.Equals(status, "refunded", StringComparison.OrdinalIgnoreCase)
+           || string.Equals(status, "disputed", StringComparison.OrdinalIgnoreCase);
+
+    private static string? FindWebhookProviderOrderMismatch(
+        string? safePayloadJson,
+        decimal expectedAmount,
+        string expectedCurrency,
+        string? eventType)
+    {
+        var (providerAmount, providerCurrency) = ReadWebhookProviderReportedAmount(safePayloadJson);
+        if (providerAmount is null && providerCurrency is null)
+        {
+            return null;
+        }
+
+        if (providerCurrency is not null
+            && !string.Equals(providerCurrency, expectedCurrency, StringComparison.OrdinalIgnoreCase))
+        {
+            return $"Provider reported currency '{providerCurrency}' for an order quoted in '{expectedCurrency}'.";
+        }
+
+        if (providerAmount is null)
+        {
+            return null;
+        }
+
+        var amountMustMatch = string.Equals(
+            InferWebhookCategory(eventType ?? string.Empty),
+            PaymentWebhookCategories.Payment,
+            StringComparison.Ordinal);
+        if (amountMustMatch ? providerAmount.Value != expectedAmount : providerAmount.Value > expectedAmount)
+        {
+            return $"Provider reported amount {providerAmount.Value} for an order of {expectedAmount}.";
+        }
+
+        return null;
+    }
+
+    private static (decimal? Amount, string? Currency) ReadWebhookProviderReportedAmount(string? safePayloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(safePayloadJson)) return (null, null);
+        try
+        {
+            using var doc = JsonDocument.Parse(safePayloadJson);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return (null, null);
+
+            if (root.TryGetProperty("data", out var data)
+                && data.ValueKind == JsonValueKind.Object
+                && data.TryGetProperty("object", out var stripeObject)
+                && stripeObject.ValueKind == JsonValueKind.Object)
+            {
+                var minorUnits = ReadMinor(stripeObject, "amount_total") ?? ReadMinor(stripeObject, "amount");
+                return (
+                    minorUnits is null ? null : decimal.Round(minorUnits.Value / 100m, 2, MidpointRounding.AwayFromZero),
+                    ReadText(stripeObject, "currency"));
+            }
+
+            if (!root.TryGetProperty("resource", out var resource) || resource.ValueKind != JsonValueKind.Object)
+            {
+                return (null, null);
+            }
+
+            var amountBlock = ReadChild(resource, "amount") ?? ReadChild(resource, "gross_amount");
+            var value = amountBlock is null ? null : ReadText(amountBlock.Value, "value");
+            return (
+                decimal.TryParse(value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+                    ? parsed
+                    : null,
+                amountBlock is null ? null : ReadText(amountBlock.Value, "currency_code"));
+        }
+        catch (JsonException)
+        {
+            return (null, null);
+        }
+
+        static long? ReadMinor(JsonElement element, string propertyName)
+            => element.TryGetProperty(propertyName, out var value)
+               && value.ValueKind == JsonValueKind.Number
+               && value.TryGetInt64(out var number)
+                ? number
+                : null;
+
+        static string? ReadText(JsonElement element, string propertyName)
+            => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+
+        static JsonElement? ReadChild(JsonElement element, string propertyName)
+            => element.TryGetProperty(propertyName, out var value) && value.ValueKind == JsonValueKind.Object
+                ? value
+                : null;
+    }
+
+    /// <summary>
+    /// Returns a short machine-readable reason when a provider capture does not match the
+    /// authoritative order, or null when it is consistent. A capture that reports success
+    /// but took a different amount or currency must never release entitlement.
+    /// Security standard PAY-14 (audit §4.4): the check is unconditional —
+    /// a capture with no reportable amount (&lt;= 0), a blank currency, or no
+    /// authoritative order to compare against is a mismatch, not a pass.
+    /// </summary>
+    private static string? FindCaptureOrderMismatch(
+        CaptureResult capture,
+        PaymentTransaction? transaction,
+        CheckoutSession? cartSession,
+        PrivateSpeakingBooking? speakingBooking = null)
+    {
+        decimal? expectedAmount;
+        string? expectedCurrency;
+        if (transaction is not null)
+        {
+            expectedAmount = transaction.Amount;
+            expectedCurrency = transaction.Currency;
+        }
+        else if (cartSession is not null)
+        {
+            expectedAmount = cartSession.TotalAmount;
+            expectedCurrency = cartSession.Currency;
+        }
+        else if (speakingBooking is not null)
+        {
+            expectedAmount = speakingBooking.PriceMinorUnits / 100m;
+            expectedCurrency = speakingBooking.Currency;
+        }
+        else
+        {
+            // No authoritative order to bind this capture against — never grant.
+            return "payment_order_unbound";
+        }
+
+        if (string.IsNullOrWhiteSpace(expectedCurrency)
+            || string.IsNullOrWhiteSpace(capture.Currency)
+            || !string.Equals(expectedCurrency, capture.Currency, StringComparison.OrdinalIgnoreCase))
+        {
+            return "payment_currency_mismatch";
+        }
+
+        // A completed capture that does not report what it took cannot be
+        // verified against the order — treat as a mismatch (fail closed).
+        if (capture.AmountCaptured <= 0m)
+        {
+            return "payment_amount_unverified";
+        }
+
+        if (capture.AmountCaptured != expectedAmount)
+        {
+            return "payment_amount_mismatch";
+        }
+
+        return null;
+    }
 }

@@ -1,5 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -206,6 +208,159 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         {
             Environment.SetEnvironmentVariable(key, value);
         }
+    }
+
+    /// <summary>
+    /// Ensures an auth account row exists for a dev-auth debug identity, so features
+    /// that resolve the account by id (step-up) can find it.
+    /// </summary>
+    public async Task EnsureAuthAccountAsync(
+        string accountId,
+        string role,
+        string email,
+        IReadOnlyList<string>? permissions = null)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var normalizedEmail = email.ToUpperInvariant();
+
+        var account = await db.ApplicationUserAccounts.SingleOrDefaultAsync(x => x.Id == accountId);
+        if (account is null)
+        {
+            account = new ApplicationUserAccount
+            {
+                Id = accountId,
+                CreatedAt = now,
+            };
+            db.ApplicationUserAccounts.Add(account);
+        }
+
+        account.Email = email;
+        account.NormalizedEmail = normalizedEmail;
+        account.Role = role;
+        account.EmailVerifiedAt ??= now;
+        account.UpdatedAt = now;
+        account.PasswordHash ??= new PasswordHasher<ApplicationUserAccount>()
+            .HashPassword(account, SeedData.LocalSeedPassword);
+
+        foreach (var permission in permissions ?? [])
+        {
+            var grantId = $"grant_dev_{permission}_{accountId}";
+            if (!await db.AdminPermissionGrants.AnyAsync(g => g.Id == grantId))
+            {
+                db.AdminPermissionGrants.Add(new AdminPermissionGrant
+                {
+                    Id = grantId,
+                    AdminUserId = accountId,
+                    Permission = permission,
+                    GrantedBy = "test-factory",
+                    GrantedAt = now,
+                });
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Enrols authenticator TOTP on an existing auth account so step-up gated admin
+    /// actions can be exercised. Returns the TOTP secret so a caller can generate codes.
+    /// </summary>
+    public async Task<string> EnrolAuthenticatorAsync(string authAccountId)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var protector = scope.ServiceProvider
+            .GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>()
+            .CreateProtector("AuthService.AuthenticatorSecret");
+
+        var account = await db.ApplicationUserAccounts.SingleAsync(x => x.Id == authAccountId);
+        var secret = AuthenticatorTotp.GenerateSecretKey();
+        account.ProtectedAuthenticatorSecret = System.Convert.ToBase64String(
+            protector.Protect(System.Text.Encoding.UTF8.GetBytes(secret)));
+        account.AuthenticatorEnabledAt = DateTimeOffset.UtcNow;
+        account.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        return secret;
+    }
+
+    /// <summary>
+    /// Issues a real step-up proof for a client via the public endpoint, so tests
+    /// exercise the same path the admin UI uses. The client must already be
+    /// authenticated as <paramref name="authAccountId"/>.
+    /// </summary>
+    public static async Task<string> IssueStepUpTokenAsync(HttpClient client, string secret, string scope)
+    {
+        var code = GenerateTotpCode(secret, DateTimeOffset.UtcNow);
+        var response = await client.PostAsJsonAsync("/v1/auth/step-up", new { code, scope });
+        var body = await response.Content.ReadAsStringAsync();
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"Step-up issuance for scope '{scope}' failed with {(int)response.StatusCode}: {body}");
+        }
+
+        using var document = JsonDocument.Parse(body);
+        return document.RootElement.GetProperty("stepUpToken").GetString()!;
+    }
+
+    /// <summary>RFC 6238 TOTP generator matching the server's 6-digit / 30s profile.</summary>
+    public static string GenerateTotpCode(string secretKey, DateTimeOffset timestamp)
+    {
+        var key = DecodeBase32(secretKey);
+        var timestep = timestamp.ToUnixTimeSeconds() / 30;
+        Span<byte> counter = stackalloc byte[8];
+        for (var index = 7; index >= 0; index--)
+        {
+            counter[index] = (byte)(timestep & 0xFF);
+            timestep >>= 8;
+        }
+
+        using var hmac = new System.Security.Cryptography.HMACSHA1(key);
+        var hash = hmac.ComputeHash(counter.ToArray());
+        var offset = hash[^1] & 0x0F;
+        var binaryCode = ((hash[offset] & 0x7F) << 24)
+                         | (hash[offset + 1] << 16)
+                         | (hash[offset + 2] << 8)
+                         | hash[offset + 3];
+        return (binaryCode % 1_000_000).ToString("D6");
+    }
+
+    /// <summary>
+    /// Mirrors the server's base32 decoder exactly. It is deliberately not the
+    /// textbook/RFC decoder: the server keeps the accumulator's leftover bits between
+    /// characters instead of masking them off, so a "correct" decoder derives a
+    /// different HMAC key and every generated code is rejected. Matching the verifier
+    /// is what matters here, and <see cref="StepUpTotpHelperTests"/> pins the pairing.
+    /// </summary>
+    private static byte[] DecodeBase32(string value)
+    {
+        var cleaned = value.Trim().TrimEnd('=').ToUpperInvariant();
+        var output = new List<byte>();
+        var buffer = 0;
+        var bitsLeft = 0;
+
+        foreach (var character in cleaned)
+        {
+            var digit = character switch
+            {
+                >= 'A' and <= 'Z' => character - 'A',
+                >= '2' and <= '7' => character - '2' + 26,
+                _ => throw new FormatException("Invalid base32 character.")
+            };
+
+            buffer = (buffer << 5) | digit;
+            bitsLeft += 5;
+
+            while (bitsLeft >= 8)
+            {
+                output.Add((byte)(buffer >> (bitsLeft - 8)));
+                bitsLeft -= 8;
+            }
+        }
+
+        return output.ToArray();
     }
 
     public HttpClient CreateAuthenticatedClient(string email, string password, string? expectedRole = null)

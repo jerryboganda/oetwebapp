@@ -103,8 +103,10 @@ export function listAdminManualPayments(params: AdminManualPaymentListParams = {
   return apiClient.get<ManualPaymentListResponse>(`/v1/admin/billing/manual-payments/${qs ? `?${qs}` : ''}`);
 }
 
+export const MANUAL_PAYMENT_STEP_UP_SCOPE = 'billing.mark_paid';
+
 export function approveManualPayment(id: string, notes?: string): Promise<ManualPaymentDto> {
-  return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/approve`, { notes });
+  return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/approve`, { notes }, { stepUpScope: MANUAL_PAYMENT_STEP_UP_SCOPE });
 }
 
 export function rejectManualPayment(id: string, notes?: string): Promise<ManualPaymentDto> {
@@ -124,7 +126,7 @@ export function setManualPaymentStatus(id: string, status: 'pending' | 'needs_re
  * saw the transfer land) without waiting for the learner to upload a file. Audited.
  */
 export function waiveManualPaymentProof(id: string, reason: string): Promise<ManualPaymentDto> {
-  return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/waive-proof`, { reason });
+  return apiClient.post<ManualPaymentDto>(`/v1/admin/billing/manual-payments/${encodeURIComponent(id)}/waive-proof`, { reason }, { stepUpScope: MANUAL_PAYMENT_STEP_UP_SCOPE });
 }
 
 /** Undo a mis-clicked Reject: `rejected` → `pending`. */
@@ -188,6 +190,7 @@ export function markSubscriptionFulfilled(subscriptionId: string, notes?: string
   return apiClient.post<PendingFulfilmentDto>(
     `/v1/admin/billing/fulfilment/subscriptions/${encodeURIComponent(subscriptionId)}/mark-fulfilled`,
     { notes },
+    { stepUpScope: MANUAL_PAYMENT_STEP_UP_SCOPE },
   );
 }
 

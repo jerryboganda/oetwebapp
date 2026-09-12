@@ -19,7 +19,6 @@ namespace OetLearner.Api.Domain;
 [Index(nameof(UserId), nameof(Status))]
 [Index(nameof(ProofHashHex))]
 [Index(nameof(Status), nameof(SubmittedAt))]
-[Index(nameof(PaymentTransactionId))]
 [Index(nameof(Kind), nameof(Status))]
 public class ManualPaymentRequest
 {

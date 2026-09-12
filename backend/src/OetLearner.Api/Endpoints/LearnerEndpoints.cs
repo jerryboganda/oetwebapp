@@ -424,7 +424,12 @@ public static class LearnerEndpoints
             });
         });
 
-        // Payment webhook endpoints (no auth required)
+        // Payment webhook endpoints (no auth required).
+        // PAY-02/PAY-03 guard (audit §4.9): these endpoints are DELIBERATELY
+        // unthrottled — payment providers retry delivery from rotating IPs and
+        // any rate limit here causes missed fulfilment. Do NOT add
+        // RequireRateLimiting to this group. Compensating controls: signature
+        // verification at ingestion, replay window, and idempotent event dedup.
         var webhooks = app.MapGroup("/v1/payment/webhooks");
         webhooks.MapPost("/stripe", async (HttpContext http, LearnerService service, CancellationToken ct) =>
         {

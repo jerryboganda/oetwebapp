@@ -1,3 +1,8 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using OetLearner.Api.Services;
+using OetLearner.Api.Services.StepUp;
+
 namespace OetLearner.Api.Endpoints;
 
 /// <summary>
@@ -38,4 +43,56 @@ internal static class AdminRouteBuilderExtensions
     /// </summary>
     public static RouteHandlerBuilder WithAdminRead(this RouteHandlerBuilder builder, string permission)
         => builder.RequireAuthorization(permission);
+
+    /// <summary>
+    /// Require a fresh step-up (re-)authentication proof scoped to
+    /// <paramref name="scope"/> (PAY-16 / IAM-08) on top of the policy call.
+    /// </summary>
+    public static RouteHandlerBuilder WithStepUp(this RouteHandlerBuilder builder, string scope)
+        => builder.AddEndpointFilter(new StepUpEndpointFilter(scope));
+
+    /// <summary>Reads the <c>X-OET-Step-Up</c> header and verifies the presented
+    /// token against the route's required scope.</summary>
+    /// <remarks>
+    /// An endpoint filter runs before the authorization middleware populates the
+    /// principal, so <c>HttpContext.User</c> is not yet the authenticated user here.
+    /// The filter therefore authenticates explicitly before reading the account claim;
+    /// otherwise it would treat every caller as anonymous. It still never grants
+    /// anything — the route's own policies remain the authority on access, and this
+    /// only adds the step-up requirement on top.
+    /// </remarks>
+    internal sealed class StepUpEndpointFilter(string scope) : IEndpointFilter
+    {
+        public const string HeaderName = "X-OET-Step-Up";
+
+        public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+        {
+            var httpContext = context.HttpContext;
+            var authenticate = await httpContext.AuthenticateAsync();
+            var principal = authenticate.Succeeded ? authenticate.Principal : httpContext.User;
+            var authAccountId = principal?.FindFirstValue(AuthTokenService.AuthAccountIdClaimType);
+            if (string.IsNullOrWhiteSpace(authAccountId))
+            {
+                return Results.Unauthorized();
+            }
+
+            var token = httpContext.Request.Headers[HeaderName].ToString();
+            var stepUp = httpContext.RequestServices.GetRequiredService<IStepUpService>();
+            var verification = await stepUp.VerifyAsync(authAccountId, token, scope, httpContext.RequestAborted);
+            if (!verification.Ok)
+            {
+                return Results.Json(
+                    new
+                    {
+                        code = "step_up_required",
+                        message = "Confirm this action with your authenticator code.",
+                        retryable = false,
+                        requiredScope = scope,
+                    },
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            return await next(context);
+        }
+    }
 }

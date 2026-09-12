@@ -63,6 +63,13 @@ function getStorage(persistence: AuthPersistence): Storage | null {
 const E2E_KEEP_TOKENS_KEY = 'oet.e2e.keep-tokens';
 
 function shouldKeepTokensForE2E(): boolean {
+  // IAM-05: this test-only path must be UNAVAILABLE in production builds.
+  // NODE_ENV is inlined at build time, so in a production bundle this whole
+  // branch folds to `false` and no runtime flag — however it got into
+  // localStorage (attacker-seeded via XSS or devtools) — can make the app
+  // persist access/refresh tokens to web storage. Only Playwright builds
+  // (development/test) honor the seeded flag.
+  if (process.env.NODE_ENV === 'production') return false;
   // Only true when the Playwright bootstrap explicitly seeds this flag into
   // localStorage. Production sign-in flows never set this key, so production
   // behavior (XSS hardening: tokens never persisted to web storage) is
@@ -102,14 +109,16 @@ function fromPersistedSnapshot(snapshot: PersistedSessionSnapshot): AuthSession 
   // them so the auth manager can avoid an immediate /v1/auth/refresh round
   // trip — important because the backend rotates refresh tokens single-use,
   // so a single shared storageState cannot survive multiple test contexts
-  // that each refresh on cold load. Reading the persisted access token costs
-  // nothing in production where the field is simply absent.
+  // that each refresh on cold load. IAM-05: in production builds the extras
+  // are NEVER honored — a hand-seeded payload with tokens is treated as
+  // token-less and the normal refresh flow takes over.
+  const honorPersistedTokens = process.env.NODE_ENV !== 'production';
   const extras = snapshot as PersistedSessionSnapshot & {
     accessToken?: unknown;
     refreshToken?: unknown;
   };
-  const persistedAccessToken = typeof extras.accessToken === 'string' ? extras.accessToken : '';
-  const persistedRefreshToken = typeof extras.refreshToken === 'string' ? extras.refreshToken : null;
+  const persistedAccessToken = honorPersistedTokens && typeof extras.accessToken === 'string' ? extras.accessToken : '';
+  const persistedRefreshToken = honorPersistedTokens && typeof extras.refreshToken === 'string' ? extras.refreshToken : null;
 
   return {
     accessToken: persistedAccessToken,

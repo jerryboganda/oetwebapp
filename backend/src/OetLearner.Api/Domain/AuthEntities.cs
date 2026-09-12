@@ -277,6 +277,13 @@ public static class AdminPermissions
     /// (create, change-plan, extend, cancel, reactivate, status, wallet spend) only.</summary>
     public const string BillingSubscriptionWrite = "billing:subscription_write";
 
+    /// <summary>Grants the money-moving manual-payment decisions only — approving a
+    /// proof of payment, waiving proof for a confirmed offline payment, and marking a
+    /// paid subscription fulfilled. Deliberately separate from
+    /// <see cref="BillingRefundWrite"/> so the role that may reverse a charge is not
+    /// automatically the role that may recognise one.</summary>
+    public const string BillingMarkPaidWrite = "billing:mark_paid_write";
+
     public const string LearnerRead = "learner:read";
     public const string LearnerWrite = "learner:write";
     public const string UsersRead = "users:read";
@@ -309,7 +316,7 @@ public static class AdminPermissions
         AssessmentGovernanceApprove, AssessmentGovernanceExecute,
         AssessmentResultsRead, AssessmentResultsWrite,
         BillingRead, BillingWrite,
-        BillingRefundWrite, BillingCatalogWrite, BillingSubscriptionWrite,
+        BillingRefundWrite, BillingCatalogWrite, BillingSubscriptionWrite, BillingMarkPaidWrite,
         LearnerRead, LearnerWrite,
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,

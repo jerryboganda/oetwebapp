@@ -37,11 +37,38 @@ export interface PlaybackAttestationIntegrityResult {
   isSuspicious: boolean;
 }
 
+/**
+ * Hardware-attestation material (Play Integrity / App Attest), distinct from the
+ * heuristic {@link PlaybackAttestationIntegrityResult}. The `token` is OPAQUE
+ * and platform-defined — JS must never try to interpret it; only the server
+ * verifies it.
+ */
+export interface PlaybackAttestationIntegrityTokenResult {
+  /**
+   * Opaque platform attestation material:
+   *  - Android: the Play Integrity token (the JWE string from the Play Integrity
+   *    `StandardIntegrityTokenProvider` / classic `IntegrityTokenResponse.token`).
+   *  - iOS: base64 of the `DCAppAttestService` attestation object (first run) or
+   *    assertion (subsequent runs).
+   */
+  token: string;
+  /** iOS App Attest key id (`DCAppAttestService.generateKey` result). Null on Android. */
+  keyId?: string | null;
+}
+
 export interface PlaybackAttestationPlugin {
   sign(options: { nonce: string; videoId: string; userId: string }): Promise<PlaybackAttestationSignResult>;
   setSecureScreen(options: { enabled: boolean }): Promise<PlaybackAttestationSecureScreenResult>;
   /** Native-only (Android + iOS). Rejects on desktop/web shells that don't implement it. */
   getIntegrity(): Promise<PlaybackAttestationIntegrityResult>;
+  /**
+   * Native-only (Android + iOS). OPTIONAL — shells predating hardware attestation
+   * do not implement it. Returns a real hardware attestation token (Play
+   * Integrity / App Attest) bound to the supplied server-issued `nonce`.
+   * Feature-detect via the {@link getIntegrityToken} helper, which returns null
+   * (never throws) when the method is missing or the native call rejects.
+   */
+  getIntegrityToken?(options: { nonce: string }): Promise<PlaybackAttestationIntegrityTokenResult>;
   /** iOS only: fires whenever `UIApplication.userDidTakeScreenshotNotification`
    * is posted. Detection-after-the-fact only — iOS cannot block a still
    * screenshot of an arbitrary WKWebView. Android blocks screenshots outright
@@ -124,6 +151,37 @@ export async function getDeviceIntegrity(): Promise<PlaybackAttestationIntegrity
 
   try {
     return await PlaybackAttestation.getIntegrity();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hardware attestation (security standard MOB-09 / MOB-10) — best-effort, no
+ * throw. Requests a real Play Integrity / App Attest token bound to the
+ * server-issued `nonce`. Returns null on web/desktop, on shells that do not
+ * implement the optional native `getIntegrityToken` method, or when the native
+ * call rejects — so callers fall back to the heuristic {@link getDeviceIntegrity}
+ * path without try/catch. This is a RISK SIGNAL, never an access control.
+ */
+export async function getIntegrityToken(
+  nonce: string,
+): Promise<PlaybackAttestationIntegrityTokenResult | null> {
+  if (!isPlaybackAttestationAvailable()) {
+    return null;
+  }
+
+  const request = PlaybackAttestation.getIntegrityToken?.bind(PlaybackAttestation);
+  if (!request) {
+    return null;
+  }
+
+  try {
+    const result = await request({ nonce });
+    if (!result || typeof result.token !== 'string' || result.token.length === 0) {
+      return null;
+    }
+    return result;
   } catch {
     return null;
   }

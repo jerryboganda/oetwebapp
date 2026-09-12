@@ -37,7 +37,7 @@ public static class AdminRoleCatalog
         new(ClinicalReviewer, "Clinical Reviewer", "Clinical content review without candidate-result access", [AdminPermissions.ContentRead, AdminPermissions.ContentEditorReview]),
         new(LanguageAssessor, "Language Assessor", "Language-quality content review without candidate-result access", [AdminPermissions.ContentRead, AdminPermissions.ContentEditorReview]),
         new(Reviewer, "Reviewer", "Review operations access", [AdminPermissions.ContentRead, AdminPermissions.ReviewOps]),
-        new(BillingAdmin, "Billing Admin", "Full billing management (legacy superset)", [AdminPermissions.BillingRead, AdminPermissions.BillingWrite]),
+        new(BillingAdmin, "Billing Admin", "Full billing management (legacy superset)", [AdminPermissions.BillingRead, AdminPermissions.BillingWrite, AdminPermissions.BillingMarkPaidWrite]),
         new(CustomerSupport, "Customer Support", "Ticket-linked, time-limited candidate support access", [AdminPermissions.CustomerSupportRead, AdminPermissions.CustomerSupportWrite]),
         new(RefundSpecialist, "Refund Specialist", "Read billing data and issue refunds / handle disputes only", [AdminPermissions.BillingRead, AdminPermissions.BillingRefundWrite]),
         new(CatalogEditor, "Catalog Editor", "Read billing data and edit plans, add-ons, coupons, wallet tiers, free-tier, score-guarantee", [AdminPermissions.BillingRead, AdminPermissions.BillingCatalogWrite]),

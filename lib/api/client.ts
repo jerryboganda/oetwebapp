@@ -13,6 +13,7 @@ import { env } from '../env';
 import { fetchWithTimeout } from '../network/fetch-with-timeout';
 import { getClientIdentitySnapshot } from '../client-version';
 import { getDeviceIdForRequest } from '../device-id';
+import { getStepUpToken } from './step-up';
 
 export const API_BASE_URL = env.apiBaseUrl;
 
@@ -76,6 +77,24 @@ export function resolveBrowserApiResourceUrl(pathOrUrl: string): string | null {
 
 export function resolveApiUploadUrl(pathOrUrl: string): string {
   return resolveBrowserApiResourceUrl(pathOrUrl) ?? resolveApiUrl(pathOrUrl);
+}
+
+const STEP_UP_HEADER = 'X-OET-Step-Up';
+
+/**
+ * Echo a cached step-up proof onto the outgoing request when the caller declared
+ * a scope. The token is a live credential held in memory only; absent or expired
+ * proofs are simply omitted so the backend can raise `403 step_up_required`.
+ */
+function withStepUpHeader(headers: HeadersInit | undefined, stepUpScope?: string): HeadersInit | undefined {
+  if (!stepUpScope) return headers;
+
+  const token = getStepUpToken(stepUpScope);
+  if (!token) return headers;
+
+  const merged = new Headers(headers);
+  merged.set(STEP_UP_HEADER, token);
+  return merged;
 }
 
 export async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: boolean }): Promise<HeadersInit> {
@@ -158,6 +177,7 @@ function mapErrorCodeToUserMessage(code: string, fallback: string): string {
     case 'idempotency_duplicate': return 'This action was already completed.';
     case 'not_found': return 'The requested resource was not found.';
     case 'forbidden': return 'You do not have permission to perform this action.';
+    case 'step_up_invalid_code': return 'That authenticator code was incorrect or has expired. Enter the current 6-digit code and try again.';
     case 'validation_error': return 'Please check your input and try again.';
     case 'rate_limited': return 'Too many requests. Please wait a moment and try again.';
     case 'internal_server_error': return 'Server encountered an issue processing this request. Tap retry or reload.';
@@ -193,14 +213,14 @@ export async function maybe<T>(promise: Promise<T>, fallback: T | null = null): 
   }
 }
 
-export async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean; acceptedStatuses?: number[]; timeoutMs?: number }): Promise<T> {
+export async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean; acceptedStatuses?: number[]; timeoutMs?: number; stepUpScope?: string }): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await fetchWithTimeout(resolveApiUrl(path), {
         ...init,
-        headers: await getHeaders(path, init?.headers, options),
+        headers: await getHeaders(path, withStepUpHeader(init?.headers, options?.stepUpScope), options),
       }, options?.timeoutMs);
 
       const acceptedStatuses = options?.acceptedStatuses ?? [];
@@ -325,11 +345,11 @@ export async function apiRequest<T = any>(path: string, init?: RequestInit, opti
   throw lastError ?? new Error('Request failed');
 }
 
-export async function apiBlobRequest(path: string, init?: RequestInit): Promise<Blob> {
+export async function apiBlobRequest(path: string, init?: RequestInit, options?: { stepUpScope?: string }): Promise<Blob> {
   const response = await fetchWithTimeout(resolveApiUrl(path), {
     ...init,
     credentials: init?.credentials ?? 'include',
-    headers: await getHeaders(path, init?.headers),
+    headers: await getHeaders(path, withStepUpHeader(init?.headers, options?.stepUpScope)),
   });
 
   if (!response.ok) {

@@ -592,7 +592,7 @@ public class WalletTransaction
 // ── Payment Gateway Integration ──
 
 [Index(nameof(LearnerUserId))]
-[Index(nameof(GatewayTransactionId), IsUnique = true)]
+[Index(nameof(Gateway), nameof(GatewayTransactionId), IsUnique = true)]
 public class PaymentTransaction
 {
     [Key]
@@ -650,7 +650,7 @@ public class PaymentTransaction
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
-[Index(nameof(GatewayEventId), IsUnique = true)]
+[Index(nameof(Gateway), nameof(GatewayEventId), IsUnique = true)]
 public class PaymentWebhookEvent
 {
     [Key]

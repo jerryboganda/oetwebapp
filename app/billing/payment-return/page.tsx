@@ -46,10 +46,10 @@ function BillingPaymentReturnContent() {
   const quoteId = urlRefs.quoteId ?? storedRefs?.quoteId ?? null;
   const sessionId = urlRefs.sessionId ?? storedRefs?.sessionId ?? null;
   const initialStatus = searchParams?.get('status') ?? null;
-  const cancelledByLearner = initialStatus === 'cancelled';
+  const cancelledHint = initialStatus === 'cancelled';
   const storageReady = storedRefs !== undefined || Boolean(urlRefs.quoteId || urlRefs.sessionId);
   const missingReference = storageReady && !quoteId && !sessionId;
-  const [phase, setPhase] = useState<Phase>(() => (cancelledByLearner ? 'cancelled' : 'polling'));
+  const [phase, setPhase] = useState<Phase>('polling');
   const [status, setStatus] = useState<BillingPaymentStatus | null>(null);
   const [pollAttempt, setPollAttempt] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -76,15 +76,15 @@ function BillingPaymentReturnContent() {
   }, [initialStatus, quoteId, searchParams, sessionId, storageReady, storedRefs?.gateway]);
 
   useEffect(() => {
-    if (cancelledByLearner || !missingReference) return;
+    if (!missingReference) return;
     setPhase('failed');
     setError('Missing checkout reference. Please open Billing to confirm your purchase status.');
-  }, [cancelledByLearner, missingReference]);
+  }, [missingReference]);
 
   useEffect(() => {
-    // A learner-cancelled checkout stays on the cancelled screen — the
-    // backend may still report the session as pending until it expires.
-    if (!storageReady || missingReference || cancelledByLearner) {
+    // The backend owns the verdict; a `?status=cancelled` hint may only reword
+    // the polling state, never decide it. Always poll when a reference exists.
+    if (!storageReady || missingReference) {
       return;
     }
 
@@ -137,19 +137,20 @@ function BillingPaymentReturnContent() {
     return () => {
       cancelled = true;
     };
-  }, [cancelledByLearner, missingReference, pollAttempt, quoteId, sessionId, storageReady, user?.userId]);
+  }, [missingReference, pollAttempt, quoteId, sessionId, storageReady, user?.userId]);
 
   return (
     <PaymentReturnShell
       phase={phase}
       status={status}
       error={error}
+      cancelledHint={cancelledHint}
       onCheckAgain={() => setPollAttempt((attempt) => attempt + 1)}
     />
   );
 }
 
-function PaymentReturnShell({ phase, status, error, onCheckAgain }: { phase: Phase; status?: BillingPaymentStatus | null; error?: string | null; onCheckAgain?: () => void }) {
+function PaymentReturnShell({ phase, status, error, onCheckAgain, cancelledHint }: { phase: Phase; status?: BillingPaymentStatus | null; error?: string | null; onCheckAgain?: () => void; cancelledHint?: boolean }) {
   const destination = useMemo(() => {
     if (status?.productType === 'addon_purchase' && status.addOnCodes.some((code) => code.startsWith('pkg_'))) return '/ai-packages';
     if (status?.productType === 'addon_purchase') return '/billing';
@@ -185,7 +186,7 @@ function PaymentReturnShell({ phase, status, error, onCheckAgain }: { phase: Pha
             <StatusIcon phase={phase} />
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-              <p className="mt-2 text-sm leading-6 text-muted">{messageFor(phase, status)}</p>
+              <p className="mt-2 text-sm leading-6 text-muted">{messageFor(phase, status, cancelledHint)}</p>
             </div>
           </div>
 
@@ -263,7 +264,7 @@ function StatusIcon({ phase }: { phase: Phase }) {
   return <AlertCircle className="mt-1 h-7 w-7 flex-none text-danger" />;
 }
 
-function messageFor(phase: Phase, status?: BillingPaymentStatus | null) {
+function messageFor(phase: Phase, status?: BillingPaymentStatus | null, cancelledHint?: boolean) {
   if (phase === 'completed' && status?.verificationRequired) {
     return status.verificationMessage
       ?? 'Payment received — your order is Pending Verification. An admin will approve it shortly; you can also send your receipt on WhatsApp.';
@@ -276,5 +277,6 @@ function messageFor(phase: Phase, status?: BillingPaymentStatus | null) {
   if (phase === 'expired') return status?.failureReason ?? 'The checkout window expired before payment was completed.';
   if (phase === 'failed') return status?.failureReason ?? 'The payment portal did not complete this order.';
   if (phase === 'timeout') return 'Your payment may still be processing — your purchase activates automatically once it is confirmed. Use "Check again", or look at Billing or your email in a few minutes. You will not be charged twice for this order.';
+  if (cancelledHint) return 'You cancelled this checkout. We are confirming the final status with the provider.';
   return 'We are confirming your payment with the provider. This usually takes a few seconds.';
 }

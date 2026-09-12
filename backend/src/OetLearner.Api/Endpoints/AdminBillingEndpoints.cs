@@ -45,7 +45,11 @@ public static class AdminBillingEndpoints
         // require AdminBillingRead, writes require AdminBillingRefundWrite.
         var refunds = app.MapGroup("/v1/admin/refunds");
         refunds.MapGet("/", ListRefunds).RequireAuthorization("AdminBillingRead");
-        refunds.MapPost("/", IssueRefund).WithAdminWrite("AdminBillingRefundWrite");
+        var issueRefund = refunds.MapPost("/", IssueRefund).WithAdminWrite("AdminBillingRefundWrite");
+        if (app.ServiceProvider.GetRequiredService<IOptions<StepUpOptions>>().Value.RequireForRefunds)
+        {
+            issueRefund.WithStepUp("billing.refund");
+        }
 
         // ── Products (DB-only — Stripe sync is the seeder's job) ───────────────
         var products = app.MapGroup("/v1/admin/products");

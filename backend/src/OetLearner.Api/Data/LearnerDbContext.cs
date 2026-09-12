@@ -1246,10 +1246,12 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         // Payment indexes
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.Status, x.CreatedAt });
-        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.GatewayTransactionId).IsUnique();
-        modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => x.GatewayEventId).IsUnique();
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.Gateway, x.GatewayTransactionId }).IsUnique();
+        modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.Gateway, x.GatewayEventId }).IsUnique();
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.ProcessingStatus, x.ReceivedAt });
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.VerificationStatus, x.ProcessingStatus });
+        modelBuilder.Entity<ManualPaymentRequest>().HasIndex(x => x.PaymentTransactionId).IsUnique().HasFilter("\"PaymentTransactionId\" IS NOT NULL");
+        modelBuilder.Entity<CheckoutSession>().HasIndex(x => new { x.Gateway, x.GatewayOrderId }).IsUnique().HasFilter("\"GatewayOrderId\" IS NOT NULL");
 
         // ── Content hierarchy indexes ──
         modelBuilder.Entity<ContentProgram>().HasIndex(x => x.Code).IsUnique();

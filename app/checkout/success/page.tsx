@@ -3,7 +3,7 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { CheckCircle2, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { SendProofOnWhatsAppButton } from '@/components/billing/send-proof-whatsapp-button';
@@ -13,10 +13,12 @@ import { CheckoutSuccessPoller } from '@/components/checkout';
  * Post-payment confirmation. Two routes land here:
  *  - hosted card checkout, which returns `session_id` and is polled until the
  *    backend confirms fulfilment;
- *  - the embedded PayPal capture on /checkout/review, which redirects here with the
- *    order context it already holds (there is no session to poll — the capture call
- *    itself confirmed the payment).
+ *  - the embedded PayPal capture on /checkout/review, which redirects here with its
+ *    `order` id — the same checkout session id the capture was created against — so
+ *    it is polled the same way.
  *
+ * The verdict (paid, manual fulfilment, failure) always comes from the backend poll;
+ * URL parameters only ever supply the lookup reference and display wording.
  * Both end with the proof-of-payment WhatsApp CTA (spec 2026-07-15 §7).
  */
 export default function CheckoutSuccessPage() {
@@ -27,10 +29,6 @@ export default function CheckoutSuccessPage() {
   );
 }
 
-/** Delivery methods where payment does NOT release access — an admin hands the
- *  package over and only then does the subscription go Active (spec §2/§5). */
-const MANUAL_DELIVERY = new Set(['manual_web', 'whatsapp', 'telegram', 'manual_material']);
-
 function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams?.get('session_id') ?? '';
@@ -38,9 +36,8 @@ function CheckoutSuccessContent() {
   const amountParam = searchParams?.get('amount');
   const currency = searchParams?.get('currency') ?? '';
   const reference = searchParams?.get('order') ?? searchParams?.get('quote') ?? '';
-  const delivery = searchParams?.get('delivery') ?? '';
+  const pollReference = sessionId || reference;
   const amount = amountParam != null && amountParam !== '' ? Number(amountParam) : null;
-  const isManualDelivery = MANUAL_DELIVERY.has(delivery);
   // AI / practice / mock packages (Products 30-47) activate instantly and
   // never use the proof-of-payment verification route.
   const isAiPackage =
@@ -54,18 +51,14 @@ function CheckoutSuccessContent() {
         <header>
           <h1 className="text-3xl font-bold">Thank you</h1>
           <p className="mt-1 text-sm text-muted">
-            {isManualDelivery
-              ? 'We have your payment. Your package is handed over by our team — details below.'
-              : 'We are confirming your purchase with the payment processor.'}
+            We are confirming your purchase with the payment processor.
           </p>
         </header>
 
-        {isManualDelivery ? (
-          <PendingManualFulfilment delivery={delivery} course={course} />
-        ) : sessionId ? (
-          <CheckoutSuccessPoller sessionId={sessionId} />
+        {pollReference ? (
+          <CheckoutSuccessPoller sessionId={pollReference} />
         ) : (
-          <PaymentReceived course={course} />
+          <ConfirmingPurchase course={course} />
         )}
 
         {!isAiPackage && (
@@ -88,69 +81,28 @@ function CheckoutSuccessContent() {
   );
 }
 
-/**
- * A paid order whose subscription stays Pending until an admin marks it fulfilled.
- * Must not imply access is live — it is not, and the entitlement resolver grants
- * nothing for a Pending subscription.
- */
-function PendingManualFulfilment({ delivery, course }: { delivery: string; course: string }) {
-  const handover =
-    delivery === 'whatsapp' || delivery === 'telegram'
-      ? 'Once our team verifies your payment, message us on WhatsApp using the button below — it reaches our support desk directly.'
-      : delivery === 'manual_material'
-        ? 'Once our team verifies your payment we will arrange delivery of your materials and confirm the details with you.'
-        : 'Once our team verifies your payment we will switch your access on and confirm it with you.';
-
+function ConfirmingPurchase({ course }: { course: string }) {
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-warning/30 bg-warning/10 p-6">
+      <div className="rounded-2xl border border-border bg-surface p-6">
         <div className="flex items-start gap-3">
-          <Clock className="mt-0.5 h-6 w-6 flex-none text-warning" aria-hidden="true" />
+          <Clock className="mt-0.5 h-6 w-6 flex-none text-muted" aria-hidden="true" />
           <div>
-            <h2 className="text-lg font-semibold text-warning">Pending manual fulfilment</h2>
+            <h2 className="text-lg font-semibold text-navy">Confirming your purchase</h2>
             {course ? <p className="mt-1 text-sm font-medium text-navy">{course}</p> : null}
             <p className="mt-2 text-sm leading-6 text-navy">
-              Your payment is in. This package is not activated automatically — an admin verifies your
-              proof of payment and hands it over. {handover}
-            </p>
-            <p className="mt-2 text-sm leading-6 text-navy">
-              Your access is <strong>not live yet</strong>, so don&apos;t worry if the package still looks
-              locked on your dashboard.
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-3">
-        <Button asChild variant="outline">
-          <Link href="/billing">Track this order in Billing</Link>
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-/** Embedded PayPal capture: the payment is already confirmed, there is nothing to poll. */
-function PaymentReceived({ course }: { course: string }) {
-  return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-success/30 bg-success/10 p-6">
-        <div className="flex items-start gap-3">
-          <CheckCircle2 className="mt-0.5 h-6 w-6 flex-none text-success" aria-hidden="true" />
-          <div>
-            <h2 className="text-lg font-semibold text-success">Payment received</h2>
-            {course ? <p className="mt-1 text-sm font-medium text-navy">{course}</p> : null}
-            <p className="mt-2 text-sm text-navy">
-              Thanks for your purchase. We have added the new entitlements to your account.
+              We could not match this page to a checkout on your account. Your purchase is confirmed
+              once the payment processor reports it — check Billing for the latest status.
             </p>
           </div>
         </div>
       </div>
       <div className="flex flex-wrap gap-3">
         <Button asChild>
-          <Link href="/dashboard">Go to my dashboard</Link>
+          <Link href="/billing">Check Billing</Link>
         </Button>
         <Button asChild variant="outline">
-          <Link href="/billing">View billing</Link>
+          <Link href="/dashboard">Back to dashboard</Link>
         </Button>
       </div>
     </div>

@@ -65,12 +65,16 @@ public sealed class AuthService(
 
     // M2 (security): a PBKDF2-hashed sentinel password used to normalise
     // sign-in response timing when the email does not map to any account.
-    // The default password hasher runs the full KDF on Verify, so invoking it
-    // against a pre-baked hash takes the same ~50–200ms as a real miss. We do
-    // this instead of building a throwaway account so the hash format tracks
-    // whatever identity format v3/v4 the hasher is configured to emit.
-    private static readonly string _dummyPasswordHash = new PasswordHasher<ApplicationUserAccount>()
-        .HashPassword(new ApplicationUserAccount(), "enumeration-guard-dummy-password");
+    // The hasher runs the full KDF on Verify, so invoking it against a
+    // pre-baked hash takes the same time as a real miss. We do this instead
+    // of building a throwaway account so the hash format tracks the
+    // configured identity profile.
+    // IAM-01: built with the SAME PBKDF2-HMAC-SHA512/>=220k profile the real
+    // hasher uses (PasswordHasherPolicy), so the sentinel cost cannot be used
+    // as a distinguisher.
+    private static readonly string _dummyPasswordHash =
+        OetLearner.Api.Security.PasswordHasherPolicy.CreateHasher<ApplicationUserAccount>()
+            .HashPassword(new ApplicationUserAccount(), "enumeration-guard-dummy-password");
 
     public async Task<AuthSessionResponse> RegisterLearnerAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
@@ -331,6 +335,20 @@ public sealed class AuthService(
             await db.SaveChangesAsync(cancellationToken);
             await securityEventLogger.TryLogAsync(account.Id, SecurityEventKinds.AuthSignInFailed, cancellationToken: cancellationToken);
             throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
+        }
+
+        // IAM-01 (OWASP): migrate any older/weaker password hash (v3 SHA-1/SHA-256
+        // formats or lower iteration counts) to the configured PBKDF2-HMAC-SHA512
+        // >=220k profile on successful sign-in, while the plaintext password is
+        // in hand. This runs BEFORE the MFA/device-challenge throws so an
+        // MFA-gated account still migrates on the password-verified attempt.
+        if (verificationResult == PasswordVerificationResult.SuccessRehashNeeded)
+        {
+            account.PasswordHash = passwordHasher.HashPassword(account, request.Password);
+            // Persist immediately: sign-ins that continue into an MFA challenge
+            // throw out of this request, and the rehash must not depend on the
+            // later session-creation SaveChanges surviving.
+            await db.SaveChangesAsync(cancellationToken);
         }
 
         var authenticatedLearner = await EnsureAccountCanAuthenticateAsync(account, cancellationToken);

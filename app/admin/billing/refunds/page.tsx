@@ -24,8 +24,11 @@ import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import {
   fetchAdminRefunds,
   postAdminRefundAction,
+  ADMIN_REFUND_STEP_UP_SCOPE,
   type AdminRefundRequest,
 } from '@/lib/api';
+import { StepUpConfirmDialog } from '@/components/admin/step-up-confirm-dialog';
+import { useStepUpAction } from '@/components/admin/step-up/use-step-up-action';
 import { formatMoney } from '@/lib/money';
 
 /**
@@ -43,6 +46,7 @@ export default function AdminRefundsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const stepUp = useStepUpAction(ADMIN_REFUND_STEP_UP_SCOPE);
   const [serviceAvailable, setServiceAvailable] = useState(true);
 
   const load = useCallback(async () => {
@@ -68,9 +72,13 @@ export default function AdminRefundsPage() {
   async function act(refund: AdminRefundRequest, action: 'approve' | 'deny' | 'issue') {
     setBusyId(refund.id);
     try {
-      const next = await postAdminRefundAction({ refundId: refund.id, action });
-      setRefunds((current) => current.map((r) => (r.id === refund.id ? next : r)));
-      toast.success(`Refund ${action}d.`);
+      await stepUp.run(
+        () => postAdminRefundAction({ refundId: refund.id, action }),
+        (next) => {
+          setRefunds((current) => current.map((r) => (r.id === refund.id ? next : r)));
+          toast.success(`Refund ${action}d.`);
+        },
+      );
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : 'Refund action failed.');
@@ -218,6 +226,15 @@ export default function AdminRefundsPage() {
         loading={loading}
         emptyMessage="No refund requests match the current filters."
         searchPlaceholder="Search refunds..."
+      />
+
+      <StepUpConfirmDialog
+        open={stepUp.promptOpen}
+        scope={ADMIN_REFUND_STEP_UP_SCOPE}
+        loading={stepUp.pending}
+        error={stepUp.error}
+        onSubmit={stepUp.submitCode}
+        onCancel={stepUp.cancel}
       />
     </AdminTableLayout>
   );

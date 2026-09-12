@@ -3926,14 +3926,16 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GatewayOrderId");
-
                     b.HasIndex("IdempotencyKey")
                         .IsUnique();
 
                     b.HasIndex("StripeSessionId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("Gateway", "GatewayOrderId")
+                        .IsUnique()
+                        .HasFilter("\"GatewayOrderId\" IS NOT NULL");
 
                     b.ToTable("CheckoutSessions");
                 });
@@ -14512,7 +14514,9 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PaymentTransactionId");
+                    b.HasIndex("PaymentTransactionId")
+                        .IsUnique()
+                        .HasFilter("\"PaymentTransactionId\" IS NOT NULL");
 
                     b.HasIndex("ProofHashHex");
 
@@ -16937,14 +16941,14 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("CouponVersionId");
 
-                    b.HasIndex("GatewayTransactionId")
-                        .IsUnique();
-
                     b.HasIndex("LearnerUserId");
 
                     b.HasIndex("PlanVersionId");
 
                     b.HasIndex("QuoteId");
+
+                    b.HasIndex("Gateway", "GatewayTransactionId")
+                        .IsUnique();
 
                     b.HasIndex("LearnerUserId", "CreatedAt");
 
@@ -17038,7 +17042,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("GatewayEventId")
+                    b.HasIndex("Gateway", "GatewayEventId")
                         .IsUnique();
 
                     b.HasIndex("ProcessingStatus", "ReceivedAt");

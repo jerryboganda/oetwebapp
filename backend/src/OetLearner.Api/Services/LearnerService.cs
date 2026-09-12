@@ -10706,6 +10706,14 @@ public partial class LearnerService(
 
     // ── Payment Webhooks ──
 
+    // PAY-17 (audit §4.6): gateway selection only validates support + enablement.
+    // The amount pin itself happens at intent creation — every checkout intent is
+    // minted from the server-calculated BillingQuote (quoteEntity.TotalAmount/
+    // Currency, never a client-supplied figure) with quote_id in the metadata —
+    // and settlement re-validates provider-vs-order on both the webhook path
+    // (EnsureWebhookMatchesAuthoritativeOrder, fail-closed) and the capture path
+    // (FindCaptureOrderMismatch, unconditional). A client cannot substitute a
+    // cheaper provider order: any contradiction refuses the grant.
     private async Task EnsureCheckoutGatewayAsync(string gatewayLabel, CancellationToken cancellationToken)
     {
         if (!paymentGateways.SupportedGateways.Contains(gatewayLabel, StringComparer.OrdinalIgnoreCase))
@@ -11090,6 +11098,46 @@ public partial class LearnerService(
                 ? paymentTransaction.Status
                 : normalizedStatus.Trim().ToLowerInvariant();
 
+            if (RequiresWebhookOrderBinding(targetStatus, eventCategory))
+            {
+                var authoritativeQuote = await GetQuoteForTransactionAsync(paymentTransaction, ct);
+                if (authoritativeQuote is not null)
+                {
+                    EnsureWebhookMatchesAuthoritativeOrder(webhookEvent, authoritativeQuote, paymentTransaction);
+                }
+                else if (IsWalletTopUpTransaction(paymentTransaction))
+                {
+                    // Wallet top-ups carry no BillingQuote: the server-validated tier
+                    // amount is bound into the PaymentTransaction row itself at
+                    // creation (WalletService), so the order-binding that matters is
+                    // provider-reported amount/currency vs that row. Fail closed on
+                    // contradiction; a payload without any amount blocks nothing here
+                    // but stays covered by PAY-14-style checks on capture and by
+                    // reconciliation.
+                    var providerMismatch = FindWebhookProviderOrderMismatch(
+                        webhookEvent.PayloadJson,
+                        paymentTransaction.Amount,
+                        paymentTransaction.Currency,
+                        webhookEvent.EventType);
+                    if (providerMismatch is not null)
+                    {
+                        throw ApiException.Conflict("payment_amount_mismatch", providerMismatch);
+                    }
+                }
+                else
+                {
+                    // Security standard PAY-07/08/09 (audit §4.5): the absence of a
+                    // resolvable authoritative order is a binding failure, not a pass.
+                    // Quote-less fulfilment is removed entirely: the event is parked
+                    // as failed and grants nothing — an admin can retry it through
+                    // RetryVerifiedPaymentWebhookAsync once the order is readable,
+                    // or quarantine it for reviewed resolution.
+                    throw ApiException.Conflict(
+                        "payment_order_unresolvable",
+                        $"Payment transaction '{paymentTransaction.GatewayTransactionId}' has no resolvable authoritative order. Fulfilment was not applied.");
+                }
+            }
+
             if (string.Equals(eventCategory, PaymentWebhookCategories.Refund, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(targetStatus, "refunded", StringComparison.OrdinalIgnoreCase))
             {
@@ -11133,6 +11181,17 @@ public partial class LearnerService(
                 return MapWebhookRetryResult(webhookEvent);
             }
 
+            if (string.Equals(targetStatus, "completed", StringComparison.OrdinalIgnoreCase)
+                && IsTerminalNonRestorableTransactionStatus(paymentTransaction.Status))
+            {
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = $"Payment transaction is already {paymentTransaction.Status}; a later completion cannot restore access.";
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
             if (string.Equals(paymentTransaction.Status, "completed", StringComparison.OrdinalIgnoreCase)
                 && !string.Equals(targetStatus, "completed", StringComparison.OrdinalIgnoreCase))
             {
@@ -11155,7 +11214,7 @@ public partial class LearnerService(
                     break;
 
                 case "completed":
-                    await ApplyCheckoutCompletionAsync(paymentTransaction, ct);
+                    await ApplyCheckoutCompletionAsync(paymentTransaction, ct, webhookEvent);
                     webhookEvent.ProcessingStatus = "completed";
                     break;
 
@@ -11388,6 +11447,23 @@ public partial class LearnerService(
             }
 
             return new PaymentCaptureResult("failed", orderId, capture.CaptureId, null, "payment_not_completed");
+        }
+
+        // A capture may report completed while having taken less than the order — or in
+        // another currency. Verify the amount and currency the provider actually captured
+        // against the authoritative order before granting anything (PAY-14). The check is
+        // unconditional: no order, no reported amount, or a blank currency all refuse.
+        var captureMismatch = FindCaptureOrderMismatch(capture, transaction, cartSession, speakingBooking);
+        if (captureMismatch is not null)
+        {
+            if (cartSession is not null && !string.Equals(cartSession.Status, "fulfilled", StringComparison.OrdinalIgnoreCase))
+            {
+                cartSession.Status = "failed";
+                cartSession.UpdatedAt = now;
+                await db.SaveChangesAsync(ct);
+            }
+
+            return new PaymentCaptureResult("failed", orderId, capture.CaptureId, null, captureMismatch);
         }
 
         // Capture succeeded — run the idempotent grant inside a transaction.
@@ -11631,6 +11707,16 @@ public partial class LearnerService(
         if (cartSession is null)
         {
             return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(cartSession.UserId)
+            || FindWebhookProviderOrderMismatch(webhookEvent.PayloadJson, cartSession.TotalAmount, cartSession.Currency, webhookEvent.EventType) is not null)
+        {
+            webhookEvent.ProcessingStatus = "ignored";
+            webhookEvent.ErrorMessage = "PayPal cart webhook could not be bound to the checkout session it names.";
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return true;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -11901,13 +11987,15 @@ public partial class LearnerService(
         }
     }
 
-    private async Task ApplyCheckoutCompletionAsync(PaymentTransaction transaction, CancellationToken ct)
+    private async Task ApplyCheckoutCompletionAsync(PaymentTransaction transaction, CancellationToken ct, PaymentWebhookEvent? webhookEvent = null)
     {
         var quote = await GetQuoteForTransactionAsync(transaction, ct);
         if (quote is null || quote.Status == BillingQuoteStatus.Completed)
         {
             return;
         }
+
+        EnsureWebhookMatchesAuthoritativeOrder(webhookEvent, quote, transaction);
 
         var user = await EnsureUserAsync(transaction.LearnerUserId, ct);
         var subscription = !string.IsNullOrWhiteSpace(quote.SubscriptionId)

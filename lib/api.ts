@@ -150,7 +150,7 @@ import type {
 } from './rulebook';
 import type { WeaknessDataPoint } from './writing-analytics/types';
 
-type ApiClientInit = Omit<RequestInit, 'body' | 'method'>;
+type ApiClientInit = Omit<RequestInit, 'body' | 'method'> & { stepUpScope?: string };
 type ApiClientBody = unknown;
 
 function isRequestBody(value: unknown): value is BodyInit {
@@ -196,7 +196,8 @@ export const apiClient = {
   },
   post<T = any>(path: string, body?: ApiClientBody, init?: ApiClientInit): Promise<T> {
     const payload = toRequestBody(body);
-    return apiRequest<T>(path, { ...init, method: 'POST', body: payload.body }, { json: payload.json });
+    const { stepUpScope, ...rest } = init ?? {};
+    return apiRequest<T>(path, { ...rest, method: 'POST', body: payload.body }, { json: payload.json, stepUpScope });
   },
   postWithAcceptedStatuses<T = any>(path: string, body: ApiClientBody, acceptedStatuses: number[], init?: ApiClientInit): Promise<T> {
     const payload = toRequestBody(body);
@@ -1606,6 +1607,7 @@ export type {
   AdminRefundRequest,
 } from './api/billing-products';
 export {
+  ADMIN_REFUND_STEP_UP_SCOPE,
   fetchAdminBillingAnalytics,
   fetchAdminBillingProduct,
   fetchAdminBillingProducts,

@@ -5,7 +5,6 @@ namespace OetLearner.Api.Domain.Billing;
 
 [Index(nameof(IdempotencyKey), IsUnique = true)]
 [Index(nameof(StripeSessionId))]
-[Index(nameof(GatewayOrderId))]
 [Index(nameof(UserId))]
 public class CheckoutSession
 {

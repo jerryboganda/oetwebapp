@@ -208,6 +208,21 @@ public sealed class EasyKashGateway : IPaymentGateway
         }
     }
 
+    /// <summary>
+    /// EasyKash publishes no server-to-server transaction/status lookup API, so a
+    /// payment cannot be confirmed out-of-band. Paid status is delivered ONLY through
+    /// the signed callback verified in <see cref="HandleWebhookAsync"/>; this method
+    /// therefore always returns null and exists so callers can treat every gateway
+    /// uniformly. Callers MUST treat null as "unknown", never as "unpaid".
+    /// </summary>
+    public Task<PaymentConfirmation?> GetTransactionConfirmationAsync(string productCode, CancellationToken ct)
+    {
+        _logger?.LogWarning(
+            "EasyKash has no server-to-server status lookup; confirm payment via the signed callback for product {ProductCode}",
+            productCode);
+        return Task.FromResult<PaymentConfirmation?>(null);
+    }
+
     public Task<RefundResult> ProcessRefundAsync(string transactionId, decimal amount, string currency, string reason, string idempotencyKey, CancellationToken ct)
     {
         if (_billing.Value.AllowSandboxFallbacks)
