@@ -35,9 +35,13 @@ vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => createElement('div', null, children),
 }));
 
-// eslint-disable-next-line react/display-name
+// The mock component is named so it satisfies react/display-name on its own.
+// The previous `eslint-disable-next-line` sat one line above the `forwardRef`
+// that actually creates the component, so it was reported as unused while the
+// error still fired — and it kept `iOS Build Check` (gated on this lint job)
+// skipped on every run.
 vi.mock('@/components/videos/video-player', () => ({
-  VideoPlayer: forwardRef((props: Record<string, unknown>, ref) => {
+  VideoPlayer: forwardRef(function VideoPlayerStub(props: Record<string, unknown>, ref) {
     mocks.videoPlayerStub(props);
     return createElement('div', { ref, 'data-testid': 'video-player-stub' });
   }),
