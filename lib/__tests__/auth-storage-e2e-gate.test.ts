@@ -6,16 +6,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-type StorageRecord = {
-  persistence: 'local' | 'session';
-  session: {
-    accessToken: string;
-    refreshToken: string | null;
-    accessTokenExpiresAt: string;
-    refreshTokenExpiresAt: string;
-    currentUser: unknown;
-  };
-};
+import type { AuthSession, CurrentUser } from '@/lib/types/auth';
 
 const LOCAL_SESSION_KEY = 'oet.auth.session.local';
 
@@ -33,25 +24,35 @@ function fakeLocalStorage(): Storage {
   };
 }
 
-const sessionPayload = {
+const currentUser: CurrentUser = {
+  userId: 'u1',
+  email: 'learner@oet-prep.dev',
+  role: 'learner',
+  displayName: 'Test',
+  isEmailVerified: true,
+  isAuthenticatorEnabled: false,
+  requiresEmailVerification: false,
+  requiresMfa: false,
+  emailVerifiedAt: null,
+  authenticatorEnabledAt: null,
+};
+
+const sessionPayload: AuthSession = {
   accessToken: 'secret-access-token',
   refreshToken: 'secret-refresh-token',
   accessTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
   refreshTokenExpiresAt: new Date(Date.now() + 60_000).toISOString(),
-  currentUser: { userId: 'u1', displayName: 'Test', role: 'learner' },
+  currentUser,
 };
 
 async function loadAuthStorage(nodeEnv: 'production' | 'test') {
   vi.resetModules();
-  const original = process.env.NODE_ENV;
   vi.stubEnv('NODE_ENV', nodeEnv);
   try {
     return await import('@/lib/auth-storage');
   } finally {
+    // Restores whatever was stubbed above; the previous value is tracked by vitest.
     vi.unstubAllEnvs();
-    if (original !== undefined) {
-      process.env.NODE_ENV = original;
-    }
   }
 }
 
@@ -67,7 +68,7 @@ describe('auth-storage E2E token persistence (IAM-05)', () => {
     // Attacker/XSS seeds the E2E flag and tries to make sign-in persist tokens.
     window.localStorage.setItem('oet.e2e.keep-tokens', '1');
 
-    storage.saveStoredSession(sessionPayload as StorageRecord['session'], 'local');
+    storage.saveStoredSession(sessionPayload, 'local');
 
     const persisted = JSON.parse(String(window.localStorage.getItem(LOCAL_SESSION_KEY)));
     expect(persisted.accessToken).toBeUndefined();
@@ -79,7 +80,7 @@ describe('auth-storage E2E token persistence (IAM-05)', () => {
 
     window.localStorage.setItem(
       LOCAL_SESSION_KEY,
-      JSON.stringify({ ...sessionPayload, persistence: 'local' }),
+      JSON.stringify({ persistence: 'local', session: sessionPayload }),
     );
 
     const loaded = storage.loadStoredSession();
@@ -91,7 +92,7 @@ describe('auth-storage E2E token persistence (IAM-05)', () => {
     const storage = await loadAuthStorage('test');
 
     window.localStorage.setItem('oet.e2e.keep-tokens', '1');
-    storage.saveStoredSession(sessionPayload as StorageRecord['session'], 'local');
+    storage.saveStoredSession(sessionPayload, 'local');
 
     const persisted = JSON.parse(String(window.localStorage.getItem(LOCAL_SESSION_KEY)));
     expect(persisted.accessToken).toBe('secret-access-token');
