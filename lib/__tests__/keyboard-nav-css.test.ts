@@ -90,7 +90,7 @@ describe('bottom-nav keyboard contract (app/globals.css)', () => {
   it('detects the 11 Sep 2026 defect when it is reintroduced', () => {
     const regressed = css.replace(
       /(\.keyboard-safe-bottom\s*\{)([^}]*)(\})/,
-      (_match, open: string, body: string, close: string) =>
+      (_match: string, open: string, body: string, close: string) =>
         open + body.replace(/bottom:\s*var\(--safe-area-inset-bottom\)/, 'bottom: var(--app-keyboard-offset)') + close,
     );
 
