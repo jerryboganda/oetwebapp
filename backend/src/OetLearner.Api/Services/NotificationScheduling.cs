@@ -13,6 +13,23 @@ public static class NotificationScheduling
         return Convert.ToHexString(hash);
     }
 
+    /// <summary>
+    /// Coarse hourly bucket used to aggregate repeat operational alerts.
+    /// <para>
+    /// A single stuck-job incident must not produce dozens of identical emails.
+    /// Because the notification dedupe key includes the entity id, keying a
+    /// stuck-job alert on the individual <c>BackgroundJobs.Id</c> emits one alert
+    /// per affected job. Aggregating on (event, job type, hour) collapses a batch
+    /// of jobs wedged by the same cause into one admin alert per type per hour,
+    /// while a genuinely new incident in a later hour still raises its own alert —
+    /// so real warnings are preserved, only duplicates are suppressed
+    /// (12 Sep 2026 brief: "one incident should not generate dozens of identical
+    /// alerts. Use sensible deduplication/cooldown/escalation").
+    /// </para>
+    /// </summary>
+    public static string BuildIncidentBucket(DateTimeOffset utcTimestamp)
+        => utcTimestamp.UtcDateTime.ToString("yyyy-MM-ddTHH");
+
     public static string GetLocalDateBucket(DateTimeOffset utcTimestamp, string timezone)
     {
         var localTime = ConvertToLocalTime(utcTimestamp, timezone);

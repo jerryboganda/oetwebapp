@@ -11,8 +11,9 @@ import {
 } from '@/components/marketing/store-badges';
 import {
   ANDROID_INSTALL_URL,
-  GET_APP_PATH,
   IOS_DOWNLOAD_URL,
+  MAC_DOWNLOAD_URL,
+  WINDOWS_DOWNLOAD_URL,
 } from '@/lib/app-downloads';
 
 interface AppDownloadPromoProps {
@@ -20,9 +21,16 @@ interface AppDownloadPromoProps {
   onClose?: () => void;
 }
 
+// One click must start the installer download — never a technical
+// choose-your-format / choose-your-architecture page (12 Sep 2026 brief).
+// Windows and Mac point straight at the platform download resolver; Android
+// keeps the install-instructions page because a bare .apk link downloads a
+// file without ever triggering Android's install step. iOS resolves to the
+// App Store / TestFlight, or renders a disabled "coming soon" badge when
+// neither is configured (IOS_DOWNLOAD_URL is null).
 const APP_DOWNLOAD_LINKS: AppDownloadLinks = {
-  windows: GET_APP_PATH,
-  mac: GET_APP_PATH,
+  windows: WINDOWS_DOWNLOAD_URL,
+  mac: MAC_DOWNLOAD_URL,
   android: ANDROID_INSTALL_URL,
   ios: IOS_DOWNLOAD_URL,
 };
@@ -103,12 +111,17 @@ function PostLoginAppModalContent({ onClose }: { onClose?: () => void }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] overflow-y-auto bg-black/60 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-sm animate-in fade-in duration-200"
+      // `flex justify-center` + the card's `my-auto` centres the panel
+      // vertically within the usable screen area while still allowing the
+      // overlay to scroll when the content is taller than the viewport — the
+      // previous top-anchored layout left the dark panel sitting too high
+      // (12 Sep 2026 brief). Safe-area padding is preserved on all four edges.
+      className="fixed inset-0 z-[100] flex justify-center overflow-y-auto bg-black/60 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-[max(0.75rem,env(safe-area-inset-top))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-labelledby="app-download-modal-title"
     >
-      <div className="relative mx-auto flex min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-teal-500/30 bg-slate-900 text-white shadow-2xl">
+      <div className="relative my-auto flex max-h-[calc(var(--app-viewport-height,100dvh)-1.5rem)] min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-3xl border border-teal-500/30 bg-slate-900 text-white shadow-2xl">
         {onClose && (
           <button
             type="button"

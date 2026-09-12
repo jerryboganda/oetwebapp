@@ -80,3 +80,8 @@ Use `scripts/deploy/pre-flight.sh` before risky remediation when the production 
 - What failed:
 - Follow-up actions:
 - Owners and target dates:
+
+## Related runbooks
+
+- [Background job stuck](../runbooks/background-job-stuck.md) — "A background job is stuck" alert: triage, queue queries, recovery, and the Admin checklist.
+- [Billing incident](../runbooks/billing-incident.md)

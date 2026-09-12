@@ -6,8 +6,9 @@ export const PLATFORM_LABELS: Record<PlatformKey, string> = {
   windows: 'Windows',
   mac: 'Mac',
   android: 'Google Play',
-  // Short label everywhere, whether the badge currently resolves to the App
-  // Store listing or the temporary direct-.ipa route — see IOS_DOWNLOAD_URL.
+  // Short label everywhere. The iOS badge resolves to the App Store listing or
+  // the TestFlight public link, and renders as a disabled "coming soon" badge
+  // when neither is configured — see IOS_DOWNLOAD_URL.
   ios: 'iOS',
 };
 
@@ -66,47 +67,64 @@ export function PlatformGlyph({ platform, className }: PlatformGlyphProps) {
 
 export interface PlatformDownloadBadgeProps {
   platform: PlatformKey;
-  href: string;
+  /** Destination URL. `null` renders a non-interactive "coming soon" badge —
+   * used for iOS until an Apple-approved link (App Store / TestFlight) exists,
+   * so candidates are never offered a download that cannot install. */
+  href: string | null;
   compact?: boolean;
   className?: string;
 }
 
 const badgeBaseClassName = 'inline-flex w-full items-center justify-center rounded-2xl border border-black/40 bg-black text-white shadow-sm transition-[background-color,border-color,transform] duration-200 hover:border-black/60 hover:bg-black/85 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 motion-reduce:transition-none motion-reduce:active:scale-100';
 
+const badgeDisabledClassName = 'inline-flex w-full cursor-not-allowed items-center justify-center rounded-2xl border border-dashed border-border bg-surface text-muted shadow-none';
+
 export function PlatformDownloadBadge({ platform, href, compact = false, className }: PlatformDownloadBadgeProps) {
   const label = PLATFORM_LABELS[platform];
   const ariaLabel = PLATFORM_ARIA_LABELS[platform];
+  const sizeClassName = compact ? 'h-16 gap-3 px-5' : 'h-14 gap-3 px-4 sm:h-20 sm:gap-4 sm:px-6';
+  const labelClassName = cn(
+    'font-semibold leading-tight text-center sm:leading-none whitespace-nowrap',
+    compact ? 'text-sm' : 'text-xs min-[400px]:text-sm sm:text-base',
+  );
+
+  if (!href) {
+    return (
+      <span
+        aria-disabled="true"
+        aria-label={`${ariaLabel} — coming soon`}
+        className={cn(badgeDisabledClassName, sizeClassName, className)}
+      >
+        <PlatformGlyph
+          platform={platform}
+          className={cn(compact ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9', 'shrink-0 opacity-60')}
+        />
+        <span className={cn(labelClassName, 'text-muted')}>
+          {label}
+          <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide opacity-80">
+            Soon
+          </span>
+        </span>
+      </span>
+    );
+  }
+
   return (
     <a
       href={href}
       aria-label={ariaLabel}
-      className={cn(
-        badgeBaseClassName,
-        // Full h-20 buttons only from sm: up — every real phone in portrait
-        // (360-430px) is below that, so 4 of these stacked (see
-        // AppDownloadGrid's 1-column fallback) must stay compact enough to
-        // fit a mobile viewport without being clipped by an ancestor.
-        compact ? 'h-16 gap-3 px-5' : 'h-14 gap-3 px-4 sm:h-20 sm:gap-4 sm:px-6',
-        className
-      )}
+      className={cn(badgeBaseClassName, sizeClassName, className)}
     >
       <PlatformGlyph
         platform={platform}
         className={cn(compact ? 'h-7 w-7' : 'h-8 w-8 sm:h-9 sm:w-9', 'shrink-0')}
       />
-      <span
-        className={cn(
-          'font-semibold leading-tight text-center sm:leading-none whitespace-nowrap',
-          compact ? 'text-sm' : 'text-xs min-[400px]:text-sm sm:text-base',
-        )}
-      >
-        {label}
-      </span>
+      <span className={labelClassName}>{label}</span>
     </a>
   );
 }
 
-export type AppDownloadLinks = Record<PlatformKey, string>;
+export type AppDownloadLinks = Record<PlatformKey, string | null>;
 
 interface AppDownloadGridProps {
   links: AppDownloadLinks;
