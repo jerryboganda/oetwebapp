@@ -415,6 +415,26 @@ public sealed class WritingTaskModelAnswerService(
             });
             return Hold(row, "model_answer_generation_duplicate_window");
         }
+        catch (OetLearner.Api.Services.Ai.AiOperationConflictException conflictEx)
+        {
+            // CompleteWithDuplicateRetryAsync's bounded slot-conflict retry
+            // (see its doc comment) exhausted MaxDuplicateCompletedRetries
+            // without finding an unclaimed replay-version slot -- rare
+            // (needs that many distinct payloads already occupying
+            // consecutive versions for this exact scenario), but a distinct,
+            // diagnosable, non-transient hold is still better here than
+            // falling into the generic bucket below.
+            logger.LogInformation(conflictEx,
+                "Model-answer generation for scenario {ScenarioId} exhausted its bounded replay-version retry against occupied slots.",
+                scenarioId);
+            row.ValidationReportJson = JsonSerializer.Serialize(new
+            {
+                transientDuplicate = true,
+                exceptionMessage = Truncate(conflictEx.ToString(), 4000),
+                checkedAt = now,
+            });
+            return Hold(row, "model_answer_generation_duplicate_window");
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Model-answer pregeneration failed for scenario {ScenarioId}", scenarioId);
@@ -956,8 +976,11 @@ public sealed class WritingTaskModelAnswerService(
     /// <summary>Bounded replay-discriminator bumps a Completed-collision retry
     /// may use before giving up and letting the caller's own catch block hold
     /// the row. Small on purpose: this is a deliberate-retry escape hatch, not
-    /// a retry loop — see the method doc comment.</summary>
-    private const int MaxDuplicateCompletedRetries = 3;
+    /// a retry loop — see the method doc comment. Matches
+    /// <see cref="OetLearner.Api.Services.Ai.AiOperationReplayPolicy.MaxReplayRoundsCeiling"/>,
+    /// the system's own documented hard ceiling for this exact kind of bounded
+    /// discriminator walk, rather than inventing a separate number.</summary>
+    private const int MaxDuplicateCompletedRetries = 10;
 
     /// <summary>
     /// Root-cause fix (13 Sep 2026): <see cref="WritingTaskModelAnswer"/>
@@ -1037,6 +1060,24 @@ public sealed class WritingTaskModelAnswerService(
                 logger.LogInformation(
                     "Model-answer generation for scenario {ScenarioId} collided with a Completed predecessor; " +
                     "retrying as a new attempt at replay version {ResourceVersion} ({Retry}/{Max}).",
+                    scenarioId, resourceVersion, retry + 1, MaxDuplicateCompletedRetries);
+            }
+            catch (OetLearner.Api.Services.Ai.AiOperationConflictException conflictEx)
+                when (retry < MaxDuplicateCompletedRetries)
+            {
+                // A DIFFERENT payload (different content hash) already owns
+                // this exact resourceId+ResourceVersion slot -- e.g. an
+                // earlier automatic safe-failure bump from unrelated
+                // activity landed on the same version number this retry just
+                // tried. Same safety reasoning as the Completed case (no
+                // insert can ever race here -- the unique index resolves
+                // concurrent inserts atomically, so trying the NEXT version
+                // is just "find an unclaimed slot", never a duplicate
+                // provider call): keep bumping, bounded.
+                resourceVersion = OetLearner.Api.Services.Ai.AiOperationReplayPolicy.NextVersion(resourceVersion);
+                logger.LogInformation(conflictEx,
+                    "Model-answer generation for scenario {ScenarioId} hit an occupied replay-version slot; " +
+                    "retrying at version {ResourceVersion} ({Retry}/{Max}).",
                     scenarioId, resourceVersion, retry + 1, MaxDuplicateCompletedRetries);
             }
         }

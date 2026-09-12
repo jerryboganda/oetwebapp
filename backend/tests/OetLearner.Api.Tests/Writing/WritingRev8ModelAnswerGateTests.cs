@@ -268,6 +268,26 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal(WritingRuleEngine.ValidatorVersion, dto.ValidatorVersion);
     }
 
+    // A resource-version slot already claimed by a DIFFERENT payload (e.g. an
+    // unrelated earlier auto-bump landed on the same version number) is the
+    // other exception CompleteWithDuplicateRetryAsync retries past, bounded,
+    // by trying the next version — never a duplicate-charge risk since it's
+    // a plain "find an unclaimed slot" walk, not a replay of a real request.
+    [Fact]
+    public async Task Generate_Retries_Past_An_Occupied_Replay_Version_Slot_And_Succeeds()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var gateway = new SlotConflictThenSucceedsGateway(WritingModelAnswerBatchTests.ExemplarText());
+        var svc = Service(db, gateway);
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("Ready", dto.Status);
+        Assert.Equal(3, gateway.Calls); // 2 occupied slots + 1 successful retry
+        Assert.Equal(WritingRuleEngine.ValidatorVersion, dto.ValidatorVersion);
+    }
+
     // A predecessor whose outcome is ambiguous (never proven un-billed) must
     // NEVER be auto-retried, regardless of how long ago it happened —
     // AiOperationReplayPolicy.Decide() returns Duplicate for Indeterminate
@@ -350,6 +370,38 @@ public sealed class WritingRev8ModelAnswerGateTests
             {
                 throw new OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException(
                     "op-completed-predecessor", OetLearner.Api.Domain.AiOperationState.Completed, null);
+            }
+
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                modelAnswerText = letter,
+                whyThisWorks = new[] { "Grounded exemplar." },
+                groundedFactReferences = new[] { "case-note-line:1" },
+            });
+            return Task.FromResult(new AiGatewayResult { Completion = json, ResolvedModel = "claude-sonnet-5" });
+        }
+    }
+
+    /// <summary>Throws a resource-slot conflict on the first two calls, then
+    /// succeeds -- the "occupied replay-version slot from unrelated activity"
+    /// case.</summary>
+    private sealed class SlotConflictThenSucceedsGateway(string letter) : IAiGatewayService
+    {
+        public int Calls { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "generate",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            Calls++;
+            if (Calls <= 2)
+            {
+                throw new OetLearner.Api.Services.Ai.AiOperationConflictException("idem-key-occupied");
             }
 
             var json = System.Text.Json.JsonSerializer.Serialize(new
