@@ -299,15 +299,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' | head -1)"
+          # `-print -quit` rather than `| head -1`: under `set -o pipefail` a
+          # short-circuiting `head` makes `find` die on SIGPIPE, so the pipeline
+          # returns 141 and aborts the step before it can report anything. This
+          # step failed exactly that way on its first real run.
+          app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' -print -quit)"
           if [ -z "$app" ]; then
-            app="$(find src-tauri/target -type d -name '*.app' | head -1)"
+            app="$(find src-tauri/target -type d -name '*.app' -print -quit)"
           fi
           if [ -z "$app" ]; then
             echo "No macOS .app bundle was produced." >&2
+            echo "Expected something like src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app" >&2
             exit 1
           fi
           echo "Inspecting $app"
+          ls -la "$app/Contents/MacOS" 2>/dev/null || echo "(no Contents/MacOS to list)"
           node scripts/apple/assert-macos-bundle-architectures.mjs --app "$app"
 
       - name: Verify macOS signing, notarization and stapling
@@ -320,8 +326,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' | head -1)"
-          dmg="$(find src-tauri/target -type f -name '*.dmg' | head -1)"
+          app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' -print -quit)"
+          dmg="$(find src-tauri/target -type f -name '*.dmg' -print -quit)"
 
           echo "== .app: $app =="
           codesign --verify --deep --strict --verbose=2 "$app"
