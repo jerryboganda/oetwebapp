@@ -403,6 +403,22 @@ public sealed class WritingTaskModelAnswerService(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Model-answer pregeneration failed for scenario {ScenarioId}", scenarioId);
+            // Diagnostic fix (12 Sep 2026): this hold reason gave zero visible
+            // detail via the admin API (no server log access in this
+            // deployment), and EVERY worker-triggered regeneration attempt
+            // across many professions/letter types landed on it despite the
+            // underlying AI call completing normally per AiOperations, with
+            // Lint()/RunGateAsync/Parse()/the semantic validator/tool grants
+            // all individually ruled out by direct code review. Persist the
+            // real exception type + message (bounded) so the next occurrence
+            // is diagnosable from GET .../model-answer alone.
+            row.ValidationReportJson = JsonSerializer.Serialize(new
+            {
+                internalError = true,
+                exceptionType = ex.GetType().FullName,
+                exceptionMessage = Truncate(ex.ToString(), 4000),
+                checkedAt = now,
+            });
             return Hold(row, "model_answer_generation_failed");
         }
     }
