@@ -382,6 +382,34 @@ NOT VERIFIED iOS 16.4 (declared minimum)
 
 **One correction made after this run:** the job took 33m31s against a 45-minute cap, 25 minutes of it in the simulator sweep, because the script booted every device class on *two* runtimes. Sweeping a second runtime re-boots every class without adding form-factor coverage, so it now sweeps the newest runtime only (3 configurations instead of 6), with the step bounded by `timeout-minutes: 20` so a slow runner cannot consume the job budget. Runtime spread belongs in a job matrix, not in serialised boots.
 
+### Desktop packaging: what the first real dispatch revealed
+
+Dispatching `tauri-desktop-release.yml` (unsigned, so nothing was published) was the only way to exercise the packaging gate — a pre-push gate cannot see shell logic inside a workflow. It surfaced three things.
+
+**1. A SIGPIPE bug in the gate itself.** `find … | head -1` under `set -o pipefail` returns 141, because the short-circuiting `head` makes `find` die on SIGPIPE — so `set -e` aborted the step in 0.27s with no output at all. Fixed with `find … -print -quit`.
+
+**2. Tauri deletes the intermediate `.app`.** With `bundle.targets: ["nsis", "dmg"]` the build log reads:
+
+```
+  Bundling OET with Dr. Hesham.app (…/bundle/macos/…)
+  Bundling …_universal.dmg (…/bundle/dmg/…)
+  Cleaning …/bundle/macos/OET with Dr. Hesham.app
+  Finished 1 bundle at: …/bundle/dmg/…dmg
+```
+
+The gate assumed a persisted `.app` and aborted the macOS leg *before* `Generate checksums`, which broke the release. It now inspects **the DMG that actually ships** — mounted read-only, with the `.app` inside it checked recursively — and only falls back to a persisted `.app` if one exists.
+
+**3. A real production gap: the macOS desktop app cannot auto-update.** The same build log warns:
+
+```
+Warn  The bundler was configured to create updater artifacts but no updater-enabled
+      targets were built. Please enable one of these targets: app, appimage, msi, nsis
+```
+
+`tauri.conf.json` sets `createUpdaterArtifacts: true`, but on macOS the updater requires the `app` target (which produces `OET.app.tar.gz`), and `bundle.targets` lists only `nsis` and `dmg`. So no macOS updater artifact is ever produced and the published feed carries no macOS entry — consistent with the previously observed `desktop feed 0.7.5/windows-x86_64-only`.
+
+**Recommended fix — to land *with* signing, not before:** add `"app"` to `bundle.targets`. Deliberately not done in this pass: enabling a macOS updater while builds are **unsigned** would let the app replace itself with an unsigned bundle that Gatekeeper can then refuse, trading a missing feature for a broken install. It belongs in the same change that sets the `APPLE_*` secrets and proves notarization, so every artefact the updater can serve is signed and stapled.
+
 ### Definition of done for this pass
 
 The declared support matrix in `apple-compatibility.json` is now machine-enforced and internally consistent, and every excluded platform is documented with a technical reason. The work is **not** "verified for the declared matrix" until the CI lanes above have run green — in particular the first signed and notarized release, and the first native Intel smoke on `macos-15-intel`.
