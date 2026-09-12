@@ -1100,18 +1100,29 @@ public sealed class WritingTaskModelAnswerService(
     }
 
     /// <summary>
-    /// The three exceptions <see cref="CompleteWithDuplicateRetryAsync"/> may
+    /// The exceptions <see cref="CompleteWithDuplicateRetryAsync"/> may
     /// safely retry past with a freshly-chosen <c>ResourceVersion</c> --
-    /// never a duplicate-charge risk in any of the three, because each is
-    /// only ever thrown once the coordinator has already resolved (or given
-    /// up waiting bounded-ly on) the blocking row, meaning there is no live
+    /// never a duplicate-charge risk in any of them, because each is only
+    /// ever thrown once the coordinator has already resolved (or given up
+    /// waiting bounded-ly on) the blocking row, meaning there is no live
     /// request left for a retry to duplicate:
     /// <list type="bullet">
     /// <item><see cref="OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException"/>
-    /// with <c>State == Completed</c> only — the predecessor's real provider
-    /// call already finished (a non-Completed/ambiguous predecessor is a
-    /// genuine concurrent racer and must NOT be retried; see
-    /// <see cref="AiOperationReplayPolicy"/>).</item>
+    /// for every state EXCEPT <see cref="OetLearner.Api.Domain.AiOperationState.Indeterminate"/>
+    /// (live evidence, 13 Sep 2026: the coordinator's OWN bounded internal
+    /// replay walk — up to 5 rounds per attempt, see
+    /// <see cref="AiExecutionCoordinator"/> — can exhaust and report a row as
+    /// "duplicate" purely because it ran out of rounds, even when that exact
+    /// row's own <see cref="AiOperationReplayPolicy.Decide"/> verdict would
+    /// have been CreateNewAttempt in isolation — observed live for a
+    /// FailedTerminal predecessor, which per policy is always
+    /// auto-CreateNewAttempt-eligible. So the reported State here is not
+    /// reliable evidence of WHY the coordinator gave up, only that it did —
+    /// and by construction that already proves no concurrent racer exists.
+    /// The one state that is never safe is Indeterminate: an outcome that
+    /// may already have been billed, which <see cref="AiOperationReplayPolicy"/>
+    /// itself deliberately never auto-replays under any circumstance, so
+    /// this caller must not either.</item>
     /// <item><see cref="OetLearner.Api.Services.Ai.AiOperationConflictException"/> —
     /// a DIFFERENT payload owns this exact slot; trying another version
     /// number is just "find an unclaimed slot", not a replay of any
@@ -1128,7 +1139,7 @@ public sealed class WritingTaskModelAnswerService(
     private static bool IsSafeToRetryWithNewVersion(Exception ex) => ex switch
     {
         OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx =>
-            dupEx.State == OetLearner.Api.Domain.AiOperationState.Completed,
+            dupEx.State != OetLearner.Api.Domain.AiOperationState.Indeterminate,
         OetLearner.Api.Services.Ai.AiOperationConflictException => true,
         OetLearner.Api.Services.Ai.AiOperationInFlightException => true,
         _ => false,
