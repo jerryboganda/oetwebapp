@@ -121,18 +121,24 @@ function pickDevice(devices, patterns) {
   return null;
 }
 
-// Pure: for each device class, pick the device on the lowest and the highest
-// available runtime — the widest spread the runner can actually reach — and
-// report any class that could not be resolved at all, so an uncovered class is
-// never silently dropped.
+// Pure: for each device class, pick the device on the newest available runtime,
+// and report any class that could not be resolved at all so an uncovered class
+// is never silently dropped.
+//
+// Only ONE runtime is swept on purpose. Sweeping a second runtime re-boots every
+// device class without adding form-factor coverage, and a simulator boot
+// dominates the cost — measured at ~4 minutes per configuration on a hosted
+// runner, so sweeping two runtimes took 25 minutes and left the job just 12
+// minutes of headroom against its 45-minute timeout. Runtime spread is better
+// obtained by matrixing this job than by serialising more boots.
 function selectTargets(devices, deviceClasses) {
   const runtimes = [...new Set(devices.map((entry) => entry.runtimeVersion))].sort(compareVersions);
   const targets = [];
   const seen = new Set();
 
-  for (const runtime of [runtimes[0], runtimes[runtimes.length - 1]]) {
-    if (runtime === undefined) continue;
-    const runtimeDevices = devices.filter((entry) => entry.runtimeVersion === runtime);
+  const newestRuntime = runtimes[runtimes.length - 1];
+  if (newestRuntime !== undefined) {
+    const runtimeDevices = devices.filter((entry) => entry.runtimeVersion === newestRuntime);
     for (const deviceClass of deviceClasses) {
       const device = pickDevice(runtimeDevices, deviceClass.patterns);
       if (!device || seen.has(device.udid)) continue;
@@ -265,8 +271,13 @@ function selfTest() {
     );
   }
   expect(
-    targets.some((target) => target.device.name === 'iPhone 16e'),
-    'the lowest available runtime was not exercised',
+    targets.every((target) => target.device.runtimeVersion === '26.5'),
+    'only the newest available runtime should be swept',
+  );
+  expect(targets.length === 3, `expected one target per device class (3), got ${targets.length}`);
+  expect(
+    !targets.some((target) => target.device.name === 'iPhone 16e'),
+    'a device that exists only on an older runtime must not be swept',
   );
   expect(
     targets.some((target) => target.device.name === 'iPhone 17 Pro Max'),
