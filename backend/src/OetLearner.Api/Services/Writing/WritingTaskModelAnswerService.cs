@@ -905,7 +905,39 @@ public sealed class WritingTaskModelAnswerService(
     // The full Model Answer gate (Addendum Rev8 §7, §14)
     // ---------------------------------------------------------------------
 
+    // P0 fix (12 Sep 2026): WritingRuleEngine.Lint() itself is now
+    // exception-safe (RunDetectorSafely), but the live 224-answer
+    // regeneration batch kept failing "model_answer_generation_failed"
+    // afterward too - a direct, patient re-test of a task that hit that
+    // path reproduced it identically post-fix. The remaining unguarded
+    // surface is everything else in the gate that runs against a freshly
+    // AI-generated draft none of the hand-written fixtures resemble:
+    // WritingModelAnswerWordCounter, WritingModelAnswerGroundingValidator,
+    // ExtractPatientAge and WritingCaseNotesMarkerExtractor. Wrap the whole
+    // gate, not just Lint(), so any of them failing produces one clear hold
+    // reason instead of an opaque, budget-burning "generation_failed" that
+    // silently discards every AI call already paid for in this attempt.
     private async Task<WritingModelAnswerValidationReport> RunGateAsync(
+        WritingScenario scenario,
+        IReadOnlyList<WritingScenarioStructuredSentence> sentences,
+        ExamProfession profession,
+        string letterText,
+        bool includeSemantic,
+        string adminUserId,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await RunGateAsyncCore(scenario, sentences, profession, letterText, includeSemantic, adminUserId, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Model-answer validation gate threw for scenario {ScenarioId}", scenario.Id);
+            return FailedReport(scenario.Id, "model_answer_internal_validation_error");
+        }
+    }
+
+    private async Task<WritingModelAnswerValidationReport> RunGateAsyncCore(
         WritingScenario scenario,
         IReadOnlyList<WritingScenarioStructuredSentence> sentences,
         ExamProfession profession,
