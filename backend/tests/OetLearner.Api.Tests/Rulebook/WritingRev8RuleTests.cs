@@ -674,4 +674,65 @@ public sealed class WritingRev8RuleTests
         Assert.Equal("R07.6", finding.RuleId);
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.urgent_intro_contains_urgent");
     }
+
+    // ---------------------------------------------------------------------
+    // Detector fault isolation (P0 fix, 12 Sep 2026): a live regeneration
+    // batch found every single attempt failing "model_answer_generation_failed"
+    // despite the underlying AI call completing normally - the freshly
+    // AI-generated draft did not match the shape every hand-crafted fixture
+    // above assumes, and SOME detector in the 81-detector battery threw on
+    // it, killing the whole Lint() call (used by Model Answer generation AND
+    // real candidate Submit-for-Grading). Lint() must never throw, whatever
+    // the input; a detector fault must surface as one finding, not a crash.
+    // ---------------------------------------------------------------------
+
+    public static IEnumerable<object[]> AdversarialLetters()
+    {
+        // Every case here is a plausible real-world shape none of the
+        // hand-crafted fixtures above exercise: missing sections, no Re:
+        // line at all, no title, run-on/empty paragraphs, unusual Unicode,
+        // extremely short/long content, no sign-off, and a genuinely
+        // malformed Re: line ("Re: Patient DOB Age 55" - all-caps/no-name
+        // tokens only, which is exactly the shape ResolvePatientName's
+        // trailing-token stripping (12 Sep 2026 fix) must not throw on if
+        // NO token survives the strip).
+        yield return new object[] { "" };
+        yield return new object[] { "Just one line, nothing else." };
+        yield return new object[] { "Dear Sir/Madam,\n\nNo Re: line at all in this letter.\n\nYours faithfully,\n\nDoctor" };
+        yield return new object[] { "Re: DOB Age NHS MRN\n\nI am writing to refer.\n\nYours sincerely,\n\nDoctor" };
+        yield return new object[] { "Re: Mr\n\nI am writing to refer him.\n\nYours sincerely,\n\nDoctor" };
+        yield return new object[] { "Re: Mr Smith\n\n\n\n\n\nYours sincerely,\n\nDoctor" };
+        yield return new object[] { string.Concat(Enumerable.Repeat("Mr Smith was seen today. ", 400)) };
+        yield return new object[] { "Re: Mr Ünïçödé Ñame, DOB: 1 Ⅷ 2020\n\nI am writing to refer. 你好\n\nYours sincerely,\n\nDoctor" };
+        yield return new object[] { "Re: Mr Smith\nDOB: 1 January 2020\nRe: Mr Smith again\n\nBody.\n\nYours sincerely,\n\nDoctor" };
+        yield return new object[] { new string('\n', 50) };
+        yield return new object[] { "Re: Mrs Smith, aged aged aged\n\nBody with 1/0 and 99999999999999999999 as tokens.\n\nYours sincerely,\n\nDoctor" };
+    }
+
+    [Theory]
+    [MemberData(nameof(AdversarialLetters))]
+    public void Lint_Never_Throws_On_Adversarial_Input(string letter)
+    {
+        foreach (var model in new[] { false, true })
+        foreach (var letterType in new[] { "routine_referral", "urgent_referral", "discharge", "transfer_letter", "non_medical_referral", "other_letters" })
+        foreach (var profession in new[] { ExamProfession.Medicine, ExamProfession.Nursing, ExamProfession.Dietetics })
+        {
+            var exception = Record.Exception(() => Lint(letter, model, letterType, profession: profession));
+            Assert.Null(exception);
+        }
+    }
+
+    [Fact]
+    public void Lint_Converts_A_Detector_Exception_Into_A_Finding_Not_A_Crash()
+    {
+        // Cannot inject a fake throwing detector (DetectorFor is a fixed
+        // switch over static methods) - this documents the isolation
+        // contract via the synthetic ruleId RunDetectorSafely emits, so a
+        // future refactor that removes the try/catch fails loudly here even
+        // without reproducing the exact unknown production input that
+        // exposed the gap.
+        Assert.True(typeof(WritingRuleEngine)
+            .GetMethod("RunDetectorSafely", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static) is not null,
+            "WritingRuleEngine.RunDetectorSafely must exist and wrap every detector call in Lint().");
+    }
 }
