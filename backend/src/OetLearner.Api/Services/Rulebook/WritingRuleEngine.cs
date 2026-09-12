@@ -246,7 +246,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             if (!string.IsNullOrWhiteSpace(rule.CheckId) && handledCheckIds.Add(rule.CheckId!))
             {
                 var det = DetectorFor(rule.CheckId!);
-                if (det is not null) findings.AddRange(det(rule, input, structure));
+                if (det is not null) findings.AddRange(RunDetectorSafely(det, rule, input, structure));
             }
             if (rule.ForbiddenPatterns is { Count: > 0 })
             {
@@ -279,9 +279,46 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
                     ? DefaultLatinParams
                     : null,
             };
-            findings.AddRange(det(builtIn, input, structure));
+            findings.AddRange(RunDetectorSafely(det, builtIn, input, structure));
         }
 
+        return DedupeAndSort(findings);
+    }
+
+    // P0 fix (Rev8 224-answer regeneration, 12 Sep 2026): every detector call
+    // in the two loops above ran unguarded. A single detector throwing on
+    // input it did not anticipate (a freshly AI-generated draft, unlike the
+    // hand-crafted fixtures every unit test uses) killed the ENTIRE Lint()
+    // call with an uncaught exception - not just for Model Answer generation
+    // (observed live: every regeneration attempt failing with
+    // "model_answer_generation_failed" despite the underlying AI call
+    // completing normally) but for every other Lint() caller too, including
+    // real candidate Submit-for-Grading, which calls the exact same method.
+    // Isolate each detector: a crash becomes one visible, blocking finding
+    // instead of an opaque 500 for a real candidate or a silently-abandoned
+    // generation attempt. Major (not Info) so a broken detector never lets a
+    // Model Answer publish unreviewed, and never crashes candidate grading.
+    private static IEnumerable<LintFinding> RunDetectorSafely(Detector det, OetRule rule, WritingLintInput input, LetterStructure structure)
+    {
+        try
+        {
+            return det(rule, input, structure).ToList();
+        }
+        catch (Exception ex)
+        {
+            return
+            [
+                new LintFinding(
+                    "BUILTIN.internal_detector_error",
+                    RuleSeverity.Major,
+                    $"A rule check ({rule.CheckId ?? rule.Id}) could not be completed for this text ({ex.GetType().Name}); this letter needs manual review.",
+                    Quote: null)
+            ];
+        }
+    }
+
+    private static IReadOnlyList<LintFinding> DedupeAndSort(List<LintFinding> findings)
+    {
         // Dedup
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var unique = new List<LintFinding>();
