@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light" />
+<meta name="theme-color" content="#eef4ff" />
+<title>OET with Dr Ahmed Hesham</title>
+<style>
+  :root {
+    --bg: linear-gradient(135deg, #eef4ff 0%, #f6f3ff 48%, #eef9ff 100%);
+    --card: rgba(255, 255, 255, 0.92);
+    --card-border: rgba(118, 132, 255, 0.16);
+    --card-shadow: 0 28px 80px rgba(88, 87, 161, 0.16);
+    --text: #1e245c;
+    --muted: #66708f;
+    --violet: #7c3aed;
+    --periwinkle: #7b79ff;
+    --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body { margin: 0; min-height: 100%; }
+
+  body {
+    min-height: 100dvh;
+    display: grid;
+    place-items: center;
+    padding: calc(24px + env(safe-area-inset-top)) calc(24px + env(safe-area-inset-right)) calc(24px + env(safe-area-inset-bottom)) calc(24px + env(safe-area-inset-left));
+    background: var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 27rem;
+    padding: 40px 32px 32px;
+    border-radius: 24px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    box-shadow: var(--card-shadow);
+    backdrop-filter: blur(14px) saturate(130%);
+    -webkit-backdrop-filter: blur(14px) saturate(130%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    animation: rise 0.5s var(--ease-spring) both;
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(12px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  .badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 62px;
+    height: 62px;
+    margin-bottom: 20px;
+    border-radius: 50%;
+    background: rgba(123, 121, 255, 0.1);
+  }
+
+  .badge svg {
+    width: 30px;
+    height: 30px;
+    color: var(--violet);
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  h1 {
+    margin: 0 0 10px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  p {
+    margin: 0 0 8px;
+    font-size: 14px;
+    line-height: 1.55;
+    color: var(--muted);
+  }
+
+  .status {
+    margin: 0 0 22px;
+    font-size: 13px;
+    color: #b4235a;
+    min-height: 16px;
+  }
+
+  .retry-btn {
+    appearance: none;
+    border: none;
+    cursor: pointer;
+    padding: 12px 34px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #fff;
+    background: linear-gradient(135deg, var(--violet), var(--periwinkle));
+    box-shadow: 0 12px 26px -10px rgba(124, 58, 237, 0.55);
+    transition: transform 0.18s var(--ease-spring), filter 0.18s var(--ease-spring);
+  }
+
+  .retry-btn:hover { filter: brightness(1.05); transform: translateY(-1px); }
+  .retry-btn:active { transform: translateY(0); }
+  .retry-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
+
+  .retry-btn:focus-visible {
+    outline: 2px solid var(--periwinkle);
+    outline-offset: 3px;
+  }
+
+  .link-btn {
+    appearance: none;
+    border: none;
+    background: none;
+    cursor: pointer;
+    margin-top: 14px;
+    padding: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .link-btn:hover { color: var(--text); }
+
+  .link-btn:focus-visible {
+    outline: 2px solid var(--periwinkle);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card { animation: none; }
+    .retry-btn { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="card" role="alert">
+    <div class="badge" aria-hidden="true">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 3l18 18M8.5 8.5a11 11 0 0113.6 1.9M5.1 11.1A15.9 15.9 0 0112 8c1.7 0 3.3.3 4.8.9M12 19h.01M9.2 15.2a5.5 5.5 0 015.6 0" />
+      </svg>
+    </div>
+    <h1>Can&rsquo;t reach OET with Dr. Hesham</h1>
+    <p id="body-copy">The app needs an internet connection the first time it opens. Check your Wi-Fi or mobile data, then try again.</p>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <button id="retry" type="button" class="retry-btn">Try again</button>
+    <button id="open-web" type="button" class="link-btn">Open the web version instead</button>
+  </main>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // Native shell env (Capacitor iOS). The remote origin is configured by
+      // server.url in capacitor.config.ts; this page only runs when that URL
+      // could not be reached, so recovery means re-attempting the launch.
+      var bodyCopy = document.getElementById('body-copy');
+      var status = document.getElementById('status');
+      var retry = document.getElementById('retry');
+      var openWeb = document.getElementById('open-web');
+
+      function setStatus(message) {
+        if (status) status.textContent = message || '';
+      }
+
+      function refreshConnectivityCopy() {
+        if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+          bodyCopy.textContent = 'This device is offline. Reconnect to Wi-Fi or mobile data, then try again.';
+        } else {
+          bodyCopy.textContent = 'The app needs an internet connection the first time it opens. Check your Wi-Fi or mobile data, then try again.';
+        }
+      }
+
+      if (retry) {
+        retry.addEventListener('click', function () {
+          retry.disabled = true;
+          setStatus('Retrying\u2026');
+          // Reloading re-runs the native launch path, which re-attempts the
+          // configured server.url before falling back to this page again.
+          window.location.reload();
+        });
+      }
+
+      if (openWeb) {
+        openWeb.addEventListener('click', function () {
+          setStatus('Opening the web app\u2026');
+          // Deliberately the same origin the native shell targets. Only used as
+          // a manual escape hatch when the packaged shell cannot start.
+          window.location.href = 'https://app.oetwithdrhesham.co.uk';
+        });
+      }
+
+      window.addEventListener('online', function () {
+        refreshConnectivityCopy();
+        setStatus('Connection restored \u2014 tap Try again.');
+      });
+
+      window.addEventListener('offline', function () {
+        setStatus('Connection lost.');
+        refreshConnectivityCopy();
+      });
+
+      refreshConnectivityCopy();
+    })();
+  </script>
+</body>
+</html>

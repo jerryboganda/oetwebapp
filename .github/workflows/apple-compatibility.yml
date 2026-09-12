@@ -1,0 +1,118 @@
+name: Apple Compatibility
+
+# Guards the declared Apple support matrix against the files that actually
+# encode it, and against the CSS the web app really emits.
+#
+# Why this exists: on macOS and iOS the WebView engine ships with the operating
+# system, so the real minimum OS for these apps is decided by the web stack, not
+# by the native projects. Nothing else in this repository can see that coupling —
+# the iOS deployment target advertised iOS 14 long after the bundled
+# Next.js 16 + Tailwind v4 content could no longer render below Safari 16.4.
+# These jobs are that tie. See docs/APPLE_COMPATIBILITY_MATRIX.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apple-compatibility.json'
+      - 'scripts/apple/**'
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - 'capacitor-web/**'
+      - 'src-tauri/tauri.conf.json'
+      - 'src-tauri/entitlements.plist'
+      - 'src-tauri/splash/**'
+      - 'app/globals.css'
+      - 'app/layout.tsx'
+      - 'next.config.ts'
+      - 'postcss.config.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/apple-compatibility.yml'
+  pull_request:
+    paths:
+      - 'apple-compatibility.json'
+      - 'scripts/apple/**'
+      - 'ios/**'
+      - 'capacitor.config.ts'
+      - 'capacitor-web/**'
+      - 'src-tauri/tauri.conf.json'
+      - 'src-tauri/entitlements.plist'
+      - 'src-tauri/splash/**'
+      - 'app/globals.css'
+      - 'app/layout.tsx'
+      - 'next.config.ts'
+      - 'postcss.config.mjs'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/apple-compatibility.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: apple-compatibility-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # Fast and build-free: does every declaration still agree with
+  # apple-compatibility.json? This is the gate that prevents the drift that
+  # created the original problem.
+  declared-floors:
+    name: Declared Apple floors are consistent
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # The guards are the safety mechanism, so prove they can actually detect
+      # the failures they exist to catch before trusting their silence.
+      - name: Guard self-tests
+        run: |
+          node scripts/apple/assert-apple-config-consistency.mjs --self-test
+          node scripts/apple/assert-webview-floor.mjs --self-test
+          node scripts/apple/assert-macos-bundle-architectures.mjs --self-test
+          node scripts/apple/assert-ios-ipa.mjs --self-test
+          node scripts/apple/run-ios-simulator-smoke.mjs --self-test
+
+      - name: pbxproj / Podfile / tauri.conf.json match apple-compatibility.json
+        run: node scripts/apple/assert-apple-config-consistency.mjs
+
+  # Needs a real build: the emitted CSS is the only place that shows which CSS
+  # features actually ship, and therefore which engine the content requires.
+  webview-floor:
+    name: Emitted CSS stays within the WebView floor
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the web app
+        run: pnpm run build
+        env:
+          CAPACITOR_APP_URL: https://app.oetwithdrhesham.co.uk
+
+      # Content is checked against webview.contentSafariMin (what the remote
+      # Next.js app may use) and the Tauri splash against webview.shellSafariMin
+      # (the splash must still render its own guidance on the oldest engine we
+      # claim to support, so it can never use newer features itself).
+      - name: Assert emitted CSS and shell pages stay within the declared floor
+        run: node scripts/apple/assert-webview-floor.mjs

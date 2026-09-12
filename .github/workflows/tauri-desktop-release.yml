@@ -24,8 +24,18 @@ name: Tauri Desktop Release
 #    into tauri.conf.json before `tauri build`, so the NSIS installer is signed
 #    with a SHA-256 digest and an RFC3161 timestamp automatically. If unset, the
 #    Windows build proceeds unsigned (no code changes needed either way).
-#  macOS signing/notarisation (optional): APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
-#  APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID (tauri-cli reads these).
+#  - APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD (strongly recommended) —
+#    base64 Developer ID Application .p12 + its password.
+#  - APPLE_SIGNING_IDENTITY (e.g. "Developer ID Application: Name (TEAMID)").
+#  - APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID — notarization credentials
+#    (APPLE_PASSWORD is an app-specific password, not the account password).
+#    tauri-cli reads all of these directly.
+#    When they are absent the macOS artifact is UNSIGNED and unnotarized, which
+#    means Gatekeeper blocks it — and since macOS 15 the old right-click -> Open
+#    bypass no longer exists, so users must go through System Settings ->
+#    Privacy & Security -> Open Anyway. The build stays green and prints an
+#    explicit warning, so an unsigned release can never be mistaken for a signed
+#    one.
 #
 # NOTE: a green macOS build here does NOT discharge the migration plan's macOS
 # gate — WKWebView microphone capture needs a one-time manual run on real
@@ -229,6 +239,22 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Detect Apple signing configuration
+        if: runner.os == 'macOS'
+        id: apple-signing
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+        run: |
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Apple signing certificate detected — the macOS build will be signed, notarized and stapled."
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::APPLE_CERTIFICATE is not configured — the macOS .dmg will be UNSIGNED and unnotarized."
+            echo "::warning::Gatekeeper will block it. On macOS 15+ the old right-click -> Open bypass no longer exists, so users must use System Settings -> Privacy & Security -> Open Anyway."
+          fi
+
       - name: Build + bundle (tauri build — remote-only shell)
         shell: bash
         env:
@@ -240,13 +266,93 @@ jobs:
           # ("attestation secret not embedded"); dev builds fall back to the
           # public dev constant.
           OET_DESKTOP_ATTEST_SECRET: ${{ secrets.OET_DESKTOP_ATTEST_SECRET }}
+          # Apple signing + notarization credentials. tauri-cli reads these exact
+          # names and signs, notarizes and staples the .app during bundling.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # The shell loads the remote web app over HTTPS — there is no Next.js or
           # .NET build here. The remote URLs live in src-tauri/desktop-runtime-config.json.
-          # macOS is built UNSIGNED (no Apple Developer ID, per the QA decision).
-          # Do NOT pass empty APPLE_* env — tauri treats an empty APPLE_CERTIFICATE
-          # as "import this cert" and fails ("security import ... not valid").
-          # To enable macOS signing later, add the APPLE_* secrets and map them here.
-        run: node scripts/tauri-dist.cjs build
+        run: |
+          # tauri-cli treats an empty APPLE_CERTIFICATE as "import this
+          # certificate" and fails with "security import ... not valid". Drop the
+          # whole family when no certificate is configured so that unsigned
+          # builds keep working exactly as before.
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "No Apple signing certificate configured — building unsigned."
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
+            unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+          fi
+          node scripts/tauri-dist.cjs build
+
+      # ── macOS release gates ────────────────────────────────────────────────
+      # These inspect the artifact users actually download, never the project
+      # settings. A Universal outer executable with a single-architecture nested
+      # binary is not a Universal app, and an unsigned build cannot pass
+      # Gatekeeper at all. Run before the checksum step so the hashes describe
+      # exactly the bytes that ship.
+      - name: Verify macOS Universal architecture
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' | head -1)"
+          if [ -z "$app" ]; then
+            app="$(find src-tauri/target -type d -name '*.app' | head -1)"
+          fi
+          if [ -z "$app" ]; then
+            echo "No macOS .app bundle was produced." >&2
+            exit 1
+          fi
+          echo "Inspecting $app"
+          node scripts/apple/assert-macos-bundle-architectures.mjs --app "$app"
+
+      - name: Verify macOS signing, notarization and stapling
+        if: runner.os == 'macOS' && steps.apple-signing.outputs.configured == 'true'
+        shell: bash
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' | head -1)"
+          dmg="$(find src-tauri/target -type f -name '*.dmg' | head -1)"
+
+          echo "== .app: $app =="
+          codesign --verify --deep --strict --verbose=2 "$app"
+          xcrun stapler validate "$app"
+          spctl --assess --type exec --verbose=4 "$app"
+
+          if [ -z "$dmg" ]; then
+            echo "::warning::No .dmg was produced, so only the .app could be verified."
+            exit 0
+          fi
+
+          echo "== .dmg: $dmg =="
+          # Bundling signs and notarizes the .app, but the .dmg wrapper only
+          # carries its own signature when the bundler wraps it signed. Cover it
+          # here so the file users download passes Gatekeeper on its own.
+          if ! codesign --verify --verbose=2 "$dmg" >/dev/null 2>&1; then
+            echo "The .dmg is not code-signed — signing it."
+            codesign --sign "$APPLE_SIGNING_IDENTITY" --timestamp "$dmg"
+          fi
+          if ! xcrun stapler validate "$dmg" >/dev/null 2>&1; then
+            echo "The .dmg is not stapled — submitting it for notarization."
+            xcrun notarytool submit "$dmg" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            xcrun stapler staple "$dmg"
+          fi
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          xcrun stapler validate "$dmg"
+          echo "macOS artifact is signed, notarized and stapled."
 
       - name: Generate checksums
         shell: bash

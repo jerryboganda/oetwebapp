@@ -23,6 +23,11 @@ const config: CapacitorConfig = {
     cleartext: isCapacitorLocalHttpAllowed(appUrl),
     androidScheme: 'https',
     iosScheme: 'capacitor',
+    // With server.url set, the WebView loads the remote app directly and the
+    // bundled webDir is bypassed — so without this a failed first load (offline
+    // launch) surfaced as a blank/WebKit error page with no way forward.
+    // error.html is a self-contained, network-free recovery screen.
+    errorPath: 'error.html',
   },
   ios: {
     contentInset: 'automatic',

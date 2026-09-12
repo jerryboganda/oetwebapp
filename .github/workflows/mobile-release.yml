@@ -296,6 +296,25 @@ jobs:
       - name: Capacitor sync
         run: pnpm exec cap sync ios
 
+      # Apple has required Xcode 26+ with the iOS 26 SDK for every App Store
+      # Connect upload since 2026-04-28. A release that quietly built with an
+      # older toolchain would be rejected at upload time, so assert it up front.
+      - name: Assert a current Xcode toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcode_major="$(xcodebuild -version | head -1 | awk '{print $2}' | cut -d. -f1)"
+          if [ "${xcode_major:-0}" -lt 26 ]; then
+            echo "::error::App Store Connect requires Xcode 26 or later since 2026-04-28; this runner has Xcode ${xcode_major:-unknown}." >&2
+            exit 1
+          fi
+          sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iPhoneOS SDK: $sdk_version"
+          case "$sdk_version" in
+            26.*|27.*) ;;
+            *) echo "::error::App Store Connect requires the iOS 26 SDK or later; this runner has $sdk_version." >&2; exit 1 ;;
+          esac
+
       - name: Install CocoaPods
         working-directory: ios/App
         run: pod install
@@ -368,8 +387,10 @@ jobs:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
           <dict>
+            <!-- Renamed from "app-store" in Xcode 15.4; the old value is
+                 deprecated and warns on export. -->
             <key>method</key>
-            <string>app-store</string>
+            <string>app-store-connect</string>
             <key>teamID</key>
             <string>${escapedTeamId}</string>
           </dict>
@@ -380,6 +401,17 @@ jobs:
             -archivePath $RUNNER_TEMP/App.xcarchive \
             -exportPath $RUNNER_TEMP/ipa \
             -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist
+
+      # Inspects the exported IPA itself. The artifact is what the App Store and
+      # the device act on, and Xcode resolves the deployment target, device
+      # families and capabilities into it at export time — so the project files
+      # agreeing with apple-compatibility.json is not sufficient proof. Runs
+      # before the upload so a non-conforming IPA is never published.
+      - name: Validate the exported IPA against the support matrix
+        run: |
+          node scripts/apple/assert-ios-ipa.mjs \
+            --root "$RUNNER_TEMP/ipa" \
+            --require-signature
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4

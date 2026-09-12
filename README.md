@@ -95,9 +95,24 @@ the `OET_DESKTOP_WEB_URL` / `OET_DESKTOP_API_URL` env vars).
   so the NSIS installer is signed automatically. The committed config has no
   thumbprint, so local/dev builds stay unsigned unless you stamp one in yourself.
   If `WINDOWS_CERTIFICATE` is unset, CI produces an unsigned installer as before.
-- **macOS notarization:** add the `APPLE_*` secrets and map them in
-  `.github/workflows/tauri-desktop-release.yml`. Until then, the macOS `.dmg` is
-  unsigned (open it with right-click → Open the first time).
+- **macOS signing + notarization:** set the `APPLE_CERTIFICATE`,
+  `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`,
+  `APPLE_PASSWORD` and `APPLE_TEAM_ID` CI secrets. `tauri-desktop-release.yml`
+  already maps them and gates on `APPLE_CERTIFICATE`, so an unsigned build still
+  succeeds and prints an explicit warning rather than looking signed. The
+  pipeline then verifies the result with `codesign --verify --deep --strict`,
+  `xcrun stapler validate` and `spctl --assess`, and signs / notarizes / staples
+  the `.dmg` itself if bundling left it unsigned.
+  While a release is unsigned, Gatekeeper blocks it and users must go to
+  **System Settings → Privacy & Security → Open Anyway**. The old "right-click →
+  Open" bypass was removed in macOS 15, so this README's previous advice no
+  longer worked on any current macOS.
+- **Apple compatibility:** supported OS versions, processor architectures and
+  the enforced WebView floors are documented in
+  `docs/APPLE_COMPATIBILITY_MATRIX.md` (source of truth:
+  `apple-compatibility.json`, guarded by `scripts/apple/*`). The macOS splash
+  detects a WebView engine older than Safari 16.4 and explains how to update
+  Safari instead of navigating into a half-rendered app.
 
 If PowerShell blocks scripts, run:
 

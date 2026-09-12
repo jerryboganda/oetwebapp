@@ -218,7 +218,7 @@ function PassagePanel({
         data-reading-annotate-scope="passage"
         className={cn(
           'prose prose-sm max-w-[70ch] rounded-lg border border-border bg-surface p-4 text-sm leading-relaxed text-navy selection:bg-warning/30',
-          variant === 'scroll' && 'max-h-[calc(100vh-13rem)] overflow-y-auto',
+          variant === 'scroll' && 'max-h-[calc(var(--app-viewport-height,100dvh)-13rem)] overflow-y-auto',
         )}
         dangerouslySetInnerHTML={{ __html: sanitizeBodyHtml(passage.bodyHtml) }}
       />

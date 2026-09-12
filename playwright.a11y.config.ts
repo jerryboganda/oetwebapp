@@ -24,11 +24,43 @@ export default defineConfig({
     video: 'retain-on-failure',
     viewport: { width: 1366, height: 900 },
   },
+  // Accessibility is verified at the Apple form factors the app actually ships
+  // to, not just on a desktop viewport. All of these descriptors resolve to
+  // WebKit, which is the engine family WKWebView belongs to — and viewport
+  // emulation is the only deterministic way to reach the small-screen class,
+  // because hosted macOS runners carry no home-button iPhone simulator type and
+  // no iOS 16.4 runtime. See docs/APPLE_COMPATIBILITY_MATRIX.md.
   projects: [
     {
       name: 'a11y-unauth',
       use: {
         ...devices['Desktop Chrome'],
+      },
+    },
+    {
+      // Smallest supported iPhone class (375x667).
+      name: 'a11y-iphone-small',
+      use: {
+        ...devices['iPhone SE (3rd gen)'],
+      },
+    },
+    {
+      // Largest supported iPhone class (430x932, Dynamic Island safe areas).
+      name: 'a11y-iphone-large',
+      use: {
+        ...devices['iPhone 15 Pro Max'],
+      },
+    },
+    {
+      name: 'a11y-ipad-portrait',
+      use: {
+        ...devices['iPad (gen 11)'],
+      },
+    },
+    {
+      name: 'a11y-ipad-landscape',
+      use: {
+        ...devices['iPad (gen 11) landscape'],
       },
     },
   ],
