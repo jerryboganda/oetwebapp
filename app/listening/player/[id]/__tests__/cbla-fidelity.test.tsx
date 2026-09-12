@@ -763,15 +763,16 @@ describe('Listening player — CBLA fidelity (preview / attempt timer / one-play
     expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true');
     expect(playCalls).toBe(playbackCallsAfterInitialStart);
 
-    // A C2 card cannot be opened while C1 is still playing. The jump routes
-    // through the section transition, and that explains itself rather than
-    // showing a card whose audio has not started — the reported defect where the
-    // candidate sat on Q37+ in silence until the timer ran out.
+    // A C2 card cannot be opened while C1 is still playing. The jump says so
+    // straight away — no confirmation dialog, because there is no transition to
+    // take yet — rather than showing a card whose audio has not started: the
+    // reported defect where the candidate sat on Q37+ in silence until the timer
+    // ran out.
     fireEvent.click(screen.getByRole('button', { name: 'Go to question 40' }));
-    fireEvent.click(await screen.findByRole('button', { name: /^Lock & continue$/i }));
     await waitFor(() => {
       expect(screen.getByText(/has not finished yet/i)).toBeInTheDocument();
     });
+    expect(screen.queryByRole('button', { name: /^Lock & continue$/i })).not.toBeInTheDocument();
     expect(screen.queryByText('Standalone Part C source question 40')).not.toBeInTheDocument();
     expect(screen.getByText('Standalone Part C source question 34')).toBeInTheDocument();
   });

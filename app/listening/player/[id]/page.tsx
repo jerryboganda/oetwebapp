@@ -197,6 +197,14 @@ async function advanceStrictStart(attemptId: string) {
 // foreign to the file.
 const CUE_WINDOW_FIT_TOLERANCE_MS = 1500;
 
+/**
+ * Surfaced whenever a sub-section boundary the candidate asked for cannot be
+ * taken yet. The boundary confirmation and the Part C jump pills both show it,
+ * so the wording lives in one place.
+ */
+const SECTION_AUDIO_INCOMPLETE_MESSAGE =
+  'The audio for this section has not finished yet. The next section opens as soon as it ends.';
+
 function PlayerContent() {
   const params = useParams<{ id?: string | string[] }>();
   const router = useRouter();
@@ -1691,9 +1699,7 @@ function PlayerContent() {
       // Drop any cross-extract jump with it — the card it named is still out of
       // reach, and leaving it armed would re-open it on a later advance.
       pendingJumpQuestionIdRef.current = null;
-      setAudioError(
-        'The audio for this section has not finished yet. The next section opens as soon as it ends.',
-      );
+      setAudioError(SECTION_AUDIO_INCOMPLETE_MESSAGE);
       return;
     }
     pauseAudio();
@@ -2319,10 +2325,18 @@ function PlayerContent() {
                               const index = navigationQuestions.findIndex((item) => item.id === question.id);
                               if (index >= 0 && currentSection) {
                                 // A card past the boundary belongs to the next extract, so
-                                // it cannot be shown without switching the audio first. Arm
-                                // the transition and let the section-entry reset land on this
-                                // card once the new section is live.
+                                // it cannot be shown without switching the audio first. If
+                                // the extract has not finished there is no transition to
+                                // take yet, so say so straight away rather than opening a
+                                // confirm that could only refuse.
                                 if (index > workspaceBoundary) {
+                                  if (!canOpenReviewWindow) {
+                                    pendingJumpQuestionIdRef.current = null;
+                                    setAudioError(SECTION_AUDIO_INCOMPLETE_MESSAGE);
+                                    return;
+                                  }
+                                  // Arm the transition; the section-entry reset lands on
+                                  // this card once the new section is live.
                                   pendingJumpQuestionIdRef.current = question.id;
                                   setShowNextConfirm(true);
                                   return;
