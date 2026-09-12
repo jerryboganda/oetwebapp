@@ -25,6 +25,13 @@ oet-desktop (Rust core)
   resource), overridable by `OET_DESKTOP_WEB_URL` / `OET_DESKTOP_API_URL`.
 - **Offline UX:** if the remote is unreachable at launch, the splash shows a
   "You're offline — Retry" screen and auto-retries on the OS `online` event.
+- **Engine gate:** the splash probes for the CSS/JS features the remote
+  Next.js 16 + Tailwind v4 app actually needs (Safari 16.4+). macOS ships that
+  engine with **Safari**, not with the OS version, so an un-updated Safari would
+  otherwise render a half-broken UI. Instead the splash explains how to update
+  and offers "Check again", plus a "Continue anyway" escape hatch so a
+  misdetection can never permanently block the app. The splash's own CSS is held
+  to a stricter Safari 15.0 floor — see `docs/APPLE_COMPATIBILITY_MATRIX.md`.
 - No sidecars, no local SQLite, no bundled Node/.NET → near-instant cold start
   and a small installer (Rust shell only).
 
@@ -69,7 +76,7 @@ pnpm run desktop:dist         # = node scripts/tauri-dist.cjs build  → NSIS + 
 
 ## Versions (pinned exact, verified June 2026)
 
-`tauri 2.11.3` · `tauri-build 2.6.2` · `@tauri-apps/cli 2.11.3` · plugins:
+`tauri 2.11.3` · `tauri-build 2.6.3` · `@tauri-apps/cli 2.11.3` · plugins:
 `single-instance 2.4.2`, `deep-link 2.4.9`, `notification 2.3.3`, `opener 2.5.4`,
 `dialog 2.7.1`, `updater 2.10.1`. The frontend uses the injected raw-JS bridge,
 not `@tauri-apps/api`.
@@ -89,8 +96,19 @@ OET_UPDATER_TEST=1 <run the built app>
 ## CI
 
 - `.github/workflows/tauri-ci.yml` — Rust gate (fmt, clippy `-D warnings`, test,
-  build) on Windows + the bridge conformance test.
+  build) on Windows + the bridge conformance test. On macOS it runs **two native
+  lanes**, `macos-latest` (Apple Silicon) and `macos-15-intel` (Intel), each
+  asserting the runner's real CPU family and the binary's slices — so the
+  `x86_64` half of the Universal build is executed, not merely cross-compiled.
+  GitHub retires the x86_64 macOS images in August 2027.
 - `.github/workflows/tauri-desktop-release.yml` — Windows (NSIS) + macOS (dmg)
   build matrix, checksums, artifact upload, and publish of the latest signed
-  feed/installers to the production VPS. Installers are unsigned by default —
-  see the README "Desktop signing" section to enable Authenticode / Apple notarization.
+  feed/installers to the production VPS. On macOS it additionally runs the
+  recursive Universal 2 architecture gate and, when Apple secrets are present,
+  `codesign` / `stapler` / `spctl` verification of both the `.app` and the
+  `.dmg`. **Installers are unsigned unless the `APPLE_*` secrets are set** — see
+  the README "Desktop signing" section.
+- `.github/workflows/apple-compatibility.yml` — keeps the declared Apple floors
+  (`apple-compatibility.json`) consistent with `project.pbxproj`, `Podfile`,
+  `Info.plist` and `tauri.conf.json`, and fails if the emitted CSS outgrows the
+  declared WebView floor.

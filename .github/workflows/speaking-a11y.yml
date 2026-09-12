@@ -37,8 +37,12 @@ jobs:
           PLAYWRIGHT_READY_TIMEOUT_MS: '900000'
         run: node ./scripts/qa/assert-local-stack.mjs
 
+      # The a11y config runs the Apple device descriptors (iPhone SE 3rd gen,
+      # iPhone 15 Pro Max, iPad) alongside the desktop baseline. Those resolve to
+      # WebKit, so chromium alone is not enough — without webkit the suite fails
+      # at browser launch instead of testing anything.
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm exec playwright install --with-deps chromium webkit
 
       - name: A11y suite
         run: pnpm exec playwright test -c playwright.a11y.config.ts --reporter=html,line

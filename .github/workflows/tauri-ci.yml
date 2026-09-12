@@ -112,24 +112,97 @@ jobs:
             }
           }
 
+  # The macOS release artifact is Universal 2 (arm64 + x86_64), but until this
+  # job was split, only the host architecture was ever executed — the Intel
+  # slice was cross-compiled and never once run. Each lane below proves three
+  # separate things: the runner is genuinely that processor family, the built
+  # binary carries that slice, and it launches and stays alive.
+  #
+  # Runner facts (actions/runner-images): macos-latest is macOS 26 on Apple
+  # Silicon arm64; macos-15-intel is the x64 image. GitHub retires the x86_64
+  # macOS images in August 2027, so the Intel lane has a known end date — see
+  # docs/APPLE_COMPATIBILITY_MATRIX.md. There is also a macos-26-intel label
+  # (Intel on macOS 26, Intel's final macOS) which belongs to the larger-runner
+  # family; add it here if the plan covers those runners.
   runtime-macos:
-    name: macOS desktop launch smoke
-    runs-on: macos-latest
-    timeout-minutes: 30
+    name: macOS launch smoke — ${{ matrix.arch.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - name: arm64 (Apple Silicon)
+            os: macos-latest
+            expected: arm64
+            target: aarch64-apple-darwin
+          - name: x86_64 (Intel)
+            os: macos-15-intel
+            expected: x86_64
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.arch.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.arch.target }}
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-      - name: cargo build (macOS compile smoke)
+          key: ${{ matrix.arch.target }}
+
+      # "It started" only means "it ran natively" if the hardware really is that
+      # family. uname alone is weak evidence, so also read the CPU brand: it is
+      # the difference between executing on Apple Silicon and executing an
+      # x86_64 slice under Rosetta.
+      - name: Assert native ${{ matrix.arch.expected }} hardware
+        run: |
+          set -euo pipefail
+          actual="$(uname -m)"
+          cpu="$(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo unknown)"
+          echo "Runner machine: $actual"
+          echo "Runner CPU: $cpu"
+
+          if [ "$actual" != "${{ matrix.arch.expected }}" ]; then
+            echo "::error::Expected a ${{ matrix.arch.expected }} runner but got '$actual'; this lane would not prove native execution." >&2
+            exit 1
+          fi
+
+          case "${{ matrix.arch.expected }}" in
+            arm64)
+              case "$cpu" in
+                *Apple*) ;;
+                *) echo "::error::Expected Apple Silicon hardware but the CPU reports '$cpu'." >&2; exit 1 ;;
+              esac
+              ;;
+            x86_64)
+              case "$cpu" in
+                *Intel*) ;;
+                *) echo "::error::Expected Intel hardware but the CPU reports '$cpu'." >&2; exit 1 ;;
+              esac
+              ;;
+          esac
+
+      - name: cargo build (${{ matrix.arch.target }})
         working-directory: src-tauri
-        run: cargo build
+        run: cargo build --target ${{ matrix.arch.target }}
+
+      - name: Assert the binary carries an ${{ matrix.arch.expected }} slice
+        working-directory: src-tauri
+        run: |
+          set -euo pipefail
+          binary="target/${{ matrix.arch.target }}/debug/oet-desktop"
+          echo "lipo -archs: $(lipo -archs "$binary")"
+          if ! lipo -archs "$binary" | tr ' ' '\n' | grep -qx "${{ matrix.arch.expected }}"; then
+            echo "::error::$binary does not contain a ${{ matrix.arch.expected }} slice." >&2
+            exit 1
+          fi
+
       - name: macOS desktop launch smoke
         working-directory: src-tauri
         run: |
           set -euo pipefail
-          ./target/debug/oet-desktop > "$RUNNER_TEMP/oet-desktop.log" 2>&1 &
+          binary="target/${{ matrix.arch.target }}/debug/oet-desktop"
+          "$binary" > "$RUNNER_TEMP/oet-desktop.log" 2>&1 &
           desktop_pid=$!
           cleanup() {
             kill "$desktop_pid" 2>/dev/null || true
@@ -137,13 +210,13 @@ jobs:
           trap cleanup EXIT
           for attempt in $(seq 1 15); do
             if ! kill -0 "$desktop_pid" 2>/dev/null; then
-              echo 'Tauri desktop process exited during the macOS launch smoke.' >&2
+              echo "Tauri desktop process exited during the ${{ matrix.arch.name }} launch smoke." >&2
               cat "$RUNNER_TEMP/oet-desktop.log" >&2
               exit 1
             fi
             sleep 1
           done
-          echo 'Tauri desktop process stayed alive for the macOS launch smoke.'
+          echo "Tauri desktop process stayed alive for the ${{ matrix.arch.name }} launch smoke."
 
   conformance:
     name: desktopBridge contract conformance

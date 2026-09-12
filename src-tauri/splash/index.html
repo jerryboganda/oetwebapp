@@ -345,7 +345,33 @@
 
   .retry-btn:disabled { opacity: 0.55; cursor: default; transform: none; }
 
-  .retry-btn:focus-visible {
+  /* :focus, not :focus-visible — the splash must render its guidance on the
+     oldest engine we claim to support (see apple-compatibility.json ->
+     webview.shellSafariMin), and :focus-visible needs Safari 15.4. */
+  .retry-btn:focus {
+    outline: 2px solid var(--periwinkle);
+    outline-offset: 3px;
+  }
+
+  /* Secondary action — must never compete with the primary recovery button. */
+  .link-btn {
+    appearance: none;
+    border: none;
+    background: none;
+    cursor: pointer;
+    margin-top: 14px;
+    padding: 6px 8px;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: inherit;
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .link-btn:hover { color: var(--text); }
+
+  .link-btn:focus {
     outline: 2px solid var(--periwinkle);
     outline-offset: 3px;
   }
@@ -403,6 +429,28 @@
         <p class="offline-body">OET with Dr. Hesham needs an internet connection. Check your network and try again.</p>
         <p id="offline-detail" class="offline-detail" aria-live="polite"></p>
         <button id="retry" type="button" class="retry-btn">Retry</button>
+      </div>
+    </div>
+
+    <!-- macOS ships its WebView engine with Safari, so a supported macOS
+         version can still carry an engine too old for the remote Next.js 16 +
+         Tailwind v4 content. Explain that instead of rendering a broken UI.
+         This page itself deliberately stays within the oldest supported engine
+         (see apple-compatibility.json -> webview.shellSafariMin). -->
+    <div id="unsupported" class="state" hidden role="alert">
+      <div class="card">
+        <div class="offline-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 4.5 21 19.5H3L12 4.5Z" />
+            <path d="M12 10.5v4" />
+            <path d="M12 17.5h.01" />
+          </svg>
+        </div>
+        <h1 class="offline-title">Update Safari to continue</h1>
+        <p class="offline-body">OET with Dr. Hesham needs Safari 16.4 or newer. Open <strong>System&nbsp;Settings &rarr; General &rarr; Software&nbsp;Update</strong>, install the latest updates for this Mac, then reopen the app.</p>
+        <p id="unsupported-detail" class="offline-detail" aria-live="polite"></p>
+        <button id="recheck" type="button" class="retry-btn">Check again</button>
+        <button id="continue-anyway" type="button" class="link-btn">Continue anyway</button>
       </div>
     </div>
   </div>

@@ -234,15 +234,57 @@ jobs:
       - name: Capacitor sync
         run: pnpm exec cap sync ios
 
+      # Apple has required Xcode 26+ with the iOS 26 SDK for every App Store
+      # Connect upload since 2026-04-28. Assert the toolchain rather than pin an
+      # exact Xcode build: hosted images rotate minor versions (26.0.1 … 26.6 are
+      # all present today) and a hard pin breaks the moment it is removed.
+      - name: Assert a current Xcode toolchain
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          xcode_major="$(xcodebuild -version | head -1 | awk '{print $2}' | cut -d. -f1)"
+          if [ "${xcode_major:-0}" -lt 26 ]; then
+            echo "::error::App Store Connect requires Xcode 26 or later since 2026-04-28; this runner has Xcode ${xcode_major:-unknown}." >&2
+            exit 1
+          fi
+          sdk_version="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iPhoneOS SDK: $sdk_version"
+          case "$sdk_version" in
+            26.*|27.*) ;;
+            *) echo "::error::App Store Connect requires the iOS 26 SDK or later; this runner has $sdk_version." >&2; exit 1 ;;
+          esac
+
       - name: Install CocoaPods
         working-directory: ios/App
         run: pod install
 
+      # Podfile.lock is not committed, so the transitive pod graph — and the
+      # deployment target each pod requires — is re-resolved on every build and
+      # is not pinned anywhere in the repository. Record what was actually
+      # resolved as build evidence, and state the gap rather than letting it
+      # drift unseen.
+      - name: Record the resolved CocoaPods lock
+        working-directory: ios/App
+        run: |
+          if git ls-files --error-unmatch Podfile.lock >/dev/null 2>&1; then
+            echo "Podfile.lock is committed — pod resolution is reproducible."
+          else
+            echo "::warning::ios/App/Podfile.lock is not committed, so CocoaPods re-resolves the transitive pod graph on every build. Commit the lock this run produced to make iOS builds reproducible."
+          fi
+          if [ -f Podfile.lock ]; then
+            echo "Resolved pods:"
+            grep -E '^  - ' Podfile.lock | head -40
+          fi
+
       - name: Build iOS (no code sign)
         working-directory: ios/App
         run: |
-          set -o pipefail
-          xcodebuild build \
+          set -euo pipefail
+          # Log to a file rather than piping through a pretty-printer: xcpretty is
+          # not installed on current runner images, and a missing formatter must
+          # not be able to fail the build. The log is uploaded as evidence.
+          log="$RUNNER_TEMP/xcodebuild-ios.log"
+          if ! xcodebuild build \
             -workspace App.xcworkspace \
             -scheme App \
             -destination 'generic/platform=iOS Simulator' \
@@ -251,39 +293,36 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
-            | xcpretty
+            > "$log" 2>&1; then
+            echo "xcodebuild failed — last 200 lines:" >&2
+            tail -200 "$log" >&2
+            exit 1
+          fi
+          tail -30 "$log"
 
-      - name: Launch app on iOS simulator
-        id: ios_simulator
-        working-directory: ios/App
+      # Representative device classes across the lowest and highest iOS runtimes
+      # the runner has. The bundle identifier is read from the built app: the iOS
+      # bundle ID (com.oetprep.learner) and the Android applicationId
+      # (com.oetwithdrhesham.app) are deliberately different, so a hardcoded
+      # value here targets the wrong app.
+      #
+      # The declared minimum (iOS 16.4) has no simulator runtime on hosted images;
+      # the script reports that as NOT VERIFIED and records it in a coverage
+      # report instead of skipping silently.
+      - name: Launch app on iOS simulators
         run: |
-          set -euo pipefail
-          device_udid=$(node - <<'NODE'
-          const { execFileSync } = require('node:child_process');
-          const devices = JSON.parse(execFileSync('xcrun', ['simctl', 'list', 'devices', 'available', '-j'], { encoding: 'utf8' })).devices;
-          const device = Object.values(devices).flat().find((candidate) => candidate.isAvailable && /^iPhone\b/.test(candidate.name));
-          if (!device) throw new Error('No available iPhone simulator was found on the runner.');
-          process.stdout.write(device.udid);
-          NODE
-          )
-          echo "device_udid=$device_udid" >> "$GITHUB_OUTPUT"
-          xcrun simctl boot "$device_udid" 2>/dev/null || true
-          xcrun simctl bootstatus "$device_udid" -b
-          xcrun simctl install "$device_udid" "$RUNNER_TEMP/AppDerivedData/Build/Products/Debug-iphonesimulator/App.app"
-          xcrun simctl launch "$device_udid" com.oetwithdrhesham.app
-          sleep 10
-          xcrun simctl listapps "$device_udid" | grep -q 'com.oetwithdrhesham.app'
-          xcrun simctl io "$device_udid" screenshot "$RUNNER_TEMP/oet-ios-simulator.png"
+          node scripts/apple/run-ios-simulator-smoke.mjs \
+            --app "$RUNNER_TEMP/AppDerivedData/Build/Products/Debug-iphonesimulator/App.app" \
+            --out output/native/ios
 
-      - name: Upload iOS simulator smoke evidence
+      - name: Upload iOS simulator + build evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-runtime-smoke-${{ github.run_id }}
-          path: ${{ runner.temp }}/oet-ios-simulator.png
+          path: |
+            output/native/ios
+            ${{ runner.temp }}/xcodebuild-ios.log
+            ios/App/Podfile.lock
           if-no-files-found: warn
           retention-days: 14
-
-      - name: Shut down iOS simulator
-        if: always() && steps.ios_simulator.outputs.device_udid != ''
-        run: xcrun simctl shutdown "${{ steps.ios_simulator.outputs.device_udid }}" || true

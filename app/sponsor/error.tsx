@@ -15,7 +15,7 @@ export default function SponsorError({
   }, [error]);
 
   return (
-    <div className="flex min-h-[calc(100vh-9rem)] items-center justify-center">
+    <div className="flex min-h-[calc(var(--app-viewport-height,100dvh)-9rem)] items-center justify-center">
       <ErrorState
         title="Sponsor Portal Error"
         message="An unexpected error occurred. Please try again or contact support if the problem persists."

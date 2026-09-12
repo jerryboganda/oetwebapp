@@ -1,0 +1,22 @@
+{
+  "ios": {
+    "deploymentTarget": "16.4",
+    "xcodeMajor": "26",
+    "architectures": [
+      "arm64"
+    ],
+    "targetedDeviceFamily": "1,2",
+    "requiredDeviceCapabilities": []
+  },
+  "macos": {
+    "minimumSystemVersion": "12.0",
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ]
+  },
+  "webview": {
+    "shellSafariMin": "15.0",
+    "contentSafariMin": "16.4"
+  }
+}
