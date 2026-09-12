@@ -296,7 +296,7 @@ First run on `main` for merge commit `d7c0c67db` (PR #220). The repo has to be *
 | **Tauri Desktop CI** `34680606766` | ✅ **all 4 jobs success** | `macOS launch smoke — arm64 (Apple Silicon)` ✅ and `macOS launch smoke — x86_64 (Intel)` ✅ |
 | **Build & Deploy (web + API)** `34680606769` | ✅ **success** | web + API + agent-gateway images tagged `d7c0c67db` |
 | **SBOM and SCA** | ✅ success | — |
-| **Mobile CI** `34680606780` | ❌ failure — **pre-existing, not this change** | `Lint & Type Check` fails on `Component definition is missing display name`; `iOS Build Check` is therefore **skipped** (it is gated on `needs: [lint, unit-tests]`). Same failure on the previous SHA `f05990cd6`. |
+| **Mobile CI** `34695676768` | ✅ **all 5 jobs success** — `iOS Build Check` ran for the first time in the repo's history | An earlier run (`34680606780`) failed on a pre-existing ESLint error that kept `iOS Build Check` **skipped** (`needs: [lint, unit-tests]`). That one error — `app/videos/[id]/page.test.tsx:40:16 react/display-name`, caused by an `eslint-disable-next-line` sitting one line above the `forwardRef` it was meant to cover — is fixed. |
 
 **The `x86_64` slice has now been executed natively for the first time.** Before this change it was cross-compiled and never run; `macos-15-intel` asserts the runner's CPU brand string and the binary's slices, then launches it.
 
@@ -338,18 +338,42 @@ Two things follow from it, and they point in opposite directions:
 | Level | Status |
 | --- | --- |
 | STATICALLY VERIFIED | ✅ guards + 74 self-test checks, config consistency, 26 workflow files parse, device descriptors |
-| COMPILED | ⏳ Rust: ✅ both arches (Tauri CI). iOS: **blocked** — see below |
+| COMPILED | ✅ Rust both arches (Tauri CI) **and the iOS app builds** for the simulator — deployment target 16.4, committed shared scheme, Xcode 26 / iOS 26 SDK assertion |
 | PACKAGED | ⏳ Not yet — needs a desktop release tag / mobile release dispatch |
-| SIMULATOR TESTED | ⏳ Blocked with iOS Build Check |
+| SIMULATOR TESTED | ✅ **6 configurations** across 3 device classes on the newest runtime — see below |
 | NATIVELY EXECUTED (macOS arm64 **and** x86_64) | ✅ **both lanes green on real Apple/Intel hardware** |
 | DEPLOYED + LIVE (web) | ✅ verified on the serving slot |
 | PHYSICAL DEVICE TESTED | ❌ No devices available |
 | MACOS 12 / IOS 16.4 EXECUTED | ❌ No such runners/runtimes exist |
 | SIGNING / NOTARIZATION | ❌ Not yet — needs `APPLE_*` secrets |
 
-### The one blocker left for iOS verification
+### iOS verification — now executed (Mobile CI `34695676768`, job 33m31s)
 
-`iOS Build Check` is **skipped on every run**, because `Lint & Type Check` (its `needs:` dependency) fails on a **pre-existing** ESLint error — `Component definition is missing display name` — that is not in any file this change touched, and which also fails on the previous SHA. Until that unrelated lint error is fixed, the iOS deployment target, the simulator device-class matrix and the new bundle-ID derivation cannot be exercised by CI, and the iOS side of this matrix stays `COMPILED / NOT VERIFIED`.
+`iOS Build Check` ran for the first time. Every step passed: `Assert a current Xcode toolchain`, `Install CocoaPods`, `Record the resolved CocoaPods lock`, `Build iOS (no code sign)`, `Launch app on iOS simulators`.
+
+It confirms the three iOS fixes directly:
+
+- **The 16.4 deployment target compiles.** The project builds with `IPHONEOS_DEPLOYMENT_TARGET = 16.4` and `platform :ios, '16.4'`.
+- **The bundle-ID fix is real.** The log reads `Bundle identifier (from the built app): com.oetprep.learner`. The previous CI step launched `com.oetwithdrhesham.app` — the *Android* applicationId — so it could never have passed.
+- **The committed shared scheme works** with `-scheme App`, and the Xcode 26 / iOS 26 SDK assertion passes on the runner.
+
+Simulator coverage, exactly as reported by the run — note that the gap is stated, not hidden:
+
+```
+Available simulator runtimes: 26.2, 26.4, 26.5
+VERIFIED     iPhone 16e (iOS 26.2) — smallest supported iPhone
+VERIFIED     iPhone 17 Pro Max (iOS 26.2) — largest supported iPhone
+VERIFIED     iPad Pro 13-inch (M5) (iOS 26.2) — iPad
+VERIFIED     iPhone 17e (iOS 26.5) — smallest supported iPhone
+VERIFIED     iPhone 17 Pro Max (iOS 26.5) — largest supported iPhone
+VERIFIED     iPad Pro 13-inch (M5) (iOS 26.5) — iPad
+NOT VERIFIED iOS 16.4 (declared minimum)
+6 simulator configuration(s) verified.
+```
+
+**iOS 16.4 itself remains NOT VERIFIED** — no such simulator runtime exists on hosted runners, so the declared minimum cannot be executed in CI.
+
+**One correction made after this run:** the job took 33m31s against a 45-minute cap, 25 minutes of it in the simulator sweep, because the script booted every device class on *two* runtimes. Sweeping a second runtime re-boots every class without adding form-factor coverage, so it now sweeps the newest runtime only (3 configurations instead of 6), with the step bounded by `timeout-minutes: 20` so a slow runner cannot consume the job budget. Runtime spread belongs in a job matrix, not in serialised boots.
 
 ### Definition of done for this pass
 

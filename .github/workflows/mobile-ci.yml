@@ -310,6 +310,10 @@ jobs:
       # the script reports that as NOT VERIFIED and records it in a coverage
       # report instead of skipping silently.
       - name: Launch app on iOS simulators
+        # Bounded so a slow runner cannot eat the job budget: one simulator boot
+        # dominates the cost (~4 min per configuration measured on a hosted
+        # runner), and the sweep covers three device classes on one runtime.
+        timeout-minutes: 20
         run: |
           node scripts/apple/run-ios-simulator-smoke.mjs \
             --app "$RUNNER_TEMP/AppDerivedData/Build/Products/Debug-iphonesimulator/App.app" \
