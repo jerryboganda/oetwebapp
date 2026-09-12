@@ -435,6 +435,26 @@ public sealed class WritingTaskModelAnswerService(
             });
             return Hold(row, "model_answer_generation_duplicate_window");
         }
+        catch (OetLearner.Api.Services.Ai.AiOperationInFlightException inFlightEx)
+        {
+            // Same exhausted-bounded-retry fallback as the conflict catch
+            // above, for the third safe-to-retry exception
+            // CompleteWithDuplicateRetryAsync's bump loop handles (see
+            // IsSafeToRetryWithNewVersion's doc comment) -- the coordinator's
+            // own ~4s poll never saw this slot resolve across every version
+            // this attempt tried. Same distinct, diagnosable, non-transient
+            // hold as the other two collision fallbacks.
+            logger.LogInformation(inFlightEx,
+                "Model-answer generation for scenario {ScenarioId} exhausted its bounded replay-version retry against a slot that never resolved.",
+                scenarioId);
+            row.ValidationReportJson = JsonSerializer.Serialize(new
+            {
+                transientDuplicate = true,
+                exceptionMessage = Truncate(inFlightEx.ToString(), 4000),
+                checkedAt = now,
+            });
+            return Hold(row, "model_answer_generation_duplicate_window");
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Model-answer pregeneration failed for scenario {ScenarioId}", scenarioId);
@@ -1052,36 +1072,67 @@ public sealed class WritingTaskModelAnswerService(
                     UserInput = userInput,
                 }, ct);
             }
-            catch (OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx)
-                when (dupEx.State == OetLearner.Api.Domain.AiOperationState.Completed
-                      && retry < MaxDuplicateCompletedRetries)
+            catch (Exception ex) when (retry < MaxDuplicateCompletedRetries && IsSafeToRetryWithNewVersion(ex))
             {
-                resourceVersion = OetLearner.Api.Services.Ai.AiOperationReplayPolicy.NextVersion(resourceVersion);
-                logger.LogInformation(
-                    "Model-answer generation for scenario {ScenarioId} collided with a Completed predecessor; " +
+                // Root cause of the 3-bump version proving too small (13 Sep
+                // 2026, live evidence): AiOperationReplayPolicy.NextVersion's
+                // small sequential sequence (2, 3, 4, ...) is exactly the
+                // same low range the COORDINATOR's own internal auto-bump
+                // already walks through on every call (its bounded internal
+                // walk is up to 5 rounds PER ATTEMPT) -- on a scenario tested
+                // hundreds of times today, those low numbers are already
+                // heavily claimed, so a small sequential bump keeps landing
+                // on more historical collisions instead of a genuinely free
+                // slot. A wall-clock-derived version is, in practice, never
+                // claimed by anything else: jump the ENTIRE remaining retry
+                // budget into that essentially-collision-free range in one
+                // step, and only fall back to a plain increment (belt and
+                // braces) if that too somehow collides.
+                resourceVersion = resourceVersion is null
+                    ? unchecked((int)clock.GetUtcNow().ToUnixTimeSeconds())
+                    : resourceVersion + 1;
+                logger.LogInformation(ex,
+                    "Model-answer generation for scenario {ScenarioId} hit a replay-version collision ({ExceptionType}); " +
                     "retrying as a new attempt at replay version {ResourceVersion} ({Retry}/{Max}).",
-                    scenarioId, resourceVersion, retry + 1, MaxDuplicateCompletedRetries);
-            }
-            catch (OetLearner.Api.Services.Ai.AiOperationConflictException conflictEx)
-                when (retry < MaxDuplicateCompletedRetries)
-            {
-                // A DIFFERENT payload (different content hash) already owns
-                // this exact resourceId+ResourceVersion slot -- e.g. an
-                // earlier automatic safe-failure bump from unrelated
-                // activity landed on the same version number this retry just
-                // tried. Same safety reasoning as the Completed case (no
-                // insert can ever race here -- the unique index resolves
-                // concurrent inserts atomically, so trying the NEXT version
-                // is just "find an unclaimed slot", never a duplicate
-                // provider call): keep bumping, bounded.
-                resourceVersion = OetLearner.Api.Services.Ai.AiOperationReplayPolicy.NextVersion(resourceVersion);
-                logger.LogInformation(conflictEx,
-                    "Model-answer generation for scenario {ScenarioId} hit an occupied replay-version slot; " +
-                    "retrying at version {ResourceVersion} ({Retry}/{Max}).",
-                    scenarioId, resourceVersion, retry + 1, MaxDuplicateCompletedRetries);
+                    scenarioId, ex.GetType().Name, resourceVersion, retry + 1, MaxDuplicateCompletedRetries);
             }
         }
     }
+
+    /// <summary>
+    /// The three exceptions <see cref="CompleteWithDuplicateRetryAsync"/> may
+    /// safely retry past with a freshly-chosen <c>ResourceVersion</c> --
+    /// never a duplicate-charge risk in any of the three, because each is
+    /// only ever thrown once the coordinator has already resolved (or given
+    /// up waiting bounded-ly on) the blocking row, meaning there is no live
+    /// request left for a retry to duplicate:
+    /// <list type="bullet">
+    /// <item><see cref="OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException"/>
+    /// with <c>State == Completed</c> only — the predecessor's real provider
+    /// call already finished (a non-Completed/ambiguous predecessor is a
+    /// genuine concurrent racer and must NOT be retried; see
+    /// <see cref="AiOperationReplayPolicy"/>).</item>
+    /// <item><see cref="OetLearner.Api.Services.Ai.AiOperationConflictException"/> —
+    /// a DIFFERENT payload owns this exact slot; trying another version
+    /// number is just "find an unclaimed slot", not a replay of any
+    /// request.</item>
+    /// <item><see cref="OetLearner.Api.Services.Ai.AiOperationInFlightException"/> —
+    /// the coordinator polled this slot for its own bounded window (~4s) and
+    /// it never resolved; in this service's synchronous admin/system-caller
+    /// context that is far more often an orphaned row (e.g. from an earlier
+    /// client-side timeout that cancelled the shared token) than a real
+    /// multi-second-and-counting concurrent racer, so moving to a fresh slot
+    /// rather than holding the row is the more useful outcome.</item>
+    /// </list>
+    /// </summary>
+    private static bool IsSafeToRetryWithNewVersion(Exception ex) => ex switch
+    {
+        OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx =>
+            dupEx.State == OetLearner.Api.Domain.AiOperationState.Completed,
+        OetLearner.Api.Services.Ai.AiOperationConflictException => true,
+        OetLearner.Api.Services.Ai.AiOperationInFlightException => true,
+        _ => false,
+    };
 
     // P0 fix (12 Sep 2026): WritingRuleEngine.Lint() itself is now
     // exception-safe (RunDetectorSafely), but the live 224-answer

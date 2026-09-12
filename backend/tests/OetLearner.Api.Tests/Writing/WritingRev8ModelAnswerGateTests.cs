@@ -264,7 +264,31 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal("Ready", dto.Status);
         Assert.Equal(2, gateway.Calls); // 1 collision + 1 successful retry
         Assert.Null(gateway.ResourceVersionsSeen[0]);   // first attempt: unmodified, matches current behaviour
-        Assert.Equal(2, gateway.ResourceVersionsSeen[1]); // retry: bumped via AiOperationReplayPolicy.NextVersion
+        // Retry: a wall-clock-derived version, not a small sequential bump
+        // (see CompleteWithDuplicateRetryAsync's doc comment for why -- a
+        // small sequence collides with the coordinator's own historical
+        // internal bumps on a heavily-reused scenario).
+        Assert.True(gateway.ResourceVersionsSeen[1] > 1_000_000_000);
+        Assert.Equal(WritingRuleEngine.ValidatorVersion, dto.ValidatorVersion);
+    }
+
+    // A slot that never resolves within the coordinator's own bounded poll
+    // (AiOperationInFlightException) is, for this synchronous admin/system
+    // caller, far more often an orphaned row from an earlier client-side
+    // timeout than a real still-running concurrent racer -- retried past the
+    // same bounded way as the other two safe cases.
+    [Fact]
+    public async Task Generate_Retries_Past_An_Unresolved_InFlight_Slot_And_Succeeds()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var gateway = new InFlightThenSucceedsGateway(WritingModelAnswerBatchTests.ExemplarText());
+        var svc = Service(db, gateway);
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("Ready", dto.Status);
+        Assert.Equal(2, gateway.Calls); // 1 unresolved slot + 1 successful retry
         Assert.Equal(WritingRuleEngine.ValidatorVersion, dto.ValidatorVersion);
     }
 
@@ -370,6 +394,38 @@ public sealed class WritingRev8ModelAnswerGateTests
             {
                 throw new OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException(
                     "op-completed-predecessor", OetLearner.Api.Domain.AiOperationState.Completed, null);
+            }
+
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                modelAnswerText = letter,
+                whyThisWorks = new[] { "Grounded exemplar." },
+                groundedFactReferences = new[] { "case-note-line:1" },
+            });
+            return Task.FromResult(new AiGatewayResult { Completion = json, ResolvedModel = "claude-sonnet-5" });
+        }
+    }
+
+    /// <summary>Throws an unresolved in-flight-slot timeout on the first
+    /// call, then succeeds -- the "orphaned slot from an earlier client
+    /// timeout" case.</summary>
+    private sealed class InFlightThenSucceedsGateway(string letter) : IAiGatewayService
+    {
+        public int Calls { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "generate",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            Calls++;
+            if (Calls == 1)
+            {
+                throw new OetLearner.Api.Services.Ai.AiOperationInFlightException("idem-key-stuck");
             }
 
             var json = System.Text.Json.JsonSerializer.Serialize(new
