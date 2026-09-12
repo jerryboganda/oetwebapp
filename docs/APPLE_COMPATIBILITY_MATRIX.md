@@ -97,7 +97,7 @@ These are stated plainly rather than implied by a green build. See `APPLE_COMPAT
 | Guard | What it proves |
 | --- | --- |
 | `scripts/apple/assert-apple-config-consistency.mjs` | `project.pbxproj`, `Podfile`, `Info.plist` and `tauri.conf.json` all agree with `apple-compatibility.json`, and `UIRequiredDeviceCapabilities` stays within the allowlist. |
-| `scripts/apple/assert-webview-floor.mjs` | The emitted CSS and shell pages contain no CSS feature newer than their declared floor. Comments and probe strings are stripped first, so naming a feature in detection code does not fail the check. |
+| `scripts/apple/assert-webview-floor.mjs` | The emitted CSS and shell pages contain no **rendering-breaking** CSS feature newer than their declared floor. Comments and probe strings are stripped first, so naming a feature in detection code does not fail the check. Cosmetic features that degrade harmlessly (e.g. `text-wrap: balance`) are reported as warnings, never as gates — an earlier revision failed CI on one of those, which would have raised the whole app's floor for a typographic nicety. |
 | `scripts/apple/assert-macos-bundle-architectures.mjs` | **Every** Mach-O in the packaged `.app` — executable, dylibs, frameworks, helpers — contains both `arm64` and `x86_64`. |
 | `scripts/apple/assert-ios-ipa.mjs` | The exported IPA declares the documented `MinimumOSVersion`, supports iPhone and iPad, is `arm64` only, carries no undeclared required capabilities, and (in release) verifies under `codesign`. |
 | `scripts/apple/run-ios-simulator-smoke.mjs` | Launches the built app across representative device classes and writes a coverage report that names what it could **not** cover. |

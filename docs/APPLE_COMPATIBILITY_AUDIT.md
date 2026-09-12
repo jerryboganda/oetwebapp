@@ -286,19 +286,70 @@ The WebView-floor run against the repo's real compiled stylesheet is what *prove
 
 The Tailwind emission probe is what turned the `100vh` fix from a guess into a verified change: it compiled the exact class strings used by the ten edited files through the project's own Tailwind version and confirmed the emitted declarations are valid CSS.
 
-### Originated but NOT yet executed
+### Executed on GitHub Actions — real results
 
-No Apple hardware, no macOS, and no Apple Developer Program secrets were available in this environment. **Nothing below has been run.** Per the compute policy, this work belongs on GitHub Actions, not on a development machine.
+First run on `main` for merge commit `d7c0c67db` (PR #220). The repo has to be **public** for Actions jobs to start; runs while private die in ~4–10s with a billing/spending-limit annotation and no logs (AGENTS.md §"GitHub Actions visibility").
+
+| Workflow / run | Result | Evidence |
+| --- | --- | --- |
+| **Apple Compatibility** `34680606776` | consistency **PASSED** (11s); CSS floor **FAILED → fixed** | See below |
+| **Tauri Desktop CI** `34680606766` | ✅ **all 4 jobs success** | `macOS launch smoke — arm64 (Apple Silicon)` ✅ and `macOS launch smoke — x86_64 (Intel)` ✅ |
+| **Build & Deploy (web + API)** `34680606769` | ✅ **success** | web + API + agent-gateway images tagged `d7c0c67db` |
+| **SBOM and SCA** | ✅ success | — |
+| **Mobile CI** `34680606780` | ❌ failure — **pre-existing, not this change** | `Lint & Type Check` fails on `Component definition is missing display name`; `iOS Build Check` is therefore **skipped** (it is gated on `needs: [lint, unit-tests]`). Same failure on the previous SHA `f05990cd6`. |
+
+**The `x86_64` slice has now been executed natively for the first time.** Before this change it was cross-compiled and never run; `macos-15-intel` asserts the runner's CPU brand string and the binary's slices, then launches it.
+
+**Live production verified** (`scripts/ship/watch-deploy.ps1 -Sha d7c0c67db…`):
+
+```
+SHIP-WATCH_DEPLOY_OK
+LIVE web: 200 ok          LIVE api-ready: 200 (database/migrations/stuck_jobs/storage all ok)
+LIVE api-live: 200 ok
+oet-web-green / oet-api-green / oet-agent-gateway  HEALTH=healthy  IMAGE=…:d7c0c67dba33…
+ROUTER_ACTIVE_SLOT=green
+LIVE_SHA_OK d7c0c67dba33122f58cb9cfe185fb2d02593867b (serving slot: green)
+```
+
+Blue still carries the previous SHA (`69f9ee823`) as the rollback path.
+
+### The CSS-floor failure was a real defect in this guard
+
+The first CI run failed:
+
+```
+FAIL content requires a newer engine than the declared Safari 16.4:
+  .next/static/chunks/17opldn84roqk.css
+    - text-wrap: balance: needs Safari 17.5 (2 occurrence(s))
+OK   shell stays within Safari 15.0.
+```
+
+Two things follow from it, and they point in opposite directions:
+
+1. **The 16.4 floor is confirmed correct.** The guard scanned four real built CSS files, and `@property`, `color-mix()`, `oklch()`, `@layer` and `:has()` were **not** flagged — i.e. every load-bearing feature the floor was derived from is genuinely at or below Safari 16.4. The deployment-target change is now validated against the artifact, not just against documentation.
+2. **The guard itself was wrong.** `text-wrap: balance` is a cosmetic typographic refinement: unsupported browsers ignore the declaration and text wraps normally. Classifying it as a hard floor requirement would have forced the entire app onto a newer OS for no user-visible benefit. The table now carries a `severity`:
+   - `hard` — the app renders wrong without it (Tailwind v4's colour pipeline and cascade layers): `oklch()`, `color-mix()`, `@layer`, `:has()`, `@property`.
+   - `advisory` — degrades harmlessly and is **reported but never gates**: `text-wrap: balance`, `@starting-style`, `field-sizing`, `@container`, `subgrid`, `dvh/svh/lvh`, `:focus-visible`.
+
+   The self-test now asserts the split in both directions, so a future edit cannot silently promote a cosmetic feature to a floor requirement (or demote a load-bearing one).
+
+### Verification levels
 
 | Level | Status |
 | --- | --- |
-| STATICALLY VERIFIED | ✅ Guards, config consistency, workflow YAML, device descriptors |
-| COMPILED | ⏳ CI — Rust both arches, iOS simulator + device archive |
-| PACKAGED | ⏳ CI — Universal `.app`/`.dmg`, IPA |
-| SIMULATOR TESTED | ⏳ CI — device-class matrix on available runtimes |
-| NATIVELY EXECUTED (macOS arm64 + x86_64) | ⏳ CI — both lanes assert real Apple/Intel hardware |
+| STATICALLY VERIFIED | ✅ guards + 74 self-test checks, config consistency, 26 workflow files parse, device descriptors |
+| COMPILED | ⏳ Rust: ✅ both arches (Tauri CI). iOS: **blocked** — see below |
+| PACKAGED | ⏳ Not yet — needs a desktop release tag / mobile release dispatch |
+| SIMULATOR TESTED | ⏳ Blocked with iOS Build Check |
+| NATIVELY EXECUTED (macOS arm64 **and** x86_64) | ✅ **both lanes green on real Apple/Intel hardware** |
+| DEPLOYED + LIVE (web) | ✅ verified on the serving slot |
 | PHYSICAL DEVICE TESTED | ❌ No devices available |
 | MACOS 12 / IOS 16.4 EXECUTED | ❌ No such runners/runtimes exist |
+| SIGNING / NOTARIZATION | ❌ Not yet — needs `APPLE_*` secrets |
+
+### The one blocker left for iOS verification
+
+`iOS Build Check` is **skipped on every run**, because `Lint & Type Check` (its `needs:` dependency) fails on a **pre-existing** ESLint error — `Component definition is missing display name` — that is not in any file this change touched, and which also fails on the previous SHA. Until that unrelated lint error is fixed, the iOS deployment target, the simulator device-class matrix and the new bundle-ID derivation cannot be exercised by CI, and the iOS side of this matrix stays `COMPILED / NOT VERIFIED`.
 
 ### Definition of done for this pass
 

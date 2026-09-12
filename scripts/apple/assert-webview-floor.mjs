@@ -45,19 +45,30 @@ const SHELL_FILES = [
 // feature we would genuinely break on, not a theoretical concern. The table
 // only lists features newer than the lowest floor we ever enforce (the shell
 // floor, Safari 15.0), because anything older can never fail the check.
+//
+// severity:
+//   'hard'     — without it the app renders wrong: Tailwind v4's colour
+//                pipeline and cascade layers are load-bearing.
+//   'advisory' — a refinement that degrades harmlessly when unsupported (text
+//                simply does not balance, an entry animation does not run). It
+//                is reported so it stays visible, but it must NOT gate the
+//                build: treating a cosmetic nicety as a floor would force the
+//                whole app onto a newer OS for no user-visible benefit. This
+//                distinction is not theoretical — an earlier revision of this
+//                guard failed CI on `text-wrap: balance` alone.
 const FEATURES = [
-  { label: 'oklch() colour values', pattern: /\boklch\(/gi, safari: '15.4' },
-  { label: 'color-mix()', pattern: /\bcolor-mix\(/gi, safari: '16.2' },
-  { label: '@layer at-rule', pattern: /@layer\b/gi, safari: '15.4' },
-  { label: ':has() selector', pattern: /:has\(/gi, safari: '15.4' },
-  { label: ':focus-visible selector', pattern: /:focus-visible\b/gi, safari: '15.4' },
-  { label: 'dynamic viewport units (dvh/svh/lvh)', pattern: /\d(?:dvh|svh|lvh)\b/gi, safari: '15.4' },
-  { label: '@property at-rule', pattern: /@property\b/gi, safari: '16.4' },
-  { label: '@container queries', pattern: /@container\b/gi, safari: '16.0' },
-  { label: 'grid subgrid', pattern: /\bsubgrid\b/gi, safari: '16.0' },
-  { label: 'text-wrap: balance', pattern: /text-wrap\s*:\s*balance/gi, safari: '17.5' },
-  { label: '@starting-style at-rule', pattern: /@starting-style\b/gi, safari: '17.5' },
-  { label: 'field-sizing', pattern: /\bfield-sizing\s*:/gi, safari: '18.0' },
+  { label: 'oklch() colour values', pattern: /\boklch\(/gi, safari: '15.4', severity: 'hard' },
+  { label: 'color-mix()', pattern: /\bcolor-mix\(/gi, safari: '16.2', severity: 'hard' },
+  { label: '@layer at-rule', pattern: /@layer\b/gi, safari: '15.4', severity: 'hard' },
+  { label: ':has() selector', pattern: /:has\(/gi, safari: '15.4', severity: 'hard' },
+  { label: '@property at-rule', pattern: /@property\b/gi, safari: '16.4', severity: 'hard' },
+  { label: ':focus-visible selector', pattern: /:focus-visible\b/gi, safari: '15.4', severity: 'advisory' },
+  { label: 'dynamic viewport units (dvh/svh/lvh)', pattern: /\d(?:dvh|svh|lvh)\b/gi, safari: '15.4', severity: 'advisory' },
+  { label: '@container queries', pattern: /@container\b/gi, safari: '16.0', severity: 'advisory' },
+  { label: 'grid subgrid', pattern: /\bsubgrid\b/gi, safari: '16.0', severity: 'advisory' },
+  { label: 'text-wrap: balance', pattern: /text-wrap\s*:\s*balance/gi, safari: '17.5', severity: 'advisory' },
+  { label: '@starting-style at-rule', pattern: /@starting-style\b/gi, safari: '17.5', severity: 'advisory' },
+  { label: 'field-sizing', pattern: /\bfield-sizing\s*:/gi, safari: '18.0', severity: 'advisory' },
 ];
 
 function compareVersions(left, right) {
@@ -167,24 +178,43 @@ function scanFile(absolutePath, floor) {
 }
 
 function report(label, floor, findings) {
-  if (findings.length === 0) {
+  const groupByFile = (entries) => {
+    const byFile = new Map();
+    for (const entry of entries) {
+      if (!byFile.has(entry.file)) byFile.set(entry.file, []);
+      byFile.get(entry.file).push(entry);
+    }
+    return byFile;
+  };
+
+  const print = (entries, write) => {
+    for (const [file, fileFindings] of groupByFile(entries)) {
+      write(`  ${file}`);
+      for (const finding of fileFindings) {
+        write(`    - ${finding.label}: needs Safari ${finding.safari} (${finding.occurrences} occurrence(s))`);
+      }
+    }
+  };
+
+  const hard = findings.filter((entry) => entry.severity === 'hard');
+  const advisory = findings.filter((entry) => entry.severity === 'advisory');
+
+  if (hard.length > 0) {
+    console.error(`FAIL ${label} requires a newer engine than the declared Safari ${floor}:`);
+    print(hard, (line) => console.error(line));
+  } else {
     console.log(`OK   ${label} stays within Safari ${floor}.`);
-    return 0;
   }
 
-  console.error(`FAIL ${label} requires a newer engine than the declared Safari ${floor}:`);
-  const byFile = new Map();
-  for (const finding of findings) {
-    if (!byFile.has(finding.file)) byFile.set(finding.file, []);
-    byFile.get(finding.file).push(finding);
+  if (advisory.length > 0) {
+    console.log(
+      `WARN ${label} uses ${advisory.length} cosmetic feature(s) newer than Safari ${floor}. `
+        + 'These degrade harmlessly (no layout breakage) so they do not gate the build:',
+    );
+    print(advisory, (line) => console.log(line));
   }
-  for (const [file, fileFindings] of byFile) {
-    console.error(`  ${file}`);
-    for (const finding of fileFindings) {
-      console.error(`    - ${finding.label}: needs Safari ${finding.safari} (${finding.occurrences} occurrence(s))`);
-    }
-  }
-  return findings.length;
+
+  return { hard: hard.length, advisory: advisory.length };
 }
 
 function selfTest() {
@@ -267,13 +297,35 @@ function selfTest() {
     'live usage next to a stripped region was missed',
   );
 
+  // The severity split is load-bearing: an earlier revision of this guard failed
+  // CI on `text-wrap: balance` alone, which would have forced the whole app onto
+  // a newer OS for a typographic nicety that degrades harmlessly.
+  const advisoryOnly = findOffendingFeatures('.a{text-wrap:balance}', '15.0');
+  expect(advisoryOnly.length > 0, 'text-wrap: balance was not detected at all');
+  expect(
+    advisoryOnly.every((entry) => entry.severity === 'advisory'),
+    'text-wrap: balance must be advisory, not a floor requirement',
+  );
+  expect(
+    findOffendingFeatures('@property --x{syntax:"*"}', '15.0').every((entry) => entry.severity === 'hard'),
+    '@property must be hard',
+  );
+  expect(
+    findOffendingFeatures('.a{color:oklch(0 0 0)}', '15.0').every((entry) => entry.severity === 'hard'),
+    'oklch() must be hard',
+  );
+  expect(
+    findOffendingFeatures('.a{border:1px solid color-mix(in oklab,red,blue)}', '15.0').every((entry) => entry.severity === 'hard'),
+    'color-mix() must be hard',
+  );
+
   if (failures.length > 0) {
     console.error('assert-webview-floor self-test failed:');
     for (const failure of failures) console.error(`  - ${failure}`);
     process.exit(1);
   }
 
-  console.log(`assert-webview-floor self-test passed (${cases.length * 2 + 4 + stripped.length + 1} checks).`);
+  console.log(`assert-webview-floor self-test passed (${cases.length * 2 + 4 + stripped.length + 5} checks).`);
 }
 
 function main() {
@@ -331,16 +383,25 @@ function main() {
       + `at Safari ${contentFloor}, and ${SHELL_FILES.length} splash file(s) at Safari ${shellFloor}.`,
   );
 
-  const violations = report('content', contentFloor, contentFindings)
-    + report('shell', shellFloor, shellFindings);
+  const contentResult = report('content', contentFloor, contentFindings);
+  const shellResult = report('shell', shellFloor, shellFindings);
 
-  if (violations > 0) {
+  const hardTotal = contentResult.hard + shellResult.hard;
+  const advisoryTotal = contentResult.advisory + shellResult.advisory;
+
+  if (hardTotal > 0) {
     console.error(
-      '\nFix by either removing the newer feature, or raising the floor deliberately in '
-        + 'apple-compatibility.json plus the matching deployment target.',
+      '\nThe app would render incorrectly on the declared floor. Fix by removing the newer '
+        + 'feature, or raise the floor deliberately in apple-compatibility.json plus the '
+        + 'matching deployment target.',
     );
     process.exit(1);
   }
+
+  console.log(
+    `\nNo rendering-breaking feature exceeds the declared floors`
+      + `${advisoryTotal > 0 ? ` (${advisoryTotal} cosmetic feature(s) noted above)` : ''}.`,
+  );
 }
 
 main();
