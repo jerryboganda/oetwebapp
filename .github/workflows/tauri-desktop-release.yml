@@ -301,20 +301,32 @@ jobs:
           set -euo pipefail
           # `-print -quit` rather than `| head -1`: under `set -o pipefail` a
           # short-circuiting `head` makes `find` die on SIGPIPE, so the pipeline
-          # returns 141 and aborts the step before it can report anything. This
-          # step failed exactly that way on its first real run.
+          # returns 141 and aborts the step before it can report anything.
           app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' -print -quit)"
-          if [ -z "$app" ]; then
-            app="$(find src-tauri/target -type d -name '*.app' -print -quit)"
+
+          if [ -n "$app" ]; then
+            echo "Inspecting persisted bundle: $app"
+            exec node scripts/apple/assert-macos-bundle-architectures.mjs --app "$app"
           fi
-          if [ -z "$app" ]; then
-            echo "No macOS .app bundle was produced." >&2
-            echo "Expected something like src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app" >&2
+
+          dmg="$(find src-tauri/target -type f -name '*.dmg' -print -quit)"
+          if [ -z "$dmg" ]; then
+            echo "Neither a macOS .app nor a .dmg was produced." >&2
+            echo "Expected .../release/bundle/macos/*.app or .../release/bundle/dmg/*.dmg" >&2
             exit 1
           fi
-          echo "Inspecting $app"
-          ls -la "$app/Contents/MacOS" 2>/dev/null || echo "(no Contents/MacOS to list)"
-          node scripts/apple/assert-macos-bundle-architectures.mjs --app "$app"
+
+          # With only `dmg` in bundle.targets, Tauri deletes the intermediate
+          # .app after wrapping it ("Cleaning .../bundle/macos/<App>.app"), so
+          # the DMG is the artifact that actually ships. Mount it and inspect the
+          # .app inside rather than passing on an empty scan.
+          mountpoint="$(mktemp -d)"
+          echo "Inspecting shipped DMG: $dmg"
+          hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
+          status=0
+          node scripts/apple/assert-macos-bundle-architectures.mjs --root "$mountpoint" || status=$?
+          hdiutil detach "$mountpoint" >/dev/null 2>&1 || echo "::warning::could not detach $mountpoint"
+          exit "$status"
 
       - name: Verify macOS signing, notarization and stapling
         if: runner.os == 'macOS' && steps.apple-signing.outputs.configured == 'true'
