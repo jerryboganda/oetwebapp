@@ -400,6 +400,38 @@ public sealed class WritingTaskModelAnswerService(
             await db.SaveChangesAsync(ct);
             return ToDto(row, scenario, includeReport: true);
         }
+        catch (OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx)
+        {
+            // Root cause (12 Sep 2026, found via the diagnostic capture above):
+            // attempt 0 of every fresh GenerateAsync call sends byte-identical
+            // content (BuildGenerationInput depends only on stable scenario
+            // data), so a retry of the WHOLE generation — job-level retry
+            // after a failed repair loop, or a second manual/worker trigger —
+            // always collides with the just-completed attempt-0 operation for
+            // up to CoordinatedAiGatewayService's 5-minute replay window. That
+            // collision is a benign, self-resolving control-plane dedup (see
+            // AiOperationReplayPolicy), never a real generation failure, so it
+            // must NOT be treated as generic "model_answer_generation_failed"
+            // (which IsTransientHold fast-retries at 5s/10s/20s — well inside
+            // the window, guaranteeing all 3 job retries collide again and the
+            // task gets stuck needing a manual kick).
+            //
+            // Fix: hold with a distinct reason that is deliberately NOT in
+            // IsTransientHold, so the job completes (no retry storm) and the
+            // row — still not Ready — is naturally picked up by the next
+            // EnqueueMissingAsync sweep, by which time the window has elapsed
+            // and a fresh attempt proceeds normally.
+            logger.LogInformation(dupEx,
+                "Model-answer generation for scenario {ScenarioId} collided with a recent AI operation still inside the replay window; will retry cleanly on the next sweep.",
+                scenarioId);
+            row.ValidationReportJson = JsonSerializer.Serialize(new
+            {
+                transientDuplicate = true,
+                exceptionMessage = Truncate(dupEx.ToString(), 4000),
+                checkedAt = now,
+            });
+            return Hold(row, "model_answer_generation_duplicate_window");
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Model-answer pregeneration failed for scenario {ScenarioId}", scenarioId);

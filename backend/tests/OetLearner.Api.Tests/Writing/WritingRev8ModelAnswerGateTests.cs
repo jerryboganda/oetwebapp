@@ -220,6 +220,28 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal(0, await db.WritingTaskModelAnswers.CountAsync());
     }
 
+    // Root cause (12 Sep 2026): a retry of the whole generation call — job
+    // retry, or a second manual/worker trigger — sends byte-identical
+    // attempt-0 content and so collides with CoordinatedAiGatewayService's
+    // 5-minute AI-operation replay-window dedup. That must be held as a
+    // distinct, non-transient reason (never generic "generation_failed"), so
+    // the job stops hammer-retrying into the same window and the row is
+    // instead picked up cleanly by the next enqueue sweep.
+    [Fact]
+    public async Task Generate_Holds_Non_Transiently_When_The_AI_Dedup_Window_Collides()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var svc = Service(db, new DuplicateOperationGateway());
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("HeldForReview", dto.Status);
+        Assert.Equal("model_answer_generation_duplicate_window", dto.HoldReason);
+        Assert.False(WritingTaskModelAnswerService.IsTransientHold(dto.HoldReason));
+        Assert.False(dto.IsCandidateVisible);
+    }
+
     [Fact]
     public void Contact_Offer_Courtesy_Sentence_Is_Not_An_Unmapped_Fact()
     {
@@ -240,6 +262,20 @@ public sealed class WritingRev8ModelAnswerGateTests
             Calls++;
             return Task.FromResult(result);
         }
+    }
+
+    private sealed class DuplicateOperationGateway : IAiGatewayService
+    {
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "generate",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+            => throw new OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException(
+                "op-1", OetLearner.Api.Domain.AiOperationState.Completed, null);
     }
 
     /// <summary>Returns the scripted letters in order (the last one repeats).</summary>
