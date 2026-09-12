@@ -342,23 +342,7 @@ public sealed class WritingTaskModelAnswerService(
                 var userInput = attempt == 0 || letter is null || report is null
                     ? BuildGenerationInput(scenario, profession, taskSnapshot, caseNotesText)
                     : BuildRepairInput(scenario, profession, taskSnapshot, caseNotesText, letter, report);
-                var result = await gateway.CompleteAsync(new AiGatewayRequest
-                {
-                    Prompt = prompt,
-                    Provider = PinnedProvider,
-                    Model = PinnedModel,
-                    Temperature = 0.1,
-                    MaxTokens = MaxCompletionTokens,
-                    EnableExtendedThinking = true,
-                    ThinkingEffort = ThinkingEffort,
-                    FeatureCode = AiFeatureCodes.WritingModelAnswerPregenerate,
-                    PromptTemplateId = PromptVersion,
-                    UserId = adminUserId,
-                    AssessmentContext = AiAssessmentContext.Practice,
-                    ResourceId = scenarioId.ToString("D"),
-                    ResourceType = "writing_task_model_answer",
-                    UserInput = userInput,
-                }, ct);
+                var result = await CompleteWithDuplicateRetryAsync(scenarioId, prompt, adminUserId, userInput, ct);
                 resolvedModel = string.IsNullOrWhiteSpace(result.ResolvedModel) ? PinnedModel : result.ResolvedModel;
                 rulebookVersion = string.IsNullOrWhiteSpace(result.RulebookVersion) ? rulebookVersion : result.RulebookVersion;
 
@@ -402,19 +386,18 @@ public sealed class WritingTaskModelAnswerService(
         }
         catch (OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx)
         {
-            // Root cause (12 Sep 2026, found via the diagnostic capture above):
-            // attempt 0 of every fresh GenerateAsync call sends byte-identical
-            // content (BuildGenerationInput depends only on stable scenario
-            // data), so a retry of the WHOLE generation — job-level retry
-            // after a failed repair loop, or a second manual/worker trigger —
-            // always collides with the just-completed attempt-0 operation for
-            // up to CoordinatedAiGatewayService's 5-minute replay window. That
-            // collision is a benign, self-resolving control-plane dedup (see
-            // AiOperationReplayPolicy), never a real generation failure, so it
-            // must NOT be treated as generic "model_answer_generation_failed"
-            // (which IsTransientHold fast-retries at 5s/10s/20s — well inside
-            // the window, guaranteeing all 3 job retries collide again and the
-            // task gets stuck needing a manual kick).
+            // Residual fallback: CompleteWithDuplicateRetryAsync already
+            // bumps the replay discriminator itself, bounded, whenever the
+            // blocking predecessor is Completed (see its own doc comment for
+            // why that's always safe). This catch only fires once that
+            // bounded retry is ALSO exhausted (repeated Completed collisions
+            // across several bumped versions — rare) or the predecessor is
+            // non-terminal/ambiguous (a genuine concurrent racer, correctly
+            // left alone). Either way this must NOT be treated as generic
+            // "model_answer_generation_failed" (which IsTransientHold
+            // fast-retries at 5s/10s/20s — well inside any replay window,
+            // guaranteeing all 3 job retries collide again and the task gets
+            // stuck needing a manual kick).
             //
             // Fix: hold with a distinct reason that is deliberately NOT in
             // IsTransientHold, so the job completes (no retry storm) and the
@@ -969,6 +952,95 @@ public sealed class WritingTaskModelAnswerService(
     // ---------------------------------------------------------------------
     // The full Model Answer gate (Addendum Rev8 §7, §14)
     // ---------------------------------------------------------------------
+
+    /// <summary>Bounded replay-discriminator bumps a Completed-collision retry
+    /// may use before giving up and letting the caller's own catch block hold
+    /// the row. Small on purpose: this is a deliberate-retry escape hatch, not
+    /// a retry loop — see the method doc comment.</summary>
+    private const int MaxDuplicateCompletedRetries = 3;
+
+    /// <summary>
+    /// Root-cause fix (13 Sep 2026): <see cref="WritingTaskModelAnswer"/>
+    /// generation never varied <see cref="AiGatewayRequest.ResourceVersion"/>
+    /// across separate top-level <see cref="GenerateAsync"/> invocations, so
+    /// once a scenario had ANY Completed AI operation for its (fully
+    /// deterministic) attempt-0 content, every later admin/job regeneration
+    /// attempt — however long after the first one finished — collided with
+    /// that same Completed row and got refused
+    /// (<see cref="OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException"/>),
+    /// regardless of how much real time had passed. The 12 Sep fix (holding
+    /// with "model_answer_generation_duplicate_window" instead of
+    /// hammer-retrying) stopped the retry storm but never let the scenario
+    /// actually regenerate — it just waited out a replay window that, per
+    /// live production evidence, is configured longer than the 5-minute
+    /// default this service's comments assumed.
+    ///
+    /// <para>
+    /// <b>Why this is always safe — never a double provider charge.</b> This
+    /// exception is thrown only once <see cref="AiExecutionCoordinator"/> has
+    /// already resolved the predecessor operation to a TERMINAL state; a
+    /// genuinely in-flight/concurrent racer is resolved by that coordinator's
+    /// own bounded <c>WaitInFlight</c> poll instead and never surfaces here.
+    /// So by the time this catch runs, the predecessor's real provider call
+    /// has already completed (successfully) — there is no live request left
+    /// to duplicate. Retrying with a bumped <c>ResourceVersion</c> therefore
+    /// always opens a genuinely NEW, intentional generation attempt, never a
+    /// second charge for the SAME logical request. This mirrors exactly what
+    /// <see cref="AiOperationReplayPolicy"/> already does automatically for
+    /// FailedTerminal/Cancelled predecessors — Completed predecessors are the
+    /// one state the coordinator deliberately does NOT auto-bump (it cannot
+    /// tell "genuine too-fast retry" from "deliberate later attempt" on its
+    /// own), which is exactly the distinction this admin/system caller CAN
+    /// make: reaching this catch already proves there is no concurrent
+    /// racer, so bumping here can only ever be the latter.
+    /// </para>
+    ///
+    /// <para>
+    /// Bounded to <see cref="MaxDuplicateCompletedRetries"/> bumps — a small,
+    /// fixed escape hatch, not an open-ended loop — after which the caller's
+    /// own <see cref="OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException"/>
+    /// catch takes over and holds the row exactly as before.
+    /// </para>
+    /// </summary>
+    private async Task<AiGatewayResult> CompleteWithDuplicateRetryAsync(
+        Guid scenarioId, AiGroundedPrompt prompt, string adminUserId, string userInput, CancellationToken ct)
+    {
+        int? resourceVersion = null;
+        for (var retry = 0; ; retry++)
+        {
+            try
+            {
+                return await gateway.CompleteAsync(new AiGatewayRequest
+                {
+                    Prompt = prompt,
+                    Provider = PinnedProvider,
+                    Model = PinnedModel,
+                    Temperature = 0.1,
+                    MaxTokens = MaxCompletionTokens,
+                    EnableExtendedThinking = true,
+                    ThinkingEffort = ThinkingEffort,
+                    FeatureCode = AiFeatureCodes.WritingModelAnswerPregenerate,
+                    PromptTemplateId = PromptVersion,
+                    UserId = adminUserId,
+                    AssessmentContext = AiAssessmentContext.Practice,
+                    ResourceId = scenarioId.ToString("D"),
+                    ResourceType = "writing_task_model_answer",
+                    ResourceVersion = resourceVersion,
+                    UserInput = userInput,
+                }, ct);
+            }
+            catch (OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException dupEx)
+                when (dupEx.State == OetLearner.Api.Domain.AiOperationState.Completed
+                      && retry < MaxDuplicateCompletedRetries)
+            {
+                resourceVersion = OetLearner.Api.Services.Ai.AiOperationReplayPolicy.NextVersion(resourceVersion);
+                logger.LogInformation(
+                    "Model-answer generation for scenario {ScenarioId} collided with a Completed predecessor; " +
+                    "retrying as a new attempt at replay version {ResourceVersion} ({Retry}/{Max}).",
+                    scenarioId, resourceVersion, retry + 1, MaxDuplicateCompletedRetries);
+            }
+        }
+    }
 
     // P0 fix (12 Sep 2026): WritingRuleEngine.Lint() itself is now
     // exception-safe (RunDetectorSafely), but the live 224-answer

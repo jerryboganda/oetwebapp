@@ -242,6 +242,55 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.False(dto.IsCandidateVisible);
     }
 
+    // Root-cause fix (13 Sep 2026): once a scenario has ANY Completed AI
+    // operation for its deterministic attempt-0 content, every later
+    // regeneration attempt collided with that same row forever — the 12 Sep
+    // fix above stopped the retry storm but never let the scenario actually
+    // regenerate. This asserts the fix: a Completed-state collision is
+    // retried, bounded, with a bumped replay discriminator, and a genuinely
+    // new attempt succeeds. Existing global concurrent-duplicate protection
+    // is untouched (see the two tests below and CompleteWithDuplicateRetryAsync's
+    // doc comment for why bumping here can never double-charge a provider).
+    [Fact]
+    public async Task Generate_Retries_A_Completed_Collision_As_A_New_Attempt_And_Succeeds()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var gateway = new CompletedCollisionThenSucceedsGateway(WritingModelAnswerBatchTests.ExemplarText());
+        var svc = Service(db, gateway);
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("Ready", dto.Status);
+        Assert.Equal(2, gateway.Calls); // 1 collision + 1 successful retry
+        Assert.Null(gateway.ResourceVersionsSeen[0]);   // first attempt: unmodified, matches current behaviour
+        Assert.Equal(2, gateway.ResourceVersionsSeen[1]); // retry: bumped via AiOperationReplayPolicy.NextVersion
+        Assert.Equal(WritingRuleEngine.ValidatorVersion, dto.ValidatorVersion);
+    }
+
+    // A predecessor whose outcome is ambiguous (never proven un-billed) must
+    // NEVER be auto-retried, regardless of how long ago it happened —
+    // AiOperationReplayPolicy.Decide() returns Duplicate for Indeterminate
+    // unconditionally. This is the "true concurrent/ambiguous duplicate stays
+    // blocked" case: the fix above must not weaken it. Assert the gateway is
+    // called exactly once — no bump-and-retry is even attempted — and the
+    // row still holds via the pre-existing safe fallback.
+    [Fact]
+    public async Task Generate_Never_Retries_A_Non_Completed_Predecessor()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var gateway = new AlwaysDuplicateGateway(OetLearner.Api.Domain.AiOperationState.Indeterminate);
+        var svc = Service(db, gateway);
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("HeldForReview", dto.Status);
+        Assert.Equal("model_answer_generation_duplicate_window", dto.HoldReason);
+        Assert.False(WritingTaskModelAnswerService.IsTransientHold(dto.HoldReason));
+        Assert.Equal(1, gateway.Calls); // never retried -- the guard requires State == Completed
+    }
+
     [Fact]
     public void Contact_Offer_Courtesy_Sentence_Is_Not_An_Unmapped_Fact()
     {
@@ -276,6 +325,63 @@ public sealed class WritingRev8ModelAnswerGateTests
         public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
             => throw new OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException(
                 "op-1", OetLearner.Api.Domain.AiOperationState.Completed, null);
+    }
+
+    /// <summary>Throws a Completed-state duplicate collision on the first
+    /// call, then succeeds on the next -- the "deliberate later admin
+    /// regeneration" case.</summary>
+    private sealed class CompletedCollisionThenSucceedsGateway(string letter) : IAiGatewayService
+    {
+        public int Calls { get; private set; }
+        public List<int?> ResourceVersionsSeen { get; } = [];
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "generate",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            ResourceVersionsSeen.Add(request.ResourceVersion);
+            Calls++;
+            if (Calls == 1)
+            {
+                throw new OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException(
+                    "op-completed-predecessor", OetLearner.Api.Domain.AiOperationState.Completed, null);
+            }
+
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                modelAnswerText = letter,
+                whyThisWorks = new[] { "Grounded exemplar." },
+                groundedFactReferences = new[] { "case-note-line:1" },
+            });
+            return Task.FromResult(new AiGatewayResult { Completion = json, ResolvedModel = "claude-sonnet-5" });
+        }
+    }
+
+    /// <summary>Always throws a duplicate collision in the given (non-Completed
+    /// by design, for the "never retry an ambiguous/concurrent predecessor"
+    /// test) state.</summary>
+    private sealed class AlwaysDuplicateGateway(OetLearner.Api.Domain.AiOperationState state) : IAiGatewayService
+    {
+        public int Calls { get; private set; }
+
+        public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
+            => new()
+            {
+                SystemPrompt = "# OET AI — Rulebook-Grounded System Prompt\n**This call concerns WRITING**",
+                TaskInstruction = "generate",
+            };
+
+        public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
+        {
+            Calls++;
+            throw new OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException(
+                "op-ambiguous", state, null);
+        }
     }
 
     /// <summary>Returns the scripted letters in order (the last one repeats).</summary>
