@@ -272,6 +272,28 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal(WritingRuleEngine.ValidatorVersion, dto.ValidatorVersion);
     }
 
+    // Live evidence (13 Sep 2026): the coordinator's own bounded internal
+    // replay walk can exhaust and report a row as "duplicate" purely because
+    // it ran out of rounds -- observed for a FailedTerminal predecessor,
+    // which per AiOperationReplayPolicy.Decide is ALWAYS individually
+    // CreateNewAttempt-eligible on its own. The reported State is therefore
+    // not reliable evidence of why the coordinator gave up; only Indeterminate
+    // (see the test below) is ever unsafe to retry past.
+    [Fact]
+    public async Task Generate_Retries_A_FailedTerminal_Reported_Collision_And_Succeeds()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var gateway = new CompletedCollisionThenSucceedsGateway(
+            WritingModelAnswerBatchTests.ExemplarText(), OetLearner.Api.Domain.AiOperationState.FailedTerminal);
+        var svc = Service(db, gateway);
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("Ready", dto.Status);
+        Assert.Equal(2, gateway.Calls);
+    }
+
     // A slot that never resolves within the coordinator's own bounded poll
     // (AiOperationInFlightException) is, for this synchronous admin/system
     // caller, far more often an orphaned row from an earlier client-side
@@ -374,7 +396,9 @@ public sealed class WritingRev8ModelAnswerGateTests
     /// <summary>Throws a Completed-state duplicate collision on the first
     /// call, then succeeds on the next -- the "deliberate later admin
     /// regeneration" case.</summary>
-    private sealed class CompletedCollisionThenSucceedsGateway(string letter) : IAiGatewayService
+    private sealed class CompletedCollisionThenSucceedsGateway(
+        string letter, OetLearner.Api.Domain.AiOperationState state = OetLearner.Api.Domain.AiOperationState.Completed)
+        : IAiGatewayService
     {
         public int Calls { get; private set; }
         public List<int?> ResourceVersionsSeen { get; } = [];
@@ -393,7 +417,7 @@ public sealed class WritingRev8ModelAnswerGateTests
             if (Calls == 1)
             {
                 throw new OetLearner.Api.Services.Ai.AiOperationDuplicateResultUnavailableException(
-                    "op-completed-predecessor", OetLearner.Api.Domain.AiOperationState.Completed, null);
+                    "op-completed-predecessor", state, null);
             }
 
             var json = System.Text.Json.JsonSerializer.Serialize(new
