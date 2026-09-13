@@ -248,21 +248,25 @@ public sealed class WritingTaskModelAnswerService(
     private const string PinnedProvider = "anthropic";
     private const string PinnedModel = "claude-sonnet-5";
     // Owner instruction: this is one-time content-authoring, not per-candidate
-    // grading, so pay for max reasoning quality/effort. claude-sonnet-5 uses
-    // adaptive thinking (no manual token budget) - "max" is a valid
-    // output_config.effort value, confirmed live against the Anthropic API.
-    private const string ThinkingEffort = "max";
-    // Root cause (13 Sep 2026 live incident): Anthropic's "adaptive" thinking
-    // mode shares ONE max_tokens budget between reasoning and the actual
-    // visible completion -- there is no separate thinking-token allowance.
-    // At effort "max" with a 32000 cap, live evidence showed EVERY single
-    // call landing at exactly 32000 completionTokens (zero variance across
-    // many calls), meaning reasoning was consuming the entire budget and the
-    // JSON answer was getting truncated/lost every time -- Parse() then
-    // fails and, after MaxGenerationAttempts retries, the row holds as
-    // "model_answer_unreadable" having spent real money on every attempt
-    // with no usable output. Doubled so max-effort reasoning has room to
-    // finish AND still leave space for the ~200-word letter + JSON wrapper.
+    // grading, so pay for high reasoning quality/effort. claude-sonnet-5 uses
+    // adaptive thinking (no manual token budget) - "high"/"max" are both
+    // valid output_config.effort values, confirmed live against the
+    // Anthropic API.
+    //
+    // Root cause (13 Sep 2026 live incident): at effort "max", Anthropic's
+    // "adaptive" thinking mode -- which shares ONE max_tokens budget between
+    // reasoning and the visible completion, no separate thinking-token
+    // allowance -- consumed the ENTIRE budget on every single real call,
+    // regardless of how large that budget was: live evidence showed exactly
+    // 32000/32000 completion tokens at the original cap, and STILL exactly
+    // 64000/64000 after doubling it, zero variance either time. This is not
+    // a budget-size problem -- "max" effort never reached a natural
+    // stopping point for this task and never left room for the actual JSON
+    // answer, so Parse() failed on every attempt (real money spent, zero
+    // usable output, for hours). Dropped to "high" -- still top-tier
+    // reasoning quality, but with the natural stopping point "max" lacked
+    // for this content-authoring task.
+    private const string ThinkingEffort = "high";
     private const int MaxCompletionTokens = 64000;
     // Addendum Rev8 §14: repair only the failed rules, then re-run ALL
     // validators. One generation + up to three targeted repairs.
