@@ -23,6 +23,14 @@ const readNextBuildWorkers = () => {
 const nextBuildWorkers = readNextBuildWorkers();
 
 const nextConfig: NextConfig = {
+  // Build provenance stamp surfaced by the on-device runtime diagnostics
+  // overlay (components/mobile/runtime-diagnostics.tsx): answers "which deploy
+  // is this shell actually executing" when a device reports a bug the current
+  // bundle should have fixed. GITHUB_SHA is set by every GitHub Actions build;
+  // local builds fall back to 'dev'.
+  env: {
+    NEXT_PUBLIC_DEPLOY_SHA: process.env.GITHUB_SHA ?? 'dev',
+  },
   experimental: {
     // FE-038: rewrite barrel imports (lucide-react is imported by ~250 files,
     // plus tabler/recharts/motion) to deep imports so unused members tree-shake

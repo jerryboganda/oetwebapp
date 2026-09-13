@@ -7,6 +7,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
 import { AccessibilityProvider } from '@/contexts/accessibility-context';
 import { MobileRuntimeGate } from '@/components/mobile/mobile-runtime-gate';
+import { RuntimeDiagnostics } from '@/components/mobile/runtime-diagnostics';
 import { RuntimeLifecycleBridge } from '@/components/runtime/runtime-lifecycle-bridge';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { AuthenticatedNotificationCenter } from '@/components/providers/authenticated-notification-center';
@@ -103,6 +104,7 @@ export function AppProviders({
             <AuthProvider>
               <RuntimeLifecycleBridge />
               <MobileRuntimeGate />
+              <RuntimeDiagnostics />
               {/*
                 AccessibilityProvider reads the learner's saved Settings →
                 Accessibility preferences (large text, high contrast, reduce

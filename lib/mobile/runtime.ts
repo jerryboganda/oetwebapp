@@ -313,6 +313,10 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   setViewportMetrics();
   setSafeAreaInsets();
   document.documentElement.dataset.runtimeKind = 'capacitor-native';
+  // Distinct from data-runtime-kind (which the layout bootstrap script also
+  // stamps): proves THIS function ran on the device, not just that a native
+  // Capacitor bridge was injected. The runtime diagnostics overlay reads it.
+  document.documentElement.dataset.mobileRuntimeActive = 'true';
   document.documentElement.dataset.colorScheme = getPreferredColorScheme();
   document.documentElement.dataset.capacitorPlatform = Capacitor.getPlatform();
   document.documentElement.dataset.capacitorNative = String(Capacitor.isNativePlatform());

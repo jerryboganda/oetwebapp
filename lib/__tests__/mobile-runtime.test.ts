@@ -99,6 +99,7 @@ describe('mobile runtime', () => {
   afterEach(() => {
     delete window.desktopBridge;
     delete document.documentElement.dataset.runtimeKind;
+    delete document.documentElement.dataset.mobileRuntimeActive;
     delete document.documentElement.dataset.desktopNative;
     delete document.documentElement.dataset.capacitorNative;
     delete document.documentElement.dataset.capacitorPlatform;
@@ -231,6 +232,9 @@ describe('mobile runtime', () => {
     expect(mobileMocks.splashScreen.hide).toHaveBeenCalledTimes(1);
     expect(mobileMocks.statusBar.setStyle).toHaveBeenCalledTimes(1);
     expect(document.documentElement.dataset.runtimeKind).toBe('capacitor-native');
+    // Distinct marker proving initializeMobileRuntime itself ran (the layout
+    // bootstrap script stamps runtimeKind independently of this function).
+    expect(document.documentElement.dataset.mobileRuntimeActive).toBe('true');
     expect(document.documentElement.dataset.capacitorPlatform).toBe('android');
 
     cleanup();
