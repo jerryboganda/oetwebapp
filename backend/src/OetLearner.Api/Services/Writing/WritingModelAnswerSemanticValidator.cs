@@ -75,6 +75,19 @@ public sealed class WritingModelAnswerSemanticValidator(
                 AssessmentContext = AiAssessmentContext.Practice,
                 ResourceId = request.ScenarioId.ToString("D"),
                 ResourceType = "writing_task_model_answer_validation",
+                // Root cause (13 Sep 2026 live incident): with no
+                // ResourceVersion, every validation call for the same
+                // scenario shares ONE idempotency key regardless of how many
+                // times the letter has been regenerated/repaired. A scenario
+                // validated many times in one session (heavy retry testing,
+                // or just several repair rounds) collides with its own prior
+                // attempt, throws, and the blanket catch below immediately
+                // gives up with Unavailable=true -- with NO retry at all,
+                // unlike the main generator. Each call here validates
+                // DIFFERENT letter content anyway (a fresh draft each repair
+                // round), so it should never be deduplicated against
+                // history -- key it by the draft's own content instead.
+                ResourceVersion = unchecked(request.LetterText.GetHashCode()),
                 UserInput = BuildUserInput(request, legacyLetterType),
             }, ct);
 
