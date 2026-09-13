@@ -113,6 +113,8 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["linker_in_addition_punctuation"] = Punctuation,
             ["linker_therefore_punctuation"] = Punctuation,
             ["medication_list_punctuation"] = Punctuation,
+            ["medication_passive_grammar"] = Grammar,
+            ["lifestyle_frequency_precision"] = Content,
             ["min_body_paragraphs"] = Layout,
             ["minor_naming_convention"] = Register,
             ["model_answer_layout"] = Layout,

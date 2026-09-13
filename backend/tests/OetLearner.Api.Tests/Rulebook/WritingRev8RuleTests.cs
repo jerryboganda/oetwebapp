@@ -290,6 +290,7 @@ public sealed class WritingRev8RuleTests
     [InlineData("Mr Taylor takes ranitidine, 150mg twice a day.", "150 mg")]
     [InlineData("His potassium was 6.37mmol/L.", "6.37 mmol/L")]
     [InlineData("Mr Taylor takes colecalciferol, 2500IU daily.", "2500 IU")]
+    [InlineData("His temperature was 37.8°C.", "37.8 °C")]
     public void ValueUnitSpacing_Fires_With_Spaced_Fix(string sentence, string fix)
         => Assert.Contains(Lint(Letter(TaylorRe, TaylorIntro, sentence, TaylorClosure), model: false),
             f => f.RuleId == "BUILTIN.value_unit_spacing" && f.FixSuggestion == fix);
@@ -297,7 +298,7 @@ public sealed class WritingRev8RuleTests
     [Fact]
     public void ValueUnitSpacing_Passes_On_Spaced_Values_Degrees_And_Percentages()
         => Assert.DoesNotContain(Lint(Letter(TaylorRe, TaylorIntro,
-                "Mr Taylor takes ranitidine, 150 mg twice a day. His temperature was 37.8°C, his oxygen saturation was 95% and his blood pressure was 120/80 mmHg.",
+                "Mr Taylor takes ranitidine, 150 mg twice a day. His temperature was 37.8 °C, his oxygen saturation was 95% and his blood pressure was 120/80 mmHg.",
                 TaylorClosure), model: false),
             f => f.RuleId == "BUILTIN.value_unit_spacing");
 

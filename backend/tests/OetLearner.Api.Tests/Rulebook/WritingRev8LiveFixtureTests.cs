@@ -119,7 +119,7 @@ Re: Mr David Taylor, aged 55
 
 I am writing to urgently refer Mr Taylor for rheumatological assessment of an acute gout flare with an associated tophus.
 
-On today's visit, Mr Taylor presented with a painful, swollen right big toe and foot, right flank pain and red-coloured urine. His blood pressure was 120/80 mmHg, heart rate 90 per minute and temperature 37.8°C. His right first toe was inflamed with an underlying tophus, and he was commenced on colchicine, 1 mg, and anti-inflammatory medication.
+On today's visit, Mr Taylor presented with a painful, swollen right big toe and foot, right flank pain and red-coloured urine. His blood pressure was 120/80 mmHg, heart rate 90 bpm and temperature 37.8 °C. His right first toe was inflamed with an underlying tophus, and he was commenced on colchicine, 1 mg, and anti-inflammatory medication.
 
 Mr Taylor was diagnosed with gout in 2000 and treated with colchicine, allopurinol and paracetamol. Further attacks on 1 June 2010 and 1 September 2010 were treated with a steroid injection, colchicine and allopurinol. He was advised to stop smoking, reduce alcohol and red meat, and increase fluids; subsequently, he remained attack-free from 2011.
 
