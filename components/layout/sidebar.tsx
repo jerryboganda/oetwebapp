@@ -105,6 +105,13 @@ export const mainNavItems: NavItem[] = [
 // module; the more operational surfaces (Study Plan, Readiness, History,
 // Escalations) remain addressable by URL and visible to admins/tutors via
 // `mainNavItems`, but stay out of the learner workspace nav.
+//
+// Cross-platform parity rule (13 Sep 2026 addendum): Recalls, Course
+// Materials and Videos are PRIMARY learner areas — they carry no moduleKey /
+// featureFlag here, so the navigation itself can never disappear because of
+// entitlement hydration, a failed flag fetch, stale cache, or
+// platform-specific gating. Permissions are enforced inside each area; the
+// nav link always renders.
 export const learnerMainNavItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/' },
   { href: '/listening', label: 'Listening', sidebarLabel: 'Listening Practice', icon: <Headphones className="w-5 h-5" />, matchPrefix: '/listening' },
@@ -112,9 +119,9 @@ export const learnerMainNavItems: NavItem[] = [
   { href: '/writing', label: 'Writing', sidebarLabel: 'Writing Practice', icon: <FilePenLine className="w-5 h-5" />, matchPrefix: '/writing' },
   { href: '/speaking', label: 'Speaking', sidebarLabel: 'Speaking Practice', icon: <Mic className="w-5 h-5" />, matchPrefix: '/speaking' },
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks', moduleKey: 'Mocks' },
-  { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls', moduleKey: 'Recalls' },
-  { href: '/materials', label: 'Materials', sidebarLabel: 'Course Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials', moduleKey: 'MaterialsLibrary' },
-  { href: '/videos', label: 'Videos', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos', featureFlag: 'video_library', moduleKey: 'VideoLibrary' },
+  { href: '/recalls', label: 'Recalls', icon: <Brain className="w-5 h-5" />, matchPrefix: '/recalls' },
+  { href: '/materials', label: 'Materials', sidebarLabel: 'Course Materials', icon: <FolderOpen className="w-5 h-5" />, matchPrefix: '/materials' },
+  { href: '/videos', label: 'Videos', icon: <Video className="w-5 h-5" />, matchPrefix: '/videos' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
   { href: '/submissions', label: 'History', icon: <History className="w-5 h-5" />, matchPrefix: '/submissions' },
   { href: '/subscriptions', label: 'Subscriptions & Packages', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/subscriptions' },
@@ -219,7 +226,10 @@ function NavRail({
               <span className="flex items-center justify-center [&_svg]:h-[22px] [&_svg]:w-[22px]">
                 {item.icon}
               </span>
-              <span className="w-full px-0.5 text-[11px] font-medium leading-tight">{item.label}</span>
+              {/* Full agreed names on the desktop rail (13 Sep 2026 addendum):
+                  "Listening Practice" etc. — sidebarLabel wraps to two lines
+                  here; the compact bottom nav keeps the short `label`. */}
+              <span className="w-full px-0.5 text-[11px] font-medium leading-tight">{item.sidebarLabel ?? item.label}</span>
             </Link>
           </li>
         );

@@ -22,6 +22,7 @@ const routeLabelOverrides: Record<string, string> = {
   grammar: 'Grammar',
   library: 'Library',
   listening: 'Listening',
+  materials: 'Course Materials',
   mocks: 'Mocks',
   model: 'Model Answer',
   onboarding: 'Onboarding',

@@ -12,6 +12,9 @@ const mobileMocks = vi.hoisted(() => {
 
   return {
     native: false,
+    // Controllable so the safe-area tests can pin both the Android fallback and
+    // the iOS/web "leave env() alone" branch through initializeMobileRuntime().
+    platform: 'android' as 'android' | 'ios' | 'web',
     factories: {
       app: vi.fn(),
       keyboard: vi.fn(),
@@ -52,7 +55,7 @@ const mobileMocks = vi.hoisted(() => {
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
     isNativePlatform: () => mobileMocks.native,
-    getPlatform: () => 'android',
+    getPlatform: () => mobileMocks.platform,
   },
 }));
 
@@ -89,6 +92,7 @@ import { initializeMobileRuntime } from '@/lib/mobile/runtime';
 describe('mobile runtime', () => {
   beforeEach(() => {
     mobileMocks.native = false;
+    mobileMocks.platform = 'android';
     vi.clearAllMocks();
   });
 
@@ -274,8 +278,27 @@ describe('mobile runtime', () => {
     cleanup();
   });
 
-  it('leaves the safe-area insets untouched when no native values were pushed', async () => {
+  // Android's WebView never resolves env(safe-area-inset-*), so with no native
+  // push the runtime must install ANDROID_FALLBACK_SAFE_AREA_INSETS instead of
+  // leaving the header flush under the status bar (the 10 Sep 2026 cold-launch
+  // report). lib/mobile/__tests__/runtime-safe-area.test.ts pins
+  // setSafeAreaInsets() itself; this pins that initializeMobileRuntime()
+  // actually reaches it — the wiring that file cannot see.
+  it('applies the Android safe-area placeholder when no native values were pushed', async () => {
     mobileMocks.native = true;
+    mobileMocks.platform = 'android';
+
+    const cleanup = await initializeMobileRuntime();
+
+    expect(document.documentElement.style.getPropertyValue('--safe-area-inset-top')).toBe('24px');
+    expect(document.documentElement.style.getPropertyValue('--safe-area-inset-bottom')).toBe('16px');
+
+    cleanup();
+  });
+
+  it('writes no safe-area insets on iOS/web, where env() already resolves', async () => {
+    mobileMocks.native = true;
+    mobileMocks.platform = 'ios';
 
     const cleanup = await initializeMobileRuntime();
 
@@ -367,6 +390,97 @@ describe('mobile runtime', () => {
       expect(document.documentElement.dataset.keyboardVisible).toBe('false');
 
       cleanup();
+    });
+
+    // Report 13 Sep 2026 — the surviving Android Recalls > Practice Spelling
+    // defect. On the Android shell the Keyboard plugin's resizeOnFullScreen
+    // path resizes the WebView ITSELF when the IME opens: innerHeight and
+    // visualViewport.height shrink together, the offset test reads 0, and every
+    // resize-triggered metrics pass re-derived "no keyboard" — un-hiding the
+    // bottom nav so it floated above the keyboard over the spelling input. The
+    // baseline-shrinkage test must keep the nav hidden in that mode.
+    describe('native WebView resize (Android IME)', () => {
+      const originalInnerHeight = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+
+      const setWindowHeight = (height: number) => {
+        Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+      };
+
+      const focusTextEntry = () => {
+        const input = document.createElement('input');
+        document.body.appendChild(input);
+        input.focus();
+        return input;
+      };
+
+      afterEach(() => {
+        if (originalInnerHeight) {
+          Object.defineProperty(window, 'innerHeight', originalInnerHeight);
+        } else {
+          // jsdom defines innerHeight; fall back to the standard 1024 if not.
+          setWindowHeight(1024);
+        }
+        document.body.innerHTML = '';
+      });
+
+      it('keeps the nav hidden when the WebView shrinks under the keyboard while an input has focus', async () => {
+        mobileMocks.native = true;
+        const cleanup = await initializeMobileRuntime();
+        const input = focusTextEntry();
+        const fullHeight = window.innerHeight;
+
+        // Keyboard opens: the plugin resizes the WebView, so BOTH heights drop
+        // by the keyboard height and the offset between them is 0.
+        setWindowHeight(fullHeight - 320);
+        setViewportHeight(fullHeight - 320);
+        window.dispatchEvent(new Event('resize'));
+        await flushFrame();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+        // Keyboard closes: the WebView is restored to the full height.
+        setWindowHeight(fullHeight);
+        setViewportHeight(fullHeight);
+        window.dispatchEvent(new Event('resize'));
+        await flushFrame();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+        input.remove();
+        cleanup();
+      });
+
+      it('does not treat a non-keyboard viewport shrink without a focused input as a keyboard', async () => {
+        mobileMocks.native = true;
+        const cleanup = await initializeMobileRuntime();
+        const fullHeight = window.innerHeight;
+
+        // Split-screen / window resize with no text entry focused: the nav must
+        // stay visible even though the viewport shrank beyond the threshold.
+        setWindowHeight(fullHeight - 320);
+        setViewportHeight(fullHeight - 320);
+        window.dispatchEvent(new Event('resize'));
+        await flushFrame();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+        cleanup();
+      });
+
+      it('re-baselines on rotation so the shorter landscape height is not read as a keyboard', async () => {
+        mobileMocks.native = true;
+        const cleanup = await initializeMobileRuntime();
+        focusTextEntry();
+
+        // Rotate portrait (tall) -> landscape (short) while the keyboard is
+        // closed. Without the orientation baseline reset the landscape height
+        // would read as a >120px keyboard shortfall and hide the nav forever.
+        window.dispatchEvent(new Event('orientationchange'));
+        setWindowHeight(400);
+        setViewportHeight(400);
+        window.dispatchEvent(new Event('resize'));
+        await flushFrame();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+        cleanup();
+      });
     });
   });
 });

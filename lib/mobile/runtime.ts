@@ -76,6 +76,33 @@ function setKeyboardVisible(visible: boolean) {
  */
 const KEYBOARD_VISIBLE_THRESHOLD_PX = 120;
 
+/**
+ * Tallest viewport height observed without a keyboard, and the last keyboard
+ * state the Capacitor Keyboard plugin reported. The keyboard test must use
+ * BOTH: on Android (edge-to-edge + the Keyboard plugin's resizeOnFullScreen
+ * path) the WebView itself is resized when the IME opens, so innerHeight and
+ * visualViewport.height shrink TOGETHER and `innerHeight -
+ * visualViewport.height` reads 0 — every resize-triggered metrics pass then
+ * re-derived "no keyboard", un-hid the bottom nav, and it floated just above
+ * the keyboard covering the Recalls > Practice Spelling input (report
+ * 13 Sep 2026). Comparing the current viewport against this baseline catches
+ * that native-resize mode, while the offset test still catches the overlay
+ * modes (iOS body resize, mobile browsers).
+ */
+let keyboardFreeBaselineHeight = 0;
+let pluginKeyboardVisible = false;
+
+function resetKeyboardBaseline() {
+  keyboardFreeBaselineHeight = 0;
+}
+
+function isTextEntryFocused(): boolean {
+  const el = document.activeElement;
+  if (!el) return false;
+  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return true;
+  return (el as HTMLElement).isContentEditable === true;
+}
+
 function setViewportMetrics() {
   if (!isBrowser()) {
     return;
@@ -87,11 +114,24 @@ function setViewportMetrics() {
 
   document.documentElement.style.setProperty('--app-viewport-height', `${viewportHeight}px`);
   document.documentElement.style.setProperty('--app-keyboard-offset', `${keyboardOffset}px`);
+
+  if (viewportHeight > keyboardFreeBaselineHeight) {
+    keyboardFreeBaselineHeight = viewportHeight;
+  }
+  // Below-baseline shrinkage only counts as a keyboard while a text entry has
+  // focus (the IME cannot be open otherwise) — a split-screen resize or other
+  // height change without focus must not hide the nav. Offset-based shrinkage
+  // (overlay modes) needs no focus guard: innerHeight stays at the full window
+  // there, so only the IME can produce the shortfall.
+  const keyboardVisible =
+    keyboardOffset > KEYBOARD_VISIBLE_THRESHOLD_PX
+    || (keyboardFreeBaselineHeight - viewportHeight > KEYBOARD_VISIBLE_THRESHOLD_PX
+      && (isTextEntryFocused() || pluginKeyboardVisible));
   // Re-derived on every metrics pass (resize, orientation change, visualViewport
-  // resize/scroll) so the state self-corrects: a keyboardWillHide that never
-  // arrives can no longer leave the bottom nav hidden, and a keyboardWillShow
-  // that never arrives can no longer leave it floating.
-  setKeyboardVisible(keyboardOffset > KEYBOARD_VISIBLE_THRESHOLD_PX);
+  // resize/scroll) so the state self-corrects in every mode: a keyboardWillHide
+  // that never arrives clears as soon as the viewport returns to the baseline,
+  // and a keyboardWillShow that never arrives is caught by the shrinkage test.
+  setKeyboardVisible(keyboardVisible);
 }
 
 function scheduleViewportMetrics() {
@@ -237,10 +277,17 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   const cleanup: Array<() => Promise<void> | void> = [];
 
   const resizeHandler = () => scheduleViewportMetrics();
+  const orientationChangeHandler = () => {
+    // Rotation swaps width/height wholesale: drop the baseline so the shorter
+    // landscape height is not read as an open keyboard. The next metrics pass
+    // re-establishes it at the new orientation's keyboard-free height.
+    resetKeyboardBaseline();
+    scheduleViewportMetrics();
+  };
   window.addEventListener('resize', resizeHandler);
-  window.addEventListener('orientationchange', resizeHandler);
+  window.addEventListener('orientationchange', orientationChangeHandler);
   cleanup.push(() => window.removeEventListener('resize', resizeHandler));
-  cleanup.push(() => window.removeEventListener('orientationchange', resizeHandler));
+  cleanup.push(() => window.removeEventListener('orientationchange', orientationChangeHandler));
 
   if (window.visualViewport) {
     const visualViewportResize = () => scheduleViewportMetrics();
@@ -268,21 +315,28 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     // `--app-keyboard-offset`: with KeyboardResize.Body the layout viewport does
     // not change, so applying a keyboard height as a bottom offset threw the
     // fixed bottom nav into the middle of the screen (issue report 11 Sep 2026).
+    // The plugin's state is ALSO mirrored into pluginKeyboardVisible so the
+    // metrics re-derivation cannot clobber it while the IME transition runs
+    // (see setViewportMetrics — report 13 Sep 2026).
     const keyboardWillShow = await Keyboard.addListener('keyboardWillShow', () => {
+      pluginKeyboardVisible = true;
       setKeyboardVisible(true);
       scheduleViewportMetrics();
     });
     const keyboardDidShow = await Keyboard.addListener('keyboardDidShow', () => {
+      pluginKeyboardVisible = true;
       setKeyboardVisible(true);
       scheduleViewportMetrics();
     });
 
     const keyboardWillHide = await Keyboard.addListener('keyboardWillHide', () => {
+      pluginKeyboardVisible = false;
       setKeyboardVisible(false);
       document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
       scheduleViewportMetrics();
     });
     const keyboardDidHide = await Keyboard.addListener('keyboardDidHide', () => {
+      pluginKeyboardVisible = false;
       setKeyboardVisible(false);
       document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
       scheduleViewportMetrics();

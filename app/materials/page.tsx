@@ -42,7 +42,7 @@ export default function MaterialsPage() {
   return (
     <LearnerDashboardShell>
       <LearnerPageHero
-        title="Materials"
+        title="Course Materials"
         description="Every study resource shared by your tutors — search the whole library, or browse by section."
         icon={FolderOpen}
         highlights={loading ? [] : highlights}
@@ -50,7 +50,7 @@ export default function MaterialsPage() {
 
       <div className="mx-auto mt-6 max-w-4xl space-y-5 px-4 pb-24 sm:px-6 lg:px-8">
         <LearnerSurfaceSectionHeader
-          title="Your Materials"
+          title="Your Course Materials"
           description="Listening and Reading are shared across professions. Writing and Speaking are specific to yours."
         />
 

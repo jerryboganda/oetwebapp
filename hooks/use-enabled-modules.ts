@@ -58,10 +58,12 @@ export function useEnabledModules(active = true): EnabledModulesGate {
   const isModuleEnabled = (moduleKey?: string | null): boolean => {
     if (!moduleKey) return true;
     if (!active || !loaded) return true;
-    if (lowered.length === 0) {
-      return moduleKey.toLowerCase() !== MODULE_KEYS.mocks.toLowerCase()
-        && moduleKey.toLowerCase() !== MODULE_KEYS.recalls.toLowerCase();
-    }
+    // An empty module list means the plan never explicitly configured modules —
+    // nothing was disabled, so every module reads as enabled (fail-open, per the
+    // contract above). The old special case that hid Recalls/Mocks here is what
+    // made core navigation disappear for plans without an explicit list
+    // (13 Sep 2026 parity addendum: navigation must not silently hide).
+    if (lowered.length === 0) return true;
     return lowered.includes(moduleKey.toLowerCase());
   };
 

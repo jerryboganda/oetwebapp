@@ -36,7 +36,7 @@ vi.mock('@/components/layout/notification-center', () => ({
   NotificationCenter: () => <div data-testid="notification-center" />,
 }));
 
-import { Sidebar, type NavItem } from '../sidebar';
+import { Sidebar, learnerMobileNavItems, type NavItem } from '../sidebar';
 import { TopNav } from '../top-nav';
 
 const learnerUser = {
@@ -147,5 +147,85 @@ describe('learner feature-gated navigation', () => {
 
     expect(screen.getByRole('link', { name: /content generation/i })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: /content library/i })).not.toHaveAttribute('aria-current');
+  });
+});
+
+// 13 Sep 2026 cross-platform parity addendum: the learner sidebar must show the
+// full agreed names (Listening Practice … Course Materials), and Recalls,
+// Course Materials and Videos are PRIMARY areas — the navigation itself must
+// never disappear because of entitlement hydration, empty module lists, failed
+// flag fetches, cache state or platform. Permissions gate inside each area.
+describe('learner core navigation parity', () => {
+  const fullLabelNames = [
+    'Listening Practice',
+    'Reading Practice',
+    'Writing Practice',
+    'Speaking Practice',
+    'Recalls',
+    'Course Materials',
+    'Videos',
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFetchLearnerFeatureFlag.mockResolvedValue({ key: 'video_library', enabled: false });
+    mockFetchMyEntitlementSnapshot.mockResolvedValue({ enabledModules: [] });
+    mockFetchStreak.mockResolvedValue({ currentStreak: 3 });
+    mockFetchXP.mockResolvedValue({ level: 4 });
+    mockUseAuth.mockReturnValue({ user: learnerUser, signOut: mockSignOut });
+  });
+
+  it('always shows Recalls, Course Materials and Videos with the full practice labels in the expanded sidebar', () => {
+    renderWithRouter(<Sidebar workspaceRole="learner" />, { pathname: '/' });
+
+    for (const name of fullLabelNames) {
+      const link = screen.getByRole('link', { name: new RegExp(`^${name}$`, 'i') });
+      expect(link).toBeVisible();
+    }
+  });
+
+  it('shows the full agreed names on the desktop learner rail (hideBrand layout)', () => {
+    // The Windows EXE and desktop web render the learner workspace through the
+    // icon-over-label rail — the exact surface caught showing bare
+    // "Listening / Reading / … / Materials" in the 13 Sep review.
+    renderWithRouter(<Sidebar hideBrand workspaceRole="learner" />, { pathname: '/' });
+
+    for (const name of fullLabelNames) {
+      expect(screen.getByRole('link', { name: new RegExp(`^${name}$`, 'i') })).toBeInTheDocument();
+    }
+  });
+
+  it('keeps core navigation visible when the entitlement snapshot fails to hydrate', () => {
+    mockFetchMyEntitlementSnapshot.mockRejectedValue(new Error('entitlement snapshot unreachable'));
+
+    renderWithRouter(<Sidebar workspaceRole="learner" />, { pathname: '/' });
+
+    for (const name of ['Recalls', 'Course Materials', 'Videos']) {
+      expect(screen.getByRole('link', { name: new RegExp(`^${name}$`, 'i') })).toBeInTheDocument();
+    }
+  });
+
+  it('keeps core navigation visible when the plan explicitly omits the modules', () => {
+    // A plan that configured SOME modules but not these three must not lose the
+    // nav links; the areas gate their content inside instead.
+    mockFetchMyEntitlementSnapshot.mockResolvedValue({ enabledModules: ['Mocks'] });
+
+    renderWithRouter(<Sidebar workspaceRole="learner" />, { pathname: '/' });
+
+    for (const name of ['Recalls', 'Course Materials', 'Videos']) {
+      expect(screen.getByRole('link', { name: new RegExp(`^${name}$`, 'i') })).toBeInTheDocument();
+    }
+  });
+
+  it('keeps the compact short labels on the mobile bottom nav', () => {
+    expect(learnerMobileNavItems.map((item) => item.label)).toEqual([
+      'Dashboard',
+      'Listening',
+      'Reading',
+      'Writing',
+      'Speaking',
+      'Mocks',
+      'Videos',
+    ]);
   });
 });
