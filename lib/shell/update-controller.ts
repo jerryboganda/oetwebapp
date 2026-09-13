@@ -1,7 +1,7 @@
 import { getAppRuntimeKind } from '@/lib/runtime-signals';
 import { resolveClientIdentity } from '@/lib/client-version';
 import { fetchAppReleasePolicy } from '@/lib/api';
-import { compareVersions } from '@/lib/mobile/forced-update';
+import { ANDROID_SIDELOAD_URL, compareVersions } from '@/lib/mobile/forced-update';
 
 export type UpdatePhase =
   | 'idle'
@@ -100,7 +100,7 @@ export async function checkForUpdates(): Promise<UpdateState> {
       // so the Android fallback (no admin-configured Play Store URL) points at
       // the install-instructions page instead of the bare binary.
       const fallbackStoreUrl = platform === 'android' && nativeRelease
-        ? 'https://app.oetwithdrhesham.co.uk/get-app/android-install'
+        ? ANDROID_SIDELOAD_URL
         : nativeRelease?.downloadUrl ?? null;
       return {
         phase: outdated ? 'available' : 'uptodate',

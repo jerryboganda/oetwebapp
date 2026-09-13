@@ -37,7 +37,7 @@ vi.mock('@capawesome/capacitor-app-update', () => ({
   AppUpdate: mockNativeAppUpdate,
 }));
 
-import { compareVersions, getAppVersion, checkForUpdate, openAppStore } from '@/lib/mobile/forced-update';
+import { ANDROID_SIDELOAD_URL, compareVersions, getAppVersion, checkForUpdate, openAppStore } from '@/lib/mobile/forced-update';
 
 describe('forced-update', () => {
   beforeEach(() => {
@@ -140,12 +140,21 @@ describe('forced-update', () => {
   });
 
   describe('openAppStore', () => {
-    it('opens the Android install-instructions page when Play is not configured', async () => {
-      mockBrowser.open.mockResolvedValue(undefined);
+    it('defaults to the Play listing when no override is supplied', async () => {
+      mockNativeAppUpdate.openAppStore.mockResolvedValue(undefined);
       await expect(openAppStore()).resolves.toBe(true);
-      expect(mockBrowser.open).toHaveBeenCalledWith({
-        url: 'https://app.oetwithdrhesham.co.uk/get-app/android-install',
-      });
+      // Play is the default Android channel. The sideload install-instructions
+      // page is reached by passing it explicitly — update-controller does that
+      // when no admin-configured Play URL exists.
+      expect(mockNativeAppUpdate.openAppStore).toHaveBeenCalledOnce();
+      expect(mockBrowser.open).not.toHaveBeenCalled();
+    });
+
+    it('opens the install-instructions page when that URL is supplied', async () => {
+      mockBrowser.open.mockResolvedValue(undefined);
+      await expect(openAppStore(ANDROID_SIDELOAD_URL)).resolves.toBe(true);
+      expect(mockBrowser.open).toHaveBeenCalledWith({ url: ANDROID_SIDELOAD_URL });
+      expect(mockNativeAppUpdate.openAppStore).not.toHaveBeenCalled();
     });
 
     it('uses the native store app for an official server-provided listing', async () => {
