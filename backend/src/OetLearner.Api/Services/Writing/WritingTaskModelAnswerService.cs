@@ -1405,9 +1405,15 @@ public sealed class WritingTaskModelAnswerService(
         foreach (var s in report.UnmappedSentences)
             sb.AppendLine($"- Sentence not traceable to the case notes (rewrite it from case-note facts only or remove it): \"{s}\"");
         foreach (var f in report.DeterministicFindings)
-            sb.AppendLine($"- [{f.RuleId}] {f.Message}{(string.IsNullOrWhiteSpace(f.Quote) ? "" : $" (at: \"{f.Quote}\")")}");
+        {
+            var quoteSuffix = string.IsNullOrWhiteSpace(f.Quote) ? "" : $" (at: \"{f.Quote}\")";
+            sb.AppendLine($"- [{f.RuleId}] {f.Message}{quoteSuffix}");
+        }
         foreach (var v in report.SemanticViolations)
-            sb.AppendLine($"- [{v.RuleId}] {v.Message}{(string.IsNullOrWhiteSpace(v.Quote) ? "" : $" (at: \"{v.Quote}\")")}");
+        {
+            var quoteSuffix = string.IsNullOrWhiteSpace(v.Quote) ? "" : $" (at: \"{v.Quote}\")";
+            sb.AppendLine($"- [{v.RuleId}] {v.Message}{quoteSuffix}");
+        }
         return $$"""
             Your previous draft of this OET Writing Model Answer FAILED validation. Repair ONLY the violations
             listed below; keep every other sentence, fact, paragraph and the layout unchanged. Then re-check the
