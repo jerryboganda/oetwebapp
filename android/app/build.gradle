@@ -20,13 +20,16 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Bumped from versionCode 1 / "1.0". Google Play's alpha (Closed Testing)
-        // and internal tracks are already published at versionCode 6 / "1.4.11",
+        // and internal tracks are already published at versionCode 7 / "1.4.12",
         // so a lower default would not be recognised as an upgrade. The next
-        // Closed Testing build must be versionCode 7 / "1.4.12" (mobile-release.yml
+        // Closed Testing build must be versionCode 8 / "1.4.13" (mobile-release.yml
         // injects these from its version / version_code inputs at build time;
         // these defaults keep a local or default-arg build consistent with Play).
-        versionCode 7
-        versionName "1.4.12"
+        // 1.4.13 is the first release carrying
+        // android:windowSoftInputMode="adjustResize" (the Android keyboard /
+        // bottom-nav root fix, see docs/releases/2026-09-13-cross-platform-parity.md).
+        versionCode 8
+        versionName "1.4.13"
         buildConfigField "String", "OET_ATTEST_SECRET", "\"${oetAttestSecret}\""
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
