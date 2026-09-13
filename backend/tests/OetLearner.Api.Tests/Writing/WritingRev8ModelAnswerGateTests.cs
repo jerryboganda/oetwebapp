@@ -479,32 +479,34 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Contains(findings, f => f.RuleId.EndsWith("minor_naming_convention", StringComparison.Ordinal));
     }
 
-    // ── Rev8 §7.2 — register_colloquial must not punish wording the case
-    // notes themselves use (Weir: "tired, stressed and sluggish"), because
-    // the grounding/fidelity rules demand that exact wording. ──
+    // ── Rev8 §7.2 — owner ruling (13 Sep 2026): a Model Answer must render
+    // case-note wording in premium clinical English, so register_colloquial
+    // fires even when the notes themselves use the word. There is
+    // deliberately NO case-notes exemption; "fatigue"/"lethargy" ground
+    // fine, as the stored exemplar proves. ──
 
     [Fact]
-    public void Register_Colloquial_Exempts_Verbatim_Case_Note_Wording_But_Still_Fires_On_Unsourced_Slang()
+    public void Register_Colloquial_Fires_Even_When_The_Case_Notes_Use_The_Word()
     {
         var engine = new WritingRuleEngine(new RulebookLoader());
         var letter = WritingModelAnswerBatchTests.ExemplarText().Replace("with fatigue and stress", "with tired and stressed");
         const string notes = "On 29.06.14 he presented for a general check-up, reporting feeling run down: tired, stressed and sluggish";
 
         var withNotes = engine.Lint(new WritingLintInput(
-            LetterText: letter, LetterType: "LT-RR", CaseNotesText: notes,
+            LetterText: letter, LetterType: "LT-RR",
             Profession: ExamProfession.Medicine, IsModelAnswer: true));
-        Assert.DoesNotContain(withNotes, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
+        Assert.Contains(withNotes, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
 
         var withoutNotes = engine.Lint(new WritingLintInput(
             LetterText: letter, LetterType: "LT-RR",
             Profession: ExamProfession.Medicine, IsModelAnswer: true));
         Assert.Contains(withoutNotes, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
 
-        var slang = engine.Lint(new WritingLintInput(
-            LetterText: WritingModelAnswerBatchTests.ExemplarText().Replace("He smokes", "His kids say he smokes"),
-            LetterType: "LT-RR", CaseNotesText: notes,
+        var premium = engine.Lint(new WritingLintInput(
+            LetterText: WritingModelAnswerBatchTests.ExemplarText(),
+            LetterType: "LT-RR",
             Profession: ExamProfession.Medicine, IsModelAnswer: true));
-        Assert.Contains(slang, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
+        Assert.DoesNotContain(premium, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
     }
 
     // ── Import semantic flag — an import whose content has already been

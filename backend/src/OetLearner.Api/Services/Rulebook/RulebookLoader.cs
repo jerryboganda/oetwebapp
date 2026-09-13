@@ -354,12 +354,7 @@ public sealed record WritingLintInput(
     // grader must NOT. Default false (candidate/grader) since every existing
     // candidate-facing caller (coach, submission grading, lint endpoint)
     // omits this; only the Model Answer generation paths pass true.
-    bool IsModelAnswer = false,
-    // Rev8 §7.2 (Weir): the grounding/fidelity rules demand verbatim
-    // case-note wording, so register_colloquial must not flag a token the
-    // source notes themselves use. Callers that know the case-notes text
-    // pass it here; empty (default) keeps the historical behaviour.
-    string CaseNotesText = "");
+    bool IsModelAnswer = false);
 
 public sealed record WritingCaseNotesMarkers(
     bool SmokingMentioned = false,

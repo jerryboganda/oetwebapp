@@ -333,8 +333,24 @@ public sealed partial class WritingRuleEngine
 
     private const string DoseUnitPattern = @"mg|mcg|µg|micrograms?|g|IU|units?|mL|ml";
 
+    // A dose is a single value, a decimal, a range ("5-10", "5 to 10") or a
+    // combination strength ("20/10", "500/125"). A unit (mg, mL, ...) normally
+    // follows; when it does not, the dose only counts as a medication dose if
+    // a frequency qualifier immediately follows ("Targin, 20/10 twice daily")
+    // — so every legitimate dose format is recognised while prose ("aged 13",
+    // "3 blackouts", "temperature 37.8") never matches. Owner directive
+    // (13 Sep 2026, McDonald): correct clinical wording drives the validator —
+    // the parser must understand ranges and combination strengths, never
+    // force letters into unnatural shapes it happens to parse.
+    private const string MedicationDosePattern =
+        @"\d+(?:\.\d+)?(?:\s*(?:-|\u2013|to)\s*\d+(?:\.\d+)?|\s*\/\s*\d+(?:\.\d+)?)?";
+
+    private const string MedicationFrequencyLookahead =
+        @"(?=\s+(?:(?:once|twice|three|four|five|six|eight|twelve)\s+)?(?:times\s+)?(?:a\s+day|per\s+day|daily|hourly|nightly|weekly|at\s+night|in\s+the\s+morning|as\s+needed|when\s+required|nocte|mane|prn|om|od|bd|bid|tds|tid|qds|qid)\b|\s+(?:four|six|eight|twelve)-hourly\b)";
+
     private static readonly Regex MedicationItemRe = new(
-        @"\b(?<drug>[A-Za-z][A-Za-z\-]{2,})(?<comma>,)?\s+(?<dose>\d+(?:\.\d+)?)\s?(?<unit>" + DoseUnitPattern + @")\b(?!\s*\/)",
+        @"\b(?<drug>[A-Za-z][A-Za-z\-]{2,})(?<comma>,)?\s+(?<dose>" + MedicationDosePattern + @")\s*(?<unit>" + DoseUnitPattern + @")\b(?!\s*\/)"
+        + @"|\b(?<drug>[A-Za-z][A-Za-z\-]{2,})(?<comma>,)?\s+(?<dose>" + MedicationDosePattern + @")" + MedicationFrequencyLookahead,
         RegexOptions.None);
 
     private static readonly HashSet<string> MedicationStopWords = new(StringComparer.OrdinalIgnoreCase)
@@ -353,6 +369,8 @@ public sealed partial class WritingRuleEngine
         "above", "below", "between", "after", "before", "following", "later", "prior", "past", "last", "next",
         "drinks", "drank", "drinking", "consumes", "consumed", "consuming", "smokes", "smoked", "smoking",
         "alcohol", "beer", "wine", "spirits", "approx", "roughly", "some", "only", "just",
+        "temperature", "blood", "pressure", "heart", "respiratory", "rate", "cigarettes", "cigarette",
+        "minutes", "hours", "days", "weeks", "months", "years",
     };
 
     // Words between two medication items that mean the sentence is not a
@@ -377,7 +395,7 @@ public sealed partial class WritingRuleEngine
             foreach (var item in items.Where(i => !i.Groups["comma"].Success))
             {
                 var drug = item.Groups["drug"].Value;
-                var dose = $"{item.Groups["dose"].Value} {item.Groups["unit"].Value}";
+                var dose = $"{item.Groups["dose"].Value} {item.Groups["unit"].Value}".Trim();
                 yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                     $"Medication notation: put a comma between the medicine and its dose (\"{drug}, {dose}\").",
                     Quote: item.Value, Start: bodyOffset + sentenceMatch.Index + item.Index,
@@ -418,7 +436,7 @@ public sealed partial class WritingRuleEngine
     }
 
     private static readonly Regex ValueUnitNoSpaceRe = new(
-        @"(?<![\w.])(\d+(?:\.\d+)?)(mmol\/L|µmol\/L|umol\/L|nmol\/L|mg\/kg|mg\/dL|g\/dL|g\/L|U\/L|ng\/mL|mg|mcg|µg|kg|g|mL|ml|L|IU|mmol|mmHg|cm|mm|bpm|kPa|mEq|units)\b",
+        @"(?<![\w.])(\d+(?:\.\d+)?)(\u00b0C|mmol\/L|µmol\/L|umol\/L|nmol\/L|mg\/kg|mg\/dL|g\/dL|g\/L|U\/L|ng\/mL|mg|mcg|µg|kg|g|mL|ml|L|IU|mmol|mmHg|cm|mm|bpm|kPa|mEq|units)\b",
         RegexOptions.None);
 
     private static IEnumerable<LintFinding> DetectValueUnitSpacing(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -505,9 +523,15 @@ public sealed partial class WritingRuleEngine
     }
 
     // OWN-W-033 — professional clinical register (Weir "tired"/"sluggish",
-    // "MRI imaging"; Wright "felt something pop", "with no GP").
+    // "MRI imaging"; Wright "felt something pop", "with no GP") plus the
+    // owner's 13 Sep 2026 additions: vague duration ("for a long time"),
+    // emotional/judgmental observation ("appeared anxious") and stripped
+    // clinical precision are register failures in their own right. A Model
+    // Answer must render case-note wording in premium clinical English
+    // ("fatigue", "lethargy"), never copy colloquial source words verbatim —
+    // so there is deliberately NO case-notes exemption here.
     private static readonly Regex ColloquialRe = new(
-        @"\bMRI imaging\b|\bCT scan imaging\b|\bfelt something\s+['‘’]?pop['‘’]?|\bsomething\s+['‘’]pop['‘’]|\bsluggish\b|\bwith no GP\b|\bno GP\b|\bkids?\b|\bguys?\b|\ba lot of\b|\blots of\b|\bpretty (?:bad|severe|good|much)\b|\bokay\b|\bOK\b|\bgot (?:better|worse)\b|\bstuff\b|\btired\b|\bfeeling down\b|\bup and down\b|\btummy\b|\bpee\b|\bpoo\b",
+        @"\bMRI imaging\b|\bCT scan imaging\b|\bfelt something\s+['‘’]?pop['‘’]?|\bsomething\s+['‘’]pop['‘’]|\bsluggish\b|\bwith no GP\b|\bno GP\b|\bkids?\b|\bguys?\b|\ba lot of\b|\blots of\b|\bpretty (?:bad|severe|good|much)\b|\bokay\b|\bOK\b|\bgot (?:better|worse)\b|\bstuff\b|\btired\b|\bfeeling down\b|\bup and down\b|\btummy\b|\bpee\b|\bpoo\b|\bfor a long time\b|\b(?:appeared|seemed)\s+(?:anxious|agitated|confused|distressed)\b",
         RegexOptions.None);
 
     private static IEnumerable<LintFinding> DetectColloquialRegister(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -517,15 +541,78 @@ public sealed partial class WritingRuleEngine
         var count = 0;
         foreach (Match m in ColloquialRe.Matches(s.Body))
         {
-            // Rev8 §7.2 (Weir): "tired"/"sluggish" came verbatim from the case
-            // notes while grounding demanded source faithfulness — the two
-            // rules were mutually unsatisfiable. Wording the source itself
-            // uses is source-faithful, not informal.
-            if (input.CaseNotesText.Contains(m.Value, StringComparison.OrdinalIgnoreCase)) continue;
             yield return new LintFinding(rule.Id, input.IsModelAnswer ? RuleSeverity.Critical : RuleSeverity.Minor,
-                $"\"{m.Value}\" is informal or redundant for a clinical letter. Use a professional, source-faithful form (e.g. fatigue, MRI, felt a popping sensation, does not currently have a GP).",
+                $"\"{m.Value}\" is informal, vague or judgmental for a clinical letter. Use precise, neutral professional wording (e.g. fatigue, lethargy, long-term obesity, MRI).",
                 Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
             if (++count >= 5) yield break;
+        }
+    }
+
+    // Rev8 (owner directive, 13 Sep 2026, McDonald): "amitriptyline ceased
+    // due to difficulty urinating" is note-form English. A medication
+    // followed by a bare past participle must use the passive ("was
+    // discontinued"). Only drug-name subjects are flagged; genuinely
+    // intransitive subjects ("the pain ceased", "bleeding stopped") and
+    // determiner-led general subjects ("the treatment stopped") stay valid.
+    private static readonly Regex MedicationPassiveRe = new(
+        @"(?:(?<det>\b(?:the|a|an|his|her|its|their)\s+)|(?<aux>\b(?:was|were|is|are|be|been|being|has|have|had)\s+))?\b(?<drug>[A-Za-z][A-Za-z\-]{2,})\s+(?<participle>ceased|discontinued|commenced|initiated|recommenced|stopped|started|weaned|withdrawn)\b",
+        RegexOptions.IgnoreCase);
+
+    private static readonly HashSet<string> IntransitiveParticipleSubjects = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "pain", "pains", "seizure", "seizures", "fit", "fits", "bleeding", "symptom", "symptoms",
+        "smoking", "vomiting", "nausea", "withdrawal", "tremor", "tremors", "spasm", "spasms",
+        "cough", "diarrhoea", "diarrhea", "constipation", "sweating", "ache", "aches",
+        "treatment", "therapy", "course", "dose", "medication", "medications", "drug", "drugs",
+    };
+
+    private static IEnumerable<LintFinding> DetectMedicationPassiveGrammar(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        var count = 0;
+        foreach (Match m in MedicationPassiveRe.Matches(s.Body))
+        {
+            if (m.Groups["aux"].Success || m.Groups["det"].Success) continue;
+            var drug = m.Groups["drug"].Value;
+            if (MedicationStopWords.Contains(drug) || IntransitiveParticipleSubjects.Contains(drug)) continue;
+            var participle = m.Groups["participle"].Value;
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                $"\"{drug} {participle}\" is note-form English. Use the passive voice, e.g. \"{drug} was discontinued\" or \"{drug} was commenced\".",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+            if (++count >= 3) yield break;
+        }
+    }
+
+    // Rev8 (owner directive, 13 Sep 2026, McDonald): clinical precision must
+    // not be trimmed to save words — the source's daily frequency for smoking
+    // and alcohol intake has to survive into the Model Answer.
+    private static readonly Regex CigarettesWithoutFrequencyRe = new(
+        @"\b\d{1,3}\s+cigarettes\b(?!\s*(?:a\s+day|per\s+day|daily))",
+        RegexOptions.IgnoreCase);
+
+    private static readonly Regex StandardDrinksWithoutFrequencyRe = new(
+        @"\bstandard\s+drinks\b(?![^.;\n]{0,15}\b(?:a\s+day|per\s+day|daily))",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectLifestyleFrequencyPrecision(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        var count = 0;
+        foreach (Match m in CigarettesWithoutFrequencyRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "State the daily frequency recorded in the case notes (\"20 cigarettes a day\") — do not drop it to save words.",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+            if (++count >= 3) yield break;
+        }
+        foreach (Match m in StandardDrinksWithoutFrequencyRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "State the daily frequency recorded in the case notes (\"six to ten standard drinks per day\") — do not drop it to save words.",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+            if (++count >= 3) yield break;
         }
     }
 

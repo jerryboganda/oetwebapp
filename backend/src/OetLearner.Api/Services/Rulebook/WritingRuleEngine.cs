@@ -59,6 +59,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "letter_body_length",
         "letter_paragraph_count",
         "letter_structure_order",
+        "lifestyle_frequency_precision",
         "linker_avoid_words",
         "linker_comma_and_case",
         "linker_density",
@@ -66,6 +67,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "linker_in_addition_punctuation",
         "linker_therefore_punctuation",
         "medication_list_punctuation",
+        "medication_passive_grammar",
         "min_body_paragraphs",
         "minor_naming_convention",
         "model_answer_layout",
@@ -192,6 +194,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         ["intro_opens_i_am_writing_to"] = RuleSeverity.Critical,
         ["linker_comma_and_case"] = RuleSeverity.Major,
         ["medication_list_punctuation"] = RuleSeverity.Major,
+        ["medication_passive_grammar"] = RuleSeverity.Major,
+        ["lifestyle_frequency_precision"] = RuleSeverity.Major,
         ["model_answer_layout"] = RuleSeverity.Critical,
         ["paragraph_start_patient_name"] = RuleSeverity.Major,
         ["register_colloquial"] = RuleSeverity.Minor,
@@ -213,7 +217,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     /// </summary>
     private static readonly System.Text.Json.JsonElement DefaultLatinParams =
         System.Text.Json.JsonDocument.Parse(
-            """{"map":{"od":"once a day","om":"once a day","bd":"twice a day","bid":"twice a day","tds":"three times a day","tid":"three times a day","qds":"four times a day","qid":"four times a day","stat":"immediately","prn":"as needed"}}""").RootElement;
+            """{"map":{"od":"once a day","om":"once a day","bd":"twice a day","bid":"twice a day","tds":"three times a day","tid":"three times a day","qds":"four times a day","qid":"four times a day","stat":"immediately","prn":"as needed","nocte":"at night","mane":"in the morning"}}""").RootElement;
 
     public IReadOnlyList<LintFinding> Lint(WritingLintInput input)
     {
@@ -471,6 +475,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "closure_contact_offer" => DetectContactOfferClosure,
         "closure_contains_management" => DetectClosureContainsManagement,
         "medication_list_punctuation" => DetectMedicationListPunctuation,
+        "medication_passive_grammar" => DetectMedicationPassiveGrammar,
+        "lifestyle_frequency_precision" => DetectLifestyleFrequencyPrecision,
         "value_unit_spacing" => DetectValueUnitSpacing,
         "dob_colon_format" => DetectDobColonFormat,
         "register_colloquial" => DetectColloquialRegister,
@@ -1702,21 +1708,23 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 
     private static IEnumerable<LintFinding> DetectNumericalValuesHaveUnits(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var keywords = new[]
-        {
-            "glucose",
-            "hba1c",
-            "temperature",
-            "blood pressure",
-            "pulse",
-            "weight",
-            "height",
-            "BMI",
-            "haemoglobin",
-            "sodium",
-            "potassium",
-            "creatinine"
-        };
+    var keywords = new[]
+    {
+        "glucose",
+        "hba1c",
+        "temperature",
+        "blood pressure",
+        "pulse",
+        "heart rate",
+        "respiratory rate",
+        "weight",
+        "height",
+        "BMI",
+        "haemoglobin",
+        "sodium",
+        "potassium",
+        "creatinine"
+    };
         // /min (pulse/respiratory rate) and a bare X/Y ratio (blood pressure,
         // conventionally never needs "mmHg" spelled out) each already carry
         // their own implicit unit \u2014 added 2026-09-06 after this flagged

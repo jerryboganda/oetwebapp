@@ -1252,9 +1252,6 @@ public sealed class WritingTaskModelAnswerService(
             PatientAge: patientAge,
             PatientIsMinor: patientAge is < 18,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(caseNotesAll),
-            // Case-note wording is exempt from register_colloquial (Rev8 §7.2):
-            // the fidelity rules demand verbatim source terms.
-            CaseNotesText: caseNotesAll,
             Profession: profession,
             IsModelAnswer: true)));
         var findings = lint.Select(f => new WritingModelAnswerFindingDto(
