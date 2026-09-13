@@ -1002,6 +1002,14 @@ public sealed class WritingTaskModelAnswerService(
     /// discriminator walk, rather than inventing a separate number.</summary>
     private const int MaxDuplicateCompletedRetries = 10;
 
+    /// <summary>Rounds of rejoining a genuinely in-flight predecessor's own
+    /// bounded ~4s wait (see <see cref="AiExecutionCoordinator.ResolveExistingAsync"/>)
+    /// before giving up and falling back to <see cref="IsSafeToRetryWithNewVersion"/>'s
+    /// version-bump escape hatch. ~90 rounds x ~4s ≈ 6 minutes, comfortably
+    /// past this feature's observed ~5-minute real generation time (13 Sep
+    /// 2026 live evidence) so the SAME winner has time to actually finish.</summary>
+    private const int MaxInFlightWaitRounds = 90;
+
     /// <summary>
     /// Root-cause fix (13 Sep 2026): <see cref="WritingTaskModelAnswer"/>
     /// generation never varied <see cref="AiGatewayRequest.ResourceVersion"/>
@@ -1021,10 +1029,13 @@ public sealed class WritingTaskModelAnswerService(
     /// <para>
     /// <b>Why this is always safe — never a double provider charge.</b> This
     /// exception is thrown only once <see cref="AiExecutionCoordinator"/> has
-    /// already resolved the predecessor operation to a TERMINAL state; a
-    /// genuinely in-flight/concurrent racer is resolved by that coordinator's
-    /// own bounded <c>WaitInFlight</c> poll instead and never surfaces here.
-    /// So by the time this catch runs, the predecessor's real provider call
+    /// already resolved the predecessor operation to a TERMINAL state — a
+    /// genuinely in-flight/concurrent racer instead throws
+    /// <see cref="OetLearner.Api.Services.Ai.AiOperationInFlightException"/>,
+    /// which this method now handles with its OWN dedicated wait-and-rejoin
+    /// catch (see above) precisely so it never falls into the version-bump
+    /// branch below while the predecessor is still genuinely running.
+    /// So by the time THIS catch runs, the predecessor's real provider call
     /// has already completed (successfully) — there is no live request left
     /// to duplicate. Retrying with a bumped <c>ResourceVersion</c> therefore
     /// always opens a genuinely NEW, intentional generation attempt, never a
@@ -1049,7 +1060,9 @@ public sealed class WritingTaskModelAnswerService(
         Guid scenarioId, AiGroundedPrompt prompt, string adminUserId, string userInput, CancellationToken ct)
     {
         int? resourceVersion = null;
-        for (var retry = 0; ; retry++)
+        var inFlightWaitRounds = 0;
+        var versionBumpRetries = 0;
+        while (true)
         {
             try
             {
@@ -1072,8 +1085,31 @@ public sealed class WritingTaskModelAnswerService(
                     UserInput = userInput,
                 }, ct);
             }
-            catch (Exception ex) when (retry < MaxDuplicateCompletedRetries && IsSafeToRetryWithNewVersion(ex))
+            catch (OetLearner.Api.Services.Ai.AiOperationInFlightException ex) when (inFlightWaitRounds < MaxInFlightWaitRounds)
             {
+                // Root-cause fix (13 Sep 2026 live incident): this exception means
+                // the coordinator's OWN bounded ~4s wait for a genuinely in-flight
+                // predecessor just expired -- it does NOT mean the predecessor is
+                // orphaned (that assumption, in the version-bump branch below, was
+                // wrong and caused a real-money pile-up: every ~4s a still-running
+                // real generation was still mid-flight, this retried with a BUMPED
+                // version, spawning a brand-new competing paid call, which then did
+                // the same to itself, compounding into a swarm of colliding real
+                // provider calls with no result ever landing). Retrying with the
+                // SAME ResourceVersion instead rejoins that exact predecessor's
+                // wait -- no new provider call. Once it reaches a terminal state
+                // the coordinator serves its real result back normally (or, for a
+                // safe-failure state, this same call transparently opens one new
+                // attempt) -- never a duplicate charge.
+                inFlightWaitRounds++;
+                logger.LogInformation(ex,
+                    "Model-answer generation for scenario {ScenarioId} found a still in-flight predecessor; " +
+                    "rejoining its wait at replay version {ResourceVersion} ({Round}/{Max}).",
+                    scenarioId, resourceVersion, inFlightWaitRounds, MaxInFlightWaitRounds);
+            }
+            catch (Exception ex) when (versionBumpRetries < MaxDuplicateCompletedRetries && IsSafeToRetryWithNewVersion(ex))
+            {
+                versionBumpRetries++;
                 // Root cause of the 3-bump version proving too small (13 Sep
                 // 2026, live evidence): AiOperationReplayPolicy.NextVersion's
                 // small sequential sequence (2, 3, 4, ...) is exactly the
@@ -1094,7 +1130,7 @@ public sealed class WritingTaskModelAnswerService(
                 logger.LogInformation(ex,
                     "Model-answer generation for scenario {ScenarioId} hit a replay-version collision ({ExceptionType}); " +
                     "retrying as a new attempt at replay version {ResourceVersion} ({Retry}/{Max}).",
-                    scenarioId, ex.GetType().Name, resourceVersion, retry + 1, MaxDuplicateCompletedRetries);
+                    scenarioId, ex.GetType().Name, resourceVersion, versionBumpRetries, MaxDuplicateCompletedRetries);
             }
         }
     }
@@ -1128,12 +1164,14 @@ public sealed class WritingTaskModelAnswerService(
     /// number is just "find an unclaimed slot", not a replay of any
     /// request.</item>
     /// <item><see cref="OetLearner.Api.Services.Ai.AiOperationInFlightException"/> —
-    /// the coordinator polled this slot for its own bounded window (~4s) and
-    /// it never resolved; in this service's synchronous admin/system-caller
-    /// context that is far more often an orphaned row (e.g. from an earlier
-    /// client-side timeout that cancelled the shared token) than a real
-    /// multi-second-and-counting concurrent racer, so moving to a fresh slot
-    /// rather than holding the row is the more useful outcome.</item>
+    /// reaches this generic branch ONLY as a last resort, after
+    /// <see cref="MaxInFlightWaitRounds"/> rounds of the dedicated wait-and-rejoin
+    /// catch above already failed to see the predecessor resolve (~6 minutes
+    /// real time). Live evidence (13 Sep 2026) proved the predecessor is
+    /// usually still a genuine, actively-running racer, not an orphan — so
+    /// this branch only fires for the rare case that really did stay stuck
+    /// that long, at which point trying one fresh slot is a reasonable last
+    /// resort rather than holding forever.</item>
     /// </list>
     /// </summary>
     private static bool IsSafeToRetryWithNewVersion(Exception ex) => ex switch

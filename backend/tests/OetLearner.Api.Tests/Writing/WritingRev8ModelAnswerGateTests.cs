@@ -294,11 +294,13 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal(2, gateway.Calls);
     }
 
-    // A slot that never resolves within the coordinator's own bounded poll
-    // (AiOperationInFlightException) is, for this synchronous admin/system
-    // caller, far more often an orphaned row from an earlier client-side
-    // timeout than a real still-running concurrent racer -- retried past the
-    // same bounded way as the other two safe cases.
+    // Root-cause fix (13 Sep 2026 live incident): AiOperationInFlightException
+    // means the coordinator's own ~4s bounded wait for a GENUINELY in-flight
+    // predecessor just expired -- the predecessor is still actively running,
+    // not orphaned. Rejoining with the SAME ResourceVersion (never bumping)
+    // re-enters that same predecessor's wait instead of spawning a competing
+    // real paid call. The old behaviour (bump-and-retry here) caused exactly
+    // that: a real production pile-up of colliding real generations.
     [Fact]
     public async Task Generate_Retries_Past_An_Unresolved_InFlight_Slot_And_Succeeds()
     {
@@ -311,7 +313,55 @@ public sealed class WritingRev8ModelAnswerGateTests
 
         Assert.Equal("Ready", dto.Status);
         Assert.Equal(2, gateway.Calls); // 1 unresolved slot + 1 successful retry
+        Assert.All(gateway.ResourceVersionsSeen, v => Assert.Null(v)); // never bumped -- rejoined the same slot
         Assert.Equal(WritingRuleEngine.ValidatorVersion, dto.ValidatorVersion);
+    }
+
+    // The exact pile-up scenario from the 13 Sep 2026 incident: a real
+    // predecessor stays in-flight across MANY of the coordinator's own ~4s
+    // bounded polls (its own generation is genuinely still running). Must
+    // keep rejoining the SAME slot the whole time -- never bump to a new
+    // version, which would each time spawn a brand-new competing real paid
+    // call instead of waiting for the one already running.
+    [Fact]
+    public async Task Generate_Keeps_Rejoining_A_Long_Running_InFlight_Predecessor_Without_Bumping_Version()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var gateway = new InFlightThenSucceedsGateway(WritingModelAnswerBatchTests.ExemplarText(), unresolvedCalls: 40);
+        var svc = Service(db, gateway);
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("Ready", dto.Status);
+        Assert.Equal(41, gateway.Calls);
+        Assert.All(gateway.ResourceVersionsSeen, v => Assert.Null(v)); // every single retry rejoined the same unbumped slot
+    }
+
+    // If a predecessor NEVER resolves within MaxInFlightWaitRounds, the
+    // dedicated wait-and-rejoin catch gives up and falls back to the existing
+    // bounded version-bump escape hatch (last resort) rather than holding the
+    // row forever or looping without end.
+    [Fact]
+    public async Task Generate_Falls_Back_To_A_New_Version_After_Exhausting_The_InFlight_Wait()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        // 91 throws: the first 90 exhaust MaxInFlightWaitRounds rejoining the
+        // same slot; the 91st throw finds that budget spent and falls to the
+        // separate version-bump budget instead; call 92 (bumped) succeeds.
+        var gateway = new InFlightThenSucceedsGateway(WritingModelAnswerBatchTests.ExemplarText(), unresolvedCalls: 91);
+        var svc = Service(db, gateway);
+
+        var dto = await svc.GenerateAsync(scenarioId, "admin-1");
+
+        Assert.Equal("Ready", dto.Status);
+        Assert.Equal(92, gateway.Calls);
+        // The first 91 attempts (90 rejoins + the one that trips the fallback)
+        // all still carry the original null slot; only the final, bumped
+        // attempt carries a non-null version.
+        Assert.Equal(91, gateway.ResourceVersionsSeen.Count(v => v is null));
+        Assert.NotNull(gateway.ResourceVersionsSeen[^1]);
     }
 
     // A resource-version slot already claimed by a DIFFERENT payload (e.g. an
@@ -433,9 +483,10 @@ public sealed class WritingRev8ModelAnswerGateTests
     /// <summary>Throws an unresolved in-flight-slot timeout on the first
     /// call, then succeeds -- the "orphaned slot from an earlier client
     /// timeout" case.</summary>
-    private sealed class InFlightThenSucceedsGateway(string letter) : IAiGatewayService
+    private sealed class InFlightThenSucceedsGateway(string letter, int unresolvedCalls = 1) : IAiGatewayService
     {
         public int Calls { get; private set; }
+        public List<int?> ResourceVersionsSeen { get; } = [];
 
         public AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context)
             => new()
@@ -447,7 +498,8 @@ public sealed class WritingRev8ModelAnswerGateTests
         public Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
         {
             Calls++;
-            if (Calls == 1)
+            ResourceVersionsSeen.Add(request.ResourceVersion);
+            if (Calls <= unresolvedCalls)
             {
                 throw new OetLearner.Api.Services.Ai.AiOperationInFlightException("idem-key-stuck");
             }
