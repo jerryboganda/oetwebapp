@@ -87,7 +87,17 @@ public sealed class WritingModelAnswerSemanticValidator(
                 // DIFFERENT letter content anyway (a fresh draft each repair
                 // round), so it should never be deduplicated against
                 // history -- key it by the draft's own content instead.
-                ResourceVersion = unchecked(request.LetterText.GetHashCode()),
+                //
+                // A content-only hash (13 Sep 2026, same-day follow-up) turned
+                // out to be insufficient on its own: re-validating the EXACT
+                // same draft twice (e.g. a manual offline edit checked via
+                // /validate before import) produces the identical hash both
+                // times, so the second call collides with the first -- the
+                // exact same self-collision this fix exists to prevent, just
+                // shifted from "same scenario" to "same draft". Mix in the
+                // wall-clock second so a retry of unchanged content still
+                // gets a fresh slot.
+                ResourceVersion = unchecked(request.LetterText.GetHashCode() ^ (int)DateTimeOffset.UtcNow.ToUnixTimeSeconds()),
                 UserInput = BuildUserInput(request, legacyLetterType),
             }, ct);
 
