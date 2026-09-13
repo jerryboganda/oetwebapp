@@ -23,17 +23,21 @@ identifiers and are intentionally not bumped when only the remote bundle changes
 ## What this release fixes
 
 1. **PRIORITY 1 — Android Recalls > Practice Spelling keyboard overlap.**
-   When the IME opened, the Keyboard plugin's `resizeOnFullScreen` path resizes
-   the WebView itself, so `innerHeight` and `visualViewport.height` shrink
-   together and the old `innerHeight − visualViewport.height` derivation read 0 —
-   every resize-triggered metrics pass re-derived "no keyboard" and un-hid the
-   bottom nav, which floated just above the keyboard covering the spelling
-   card/input. The keyboard test in `lib/mobile/runtime.ts` now also compares the
-   viewport against a keyboard-free baseline height (focus-guarded; baseline
-   resets on rotation) and mirrors the plugin's keyboard state so re-derivation
-   cannot clobber it mid-transition. The nav hides while the keyboard is open,
-   exactly like the mobile browser; the spelling card, input and actions stay
-   visible and usable.
+   The Android shell can open the IME in two modes and the old derivation read
+   "no keyboard" in both. (a) Native WebView resize (`resizeOnFullScreen`):
+   `innerHeight` and `visualViewport.height` shrink together, so the offset
+   test read 0 — fixed by comparing the viewport against a keyboard-free
+   baseline height (focus-guarded; baseline resets on rotation). (b) adjustPan
+   (the default under edge-to-edge, observed live on device 13 Sep): the
+   window pans and NO viewport metric changes — only the Capacitor Keyboard
+   plugin sees the keyboard, and every resize-triggered metrics pass was
+   clobbering the plugin's flag, resurrecting the bottom nav mid-screen over
+   the spelling input while mobile web behaved fine. The plugin's keyboard
+   state is now authoritative in `lib/mobile/runtime.ts`: metrics may raise
+   the keyboard flag (missed plugin events, plugin-less browsers, resize
+   mode) but can never clear it while the plugin says the IME is open. The
+   nav hides while the keyboard is open, exactly like the mobile browser;
+   the spelling card, input and actions stay visible and usable.
 2. **Desktop web navigation naming.** The learner desktop rail rendered the
    short labels (Listening / Reading / Writing / Speaking / Materials). The rail
    (`NavRail`) now renders `sidebarLabel`, so desktop/laptop widths show the

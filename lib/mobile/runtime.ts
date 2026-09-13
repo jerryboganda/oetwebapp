@@ -78,16 +78,16 @@ const KEYBOARD_VISIBLE_THRESHOLD_PX = 120;
 
 /**
  * Tallest viewport height observed without a keyboard, and the last keyboard
- * state the Capacitor Keyboard plugin reported. The keyboard test must use
- * BOTH: on Android (edge-to-edge + the Keyboard plugin's resizeOnFullScreen
- * path) the WebView itself is resized when the IME opens, so innerHeight and
- * visualViewport.height shrink TOGETHER and `innerHeight -
- * visualViewport.height` reads 0 — every resize-triggered metrics pass then
- * re-derived "no keyboard", un-hid the bottom nav, and it floated just above
- * the keyboard covering the Recalls > Practice Spelling input (report
- * 13 Sep 2026). Comparing the current viewport against this baseline catches
- * that native-resize mode, while the offset test still catches the overlay
- * modes (iOS body resize, mobile browsers).
+ * state the Capacitor Keyboard plugin reported. Native IME behavior differs by
+ * mode and ALL must read as "keyboard open":
+ *  - adjustPan (Android default under edge-to-edge): the window pans, NO
+ *    viewport metric changes — only the plugin state can see the keyboard.
+ *  - native WebView resize (Keyboard plugin resizeOnFullScreen path):
+ *    innerHeight and visualViewport.height shrink TOGETHER, so the offset
+ *    reads 0 — the baseline-shrinkage comparison catches it.
+ *  - overlay modes (iOS body resize, mobile browsers): innerHeight stays full
+ *    while visualViewport.height shrinks — the offset test catches it.
+ * The plugin state outranks the metrics tests (see setViewportMetrics).
  */
 let keyboardFreeBaselineHeight = 0;
 let pluginKeyboardVisible = false;
@@ -118,19 +118,29 @@ function setViewportMetrics() {
   if (viewportHeight > keyboardFreeBaselineHeight) {
     keyboardFreeBaselineHeight = viewportHeight;
   }
-  // Below-baseline shrinkage only counts as a keyboard while a text entry has
-  // focus (the IME cannot be open otherwise) — a split-screen resize or other
-  // height change without focus must not hide the nav. Offset-based shrinkage
-  // (overlay modes) needs no focus guard: innerHeight stays at the full window
-  // there, so only the IME can produce the shortfall.
+  // The plugin's keyboard state is AUTHORITATIVE on native shells. Under
+  // adjustPan (the Android default with edge-to-edge) NOTHING changes in the
+  // viewport metrics while the IME opens — innerHeight, visualViewport.height
+  // and the baseline all stay identical and the window merely pans up — so
+  // only the plugin can see the keyboard there. This was the second half of
+  // the 13 Sep 2026 Practice Spelling defect: the plugin flag was folded into
+  // the shrinkage prong, every resize-triggered metrics pass re-derived
+  // "no keyboard", and the bottom nav resurrected mid-screen over the
+  // spelling input in the Android app while mobile web behaved fine.
+  // Metrics can still SET the flag (missed show events, plugin-less browsers,
+  // native WebView resize) but must never CLEAR it while the plugin says the
+  // IME is open. A focused text entry plus below-baseline shrinkage only
+  // counts as a keyboard with focus (split-screen resize cannot hide the nav).
   const keyboardVisible =
-    keyboardOffset > KEYBOARD_VISIBLE_THRESHOLD_PX
+    pluginKeyboardVisible
+    || keyboardOffset > KEYBOARD_VISIBLE_THRESHOLD_PX
     || (keyboardFreeBaselineHeight - viewportHeight > KEYBOARD_VISIBLE_THRESHOLD_PX
-      && (isTextEntryFocused() || pluginKeyboardVisible));
+      && isTextEntryFocused());
   // Re-derived on every metrics pass (resize, orientation change, visualViewport
-  // resize/scroll) so the state self-corrects in every mode: a keyboardWillHide
-  // that never arrives clears as soon as the viewport returns to the baseline,
-  // and a keyboardWillShow that never arrives is caught by the shrinkage test.
+  // resize/scroll) so the state self-corrects for plugin-less surfaces: a
+  // keyboardWillHide that never arrives clears as soon as the viewport returns
+  // to the baseline, and a keyboardWillShow that never arrives is caught by
+  // the offset/shrinkage tests.
   setKeyboardVisible(keyboardVisible);
 }
 

@@ -464,7 +464,7 @@ describe('mobile runtime', () => {
         cleanup();
       });
 
-      it('re-baselines on rotation so the shorter landscape height is not read as a keyboard', async () => {
+    it('re-baselines on rotation so the shorter landscape height is not read as a keyboard', async () => {
         mobileMocks.native = true;
         const cleanup = await initializeMobileRuntime();
         focusTextEntry();
@@ -481,6 +481,39 @@ describe('mobile runtime', () => {
 
         cleanup();
       });
+    });
+
+    // Second half of the 13 Sep 2026 Practice Spelling device report. Under
+    // adjustPan (the Android default with edge-to-edge) the window pans up and
+    // NO viewport metric changes while the IME opens — the metrics re-derivation
+    // kept resurrecting the bottom nav mid-screen over the spelling input while
+    // mobile web was fine. The plugin's keyboard state is authoritative: metrics
+    // may raise the flag but can never clear it while the plugin says the IME
+    // is open.
+    it('keeps the nav hidden through resize churn while the plugin reports the keyboard (adjustPan)', async () => {
+      mobileMocks.native = true;
+      const cleanup = await initializeMobileRuntime();
+
+      // Pan mode: heights never change, only the plugin event signals the IME.
+      setViewportHeight(window.innerHeight);
+      listenerFor('keyboardWillShow')();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      // The pan still produces resize/visualViewport churn after the show
+      // event — the re-derivation must not resurrect the nav.
+      window.dispatchEvent(new Event('resize'));
+      await flushFrame();
+      window.dispatchEvent(new Event('resize'));
+      await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      // Keyboard closes: the plugin hide event is trusted, metrics agree.
+      listenerFor('keyboardDidHide')();
+      window.dispatchEvent(new Event('resize'));
+      await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+      cleanup();
     });
   });
 });
