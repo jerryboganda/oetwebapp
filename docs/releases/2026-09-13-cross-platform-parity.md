@@ -79,3 +79,43 @@ identifiers and are intentionally not bumped when only the remote bundle changes
   Practice Spelling input (nav must never rise over the card); Windows EXE at
   laptop width with multiple learner accounts (Recalls / Course Materials /
   Videos present).
+
+## Round 3 — deterministic text-entry focus fallback + native adjustResize (13 Sep 2026, evening)
+
+Round 2 (commit 739e0091b, plugin-state-authoritative) still failed on the
+owner's device. Verified against the installed Capacitor 7 Keyboard plugin
+source this round, the reason is now concrete rather than hypothetical:
+
+- The manifest never declared `android:windowSoftInputMode` (checked the full
+  git history) — Capacitor's scaffold ships `adjustResize` on MainActivity;
+  this project deviated. With edge-to-edge forced, the system fell back to
+  PANNING the window: no viewport metric ever changes in JS.
+- The plugin's show/hide events fire only from `WindowInsetsAnimationCompat`
+  callbacks; on the reporting device they evidently never fire at all.
+- `Keyboard.resize: KeyboardResize.Body` is iOS-only in effect — the Android
+  plugin ships `setResizeMode` as an unimplemented stub. `resizeOnFullScreen`
+  only acts when the visible display frame changes, which pan mode never does.
+
+So rounds 1 and 2 were both built on signals that are structurally absent on
+this device. Round 3 stops depending on them:
+
+1. **Web (ships to the installed APK via the site deploy, no new APK):**
+   `lib/mobile/runtime.ts` now treats DOM focus as a last-resort keyboard
+   signal. While a text entry holds focus on a native shell the nav stays
+   hidden unless hard evidence says the IME is closed: focus leaving the
+   entry, a plugin-reported hide, or (resize-mode devices) the viewport
+   returning to the keyboard-free baseline after shrinking. Orientation
+   change clears the conclusion alongside the baseline reset. New tests pin
+   the exact device case (focus hides with zero plugin events and zero
+   viewport change), focus hopping between fields, and plugin-hide override.
+   Known trade-off, stated plainly: if the IME is dismissed via back button
+   while the field keeps DOM focus AND the plugin hide event never arrives
+   AND no viewport change occurs (the reporting device's exact profile), the
+   nav stays hidden until focus leaves the field — tapping anything (e.g.
+   Check / Next Word) restores it. Hidden-until-tap beats overlap-unusable.
+2. **Native root cause (ships with the next APK release):** the manifest now
+   declares `android:windowSoftInputMode="adjustResize"`, restoring the
+   supported Capacitor configuration — the WebView will actually resize for
+   the IME, plugin events and `resizeOnFullScreen` become live, and the nav
+   behaves like every other Capacitor app. Requires a new APK build/release
+   to reach devices; the web fix above covers the currently installed APK.

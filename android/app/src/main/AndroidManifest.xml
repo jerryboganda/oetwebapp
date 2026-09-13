@@ -9,12 +9,21 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- android:windowSoftInputMode="adjustResize" is REQUIRED by Capacitor's
+             Keyboard plugin: without it the IME neither resizes the WebView nor
+             changes the visible display frame, so the plugin's
+             resizeOnFullScreen is inert and its show/hide events can go
+             unfired, and the system silently falls back to panning the whole
+             window — which floated the fixed bottom nav mid-screen over the
+             Practice Spelling input (13 Sep 2026 report). adjustResize remains
+             supported alongside edge-to-edge on API 30+. -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask"
+            android:windowSoftInputMode="adjustResize"
             android:exported="true">
 
             <intent-filter>

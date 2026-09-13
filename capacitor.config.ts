@@ -40,6 +40,11 @@ const config: CapacitorConfig = {
   },
   plugins: {
     Keyboard: {
+      // `resize` is iOS-only in practice — the Android plugin ships
+      // setResizeMode as an unimplemented stub. On Android what matters is
+      // android:windowSoftInputMode="adjustResize" in the manifest (without it
+      // nothing here resizes and the plugin events can go unfired) plus
+      // resizeOnFullScreen below for the edge-to-edge window.
       resize: KeyboardResize.Body,
       resizeOnFullScreen: true,
     },

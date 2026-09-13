@@ -92,15 +92,42 @@ const KEYBOARD_VISIBLE_THRESHOLD_PX = 120;
 let keyboardFreeBaselineHeight = 0;
 let pluginKeyboardVisible = false;
 
+/**
+ * The DOM focus fallback, third round of the 13 Sep 2026 Practice Spelling
+ * defect. Both prior signals can be silently absent on the Android shell: the
+ * plugin's show/hide events only fire from WindowInsetsAnimation callbacks
+ * (OEM-dependent — they never fired on the reporting device), and under
+ * adjustPan/adjustUnspecified with edge-to-edge the window PANS, so no viewport
+ * metric ever changes. `focusin`/`focusout` on a text entry are the only events
+ * guaranteed to exist in every WebView and every soft-input mode, so while a
+ * text entry holds focus we treat the IME as open unless hard evidence says
+ * otherwise. Evidence of open: the viewport shrinks past the threshold while
+ * focused (resize modes). Evidence of closed: focus leaves the entry, the
+ * plugin reports a hide, or the viewport returns to the keyboard-free baseline
+ * after having shrunk (resize-mode back-button IME dismiss keeps DOM focus).
+ * `orientationchange` drops the whole conclusion for the same reason it resets
+ * the baseline — rotation invalidates every height comparison at once.
+ */
+let textEntryKeyboardVisible = false;
+let viewportShrankWhileTextEntryFocused = false;
+
+function clearTextEntryKeyboardEvidence() {
+  textEntryKeyboardVisible = false;
+  viewportShrankWhileTextEntryFocused = false;
+}
+
 function resetKeyboardBaseline() {
   keyboardFreeBaselineHeight = 0;
+  clearTextEntryKeyboardEvidence();
+}
+
+function isTextEntryElement(target: EventTarget | null): target is HTMLElement {
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true;
+  return target instanceof HTMLElement && target.isContentEditable === true;
 }
 
 function isTextEntryFocused(): boolean {
-  const el = document.activeElement;
-  if (!el) return false;
-  if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) return true;
-  return (el as HTMLElement).isContentEditable === true;
+  return isTextEntryElement(document.activeElement);
 }
 
 function setViewportMetrics() {
@@ -131,8 +158,21 @@ function setViewportMetrics() {
   // native WebView resize) but must never CLEAR it while the plugin says the
   // IME is open. A focused text entry plus below-baseline shrinkage only
   // counts as a keyboard with focus (split-screen resize cannot hide the nav).
+  if (textEntryKeyboardVisible) {
+    const baselineShortfall = keyboardFreeBaselineHeight - viewportHeight;
+    if (baselineShortfall > KEYBOARD_VISIBLE_THRESHOLD_PX) {
+      // Resize mode: the shrinking viewport is hard evidence the IME is up.
+      viewportShrankWhileTextEntryFocused = true;
+    } else if (viewportShrankWhileTextEntryFocused) {
+      // Resize mode close: the viewport returned to the keyboard-free baseline
+      // while the field kept DOM focus (e.g. back-button IME dismiss). The
+      // keyboard is demonstrably gone, so stop holding the nav hidden.
+      clearTextEntryKeyboardEvidence();
+    }
+  }
   const keyboardVisible =
     pluginKeyboardVisible
+    || textEntryKeyboardVisible
     || keyboardOffset > KEYBOARD_VISIBLE_THRESHOLD_PX
     || (keyboardFreeBaselineHeight - viewportHeight > KEYBOARD_VISIBLE_THRESHOLD_PX
       && isTextEntryFocused());
@@ -307,6 +347,38 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     cleanup.push(() => window.visualViewport?.removeEventListener('scroll', visualViewportResize));
   }
 
+  // DOM focus is the last-resort keyboard signal (see the block comment on
+  // textEntryKeyboardVisible): it works in every soft-input mode and on every
+  // device, including the shells where the plugin events and the viewport
+  // metrics are both silent. Registered outside the Keyboard try-block so a
+  // missing/failing plugin never takes this path down with it.
+  const focusInHandler = (event: FocusEvent) => {
+    if (!isTextEntryElement(event.target)) {
+      return;
+    }
+    viewportShrankWhileTextEntryFocused = false;
+    textEntryKeyboardVisible = true;
+    // Synchronous: the nav must be gone before the IME finishes animating in.
+    setKeyboardVisible(true);
+  };
+  const focusOutHandler = () => {
+    if (!textEntryKeyboardVisible) {
+      return;
+    }
+    // Focus may hop straight to another field in multi-field forms; judge
+    // only after it has settled.
+    window.requestAnimationFrame(() => {
+      if (!isTextEntryFocused()) {
+        clearTextEntryKeyboardEvidence();
+        setViewportMetrics();
+      }
+    });
+  };
+  document.addEventListener('focusin', focusInHandler);
+  document.addEventListener('focusout', focusOutHandler);
+  cleanup.push(() => document.removeEventListener('focusin', focusInHandler));
+  cleanup.push(() => document.removeEventListener('focusout', focusOutHandler));
+
   const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const colorSchemeListener = () => {
     document.documentElement.dataset.colorScheme = colorSchemeQuery.matches ? 'dark' : 'light';
@@ -341,12 +413,17 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
 
     const keyboardWillHide = await Keyboard.addListener('keyboardWillHide', () => {
       pluginKeyboardVisible = false;
+      // A plugin-reported hide is hard evidence the IME is closing, even if
+      // the field keeps DOM focus (back-button dismiss) — release the
+      // focus-based hold so the nav returns.
+      clearTextEntryKeyboardEvidence();
       setKeyboardVisible(false);
       document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
       scheduleViewportMetrics();
     });
     const keyboardDidHide = await Keyboard.addListener('keyboardDidHide', () => {
       pluginKeyboardVisible = false;
+      clearTextEntryKeyboardEvidence();
       setKeyboardVisible(false);
       document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
       scheduleViewportMetrics();

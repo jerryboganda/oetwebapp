@@ -329,3 +329,10 @@ Named volumes `oetwebsite_oet_*` are independent of containers. Compose pins the
 - KNOWN NON-MINE: 19 full-Writing failures = parallel session dirty WritingRuleEngine.cs/tests; ship:gate red on untracked lib/api/writing-attempts.ts (theirs). Do not touch.
 - NEXT: exemplar grind to clear 112 model_answer_not_approved, then re-run catalogue-compatibility to releaseBlocked=false.
 
+
+## Current task — Android bottom nav vs keyboard (round 3) — SHIPPED, NEEDS DEVICE RE-TEST
+- Rounds 1 (40f79b6e7) and 2 (739e0091b) failed on device because BOTH relied on signals structurally absent there: verified in @capacitor/keyboard@7.0.6 Android source — show/hide events fire only from WindowInsetsAnimation callbacks (never fired on the device); manifest had NO windowSoftInputMode in its entire history (system pans the window, zero viewport metric changes); KeyboardResize.Body is iOS-only (Android setResizeMode is an unimplemented stub).
+- Round 3 (this commit): (a) lib/mobile/runtime.ts — DOM focus is now the last-resort signal on native: text-entry focus hides the nav immediately; cleared by focusout, plugin-reported hide, or (resize devices) viewport returning to baseline after shrinking; orientationchange resets. (b) android/app/src/main/AndroidManifest.xml — MainActivity gains android:windowSoftInputMode="adjustResize" (root cause; needs a NEW APK release to reach devices; web part covers the installed APK via site deploy). (c) capacitor.config.ts comment documents the dead Android resize config.
+- Tests: 16/16 mobile-runtime (3 new: focus-alone hide on silent plugin+viewport, input-hop, plugin-hide override), 4/4 safe-area, capacitor-config 4/4; tsc clean; eslint clean.
+- Transplant note: local branch tree differs from origin/main by peer Writing C# files (main is newer) — commit built via temp-index from origin/main tree + only the 5 paths; do NOT reset main to this branch.
+- DEVICE PROTOCOL: cold-restart the app (swipe away from Recents) before testing — WebView caches JS. Expect: focus spelling input → nav hides; tap elsewhere → nav returns. If STILL broken, next step is on-device chrome://inspect logging of plugin events vs focus events.

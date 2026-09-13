@@ -515,5 +515,79 @@ describe('mobile runtime', () => {
 
       cleanup();
     });
+
+    // Third round of the 13 Sep 2026 Practice Spelling device report. The
+    // reporting device fires NO plugin keyboard events and, under pan mode,
+    // NO viewport metric ever changes — both shipped rounds kept re-deriving
+    // "no keyboard" and the bottom nav floated over the spelling input. DOM
+    // focus is the only signal guaranteed in that environment, so focus alone
+    // must hide the nav and blur alone must bring it back.
+    describe('text-entry focus fallback (no plugin events, no viewport change)', () => {
+      const flushFrame = () => new Promise((resolve) => { requestAnimationFrame(() => resolve(null)); });
+
+      it('hides the nav on focus alone and restores it on blur', async () => {
+        mobileMocks.native = true;
+        const cleanup = await initializeMobileRuntime();
+
+        const input = document.createElement('input');
+        document.body.appendChild(input);
+        input.focus();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+        // Resize churn must not resurrect the nav while the field is focused.
+        window.dispatchEvent(new Event('resize'));
+        await flushFrame();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+        // Tapping elsewhere moves focus off the entry; the nav returns.
+        const button = document.createElement('button');
+        document.body.appendChild(button);
+        button.focus();
+        await flushFrame();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+        input.remove();
+        button.remove();
+        cleanup();
+      });
+
+      it('keeps the nav hidden when focus hops between text fields', async () => {
+        mobileMocks.native = true;
+        const cleanup = await initializeMobileRuntime();
+
+        const first = document.createElement('input');
+        const second = document.createElement('textarea');
+        document.body.append(first, second);
+        first.focus();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+        second.focus();
+        await flushFrame();
+        await flushFrame();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+        first.remove();
+        second.remove();
+        cleanup();
+      });
+
+      it('returns the nav when the plugin reports a hide even if the field kept focus', async () => {
+        mobileMocks.native = true;
+        const cleanup = await initializeMobileRuntime();
+
+        const input = document.createElement('input');
+        document.body.appendChild(input);
+        input.focus();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+        // Back-button IME dismiss keeps DOM focus; the plugin's report of the
+        // close is hard evidence and must release the hold.
+        listenerFor('keyboardDidHide')();
+        expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+        input.remove();
+        cleanup();
+      });
+    });
   });
 });
