@@ -418,6 +418,119 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.True(grounding.IsGrounded, string.Join(" | ", grounding.UnmappedSentences));
     }
 
+    // ── Rev8 §7.1 — the Weir false minor: "3 children aged 13, 10 and 8"
+    // made the old first-match age scan classify an adult patient as a
+    // minor, so minor_naming_convention and the adult Re: line rule became
+    // mutually unsatisfiable and LT-RR could never pass. ──
+
+    [Fact]
+    public void PatientAge_Extractor_Never_Attributes_Relative_Or_List_Ages_To_The_Patient()
+    {
+        var weirNotes = string.Join('\n',
+            "Mr Michael Weir is a patient in your general practice, height 183cm",
+            "He is married with 3 children aged 13, 10 and 8");
+        Assert.Null(WritingPatientAgeExtractor.Extract(weirNotes));
+
+        Assert.Equal(55, WritingPatientAgeExtractor.Extract("Mr David Taylor, aged 55, presented today."));
+        Assert.Equal(9, WritingPatientAgeExtractor.Extract("The patient is 9 years old."));
+        Assert.Null(WritingPatientAgeExtractor.Extract("His daughter, aged 8, attends with him."));
+        Assert.Null(WritingPatientAgeExtractor.Extract("He has two sons aged 4 and 7."));
+        Assert.Equal(45, WritingPatientAgeExtractor.Extract("Mr X, aged 45, has two sons aged 4 and 7."));
+    }
+
+    [Fact]
+    public async Task Import_With_Relatives_Ages_In_Notes_Stays_Adult_And_Ready()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        db.WritingScenarioStructuredSentences.Add(new WritingScenarioStructuredSentence
+        {
+            Id = Guid.NewGuid(),
+            ScenarioId = scenarioId,
+            Ordinal = 999,
+            SentenceText = "He is married with 3 children aged 13, 10 and 8",
+            RelevanceLabel = "maybe",
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var svc = Service(db, new ScriptedGateway());
+
+        var dto = await svc.ImportAsync(scenarioId, WritingModelAnswerBatchTests.ExemplarText(), "admin-1");
+
+        Assert.Equal("Ready", dto.Status);
+        var row = await db.WritingTaskModelAnswers.AsNoTracking().SingleAsync(a => a.ScenarioId == scenarioId);
+        Assert.DoesNotContain("minor_naming_convention", row.ValidationReportJson);
+    }
+
+    [Fact]
+    public void Minor_Naming_Rule_Still_Fires_For_A_Genuine_Child_With_A_Titled_Re_Line()
+    {
+        var engine = new WritingRuleEngine(new RulebookLoader());
+        var letter = WritingModelAnswerBatchTests.ExemplarText().Replace("Re: Mr Michael Weir", "Re: Master Tommy Atkins");
+
+        var findings = engine.Lint(new WritingLintInput(
+            LetterText: letter,
+            LetterType: "LT-RR",
+            PatientAge: 9,
+            PatientIsMinor: true,
+            Profession: ExamProfession.Medicine,
+            IsModelAnswer: true));
+
+        Assert.Contains(findings, f => f.RuleId.EndsWith("minor_naming_convention", StringComparison.Ordinal));
+    }
+
+    // ── Rev8 §7.2 — register_colloquial must not punish wording the case
+    // notes themselves use (Weir: "tired, stressed and sluggish"), because
+    // the grounding/fidelity rules demand that exact wording. ──
+
+    [Fact]
+    public void Register_Colloquial_Exempts_Verbatim_Case_Note_Wording_But_Still_Fires_On_Unsourced_Slang()
+    {
+        var engine = new WritingRuleEngine(new RulebookLoader());
+        var letter = WritingModelAnswerBatchTests.ExemplarText().Replace("with fatigue and stress", "with tired and stressed");
+        const string notes = "On 29.06.14 he presented for a general check-up, reporting feeling run down: tired, stressed and sluggish";
+
+        var withNotes = engine.Lint(new WritingLintInput(
+            LetterText: letter, LetterType: "LT-RR", CaseNotesText: notes,
+            Profession: ExamProfession.Medicine, IsModelAnswer: true));
+        Assert.DoesNotContain(withNotes, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
+
+        var withoutNotes = engine.Lint(new WritingLintInput(
+            LetterText: letter, LetterType: "LT-RR",
+            Profession: ExamProfession.Medicine, IsModelAnswer: true));
+        Assert.Contains(withoutNotes, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
+
+        var slang = engine.Lint(new WritingLintInput(
+            LetterText: WritingModelAnswerBatchTests.ExemplarText().Replace("He smokes", "His kids say he smokes"),
+            LetterType: "LT-RR", CaseNotesText: notes,
+            Profession: ExamProfession.Medicine, IsModelAnswer: true));
+        Assert.Contains(slang, f => f.RuleId.EndsWith("register_colloquial", StringComparison.Ordinal));
+    }
+
+    // ── Import semantic flag — an import whose content has already been
+    // semantically reviewed may be stored on the deterministic gate alone
+    // (owner directive: no paid AI call per import). ──
+
+    [Fact]
+    public async Task Import_Without_Semantic_Does_Not_Call_The_Semantic_Validator_And_Still_Stores_Ready()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var semantic = new FixedSemantic(new WritingModelAnswerSemanticResult(
+            Passed: true, Unavailable: false, Violations: [], Model: "test", RulebookVersion: null, Error: null));
+        var svc = Service(db, new ScriptedGateway(), semantic);
+
+        var dto = await svc.ImportAsync(scenarioId, WritingModelAnswerBatchTests.ExemplarText(), "admin-1", includeSemantic: false);
+
+        Assert.Equal("Ready", dto.Status);
+        Assert.Equal(0, semantic.Calls);
+
+        var stored = await svc.ImportAsync(scenarioId, WritingModelAnswerBatchTests.ExemplarText(), "admin-1");
+        Assert.Equal("Ready", stored.Status);
+        Assert.Equal(1, semantic.Calls);
+    }
+
+
     private sealed class FixedSemantic(WritingModelAnswerSemanticResult result) : IWritingModelAnswerSemanticValidator
     {
         public int Calls { get; private set; }

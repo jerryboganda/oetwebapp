@@ -517,6 +517,11 @@ public sealed partial class WritingRuleEngine
         var count = 0;
         foreach (Match m in ColloquialRe.Matches(s.Body))
         {
+            // Rev8 §7.2 (Weir): "tired"/"sluggish" came verbatim from the case
+            // notes while grounding demanded source faithfulness — the two
+            // rules were mutually unsatisfiable. Wording the source itself
+            // uses is source-faithful, not informal.
+            if (input.CaseNotesText.Contains(m.Value, StringComparison.OrdinalIgnoreCase)) continue;
             yield return new LintFinding(rule.Id, input.IsModelAnswer ? RuleSeverity.Critical : RuleSeverity.Minor,
                 $"\"{m.Value}\" is informal or redundant for a clinical letter. Use a professional, source-faithful form (e.g. fatigue, MRI, felt a popping sensation, does not currently have a GP).",
                 Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);

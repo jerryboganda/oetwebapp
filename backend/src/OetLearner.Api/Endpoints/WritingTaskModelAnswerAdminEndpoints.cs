@@ -126,7 +126,7 @@ public static class WritingTaskModelAnswerAdminEndpoints
         CancellationToken ct)
     {
         var adminId = GetUserId(user) ?? "system";
-        var answer = await service.ImportAsync(id, body.LetterText, adminId, ct);
+        var answer = await service.ImportAsync(id, body.LetterText, adminId, body.IncludeSemantic, ct);
         return Results.Ok(answer);
     }
 
@@ -191,7 +191,11 @@ public static class WritingTaskModelAnswerAdminEndpoints
             : Results.Ok(answer);
     }
 
-    public sealed record ImportModelAnswerRequest(string LetterText);
+    // IncludeSemantic defaults to true — the historical behaviour (a full
+    // gate including the LLM semantic pass before anything is stored Ready).
+    // An admin import that has already been semantically reviewed may pass
+    // false to store on the deterministic gate alone.
+    public sealed record ImportModelAnswerRequest(string LetterText, bool IncludeSemantic = true);
 
     private static string? GetUserId(ClaimsPrincipal user)
     {

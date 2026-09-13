@@ -1,7 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -142,7 +141,7 @@ public interface IWritingTaskModelAnswerService
     /// deterministic rule and the semantic validator — before it can ever be
     /// marked Ready). Never bypasses any check GenerateAsync applies.
     /// </summary>
-    Task<WritingTaskModelAnswerDto> ImportAsync(Guid scenarioId, string letterText, string adminUserId, CancellationToken ct = default);
+    Task<WritingTaskModelAnswerDto> ImportAsync(Guid scenarioId, string letterText, string adminUserId, bool includeSemantic = true, CancellationToken ct = default);
 
     /// <summary>
     /// Runs the full Model Answer gate on a candidate text WITHOUT storing
@@ -493,7 +492,7 @@ public sealed class WritingTaskModelAnswerService(
         }
     }
 
-    public async Task<WritingTaskModelAnswerDto> ImportAsync(Guid scenarioId, string letterText, string adminUserId, CancellationToken ct = default)
+    public async Task<WritingTaskModelAnswerDto> ImportAsync(Guid scenarioId, string letterText, string adminUserId, bool includeSemantic = true, CancellationToken ct = default)
     {
         var scenario = await db.WritingScenarios.AsNoTracking().FirstOrDefaultAsync(s => s.Id == scenarioId, ct)
             ?? throw ApiException.NotFound("writing_scenario_not_found", "Writing task was not found.");
@@ -527,7 +526,7 @@ public sealed class WritingTaskModelAnswerService(
         }
 
         var letter = NormaliseLetterText(letterText);
-        var report = await RunGateAsync(scenario, sentences, profession, letter, includeSemantic: true, adminUserId, ct);
+        var report = await RunGateAsync(scenario, sentences, profession, letter, includeSemantic, adminUserId, ct);
         if (!report.Passed)
         {
             logger.LogWarning(
@@ -1246,12 +1245,16 @@ public sealed class WritingTaskModelAnswerService(
         var grounding = WritingModelAnswerGroundingValidator.Validate(letterText, facts);
         var caseNotesAll = string.Join("\n", facts);
 
+        var patientAge = WritingPatientAgeExtractor.Extract(caseNotesAll);
         var lint = WritingRuleEngine.ModelAnswerBlockingFindings(ruleEngine.Lint(new WritingLintInput(
             LetterText: letterText,
             LetterType: scenario.LetterType,
-            PatientAge: ExtractPatientAge(caseNotesAll),
-            PatientIsMinor: ExtractPatientAge(caseNotesAll) is < 18,
+            PatientAge: patientAge,
+            PatientIsMinor: patientAge is < 18,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(caseNotesAll),
+            // Case-note wording is exempt from register_colloquial (Rev8 §7.2):
+            // the fidelity rules demand verbatim source terms.
+            CaseNotesText: caseNotesAll,
             Profession: profession,
             IsModelAnswer: true)));
         var findings = lint.Select(f => new WritingModelAnswerFindingDto(
@@ -1346,14 +1349,6 @@ public sealed class WritingTaskModelAnswerService(
     /// </summary>
     internal static string NormaliseLetterText(string text)
         => (text ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n').Trim();
-
-    private static int? ExtractPatientAge(string caseNotes)
-    {
-        var m = Regex.Match(caseNotes ?? string.Empty, @"\b(?:age|aged)\s*:?\s*(\d{1,3})\b|\b(\d{1,3})[\s-]*(?:years?|yrs?)[\s-]*old\b", RegexOptions.IgnoreCase);
-        if (!m.Success) return null;
-        var value = m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value;
-        return int.TryParse(value, out var age) && age is > 0 and < 120 ? age : null;
-    }
 
     private async Task<List<WritingScenarioStructuredSentence>> LoadSentencesAsync(Guid scenarioId, CancellationToken ct)
         => await db.WritingScenarioStructuredSentences.AsNoTracking()

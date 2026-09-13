@@ -740,12 +740,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
             throw ApiException.Conflict(
                 "writing_assessment_profession_unsupported",
                 $"No supported Writing profession pack is available for '{preflight.Profession}'.");
+        var patientAge = WritingPatientAgeExtractor.Extract(preflight.CaseNotesSnapshot);
         var ruleFindings = ruleEngine.Evaluate(new WritingLintInput(
             LetterText: submission.LetterContent,
             LetterType: preflight.LetterType,
             RecipientSpecialty: preflight.TaskUnderstanding?.RecipientCategory,
-            PatientAge: ExtractPatientAge(preflight.CaseNotesSnapshot),
-            PatientIsMinor: ExtractPatientAge(preflight.CaseNotesSnapshot) is < 18,
+            PatientAge: patientAge,
+            PatientIsMinor: patientAge is < 18,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(preflight.CaseNotesSnapshot),
             Profession: profession));
         ruleFindings = ruleFindings
@@ -773,17 +774,6 @@ public sealed class WritingSubmissionEvaluationPipeline(
             estimatedPracticeScore,
             grade.ModelUsed,
             "unreleased"));
-    }
-
-    private static int? ExtractPatientAge(string caseNotes)
-    {
-        var match = System.Text.RegularExpressions.Regex.Match(
-            caseNotes ?? string.Empty,
-            @"\b(?:age|aged)\s*:?\s*(?<age>\d{1,3})\b",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        return match.Success && int.TryParse(match.Groups["age"].Value, out var age)
-            ? age
-            : null;
     }
 
     private async Task PersistBlockedAssessmentReportAsync(
