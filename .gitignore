@@ -49,7 +49,7 @@ _gen_*.diff
 _review_focus.diff
 vitest-output.txt
 vitest-verbose-output.txt
-tsconfig.tsbuildinfo
+*.tsbuildinfo
 .env*
 !.env.example
 !.env.staging.example

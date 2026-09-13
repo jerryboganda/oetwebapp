@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { WebNotAllowedNotice } from './web-not-allowed-notice';
 import { PLATFORM_ARIA_LABELS, PLATFORM_ORDER } from '@/components/marketing/store-badges';
+import { IOS_DOWNLOAD_URL } from '@/lib/app-downloads';
 
 /**
  * Regression coverage for the mobile "App Required for Video Playback" gate
@@ -34,10 +35,20 @@ describe('WebNotAllowedNotice on a real mobile viewport', () => {
     expect(classes).not.toContain('py-12');
   });
 
-  it('renders every platform download button, visible and tappable', () => {
+  it('renders every platform download badge, with iOS inert until an Apple channel exists', () => {
     render(<WebNotAllowedNotice />);
     for (const platform of PLATFORM_ORDER) {
-      expect(screen.getByRole('link', { name: PLATFORM_ARIA_LABELS[platform] })).toBeInTheDocument();
+      const label = PLATFORM_ARIA_LABELS[platform];
+      // Windows / Mac / Android always resolve to a real installer. iOS has no
+      // Apple-approved channel yet, so it must render as an inert badge rather
+      // than a download that cannot install.
+      if (platform === 'ios' && !IOS_DOWNLOAD_URL) {
+        const ios = screen.getByLabelText(new RegExp(label));
+        expect(ios.tagName).toBe('SPAN');
+        expect(ios).toHaveAttribute('aria-disabled', 'true');
+        continue;
+      }
+      expect(screen.getByRole('link', { name: label })).toBeInTheDocument();
     }
   });
 

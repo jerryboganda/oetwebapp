@@ -2,27 +2,63 @@ import { render, screen } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import GetAppPage from './page';
+import {
+  ANDROID_INSTALL_URL,
+  IOS_DOWNLOAD_URL,
+  MAC_DOWNLOAD_URL,
+  WINDOWS_DOWNLOAD_URL,
+} from '@/lib/app-downloads';
 
 vi.mock('next/image', () => ({
   default: (props: ComponentProps<'img'>) => <img alt="" {...props} />,
 }));
 
+/**
+ * The badge's height comes from PlatformDownloadBadge's sizeClassName, which is
+ * responsive (`h-14` below sm:, `sm:h-20` above it) — the 8 Sep 2026 mobile
+ * brief replaced the old unconditional `h-20`. Assert the tokens the component
+ * actually renders so this keeps checking "every badge is the same size"
+ * instead of a class that no longer exists.
+ */
+const BADGE_SIZE_CLASSES = ['h-14', 'sm:h-20', 'rounded-2xl', 'w-full', 'max-w-[220px]'];
+
+const IOS_BADGE_NAME = 'Download the OET app on the App Store';
+
 describe('GetAppPage download badges', () => {
-  it('keeps all platform badges aligned and points iOS at the future release resolver', () => {
+  it('keeps the desktop and Android badges aligned on their one-click installers', () => {
     render(<GetAppPage />);
 
-    const badges = [
-      screen.getByRole('link', { name: 'Download the OET app for Windows' }),
-      screen.getByRole('link', { name: 'Download the OET app for Mac' }),
-      screen.getByRole('link', { name: 'Get the OET app on Google Play' }),
-      screen.getByRole('link', { name: 'Download the OET app on the App Store' }),
+    // One-click: each badge resolves straight to that platform's signed
+    // installer, never to a chooser that asks which build to pick.
+    const badges: Array<[string, string]> = [
+      ['Download the OET app for Windows', WINDOWS_DOWNLOAD_URL],
+      ['Download the OET app for Mac', MAC_DOWNLOAD_URL],
+      ['Get the OET app on Google Play', ANDROID_INSTALL_URL],
     ];
 
-    const expectedHrefs = ['/api/download/windows', '/api/download/mac', '/get-app/android-install', '/api/download/ios'];
-    badges.forEach((badge, index) => {
-      expect(badge).toHaveClass('w-full', 'max-w-[220px]', 'justify-center');
-      expect(badge).toHaveClass('h-20', 'rounded-2xl');
-      expect(badge).toHaveAttribute('href', expectedHrefs[index]);
-    });
+    for (const [name, href] of badges) {
+      const badge = screen.getByRole('link', { name });
+      expect(badge).toHaveClass(...BADGE_SIZE_CLASSES);
+      expect(badge).toHaveAttribute('href', href);
+    }
+  });
+
+  it('only exposes iOS as a link once an Apple-approved channel exists', () => {
+    render(<GetAppPage />);
+
+    if (IOS_DOWNLOAD_URL) {
+      const ios = screen.getByRole('link', { name: IOS_BADGE_NAME });
+      expect(ios).toHaveAttribute('href', IOS_DOWNLOAD_URL);
+      expect(ios).toHaveClass(...BADGE_SIZE_CLASSES);
+      return;
+    }
+
+    // No App Store / TestFlight URL configured yet. The badge must stay inert
+    // rather than offer a download that cannot install — the raw
+    // /api/download/ios link is deliberately gone.
+    const ios = screen.getByLabelText(new RegExp(IOS_BADGE_NAME));
+    expect(ios.tagName).toBe('SPAN');
+    expect(ios).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByRole('link', { name: IOS_BADGE_NAME })).toBeNull();
   });
 });
