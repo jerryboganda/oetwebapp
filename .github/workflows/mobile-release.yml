@@ -220,7 +220,15 @@ jobs:
       # live bricks updaters with "App not installed" until manual reinstall
       # (same user-facing symptom as a signature conflict). Play enforces this
       # server-side; the VPS feed needs this explicit check.
+      #
+      # Two very different cases used to share a single `exit 1`:
+      #   expect <  live  -> a real downgrade. Refuse, loudly.
+      #   expect == live  -> the identical build is already published. Re-running
+      #                      a release for an unchanged versionCode is a no-op,
+      #                      not a defect; failing here painted the whole run red
+      #                      and trained everyone to ignore the signal.
       - name: Reject VPS feed downgrade
+        id: feed_gate
         env:
           EXPECT_VERSION_CODE: ${{ inputs.version_code }}
         run: |
@@ -228,12 +236,19 @@ jobs:
           feed_json=$(curl --fail --silent --show-error --location 'https://app.oetwithdrhesham.co.uk/api/releases/native?platform=android' || echo '{}')
           live_code=$(node -e "const f = JSON.parse(process.argv[1] || '{}'); console.log(Number(f.versionCode) || 0)" "$feed_json")
           echo "Live feed versionCode: ${live_code}; releasing: ${EXPECT_VERSION_CODE}"
-          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -le "$live_code" ]; then
-            echo "::error::Release version_code ${EXPECT_VERSION_CODE} is not newer than the live VPS feed (${live_code}). Bump it."
+          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -lt "$live_code" ]; then
+            echo "::error::Release version_code ${EXPECT_VERSION_CODE} is OLDER than the live VPS feed (${live_code}). Refusing to downgrade."
             exit 1
           fi
+          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -eq "$live_code" ]; then
+            echo "::notice::versionCode ${EXPECT_VERSION_CODE} is already live on the VPS feed; nothing to upload."
+            echo "already_live=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "already_live=false" >> "$GITHUB_OUTPUT"
 
       - name: Upload latest Android release to the VPS
+        if: steps.feed_gate.outputs.already_live != 'true'
         env:
           SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
           CHANNEL: android
@@ -452,7 +467,11 @@ jobs:
             --public-base=https://app.oetwithdrhesham.co.uk \
             --out=stage/current.json
 
+      # See the Android twin above: `expect == live` is an idempotent republish
+      # and must skip the upload, not fail the job. Only `expect < live` is a
+      # real downgrade worth refusing.
       - name: Reject VPS feed downgrade
+        id: feed_gate
         env:
           EXPECT_VERSION_CODE: ${{ inputs.version_code }}
         run: |
@@ -460,12 +479,19 @@ jobs:
           feed_json=$(curl --fail --silent --show-error --location 'https://app.oetwithdrhesham.co.uk/api/releases/native?platform=ios' || echo '{}')
           live_code=$(node -e "const f = JSON.parse(process.argv[1] || '{}'); console.log(Number(f.versionCode) || 0)" "$feed_json")
           echo "Live feed versionCode: ${live_code}; releasing: ${EXPECT_VERSION_CODE}"
-          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -le "$live_code" ]; then
-            echo "::error::Release version_code ${EXPECT_VERSION_CODE} is not newer than the live VPS feed (${live_code}). Bump it."
+          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -lt "$live_code" ]; then
+            echo "::error::Release version_code ${EXPECT_VERSION_CODE} is OLDER than the live VPS feed (${live_code}). Refusing to downgrade."
             exit 1
           fi
+          if [ "$live_code" -gt 0 ] && [ "${EXPECT_VERSION_CODE}" -eq "$live_code" ]; then
+            echo "::notice::versionCode ${EXPECT_VERSION_CODE} is already live on the VPS feed; nothing to upload."
+            echo "already_live=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "already_live=false" >> "$GITHUB_OUTPUT"
 
       - name: Upload latest iOS release to the VPS
+        if: steps.feed_gate.outputs.already_live != 'true'
         env:
           SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
           CHANNEL: ios
