@@ -740,6 +740,29 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     }
 
     [Fact]
+    public void R2_19_Dob_Is_Not_A_Treatment_Date_Ceiling()
+    {
+        // Greerson's notes carry "DOB 09.10.1951" and no later dates; the
+        // detector treated the birth date as the latest documented treatment
+        // date, so any sane letter date was "an invented date". A DOB is an
+        // identity fact, not a treatment-date ceiling: with the DOB excluded,
+        // a letter dated after the admission passes.
+        const string notes = "Patient: Mrs Maeve Greerson. DOB 09.10.1951. " +
+            "Admitted 24 July 1951 with dehydration. Review in 2/52.";
+        var letter = Weir.Replace("9 August 2014", "15 October 1951");
+        AssertRuleDoesNotFire(Lint(letter, "LT-RR", caseNotes: notes), "letter_date_unsupported");
+    }
+
+    [Fact]
+    public void R2_19_Letter_Date_Still_Fires_When_Truly_Unsupported()
+    {
+        const string notes = "Patient: Mrs Maeve Greerson. DOB 09.10.1951. " +
+            "Admitted 24 July 1951 with dehydration. Review in 2/52.";
+        var letter = Weir.Replace("9 August 2014", "15 October 2009");
+        AssertRuleFires(Lint(letter, "LT-RR", caseNotes: notes), "letter_date_unsupported");
+    }
+
+    [Fact]
     public void R2_19_Genuine_Note_Form_Drug_Voice_Still_Fires()
     {
         var letter = Inject(McDonald,

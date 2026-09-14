@@ -1303,6 +1303,15 @@ public sealed partial class WritingRuleEngine
         foreach (Match m in DateTokenRe.Matches(notes))
         {
             if (!TryParseDateToken(m, out var noteDate)) continue;
+            // Revalidation fix (2026-09-14, part 3): a date of birth is an
+            // identity fact, not a documented treatment date. Greerson's
+            // notes carry "DOB 09.10.1951", which made every sane letter
+            // date "later than every documented date" — an invented-date
+            // finding on a perfectly supported letter. Birth dates are
+            // excluded from the treatment-date ceiling.
+            var windowStart = Math.Max(0, m.Index - 40);
+            var window = notes.Substring(windowStart, Math.Min(60, notes.Length - windowStart));
+            if (Regex.IsMatch(window, @"(?:dob|date\s+of\s+birth|born)", RegexOptions.IgnoreCase)) continue;
             if (latestNoteDate is null || noteDate > latestNoteDate) latestNoteDate = noteDate;
         }
         if (latestNoteDate is null || letterDate <= latestNoteDate.Value) yield break;
