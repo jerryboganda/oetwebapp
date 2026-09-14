@@ -117,15 +117,17 @@ Newtown
 Dear Dr Still,
 Re: Mr David Taylor, DOB: 1 August 1965
 
-I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with an acute gout flare and an associated tophus.
+I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with a gout flare and an associated tophus.
 
-Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure of 120/80 mmHg, heart rate of 90 bpm and respiratory rate of 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, also known as Lengout, 1 mg, and NSAIDs.
+Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure 120/80 mmHg, heart rate 90 bpm and respiratory rate 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, 1 mg, and NSAIDs.
 
-Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine, also known as Lengout. He experienced a severe attack and a further attack in 2010; kidney stones were noted that year. He remained free of attacks from 2011 to 2020. He was diagnosed with depression in 2011, possibly gout-related, treated with fluoxetine since. His brother has gout, and his father died of kidney failure.
+Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine. He experienced a severe attack in June 2010 and a further attack in September 2010. Kidney stones were also noted that year. He remained free of attacks from 2011 to 2020.
 
-I would be grateful if you could consider possible tophus removal at your earliest convenience.
+Mr Taylor was diagnosed with depression in 2011, possibly related to gout, and has taken fluoxetine since then. His brother has gout, and his father died of kidney failure.
 
-Please do not hesitate to contact me with any queries.
+I would be grateful if you could consider tophus removal, if clinically indicated, at your earliest convenience.
+
+Should there be any queries, kindly do not hesitate to contact me.
 
 Yours sincerely,
 
@@ -195,17 +197,19 @@ Newtown
 9 August 2014
 
 Dear Dr McLaren,
-Re: Mr Michael Weir, DOB: 20 September 1970
+Re: Mr Michael Weir
 
-I am writing to request your neurological assessment and management of Mr Weir, who has presented with features suggestive of multiple sclerosis.
+I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.
 
-On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes of the weakness and hyporeflexia.
+On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. His blood pressure was 88/70 mmHg. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes.
 
-Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. Investigations showed a cholesterol of 6.37 mmol/L and a full blood count with low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months. He has depression, treated with sertraline hydrochloride since September 2012, continues to smoke and has long been overweight.
+Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. The cholesterol level was 6.37 mmol/L, and the full blood count showed low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months.
 
-I would be grateful if you could assess Mr Weir and advise on further management, including possible MRI.
+Mr Weir has depression and has taken sertraline hydrochloride since September 2012. He continues to smoke. He has been overweight for many years.
 
-Please do not hesitate to contact me with any queries.
+I would be grateful if you could consider MRI if clinically indicated.
+
+Should there be any queries, kindly do not hesitate to contact me.
 
 Yours sincerely,
 
@@ -268,17 +272,17 @@ Stillwater
 Dear Dr Bradbury,
 Re: Ms Isabel Garcia, DOB: 1 January 1995
 
-I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of her close contacts.
+I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.
 
-Ms Garcia presented with a one-week history of painful, stiff joints, headache, neck stiffness, photophobia and bruising. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. Blood tests showed a white cell count of 14.0x10^9/L and a CRP of 150. Lumbar puncture showed 1000 white cells with polymorphonuclear predominance, reduced glucose of 10 mg/dL and elevated protein of 70 mg/dL. Culture confirmed Neisseria meningitidis.
+Ms Garcia presented with a one-week history of painful, stiff joints, headache and photophobia. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. The white cell count was 14.0x10^9/L and the C-reactive protein level was 150. Lumbar puncture showed a white cell count of 1000 with polymorphonuclear predominance, reduced glucose 10 mg/dL and elevated protein 70 mg/dL. Culture confirmed Neisseria meningitidis.
 
-Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily; dexamethasone was continued six-hourly for four days. Treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
+Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily. Dexamethasone was continued six-hourly for four days. Following lumbar puncture results, treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
 
-Ms Garcia's case was notified to the Department of Human Services; family immunisation was discussed.
+The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.
 
-I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care for unexplained illness and consider chemoprophylaxis.
+I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.
 
-Please do not hesitate to contact me with any queries.
+Should there be any queries, kindly do not hesitate to contact me.
 
 Yours sincerely,
 
@@ -406,7 +410,7 @@ Re: Mrs Melanie Wright, DOB: 8 June 1973
 
 I am writing to refer Mrs Wright, who does not currently have a GP, for investigation of suspected further left medial meniscal damage.
 
-Two weeks ago, Mrs Wright turned suddenly while walking and felt a popping sensation in her left knee, followed by delayed swelling. She iced and rested the knee and took paracetamol. She has had intermittent locking, inability to fully straighten the knee and disturbed sleep; however, there has been no giving way.
+Two weeks ago, Mrs Wright turned suddenly while walking and felt a popping sensation in her left knee, followed by delayed swelling. She iced and rested the knee and took paracetamol. She has had intermittent locking, inability to fully straighten the knee and disturbed sleep. However, there has been no giving way.
 
 On examination, Mrs Wright was limping and unable to straighten the knee, with difficulty ascending stairs. Active range lacked full extension and flexion, and passive extension increased pain, with hamstring tightness. Ligament testing was normal, with tenderness on the anteromedial joint line. She was advised to avoid weight-bearing and to swim for fitness.
 
@@ -428,7 +432,7 @@ Physiotherapist
     [Fact]
     public void Validator_Version_Is_Stamped_And_RulePack_Fingerprint_Is_Stable()
     {
-        Assert.Equal("writing-rules.owner-addendum.2026-09-14.1", WritingRuleEngine.ValidatorVersion);
+        Assert.Equal("writing-rules.owner-addendum-two.2026-09-14.2", WritingRuleEngine.ValidatorVersion);
         var a = _engine.RulePackFingerprint(ExamProfession.Medicine);
         var b = _engine.RulePackFingerprint(ExamProfession.Medicine);
         Assert.StartsWith("rp-", a);

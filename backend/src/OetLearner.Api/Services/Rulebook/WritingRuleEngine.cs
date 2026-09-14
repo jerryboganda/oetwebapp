@@ -21,6 +21,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "address_punctuation",
         "age_not_duplicated_in_intro",
         "ago_requires_past_simple",
+        "background_paragraph_placement",
         "blank_before_closing_phrase",
         "blank_line_after_re_line",
         "blank_line_between_paragraphs",
@@ -29,6 +30,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "body_forbidden_phrase_yesterday",
         "body_no_todays_date",
         "body_uses_last_name_only",
+        "brand_generic_duplication",
+        "canonical_contact_template",
         "cancer_suspected_flagged_urgent",
         "closure_contact_offer",
         "closure_contains_management",
@@ -48,6 +51,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "discharge_intro_no_identity",
         "discharge_intro_template",
         "discharge_all_investigations_listed",
+        "discharge_function_missed",
         "discharge_language_unsupported",
         "discharge_omits_knownto_gp",
         "discharge_plan_present",
@@ -89,11 +93,15 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "paragraph_start_patient_name",
         "re_line_age_dob",
         "re_line_full_name",
+        "re_line_identity_unsupported",
         "recipient_name_mismatch",
         "register_colloquial",
         "relationship_label_patient_reference",
         "respiratory_rate_unit_style",
+        "result_head_noun",
+        "result_noun_fragment",
         "results_comma_splice",
+        "role_salutation_matches_task",
         "salutation_last_name_only",
         "salutation_re_adjacent",
         "sentence_length_guard",
@@ -101,6 +109,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "signoff_designation_present",
         "signoff_no_invented_name",
         "since_requires_present_perfect",
+        "supine_position_wording",
         "surgery_past_simple",
         "treatment_change_grammar",
         "treatment_for_not_from",
@@ -110,6 +119,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "urgent_token_not_repeated",
         "vague_clinical_object",
         "value_unit_spacing",
+        "vital_sign_interpretation_unsupported",
         "visit_content_tense_basic_check",
         "visit_paragraphization_check",
         "year_not_abbreviated",
@@ -233,6 +243,20 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         ["letter_date_unsupported"] = RuleSeverity.Critical,
         ["recipient_name_mismatch"] = RuleSeverity.Critical,
         ["semicolon_overuse"] = RuleSeverity.Major,
+        // Owner Clarifications Addendum TWO (14 Sep 2026) — OA2-01..OA2-20.
+        // Source-fidelity and structural absolutes are Critical; grammar,
+        // register and canonical house forms are Major (and are further
+        // gated to Model Answer mode inside their own detectors).
+        ["discharge_function_missed"] = RuleSeverity.Critical,
+        ["result_noun_fragment"] = RuleSeverity.Major,
+        ["supine_position_wording"] = RuleSeverity.Major,
+        ["result_head_noun"] = RuleSeverity.Major,
+        ["background_paragraph_placement"] = RuleSeverity.Major,
+        ["vital_sign_interpretation_unsupported"] = RuleSeverity.Critical,
+        ["role_salutation_matches_task"] = RuleSeverity.Critical,
+        ["canonical_contact_template"] = RuleSeverity.Major,
+        ["re_line_identity_unsupported"] = RuleSeverity.Critical,
+        ["brand_generic_duplication"] = RuleSeverity.Major,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -565,6 +589,17 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "letter_date_unsupported" => DetectLetterDateUnsupported,
         "recipient_name_mismatch" => DetectRecipientNameMismatch,
         "semicolon_overuse" => DetectSemicolonOveruse,
+        // Owner Clarifications Addendum TWO (OA2-01..OA2-20).
+        "discharge_function_missed" => DetectDischargeFunctionMissed,
+        "result_noun_fragment" => DetectResultNounFragment,
+        "supine_position_wording" => DetectSupinePositionWording,
+        "result_head_noun" => DetectResultHeadNoun,
+        "background_paragraph_placement" => DetectBackgroundParagraphPlacement,
+        "vital_sign_interpretation_unsupported" => DetectVitalSignInterpretationUnsupported,
+        "role_salutation_matches_task" => DetectRoleSalutationMatchesTask,
+        "canonical_contact_template" => DetectCanonicalContactTemplate,
+        "re_line_identity_unsupported" => DetectReLineIdentityUnsupported,
+        "brand_generic_duplication" => DetectBrandGenericDuplication,
         "treatment_for_not_from" => DetectForbidden(@"\b(treated|admitted|referred|managed)\s+from\b", "Use 'treatment/admission/referral for ...', not 'from ...'."),
         "non_medical_no_jargon" => DetectNonMedicalJargon,
         "sentence_length_guard" => DetectSentenceLength,
@@ -862,8 +897,17 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     // note (it is ordinary English mid-sentence, so never a heavy penalty).
     // "also known as" names a drug/condition (OWN-W-005 example "dalteparin,
     // also known as Fragmin,"), it is not a linking device.
+    // Addendum Two: "also" is banned as a LINKING DEVICE, not as an adverb.
+    // The owner's own canonical Taylor sentence is "Kidney stones were also
+    // noted that year." — blocking that was the rule over-reaching. Only the
+    // connective positions remain: sentence-initial (AvoidLinkerSentenceStartRe
+    // above), ", also ..." and "and also ...".
     private static readonly Regex AvoidLinkerAnywhereRe = new(
-        @"\b(but|hence|furthermore|moreover|also(?!\s+known\s+as\b))\b|,\s*(so)\s+(?!that\b|as\b|far\b|much\b|many\b|long\b)",
+        @"\b(but|hence|furthermore|moreover)\b|,\s*(so)\s+(?!that\b|as\b|far\b|much\b|many\b|long\b)",
+        RegexOptions.IgnoreCase);
+
+    private static readonly Regex AlsoConnectiveRe = new(
+        @"(?:,\s*|\band\s+)(also)\b(?!\s+known\s+as\b)",
         RegexOptions.IgnoreCase);
 
     private static readonly Regex AvoidLinkerCandidateMajorRe = new(
@@ -891,8 +935,17 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             {
                 var g = m.Groups[1].Success ? m.Groups[1] : m.Groups[2];
                 if (reported.Contains(g.Index)) continue;
+                reported.Add(g.Index);
                 yield return new LintFinding(rule.Id, RuleSeverity.Critical,
                     $"Model Answers avoid \"{g.Value}\" as a linking device — use however/therefore/thus/consequently/subsequently/in addition/additionally where logically appropriate, or a direct sentence.",
+                    Quote: g.Value, Start: g.Index, End: g.Index + g.Length);
+            }
+            foreach (Match m in AlsoConnectiveRe.Matches(s.Body))
+            {
+                var g = m.Groups[1];
+                if (!reported.Add(g.Index)) continue;
+                yield return new LintFinding(rule.Id, RuleSeverity.Critical,
+                    "Model Answers avoid \"also\" as a linking device — use \"in addition\"/\"additionally\" or a direct sentence. (An adverbial \"also\" inside a clause, as in \"were also noted\", is correct English and is not flagged.)",
                     Quote: g.Value, Start: g.Index, End: g.Index + g.Length);
             }
             yield break;
@@ -1008,8 +1061,11 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         if (s.SalutationIndex is null || s.YoursIndex is null) yield break;
         var salutation = s.Lines[s.SalutationIndex.Value];
         var yours = s.Lines[s.YoursIndex.Value];
-        var isAnonymous = Regex.IsMatch(salutation, @"Sir/?Madam|Dear Doctor\b", RegexOptions.IgnoreCase)
-                          && !Regex.IsMatch(salutation, @"Dr\s+\w+", RegexOptions.IgnoreCase);
+        // OA2-17 (14 Sep 2026): a ROLE salutation ("Dear Admissions Officer,")
+        // names no person, so the letter still closes "Yours faithfully,".
+        // Reading the role as a name made this rule fire Critical on every
+        // correct role-addressed transfer letter.
+        var isAnonymous = SalutationIsUnnamedRecipient(salutation);
         var usesSincerely = Regex.IsMatch(yours, @"sincerely", RegexOptions.IgnoreCase);
         if (isAnonymous && usesSincerely)
             yield return new LintFinding(rule.Id, rule.Severity,
@@ -1813,7 +1869,10 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         // conventionally never needs "mmHg" spelled out) each already carry
         // their own implicit unit \u2014 added 2026-09-06 after this flagged
         // "pulse 66/min" and "blood pressure 120/60" as missing a unit.
-        var unitRe = new Regex(@"(mmol\/l|mg\/dl|kg|g|cm|mm|mmHg|bpm|\/min|\u00b0c|celsius|mmol|%|\d+\s*\/\s*\d+)", RegexOptions.IgnoreCase);
+        // The bare alternatives used to be unanchored, so the letter "g" inside
+        // the KEYWORD itself satisfied the check: glucose, haemoglobin, weight
+        // and height could never fire. Word boundaries make every keyword live.
+        var unitRe = new Regex(@"(mmol\/l|mg\/dl|g\/dl|g\/l|\bmg\b|\bkg\b|\bg\b|\bcm\b|\bmm\b|\bmL\b|mmHg|bpm|breaths\/min|\/min|\u00b0c|celsius|mmol|%|\d+\s*\/\s*\d+)", RegexOptions.IgnoreCase);
         var findings = 0;
         foreach (var keyword in keywords)
         {

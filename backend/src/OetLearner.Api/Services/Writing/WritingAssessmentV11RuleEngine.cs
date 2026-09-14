@@ -167,6 +167,17 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["year_not_abbreviated"] = Layout,
             ["yours_sincerely_capitalisation"] = Layout,
             ["yours_sincerely_vs_faithfully"] = Layout,
+            // Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20.
+            ["discharge_function_missed"] = Purpose,
+            ["result_noun_fragment"] = Language,
+            ["supine_position_wording"] = Language,
+            ["result_head_noun"] = Language,
+            ["background_paragraph_placement"] = Layout,
+            ["vital_sign_interpretation_unsupported"] = Content,
+            ["role_salutation_matches_task"] = Layout,
+            ["canonical_contact_template"] = Layout,
+            ["re_line_identity_unsupported"] = Content,
+            ["brand_generic_duplication"] = Excess,
         };
 
     /// <summary>

@@ -86,7 +86,7 @@ public sealed class WritingUltimateFinalRegressionFixtureTests
     [Fact]
     public void House_Style_And_Descriptor_Engine_Are_Stamped_Ultimate_Final()
     {
-        Assert.Equal("owner-addendum-2026-09-14", WritingRev8HouseStyle.Version);
+        Assert.Equal("owner-addendum-two-2026-09-14", WritingRev8HouseStyle.Version);
         Assert.Contains("CANDIDATE FALSE-POSITIVE FIREWALL", WritingRev8HouseStyle.CandidateGradingRules);
         Assert.Contains("never manufacture a finding", WritingRev8HouseStyle.CandidateGradingRules);
         Assert.Contains("450-500", WritingOetDescriptors.DescriptorEngine);
@@ -111,11 +111,11 @@ Re: Mr Michael Weir, DOB: 4 June 1978
 
 I am writing to refer Mr Weir, who has experienced recurrent headaches with visual disturbance over the past two months despite simple analgesia.
 
-Mr Weir reports bilateral throbbing headaches occurring four times weekly, each lasting up to six hours, accompanied by nausea, photophobia and vomiting. He describes flashing lights in both visual fields before the onset of pain, and the headaches have recently begun to wake him at night. Paracetamol, 1 g, no longer relieves his symptoms. He smokes ten cigarettes daily and drinks alcohol occasionally, and his sleep is consistently interrupted.
+Mr Weir reports bilateral throbbing headaches occurring four times weekly, each lasting up to six hours, accompanied by nausea, photophobia and vomiting. He describes flashing lights in both visual fields before the onset of pain, and the headaches have recently begun to wake him at night. Paracetamol, 1 g, no longer relieves his symptoms.
 
 Examination today was normal, with blood pressure 128/78 mmHg and no focal neurological signs. Fundoscopy was unremarkable, and cranial nerve and upper limb examination was normal. A random glucose measured 6.37 mmol/L two weeks ago.
 
-Mr Weir has no significant past medical history and takes no regular medication. His mother has a history of migraine. He works as a long-distance driver and is concerned about his vision.
+Mr Weir has no significant past medical history and takes no regular medication. He smokes ten cigarettes daily and drinks alcohol occasionally, and his sleep is consistently interrupted. His mother has a history of migraine. He works as a long-distance driver and is concerned about his vision.
 
 I would be grateful if you could assess Mr Weir for a possible migraine variant and exclude other causes.
 
@@ -397,7 +397,7 @@ Re: Mrs Alice Ramsey, DOB: 17 November 1941
 
 I am writing to request medication support for Mrs Ramsey, who has had difficulty managing her prescribed regimen since her discharge from hospital.
 
-Mrs Ramsey takes metformin, 1 g twice daily; perindopril, 5 mg in the morning; and aspirin, 100 mg daily. She has missed doses on occasion because her current blister packs are difficult to open, and her daughter reports finding tablets loose in her handbag over the past month. Mrs Ramsey has atrial fibrillation alongside type two diabetes and hypertension. Consistent daily administration is clinically important for stroke risk reduction, and missed doses would be a significant safety concern for the care team supporting her at home.
+Mrs Ramsey takes metformin, 1 g twice daily; perindopril, 5 mg in the morning and aspirin, 100 mg daily. She has missed doses on occasion because her current blister packs are difficult to open, and her daughter reports finding tablets loose in her handbag over the past month. Mrs Ramsey has atrial fibrillation alongside type two diabetes and hypertension. Consistent daily administration is clinically important for stroke risk reduction, and missed doses would be a significant safety concern for the care team supporting her at home.
 
 Mrs Ramsey's general practitioner reviewed the regimen this week, confirmed its appropriateness and asked for pharmacy support with blister-pack dispensing. Mrs Ramsey is willing to accept help with administration at breakfast and at bedtime, and her daughter visits each weekend to reinforce the routine. No dose changes are required at present, and her most recent blood results were stable.
 
@@ -436,7 +436,7 @@ Pharmacist
     public void Ramsey_Injected_Comma_Only_Medication_List_Is_Flagged()
     {
         var letter = RamseyPharmacyLetter.Replace(
-            "metformin, 1 g twice daily; perindopril, 5 mg in the morning; and aspirin, 100 mg daily",
+            "metformin, 1 g twice daily; perindopril, 5 mg in the morning and aspirin, 100 mg daily",
             "metformin, 1 g twice daily, perindopril, 5 mg in the morning, aspirin, 100 mg daily");
         AssertRuleFires(LintModel(letter, "LT-OT", ExamProfession.Pharmacy), "medication_list_punctuation");
     }
@@ -587,7 +587,7 @@ Doctor
     public void Candidate_Alternate_Medication_List_Punctuation_Is_Coaching_Only()
     {
         var letter = RamseyPharmacyLetter.Replace(
-            "metformin, 1 g twice daily; perindopril, 5 mg in the morning; and aspirin, 100 mg daily",
+            "metformin, 1 g twice daily; perindopril, 5 mg in the morning and aspirin, 100 mg daily",
             "metformin 1 g twice daily, perindopril 5 mg in the morning and aspirin 100 mg daily");
         var finding = AssessmentEngine.Evaluate(new WritingLintInput(
             LetterText: letter, LetterType: "LT-OT", Profession: ExamProfession.Pharmacy,

@@ -24,10 +24,16 @@ describe('rulebook check-id registry', () => {
     // medication_passive_grammar) + 3 from the ULTIMATE FINAL handoff
     // (2026-09-13: re_line_full_name, discharge_language_unsupported,
     // incomplete_clinical_construction) = 86, + 11 from the OWNER
-    // CLARIFICATIONS ADDENDUM (2026-09-14, OA-01..OA-15) = 97. Keep this in
-    // lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) — see that
-    // file's own header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(97);
+    // CLARIFICATIONS ADDENDUM (2026-09-14, OA-01..OA-15) = 97, + 9 from the
+    // OWNER CLARIFICATIONS ADDENDUM TWO (2026-09-14, OA2-01..OA2-20:
+    // background_paragraph_placement, canonical_contact_template,
+    // discharge_function_missed, re_line_identity_unsupported,
+    // result_head_noun, result_noun_fragment, role_salutation_matches_task,
+    // supine_position_wording, vital_sign_interpretation_unsupported) = 106,
+    // + brand_generic_duplication (OA2 Taylor defect / R2-18) = 107.
+    // Keep this in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) —
+    // see that file's own header comment.
+    expect(WRITING_CHECK_IDS.size).toBe(107);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
@@ -68,6 +74,22 @@ describe('rulebook check-id registry', () => {
       'vague_clinical_object',
     ];
     expect(ownerAddendum.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
+  });
+
+  it('includes every OWNER CLARIFICATIONS ADDENDUM TWO (2026-09-14, OA2-01..OA2-20) detector check-id', () => {
+    const ownerAddendumTwo = [
+      'background_paragraph_placement',
+      'brand_generic_duplication',
+      'canonical_contact_template',
+      'discharge_function_missed',
+      're_line_identity_unsupported',
+      'result_head_noun',
+      'result_noun_fragment',
+      'role_salutation_matches_task',
+      'supine_position_wording',
+      'vital_sign_interpretation_unsupported',
+    ];
+    expect(ownerAddendumTwo.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
   });
 
   it('includes every ULTIMATE FINAL (2026-09-13) detector check-id', () => {

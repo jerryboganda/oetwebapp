@@ -23,7 +23,7 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     const book = loadRulebook('writing', 'medicine');
     expect(book.kind).toBe('writing');
     expect(book.profession).toBe('medicine');
-    expect(book.version).toBe('2.1.0-canonical-rev8');
+    expect(book.version).toBe('2.2.0-canonical-addendum-two');
     expect(book.sections.length).toBe(43);
     expect(book.rules.length).toBeGreaterThan(90);
   });

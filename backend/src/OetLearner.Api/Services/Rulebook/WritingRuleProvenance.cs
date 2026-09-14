@@ -51,7 +51,7 @@ public static class WritingCandidateBehaviors
 /// </summary>
 public static class WritingRuleProvenance
 {
-    public const string Version = "owner-addendum-2026-09-14";
+    public const string Version = "owner-addendum-two-2026-09-14";
 
     public sealed record Provenance(string Tag, string CandidateBehavior);
 
@@ -127,6 +127,23 @@ public static class WritingRuleProvenance
             ["letter_date_unsupported"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
             ["recipient_name_mismatch"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
             ["semicolon_overuse"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
+
+            // --- Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20 ---
+            // OA2-20 is the firewall: the strict canonical requirements in this
+            // block (background paragraph position, the exact contact template,
+            // the house medication separator) are Model-Answer house style and
+            // must never become automatic candidate penalties. Only genuine
+            // source-fidelity and English failures stay score-bearing.
+            ["discharge_function_missed"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.AcceptAlternative),
+            ["result_noun_fragment"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
+            ["supine_position_wording"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
+            ["result_head_noun"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.AcceptAlternative),
+            ["background_paragraph_placement"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
+            ["vital_sign_interpretation_unsupported"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
+            ["role_salutation_matches_task"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
+            ["canonical_contact_template"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.AcceptAlternative),
+            ["re_line_identity_unsupported"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
+            ["brand_generic_duplication"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
 
             // --- Content selection & source fidelity ------------------------
             ["content_requires_smoking_drinking"] = new(WritingProvenanceTags.ProfessionResource, WritingCandidateBehaviors.CoachingOnly),

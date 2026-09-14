@@ -82,17 +82,19 @@ Newtown
 9 August 2014
 
 Dear Dr McLaren,
-Re: Mr Michael Weir, DOB: 20 September 1970
+Re: Mr Michael Weir
 
-I am writing to request your neurological assessment and management of Mr Weir, who has presented with features suggestive of multiple sclerosis.
+I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.
 
-On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes of the weakness and hyporeflexia.
+On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. His blood pressure was 88/70 mmHg. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes.
 
-Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. Investigations showed a cholesterol of 6.37 mmol/L and a full blood count with low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months. He has depression, treated with sertraline hydrochloride since September 2012, continues to smoke and has long been overweight.
+Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. The cholesterol level was 6.37 mmol/L, and the full blood count showed low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months.
 
-I would be grateful if you could assess Mr Weir and advise on further management, including possible MRI.
+Mr Weir has depression and has taken sertraline hydrochloride since September 2012. He continues to smoke. He has been overweight for many years.
 
-Please do not hesitate to contact me with any queries.
+I would be grateful if you could consider MRI if clinically indicated.
+
+Should there be any queries, kindly do not hesitate to contact me.
 
 Yours sincerely,
 

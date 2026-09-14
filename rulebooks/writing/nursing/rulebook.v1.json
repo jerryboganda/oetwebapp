@@ -1,9 +1,9 @@
 {
-  "version": "2.1.0-canonical-rev8",
+  "version": "2.2.0-canonical-addendum-two",
   "kind": "writing",
   "profession": "nursing",
-  "publishedAt": "2026-09-11T00:00:00Z",
-  "authoritySource": "OET AI Rules Master — Canonical Registry v1.1-rev8 (2026-09-11: v1.0 of 2026-08-31 + owner Rev8 additions OWN-W-001..038 and supersession amendments), sha256:f0ff3ce01873ceb5d53c6736fed658fca5bab47b5d2bf9753a7d73cb3d153d84",
+  "publishedAt": "2026-09-14T00:00:00Z",
+  "authoritySource": "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner clarifications OA-01..OA-15 and OA2-01..OA2-20), sha256:6745ae3769807ca3e9dc96a4b41cde73809bbd87096acb06bd30b0e5ae67bbb9",
   "sections": [
     {
       "id": "official-assessment",

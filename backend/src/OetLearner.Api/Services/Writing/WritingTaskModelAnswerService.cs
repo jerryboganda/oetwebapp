@@ -250,8 +250,20 @@ public sealed class WritingTaskModelAnswerService(
     // grading, so pay for max reasoning quality/effort. claude-sonnet-5 uses
     // adaptive thinking (no manual token budget) - "max" is a valid
     // output_config.effort value, confirmed live against the Anthropic API.
-    private const string ThinkingEffort = "max";
-    private const int MaxCompletionTokens = 32000;
+    // P0, re-fixed 14 Sep 2026 (Addendum Two round). Commit b0082f199
+    // dropped effort from "max" to "high" and raised MaxCompletionTokens to
+    // 64000 after "max" produced a 0% real generation success rate across
+    // dozens of PAID attempts: Anthropic adaptive thinking shares ONE
+    // max_tokens budget between reasoning and the visible completion, and at
+    // "max" the model spent the entire budget on reasoning regardless of its
+    // size (the live usage log showed exactly 32000/32000, then exactly
+    // 64000/64000, with zero variance) so the JSON answer was never emitted.
+    // Commit 31765d735 silently reverted both constants. Anyone restoring
+    // "max" must first raise MaxCompletionTokens far beyond the reasoning
+    // budget and re-verify empirically against completionTokens in
+    // GET /v1/admin/ai/usage. Pinned by WritingRev8ModelAnswerGateTests.
+    internal const string ThinkingEffort = "high";
+    internal const int MaxCompletionTokens = 64000;
     // Addendum Rev8 §14: repair only the failed rules, then re-run ALL
     // validators. One generation + up to three targeted repairs.
     private const int MaxGenerationAttempts = 4;

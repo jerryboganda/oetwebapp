@@ -32,10 +32,21 @@ public sealed partial class WritingRuleEngine
     /// recipient_name_mismatch, semicolon_overuse; OA-03 introduction
     /// full-name allowance; OA-07 duplicate-request gated to Model Answers
     /// (candidates are assessed semantically, never by phrase matching).
+    /// Owner Clarifications Addendum TWO (14 Sep 2026): +OA2-01..OA2-20 —
+    /// new detectors discharge_function_missed, result_noun_fragment,
+    /// supine_position_wording, result_head_noun,
+    /// background_paragraph_placement, vital_sign_interpretation_unsupported,
+    /// role_salutation_matches_task, canonical_contact_template,
+    /// re_line_identity_unsupported; REVERSED medication_list_punctuation (no
+    /// semicolon before the final "and", OA2-16); tightened semicolon_overuse
+    /// (any narrative semicolon in a Model Answer, OA2-07); widened
+    /// number_style_words_vs_digits and lifestyle_frequency_precision to
+    /// number-words (OA2-15); role-aware yours_sincerely_vs_faithfully
+    /// (OA2-17); connective-position-only "also" in linker_avoid_words.
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.owner-addendum.2026-09-14.1";
+    public const string ValidatorVersion = "writing-rules.owner-addendum-two.2026-09-14.2";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -191,7 +202,7 @@ public sealed partial class WritingRuleEngine
             var inIntroduction = m.Index <= introLength;
             var purposeClause = inIntroduction && Regex.IsMatch(
                 s.Body.Substring(Math.Max(0, m.Index - 14), Math.Min(14, m.Index)),
-                @"\b(?:regarding|concerning|about|for|of)\s+$",
+                @"\b(?:regarding|concerning|about|for|of|on)\s+$",
                 RegexOptions.IgnoreCase);
             if (inIntroduction && purposeClause && !purposeAllowanceUsed)
             {
@@ -452,15 +463,21 @@ public sealed partial class WritingRuleEngine
             }
             else
             {
+                // OA2-16 (latest owner override, 14 Sep 2026): semicolons go
+                // BETWEEN medication-dose pairs, but there is NO additional
+                // semicolon immediately before the final "and" —
+                // "Drug A, dose; Drug B, dose and Drug C, dose." This
+                // supersedes the older "; and final drug" house syntax.
                 ok = separators.Take(separators.Count - 1).All(x => x.Contains(';'))
-                     && Regex.IsMatch(separators[^1], @";\s*and\b", RegexOptions.IgnoreCase);
+                     && Regex.IsMatch(separators[^1], @"\band\b", RegexOptions.IgnoreCase)
+                     && !separators[^1].Contains(';');
             }
             if (!ok)
             {
                 yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                     items.Count == 2
                         ? "Two medicines: write \"Drug, dose and Drug, dose\" (no semicolon; \"and\" before the second)."
-                        : "Three or more medicines: write \"Drug, dose; Drug, dose; and Drug, dose\" (semicolons between items and \"and\" before the final item).",
+                        : "Three or more medicines: write \"Drug, dose; Drug, dose and Drug, dose\" (semicolons BETWEEN items, then \"and\" before the final item with NO semicolon before it).",
                     Quote: sentence.Trim().Length > 100 ? sentence.Trim()[..100] + "…" : sentence.Trim());
                 if (++reported >= 5) yield break;
             }
@@ -532,6 +549,12 @@ public sealed partial class WritingRuleEngine
         new(@"\b(\d{1,2})\s+(?:children|siblings|sons|daughters|brothers|sisters|occasions|episodes|attacks|falls|admissions|sessions|visits|pregnancies|flights\s+of\s+stairs|nights)\b", RegexOptions.IgnoreCase),
         new(@"\b(\d{1,2})\s+times\s+(?:a|per|each)\s+(?:day|week|month|night|year)\b", RegexOptions.IgnoreCase),
         new(@"\b(\d{1,2})\s+times\s+(?:daily|weekly|monthly)\b", RegexOptions.IgnoreCase),
+        // OA2-15 (14 Sep 2026): the descriptive counts and durations the owner
+        // named explicitly — "twenty cigarettes daily", "a forty-eight-hour
+        // ketamine infusion". Medication strengths, dates, clinical
+        // measurements and doses stay numeric and never match here.
+        new(@"\b(\d{1,3})\s+(?:cigarettes?|standard\s+drinks?)\b", RegexOptions.IgnoreCase),
+        new(@"(\d{1,2})[\-\s](?:hour|day|week|month)s?\s+(?:[a-z]+\s+){0,2}(?:infusion|course|regimen|regime|programme|program|therapy|treatment|block|trial|admission|stay)", RegexOptions.IgnoreCase),
     };
 
     private static IEnumerable<LintFinding> DetectNumberStyleRev8(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -629,8 +652,14 @@ public sealed partial class WritingRuleEngine
     // Rev8 (owner directive, 13 Sep 2026, McDonald): clinical precision must
     // not be trimmed to save words — the source's daily frequency for smoking
     // and alcohol intake has to survive into the Model Answer.
+    // OA2-15 (14 Sep 2026): canonical Model Answers write descriptive counts
+    // as words ("twenty cigarettes daily"), so a digit-only anchor would let
+    // this safety check go silently dead the moment the number is spelled out.
+    private const string CountWordOrDigitPattern =
+        @"\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|sixty";
+
     private static readonly Regex CigarettesWithoutFrequencyRe = new(
-        @"\b\d{1,3}\s+cigarettes\b(?!\s*(?:a\s+day|per\s+day|daily))",
+        @"\b(?:" + CountWordOrDigitPattern + @")\s+cigarettes\b(?!\s*(?:a\s+day|per\s+day|daily|each\s+day))",
         RegexOptions.IgnoreCase);
 
     private static readonly Regex StandardDrinksWithoutFrequencyRe = new(
@@ -645,7 +674,7 @@ public sealed partial class WritingRuleEngine
         foreach (Match m in CigarettesWithoutFrequencyRe.Matches(s.Body))
         {
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
-                "State the daily frequency recorded in the case notes (\"20 cigarettes a day\") — do not drop it to save words.",
+                "State the daily frequency recorded in the case notes (\"twenty cigarettes daily\") — do not drop it to save words.",
                 Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
             if (++count >= 3) yield break;
         }
@@ -817,8 +846,16 @@ public sealed partial class WritingRuleEngine
             // a candidate", "He was, however, the only ...") — standard English.
             if (AdverbialLinkerPrecursorRe.IsMatch(pre)) continue;
             var lk = m.Groups["lk"];
+            // OA2-07: a Model Answer avoids the narrative semicolon entirely, so
+            // it is never offered the "...; however, ..." repair — only the full
+            // stop. Candidates keep both: the semicolon form is standard English
+            // and is protected by the candidate false-positive firewall.
+            var capitalised = char.ToUpperInvariant(display[0]) + display[1..];
+            var repair = input.IsModelAnswer
+                ? "Start a new sentence: \"... . " + capitalised + ", ...\"."
+                : "Use \"...; " + display + ", ...\" or start a new sentence: \"... . " + capitalised + ", ...\".";
             yield return new LintFinding(rule.Id, ModeSeverity(input, rule.Severity == RuleSeverity.Critical ? RuleSeverity.Critical : RuleSeverity.Major),
-                $"\"{lk.Value}\" joins two complete clauses here. Use \"...; {display}, ...\" or start a new sentence: \"... . {char.ToUpperInvariant(display[0]) + display[1..]}, ...\".",
+                "\"" + lk.Value + "\" joins two complete clauses here. " + repair,
                 Quote: m.Value.Trim().Length > 90 ? m.Value.Trim()[..90] + "…" : m.Value.Trim(),
                 Start: bodyOffset + lk.Index, End: bodyOffset + lk.Index + lk.Length);
         }
@@ -1251,24 +1288,418 @@ public sealed partial class WritingRuleEngine
         }
     }
 
-    // OA-08 — sentence control: an overloaded chain of semicolon-joined
-    // clauses (three or more segments in one non-medication sentence) is a
-    // Model Answer clarity failure. Medication lists keep their canonical
-    // semicolon grammar and never match.
+    // OA2-07 (14 Sep 2026, supersedes the OA-08 "three or more" threshold):
+    // a canonical Model Answer avoids semicolons in ordinary narrative prose
+    // ENTIRELY — a single semicolon joining two clinical actions is a clarity
+    // failure ("... twice daily; dexamethasone was continued ..."). Prefer a
+    // full stop or a normal conjunction. Medication-list separators keep their
+    // canonical semicolon grammar (OA2-16), so a sentence whose semicolons all
+    // sit BETWEEN parsed medication-dose pairs is exempt; a sentence that
+    // merely happens to mention one drug is not.
+    private static bool SemicolonsAreMedicationListSeparators(string sentence)
+    {
+        var items = MedicationItemRe.Matches(sentence).Cast<Match>()
+            .Where(m => !MedicationStopWords.Contains(m.Groups["drug"].Value))
+            .OrderBy(m => m.Index)
+            .ToList();
+        if (items.Count < 3) return false;
+        var semicolons = new List<int>();
+        for (var i = 0; i < sentence.Length; i++)
+            if (sentence[i] == ';') semicolons.Add(i);
+        if (semicolons.Count == 0 || semicolons.Count > items.Count - 1) return false;
+        // Every semicolon must fall in a gap between two consecutive items.
+        foreach (var pos in semicolons)
+        {
+            var between = false;
+            for (var i = 1; i < items.Count; i++)
+            {
+                var from = items[i - 1].Index + items[i - 1].Length;
+                var to = items[i].Index;
+                if (pos >= from && pos < to) { between = true; break; }
+            }
+            if (!between) return false;
+        }
+        return true;
+    }
+
     private static IEnumerable<LintFinding> DetectSemicolonOveruse(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!input.IsModelAnswer || s.Body.Length == 0) yield break;
         var bodyOffset = BodyOffset(s);
-        foreach (var sentenceMatch in Regex.Matches(s.Body, @"[^.!?\n]+[.!?]?").Cast<Match>())
+        // Decimal-safe sentence splitter, matching DetectMedicationListPunctuation:
+        // the naive [^.!?\n]+ form breaks "14.0x10^9/L", "1.8 g" and "37.8 °C"
+        // mid-sentence and mis-segments every clause around them.
+        foreach (var sentenceMatch in Regex.Matches(s.Body, @"[^.!?\n]+(?:\.(?=\d)[^.!?\n]*)*[.!?]?").Cast<Match>())
         {
             var sentence = sentenceMatch.Value;
-            if (sentence.Split(';').Length - 1 < 2) continue;
-            if (MedicationItemRe.IsMatch(sentence)) continue;
+            var semicolons = sentence.Count(c => c == ';');
+            if (semicolons == 0) continue;
+            if (SemicolonsAreMedicationListSeparators(sentence)) continue;
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
-                "This sentence chains three or more clauses with semicolons. Split into short, easy-to-process clinical sentences.",
+                semicolons == 1
+                    ? "A canonical Model Answer does not use a semicolon in ordinary narrative prose. Use a full stop, or join the clauses with \"and\"."
+                    : "This sentence chains clauses with semicolons. Split it into short, easy-to-process clinical sentences.",
                 Quote: sentence.Trim().Length > 90 ? sentence.Trim()[..90] + "…" : sentence.Trim(),
                 Start: bodyOffset + sentenceMatch.Index, End: bodyOffset + sentenceMatch.Index + sentenceMatch.Length);
             yield break;
         }
+    }
+
+    // ---------------------------------------------------------------------
+    // FINAL WRITING OWNER CLARIFICATIONS — ADDENDUM TWO (14 Sep 2026),
+    // OA2-01..OA2-20. OA2-01 is the governing principle: a validator that
+    // reports zero findings while a visible defect survives is itself
+    // defective, so every owner-named defect class below gets a deterministic
+    // detector plus an injected-defect regression class (R2-01..R2-18 in
+    // WritingOwnerAddendumTwoRegressionFixtureTests.cs). Registry rows
+    // OA2-01..OA2-20 live in docs/canonical-rules/OET_AI_Rules_Master.jsonl.
+    // ---------------------------------------------------------------------
+
+    // OA2-02 / R2-02 — the mirror of discharge_language_unsupported. When the
+    // canonical notes prove BOTH admission and discharge/return to ongoing
+    // care and the task is routed as a discharge/update, vague simple-update
+    // wording understates the letter's function. Scoped to discharge-routed
+    // letters so a referral or transfer can never fire, and source-gated on
+    // the markers so a task without proof is never second-guessed.
+    private static readonly Regex DischargeFunctionMarkerRe = new(
+        @"\bdischarg\w*|\b(?:was|were|has been|had been) admitted\b|\badmission\b|\binto your care\b"
+        + @"|\bback to (?:your|the) care\b|\btransfer of care\b|\bongoing care\b|\breturn(?:ed|ing)? to (?:your|the) care\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectDischargeFunctionMissed(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesMarkers is not { } markers) yield break;
+        if (!markers.AdmissionDocumented || !markers.DischargeDocumented) yield break;
+        if (!string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)) yield break;
+        if (s.Body.Length == 0) yield break;
+        if (DischargeFunctionMarkerRe.IsMatch(s.Body)) yield break;
+        var intro = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[0] : s.Body;
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+            "The canonical notes document an admission AND a discharge/return to ongoing care, but the letter uses only simple-update wording. State the update-on-discharge function: admission, treatment, discharge/return to your care and the ongoing-care request.",
+            Quote: intro.Length > 100 ? intro[..100] + "…" : intro);
+    }
+
+    // OA2-08 / R2-05 — "Lumbar puncture showed 1000 white cells" states a bare
+    // plural where the intended datum is a COUNT. The head noun is required:
+    // "a white cell count of 1000". Deliberately narrow — only a digit
+    // immediately before a bare cell plural, so an explicit unit ("1000 white
+    // cells per microlitre") and ordinary prose never match.
+    private static readonly Regex ResultNounFragmentRe = new(
+        @"\b(?<value>\d[\d.,]*)\s+(?<kind>white|red|nucleated|polymorphonuclear)\s+(?:blood\s+)?cells\b(?!\s*(?:\/|per\b))",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectResultNounFragment(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in ResultNounFragmentRe.Matches(s.Body))
+        {
+            var kind = m.Groups["kind"].Value.ToLowerInvariant();
+            var value = m.Groups["value"].Value;
+            var fix = "a " + kind + " cell count of " + value;
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "\"" + m.Value + "\" is a fragment: the intended datum is a count, so it needs its measurement noun.",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: fix);
+        }
+    }
+
+    // OA2-10 / R2-07 — supine-position wording. "when supine", "while supine",
+    // "when lying supine" and "in the supine position" are all correct; the
+    // bare "on/in supine position" is not English.
+    private static readonly Regex SupinePositionRe = new(
+        @"\b(?:on|in|at)\s+supine\s+position\b", RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectSupinePositionWording(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in SupinePositionRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "\"" + m.Value + "\" is not standard English. Use \"when supine\", \"while supine\", \"when lying supine\" or \"in the supine position\".",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: "when supine");
+        }
+    }
+
+    // OA2-11 — a measurement noun that needs a head word must have one: "the
+    // cholesterol level was 6.37 mmol/L", never the awkward "a cholesterol of
+    // 6.37 mmol/L"; "the C-reactive protein level was 150", never "a CRP of
+    // 150". Anchored on the indefinite article, so forms that already carry a
+    // head noun ("a white cell count of 1000") and the adjectival forms the
+    // owner keeps ("reduced glucose of 10 mg/dL") never match.
+    private const string HeadlessResultNounPattern =
+        @"cholesterol|CRP|C-reactive protein|urea|creatinine|potassium|sodium|haemoglobin|hemoglobin|bilirubin|albumin|ferritin";
+
+    private static readonly Regex ResultHeadNounRe = new(
+        @"\ba\s+(?<noun>" + HeadlessResultNounPattern + @")\s+of\s+(?=[\d.])",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectResultHeadNoun(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in ResultHeadNounRe.Matches(s.Body))
+        {
+            var noun = m.Groups["noun"].Value;
+            var expanded = string.Equals(noun, "CRP", StringComparison.OrdinalIgnoreCase) ? "C-reactive protein" : noun;
+            var fix = "the " + expanded + " level was";
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "\"" + m.Value.Trim() + " …\" needs a measurement head noun. Write \"" + fix + " …\" or another natural source-faithful structure.",
+                Quote: m.Value.Trim(), Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: fix);
+        }
+    }
+
+    // OA2-12 / R2-10 — medical, family, social and special-habit background
+    // belongs in a dedicated paragraph immediately before the closure, never
+    // mixed into the opening current-problem paragraph. Model Answer only:
+    // candidates are assessed on logical organisation, not on the house
+    // paragraph position (OA2-20). Deliberately keyed on background LABELS and
+    // habit facts, never on the word "history" alone, so a presenting
+    // complaint ("a three-week history of numbness") never matches.
+    private static readonly Regex BackgroundMarkerRe = new(
+        @"\b(?:family|social|past medical|medical|surgical|obstetric)\s+history\b"
+        + @"|\bhistory includes\b|\bbackground of\b|\bpast history\b"
+        + @"|\bsmok(?:es|ed|ing|er)\b|\bcigarettes?\b|\btobacco\b"
+        + @"|\bstandard drinks\b|\balcohol\b"
+        + @"|\blives (?:alone|with|at)\b|\bworks as\b|\bis (?:married|divorced|widowed)\b"
+        + @"|\b(?:penicillin|drug|food)\s+allerg\w*\b|\ballergic to\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectBackgroundParagraphPlacement(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        // Needs an introduction, a current-problem paragraph and at least one
+        // later paragraph the background could have lived in.
+        if (!input.IsModelAnswer || s.BodyParagraphs.Count < 4) yield break;
+        var currentProblem = s.BodyParagraphs[1];
+        var m = BackgroundMarkerRe.Match(currentProblem);
+        if (!m.Success) yield break;
+        var offset = BodyOffset(s) + s.Body.IndexOf(currentProblem, StringComparison.Ordinal);
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+            "Medical, family, social or special-habit background (\"" + m.Value + "\") sits in the opening current-problem paragraph. Move it to a dedicated background paragraph immediately before the closure and keep this paragraph on the current episode.",
+            Quote: m.Value, Start: offset + m.Index, End: offset + m.Index + m.Length);
+    }
+
+    // OA2-14 / R2-14 — a relevant vital sign is reported as its raw value and
+    // unit; the letter never adds an interpretation the case notes did not
+    // state ("do not label it hypotension unless the source does"). Source-
+    // gated: without the canonical notes nothing can be proven, so the
+    // detector no-ops, exactly like letter_date_unsupported.
+    private static readonly Regex VitalInterpretationRe = new(
+        @"\b(?:hypotensi(?:on|ve)|hypertensi(?:on|ve)|tachycardi(?:a|c)|bradycardi(?:a|c)|tachypnoe(?:a|ic)|tachypne(?:a|ic)|pyrexi(?:a|al)|hypoxi(?:a|c)|hypothermi(?:a|c)|haemodynamically unstable)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectVitalSignInterpretationUnsupported(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesText is not { Length: > 0 } notes || s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in VitalInterpretationRe.Matches(s.Body))
+        {
+            var token = m.Value;
+            if (notes.Contains(token, StringComparison.OrdinalIgnoreCase)) continue;
+            // A shared stem means the notes DID document the condition
+            // ("hypertension" in the notes supports "hypertensive" in the
+            // letter), so a documented diagnosis is never re-flagged as an
+            // invented interpretation.
+            var stem = token.Length > 7 ? token[..7] : token;
+            if (notes.Contains(stem, StringComparison.OrdinalIgnoreCase)) continue;
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "\"" + token + "\" interprets a vital sign in a way the case notes do not state. Report the exact value and unit and leave the interpretation to the reader.",
+                Quote: token, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+            yield break;
+        }
+    }
+
+    // OA2-17 / R2-13 — when the Writing Task addresses a ROLE rather than a
+    // person ("The Admissions Officer"), the salutation uses that exact role:
+    // "Dear Admissions Officer,". Never "Dear Sir/Madam," and never an
+    // invented synonym ("Dear Admitting Officer,"). The recipient block proves
+    // the role; when the exact task is supplied it must corroborate it.
+    private static readonly Regex RoleRecipientLineRe = new(
+        @"^The\s+(?<role>[A-Z][A-Za-z]+(?:\s+[A-Za-z]+){0,3}?\s+(?:Officer|Manager|Coordinator|Co-ordinator|Registrar|Director|Secretary|Lead|Practitioner))\s*$");
+
+    private static IEnumerable<LintFinding> DetectRoleSalutationMatchesTask(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.SalutationIndex is null) yield break;
+        var boundary = s.DateIndex ?? s.SalutationIndex.Value;
+        string? role = null;
+        for (var i = 0; i < boundary && i < s.Lines.Length; i++)
+        {
+            var m = RoleRecipientLineRe.Match(s.Lines[i].Trim());
+            if (!m.Success) continue;
+            role = m.Groups["role"].Value.Trim();
+            break;
+        }
+        if (role is null) yield break;
+        // Source fidelity: the exact task must actually name this role.
+        if (input.TaskText is { Length: > 0 } task
+            && !task.Contains(role, StringComparison.OrdinalIgnoreCase)) yield break;
+        var salutation = s.Lines[s.SalutationIndex.Value].Trim();
+        if (Regex.IsMatch(salutation, @"^Dear\s+" + Regex.Escape(role) + @"\s*,?\s*$", RegexOptions.IgnoreCase)) yield break;
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+            "The task addresses a named role, so the salutation uses that exact role: \"Dear " + role + ",\". Do not fall back to \"Dear Sir/Madam,\" and do not invent a synonym.",
+            Quote: salutation, FixSuggestion: "Dear " + role + ",");
+    }
+
+    /// <summary>
+    /// True when the salutation addresses a role or an unnamed recipient
+    /// rather than a named person — "Dear Sir/Madam,", "Dear Doctor," and
+    /// (OA2-17) "Dear Admissions Officer,". Such a letter closes "Yours
+    /// faithfully,", so yours_sincerely_vs_faithfully must not read a role as
+    /// a personal name.
+    /// </summary>
+    internal static bool SalutationIsUnnamedRecipient(string? salutationLine)
+    {
+        var salutation = (salutationLine ?? string.Empty).Trim();
+        if (Regex.IsMatch(salutation, @"Sir/?Madam|Dear Doctor\b", RegexOptions.IgnoreCase)
+            && !Regex.IsMatch(salutation, @"Dr\s+\w+", RegexOptions.IgnoreCase))
+            return true;
+        // A role salutation carries no personal name: "Dear Admissions
+        // Officer,", "Dear Emergency Registrar,", "Dear Practice Manager,".
+        return Regex.IsMatch(
+            salutation,
+            @"^Dear\s+(?:[A-Z][A-Za-z]+(?:\s+[A-Za-z]+){0,3}\s+)?(?:Officer|Manager|Coordinator|Co-ordinator|Registrar|Director|Secretary|Lead|Practitioner)\s*,?\s*$",
+            RegexOptions.IgnoreCase);
+    }
+
+    // OA2-19 / R2-16 — the canonical Model Answer contact-offer paragraph.
+    // Preferred: "Should there be any queries, kindly do not hesitate to
+    // contact me."; the "please" form is the other approved house variant.
+    // The appended "... contact me with any queries." is rejected because the
+    // fixed template already communicates the meaning cleanly. Model Answer
+    // only — candidates keep any professional semantic equivalent (OA2-20).
+    private static readonly Regex CanonicalContactTemplateRe = new(
+        @"^Should there be any queries,\s+(?:kindly|please)\s+do not hesitate to contact me\.$",
+        RegexOptions.IgnoreCase);
+
+    private const string CanonicalContactTemplate =
+        "Should there be any queries, kindly do not hesitate to contact me.";
+
+    private static IEnumerable<LintFinding> DetectCanonicalContactTemplate(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (!input.IsModelAnswer || s.BodyParagraphs.Count < 2) yield break;
+        // The contact offer is the FINAL SENTENCE. Whether it also stands in
+        // its own paragraph is OA2-06's question (closure_request_paragraph),
+        // not this rule's — checking the whole paragraph here would punish a
+        // letter type whose closure legitimately carries one preceding
+        // sentence.
+        var sentences = SplitSentences(s.BodyParagraphs[^1]);
+        if (sentences.Count == 0) yield break;
+        var final = sentences[^1].Trim();
+        // A final sentence that is not a contact offer at all belongs to
+        // closure_contact_offer, not to this rule.
+        if (!ContactOfferMeaningRe.IsMatch(final)) yield break;
+        if (CanonicalContactTemplateRe.IsMatch(final)) yield break;
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+            "A canonical Model Answer closes with the selected contact template. Use \"" + CanonicalContactTemplate + "\" and do not append \"with any queries\" to it.",
+            Quote: final.Length > 90 ? final[..90] + "…" : final,
+            FixSuggestion: CanonicalContactTemplate);
+    }
+
+    // OA2 Taylor defect / R2-18 — a generic-plus-brand appositive is stated
+    // ONCE. "colchicine, also known as Lengout, 1 mg" in the current-treatment
+    // paragraph and again in the history paragraph is clumsy duplication: one
+    // clear source-supported medication identity is sufficient unless the
+    // brand is genuinely needed twice.
+    private static readonly Regex BrandAppositiveRe = new(
+        @"\b(?<generic>[A-Za-z][A-Za-z\-]{3,})\s*,?\s+also known as\s+(?<brand>[A-Z][A-Za-z\-]+)",
+        RegexOptions.None);
+
+    private static IEnumerable<LintFinding> DetectBrandGenericDuplication(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (Match m in BrandAppositiveRe.Matches(s.Body))
+        {
+            var generic = m.Groups["generic"].Value;
+            if (seen.Add(generic)) continue;
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "\"" + m.Value + "\" repeats a generic/brand pairing already given earlier in the letter. State one clear source-supported medication identity, then use it consistently.",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: generic);
+            yield break;
+        }
+    }
+
+    // Addendum Two section 2, SOURCE FACTS CONTROL — the Re: line's date of
+    // birth or age is a source fact like any other. The Weir owner-review
+    // letter carried "DOB: 20 September 1970" while the canonical notes record
+    // no date of birth and no age at all, and the validator still reported
+    // zero findings: exactly the OA2-01 failure mode. Source-gated, so without
+    // the canonical notes nothing can be proven and the detector no-ops.
+    private static readonly Regex ReLineDobRe = new(
+        @"\bDOB\s*:\s*(?<dob>[^,;]+)", RegexOptions.IgnoreCase);
+
+    private static readonly Regex ReLineAgeRe = new(
+        @"\baged\s+(?<age>\d{1,3})\b", RegexOptions.IgnoreCase);
+
+    private static readonly Regex NumericDateRe = new(
+        @"\b(?<d>\d{1,2})\s*[./-]\s*(?<m>\d{1,2})\s*[./-]\s*(?<y>\d{2,4})\b");
+
+    private static string DateKey(int day, int month, int year) => day + "/" + month + "/" + (year % 100);
+
+    private static HashSet<string> SourceDateKeys(string notes)
+    {
+        var keys = new HashSet<string>(StringComparer.Ordinal);
+        foreach (Match m in NumericDateRe.Matches(notes))
+        {
+            if (!int.TryParse(m.Groups["d"].Value, out var d)) continue;
+            if (!int.TryParse(m.Groups["m"].Value, out var mo)) continue;
+            if (!int.TryParse(m.Groups["y"].Value, out var y)) continue;
+            keys.Add(DateKey(d, mo, y));
+        }
+        foreach (Match m in DateTokenRe.Matches(notes))
+        {
+            if (!TryParseDateToken(m, out var dt)) continue;
+            keys.Add(DateKey(dt.Day, dt.Month, dt.Year));
+        }
+        return keys;
+    }
+
+    private static IEnumerable<LintFinding> DetectReLineIdentityUnsupported(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesText is not { Length: > 0 } notes || s.ReLineIndex is null) yield break;
+        var reLine = s.Lines[s.ReLineIndex.Value];
+
+        var dob = ReLineDobRe.Match(reLine);
+        if (dob.Success)
+        {
+            var raw = dob.Groups["dob"].Value.Trim();
+            string? key = null;
+            var written = DateTokenRe.Match(raw);
+            if (written.Success && TryParseDateToken(written, out var wd))
+            {
+                key = DateKey(wd.Day, wd.Month, wd.Year);
+            }
+            else
+            {
+                var numeric = NumericDateRe.Match(raw);
+                if (numeric.Success
+                    && int.TryParse(numeric.Groups["d"].Value, out var nd)
+                    && int.TryParse(numeric.Groups["m"].Value, out var nm)
+                    && int.TryParse(numeric.Groups["y"].Value, out var ny))
+                    key = DateKey(nd, nm, ny);
+            }
+            if (key is null || !SourceDateKeys(notes).Contains(key))
+            {
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                    "The Re: line states a date of birth (\"" + raw + "\") that the canonical case notes do not record. Carry only source-supported patient identification, and omit the date of birth when the source has none.",
+                    Quote: reLine.Trim());
+                yield break;
+            }
+        }
+
+        var age = ReLineAgeRe.Match(reLine);
+        if (!age.Success) yield break;
+        var value = age.Groups["age"].Value;
+        if (Regex.IsMatch(notes, @"\bage[ds]?\s*:?\s*" + value + @"\b", RegexOptions.IgnoreCase)) yield break;
+        if (Regex.IsMatch(notes, @"\(\s*age\s*" + value + @"\b", RegexOptions.IgnoreCase)) yield break;
+        if (Regex.IsMatch(notes, @"\b" + value + @"[\s-]*(?:year|yr)s?(?:[\s-]*old)?\b", RegexOptions.IgnoreCase)) yield break;
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+            "The Re: line states an age (\"aged " + value + "\") that the canonical case notes do not record. Carry only source-supported patient identification.",
+            Quote: reLine.Trim());
     }
 }

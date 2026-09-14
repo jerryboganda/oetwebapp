@@ -60,15 +60,99 @@ public static class WritingModelAnswerGroundingValidator
         @"^(?:should there be any (?:further )?(?:queries|questions|concerns)|if (?:there are|you have|you require|you need) any (?:further )?(?:queries|questions|concerns|information)|please do not hesitate|kindly do not hesitate|do not hesitate)[^.!?]*\b(?:contact|call|telephone)\s+me\b[^.!?]*[.!?]?$",
         RegexOptions.IgnoreCase);
 
+    /// <summary>
+    /// Owner Clarifications Addendum Two (14 Sep 2026). Case notes are written
+    /// in clinical shorthand with digits ("BP 88/70", "smoker, 20
+    /// cigarettes/day"), while a canonical Model Answer must expand the
+    /// abbreviation and spell descriptive numbers as words (OA2-08, OA2-14,
+    /// OA2-15). The word-overlap check below compares raw tokens, so without
+    /// this the mandated wording — "His blood pressure was 88/70 mmHg.",
+    /// "He smokes twenty cigarettes daily." — shares too few words with the very
+    /// note it came from and is reported as an INVENTED fact, which would make
+    /// OA2-14 and OA2-15 impossible to satisfy. Every rule here only ever ADDS
+    /// vocabulary alongside the original text, so nothing that grounded before
+    /// can stop grounding now.
+    /// </summary>
+    private static readonly (string Pattern, string Alias)[] GroundingAliases =
+    [
+        // Clinical shorthand the source uses and a Model Answer must expand.
+        (@"\bBP\b", "blood pressure"),
+        (@"\bHR\b", "heart rate"),
+        (@"\bRR\b", "respiratory rate"),
+        (@"\bPR\b", "pulse rate"),
+        (@"\bTemp\b", "temperature"),
+        (@"\bSats?\b|\bSpO2\b", "oxygen saturation"),
+        (@"\bWCC\b|\bWBC\b", "white cell count"),
+        (@"\bRBC\b", "red cell count"),
+        (@"\bCRP\b", "C-reactive protein"),
+        (@"\bCBC\b|\bFBC\b", "full blood count"),
+        (@"\bHb\b", "haemoglobin"),
+        (@"\bLFTs?\b", "liver function tests"),
+        (@"\bECG\b", "electrocardiogram"),
+        (@"\bLP\b", "lumbar puncture"),
+        (@"\bPCA\b", "patient-controlled analgesia"),
+        (@"\bTKJR\b|\bTKR\b", "total knee replacement"),
+        (@"\bOSA\b", "obstructive sleep apnoea"),
+        (@"\bCSU\b", "catheter specimen urine"),
+        (@"\bBMI\b", "body mass index"),
+        (@"\bPMN\b", "polymorphonuclear"),
+        (@"\bEMG\b", "electromyography"),
+        (@"\bNCS\b", "nerve conduction study"),
+        (@"\bPTSD\b", "post-traumatic stress disorder"),
+        // Morphology and frequency shorthand: the source writes the noun or the
+        // slash form, the letter writes the verb or the adverb.
+        (@"\bsmoker\b", "smokes smoking"),
+        (@"\bnon-smoker\b", "smokes smoking"),
+        (@"\bdrinker\b", "drinks drinking"),
+        (@"\/\s*day\b|\bper day\b|\ba day\b", "daily"),
+        (@"\/\s*week\b|\bper week\b", "weekly"),
+        (@"\bnocte\b", "at night nightly"),
+        (@"\bmane\b", "in the morning"),
+        (@"\bprn\b", "as needed"),
+    ];
+
+    // Descriptive numbers: OA2-15 makes the Model Answer spell them out while
+    // the source keeps digits, so each digit carries its word alongside it.
+    private static readonly (string Digits, string Word)[] GroundingNumberWords =
+    [
+        ("100", "hundred"), ("72", "seventy-two"), ("48", "forty-eight"), ("25", "twenty-five"),
+        ("24", "twenty-four"), ("90", "ninety"), ("80", "eighty"), ("70", "seventy"),
+        ("60", "sixty"), ("50", "fifty"), ("40", "forty"), ("30", "thirty"), ("20", "twenty"),
+        ("19", "nineteen"), ("18", "eighteen"), ("17", "seventeen"), ("16", "sixteen"),
+        ("15", "fifteen"), ("14", "fourteen"), ("13", "thirteen"), ("12", "twelve"),
+        ("11", "eleven"), ("10", "ten"), ("9", "nine"), ("8", "eight"), ("7", "seven"),
+        ("6", "six"), ("5", "five"), ("4", "four"), ("3", "three"), ("2", "two"), ("1", "one"),
+    ];
+
+    /// <summary>
+    /// Widens a case-note fact (or a letter sentence) with the vocabulary a
+    /// source-faithful Model Answer is required to use, so the overlap check
+    /// can trace the sentence back to the note it came from. Additive only.
+    /// </summary>
+    internal static string WidenForGrounding(string? text)
+    {
+        var value = text ?? string.Empty;
+        foreach (var (pattern, alias) in GroundingAliases)
+            value = Regex.Replace(value, pattern, m => m.Value + " " + alias, RegexOptions.IgnoreCase);
+        foreach (var (digits, word) in GroundingNumberWords)
+            value = Regex.Replace(value, @"(?<![\w.])" + digits + @"(?![\w.])", digits + " " + word);
+        return value;
+    }
+
     public static WritingModelAnswerGroundingResult Validate(string modelAnswer, IReadOnlyList<string> caseNoteFacts)
     {
-        var source = string.Join(" ", caseNoteFacts ?? Array.Empty<string>());
+        caseNoteFacts = (caseNoteFacts ?? Array.Empty<string>())
+            .Select(WidenForGrounding)
+            .ToList();
+        var source = string.Join(" ", caseNoteFacts);
         var body = WritingModelAnswerWordCounter.ExtractBody(modelAnswer);
         var unmapped = new List<string>();
         foreach (var sentence in Regex.Split(body, @"(?<=[.!?])\s+"))
         {
             var value = sentence.Trim();
             if (value.Length == 0) continue;
+            // Compare on the widened form; report the author's real sentence.
+            var normalised = WidenForGrounding(value);
             if (ContactOfferCourtesy.IsMatch(value)
                 && !ClinicalTerms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase)))
             {
@@ -81,11 +165,21 @@ public static class WritingModelAnswerGroundingValidator
                 continue;
             }
 
-            var meaningful = Regex.Matches(value.ToLowerInvariant(), @"[a-z]{4,}")
+            var meaningful = Regex.Matches(normalised.ToLowerInvariant(), @"[a-z]{4,}")
                 .Select(match => match.Value)
                 .Where(word => word is not ("please" or "patient" or "review" or "write" or "your" or "this"
                     or "would" or "grateful" or "could" or "should" or "thank" or "further" or "assistance"
-                    or "information" or "contact" or "require" or "should" or "kindly" or "advice"))
+                    or "information" or "contact" or "require" or "should" or "kindly" or "advice"
+                    // Addendum Two (14 Sep 2026): request-FRAMING vocabulary carries
+                    // no case-note fact, exactly like the courtesy words above. The
+                    // owner's own prescribed closure ("I would be grateful if you
+                    // could consider MRI if clinically indicated.") was reported as
+                    // an unmapped, i.e. invented, sentence purely because
+                    // consider/clinically/indicated are not written in the notes.
+                    // Invented REQUESTS are OWN-W-037's job in the semantic layer;
+                    // grounding exists to catch invented FACTS.
+                    or "consider" or "considered" or "clinically" or "indicated" or "possible"
+                    or "arrange" or "undertake" or "provide" or "confirm" or "appreciated"))
                 .Distinct(StringComparer.Ordinal)
                 .ToArray();
             if (meaningful.Length >= 3

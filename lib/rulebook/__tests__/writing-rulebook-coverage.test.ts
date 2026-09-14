@@ -27,7 +27,7 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
  * on legacy 172. Every book also carries the 38 owner Rev8 rules (OWN-W-001..038).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 268,
+  medicine: 303,
   nursing: 275,
   dentistry: 275,
   pharmacy: 278,

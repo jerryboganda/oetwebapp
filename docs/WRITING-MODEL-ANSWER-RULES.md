@@ -1,8 +1,8 @@
 # OET Writing Model Answer Rules — PERMANENT OWNER DIRECTIVES
 
-**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026) and the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15). Latest owner clarification supersedes conflicting older internal wording.
+**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026) the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15) and ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20). Latest owner clarification supersedes conflicting older internal wording.
 **Applies to:** every person or AI agent who generates, repairs, validates, imports, or assesses OET Writing Model Answers in this repository — regardless of which tool or agent is used.
-**Enforcement:** every language rule below is enforced by a named deterministic detector in the deployed validator (`WritingRuleEngine` / `WritingRuleEngine.Rev8`), registry rows `OA-01..OA-15` in `docs/canonical-rules/OET_AI_Rules_Master.jsonl`, provenance rows in `WritingRuleProvenance`, and pinned by regression tests (`backend/tests/OetLearner.Api.Tests/Writing/WritingRev8RegressionFixtureTests.cs` — five clean-letter positives plus every injected defect). If a rule here and the validator ever disagree, BOTH are wrong — fix the validator and update this doc together. A stored Ready flag is valid only for the exact validator version it was verified under: any rule-pack change (bump of `WritingRuleEngine.ValidatorVersion`) invalidates affected answers until revalidated.
+**Enforcement:** every language rule below is enforced by a named deterministic detector in the deployed validator (`WritingRuleEngine` / `WritingRuleEngine.Rev8`), registry rows `OA-01..OA-15` and `OA2-01..OA2-20` in `docs/canonical-rules/OET_AI_Rules_Master.jsonl`, provenance rows in `WritingRuleProvenance`, and pinned by regression tests (`WritingRev8RegressionFixtureTests.cs` — five clean-letter positives plus every injected defect — and `WritingOwnerAddendumTwoRegressionFixtureTests.cs` — regression classes R2-01..R2-18, each proving BOTH that the injected defect is caught and that the valid alternative passes). If a rule here and the validator ever disagree, BOTH are wrong — fix the validator and update this doc together. A stored Ready flag is valid only for the exact validator version it was verified under: any rule-pack change (bump of `WritingRuleEngine.ValidatorVersion`) invalidates affected answers until revalidated.
 
 ---
 
@@ -45,9 +45,22 @@ The 180–200-word body cap means selection is a tested skill: **do NOT copy eve
 | Incomplete complement structures (OA-09) | "Examination showed afebrile" | "On examination, she was afebrile" |
 | Impossible quantities (OA-08) | "drinking over six to ten standard drinks daily" | "drinking six to ten standard drinks daily" |
 | Named objects (source fidelity) | "possible removal" | "possible tophus removal" / "possible removal of the tophus" |
-| Coordinated results (OA-10) | "the white cell count was 14.0, the CRP was 150" (comma splice) | "a white cell count of 14.0 and a CRP of 150" |
+| Coordinated results (OA-10) | "the white cell count was 14.0, the CRP was 150" (comma splice) | "The white cell count was 14.0x10^9/L and the C-reactive protein level was 150." |
+| Result nouns need a head word (OA2-11) | "a cholesterol of 6.37 mmol/L" / "a CRP of 150" | "the cholesterol level was 6.37 mmol/L" / "the C-reactive protein level was 150" |
+| Counts are counts, not bare plurals (OA2-08) | "Lumbar puncture showed 1000 white cells" | "Lumbar puncture showed a white cell count of 1000" |
+| Never force a preposition (OA2-08) | a regex demanding "at" or "of" | "the temperature was 37.8 °C" and "a temperature of 37.8 °C" are BOTH correct |
+| Supine position (OA2-10) | "on supine position" | "when supine" / "while supine" / "when lying supine" / "in the supine position" |
+| No narrative semicolon (OA2-07) | "...twice daily; dexamethasone was continued..." / "...in 2010; kidney stones were noted..." | a full stop, or a clean "and" — the semicolon is reserved for medication lists |
+| Background placement (OA2-12) | history, habits or social facts inside the opening current-problem paragraph | a dedicated background paragraph immediately before the closure |
+| Descriptive numbers as words (OA2-15) | "20 cigarettes daily" / "a 48-hour ketamine infusion" | "twenty cigarettes daily" / "a forty-eight-hour ketamine infusion" (doses, dates, vitals and lab values stay numeric) |
+| Role salutation (OA2-17) | "Dear Sir/Madam," or "Dear Admitting Officer," for a task naming "The Admissions Officer" | "Dear Admissions Officer," — and a role is not a name, so the letter still closes "Yours faithfully," |
+| Allied-health reader (OA2-18) | translating diabetes mellitus / hypothyroidism / arthrosis for an occupational therapist | keep the clinical term; decide inclusion by what matters to their functional, safety or therapy role |
+| Contact offer (OA2-19) | "Please do not hesitate to contact me with any queries." | "Should there be any queries, kindly do not hesitate to contact me." |
+| One medication identity (OA2-18/R2-18) | "colchicine, also known as Lengout" repeated in two paragraphs | name it once, then use one consistent identity |
+| Vital signs carry no invented diagnosis (OA2-14) | "He was hypotensive." | "His blood pressure was 88/70 mmHg." |
+| Re: line identity is a source fact (OA2 §2) | "Re: Mr Michael Weir, DOB: 20 September 1970" when the notes record no DOB | "Re: Mr Michael Weir" |
 | English frequencies — no Latin | "Lipitor, 20 mg nocte" | "Lipitor, 20 mg at night" |
-| Medication list punctuation | "Zyloric 300 mg" / comma-only lists | comma after drug: "Zyloric, 300 mg daily"; 2 drugs: "Drug, dose and Drug, dose"; 3+: "Drug, dose; Drug, dose; and Drug, dose" |
+| Medication list punctuation (OA2-16 latest override) | "Zyloric 300 mg" / comma-only lists / "; and" before the final drug | comma after drug: "Zyloric, 300 mg daily"; 2 drugs: "Drug, dose and Drug, dose"; 3+: "Drug, dose; Drug, dose and Drug, dose" — semicolons BETWEEN pairs, NO semicolon before the final "and" |
 | Legitimate dose formats are first-class | (parser used to miss these) | ranges "5-10 mg four-hourly", combination strengths "Targin, 20/10 twice daily", unitless dose + frequency |
 | Value/unit spacing and units (OA-15) | "37.8°C", "22 /min" | "37.8 °C", "22 breaths/min" (bpm, mmHg, °C, breaths/min are the vital-sign units) |
 | Never strip clinical precision for word count | "smoking 20 cigarettes" | "smoking 20 cigarettes daily" |
@@ -64,10 +77,31 @@ The 180–200-word body cap means selection is a tested skill: **do NOT copy eve
 
 Grounding note: premium wording still grounds — "fatigue, stress and lethargy" maps to case notes saying "tired, stressed and sluggish" (proven in production). Grounding is sentence-level traceability, not verbatim copying.
 
-## 5. DETECTOR ↔ RULE MAP (as deployed 14 Sep 2026)
+## 5. DETECTOR ↔ RULE MAP (as deployed 14 Sep 2026, Addendum Two)
 
 | Owner rule | Detector |
 |---|---|
+| OA2-01 owner gate over a clean validator | no detector — expressed as the regression suite itself plus the §13 evidence package: a visible defect with a PASS is a validator defect |
+| OA2-02 admission/discharge must be evidenced | `discharge_function_missed` (notes prove admission AND discharge but the letter is a vague simple update) + `discharge_language_unsupported` (the opposite direction) |
+| OA2-03 introduction purpose / no invented request | `intro_purpose_vague` + `closure_request_paragraph` |
+| OA2-04 full patient identity, once, in the purpose clause | `body_uses_last_name_only` (allows "regarding/on Ms Isabel Garcia") + `re_line_full_name` + `re_line_identity_unsupported` |
+| OA2-05 request placement, no mechanical duplication | `no_duplicated_request` + `closure_request_paragraph` |
+| OA2-06 closure paragraphing is structural | `closure_request_paragraph` (Model Answer only) |
+| OA2-07 no narrative semicolon | `semicolon_overuse` (ANY prose semicolon in a Model Answer; medication lists exempt) + `results_comma_splice` |
+| OA2-08 result/vital grammar, no forced preposition | `result_noun_fragment` + `numerical_values_have_units`; no detector forces "at" or "of" |
+| OA2-09 complete auxiliaries | `incomplete_clinical_construction` + `medication_passive_grammar` + `treatment_change_grammar` |
+| OA2-10 supine wording | `supine_position_wording` |
+| OA2-11 result head nouns | `result_head_noun` |
+| OA2-12 dedicated late background paragraph | `background_paragraph_placement` (Model Answer only) |
+| OA2-13 task- and reader-aware relevance | semantic validator checklist item 9 (not machine-checkable) |
+| OA2-14 material vital sign, no invented interpretation | `vital_sign_interpretation_unsupported` + the Weir 88/70 mmHg fixture assertion |
+| OA2-15 descriptive numbers as words | `number_style_words_vs_digits` + `lifestyle_frequency_precision` (both accept number-words) |
+| OA2-16 medication separator override | `medication_list_punctuation` (no semicolon before the final "and") |
+| OA2-17 role-based salutation | `role_salutation_matches_task` + role-aware `yours_sincerely_vs_faithfully` |
+| OA2-18 allied-health readers | `non_medical_no_jargon` stays an intentional no-op; enforced through the prompt + the R2-15 false-positive control |
+| OA2-19 canonical contact template | `canonical_contact_template` (Model Answer only) |
+| OA2-20 house style is not candidate scoring | `WritingRuleProvenance` candidate behaviours + the candidate false-positive firewall in `WritingRev8HouseStyle.CandidateGradingRules` |
+| OA2 Taylor brand/generic duplication | `brand_generic_duplication` |
 | OA-01/OA-04 vague introduction purpose | `intro_purpose_vague` (working-assessment hand-off fires in both modes; topic-only intro fires for Model Answers when the letter carries a request) |
 | OA-03 Re-line identity / intro full-name allowance | `re_line_full_name` + `body_uses_last_name_only` (one purpose-clause full name allowed in the intro) |
 | OA-05 discharge vs simple update | `discharge_language_unsupported` (derived admission/discharge markers; never fires for LT-DG classification decisions) |
@@ -98,4 +132,4 @@ Medicine (5 live types: DG Garcia, NM Weston, RR Weir, TR McDonald, UR Taylor �
 
 ---
 
-*Handoff trail: `.tools-state/rev8-writing/AGENT-HANDOFF-WRITING-REV8.md` → `REV9` → `REV10` (local machine). This document is the permanent, in-repo home of the rules.*
+*Handoff trail: `.tools-state/rev8-writing/AGENT-HANDOFF-WRITING-REV8.md` → `REV9` → `REV10` → `REV11` → `REV12` (local machine). This document is the permanent, in-repo home of the rules.*

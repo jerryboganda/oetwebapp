@@ -41,7 +41,7 @@ const LEGACY_PROFESSIONS: ExamProfession[] = [
  * (v1.0 count + the 38 owner Rev8 rows OWN-W-001..038).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 268,
+  medicine: 303,
   nursing: 275,
   dentistry: 275,
   pharmacy: 278,
@@ -49,7 +49,7 @@ const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
   radiography: 275,
 };
 
-const CANONICAL_VERSION = '2.1.0-canonical-rev8';
+const CANONICAL_VERSION = '2.2.0-canonical-addendum-two';
 const LEGACY_VERSION = '1.1.0-rev8';
 
 /**

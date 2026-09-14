@@ -39,8 +39,8 @@ addendum's precedence rule (§7) the latest owner rule wins over older conflicti
 | Item | Value |
 |---|---|
 | Registry release | `v1.1-rev8` = v1.0 of 2026-08-31 + OWN-W-001..038 + the supersession amendments below |
-| `OET_AI_Rules_Master.jsonl` SHA-256 | `f0ff3ce01873ceb5d53c6736fed658fca5bab47b5d2bf9753a7d73cb3d153d84` (2500 lines, LF) |
-| Canonical rulebook version (6 built packs) | `2.1.0-canonical-rev8`, `publishedAt` `2026-09-11T00:00:00Z` |
+| `OET_AI_Rules_Master.jsonl` SHA-256 | `6745ae3769807ca3e9dc96a4b41cde73809bbd87096acb06bd30b0e5ae67bbb9` (2535 lines, LF) |
+| Canonical rulebook version (6 built packs) | `2.2.0-canonical-addendum-two`, `publishedAt` `2026-09-14T00:00:00Z` |
 | Legacy rulebook version (7 hand-maintained packs) | `1.1.0-rev8` |
 | Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.rev8.2026-09-11.1` (81 check-ids) |
 
@@ -50,7 +50,7 @@ the handoff package's own v1.0 artefacts and are deliberately not edited (the co
 per-profession Writing `active_rules` are v1.0 figures; v1.1-rev8 adds 38 to each).
 
 **Added.** 38 rows `OWN-W-001`..`OWN-W-038` appended to the end of each of the six professions'
-Writing blocks (Medicine 268, Nursing 275, Dentistry 275, Pharmacy 278, Physiotherapy 278,
+Writing blocks (Medicine 303 — including OA-01..OA-15 and OA2-01..OA2-20, Nursing 275, Dentistry 275, Pharmacy 278, Physiotherapy 278,
 Radiography 275 active Writing rows). Every row uses an existing section of that profession, so
 no section is added. `authority` is `DR_HESHAM_DIRECT`; `classification` comes from the catalogue
 (`Owner Override`, `Hard Rule`, `Owner Clarification`, `Exception`, `Avoid`,

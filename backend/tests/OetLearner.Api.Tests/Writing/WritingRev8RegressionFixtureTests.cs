@@ -59,31 +59,31 @@ public sealed class WritingRev8RegressionFixtureTests
     // ─── A. Ms Isabel Garcia — update (LT-DG) ────
 
     internal const string GarciaUpdateLetter = """
-Dr Lorna Bradbury
-Stillwater Medical Clinic
-12 Main Street
-Stillwater
+        Dr Lorna Bradbury
+        Stillwater Medical Clinic
+        12 Main Street
+        Stillwater
 
-23 May 2015
+        23 May 2015
 
-Dear Dr Bradbury,
-Re: Ms Isabel Garcia, DOB: 1 January 1995
+        Dear Dr Bradbury,
+        Re: Ms Isabel Garcia, DOB: 1 January 1995
 
-I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of her close contacts.
+        I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.
 
-Ms Garcia presented with a one-week history of painful, stiff joints, headache, neck stiffness, photophobia and bruising. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. Blood tests showed a white cell count of 14.0x10^9/L and a CRP of 150. Lumbar puncture showed 1000 white cells with polymorphonuclear predominance, reduced glucose of 10 mg/dL and elevated protein of 70 mg/dL. Culture confirmed Neisseria meningitidis.
+        Ms Garcia presented with a one-week history of painful, stiff joints, headache and photophobia. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. The white cell count was 14.0x10^9/L and the C-reactive protein level was 150. Lumbar puncture showed a white cell count of 1000 with polymorphonuclear predominance, reduced glucose 10 mg/dL and elevated protein 70 mg/dL. Culture confirmed Neisseria meningitidis.
 
-Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily; dexamethasone was continued six-hourly for four days. Treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
+        Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily. Dexamethasone was continued six-hourly for four days. Following lumbar puncture results, treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
 
-Ms Garcia's case was notified to the Department of Human Services; family immunisation was discussed.
+        The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.
 
-I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care for unexplained illness and consider chemoprophylaxis.
+        I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.
 
-Please do not hesitate to contact me with any queries.
+        Should there be any queries, kindly do not hesitate to contact me.
 
-Yours sincerely,
+        Yours sincerely,
 
-Doctor
+        Doctor
 """;
 
     [Fact]
@@ -123,7 +123,7 @@ Doctor
     public void Injected_Vague_Intro_Without_Request_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of her close contacts.",
+            "I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.",
             "I am writing to update you regarding Ms Garcia's diagnosis and treatment for bacterial meningitis.");
         AssertRuleFires(Lint(letter, "LT-DG"), "intro_purpose_vague");
     }
@@ -132,7 +132,7 @@ Doctor
     public void Injected_Working_Assessment_Handoff_Is_Flagged()
     {
         var letter = WeirRoutineReferralLetter.Replace(
-            "I am writing to request your neurological assessment and management of Mr Weir, who has presented with features suggestive of multiple sclerosis.",
+            "I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.",
             "I am writing to update the practice regarding Mr Weir, given a working assessment of possible multiple sclerosis.");
         AssertRuleFires(Lint(letter, "LT-RR"), "intro_purpose_vague");
     }
@@ -167,8 +167,8 @@ Doctor
     public void Injected_Medication_Without_Auxiliary_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "dexamethasone was continued six-hourly",
-            "dexamethasone continued six-hourly");
+            "Dexamethasone was continued six-hourly",
+            "Dexamethasone continued six-hourly");
         AssertRuleFires(Lint(letter, "LT-DG"), "medication_passive_grammar");
     }
 
@@ -176,8 +176,8 @@ Doctor
     public void Injected_Treatment_Changed_Without_Auxiliary_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "Treatment was changed to benzylpenicillin",
-            "Treatment changed to benzylpenicillin");
+            "treatment was changed to benzylpenicillin",
+            "treatment changed to benzylpenicillin");
         AssertRuleFires(Lint(letter, "LT-DG"), "treatment_change_grammar");
     }
 
@@ -186,8 +186,8 @@ Doctor
     public void Injected_Request_Merged_Into_Body_Paragraph_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "Ms Garcia's case was notified to the Department of Human Services; family immunisation was discussed.\n\nI would be grateful",
-            "Ms Garcia's case was notified to the Department of Human Services; family immunisation was discussed. I would be grateful");
+            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.\n\nI would be grateful",
+            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed. I would be grateful");
         AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
     }
 
@@ -197,8 +197,8 @@ Doctor
     public void Injected_Contact_Offer_Merged_Into_Request_Paragraph_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care for unexplained illness and consider chemoprophylaxis.\n\nPlease do not hesitate to contact me with any queries.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care for unexplained illness and consider chemoprophylaxis. Should there be any queries, please do not hesitate to contact me.");
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
         AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
     }
 
@@ -223,29 +223,31 @@ Doctor
     // ─── B. Mrs Betty Weston — non-medical referral (LT-NM) ────
 
     internal const string WestonReferralLetter = """
-Ms Alison Goody
-Occupational Therapist
-Northwood Community Health Centre
-Northwood
+        Ms Alison Goody
+        Occupational Therapist
+        Northwood Community Health Centre
+        Northwood
 
-20 June 2018
+        20 June 2018
 
-Dear Ms Goody,
-Re: Mrs Betty Weston, DOB: 12 February 1964
+        Dear Ms Goody,
+        Re: Mrs Betty Weston, DOB: 12 February 1964
 
-I am writing to request your occupational therapy assessment and management of Mrs Weston, who has been diagnosed with carpal tunnel syndrome.
+        I am writing to request your occupational therapy assessment and management of Mrs Betty Weston, who has been diagnosed with carpal tunnel syndrome.
 
-Mrs Weston presented on 10 June 2018 with a three-week history of numbness and tingling in the right thumb, index and middle fingers. Her sleep was disturbed by pain, relieved by moving her fingers. She reported difficulty unscrewing jar tops and gripping a glass or cup, with objects often slipping from her fingers. Examination showed decreased grip strength without swelling, with positive Phalen's and Tinel's signs, confirming the diagnosis of carpal tunnel syndrome.
+        Mrs Weston presented on 10 June 2018 with a three-week history of numbness and tingling in the right thumb, index and middle fingers. Her sleep was disturbed by pain, which was relieved by moving her fingers. She reported difficulty unscrewing jar tops and gripping a glass or cup, with objects slipping from her fingers. Examination showed decreased grip strength without swelling, with positive Phalen's and Tinel's signs, confirming carpal tunnel syndrome.
 
-Mrs Weston works as a supermarket manager, requiring long hours on her feet. She is aware that her weight, with a body mass index of 32 kg/m², is an aggravating factor. She has a background of type two diabetes mellitus, hypothyroidism and arthrosis. Her carpal tunnel syndrome has been managed conservatively with night-time wrist splinting, alongside investigations to exclude other neurologic causes. She would benefit from a custom-made wrist splint in a neutral position and an ergonomics assessment.
+        Mrs Weston's carpal tunnel syndrome has been managed conservatively with night-time wrist splinting, alongside electromyography and nerve conduction studies to exclude other neurological causes.
 
-I would be grateful if you could arrange this and review Mrs Weston.
+        Mrs Weston works as a supermarket manager, which requires long hours on her feet. She is aware that her weight, with a body mass index of 32 kg/m², is an aggravating factor. She has a background of type two diabetes mellitus, hypothyroidism and arthrosis.
 
-Please do not hesitate to contact me with any queries.
+        I would be grateful if you could provide a custom-made wrist splint in a neutral position and undertake an ergonomics assessment.
 
-Yours sincerely,
+        Should there be any queries, kindly do not hesitate to contact me.
 
-Doctor
+        Yours sincerely,
+
+        Doctor
 """;
 
     [Fact]
@@ -275,30 +277,32 @@ Doctor
     // ─── C. Mr Michael Weir — routine referral (LT-RR) ────
 
     internal const string WeirRoutineReferralLetter = """
-Dr M McLaren
-Neurologist
-Suite 3
-67 The Crescent
-Newtown
+        Dr M McLaren
+        Neurologist
+        Suite 3
+        67 The Crescent
+        Newtown
 
-9 August 2014
+        9 August 2014
 
-Dear Dr McLaren,
-Re: Mr Michael Weir, DOB: 20 September 1970
+        Dear Dr McLaren,
+        Re: Mr Michael Weir
 
-I am writing to request your neurological assessment and management of Mr Weir, who has presented with features suggestive of multiple sclerosis.
+        I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.
 
-On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes of the weakness and hyporeflexia.
+        On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. His blood pressure was 88/70 mmHg. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes.
 
-Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. Investigations showed a cholesterol of 6.37 mmol/L and a full blood count with low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months. He has depression, treated with sertraline hydrochloride since September 2012, continues to smoke and has long been overweight.
+        Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. The cholesterol level was 6.37 mmol/L, and the full blood count showed low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months.
 
-I would be grateful if you could assess Mr Weir and advise on further management, including possible MRI.
+        Mr Weir has depression and has taken sertraline hydrochloride since September 2012. He continues to smoke. He has been overweight for many years.
 
-Please do not hesitate to contact me with any queries.
+        I would be grateful if you could consider MRI if clinically indicated.
 
-Yours sincerely,
+        Should there be any queries, kindly do not hesitate to contact me.
 
-Doctor
+        Yours sincerely,
+
+        Doctor
 """;
 
     private const string WeirTaskText =
@@ -316,7 +320,7 @@ Doctor
     public void Injected_Overweight_Long_Term_Is_Flagged()
     {
         var letter = WeirRoutineReferralLetter.Replace(
-            "has long been overweight",
+            "has been overweight for many years",
             "has been overweight long term");
         AssertRuleFires(Lint(letter, "LT-RR"), "register_colloquial");
     }
@@ -339,7 +343,7 @@ Doctor
     public void Injected_Vague_Duration_Is_Flagged()
     {
         var letter = WeirRoutineReferralLetter.Replace(
-            "has long been overweight",
+            "has been overweight for many years",
             "has been overweight for a long time");
         AssertRuleFires(Lint(letter, "LT-RR"), "register_colloquial");
     }
@@ -347,32 +351,32 @@ Doctor
     // ─── D. Mr Julian McDonald — transfer (LT-TR) ────
 
     internal const string McDonaldTransferLetter = """
-The Admissions Officer
-Cabrini Hopetoun Rehabilitation
-2-6 Hopetoun Street
-Elsternwick
-Vic 3185
+        The Admissions Officer
+        Cabrini Hopetoun Rehabilitation
+        2-6 Hopetoun Street
+        Elsternwick
+        Vic 3185
 
-24 July 2018
+        24 July 2018
 
-Dear Sir/Madam,
-Re: Mr Julian McDonald, DOB: 12 January 1950
+        Dear Admissions Officer,
+        Re: Mr Julian McDonald, DOB: 12 January 1950
 
-I am writing to request Mr McDonald's admission for immediate rehabilitation following his left total knee replacement.
+        I am writing to transfer Mr McDonald to your rehabilitation service following his elective left total knee replacement on 20 July 2018 under Mr Mossley.
 
-Mr McDonald underwent elective left total knee replacement on 20 July 2018 under Mr Mossley. His history includes hypertension, post-traumatic stress disorder, childhood penicillin allergy, smoking 20 cigarettes daily and drinking six to ten standard drinks daily. He lives alone in a caravan.
+        Post-operative pain despite morphine patient-controlled analgesia slowed mobilisation. A forty-eight-hour ketamine infusion was effective. Amitriptyline was discontinued because of difficulty urinating. Somnolence and snoring prompted sleep studies for possible obstructive sleep apnoea, and a catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex.
 
-Post-operative pain despite morphine patient-controlled analgesia has slowed mobilisation. A 48-hour ketamine infusion was effective; amitriptyline was discontinued for difficulty urinating. Significant somnolence and snoring prompted sleep studies for possible obstructive sleep apnoea. Catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex.
+        Discharge medications are Zyloric, 300 mg daily; Lipitor, 20 mg at night; Karvina, 300 mg daily and Nicabate patch, 21 mg. Analgesia comprises paracetamol, 1 g four times daily; ibuprofen, 400 mg three times daily; Targin, 20/10 twice daily and oxycodone, 5-10 mg four-hourly as needed. Physiotherapy, an occupational therapy home visit, social work and drug and alcohol support are planned, with a specialist appointment on 7 September 2018.
 
-Discharge medications are Zyloric, 300 mg daily; Lipitor, 20 mg at night; Karvina, 300 mg daily; and Nicabate patch, 21 mg. Analgesia comprises paracetamol, 1 g four times daily; ibuprofen, 400 mg three times daily; Targin, 20/10 twice daily; and oxycodone, 5-10 mg four-hourly as needed. Physiotherapy, an occupational therapy home visit, social work input and drug and alcohol support are planned.
+        Mr McDonald has hypertension, osteoarthritis, gout, post-traumatic stress disorder and childhood penicillin allergy. He smokes twenty cigarettes daily and drinks six to ten standard drinks daily. He lives alone in a caravan.
 
-I would be grateful if you could confirm Mr McDonald's admission before his specialist appointment on 7 September 2018.
+        I would be grateful if you could confirm Mr McDonald's admission for immediate rehabilitation.
 
-Please do not hesitate to contact me with any queries.
+        Should there be any queries, kindly do not hesitate to contact me.
 
-Yours faithfully,
+        Yours faithfully,
 
-Doctor
+        Doctor
 """;
 
     [Fact]
@@ -408,8 +412,8 @@ Doctor
     public void Injected_Over_Six_To_Ten_Is_Flagged()
     {
         var letter = McDonaldTransferLetter.Replace(
-            "drinking six to ten standard drinks daily",
-            "drinking over six to ten standard drinks daily");
+            "drinks six to ten standard drinks daily",
+            "drinks over six to ten standard drinks daily");
         AssertRuleFires(Lint(letter, "LT-TR"), "illogical_quantity_range");
     }
 
@@ -417,8 +421,8 @@ Doctor
     public void Injected_Note_Form_Partitive_Is_Flagged()
     {
         var letter = McDonaldTransferLetter.Replace(
-            "amitriptyline was discontinued for difficulty urinating",
-            "amitriptyline ceased for difficulty urinating");
+            "Amitriptyline was discontinued because of difficulty urinating",
+            "Amitriptyline ceased because of difficulty urinating");
         AssertRuleFires(Lint(letter, "LT-TR"), "medication_passive_grammar");
     }
 
@@ -444,7 +448,7 @@ Doctor
     public void Injected_Comma_Only_Medication_List_Is_Flagged()
     {
         var letter = McDonaldTransferLetter.Replace(
-            "Analgesia comprises paracetamol, 1 g four times daily; ibuprofen, 400 mg three times daily; Targin, 20/10 twice daily; and oxycodone, 5-10 mg four-hourly as needed.",
+            "Analgesia comprises paracetamol, 1 g four times daily; ibuprofen, 400 mg three times daily; Targin, 20/10 twice daily and oxycodone, 5-10 mg four-hourly as needed.",
             "Analgesia comprises paracetamol, 1 g four times daily, ibuprofen, 400 mg three times daily, Targin, 20/10 twice daily and oxycodone, 5-10 mg four-hourly as needed.");
         AssertRuleFires(Lint(letter, "LT-TR"), "medication_list_punctuation");
     }
@@ -453,8 +457,8 @@ Doctor
     public void Injected_Stripped_Cigarette_Frequency_Is_Flagged()
     {
         var letter = McDonaldTransferLetter.Replace(
-            "smoking 20 cigarettes daily",
-            "smoking 20 cigarettes");
+            "He smokes twenty cigarettes daily",
+            "He smokes twenty cigarettes");
         AssertRuleFires(Lint(letter, "LT-TR"), "lifestyle_frequency_precision");
     }
 
@@ -464,39 +468,41 @@ Doctor
     public void Injected_Duplicated_Request_Is_Flagged()
     {
         var letter = McDonaldTransferLetter.Replace(
-            "I would be grateful if you could confirm Mr McDonald's admission before his specialist appointment on 7 September 2018.",
-            "I would be grateful if you could arrange Mr McDonald's admission for immediate rehabilitation before his specialist appointment on 7 September 2018.");
+            "I would be grateful if you could confirm Mr McDonald's admission for immediate rehabilitation.",
+            "I would be grateful if you could transfer Mr McDonald to your rehabilitation service without delay.");
         AssertRuleFires(Lint(letter, "LT-TR"), "no_duplicated_request");
     }
 
     // ─── E. Mr David Taylor — urgent referral (LT-UR) ────
 
     internal const string TaylorUrgentReferralLetter = """
-Dr Malcom Still
-Rheumatologist
-City Hospital
-Suite 32
-55 Main Road
-Newtown
+        Dr Malcom Still
+        Rheumatologist
+        City Hospital
+        Suite 32
+        55 Main Road
+        Newtown
 
-13 June 2020
+        13 June 2020
 
-Dear Dr Still,
-Re: Mr David Taylor, DOB: 1 August 1965
+        Dear Dr Still,
+        Re: Mr David Taylor, DOB: 1 August 1965
 
-I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with an acute gout flare and an associated tophus.
+        I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with a gout flare and an associated tophus.
 
-Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure of 120/80 mmHg, heart rate of 90 bpm and respiratory rate of 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, also known as Lengout, 1 mg, and NSAIDs.
+        Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure 120/80 mmHg, heart rate 90 bpm and respiratory rate 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, 1 mg, and NSAIDs.
 
-Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine, also known as Lengout. He experienced a severe attack and a further attack in 2010; kidney stones were noted that year. He remained free of attacks from 2011 to 2020. He was diagnosed with depression in 2011, possibly gout-related, treated with fluoxetine since. His brother has gout, and his father died of kidney failure.
+        Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine. He experienced a severe attack in June 2010 and a further attack in September 2010. Kidney stones were also noted that year. He remained free of attacks from 2011 to 2020.
 
-I would be grateful if you could consider possible tophus removal at your earliest convenience.
+        Mr Taylor was diagnosed with depression in 2011, possibly related to gout, and has taken fluoxetine since then. His brother has gout, and his father died of kidney failure.
 
-Please do not hesitate to contact me with any queries.
+        I would be grateful if you could consider tophus removal, if clinically indicated, at your earliest convenience.
 
-Yours sincerely,
+        Should there be any queries, kindly do not hesitate to contact me.
 
-Doctor
+        Yours sincerely,
+
+        Doctor
 """;
 
     [Fact]
@@ -518,8 +524,8 @@ Doctor
     public void Injected_Bare_Per_Minute_Respiratory_Rate_Is_Flagged()
     {
         var letter = TaylorUrgentReferralLetter.Replace(
-            "respiratory rate of 22 breaths/min",
-            "respiratory rate of 22 /min");
+            "respiratory rate 22 breaths/min",
+            "respiratory rate 22 /min");
         AssertRuleFires(Lint(letter, "LT-UR"), "respiratory_rate_unit_style");
     }
 
@@ -534,8 +540,8 @@ Doctor
     public void Injected_Unitless_Heart_And_Respiratory_Rates_Are_Flagged()
     {
         var letter = TaylorUrgentReferralLetter.Replace(
-            "heart rate of 90 bpm and respiratory rate of 22 breaths/min",
-            "heart rate of 90 and respiratory rate of 22");
+            "heart rate 90 bpm and respiratory rate 22 breaths/min",
+            "heart rate 90 and respiratory rate 22");
         AssertRuleFires(Lint(letter, "LT-UR"), "numerical_values_have_units");
     }
 
@@ -545,8 +551,8 @@ Doctor
     public void Injected_Vague_Object_Is_Flagged()
     {
         var letter = TaylorUrgentReferralLetter.Replace(
-            "possible tophus removal",
-            "possible removal");
+            "consider tophus removal, if clinically indicated",
+            "consider possible removal, if clinically indicated");
         AssertRuleFires(Lint(letter, "LT-UR"), "vague_clinical_object");
     }
 
@@ -554,8 +560,8 @@ Doctor
     public void Vague_Object_With_Named_Object_Passes()
     {
         var letter = TaylorUrgentReferralLetter.Replace(
-            "possible tophus removal",
-            "possible removal of the tophus");
+            "consider tophus removal, if clinically indicated",
+            "consider possible removal of the tophus, if clinically indicated");
         Assert.DoesNotContain(Lint(letter, "LT-UR"),
             f => f.RuleId.EndsWith("vague_clinical_object", StringComparison.Ordinal));
     }
@@ -579,8 +585,8 @@ Doctor
     public void Candidate_Merged_Closure_Paragraphs_Are_Not_Penalised()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care for unexplained illness and consider chemoprophylaxis.\n\nPlease do not hesitate to contact me with any queries.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care for unexplained illness and consider chemoprophylaxis. Should there be any queries, please do not hesitate to contact me.");
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
         Assert.DoesNotContain(Lint(letter, "LT-DG", isModelAnswer: false),
             f => f.RuleId.EndsWith("closure_request_paragraph", StringComparison.Ordinal));
     }
@@ -591,8 +597,8 @@ Doctor
     public void Candidate_Duplicate_Request_Is_Not_Phrase_Matched()
     {
         var letter = McDonaldTransferLetter.Replace(
-            "I would be grateful if you could confirm Mr McDonald's admission before his specialist appointment on 7 September 2018.",
-            "I would be grateful if you could arrange Mr McDonald's admission for immediate rehabilitation before his specialist appointment on 7 September 2018.");
+            "I would be grateful if you could confirm Mr McDonald's admission for immediate rehabilitation.",
+            "I would be grateful if you could transfer Mr McDonald to your rehabilitation service without delay.");
         Assert.DoesNotContain(Lint(letter, "LT-TR", isModelAnswer: false),
             f => f.RuleId.EndsWith("no_duplicated_request", StringComparison.Ordinal));
     }
@@ -610,8 +616,8 @@ Doctor
     public void Injected_Result_Comma_Splice_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "Blood tests showed a white cell count of 14.0x10^9/L and a CRP of 150.",
-            "The white cell count was 14.0x10^9/L, the CRP was 150.");
+            "The white cell count was 14.0x10^9/L and the C-reactive protein level was 150.",
+            "The white cell count was 14.0x10^9/L, the C-reactive protein level was 150.");
         AssertRuleFires(Lint(letter, "LT-DG"), "results_comma_splice");
     }
 }
