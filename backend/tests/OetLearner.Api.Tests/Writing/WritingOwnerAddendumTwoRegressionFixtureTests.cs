@@ -683,6 +683,45 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     }
 
     // ─────────────────────────────────────────────────────────────────
+    // Supplementary: a PAST appointment is not a follow-up instruction.
+    // ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void A_Past_Dated_Appointment_Does_Not_Set_The_Follow_Up_Marker()
+    {
+        // Weston's notes record the consultation the letter is written about.
+        // Reading it as a future follow-up forced
+        // closure_mentions_review_if_required onto a letter whose task asks for
+        // no review — Addendum Two Weston E says add review/follow-up ONLY when
+        // the Writing Task supports it.
+        var markers = WritingCaseNotesMarkerExtractor.Derive(
+            "Outpatient clinic appointment on 10.06.2018. " +
+            "17.06.2018 review of symptoms: fatigue, cold intolerance, constipation. " +
+            "Discharge plan: refer to occupational therapy for a custom-made wrist splint in neutral position.");
+        Assert.Null(markers.FollowUpDate);
+    }
+
+    [Fact]
+    public void A_Genuine_Future_Appointment_Still_Sets_The_Follow_Up_Marker()
+    {
+        var markers = WritingCaseNotesMarkerExtractor.Derive(
+            "Treatment plan: specialist appointment at 6 weeks, made for 7/9/18.");
+        Assert.NotNull(markers.FollowUpDate);
+    }
+
+    [Fact]
+    public void An_Explicit_Review_Instruction_Still_Sets_The_Follow_Up_Marker()
+    {
+        var markers = WritingCaseNotesMarkerExtractor.Derive(
+            "He was assessed for hypercholesterolaemia with repeat testing planned, review in 3 months.");
+        Assert.NotNull(markers.FollowUpDate);
+    }
+
+    [Fact]
+    public void Weston_Closure_Without_A_Review_Is_Not_Flagged()
+        => AssertRuleDoesNotFire(Lint(Weston, "LT-NM"), "closure_mentions_review_if_required");
+
+    // ─────────────────────────────────────────────────────────────────
     // Platform guard: the Model Answer generation constants.
     // ─────────────────────────────────────────────────────────────────
 
