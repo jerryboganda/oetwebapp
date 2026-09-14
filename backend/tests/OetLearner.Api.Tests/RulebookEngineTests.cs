@@ -564,12 +564,14 @@ Doctor";
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_avoid_words");
     }
 
-    // Owner clarification (same addendum, §2 "No duplicated request").
+    // Owner clarification (same addendum, §2 "No duplicated request"; OA-07,
+    // owner addendum 14 Sep 2026: phrase matching is MODEL ANSWER only —
+    // candidates are assessed semantically, never by phrase matching).
     [Fact]
     public void NoDuplicatedRequest_Fires_When_Closure_Repeats_Intro_Phrase()
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for urgent cardiology assessment.\n\nBackground details here.\n\nI would be grateful for urgent cardiology assessment at your earliest convenience.\n\nYours sincerely,\nDoctor";
-        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral", IsModelAnswer: true));
         Assert.Contains(findings, f => f.RuleId == "BUILTIN.no_duplicated_request");
     }
 
@@ -577,6 +579,14 @@ Doctor";
     public void NoDuplicatedRequest_Passes_When_Closure_Is_Distinct()
     {
         var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for urgent cardiology assessment.\n\nBackground details here.\n\nI would be grateful for your review at your earliest convenience.\n\nYours sincerely,\nDoctor";
+        var findings = _engine.Lint(new WritingLintInput(text, "routine_referral", IsModelAnswer: true));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.no_duplicated_request");
+    }
+
+    [Fact]
+    public void NoDuplicatedRequest_Does_Not_Phrase_Match_Candidate_Letters()
+    {
+        var text = "Dear Dr Smith,\nRe: Ms A\n\nI am writing to refer Ms A for urgent cardiology assessment.\n\nBackground details here.\n\nI would be grateful for urgent cardiology assessment at your earliest convenience.\n\nYours sincerely,\nDoctor";
         var findings = _engine.Lint(new WritingLintInput(text, "routine_referral"));
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.no_duplicated_request");
     }

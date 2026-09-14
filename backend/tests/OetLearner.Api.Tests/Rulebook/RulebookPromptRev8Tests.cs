@@ -91,7 +91,9 @@ public class RulebookPromptRev8Tests
         var prompt = Build(RuleKind.Writing, ExamProfession.Medicine, task, letterType: "LT-RR");
 
         Assert.Contains(WritingRev8HouseStyle.CandidateGradingRules, prompt.SystemPrompt, StringComparison.Ordinal);
-        Assert.Contains("contributes ZERO to the candidate's score", prompt.SystemPrompt, StringComparison.Ordinal);
+        // Owner addendum §6 (14 Sep 2026): "Model Answer phrase similarity
+        // contributes ZERO to candidate score."
+        Assert.Contains("Model Answer similarity contributes ZERO to the score", prompt.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain(WritingRev8HouseStyle.ModelAnswerCanonicalRules, prompt.SystemPrompt, StringComparison.Ordinal);
         Assert.DoesNotContain("Reply with exactly the JSON object requested in the user message", prompt.SystemPrompt, StringComparison.Ordinal);
     }

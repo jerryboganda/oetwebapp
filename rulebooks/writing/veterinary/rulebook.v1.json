@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0-rev8",
+  "version": "1.2.0-ultimate-final",
   "kind": "writing",
   "profession": "veterinary",
-  "publishedAt": "2026-04-18T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham — The Tutor Book — OET Writing Comprehensive Rulebook (Sessions 1–10) — adapted for Veterinary (Phase D v1)",
+  "publishedAt": "2026-09-13T00:00:00Z",
+  "authoritySource": "N/A — NOT CURRENTLY LIVE. Veterinary Science is an official OET profession but is not part of the current 11-profession platform Writing scope. This shared book exists only for loader completeness; add a source-verified pack before any Veterinary task is introduced.",
   "sections": [
     {
       "id": "01",
@@ -2662,6 +2662,21 @@
           "Rev8 §12.4",
           "Rev8 §19.4"
         ]
+      }
+    },
+    {
+      "id": "PRD-VET-00",
+      "section": "16",
+      "severity": "info",
+      "title": "Not currently live",
+      "body": "Veterinary Science is an official OET profession but is NOT part of the current platform Writing scope. Never invent Veterinary tasks or rules to fill a matrix; if introduced, add a source-verified pack and rerun the source-coverage, Model Answer and Track A/B release gates.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Governance Marker",
+        "authority": "LEGACY_INACTIVE",
+        "evidence": "Writing Master Specification ULTIMATE FINAL, 13 Sep 2026, Section 16.6 / Appendix F",
+        "aiGradingLogic": "N/A — Veterinary Science is not candidate-facing. No Veterinary tasks exist; never invent them."
       }
     }
   ],

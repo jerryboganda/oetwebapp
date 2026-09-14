@@ -19,10 +19,15 @@ describe('rulebook check-id registry', () => {
     // emotional_wording, judgmental_labels, linker_avoid_words,
     // no_duplicated_request, number_style_words_vs_digits) + 12 from the
     // owner Rev8 addendum (2026-09-11, WritingRuleEngine.Rev8.cs; registry
-    // rows OWN-W-001..038) = 81. Keep this in lockstep with
-    // WritingRuleEngine.SupportedCheckIdSet (C#) — see that file's own
-    // header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(81);
+    // rows OWN-W-001..038) = 81, + 2 from the Rev10 validator-reliability
+    // round (2026-09-13: lifestyle_frequency_precision,
+    // medication_passive_grammar) + 3 from the ULTIMATE FINAL handoff
+    // (2026-09-13: re_line_full_name, discharge_language_unsupported,
+    // incomplete_clinical_construction) = 86, + 11 from the OWNER
+    // CLARIFICATIONS ADDENDUM (2026-09-14, OA-01..OA-15) = 97. Keep this in
+    // lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) — see that
+    // file's own header comment.
+    expect(WRITING_CHECK_IDS.size).toBe(97);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
@@ -46,6 +51,32 @@ describe('rulebook check-id registry', () => {
       'value_unit_spacing',
     ];
     expect(rev8.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
+  });
+
+  it('includes every OWNER CLARIFICATIONS ADDENDUM (2026-09-14, OA-01..OA-15) detector check-id', () => {
+    const ownerAddendum = [
+      'closure_request_paragraph',
+      'diabetes_type_words',
+      'illogical_quantity_range',
+      'intro_purpose_vague',
+      'letter_date_unsupported',
+      'recipient_name_mismatch',
+      'respiratory_rate_unit_style',
+      'results_comma_splice',
+      'semicolon_overuse',
+      'treatment_change_grammar',
+      'vague_clinical_object',
+    ];
+    expect(ownerAddendum.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
+  });
+
+  it('includes every ULTIMATE FINAL (2026-09-13) detector check-id', () => {
+    const ultimateFinal = [
+      're_line_full_name',
+      'discharge_language_unsupported',
+      'incomplete_clinical_construction',
+    ];
+    expect(ultimateFinal.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
   });
 
   it('exposes the speaking detector check-ids', () => {

@@ -35,28 +35,35 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "closure_mentions_consent_if_flagged",
         "closure_mentions_patient_request_if_flagged",
         "closure_mentions_review_if_required",
+        "closure_request_paragraph",
         "conditions_lowercase",
         "content_requires_allergy_for_atopic",
         "content_requires_smoking_drinking",
         "date_blank_line_sandwich",
         "date_format_consistent",
+        "diabetes_type_words",
         "dob_age_forbidden_phrase",
         "dob_colon_format",
         "discharge_admitted_with_past_simple",
         "discharge_intro_no_identity",
         "discharge_intro_template",
         "discharge_all_investigations_listed",
+        "discharge_language_unsupported",
         "discharge_omits_knownto_gp",
         "discharge_plan_present",
         "emotional_wording",
         "enclosure_results_phrase",
         "for_duration_requires_present_perfect",
+        "illogical_quantity_range",
+        "incomplete_clinical_construction",
         "intro_contains_purpose",
         "intro_opens_i_am_writing_to",
+        "intro_purpose_vague",
         "intro_sentence_count",
         "judgmental_labels",
         "latin_abbreviations_translated",
         "letter_body_length",
+        "letter_date_unsupported",
         "letter_paragraph_count",
         "letter_structure_order",
         "lifestyle_frequency_precision",
@@ -81,20 +88,27 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "numerical_values_have_units",
         "paragraph_start_patient_name",
         "re_line_age_dob",
+        "re_line_full_name",
+        "recipient_name_mismatch",
         "register_colloquial",
         "relationship_label_patient_reference",
+        "respiratory_rate_unit_style",
+        "results_comma_splice",
         "salutation_last_name_only",
         "salutation_re_adjacent",
         "sentence_length_guard",
+        "semicolon_overuse",
         "signoff_designation_present",
         "signoff_no_invented_name",
         "since_requires_present_perfect",
         "surgery_past_simple",
+        "treatment_change_grammar",
         "treatment_for_not_from",
         "urgent_body_starts_today",
         "urgent_closure_phrase",
         "urgent_intro_contains_urgent",
         "urgent_token_not_repeated",
+        "vague_clinical_object",
         "value_unit_spacing",
         "visit_content_tense_basic_check",
         "visit_paragraphization_check",
@@ -202,6 +216,23 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         ["relationship_label_patient_reference"] = RuleSeverity.Major,
         ["signoff_designation_present"] = RuleSeverity.Minor,
         ["value_unit_spacing"] = RuleSeverity.Major,
+        // Ultimate Final handoff (13 Sep 2026): permanent regression fixtures
+        // §11.5 (false-READY Garcia) + §3.3 discharge-vs-simple-update.
+        ["re_line_full_name"] = RuleSeverity.Major,
+        ["discharge_language_unsupported"] = RuleSeverity.Critical,
+        ["incomplete_clinical_construction"] = RuleSeverity.Major,
+        // Owner Clarifications Addendum (14 Sep 2026) — OA-01..OA-15 battery.
+        ["intro_purpose_vague"] = RuleSeverity.Major,
+        ["closure_request_paragraph"] = RuleSeverity.Critical,
+        ["treatment_change_grammar"] = RuleSeverity.Major,
+        ["results_comma_splice"] = RuleSeverity.Major,
+        ["diabetes_type_words"] = RuleSeverity.Major,
+        ["respiratory_rate_unit_style"] = RuleSeverity.Major,
+        ["illogical_quantity_range"] = RuleSeverity.Critical,
+        ["vague_clinical_object"] = RuleSeverity.Major,
+        ["letter_date_unsupported"] = RuleSeverity.Critical,
+        ["recipient_name_mismatch"] = RuleSeverity.Critical,
+        ["semicolon_overuse"] = RuleSeverity.Major,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -503,6 +534,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "no_asap_in_letter" => DetectForbidden(@"\bASAP\b", "Never write 'ASAP'. Use 'at your earliest convenience'."),
         "address_punctuation" => DetectAddressPunctuation,
         "re_line_age_dob" => DetectReLineAgeDob,
+        "re_line_full_name" => DetectReLineFullName,
+        "incomplete_clinical_construction" => DetectIncompleteClinicalConstruction,
         "yours_sincerely_capitalisation" => DetectYoursSincerelyCapitalisation,
         "intro_sentence_count" => DetectIntroSentenceCount,
         "closure_mentions_patient_request_if_flagged" => DetectClosurePatientRequest,
@@ -519,7 +552,19 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "discharge_intro_template" => DetectDischargeIntroTemplate,
         "discharge_omits_knownto_gp" => DetectDischargeOmits,
         "discharge_admitted_with_past_simple" => DetectDischargeAdmittedWith,
+        "discharge_language_unsupported" => DetectDischargeLanguageUnsupported,
         "discharge_plan_present" => DetectDischargePlanPresent,
+        "intro_purpose_vague" => DetectIntroPurposeVague,
+        "closure_request_paragraph" => DetectClosureRequestParagraph,
+        "treatment_change_grammar" => DetectTreatmentChangeGrammar,
+        "results_comma_splice" => DetectResultsCommaSplice,
+        "diabetes_type_words" => DetectDiabetesTypeWords,
+        "respiratory_rate_unit_style" => DetectRespiratoryRateUnitStyle,
+        "illogical_quantity_range" => DetectIllogicalQuantityRange,
+        "vague_clinical_object" => DetectVagueClinicalObject,
+        "letter_date_unsupported" => DetectLetterDateUnsupported,
+        "recipient_name_mismatch" => DetectRecipientNameMismatch,
+        "semicolon_overuse" => DetectSemicolonOveruse,
         "treatment_for_not_from" => DetectForbidden(@"\b(treated|admitted|referred|managed)\s+from\b", "Use 'treatment/admission/referral for ...', not 'from ...'."),
         "non_medical_no_jargon" => DetectNonMedicalJargon,
         "sentence_length_guard" => DetectSentenceLength,
@@ -624,14 +669,17 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         // reply, 10 Sep 2026, §5 "Maximum paragraphs"): "BODY paragraphs
         // only" — the closing/request paragraph is not a body paragraph (it
         // is separately regulated by urgent_closure_phrase,
-        // closure_mentions_*, no_duplicated_request). It is always the last
-        // paragraph before "Yours sincerely" — same positional convention
-        // DetectNoDuplicatedRequest already uses for `closure`. Counting it
-        // here silently inflated every letter's total by one, confirmed as
-        // the root cause of 68 of the 77 audit flags (letters with 5 total
-        // paragraphs = intro + up to 3 body + closure, i.e. 4 real body
-        // paragraphs, previously misreported as 5).
+        // closure_mentions_*, no_duplicated_request). Since the 14 Sep 2026
+        // owner addendum (OA-06) the closure is TWO paragraphs — the
+        // standalone request paragraph plus the separate contact-offer
+        // paragraph — so both are excluded here when that structure is
+        // present. Counting them here silently inflated every letter's
+        // total, the same defect class as the 77-flag audit.
         var n = Math.Max(s.BodyParagraphs.Count - 1, 0);
+        if (n >= 2
+            && ClosureRequestRe.IsMatch(s.BodyParagraphs[^2])
+            && ContactOfferMeaningRe.IsMatch(s.BodyParagraphs[^1]))
+            n -= 1;
         if (n < min) yield return new LintFinding(rule.Id, rule.Severity, $"Body has {n} paragraph(s) excluding the closing paragraph. Minimum is {min}.");
         if (n > max) yield return new LintFinding(rule.Id, rule.Severity, $"Body has {n} paragraphs excluding the closing paragraph. Maximum is {max}.");
     }
@@ -871,11 +919,18 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     // not repeat the same request wording/content verbatim." Flags a 4+
     // consecutive-word phrase shared verbatim between the introduction and
     // the closure paragraph.
+    // OA-07 — no mechanically duplicated request: the introduction states the
+    // primary request; the closure carries only a remaining action or a
+    // concise NON-verbatim functional request. Model Answer only: candidates
+    // are assessed semantically, never by phrase matching (owner addendum
+    // 14 Sep 2026, §6 "do not over-penalise candidates"). The closure REGION
+    // is the last two paragraphs (request paragraph + contact-offer
+    // paragraph) so the OA-06 split cannot hide a duplicate from this check.
     private static IEnumerable<LintFinding> DetectNoDuplicatedRequest(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        if (s.BodyParagraphs.Count < 2) yield break;
+        if (!input.IsModelAnswer || s.BodyParagraphs.Count < 2) yield break;
         var intro = s.BodyParagraphs[0];
-        var closure = s.BodyParagraphs[^1];
+        var closure = string.Join(" ", s.BodyParagraphs.TakeLast(2));
         const int n = 4;
         var introWords = Regex.Matches(intro.ToLowerInvariant(), @"[a-z']+").Select(m => m.Value).ToArray();
         var closureNorm = " " + Regex.Replace(closure.ToLowerInvariant(), @"[^a-z' ]+", " ") + " ";
@@ -884,8 +939,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             var phrase = string.Join(' ', introWords.Skip(i).Take(n));
             if (closureNorm.Contains(" " + phrase + " ", StringComparison.Ordinal))
             {
-                yield return new LintFinding(rule.Id, rule.Severity,
-                    $"The closure repeats the introduction's request wording verbatim (\"{phrase}\"). Close the letter without restating the same phrase.",
+                yield return new LintFinding(rule.Id, ModeSeverity(input, rule.Severity),
+                    $"The closure repeats the introduction's request wording verbatim (\"{phrase}\"). Open with the primary request; close with only the remaining action or a concise non-verbatim functional request.",
                     Quote: phrase);
                 yield break;
             }
@@ -970,7 +1025,12 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     {
         if (s.BodyParagraphs.Count == 0) yield break;
         var intro = s.BodyParagraphs[0];
-        var markers = new Regex(@"\b(I am writing to|I am referring|I would like to refer|I am requesting|requesting|refer|update you|regarding|for (your|specialist|further) (assessment|management|review))\b",
+        // Ultimate Final §17: any professional opening whose purpose is
+        // immediately clear must pass — including noun-phrase statements of
+        // purpose ("Please accept this referral of Mr Weir"), not only the
+        // canonical verb forms. The old \brefer\b boundary never matched
+        // "referral"/"referring", falsely flagging a protected alternative.
+        var markers = new Regex(@"\b(I am writing to|I am referring|referr?ing|referral|I would like to refer|I am requesting|requesting|refer\w*|updat\w*|transfer\w*|informing you|regarding|for (your|specialist|further) (assessment|management|review))\b",
             RegexOptions.IgnoreCase);
         if (!markers.IsMatch(intro))
             yield return new LintFinding(rule.Id, rule.Severity,
@@ -1059,9 +1119,13 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         // clear, professional closure that communicates the urgent
         // requested action (this supersedes the old candidate-facing hard
         // requirement for the exact wording). Checked against the CLOSURE
-        // paragraph only (not the whole letter) — an "urgently" used only in
-        // the introduction does not make the closure itself urgent.
-        var closure = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[^1] : input.LetterText;
+        // REGION — the last two paragraphs, since the 14 Sep 2026 owner
+        // addendum (OA-06) the request and the contact offer may be separate
+        // paragraphs — an "urgently" used only in the introduction does not
+        // make the closure itself urgent.
+        var closure = s.BodyParagraphs.Count > 1
+            ? string.Join(" ", s.BodyParagraphs.TakeLast(2))
+            : s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[^1] : input.LetterText;
         if (!CandidateUrgentClosurePhraseRe.IsMatch(closure))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Urgent referral closure must clearly request urgent action (e.g. 'at your earliest convenience', 'as soon as possible', or similar professional urgency wording).");
@@ -1343,8 +1407,20 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             var trimmed = s.Lines[i].Trim();
             if (trimmed.Length == 0) continue;
             if (Regex.IsMatch(trimmed, @"[,.]$"))
+            {
                 yield return new LintFinding(rule.Id, rule.Severity,
                     $"Address line contains punctuation: \"{trimmed}\". No commas or full stops in the address.",
+                    Quote: trimmed);
+                continue;
+            }
+            // Owner addendum OA-11 (14 Sep 2026): address components are
+            // copied from the task onto separate lines. A comma JOINING two
+            // components on one line — "Elsternwick, Vic 3185" — collapses
+            // the line structure and is a Model Answer layout failure;
+            // candidates keep the lighter trailing-punctuation check.
+            if (input.IsModelAnswer && Regex.IsMatch(trimmed, @",\s+\S"))
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                    $"Address components must sit on separate lines: \"{trimmed}\" joins two components with a comma. Copy each component from the task onto its own line.",
                     Quote: trimmed);
         }
     }
@@ -1693,11 +1769,19 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectVisitContentTense(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (string.IsNullOrWhiteSpace(s.Body)) yield break;
+        // Owner Clarifications Addendum (14 Sep 2026, §4.1/§4.3): the canonical
+        // referral introduction defines the patient with the present perfect
+        // ("Mr Weir, who has presented with features suggestive of ...") and
+        // house rule 8 explicitly allows present perfect in the introduction.
+        // The visit-content tense rule therefore applies from the SECOND body
+        // paragraph onward — narrative visit prose, never the opening.
         var verbs = "presented|examined|prescribed|admitted|referred|advised|counselled|reviewed|commenced|attended";
         var re = new Regex(@"\b(has|have|had)\s+(?:been\s+)?(" + verbs + @")\b", RegexOptions.IgnoreCase);
+        var introLength = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[0].Length : 0;
         var hits = 0;
         foreach (Match m in re.Matches(s.Body))
         {
+            if (m.Index < introLength) continue;
             yield return new LintFinding(rule.Id, rule.Severity,
                 $"Visit content should use past simple. \"{m.Value}\" looks like present perfect.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);

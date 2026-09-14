@@ -89,15 +89,16 @@ The VPS `185.252.233.186` only pulls prebuilt GHCR images and runs health gates.
 | Web + API build → GHCR → VPS blue/green deploy with health gate | `.github/workflows/deploy.yml` |
 | Mobile/Android build | `.github/workflows/mobile-ci.yml` |
 
-## OET Writing Model Answers — COMPULSORY (owner directives 2026-09-13)
+## OET Writing Model Answers — COMPULSORY (owner directives 2026-09-13 + 2026-09-14)
 
 Before ANY Writing task, Model Answer, or Writing validator work, load
 `docs/WRITING-MODEL-ANSWER-RULES.md` and follow it with no deviations. Non-negotiables:
 
 - **$0 hard rule:** never call a paid AI API for Writing work. The agent writes/repairs/reviews every letter itself; validate and import with `includeSemantic: false` only. Semantic layer = the agent's own documented review.
-- **Premium clinical register always**, even when case notes are colloquial: fatigue/lethargy not "tired/sluggish"; no Latin frequencies (nocte → at night); passive voice for medications ("was discontinued"); value+unit spaced ("37.8 °C") with vital units (mmHg, bpm, /min); smoking/alcohol keep their daily frequency; no emotional observations ("appeared anxious"); precise referents ("possible tophus removal").
-- **If correct clinical wording exposes a validator weakness, FIX THE VALIDATOR — never reword the letter to dodge the regex.** Every owner-flagged defect type becomes a permanent injection test in `WritingRev8RegressionFixtureTests.cs` before further letters.
-- Targeted repair only; never regenerate a good letter for one small defect. Do not expand to further professions/cells without explicit owner approval.
+- **Premium clinical register always**, even when case notes are colloquial: fatigue/lethargy not "tired/sluggish"; no Latin frequencies (nocte → at night); passive voice for medications ("was discontinued" / "treatment was changed to"); value+unit spaced ("37.8 °C") with vital units (mmHg, bpm, breaths/min — never bare "/min"); smoking/alcohol keep their daily frequency; no emotional observations ("appeared anxious"); precise referents ("possible tophus removal"); "has long been overweight"; "bruising on her left arm"; "type two diabetes mellitus" in Model Answers.
+- **Owner Clarifications Addendum (14 Sep 2026, OA-01..OA-15):** introduction states the exact request immediately (never "given a working assessment of ..."); Re: line full identity; the intro may use the full name once in the purpose clause; closure = standalone request paragraph + separate final contact-offer paragraph, never repeating the intro's request verbatim; address components on separate lines; letter date never later than the notes; recipient spelled exactly as the task spells it; letter-type derived from notes + task (never invent admission/discharge). Registry rows OA-01..OA-15 live in `docs/canonical-rules/OET_AI_Rules_Master.jsonl`.
+- **If correct clinical wording exposes a validator weakness, FIX THE VALIDATOR — never reword the letter to dodge the regex.** Every owner-flagged defect type becomes a permanent injection test in `WritingRev8RegressionFixtureTests.cs` before further letters. A stored Ready flag is valid only for the validator version it was verified under; any rule-pack bump invalidates affected answers until revalidated.
+- Targeted repair only; never regenerate a good letter for one small defect. Do not expand to further professions/cells without explicit owner approval. STOP after the Medicine owner-review pack — Nursing/Track B/224 need owner say-so.
 
 ## Official Reading uploads — COMPULSORY
 

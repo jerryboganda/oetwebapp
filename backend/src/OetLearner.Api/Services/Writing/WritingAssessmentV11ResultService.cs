@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Writing;
 
@@ -96,20 +97,30 @@ public sealed class WritingAssessmentV11ResultService(LearnerDbContext db) : IWr
             ? report.Errors
                 .OrderBy(x => SeverityRank(x.Severity))
                 .ThenBy(x => x.StartOffset ?? int.MaxValue)
-                .Select(x => new WritingAssessmentV11ErrorResponse(
-                    x.Id.ToString(),
-                    x.Location,
-                    x.CandidateWording,
-                    x.Correction,
-                    x.Category,
-                    x.RuleSource,
-                    x.WhyItMatters,
-                    x.Severity,
-                    x.Confidence,
-                    x.PrimaryCriterionCode,
-                    ParseStringList(x.SecondaryCriterionCodesJson),
-                    x.StartOffset,
-                    x.EndOffset))
+                .Select(x =>
+                {
+                    // Ultimate Final §15.1: the finding's authority layer and
+                    // score-bearing status are registry-derived, so they are
+                    // resolved at read time from the stored rule id.
+                    var provenance = WritingRuleProvenance.For(
+                        WritingAssessmentV11RuleEngine.ResolveCheckId(x.RuleSource));
+                    return new WritingAssessmentV11ErrorResponse(
+                        x.Id.ToString(),
+                        x.Location,
+                        x.CandidateWording,
+                        x.Correction,
+                        x.Category,
+                        x.RuleSource,
+                        x.WhyItMatters,
+                        x.Severity,
+                        x.Confidence,
+                        x.PrimaryCriterionCode,
+                        ParseStringList(x.SecondaryCriterionCodesJson),
+                        x.StartOffset,
+                        x.EndOffset,
+                        provenance.Tag,
+                        provenance.CandidateBehavior);
+                })
                 .ToArray()
             : [];
         var facts = candidateVisible

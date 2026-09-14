@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0-rev8",
+  "version": "1.2.0-ultimate-final",
   "kind": "writing",
   "profession": "podiatry",
-  "publishedAt": "2026-04-18T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham — The Tutor Book — OET Writing Comprehensive Rulebook (Sessions 1–10) — adapted for Podiatry (Phase D v1)",
+  "publishedAt": "2026-09-13T00:00:00Z",
+  "authoritySource": "PROFESSION_RESOURCE_DERIVED — derived operational module from the ULTIMATE FINAL handoff (13 Sep 2026, Section 16). No audited standalone FINAL/MASTER Writing Rule Book exists for this profession yet; a later approved canonical production pack must be source-audited and supersede this module. Do not treat these rows as official OET or Dr Hesham direct teaching.",
   "sections": [
     {
       "id": "01",
@@ -2662,6 +2662,126 @@
           "Rev8 §12.4",
           "Rev8 §19.4"
         ]
+      }
+    },
+    {
+      "id": "PRD-POD-01",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 01",
+      "body": "Identify anatomical site/laterality and describe pain, callus/nail/skin/wound change and functional impact relevant to the request.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-POD-02",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 02",
+      "body": "For diabetes-related care, include neuropathy/sensation/perfusion/vascular findings and ulcer risk only when documented.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-POD-03",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 03",
+      "body": "Wound/ulcer descriptions preserve documented dimensions, depth, tissue/exudate/infection/progression; never invent staging or measurements.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-POD-04",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 04",
+      "body": "Infection/ischaemia red flags drive urgency/escalation where supported.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-POD-05",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 05",
+      "body": "Footwear, pressure/off-loading, orthoses and self-care are factual; adherence barriers are described non-judgementally.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-POD-06",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 06",
+      "body": "Document debridement/wound care/treatment and response only within source and scope; do not invent medication changes.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-POD-07",
+      "section": "16",
+      "severity": "minor",
+      "title": "Derived operational module 07",
+      "body": "Link gait/falls/walking tolerance/occupational demand when relevant.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-POD-08",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 08",
+      "body": "Closure/request identifies monitoring, wound/vascular review, footwear/orthotic action or escalation ownership as tasked.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
       }
     }
   ],

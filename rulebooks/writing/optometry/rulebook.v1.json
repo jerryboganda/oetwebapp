@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0-rev8",
+  "version": "1.2.0-ultimate-final",
   "kind": "writing",
   "profession": "optometry",
-  "publishedAt": "2026-04-18T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham — The Tutor Book — OET Writing Comprehensive Rulebook (Sessions 1–10) — adapted for Optometry (Phase D v1)",
+  "publishedAt": "2026-09-13T00:00:00Z",
+  "authoritySource": "PROFESSION_RESOURCE_DERIVED — derived operational module from the ULTIMATE FINAL handoff (13 Sep 2026, Section 16). No audited standalone FINAL/MASTER Writing Rule Book exists for this profession yet; a later approved canonical production pack must be source-audited and supersede this module. Do not treat these rows as official OET or Dr Hesham direct teaching.",
   "sections": [
     {
       "id": "01",
@@ -2662,6 +2662,126 @@
           "Rev8 §12.4",
           "Rev8 §19.4"
         ]
+      }
+    },
+    {
+      "id": "PRD-OPT-01",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 01",
+      "body": "Identify laterality, onset, visual symptoms, pain/photophobia/redness/trauma and visual change when relevant.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-OPT-02",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 02",
+      "body": "Report visual acuity, refraction, ocular examination and measured findings exactly; do not invent measurements.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-OPT-03",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 03",
+      "body": "Red flags such as sudden loss, significant pain, trauma, flashes/floaters or contact-lens risk drive urgency only when supported.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-OPT-04",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 04",
+      "body": "Calibrate certainty; do not turn an optometric impression or suspicion into a confirmed diagnosis without source support.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-OPT-05",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 05",
+      "body": "State the exact ophthalmology/medical action and urgency; make next-step ownership executable.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-OPT-06",
+      "section": "16",
+      "severity": "minor",
+      "title": "Derived operational module 06",
+      "body": "Include spectacle/contact-lens information, drops, hygiene/adherence only when relevant.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-OPT-07",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 07",
+      "body": "Patient advice/precautions must be task/source-supported and within professional scope.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-OPT-08",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 08",
+      "body": "Use reader-appropriate ocular terminology; patient-facing communication needs lay clarity.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
       }
     }
   ],

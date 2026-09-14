@@ -20,7 +20,15 @@ public static class WritingCaseNotesMarkerExtractor
             PatientInitiatedReferral: Regex.IsMatch(text, @"\b(patient requested|(?:he|she) requested (?:a )?referral|upon (his|her) request|at (?:his|her|the patient'?s|patient'?s|[a-z]+'s) (?:own )?request)\b"),
             ConsentDocumented: Regex.IsMatch(text, @"\b(consent|fully informed|discussed with patient|safety plan completed)\b"),
             FollowUpDate: followUpDate,
-            ResultsEnclosed: Regex.IsMatch(text, @"\b(enclosed|attached|please find enclosed|copy of results|copy of imaging)\b"));
+            ResultsEnclosed: Regex.IsMatch(text, @"\b(enclosed|attached|please find enclosed|copy of results|copy of imaging)\b"),
+            // Ultimate Final §3.3 — discharge language is only supported when
+            // the canonical notes document the underlying admission/discharge.
+            // Deliberately broad on the SOURCE side: "came into hospital",
+            // "ward", "theatre", "under our team" all count as admission
+            // evidence so a genuine discharge letter is never false-failed;
+            // only a letter whose notes contain none of it can invent one.
+            AdmissionDocumented: Regex.IsMatch(text, @"\b(admit(?:ted|s|tance)?|inpatient|in-patient|hospitalis?ed?|hospital|ward|theatre|overnight stay|post-?operat\w*|under (?:our|the) (?:team|care|management))\b"),
+            DischargeDocumented: Regex.IsMatch(text, @"\b(discharg\w*|sent home|returning home|returned home|back to (?:your|his|her|their) care|transfer of care|fit for discharge)\b"));
     }
 
     private static string? ExtractFollowUp(string? caseNotes)

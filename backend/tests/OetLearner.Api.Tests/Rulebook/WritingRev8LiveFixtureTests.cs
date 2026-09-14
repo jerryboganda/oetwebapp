@@ -115,17 +115,17 @@ Newtown
 13 June 2020
 
 Dear Dr Still,
-Re: Mr David Taylor, aged 55
+Re: Mr David Taylor, DOB: 1 August 1965
 
-I am writing to urgently refer Mr Taylor for rheumatological assessment of an acute gout flare with an associated tophus.
+I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with an acute gout flare and an associated tophus.
 
-On today's visit, Mr Taylor presented with a painful, swollen right big toe and foot, right flank pain and red-coloured urine. His blood pressure was 120/80 mmHg, heart rate 90 bpm and temperature 37.8 °C. His right first toe was inflamed with an underlying tophus, and he was commenced on colchicine, 1 mg, and anti-inflammatory medication.
+Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure of 120/80 mmHg, heart rate of 90 bpm and respiratory rate of 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, also known as Lengout, 1 mg, and NSAIDs.
 
-Mr Taylor was diagnosed with gout in 2000 and treated with colchicine, allopurinol and paracetamol. Further attacks on 1 June 2010 and 1 September 2010 were treated with a steroid injection, colchicine and allopurinol. He was advised to stop smoking, reduce alcohol and red meat, and increase fluids; subsequently, he remained attack-free from 2011.
+Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine, also known as Lengout. He experienced a severe attack and a further attack in 2010; kidney stones were noted that year. He remained free of attacks from 2011 to 2020. He was diagnosed with depression in 2011, possibly gout-related, treated with fluoxetine since. His brother has gout, and his father died of kidney failure.
 
-Mr Taylor has previous kidney stones, a family history of renal failure and a brother with gout. Given his flank pain and red urine, he was referred to a urologist.
+I would be grateful if you could consider possible tophus removal at your earliest convenience.
 
-I would be grateful if you could assess Mr Taylor at your earliest convenience, with a view to possible removal of the tophus. Should there be any queries, kindly do not hesitate to contact me.
+Please do not hesitate to contact me with any queries.
 
 Yours sincerely,
 
@@ -192,20 +192,20 @@ Suite 3
 67 The Crescent
 Newtown
 
-11 August 2014
+9 August 2014
 
 Dear Dr McLaren,
-Re: Mr Michael Weir
+Re: Mr Michael Weir, DOB: 20 September 1970
 
-I am writing to refer Mr Weir, who is presenting with features suggestive of multiple sclerosis, for a full neurological assessment.
+I am writing to request your neurological assessment and management of Mr Weir, who has presented with features suggestive of multiple sclerosis.
 
-On 9 August 2014, Mr Weir reported dizziness, two blackouts lasting a few minutes each, tingling in his hands, ongoing left leg weakness, breathlessness and occasional constipation. Examination revealed bilateral sensory loss in his hands and a diminished left patellar reflex. A CT scan of the head and spine has been arranged to exclude central causes.
+On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes of the weakness and hyporeflexia.
 
-Mr Weir first presented on 29 June 2014 with fatigue and stress, and blood tests were arranged. On review on 7 July 2014, he reported persistent fatigue and low mood and had developed left leg weakness. His cholesterol was 6.37 mmol/L, and his blood count showed a low white cell count, red cell count, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia and advised on lifestyle changes.
+Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. Investigations showed a cholesterol of 6.37 mmol/L and a full blood count with low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months. He has depression, treated with sertraline hydrochloride since September 2012, continues to smoke and has long been overweight.
 
-Mr Weir has depression, treated with sertraline hydrochloride, known as Zoloft, since September 2012. He smokes and has been overweight long term.
+I would be grateful if you could assess Mr Weir and advise on further management, including possible MRI.
 
-I would be grateful if you could assess Mr Weir, including MRI if indicated. Should there be any queries, kindly do not hesitate to contact me.
+Please do not hesitate to contact me with any queries.
 
 Yours sincerely,
 
@@ -268,15 +268,17 @@ Stillwater
 Dear Dr Bradbury,
 Re: Ms Isabel Garcia, DOB: 1 January 1995
 
-I am writing to update you regarding Ms Garcia, who was admitted today with bacterial meningitis, and to request follow-up of her close contacts.
+I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of her close contacts.
 
-On examination, Ms Garcia was afebrile, with bruising to her left arm and a petechial rash on her abdomen and legs. She was unable to touch her chin to her chest when supine. Blood tests showed raised white cell count and C-reactive protein, lumbar puncture findings were consistent with bacterial meningitis, and culture confirmed Neisseria meningitidis.
+Ms Garcia presented with a one-week history of painful, stiff joints, headache, neck stiffness, photophobia and bruising. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. Blood tests showed a white cell count of 14.0x10^9/L and a CRP of 150. Lumbar puncture showed 1000 white cells with polymorphonuclear predominance, reduced glucose of 10 mg/dL and elevated protein of 70 mg/dL. Culture confirmed Neisseria meningitidis.
 
-Ms Garcia was commenced on intravenous ceftriaxone, 2 g twice daily, and dexamethasone, 10 mg before the first dose and then every six hours for four days. After culture confirmation, treatment was changed to intravenous benzylpenicillin, 1.8 g every four hours for five days. She has responded well to treatment.
+Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily; dexamethasone was continued six-hourly for four days. Treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
 
-Ms Garcia's case has been notified to the Department of Human Services, and her family members were advised to be immunised.
+Ms Garcia's case was notified to the Department of Human Services; family immunisation was discussed.
 
-I would be grateful if you could advise Ms Garcia's family and friends to seek prompt medical attention if unexplained illness develops and consider chemoprophylaxis for her recent close contacts. Should there be any queries, kindly do not hesitate to contact me.
+I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care for unexplained illness and consider chemoprophylaxis.
+
+Please do not hesitate to contact me with any queries.
 
 Yours sincerely,
 
@@ -410,7 +412,9 @@ On examination, Mrs Wright was limping and unable to straighten the knee, with d
 
 Mrs Wright walks four times weekly and attends a circuit class twice weekly, having increased her exercise before the injury. She had partial meniscectomies of the right knee in 1990 and the left knee in 2000. She takes glucosamine and felodipine for hypertension.
 
-I would be grateful if you could arrange an X-ray, MRI or arthroscopy. Should there be any queries, kindly do not hesitate to contact me.
+I would be grateful if you could arrange an X-ray, MRI or arthroscopy.
+
+Should there be any queries, kindly do not hesitate to contact me.
 
 Yours sincerely,
 
@@ -424,7 +428,7 @@ Physiotherapist
     [Fact]
     public void Validator_Version_Is_Stamped_And_RulePack_Fingerprint_Is_Stable()
     {
-        Assert.Equal("writing-rules.rev8.2026-09-11.1", WritingRuleEngine.ValidatorVersion);
+        Assert.Equal("writing-rules.owner-addendum.2026-09-14.1", WritingRuleEngine.ValidatorVersion);
         var a = _engine.RulePackFingerprint(ExamProfession.Medicine);
         var b = _engine.RulePackFingerprint(ExamProfession.Medicine);
         Assert.StartsWith("rp-", a);

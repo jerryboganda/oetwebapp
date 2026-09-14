@@ -25,8 +25,17 @@ public sealed partial class WritingRuleEngine
     /// the Model Answer blocking policy MUST bump this string: a stored
     /// VERIFIED/CLEAN Model Answer is only valid for the exact validator
     /// version it was verified under (Addendum Rev8 §7, §14).
+    /// Owner Clarifications Addendum (14 Sep 2026): +OA-01..OA-15 battery —
+    /// intro_purpose_vague, closure_request_paragraph, treatment_change_grammar,
+    /// results_comma_splice, diabetes_type_words, respiratory_rate_unit_style,
+    /// illogical_quantity_range, vague_clinical_object, letter_date_unsupported,
+    /// recipient_name_mismatch, semicolon_overuse; OA-03 introduction
+    /// full-name allowance; OA-07 duplicate-request gated to Model Answers
+    /// (candidates are assessed semantically, never by phrase matching).
+    /// Every stored answer affected by this rule-pack change must be
+    /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.rev8.2026-09-11.1";
+    public const string ValidatorVersion = "writing-rules.owner-addendum.2026-09-14.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -166,18 +175,36 @@ public sealed partial class WritingRuleEngine
     // OWN-W-011 — "Do not repeat the full first + last name in the body after
     // it has been used in the Re: line." The introduction counts (Weir /
     // Taylor / Ramsey defects: "I am writing to refer Mr David Taylor ...").
+    // Owner addendum OA-03 (14 Sep 2026) override: the introduction MAY use
+    // the full patient name ONCE when it is syntactically part of the
+    // purpose clause ("I am writing to update you regarding Ms Isabel Garcia
+    // ..."); every later adult reference returns to title + surname.
     private static IEnumerable<LintFinding> DetectFullNameRepeated(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var name = ResolvePatientName(input, s);
         if (name is null || !name.HasFullName || s.Body.Length == 0) yield break;
         var re = new Regex($@"\b(?:(?:Mr|Mrs|Ms|Miss|Master|Dr)\.?\s+)?{Regex.Escape(name.First!)}\s+{Regex.Escape(name.Last!)}\b");
-        var m = re.Match(s.Body);
-        if (!m.Success) yield break;
-        var approved = name.Child ? name.First : $"{name.Title ?? "Mr/Ms"} {name.Last}";
-        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
-            $"The full name \"{m.Value}\" is already in the Re: line — do not repeat it in the letter. Use \"{approved}\" instead.",
-            Quote: m.Value, Start: BodyOffset(s) + m.Index, End: BodyOffset(s) + m.Index + m.Length,
-            FixSuggestion: approved);
+        var introLength = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[0].Length : 0;
+        var purposeAllowanceUsed = false;
+        foreach (Match m in re.Matches(s.Body))
+        {
+            var inIntroduction = m.Index <= introLength;
+            var purposeClause = inIntroduction && Regex.IsMatch(
+                s.Body.Substring(Math.Max(0, m.Index - 14), Math.Min(14, m.Index)),
+                @"\b(?:regarding|concerning|about|for|of)\s+$",
+                RegexOptions.IgnoreCase);
+            if (inIntroduction && purposeClause && !purposeAllowanceUsed)
+            {
+                purposeAllowanceUsed = true;
+                continue;
+            }
+            var approved = name.Child ? name.First : $"{name.Title ?? "Mr/Ms"} {name.Last}";
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                $"The full name \"{m.Value}\" is already in the Re: line — do not repeat it in the letter. Use \"{approved}\" instead (the introduction may use the full name once as part of the purpose clause, e.g. \"regarding {name.Title} {name.First} {name.Last}\").",
+                Quote: m.Value, Start: BodyOffset(s) + m.Index, End: BodyOffset(s) + m.Index + m.Length,
+                FixSuggestion: approved);
+            yield break;
+        }
     }
 
     // OWN-W-010 — "At the first mention of every body paragraph use the
@@ -306,12 +333,17 @@ public sealed partial class WritingRuleEngine
             .Where(x => x.Length > 0)
             .ToList();
 
-    // OWN-W-015 (Model Answer ordering) — "at your earliest convenience" in the
-    // closure, then the contact-offer sentence last.
+    // OWN-W-015 (Model Answer ordering) — "at your earliest convenience" in
+    // the closure's request sentence, then the final contact-offer
+    // paragraph. OA-06 (14 Sep 2026): the closure is the REQUEST paragraph
+    // plus the SEPARATE contact-offer paragraph, so the closure region is
+    // the last two paragraphs.
     private static IEnumerable<LintFinding> DetectUrgentClosureModelAnswer(OetRule rule, WritingLintInput input, LetterStructure s)
     {
-        var closure = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[^1] : "";
-        var sentences = SplitSentences(closure);
+        var closureRegion = s.BodyParagraphs.Count > 0
+            ? string.Join(" ", s.BodyParagraphs.TakeLast(2))
+            : "";
+        var sentences = SplitSentences(closureRegion);
         var aeycIndex = sentences.FindIndex(x => x.Contains("at your earliest convenience", StringComparison.OrdinalIgnoreCase));
         if (aeycIndex < 0)
         {
@@ -322,7 +354,7 @@ public sealed partial class WritingRuleEngine
         }
         if (aeycIndex == sentences.Count - 1)
             yield return new LintFinding(rule.Id, RuleSeverity.Critical,
-                "In an urgent-referral Model Answer, \"at your earliest convenience\" must come in the request sentence, followed by the final contact-offer sentence.",
+                "In an urgent-referral Model Answer, \"at your earliest convenience\" belongs in the request sentence, followed by the final contact-offer paragraph.",
                 Quote: sentences[aeycIndex]);
     }
 
@@ -526,12 +558,14 @@ public sealed partial class WritingRuleEngine
     // "MRI imaging"; Wright "felt something pop", "with no GP") plus the
     // owner's 13 Sep 2026 additions: vague duration ("for a long time"),
     // emotional/judgmental observation ("appeared anxious") and stripped
-    // clinical precision are register failures in their own right. A Model
+    // clinical precision are register failures in their own right, and the
+    // 14 Sep 2026 addendum (OA-08) adds the ungrammatical "overweight long
+    // term" ("has long been overweight" is the approved form). A Model
     // Answer must render case-note wording in premium clinical English
     // ("fatigue", "lethargy"), never copy colloquial source words verbatim —
     // so there is deliberately NO case-notes exemption here.
     private static readonly Regex ColloquialRe = new(
-        @"\bMRI imaging\b|\bCT scan imaging\b|\bfelt something\s+['‘’]?pop['‘’]?|\bsomething\s+['‘’]pop['‘’]|\bsluggish\b|\bwith no GP\b|\bno GP\b|\bkids?\b|\bguys?\b|\ba lot of\b|\blots of\b|\bpretty (?:bad|severe|good|much)\b|\bokay\b|\bOK\b|\bgot (?:better|worse)\b|\bstuff\b|\btired\b|\bfeeling down\b|\bup and down\b|\btummy\b|\bpee\b|\bpoo\b|\bfor a long time\b|\b(?:appeared|seemed)\s+(?:anxious|agitated|confused|distressed)\b",
+        @"\bMRI imaging\b|\bCT scan imaging\b|\bfelt something\s+['‘’]?pop['‘’]?|\bsomething\s+['‘’]pop['‘’]|\bsluggish\b|\bwith no GP\b|\bno GP\b|\bkids?\b|\bguys?\b|\ba lot of\b|\blots of\b|\bpretty (?:bad|severe|good|much)\b|\bokay\b|\bOK\b|\bgot (?:better|worse)\b|\bstuff\b|\btired\b|\bfeeling down\b|\bup and down\b|\btummy\b|\bpee\b|\bpoo\b|\bfor a long time\b|\boverweight\s+long\s+term\b|\bbruising\s+to\s+(?:his|her|their|the)\b|\b(?:appeared|seemed)\s+(?:anxious|agitated|confused|distressed)\b",
         RegexOptions.None);
 
     private static IEnumerable<LintFinding> DetectColloquialRegister(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -551,11 +585,14 @@ public sealed partial class WritingRuleEngine
     // Rev8 (owner directive, 13 Sep 2026, McDonald): "amitriptyline ceased
     // due to difficulty urinating" is note-form English. A medication
     // followed by a bare past participle must use the passive ("was
-    // discontinued"). Only drug-name subjects are flagged; genuinely
-    // intransitive subjects ("the pain ceased", "bleeding stopped") and
-    // determiner-led general subjects ("the treatment stopped") stay valid.
+    // discontinued"). Owner addendum OA-09 (14 Sep 2026) adds the Garcia
+    // defect "dexamethasone continued six-hourly" — "continued" joins the
+    // participle set for drug-name subjects. Only drug-name subjects are
+    // flagged; genuinely intransitive subjects ("the pain ceased",
+    // "bleeding stopped", "follow-up continued", "she has responded well")
+    // and determiner-led general subjects ("the treatment stopped") stay valid.
     private static readonly Regex MedicationPassiveRe = new(
-        @"(?:(?<det>\b(?:the|a|an|his|her|its|their)\s+)|(?<aux>\b(?:was|were|is|are|be|been|being|has|have|had)\s+))?\b(?<drug>[A-Za-z][A-Za-z\-]{2,})\s+(?<participle>ceased|discontinued|commenced|initiated|recommenced|stopped|started|weaned|withdrawn)\b",
+        @"(?:(?<det>\b(?:the|a|an|his|her|its|their)\s+)|(?<aux>\b(?:was|were|is|are|be|been|being|has|have|had)\s+))?\b(?<drug>[A-Za-z][A-Za-z\-]{2,})\s+(?<participle>ceased|discontinued|commenced|initiated|recommenced|stopped|started|continued|weaned|withdrawn)\b",
         RegexOptions.IgnoreCase);
 
     private static readonly HashSet<string> IntransitiveParticipleSubjects = new(StringComparer.OrdinalIgnoreCase)
@@ -564,6 +601,11 @@ public sealed partial class WritingRuleEngine
         "smoking", "vomiting", "nausea", "withdrawal", "tremor", "tremors", "spasm", "spasms",
         "cough", "diarrhoea", "diarrhea", "constipation", "sweating", "ache", "aches",
         "treatment", "therapy", "course", "dose", "medication", "medications", "drug", "drugs",
+        // Intransitive nouns that legitimately take "continued" in clinical
+        // prose ("follow-up continued", "review continued for four weeks").
+        "follow-up", "followup", "review", "reviews", "monitoring", "surveillance",
+        "observation", "observations", "care", "rehabilitation", "physiotherapy",
+        "admission", "stay", "recovery", "improvement", "treatment", "therapy",
     };
 
     private static IEnumerable<LintFinding> DetectMedicationPassiveGrammar(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -629,17 +671,22 @@ public sealed partial class WritingRuleEngine
     private static IEnumerable<LintFinding> DetectClosureContainsManagement(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (s.BodyParagraphs.Count < 2) yield break;
-        var sentences = SplitSentences(s.BodyParagraphs[^1]);
-        var requestIdx = sentences.FindIndex(x => ClosureRequestRe.IsMatch(x));
-        if (requestIdx < 0) yield break;
-        foreach (var sentence in sentences.Skip(requestIdx + 1))
+        // The request lives in its own closure paragraph (OA-06) or the
+        // combined final paragraph (candidate letters) — check both.
+        foreach (var paragraph in s.BodyParagraphs.TakeLast(2))
         {
-            if (ManagementAfterRequestRe.IsMatch(sentence) && !ContactOfferMeaningRe.IsMatch(sentence))
+            var sentences = SplitSentences(paragraph);
+            var requestIdx = sentences.FindIndex(x => ClosureRequestRe.IsMatch(x));
+            if (requestIdx < 0) continue;
+            foreach (var sentence in sentences.Skip(requestIdx + 1))
             {
-                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
-                    "Management/history details appear after the closing request. Move them into the body before the closure; the closure should only close the letter.",
-                    Quote: sentence.Length > 90 ? sentence[..90] + "…" : sentence);
-                yield break;
+                if (ManagementAfterRequestRe.IsMatch(sentence) && !ContactOfferMeaningRe.IsMatch(sentence))
+                {
+                    yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                        "Management/history details appear after the closing request. Move them into the body before the closure; the closure should only close the letter.",
+                        Quote: sentence.Length > 90 ? sentence[..90] + "…" : sentence);
+                    yield break;
+                }
             }
         }
     }
@@ -784,5 +831,444 @@ public sealed partial class WritingRuleEngine
         var offset = 0;
         for (int i = 0; i < firstBody && i < s.Lines.Length; i++) offset += s.Lines[i].Length + 1;
         return offset;
+    }
+
+    // ---------------------------------------------------------------------
+    // Ultimate Final handoff (13 Sep 2026) detectors — the permanent
+    // false-READY Garcia regression fixture (§11.5) and the discharge-vs-
+    // simple-update clarification (§3.3). A green checkmark never overrides
+    // a visible rule breach, so each previously-missed defect class gets a
+    // deterministic detector plus an injected-defect regression test.
+    // ---------------------------------------------------------------------
+
+    // Re: line must carry the patient's FULL identification (§4.4): adults
+    // = title + first + last name; children = first + last with no title.
+    // False-READY fixture: "Re: Ms Garcia" (surname only) passed the old
+    // gate with "zero findings" — it must fail.
+    private static IEnumerable<LintFinding> DetectReLineFullName(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.ReLineIndex is null) yield break;
+        var reLine = s.Lines[s.ReLineIndex.Value];
+        var titled = ReTitledNameRe.Match(reLine);
+        if (titled.Success)
+        {
+            // Same trailing-identifier trimming as ResolvePatientName so
+            // "Re: Mrs Rose Garcia DOB: 1 January 1945" counts the name
+            // tokens only.
+            var tokens = new List<string> { titled.Groups[2].Value };
+            if (titled.Groups[3].Success) tokens.Add(titled.Groups[3].Value);
+            if (titled.Groups[4].Success) tokens.Add(titled.Groups[4].Value);
+            while (tokens.Count > 1 && (NonNameReWords.Contains(tokens[^1]) || ReIdentifierWords.Contains(tokens[^1])))
+                tokens.RemoveAt(tokens.Count - 1);
+            if (tokens.Count < 2)
+            {
+                var title = titled.Groups[1].Value;
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                    $"The Re: line identifies the patient by surname only (\"{title} {tokens[0]}\"). Use the full name — title + first + last name for an adult, first + last name for a child.",
+                    Quote: reLine.Trim());
+            }
+            yield break;
+        }
+        var untitled = ReUntitledNameRe.Match(reLine);
+        if (untitled.Success
+            && !NonNameReWords.Contains(untitled.Groups[1].Value)
+            && !NonNameReWords.Contains(untitled.Groups[2].Value)
+            && !input.PatientIsMinor)
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "An adult patient's Re: line uses title + first + last name. Add the professional title (Mr/Mrs/Ms/Dr) before the full name.",
+                Quote: reLine.Trim(),
+                FixSuggestion: $"Re: Mr/Ms {untitled.Groups[1].Value} {untitled.Groups[2].Value}");
+        }
+    }
+
+    // Letter-uses discharge/transfer-of-care language while the canonical
+    // case notes document NO admission or discharge (§3.3): a simple update
+    // must never invent "being discharged" / "ready for discharge" /
+    // "returned to your care". Deliberately scoped to NON-discharge-routed
+    // letters: for an LT-DG task the classification itself is the semantic
+    // validator's decision (notes + exact task, never the catalogue code
+    // alone), and this deterministic layer only guards the invented-fact
+    // direction it can prove from the notes snapshot.
+    private static readonly Regex DischargeLanguageRe = new(
+        @"\bready for discharge\b|\bbeing discharged\b|\b(?:was|were|has been|is now|will be|to be) discharged\b" +
+        @"|\bdischarged (?:home|today|this (?:morning|afternoon|week)|from)\b|\bfollowing (?:his|her|their) discharge\b" +
+        @"|\bon discharge\b|\bdischarge (?:plan|medications?|medication|summary|date|destination|arrangements?)\b" +
+        @"|\breturned to (?:your|the) care\b|\btransfer of care back\b",
+        RegexOptions.IgnoreCase);
+
+    private static readonly Regex DischargeFalseFriendRe = new(
+        @"\b(?:vaginal|ocular|ear|nasal|nipple|wound|urethral|post.?operative)\s+discharge\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectDischargeLanguageUnsupported(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesMarkers is not { } markers) yield break;
+        if (markers.AdmissionDocumented || markers.DischargeDocumented) yield break;
+        if (string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)) yield break;
+        if (s.Body.Length == 0) yield break;
+        var body = DischargeFalseFriendRe.Replace(s.Body, string.Empty);
+        var m = DischargeLanguageRe.Match(body);
+        if (!m.Success) yield break;
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+            "The case notes do not document an admission or discharge, so this discharge/transfer-of-care wording is an invented fact. Derive the letter type from the case notes and the exact task — a task without supported admission/discharge is a simple update.",
+            Quote: m.Value, Start: BodyOffset(s) + m.Index, End: BodyOffset(s) + m.Index + m.Length);
+    }
+
+    // False-READY fixture §11.5: "Examination showed afebrile ..." — an
+    // adjective cannot be the object of "showed"; the construction is
+    // grammatically incomplete and must fail Language, not pass as clean.
+    private static readonly Regex IncompleteClinicalConstructionRe = new(
+        @"\b(?:Examination|Observations?|Obs|Assessment|Examination findings|Initial assessment)\s+(?:showed|revealed|demonstrated|indicated)\s+(?:afebrile|febrile|well|stable|alert|asymptomatic|drowsy|lethargic|breathless|agitated|haemodynamically stable|hemodynamically stable)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectIncompleteClinicalConstruction(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in IncompleteClinicalConstructionRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                $"\"{m.Value}\" is a grammatically incomplete construction — the verb needs a noun phrase or a full clause (e.g. \"on examination she was afebrile\" or \"examination showed no fever\").",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Owner Clarifications Addendum (14 Sep 2026) — OA-01..OA-15. Each
+    // detector implements one canonical owner rule; registry rows OA-01..
+    // OA-15 live in docs/canonical-rules/OET_AI_Rules_Master.jsonl and the
+    // injected-defect regression coverage in
+    // WritingRev8RegressionFixtureTests.cs.
+    // ---------------------------------------------------------------------
+
+    // OA-01 + OA-04 — introduction purpose. Two deterministic failure modes:
+    // (a) the vague hand-off construction the owner banned verbatim ("given
+    // a working assessment of possible ..."), in BOTH modes — it is vague
+    // professional English in any letter; (b) Model Answer: the letter's
+    // closure carries a request while the introduction names only the topic
+    // ("I am writing to update you regarding Ms Garcia's diagnosis and
+    // treatment ...") — the reader action must be stated immediately.
+    private static readonly Regex VagueWorkingAssessmentRe = new(
+        @"\bgiven a working assessment\b|\bworking assessment of\b",
+        RegexOptions.IgnoreCase);
+
+    private static readonly Regex IntroActionMarkerRe = new(
+        @"\b(?:request|requests|requesting|refer|referral|referring|assessment|assess|review|arrange|arranging|assist|assistance|support|transfer|transferring|opinion|follow-up|followup|management of|admission|outline|notify|advise me)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectIntroPurposeVague(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0 || s.BodyParagraphs.Count == 0) yield break;
+        var intro = s.BodyParagraphs[0];
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in VagueWorkingAssessmentRe.Matches(intro))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "The introduction hides the request behind a vague working-assessment construction. State the direct task-specific request, e.g. \"I am writing to request your neurological assessment and management of Mr Weir, who has presented with ...\".",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+            yield break;
+        }
+        if (!input.IsModelAnswer || s.BodyParagraphs.Count < 2) yield break;
+        var requestExists = s.BodyParagraphs.Skip(1).Any(p => ClosureRequestRe.IsMatch(p));
+        if (!requestExists) yield break;
+        if (!IntroActionMarkerRe.IsMatch(intro))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "The introduction states only the topic, not the task-specific purpose or request. State the reader's required action immediately (e.g. \"... and to request your assistance with the required follow-up of her close contacts\"). If the task genuinely requests no action, state the informational purpose precisely instead.",
+                Quote: intro.Length > 100 ? intro[..100] + "…" : intro);
+        }
+    }
+
+    // OA-06 — closure paragraphing. Model Answer only (candidates are never
+    // forced to copy house paragraphing). The task-specific request ("I
+    // would be grateful if you could ...") must START its own paragraph,
+    // and the universal contact-offer sentence must be the SEPARATE final
+    // paragraph. Injected defects caught: request merged into the prior
+    // body paragraph; contact offer merged into the request paragraph.
+    private static IEnumerable<LintFinding> DetectClosureRequestParagraph(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (!input.IsModelAnswer || s.BodyParagraphs.Count < 2) yield break;
+        var requestParagraphIndex = -1;
+        for (var i = s.BodyParagraphs.Count - 1; i >= 0; i--)
+        {
+            if (!ClosureRequestRe.IsMatch(s.BodyParagraphs[i])) continue;
+            requestParagraphIndex = i;
+            break;
+        }
+        if (requestParagraphIndex < 0) yield break;
+        var requestParagraph = s.BodyParagraphs[requestParagraphIndex];
+        var offset = BodyOffset(s) + s.Body.IndexOf(requestParagraph, StringComparison.Ordinal);
+        var sentences = SplitSentences(requestParagraph);
+        if (!ClosureRequestRe.IsMatch(sentences[0]))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "The task-specific request must START its own closure paragraph — content preceding \"I would be grateful if you could ...\" belongs in the body above.",
+                Quote: sentences[0].Length > 90 ? sentences[0][..90] + "…" : sentences[0],
+                Start: offset, End: offset + requestParagraph.Length);
+        }
+        var final = s.BodyParagraphs[^1];
+        var finalIsRequest = requestParagraphIndex == s.BodyParagraphs.Count - 1;
+        if (finalIsRequest)
+        {
+            // The request paragraph is also the last paragraph: if it also
+            // carries the contact offer, the two canonical paragraphs merged.
+            if (ContactOfferMeaningRe.IsMatch(final))
+            {
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                    "The universal contact-offer sentence must be a separate final paragraph before the sign-off — it may not share the request paragraph.",
+                    Quote: final.Length > 90 ? final[..90] + "…" : final);
+            }
+            yield break;
+        }
+        // A paragraph after the request exists (the intended offer paragraph).
+        // It must contain ONLY the contact offer.
+        var finalSentences = SplitSentences(final);
+        if (finalSentences.Count != 1 || !ContactOfferMeaningRe.IsMatch(final))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "The final paragraph must contain only the universal contact-offer sentence (e.g. \"Should there be any queries, please do not hesitate to contact me.\").",
+                Quote: final.Length > 90 ? final[..90] + "…" : final);
+        }
+    }
+
+    // OA-09 — missing auxiliary in the change-of-treatment passive ("treatment
+    // changed to benzylpenicillin"). "X was changed to ..." or an explicit
+    // active subject is required. Legitimately intransitive subjects
+    // ("the plan changed", "his approach changed") are exempt.
+    private static readonly Regex TreatmentChangeRe = new(
+        @"(?<aux>\b(?:was|were|is|are|be|been|being|has|have|had)\s+)?\b(?<subject>[A-Za-z][A-Za-z\-]{2,})\s+changed\s+(?:to|from)\b",
+        RegexOptions.IgnoreCase);
+
+    private static readonly HashSet<string> IntransitiveChangeSubjects = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "plan", "approach", "policy", "practice", "pattern", "attitude", "language", "wording",
+        "name", "title", "address", "landscape", "picture", "situation", "context",
+    };
+
+    private static readonly HashSet<string> AuxiliaryVerbSubjects = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "was", "were", "is", "are", "be", "been", "being", "has", "have", "had",
+    };
+
+    private static IEnumerable<LintFinding> DetectTreatmentChangeGrammar(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in TreatmentChangeRe.Matches(s.Body))
+        {
+            if (m.Groups["aux"].Success) continue;
+            var subject = m.Groups["subject"].Value;
+            // The optional aux group lets the regex otherwise match a correct
+            // "was changed to" with the AUXILIARY as the subject — that form
+            // is exactly the required passive and must never fire.
+            if (IntransitiveChangeSubjects.Contains(subject) || AuxiliaryVerbSubjects.Contains(subject)) continue;
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                $"\"{subject} changed to ...\" is missing the auxiliary — write \"{subject} was changed to ...\" or supply an explicit active subject.",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: $"{subject} was changed to ...");
+        }
+    }
+
+    // OA-10 — investigation results must be coordinated grammatically: two
+    // finite result clauses joined only by a comma is a comma splice
+    // ("the white cell count was 14.0, the CRP was 150"). Use "and", or
+    // split into short sentences. The middle segment may contain decimal
+    // points (values like 14.0x10^9/L) but never a sentence-ending ". ";
+    // scoped to clause-final was/were on both sides so article/telegraphic
+    // results lists never false-fire.
+    private static readonly Regex ResultsCommaSpliceRe = new(
+        @"\b(?:was|were)\s+(?:(?!\.\s)[^;\n]){1,60}?,\s*(?:the\s+)?(?!which\b|that\b|who\b|whom\b|whose\b|because\b|although\b|though\b|since\b|while\b|when\b|if\b|unless\b|until\b|but\b|and\b|or\b|with\b|despite\b)[A-Za-z][A-Za-z\- ]{1,38}?\s+(?:was|were)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectResultsCommaSplice(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in ResultsCommaSpliceRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "Two independent result clauses are joined only by a comma (comma splice). Use \"and\" between the two linked values, or split into short sentences.",
+                Quote: m.Value.Trim().Length > 90 ? m.Value.Trim()[..90] + "…" : m.Value.Trim(),
+                Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+            yield break;
+        }
+    }
+
+    // OA-12 — canonical Model Answers write "type two diabetes mellitus" in
+    // words (digits remain for clinical values, doses, dates, age). Candidate
+    // answers are NEVER penalised for "type 2 diabetes mellitus": this check
+    // is deliberately Model Answer only.
+    private static readonly Regex DiabetesDigitsRe = new(
+        @"\btype\s+(?:2|II|ii)\s+diabetes\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectDiabetesTypeWords(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (!input.IsModelAnswer || s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in DiabetesDigitsRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "Model Answers write \"type two diabetes mellitus\" in words (candidate answers may keep \"type 2\"; this is a canonical-house-form rule, not a language error).",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: "type two diabetes mellitus");
+        }
+    }
+
+    // OA-15 — respiratory rate carries its unit in full: "22 breaths/min".
+    // A bare "22 /min" is stripped clinical style in a Model Answer (pulse
+    // keeps "bpm"; mL/min and other unit-prefixed rates never match).
+    private static readonly Regex BarePerMinuteRe = new(
+        @"(?<![\w.])(?<value>\d+(?:\.\d+)?)\s*\/\s*min\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectRespiratoryRateUnitStyle(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (!input.IsModelAnswer || s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in BarePerMinuteRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                $"Write the respiratory rate with its unit in full (\"{m.Groups["value"].Value} breaths/min\", never \"{m.Value}\").",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: $"{m.Groups["value"].Value} breaths/min");
+        }
+    }
+
+    // OA-08 (McDonald) — "drinking over six to ten standard drinks daily" is
+    // an impossible quantity: a range is never prefixed with over/above/more
+    // than. Restore the exact source-supported quantity ("six to ten
+    // standard drinks daily").
+    private static readonly Regex IllogicalQuantityRangeRe = new(
+        @"\b(?:over|above|more than|fewer than|less than|under)\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+to\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectIllogicalQuantityRange(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in IllogicalQuantityRangeRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                $"\"{m.Value}\" is an illogical quantity — a range cannot sit under over/above/more than. Restore the exact source-supported quantity (e.g. \"six to ten standard drinks daily\").",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+        }
+    }
+
+    // OA-08 (Taylor) — "possible removal" leaves the clinical object
+    // unnamed; the source supports "possible tophus removal" (or "possible
+    // removal of the tophus"). Never vague where the source names the
+    // object.
+    private static readonly Regex VagueClinicalObjectRe = new(
+        @"\bpossible\s+(?:removal|excision|extraction|repair|replacement|insertion|drainage|biopsy)(?!\s+(?:of|by)\b)",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectVagueClinicalObject(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in VagueClinicalObjectRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                $"\"{m.Value}\" does not name its object. State the exact source-supported object (e.g. \"possible tophus removal\" or \"possible removal of the tophus\").",
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+        }
+    }
+
+    // OA source-fidelity (Garcia) — the letter date is never invented: a
+    // date LATER than every date documented in the canonical case notes is
+    // an invented fact. Runs whenever the canonical notes are supplied
+    // (Model Answer gate); the date itself must be a whole-line date.
+    private static readonly Regex DateTokenRe = new(
+        @"\b(?:(?<d>\d{1,2})(?:st|nd|rd|th)?\s+(?<mon>January|February|March|April|May|June|July|August|September|October|November|December)\s+(?<y>\d{4})|(?<mon2>January|February|March|April|May|June|July|August|September|October|November|December)\s+(?<d2>\d{1,2})(?:st|nd|rd|th)?,?\s+(?<y2>\d{4}))\b",
+        RegexOptions.IgnoreCase);
+
+    private static bool TryParseDateToken(Match m, out DateTime date)
+    {
+        var dayGroup = m.Groups["d"].Success ? m.Groups["d"] : m.Groups["d2"];
+        var monGroup = m.Groups["mon"].Success ? m.Groups["mon"] : m.Groups["mon2"];
+        var yearGroup = m.Groups["y"].Success ? m.Groups["y"] : m.Groups["y2"];
+        if (DateTime.TryParse(
+                $"{dayGroup.Value} {monGroup.Value} {yearGroup.Value}",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out date))
+            return true;
+        date = default;
+        return false;
+    }
+
+    private static IEnumerable<LintFinding> DetectLetterDateUnsupported(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesText is not { Length: > 0 } notes || s.DateIndex is null) yield break;
+        if (!TryParseDateToken(DateTokenRe.Match(s.Lines[s.DateIndex.Value]), out var letterDate)) yield break;
+        var latestNoteDate = (DateTime?)null;
+        foreach (Match m in DateTokenRe.Matches(notes))
+        {
+            if (!TryParseDateToken(m, out var noteDate)) continue;
+            if (latestNoteDate is null || noteDate > latestNoteDate) latestNoteDate = noteDate;
+        }
+        if (latestNoteDate is null || letterDate <= latestNoteDate.Value) yield break;
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+            $"The letter date ({letterDate:dd MMMM yyyy}) is later than every date documented in the case notes ({latestNoteDate.Value:dd MMMM yyyy} at the latest) — an unsupported, invented date. Use the source-supported date of treatment.",
+            Quote: s.Lines[s.DateIndex.Value].Trim());
+    }
+
+    // OA source-fidelity (Taylor) — the recipient's name is spelled exactly
+    // as the Writing Task spells it ("Dr Malcolm Still", never "Malcom").
+    // Runs whenever the exact task text is supplied WITH the task's own
+    // address instruction ("Address the letter to Dr ..., ...") — a task
+    // that names no recipient block cannot prove a mismatch, so it never
+    // fires on one. Every full name in the letter's recipient block must
+    // appear in the task.
+    private static IEnumerable<LintFinding> DetectRecipientNameMismatch(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.TaskText is not { Length: > 0 } task) yield break;
+        if (!Regex.IsMatch(task, @"\baddress the letter to\b", RegexOptions.IgnoreCase)) yield break;
+        var boundary = s.DateIndex ?? s.SalutationIndex ?? 0;
+        if (boundary == 0) yield break;
+        var normalisedTask = Regex.Replace(task, @"[^A-Za-z0-9'’\-]+", " ").ToLowerInvariant();
+        foreach (var line in s.Lines.Take(boundary))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0) continue;
+            if (!Regex.IsMatch(trimmed, @"^(?:Dr|Mr|Mrs|Ms|Miss)\b")) continue;
+            var nameMatch = Regex.Match(trimmed, @"^(?:Dr|Mr|Mrs|Ms|Miss)\.?\s+(?<name>.+)$");
+            if (!nameMatch.Success) continue;
+            var nameTokens = Regex.Replace(nameMatch.Groups["name"].Value, @"[^A-Za-z0-9'’\-]+", " ").Trim().ToLowerInvariant();
+            if (nameTokens.Length == 0) continue;
+            // "Dr M McLaren" matches a task "Dr M McLaren"; "Dr Malcom Still"
+            // does NOT match "Dr Malcolm Still" — the whole name string must
+            // appear (initials allowed, wrong spelling never).
+            if (!normalisedTask.Contains(nameTokens, StringComparison.Ordinal))
+            {
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                    $"The recipient name \"{trimmed}\" does not match the Writing Task — copy the exact source-supported spelling (task spelling controls).",
+                    Quote: trimmed);
+            }
+            yield break;
+        }
+    }
+
+    // OA-08 — sentence control: an overloaded chain of semicolon-joined
+    // clauses (three or more segments in one non-medication sentence) is a
+    // Model Answer clarity failure. Medication lists keep their canonical
+    // semicolon grammar and never match.
+    private static IEnumerable<LintFinding> DetectSemicolonOveruse(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (!input.IsModelAnswer || s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (var sentenceMatch in Regex.Matches(s.Body, @"[^.!?\n]+[.!?]?").Cast<Match>())
+        {
+            var sentence = sentenceMatch.Value;
+            if (sentence.Split(';').Length - 1 < 2) continue;
+            if (MedicationItemRe.IsMatch(sentence)) continue;
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "This sentence chains three or more clauses with semicolons. Split into short, easy-to-process clinical sentences.",
+                Quote: sentence.Trim().Length > 90 ? sentence.Trim()[..90] + "…" : sentence.Trim(),
+                Start: bodyOffset + sentenceMatch.Index, End: bodyOffset + sentenceMatch.Index + sentenceMatch.Length);
+            yield break;
+        }
     }
 }

@@ -35,7 +35,7 @@ public sealed class WritingRev8ModelAnswerGateTests
     // Major-only defect (a mid-sentence "also").
     private static string MajorOnlyDefect()
         => WritingModelAnswerBatchTests.ExemplarText()
-            .Replace("He smokes and has been overweight long term.", "He smokes and has also been overweight long term.");
+            .Replace("continues to smoke and has long been overweight.", "continues to smoke and has also been overweight.");
 
     [Fact]
     public async Task Import_Holds_A_Letter_With_Only_Major_Violations_And_Records_The_Report()
@@ -489,8 +489,8 @@ public sealed class WritingRev8ModelAnswerGateTests
     public void Register_Colloquial_Fires_Even_When_The_Case_Notes_Use_The_Word()
     {
         var engine = new WritingRuleEngine(new RulebookLoader());
-        var letter = WritingModelAnswerBatchTests.ExemplarText().Replace("with fatigue and stress", "with tired and stressed");
-        const string notes = "On 29.06.14 he presented for a general check-up, reporting feeling run down: tired, stressed and sluggish";
+        var letter = WritingModelAnswerBatchTests.ExemplarText().Replace("with fatigue, stress and lethargy", "feeling tired, stressed and sluggish");
+        const string notes = "He reported feeling run down: tired, stressed and sluggish";
 
         var withNotes = engine.Lint(new WritingLintInput(
             LetterText: letter, LetterType: "LT-RR",

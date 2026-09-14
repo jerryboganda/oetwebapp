@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0-rev8",
+  "version": "1.2.0-ultimate-final",
   "kind": "writing",
   "profession": "speech-pathology",
-  "publishedAt": "2026-04-18T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham — The Tutor Book — OET Writing Comprehensive Rulebook (Sessions 1–10) — adapted for Speech Pathology (Phase D v1)",
+  "publishedAt": "2026-09-13T00:00:00Z",
+  "authoritySource": "PROFESSION_RESOURCE_DERIVED — derived operational module from the ULTIMATE FINAL handoff (13 Sep 2026, Section 16). No audited standalone FINAL/MASTER Writing Rule Book exists for this profession yet; a later approved canonical production pack must be source-audited and supersede this module. Do not treat these rows as official OET or Dr Hesham direct teaching.",
   "sections": [
     {
       "id": "01",
@@ -2662,6 +2662,126 @@
           "Rev8 §12.4",
           "Rev8 §19.4"
         ]
+      }
+    },
+    {
+      "id": "PRD-SP-01",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 01",
+      "body": "Distinguish speech, language, voice, fluency, cognition-communication and swallowing; never treat them as interchangeable.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-SP-02",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 02",
+      "body": "State baseline versus current functional communication/swallowing ability and real-world impact.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-SP-03",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 03",
+      "body": "Use aphasia/dysarthria/dysphagia/developmental diagnoses only when documented; do not infer autism or neurological diagnoses.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-SP-04",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 04",
+      "body": "For swallowing, preserve aspiration/red flags, diet/fluid texture and supervision only when documented; unsupported diet changes are safety-critical.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-SP-05",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 05",
+      "body": "Report clinical/instrumental assessment findings at source-supported certainty and detail; never invent results.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-SP-06",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 06",
+      "body": "Include AAC, partner strategies and therapy goals when supported and linked to the requested action.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-SP-07",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 07",
+      "body": "Paediatric letters make child/carer roles, developmental/hearing context and follow-up responsibility clear where relevant.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-SP-08",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 08",
+      "body": "Neurological discharge/transfer foregrounds current communication/swallow risk, function, therapy plan, family support and the continuity request.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
       }
     }
   ],

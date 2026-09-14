@@ -166,7 +166,16 @@ public static class WritingAssessmentReportBuilder
         report.FeatureRecordJson = JsonSerializer.Serialize(new
         {
             criteria = criteria.Select(x => new { x.CriterionCode, x.Score, x.MaximumScore }),
-            primaryErrors = input.RuleFindings.Select(x => new { x.RuleId, x.Severity, x.PrimaryCriterionCode }),
+            primaryErrors = input.RuleFindings.Select(x => new
+            {
+                x.RuleId,
+                x.Severity,
+                x.PrimaryCriterionCode,
+                // Ultimate Final §15.1 — rule provenance + score-bearing vs
+                // coaching-only status travel with the audit record.
+                provenanceTag = x.ProvenanceTag,
+                candidateBehavior = x.CandidateBehavior,
+            }),
             facts = input.FactMap.Facts.Select(x => new { x.Classification, x.CandidateStatus, x.SourceReference }),
         });
 

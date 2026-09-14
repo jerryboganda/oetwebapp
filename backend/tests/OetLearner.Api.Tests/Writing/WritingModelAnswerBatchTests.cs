@@ -79,20 +79,20 @@ Suite 3
 67 The Crescent
 Newtown
 
-11 August 2014
+9 August 2014
 
 Dear Dr McLaren,
-Re: Mr Michael Weir
+Re: Mr Michael Weir, DOB: 20 September 1970
 
-I am writing to refer Mr Weir, who is presenting with features suggestive of multiple sclerosis, for a full neurological assessment.
+I am writing to request your neurological assessment and management of Mr Weir, who has presented with features suggestive of multiple sclerosis.
 
-On 9 August 2014, Mr Weir reported dizziness, two blackouts lasting a few minutes each, tingling in his hands, ongoing left leg weakness, breathlessness and occasional constipation. Examination revealed bilateral sensory loss in his hands and a diminished left patellar reflex. A CT scan of the head and spine has been arranged to exclude central causes.
+On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes of the weakness and hyporeflexia.
 
-Mr Weir first presented on 29 June 2014 with fatigue and stress, and blood tests were arranged. On review on 7 July 2014, he reported persistent fatigue and low mood and had developed left leg weakness. His cholesterol was 6.37 mmol/L, and his blood count showed a low white cell count, red cell count, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia and advised on lifestyle changes.
+Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. Investigations showed a cholesterol of 6.37 mmol/L and a full blood count with low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months. He has depression, treated with sertraline hydrochloride since September 2012, continues to smoke and has long been overweight.
 
-Mr Weir has depression, treated with sertraline hydrochloride, known as Zoloft, since September 2012. He smokes and has been overweight long term.
+I would be grateful if you could assess Mr Weir and advise on further management, including possible MRI.
 
-I would be grateful if you could assess Mr Weir, including MRI if indicated. Should there be any queries, kindly do not hesitate to contact me.
+Please do not hesitate to contact me with any queries.
 
 Yours sincerely,
 

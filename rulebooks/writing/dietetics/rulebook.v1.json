@@ -1,9 +1,9 @@
 {
-  "version": "1.1.0-rev8",
+  "version": "1.2.0-ultimate-final",
   "kind": "writing",
   "profession": "dietetics",
-  "publishedAt": "2026-04-18T00:00:00Z",
-  "authoritySource": "Dr. Ahmed Hesham — The Tutor Book — OET Writing Comprehensive Rulebook (Sessions 1–10) — adapted for Dietetics (Phase D v1)",
+  "publishedAt": "2026-09-13T00:00:00Z",
+  "authoritySource": "PROFESSION_RESOURCE_DERIVED — derived operational module from the ULTIMATE FINAL handoff (13 Sep 2026, Section 16). No audited standalone FINAL/MASTER Writing Rule Book exists for this profession yet; a later approved canonical production pack must be source-audited and supersede this module. Do not treat these rows as official OET or Dr Hesham direct teaching.",
   "sections": [
     {
       "id": "01",
@@ -2662,6 +2662,141 @@
           "Rev8 §12.4",
           "Rev8 §19.4"
         ]
+      }
+    },
+    {
+      "id": "PRD-DIET-01",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 01",
+      "body": "Lead with the nutrition problem and the exact dietetic action requested: assessment, intake optimisation, malnutrition management, therapeutic diet, supplement review or follow-up.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-02",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 02",
+      "body": "Report weight/BMI trajectory, appetite/intake pattern and relevant dietary history only when source-supported and useful to the recipient; preserve timeframe and units exactly.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-03",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 03",
+      "body": "Never invent calorie, protein, fluid or micronutrient targets. State prescribed targets/regimens only if present in the case notes.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-04",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 04",
+      "body": "Distinguish food allergy, intolerance, cultural/religious restriction, preference and poor appetite.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-05",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 05",
+      "body": "For oral nutritional supplements, include product/regimen/tolerance/purpose only when supplied.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-06",
+      "section": "16",
+      "severity": "critical",
+      "title": "Derived operational module 06",
+      "body": "For enteral/parenteral nutrition, preserve documented route/regimen/access/monitoring/ownership; never invent rates or changes.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-07",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 07",
+      "body": "Disease-specific restrictions (e.g. diabetes, renal, cardiac, gastrointestinal, dysphagia) must be source-supported and relevant to the recipient.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-08",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 08",
+      "body": "Discharge/continuity: practical home intake plan, prescribed supplements, monitoring triggers and dietetic follow-up.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
+      }
+    },
+    {
+      "id": "PRD-DIET-09",
+      "section": "16",
+      "severity": "major",
+      "title": "Derived operational module 09",
+      "body": "Use non-judgemental language for body size, eating behaviour and adherence; describe measurable intake, barriers and risk.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Derived Operational Module",
+        "authority": "PROFESSION_RESOURCE_DERIVED",
+        "evidence": "Writing Master Specification ULTIMATE FINAL handoff, 13 Sep 2026, Section 16 (no audited standalone FINAL/MASTER Writing Rule Book exists for this profession)",
+        "aiGradingLogic": "Apply task-aware for routing, safety and context. Do not mislabel as official OET or Dr Hesham direct teaching; score only genuine OET criterion impact."
       }
     }
   ],

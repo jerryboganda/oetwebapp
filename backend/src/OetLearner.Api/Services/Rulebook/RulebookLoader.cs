@@ -354,7 +354,16 @@ public sealed record WritingLintInput(
     // grader must NOT. Default false (candidate/grader) since every existing
     // candidate-facing caller (coach, submission grading, lint endpoint)
     // omits this; only the Model Answer generation paths pass true.
-    bool IsModelAnswer = false);
+    bool IsModelAnswer = false,
+    // Owner Clarifications Addendum (14 Sep 2026) source-fidelity inputs.
+    // When the canonical case notes are supplied, letter_date_unsupported
+    // proves the letter date against the latest documented note date; when
+    // the exact Writing Task is supplied, recipient_name_mismatch proves the
+    // recipient's spelling ("Dr Malcolm Still", never "Malcom"). Both
+    // detectors no-op when the corresponding text is absent, so every
+    // existing caller keeps its behaviour.
+    string? CaseNotesText = null,
+    string? TaskText = null);
 
 public sealed record WritingCaseNotesMarkers(
     bool SmokingMentioned = false,
@@ -364,7 +373,13 @@ public sealed record WritingCaseNotesMarkers(
     bool PatientInitiatedReferral = false,
     bool ConsentDocumented = false,
     string? FollowUpDate = null,
-    bool ResultsEnclosed = false);
+    bool ResultsEnclosed = false,
+    // Ultimate Final §3.3: admission/discharge support for the
+    // discharge-vs-simple-update classification. Derived from the canonical
+    // case notes; discharge language in a letter is legitimate only when the
+    // source documents the admission/discharge it depends on.
+    bool AdmissionDocumented = false,
+    bool DischargeDocumented = false);
 
 public sealed record SpeakingTurn(
     string Speaker,    // "candidate" | "patient" | "interlocutor"

@@ -1488,6 +1488,15 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 
         sb.AppendLine("Always reference pass/fail using the exact OET grade letters: A, B, C+, C, D, E.");
         sb.AppendLine();
+
+        // Ultimate Final §15.2: the official descriptor engine is the
+        // candidate-scoring authority for Writing — holistic anchors, not a
+        // fixed deduction scheme; house-style findings are coaching-only.
+        if (ctx.Kind == RuleKind.Writing)
+        {
+            sb.AppendLine(WritingOetDescriptors.DescriptorEngine);
+            sb.AppendLine();
+        }
     }
 
     private static void AppendRulesBlock(StringBuilder sb, List<OetRule> critical, List<OetRule> major, int appliedTotal)

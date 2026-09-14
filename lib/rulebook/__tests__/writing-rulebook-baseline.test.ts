@@ -52,6 +52,23 @@ const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
 const CANONICAL_VERSION = '2.1.0-canonical-rev8';
 const LEGACY_VERSION = '1.1.0-rev8';
 
+/**
+ * ULTIMATE FINAL handoff (13 Sep 2026, Section 16 + Appendix F): the five
+ * additional live professions carry explicitly PROFESSION_RESOURCE_DERIVED
+ * operational modules (PRD-* rows); Veterinary Science is stamped
+ * not-currently-live. other-allied-health keeps the pre-existing legacy
+ * baseline until a derived module is authored for it.
+ */
+const ULTIMATE_FINAL_VERSION = '1.2.0-ultimate-final';
+const ULTIMATE_FINAL_DERIVED_COUNTS: Partial<Record<ExamProfession, number>> = {
+  dietetics: 9,
+  'occupational-therapy': 8,
+  optometry: 8,
+  podiatry: 8,
+  'speech-pathology': 8,
+  veterinary: 1,
+};
+
 /** Owner Rev8 (11 Sep 2026) rule ids present in every Writing rulebook. */
 const OWNER_REV8_IDS = Array.from({ length: 38 }, (_, i) => `OWN-W-${String(i + 1).padStart(3, '0')}`);
 
@@ -120,14 +137,16 @@ describe('writing rulebooks — structural baseline lock', () => {
   for (const profession of LEGACY_PROFESSIONS) {
     describe(`writing/${profession} (legacy, not yet migrated)`, () => {
       const book = loadRulebook('writing', profession);
-      const expectedTotal = TOTAL_RULE_COUNT + OWNER_REV8_IDS.length;
+      const derivedCount = ULTIMATE_FINAL_DERIVED_COUNTS[profession] ?? 0;
+      const isStamped = derivedCount > 0;
+      const expectedTotal = TOTAL_RULE_COUNT + OWNER_REV8_IDS.length + derivedCount;
 
-      it(`has exactly ${expectedTotal} rules (${TOTAL_RULE_COUNT} legacy + ${OWNER_REV8_IDS.length} owner Rev8)`, () => {
+      it(`has exactly ${expectedTotal} rules (${TOTAL_RULE_COUNT} legacy + ${OWNER_REV8_IDS.length} owner Rev8 + ${derivedCount} derived)`, () => {
         expect(book.rules.length).toBe(expectedTotal);
       });
 
-      it(`is versioned ${LEGACY_VERSION}`, () => {
-        expect(book.version).toBe(LEGACY_VERSION);
+      it(`is versioned ${isStamped ? ULTIMATE_FINAL_VERSION : LEGACY_VERSION}`, () => {
+        expect(book.version).toBe(isStamped ? ULTIMATE_FINAL_VERSION : LEGACY_VERSION);
       });
 
       it('contains every canonical rule ID (no silent deletions)', () => {
@@ -141,6 +160,15 @@ describe('writing rulebooks — structural baseline lock', () => {
 
       it('does not introduce unexpected rule IDs beyond the canonical set', () => {
         const canonical = new Set([...CANONICAL_LEGACY_IDS, ...OWNER_REV8_IDS]);
+        // ULTIMATE FINAL derived rows are expected only in the stamped books.
+        if (isStamped) {
+          const derivedIds = book.rules.map((r) => r.id).filter((id) => id.startsWith('PRD-'));
+          expect(
+            derivedIds.length,
+            `Profession "${profession}" must carry exactly ${derivedCount} PRD- rows`,
+          ).toBe(derivedCount);
+          derivedIds.forEach((id) => canonical.add(id));
+        }
         const unexpected = book.rules
           .map((r) => r.id)
           .filter((id) => !canonical.has(id));
@@ -171,9 +199,9 @@ describe('writing rulebooks — structural baseline lock', () => {
         const sectionIds = new Set(book.sections.map((s) => s.id));
         const ownerIds = new Set(OWNER_REV8_IDS);
         for (const rule of book.rules) {
-          if (ownerIds.has(rule.id)) {
-            // Owner Rev8 rules carry no R## prefix; they must still sit in one
-            // of this book's existing sections.
+          if (ownerIds.has(rule.id) || rule.id.startsWith('PRD-')) {
+            // Owner Rev8 rules and ULTIMATE FINAL derived rows carry no R##
+            // prefix; they must still sit in one of this book's sections.
             if (!sectionIds.has(rule.section)) {
               mismatches.push(`${rule.id} (section="${rule.section}" is not a section of this rulebook)`);
             }

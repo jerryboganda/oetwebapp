@@ -13,7 +13,12 @@ public sealed record WritingAssessmentRuleFinding(
     int? StartOffset,
     int? EndOffset,
     string PrimaryCriterionCode,
-    string SecondaryCriterionCodesJson = "[]");
+    string SecondaryCriterionCodesJson = "[]",
+    // Ultimate Final §15.1 — every finding states its authority layer and
+    // whether it is score-bearing for a candidate or coaching-only house
+    // style (the official-vs-house firewall §15.3).
+    string ProvenanceTag = WritingProvenanceTags.OwnerModelAnswerCanonical,
+    string CandidateBehavior = WritingCandidateBehaviors.CoachingOnly);
 
 /// <summary>
 /// v1.1 adapter around the deterministic Writing Rulebook engine: assigns
@@ -93,17 +98,22 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["discharge_intro_no_identity"] = Excess,
             ["discharge_intro_template"] = Purpose,
             ["discharge_all_investigations_listed"] = Excess,
+            ["discharge_language_unsupported"] = Content,
             ["discharge_omits_knownto_gp"] = Content,
             ["discharge_plan_present"] = Content,
             ["emotional_wording"] = Register,
             ["enclosure_results_phrase"] = Content,
             ["for_duration_requires_present_perfect"] = Grammar,
+            ["illogical_quantity_range"] = Content,
+            ["incomplete_clinical_construction"] = Grammar,
             ["intro_contains_purpose"] = Purpose,
             ["intro_opens_i_am_writing_to"] = Purpose,
+            ["intro_purpose_vague"] = Purpose,
             ["intro_sentence_count"] = Excess,
             ["judgmental_labels"] = Register,
             ["latin_abbreviations_translated"] = Language,
             ["letter_body_length"] = Excess,
+            ["letter_date_unsupported"] = Content,
             ["letter_paragraph_count"] = Layout,
             ["letter_structure_order"] = Layout,
             ["linker_avoid_words"] = Language,
@@ -128,21 +138,30 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["numerical_values_have_units"] = Language,
             ["paragraph_start_patient_name"] = Register,
             ["re_line_age_dob"] = Layout,
+            ["re_line_full_name"] = Layout,
+            ["recipient_name_mismatch"] = Content,
             ["register_colloquial"] = Register,
             ["relationship_label_patient_reference"] = Register,
+            ["respiratory_rate_unit_style"] = Language,
+            ["results_comma_splice"] = Grammar,
             ["salutation_last_name_only"] = Layout,
             ["salutation_re_adjacent"] = Layout,
             ["sentence_length_guard"] = ("conciseness_clarity", "language"),
+            ["semicolon_overuse"] = Grammar,
             ["signoff_designation_present"] = Layout,
             ["signoff_no_invented_name"] = Layout,
             ["since_requires_present_perfect"] = Grammar,
             ["surgery_past_simple"] = Grammar,
+            ["treatment_change_grammar"] = Grammar,
             ["treatment_for_not_from"] = Grammar,
             ["urgent_body_starts_today"] = Layout,
             ["urgent_closure_phrase"] = Purpose,
             ["urgent_intro_contains_urgent"] = Purpose,
             ["urgent_token_not_repeated"] = Excess,
+            ["vague_clinical_object"] = Content,
             ["value_unit_spacing"] = Punctuation,
+            ["diabetes_type_words"] = Language,
+            ["closure_request_paragraph"] = Layout,
             ["visit_content_tense_basic_check"] = Grammar,
             ["visit_paragraphization_check"] = Layout,
             ["year_not_abbreviated"] = Layout,
@@ -197,9 +216,7 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
 
     private static (string Criterion, string Category) Classify(string? ruleId)
     {
-        var id = (ruleId ?? string.Empty).Trim();
-        if (id.StartsWith("BUILTIN.", StringComparison.OrdinalIgnoreCase)) id = id["BUILTIN.".Length..];
-        if (OwnerRuleCheckIds.TryGetValue(id, out var ownerCheckId)) id = ownerCheckId;
+        var id = ResolveCheckId(ruleId);
         if (CheckIdCriteria.TryGetValue(id, out var mapped)) return mapped;
 
         // Legacy profession books (R03..R16) report the rule id, not the
@@ -218,9 +235,23 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
         };
     }
 
+    /// <summary>
+    /// Normalises any emitted rule id (BUILTIN.*, OWN-W-*, check id, legacy
+    /// R*) to the check id vocabulary shared by <see cref="CheckIdCriteria"/>
+    /// and <see cref="WritingRuleProvenance"/>.
+    /// </summary>
+    internal static string ResolveCheckId(string? ruleId)
+    {
+        var id = (ruleId ?? string.Empty).Trim();
+        if (id.StartsWith("BUILTIN.", StringComparison.OrdinalIgnoreCase)) id = id["BUILTIN.".Length..];
+        if (OwnerRuleCheckIds.TryGetValue(id, out var ownerCheckId)) return ownerCheckId;
+        return id;
+    }
+
     private static WritingAssessmentRuleFinding ToFinding(LintFinding finding)
     {
         var (criterion, category) = Classify(finding.RuleId);
+        var provenance = WritingRuleProvenance.For(ResolveCheckId(finding.RuleId));
         return new WritingAssessmentRuleFinding(
             finding.RuleId,
             category,
@@ -230,6 +261,9 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             finding.FixSuggestion,
             finding.Start,
             finding.End,
-            criterion);
+            criterion,
+            SecondaryCriterionCodesJson: "[]",
+            ProvenanceTag: provenance.Tag,
+            CandidateBehavior: provenance.CandidateBehavior);
     }
 }

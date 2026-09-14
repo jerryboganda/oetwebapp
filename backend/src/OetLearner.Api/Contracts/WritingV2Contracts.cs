@@ -225,7 +225,12 @@ public sealed record WritingAssessmentV11ErrorResponse(
     string PrimaryCriterionCode,
     IReadOnlyList<string> SecondaryCriterionCodes,
     int? StartOffset,
-    int? EndOffset);
+    int? EndOffset,
+    // Ultimate Final §15.1 — rule provenance (authority layer) and whether
+    // the finding is score-bearing for the candidate or coaching-only house
+    // style. Resolved from the rule registry at read time.
+    string? ProvenanceTag = null,
+    string? CandidateBehavior = null);
 
 public sealed record WritingAssessmentV11FactResponse(
     string FactText,

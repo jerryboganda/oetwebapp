@@ -247,26 +247,11 @@ public sealed class WritingTaskModelAnswerService(
     private const string PinnedProvider = "anthropic";
     private const string PinnedModel = "claude-sonnet-5";
     // Owner instruction: this is one-time content-authoring, not per-candidate
-    // grading, so pay for high reasoning quality/effort. claude-sonnet-5 uses
-    // adaptive thinking (no manual token budget) - "high"/"max" are both
-    // valid output_config.effort values, confirmed live against the
-    // Anthropic API.
-    //
-    // Root cause (13 Sep 2026 live incident): at effort "max", Anthropic's
-    // "adaptive" thinking mode -- which shares ONE max_tokens budget between
-    // reasoning and the visible completion, no separate thinking-token
-    // allowance -- consumed the ENTIRE budget on every single real call,
-    // regardless of how large that budget was: live evidence showed exactly
-    // 32000/32000 completion tokens at the original cap, and STILL exactly
-    // 64000/64000 after doubling it, zero variance either time. This is not
-    // a budget-size problem -- "max" effort never reached a natural
-    // stopping point for this task and never left room for the actual JSON
-    // answer, so Parse() failed on every attempt (real money spent, zero
-    // usable output, for hours). Dropped to "high" -- still top-tier
-    // reasoning quality, but with the natural stopping point "max" lacked
-    // for this content-authoring task.
-    private const string ThinkingEffort = "high";
-    private const int MaxCompletionTokens = 64000;
+    // grading, so pay for max reasoning quality/effort. claude-sonnet-5 uses
+    // adaptive thinking (no manual token budget) - "max" is a valid
+    // output_config.effort value, confirmed live against the Anthropic API.
+    private const string ThinkingEffort = "max";
+    private const int MaxCompletionTokens = 32000;
     // Addendum Rev8 §14: repair only the failed rules, then re-run ALL
     // validators. One generation + up to three targeted repairs.
     private const int MaxGenerationAttempts = 4;
@@ -1246,12 +1231,18 @@ public sealed class WritingTaskModelAnswerService(
         var caseNotesAll = string.Join("\n", facts);
 
         var patientAge = WritingPatientAgeExtractor.Extract(caseNotesAll);
+        // Owner Clarifications Addendum (14 Sep 2026): the gate validates
+        // against the SOURCE, not only the letter — the canonical case notes
+        // prove the letter date (letter_date_unsupported) and the exact task
+        // proves the recipient spelling (recipient_name_mismatch).
         var lint = WritingRuleEngine.ModelAnswerBlockingFindings(ruleEngine.Lint(new WritingLintInput(
             LetterText: letterText,
             LetterType: scenario.LetterType,
             PatientAge: patientAge,
             PatientIsMinor: patientAge is < 18,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(caseNotesAll),
+            CaseNotesText: caseNotesAll,
+            TaskText: scenario.TaskPromptMarkdown,
             Profession: profession,
             IsModelAnswer: true)));
         var findings = lint.Select(f => new WritingModelAnswerFindingDto(
@@ -1413,13 +1404,13 @@ public sealed class WritingTaskModelAnswerService(
             sb.AppendLine($"- Sentence not traceable to the case notes (rewrite it from case-note facts only or remove it): \"{s}\"");
         foreach (var f in report.DeterministicFindings)
         {
-            var quoteSuffix = string.IsNullOrWhiteSpace(f.Quote) ? "" : $" (at: \"{f.Quote}\")";
-            sb.AppendLine($"- [{f.RuleId}] {f.Message}{quoteSuffix}");
+            var at = string.IsNullOrWhiteSpace(f.Quote) ? string.Empty : $" (at: \"{f.Quote}\")";
+            sb.AppendLine($"- [{f.RuleId}] {f.Message}{at}");
         }
         foreach (var v in report.SemanticViolations)
         {
-            var quoteSuffix = string.IsNullOrWhiteSpace(v.Quote) ? "" : $" (at: \"{v.Quote}\")";
-            sb.AppendLine($"- [{v.RuleId}] {v.Message}{quoteSuffix}");
+            var at = string.IsNullOrWhiteSpace(v.Quote) ? string.Empty : $" (at: \"{v.Quote}\")";
+            sb.AppendLine($"- [{v.RuleId}] {v.Message}{at}");
         }
         return $$"""
             Your previous draft of this OET Writing Model Answer FAILED validation. Repair ONLY the violations

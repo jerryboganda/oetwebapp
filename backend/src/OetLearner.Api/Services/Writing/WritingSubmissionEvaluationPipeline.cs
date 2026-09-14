@@ -1962,6 +1962,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 if (idx >= 0) start = idx;
             }
             var severity = f.Severity is "critical" or "major" or "minor" or "info" ? f.Severity : "major";
+            // Ultimate Final §15.1: an AI finding is a genuine detected
+            // mistake (the grounded prompt forbids reporting valid
+            // alternatives), so it defaults to score-bearing under the
+            // criterion the grader cited; when the AI cited a registry rule
+            // id, that rule's own provenance wins.
+            var provenance = WritingRuleProvenance.For(
+                WritingAssessmentV11RuleEngine.ResolveCheckId(f.RuleId));
             list.Add(new WritingAssessmentRuleFinding(
                 // The AI's grounded rule id when it cited one; never invented.
                 RuleId: string.IsNullOrWhiteSpace(f.RuleId) ? $"AI.{f.Criterion}" : $"AI:{f.RuleId}",
@@ -1980,7 +1987,13 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 FixSuggestion: f.FixSuggestion,
                 StartOffset: start,
                 EndOffset: start is { } s ? s + quote!.Length : null,
-                PrimaryCriterionCode: f.Criterion));
+                PrimaryCriterionCode: f.Criterion,
+                ProvenanceTag: string.IsNullOrWhiteSpace(f.RuleId)
+                    ? OetLearner.Api.Services.Rulebook.WritingProvenanceTags.OetOfficial
+                    : provenance.Tag,
+                CandidateBehavior: string.IsNullOrWhiteSpace(f.RuleId)
+                    ? OetLearner.Api.Services.Rulebook.WritingCandidateBehaviors.ScoreBearing
+                    : provenance.CandidateBehavior));
         }
         return list;
     }
