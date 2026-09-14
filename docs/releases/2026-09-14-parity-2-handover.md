@@ -70,19 +70,30 @@ plans for the `jerryboganda` account.
 Follow `docs/app-release-playbook.md` exactly. Short form:
 
 1. **Merge/push the release commit to `main`** so CI builds it (CI builds
-   `origin/main`, never the working tree). The release commit sits on branch
-   `feat/writing-owner-addendum-two` (which also carries the parallel writing
-   session's commits).
+   `origin/main`, never the working tree). ✅ DONE — `main` is at `2ec46cd64`
+   (pushed 2026-09-14 ~14:10 UTC) and the three tags `v1.4.14-mobile-android`,
+   `v1.4.14-mobile-ios`, `v0.7.7-tauri-desktop` are on the remote.
 2. Repo must be **public** for the whole duration of every run, then **private**
    immediately after: `gh repo edit jerryboganda/oetwebapp --visibility public --accept-visibility-change-consequences`.
-3. Android: `gh workflow run mobile-release.yml --repo jerryboganda/oetwebapp --field platform=android --field version=1.4.14 --field version_code=9`, watch to `success`, then repo private.
-4. Download the AAB and publish to **every live track**:
+3. **Desktop (tag run already exists, just rerun it):** `gh run rerun 34854005712`
+   (Tauri Desktop Release for tag `v0.7.7-tauri-desktop`, failed only on billing).
+   Watch ~90 min to `success`, then repo private.
+4. Android: `gh workflow run mobile-release.yml --repo jerryboganda/oetwebapp --field platform=android --field version=1.4.14 --field version_code=9`, watch to `success`, then repo private.
+5. Download the AAB and publish to **every live track**:
    `.venv\Scripts\python.exe -m playstore.cli cut-android-release <out>\app-release.aab`
    from `D:\Projects\OET with Dr Hesham\automation\`.
-5. iOS: repeat the dispatch with `platform=ios` (same version/build), watch, repo private.
-6. Desktop: `gh workflow run tauri-desktop-release.yml --repo jerryboganda/oetwebapp --field version=0.7.7` (or push tag `v0.7.7-tauri-desktop`), watch (~90 min), repo private.
+6. iOS: repeat the dispatch with `platform=ios` (same version/build), watch, repo private.
 7. Record run IDs, artifact SHA-256 values and live-feed JSON in
    `docs/releases/RELEASE-LEDGER.md`, and tick the parity checklist.
+
+Failed-on-billing run IDs for this SHA (2026-09-14 14:11 UTC): Build & Deploy
+`34853974318`, Mobile CI `34853974303`, QA Smoke `34853974432`, SBOM/SCA
+`34853974359`, Speaking CI `34853974358`, Tauri Desktop Release (tag)
+`34854005712`, UBAG e2e `34854005795` / `34854006021` / `34854006613`.
+None executed a single step. After billing is restored, re-run what matters:
+the desktop tag run (rerun), the two mobile dispatches, and Build & Deploy if
+the docs commits should be reflected on the site (they are docs-only, so
+optional for the release itself).
 
 ## 5. Rollback
 
