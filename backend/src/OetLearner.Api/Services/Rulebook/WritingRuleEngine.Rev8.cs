@@ -630,6 +630,20 @@ public sealed partial class WritingRuleEngine
         @"(?:(?<det>\b(?:the|a|an|his|her|its|their)\s+)|(?<aux>\b(?:was|were|is|are|be|been|being|has|have|had)\s+))?\b(?<drug>[A-Za-z][A-Za-z\-]{2,})\s+(?<participle>ceased|discontinued|commenced|initiated|recommenced|stopped|started|continued|weaned|withdrawn)\b",
         RegexOptions.IgnoreCase);
 
+    // Revalidation fix (2026-09-14, part 2): people and institutions are
+    // never medication subjects, so "<person> commenced/continued/..." is
+    // valid active-voice clinical English, not note-form drug shorthand.
+    private static readonly HashSet<string> PersonSubjects = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "he", "she", "they", "it", "we", "you", "who", "i",
+        "mother", "mothers", "father", "fathers", "sister", "brother", "son", "daughter",
+        "husband", "wife", "parents", "parent", "grandmother", "grandfather", "family",
+        "doctor", "doctors", "nurse", "nurses", "gp", "physician", "specialist",
+        "consultant", "surgeon", "practitioner", "patient", "students", "student",
+        "friend", "friends", "staff", "team", "hospital", "clinic", "centre", "center",
+        "ward", "school", "dr", "mr", "mrs", "ms", "miss", "mx",
+    };
+
     private static readonly HashSet<string> IntransitiveParticipleSubjects = new(StringComparer.OrdinalIgnoreCase)
     {
         "pain", "pains", "seizure", "seizures", "fit", "fits", "bleeding", "symptom", "symptoms",
@@ -663,6 +677,12 @@ public sealed partial class WritingRuleEngine
                 || drug.Equals("our", StringComparison.OrdinalIgnoreCase)
                 || (drug.Length > 3 && drug.EndsWith("ly", StringComparison.OrdinalIgnoreCase)))
                 continue;
+            // Revalidation fix (2026-09-14, part 2): a person or institution
+            // can never be a medication subject. "She commenced smoking",
+            // "a visiting school doctor commenced him on doxycycline" and
+            // "the hospital commenced the infusion" are correct clinical
+            // English; only a medication-name subject is note-form.
+            if (PersonSubjects.Contains(drug)) continue;
             var participle = m.Groups["participle"].Value;
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                 $"\"{drug} {participle}\" is note-form English. Use the passive voice, e.g. \"{drug} was discontinued\" or \"{drug} was commenced\".",

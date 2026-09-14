@@ -729,6 +729,17 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     }
 
     [Fact]
+    public void R2_19_Person_Subject_With_A_Participle_Is_Not_Note_Form()
+    {
+        // "She commenced smoking" and "the school doctor commenced him on
+        // doxycycline" are correct active-voice clinical English.
+        var letter = Inject(Garcia,
+            "She responded well to treatment.",
+            "She commenced smoking in 2013, and the school doctor commenced her on iron infusions.");
+        AssertRuleDoesNotFire(Lint(letter, "LT-DG", caseNotes: GarciaCaseNotes), "medication_passive_grammar");
+    }
+
+    [Fact]
     public void R2_19_Genuine_Note_Form_Drug_Voice_Still_Fires()
     {
         var letter = Inject(McDonald,
