@@ -54,6 +54,10 @@ installed shell. This release re-cuts the shells so that:
 - macOS dmg: best-effort leg of the desktop workflow (ships unsigned; absence is
   acceptable per playbook — Windows presence is mandatory).
 
-## Filled after the runs (run IDs, artifact hashes, live-feed evidence)
+## Filled after the runs (14 Sep 2026)
 
-See `docs/releases/RELEASE-LEDGER.md` — updated in the release record commit.
+- **Android:** run `34855473661` success — build + cert-pin + VPS feed publish green; AAB sha256 `6c5d2ffc…e15c4` published to every live Play track (`internal` + `alpha`, both completed at 1.4.14/9); VPS android feed serves 1.4.14/9, APK digest `sha256:fc37c95b…8c94`, APK URL HTTP 200.
+- **Desktop:** tag run `34854005712` rerun success — conformance gate, Windows NSIS, macOS dmg, updater-feed publish all green; `latest.json` serves 0.7.7 with Win installer sha256 `fa6734ca…2385` and dmg sha256 `29379e7d…9abe`; EXE URL HTTP 200.
+- **iOS:** run `34857032510` failed at input validation — repo secrets `APPLE_TEAM_ID`, `IOS_DISTRIBUTION_CERT_BASE64`, `IOS_DISTRIBUTION_CERT_PASSWORD`, `IOS_PROVISIONING_PROFILE_BASE64` are not configured and the AASA file still holds placeholders. Owner-only credentials; iOS stays on the empty VPS feed until supplied. See handover §4.
+- **Live health:** `/api/health` ok at 14:49 UTC.
+- **Note:** the earlier "billing" wall was the private-repo paid-minutes limit; flipping the repo public (mandatory playbook step) unblocked Actions. Repo flipped private again immediately after the runs.
