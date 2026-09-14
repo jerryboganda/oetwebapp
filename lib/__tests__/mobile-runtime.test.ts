@@ -317,6 +317,16 @@ describe('mobile runtime', () => {
   describe('keyboard visibility flag', () => {
     const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport');
     const flushFrame = () => new Promise((resolve) => { requestAnimationFrame(() => resolve(null)); });
+    // The 14 Sep 2026 IME slide-down latch keeps the nav hidden ~250ms after a
+    // plugin hide event (the keypad is still visually closing); reveal
+    // assertions poll past the latch instead of guessing the timer jitter.
+    const awaitReveal = async () => {
+      await flushFrame();
+      for (let i = 0; i < 60; i++) {
+        if (document.documentElement.dataset.keyboardVisible === 'false') return;
+        await new Promise((resolve) => { setTimeout(resolve, 25); });
+      }
+    };
 
     const setViewportHeight = (height: number) => {
       Object.defineProperty(window, 'visualViewport', {
@@ -349,6 +359,9 @@ describe('mobile runtime', () => {
 
       setViewportHeight(window.innerHeight);
       listenerFor('keyboardDidHide')();
+      // The reveal latch holds the flag through the visual IME slide-down…
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+      await awaitReveal();
       expect(document.documentElement.dataset.keyboardVisible).toBe('false');
 
       mobileMocks.handles.keyboardWillShow.remove.mockClear();
@@ -359,7 +372,7 @@ describe('mobile runtime', () => {
 
       setViewportHeight(window.innerHeight);
       listenerFor('keyboardWillHide')();
-      await flushFrame();
+      await awaitReveal();
       expect(document.documentElement.dataset.keyboardVisible).toBe('false');
 
       cleanup();
@@ -511,10 +524,47 @@ describe('mobile runtime', () => {
       await flushFrame();
       expect(document.documentElement.dataset.keyboardVisible).toBe('true');
 
-      // Keyboard closes: the plugin hide event is trusted, metrics agree.
+      // Keyboard closes: the plugin hide event is trusted, metrics agree — but
+      // only after the slide-down latch expires (nav must not flash over the
+      // closing keypad).
       listenerFor('keyboardDidHide')();
-      window.dispatchEvent(new Event('resize'));
       await flushFrame();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+      await awaitReveal();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('false');
+
+      cleanup();
+    });
+
+    // Device report 14 Sep 2026: tapping Check moved focus off the input, the
+    // plugin fired keyboardWillHide/DidHide and the viewport snapped back to
+    // full height while the keypad was still visually sliding away — the nav
+    // revealed at the restored bottom, i.e. exactly where the keypad still
+    // was. The reveal latch must hold the nav hidden through that window and
+    // an immediate re-show must cancel it.
+    it('holds the nav through the slide-down latch after a hide, and a re-show cancels the latch', async () => {
+      mobileMocks.native = true;
+      const cleanup = await initializeMobileRuntime();
+
+      setViewportHeight(window.innerHeight - 320);
+      listenerFor('keyboardWillShow')();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      listenerFor('keyboardWillHide')();
+      // The device restores the WebView height as the IME starts closing.
+      setViewportHeight(window.innerHeight);
+      await flushFrame();
+      // Still inside the 250ms latch: no mid-screen flash over the keypad.
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      // User re-focuses / keyboard re-opens: the latch must not delay opening.
+      setViewportHeight(window.innerHeight - 320);
+      listenerFor('keyboardDidShow')();
+      expect(document.documentElement.dataset.keyboardVisible).toBe('true');
+
+      listenerFor('keyboardDidHide')();
+      setViewportHeight(window.innerHeight);
+      await awaitReveal();
       expect(document.documentElement.dataset.keyboardVisible).toBe('false');
 
       cleanup();
@@ -575,7 +625,7 @@ describe('mobile runtime', () => {
         cleanup();
       });
 
-      it('returns the nav when the plugin reports a hide even if the field kept focus', async () => {
+      it('returns the nav after the slide-down latch when the plugin reports a hide even if the field kept focus', async () => {
         mobileMocks.native = true;
         const cleanup = await initializeMobileRuntime();
 
@@ -585,8 +635,10 @@ describe('mobile runtime', () => {
         expect(document.documentElement.dataset.keyboardVisible).toBe('true');
 
         // Back-button IME dismiss keeps DOM focus; the plugin's report of the
-        // close is hard evidence and must release the hold.
+        // close is hard evidence and must release the hold once the latch
+        // (which hides the keypad's visual slide-down) has expired.
         listenerFor('keyboardDidHide')();
+        await awaitReveal();
         expect(document.documentElement.dataset.keyboardVisible).toBe('false');
 
         input.remove();

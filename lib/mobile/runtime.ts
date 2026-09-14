@@ -77,6 +77,19 @@ function setKeyboardVisible(visible: boolean) {
 const KEYBOARD_VISIBLE_THRESHOLD_PX = 120;
 
 /**
+ * The plugin's hide events and the viewport restore both land while the IME is
+ * still visually sliding away (~300ms). Revealing the nav at that instant
+ * dropped it onto the closing keypad — with adjustResize the WebView has
+ * snapped back to full height, so the "docked" nav renders exactly where the
+ * keypad still is (device report 14 Sep 2026: tap Check → focus leaves the
+ * input → nav flashes mid-screen over the button that was just tapped). Hold
+ * the hidden state for this long after the last hide evidence; any show or
+ * focus clears the latch immediately so opening is never delayed.
+ */
+const KEYBOARD_REVEAL_LATCH_MS = 250;
+let keyboardHideLatchedAt = 0;
+
+/**
  * Tallest viewport height observed without a keyboard, and the last keyboard
  * state the Capacitor Keyboard plugin reported. Native IME behavior differs by
  * mode and ALL must read as "keyboard open":
@@ -175,7 +188,11 @@ function setViewportMetrics() {
     || textEntryKeyboardVisible
     || keyboardOffset > KEYBOARD_VISIBLE_THRESHOLD_PX
     || (keyboardFreeBaselineHeight - viewportHeight > KEYBOARD_VISIBLE_THRESHOLD_PX
-      && isTextEntryFocused());
+      && isTextEntryFocused())
+    // IME slide-down latch: the metrics pass right after a hide event must not
+    // resurrect the nav while the keypad is still visually closing. A pass
+    // scheduled after the latch expires (see the hide listeners) clears it.
+    || Date.now() - keyboardHideLatchedAt < KEYBOARD_REVEAL_LATCH_MS;
   // Re-derived on every metrics pass (resize, orientation change, visualViewport
   // resize/scroll) so the state self-corrects for plugin-less surfaces: a
   // keyboardWillHide that never arrives clears as soon as the viewport returns
@@ -362,6 +379,8 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     }
     viewportShrankWhileTextEntryFocused = false;
     textEntryKeyboardVisible = true;
+    // Opening is never delayed: a fresh focus cancels any pending reveal latch.
+    keyboardHideLatchedAt = 0;
     // Synchronous: the nav must be gone before the IME finishes animating in.
     setKeyboardVisible(true);
   };
@@ -406,32 +425,34 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     // (see setViewportMetrics — report 13 Sep 2026).
     const keyboardWillShow = await Keyboard.addListener('keyboardWillShow', () => {
       pluginKeyboardVisible = true;
+      keyboardHideLatchedAt = 0;
       setKeyboardVisible(true);
       scheduleViewportMetrics();
     });
     const keyboardDidShow = await Keyboard.addListener('keyboardDidShow', () => {
       pluginKeyboardVisible = true;
+      keyboardHideLatchedAt = 0;
       setKeyboardVisible(true);
       scheduleViewportMetrics();
     });
 
-    const keyboardWillHide = await Keyboard.addListener('keyboardWillHide', () => {
+    // Both hide forms arm the IME slide-down latch (KEYBOARD_REVEAL_LATCH_MS):
+    // the derived state stays "keyboard open" until the latch expires, and the
+    // post-latch metrics pass below performs the actual reveal.
+    const onKeyboardHide = () => {
       pluginKeyboardVisible = false;
       // A plugin-reported hide is hard evidence the IME is closing, even if
       // the field keeps DOM focus (back-button dismiss) — release the
-      // focus-based hold so the nav returns.
+      // focus-based hold so the nav returns once the latch expires.
       clearTextEntryKeyboardEvidence();
-      setKeyboardVisible(false);
+      keyboardHideLatchedAt = Date.now();
+      setKeyboardVisible(true);
       document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
       scheduleViewportMetrics();
-    });
-    const keyboardDidHide = await Keyboard.addListener('keyboardDidHide', () => {
-      pluginKeyboardVisible = false;
-      clearTextEntryKeyboardEvidence();
-      setKeyboardVisible(false);
-      document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
-      scheduleViewportMetrics();
-    });
+      window.setTimeout(scheduleViewportMetrics, KEYBOARD_REVEAL_LATCH_MS + 60);
+    };
+    const keyboardWillHide = await Keyboard.addListener('keyboardWillHide', onKeyboardHide);
+    const keyboardDidHide = await Keyboard.addListener('keyboardDidHide', onKeyboardHide);
 
     cleanup.push(() => keyboardWillShow.remove());
     cleanup.push(() => keyboardDidShow.remove());

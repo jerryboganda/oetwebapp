@@ -66,9 +66,14 @@ function navKeyboardViolations(css: string): string[] {
   if (hideRule === '') {
     violations.push('the keyboard-visible hide rule must exist');
   } else {
-    if (!/opacity:\s*0/.test(hideRule)) violations.push('hide rule must set opacity: 0');
-    if (!/transform:\s*translateY\(100%\)/.test(hideRule)) {
-      violations.push('hide rule must set transform: translateY(100%)');
+    if (!/opacity:\s*0\s*!important/.test(hideRule)) {
+      violations.push('hide rule opacity must be !important (motion writes inline styles that beat plain declarations)');
+    }
+    if (!/transform:\s*translateY\(100%\)\s*!important/.test(hideRule)) {
+      violations.push('hide rule transform must be translateY(100%) !important (motion writes inline styles that beat plain declarations)');
+    }
+    if (!/pointer-events:\s*none\s*!important/.test(hideRule)) {
+      violations.push('hide rule must set pointer-events: none !important');
     }
   }
 
@@ -100,6 +105,31 @@ describe('bottom-nav keyboard contract (app/globals.css)', () => {
     expect(violations).toContain('.keyboard-safe-bottom must not consume --app-keyboard-offset');
     expect(violations).toContain(
       '.keyboard-safe-bottom must dock to var(--safe-area-inset-bottom)',
+    );
+  });
+
+  /**
+   * Negative control for the 14 Sep 2026 device defect: motion's mount/layout
+   * animations leave opacity/transform as INLINE styles on the nav, and inline
+   * styles beat plain declarations — so the hide rule MUST carry !important.
+   * A future "cleanup" that drops it would silently resurrect the mid-screen
+   * nav; this mutation proves the guard still catches that.
+   */
+  it('detects a hide rule that loses its !important (inline-style override)', () => {
+    const regressed = css.replace(
+      /(html\[data-keyboard-visible="true"\] \.keyboard-hide-bottom-nav,\s*html\[data-keyboard-visible="true"\] \.keyboard-safe-floating-bottom\s*\{)([^}]*)(\})/,
+      (_match: string, open: string, body: string, close: string) =>
+        open + body.replace(/\s*!important/g, '') + close,
+    );
+
+    expect(regressed, 'negative control must actually mutate the stylesheet').not.toBe(css);
+
+    const violations = navKeyboardViolations(regressed);
+    expect(violations).toContain(
+      'hide rule opacity must be !important (motion writes inline styles that beat plain declarations)',
+    );
+    expect(violations).toContain(
+      'hide rule transform must be translateY(100%) !important (motion writes inline styles that beat plain declarations)',
     );
   });
 });

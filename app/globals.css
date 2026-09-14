@@ -264,16 +264,20 @@
     bottom: calc(var(--safe-area-inset-bottom) + 0.75rem);
   }
 
-  /* Hide bottom nav when virtual keyboard is open on mobile */
+  /* Hide bottom nav when virtual keyboard is open on mobile. The nav is a
+     motion.nav whose mount/layout animations leave opacity/transform as INLINE
+     styles, and inline styles beat any normal declaration — so without
+     !important this rule silently lost on the Android shell and the nav rode
+     up with the resized WebView onto the keypad (device report 14 Sep 2026). */
   .keyboard-hide-bottom-nav {
     transition: opacity 0.2s ease, transform 0.2s ease;
   }
 
   html[data-keyboard-visible="true"] .keyboard-hide-bottom-nav,
   html[data-keyboard-visible="true"] .keyboard-safe-floating-bottom {
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(100%);
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transform: translateY(100%) !important;
   }
 
   .touch-target {
