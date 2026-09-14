@@ -1,3 +1,7 @@
+## Current task — 14 Sep parity follow-up: global-search full-label consistency — SHIPPING
+- **What**: GlobalSearch "Go to" destinations now render `sidebarLabel ?? label`, so the desktop search palette matches the sidebar's agreed full names ("Course Materials", "Listening Practice", …) — closes the last old-wording surface found in the 13 Sep addendum scan. The `docs/releases/RELEASE-PARITY-CHECKLIST.md` template itself landed verbatim with `2ec46cd64` (R-2026-09-14-PARITY-2 docs commit).
+- **Validation (owner-directed local run, 14 Sep)**: `pnpm exec tsc --noEmit` exit 0; `pnpm run lint` exit 0 (0 errors, 477 pre-existing warnings); vitest nav specs 4 files / 30 tests green (`feature-flag-nav`, `top-nav`, `mobile-runtime`, `keyboard-nav-css`).
+- **Ship mechanics**: single-file commit built in a temp worktree at `origin/main` — the tree's peer-dirty `app/(auth)/privacy/page.tsx` + `app/terms/page.tsx` deliberately NOT staged. Next: watch Build & Deploy for this SHA → prod health triple-check → repo PRIVATE → owner production pass (Windows EXE nav at laptop widths, Android Practice Spelling keyboard, relaunch→Dashboard).
 # Agent State (local)
 
 ## Current task — 13 Sep 2026 cross-platform parity addendum — round 2: adjustPan keyboard fix SHIPPING (see below for round 1)

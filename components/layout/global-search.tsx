@@ -119,7 +119,10 @@ export function GlobalSearch({ className }: { className?: string }) {
   const rows = useMemo<ResultRow[]>(() => {
     const trimmed = query.trim().toLowerCase();
     const destinations: { label: string; href: string }[] = [
-      ...learnerMainNavItems.map((item: NavItem) => ({ label: item.label, href: item.href })),
+      // Same full names the desktop sidebar shows (13 Sep 2026 parity addendum:
+      // "Course Materials", "Listening Practice", …), so the rename is
+      // consistent across navigation surfaces and both wordings are findable.
+      ...learnerMainNavItems.map((item: NavItem) => ({ label: item.sidebarLabel ?? item.label, href: item.href })),
       ...EXTRA_DESTINATIONS,
     ];
     const navRows: ResultRow[] = destinations
