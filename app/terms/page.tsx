@@ -80,7 +80,7 @@ const sections: LegalSection[] = [
       'Most features are available through paid subscriptions. Pricing, billing cadence, and renewal terms are shown at checkout and in your account billing settings.',
     bullets: [
       'Subscriptions auto-renew at the end of each billing period at the then-current rate unless you cancel before the renewal date. You can cancel anytime from Settings → Billing; cancellation takes effect at the end of the current period.',
-      'Payments are processed by Stripe. We do not store full card details on our servers; only Stripe customer / subscription identifiers are retained.',
+      'Online payments may be processed securely through the payment providers currently offered on the Platform, including Whop and Fawaterak, and we may also accept bank transfer / bank account payments and supported local transfer methods such as InstaPay and Vodafone Cash. We do not store full card details on our servers.',
       'UK / EU consumers have a 14-day right of withdrawal under applicable consumer-protection law. Where you actively use the Service (open AI feedback, submit speaking attempts, request tutor review, etc.) within that window, you expressly request immediate access and acknowledge that the withdrawal right is reduced proportionally to the value of services consumed.',
       'Subscriptions purchased through Apple App Store or Google Play are subject to those stores’ refund policies and may need to be cancelled within the relevant store account.',
       'Disputed charges should first be raised with us via support@oetwithdrhesham.co.uk so we can investigate before any chargeback.',
@@ -153,7 +153,7 @@ const sections: LegalSection[] = [
     lead:
       'The Service integrates carefully selected third parties to deliver core functionality:',
     bullets: [
-      'Stripe (payments)',
+      'Whop and Fawaterak (payments); bank transfer, InstaPay and Vodafone Cash also supported',
       'Brevo (transactional email)',
       'Azure / OpenAI / Whisper / ElevenLabs / Deepgram and other AI providers, selected per feature and disclosed in-app',
       'Sentry (error monitoring)',

@@ -49,9 +49,11 @@ const sections: LegalSection[] = [
         review notes, study plan progress, predicted scores.
       </>,
       <>
-        <strong>Billing data:</strong> Stripe customer / subscription IDs,
-        plan, invoice history, partial card metadata (last 4, brand). Full
-        card numbers stay with Stripe.
+        <strong>Billing data:</strong> payment status, transaction/reference
+        details, plan, and invoice history needed to confirm and reconcile
+        your payment. Where card payment is used, full card details are
+        handled by the relevant third-party payment provider and are not
+        stored by us.
       </>,
       <>
         <strong>Device & technical data:</strong> IP address, user-agent,
@@ -91,7 +93,7 @@ const sections: LegalSection[] = [
     lead:
       'We never sell personal data. We share it only with vetted processors and only as needed to run the Service:',
     bullets: [
-      'Stripe: payments and subscription billing.',
+      'Whop and Fawaterak: online payment processing and subscription billing. We may also accept bank transfer / bank account payments and supported local transfer methods including InstaPay and Vodafone Cash.',
       'Brevo: transactional and (where you opted in) marketing email delivery.',
       'AI providers: Azure OpenAI, OpenAI, Whisper, ElevenLabs, Deepgram, and others, selected per feature. We send the minimum data required (e.g. your submission, our grounded prompt) and contractually prohibit training on your content where the provider supports it.',
       'Sentry: application error reporting (no audio or full submissions are attached to error reports).',
