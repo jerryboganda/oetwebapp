@@ -751,6 +751,14 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
             "Admitted 24 July 1951 with dehydration. Review in 2/52.";
         var letter = Weir.Replace("9 August 2014", "15 October 1951");
         AssertRuleDoesNotFire(Lint(letter, "LT-RR", caseNotes: notes), "letter_date_unsupported");
+        // Structured extraction can isolate the birth date into its own
+        // bare fragment with no label at all; a bare date line is still not
+        // a treatment-date ceiling.
+        const string bareNotes = "Greerson. 
+09.10.1951
+Admitted 24 July 1951 with dehydration.";
+        var letter2 = Weir.Replace("9 August 2014", "15 October 1951");
+        AssertRuleDoesNotFire(Lint(letter2, "LT-RR", caseNotes: bareNotes), "letter_date_unsupported");
     }
 
     [Fact]
