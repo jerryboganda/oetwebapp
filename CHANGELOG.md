@@ -4,6 +4,35 @@ All notable changes to this repo are documented here. Format inspired by
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Module-scoped
 changelogs live alongside their modules (e.g. `docs/speaking/changelog.md`).
 
+
+
+## [R-2026-09-14-PARITY-2] - 2026-09-14
+
+Cross-platform app release cut from `main` `bb3a02eeb` (branch `feat/writing-owner-addendum-two`, fast-forward merged state).
+Web app itself is unchanged on production (`Build & Deploy` run 34807150495, SHA `31765d735`, already live and healthy) — this release re-cuts the **native shells** so their pinned/installed copies converge on the same parity state:
+
+### Android — 1.4.14 (versionCode 9)
+
+- Tag `v1.4.14-mobile-android`; carries the same web bundle as 1.4.13 (the Recalls > Practice Spelling keyboard/nav fix, full desktop nav labels, always-visible core nav).
+- Shell delta vs 1.4.13: none — the manifest `adjustResize` root fix already shipped in 1.4.13. This release exists so every channel converges on one synchronized release under the new parity checklist.
+
+### iOS — 1.4.14 (build 9)
+
+- Tag `v1.4.14-mobile-ios`; publishes to the VPS sideload feed only. TestFlight/App Store Connect upload remains a manual owner step (no automation exists).
+
+### Desktop (Windows) — 0.7.7
+
+- Tag `v0.7.7-tauri-desktop`; updater feed + installer on the VPS.
+- Shell delta vs 0.7.6: Apple support-floor enforcement (`63db5fc15`, `src-tauri` only); all parity fixes reach the shell via the shared remote web bundle.
+
+### Web app
+
+- No production web change in this release (last deploy `31765d735` remains live).
+
+### Unreleased work (NOT in this release)
+
+- `d494e661b` writing case-note marker fix (unpushed at release time; ships in the next web deploy).
+
 ## [Unreleased]
 
 ### Desktop (Tauri 2) production-readiness
