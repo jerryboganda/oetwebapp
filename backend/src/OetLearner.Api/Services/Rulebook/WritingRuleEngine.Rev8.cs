@@ -1311,11 +1311,9 @@ public sealed partial class WritingRuleEngine
             // excluded from the treatment-date ceiling.
             var windowStart = Math.Max(0, m.Index - 60);
             var window = notes.Substring(windowStart, Math.Min(100, notes.Length - windowStart));
-            if (Regex.IsMatch(window, @"(?:dob|date\s+of\s+birth|birth\s+date|born)", RegexOptions.IgnoreCase)) continue;
-            var lineStart = notes.LastIndexOf('
-', Math.Max(0, m.Index - 1)) + 1;
-            var lineEnd = notes.IndexOf('
-', m.Index + m.Length);
+            if (Regex.IsMatch(window, @"\b(?:dob|date\s+of\s+birth|birth\s+date|born)\b", RegexOptions.IgnoreCase)) continue;
+            var lineStart = notes.LastIndexOf('\n', Math.Max(0, m.Index - 1)) + 1;
+            var lineEnd = notes.IndexOf('\n', m.Index + m.Length);
             if (lineEnd < 0) lineEnd = notes.Length;
             var line = notes.Substring(lineStart, lineEnd - lineStart).Trim();
             if (line.Length > 0 && !Regex.IsMatch(line, @"[A-Za-z]")) continue;
