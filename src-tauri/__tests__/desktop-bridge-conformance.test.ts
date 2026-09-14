@@ -117,3 +117,69 @@ describe('tauri desktop-bridge conformance', () => {
     expect(seen).toHaveLength(1);
   });
 });
+
+// 0.7.7 shipped a hardcoded `{ platform: 'win32' }` fallback: had the shell's
+// __OET_DESKTOP__ injection ever regressed, the macOS binary would have
+// reported itself as win32. These tests pin the fallback to runtime UA
+// detection and to injected-value precedence.
+describe('tauri desktop-bridge platform fallback (injection-regression guard)', () => {
+  const win = window as unknown as AnyWindow;
+  let originalUa: string;
+
+  const setUa = (ua: string) => {
+    Object.defineProperty(win.navigator, 'userAgent', { value: ua, configurable: true });
+  };
+
+  const evalBridgeWithoutInjection = () => {
+    delete win.desktopBridge;
+    delete win.__OET_DESKTOP__;
+    win.__TAURI_INTERNALS__ = { invoke: vi.fn(() => Promise.resolve({ ok: true })) };
+    // eslint-disable-next-line no-eval
+    (0, eval)(BRIDGE_SOURCE);
+    return win.desktopBridge;
+  };
+
+  const uas: Array<[string, string, string]> = [
+    ['macOS WKWebView', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15', 'darwin'],
+    ['Windows WebView2', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 Edg/126.0.0.0', 'win32'],
+    ['Android WebView', 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36', 'android'],
+    ['iOS WKWebView', 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1', 'ios'],
+    ['Linux WebKitGTK', 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15', 'linux'],
+  ];
+
+  beforeEach(() => {
+    originalUa = win.navigator.userAgent;
+  });
+
+  afterEach(() => {
+    Object.defineProperty(win.navigator, 'userAgent', { value: originalUa, configurable: true });
+    delete win.desktopBridge;
+    delete win.__OET_DESKTOP__;
+    delete win.__TAURI_INTERNALS__;
+  });
+
+  it.each(uas)('derives the fallback platform from the UA on %s', (_label, ua, expected) => {
+    setUa(ua);
+    expect(evalBridgeWithoutInjection().platform).toBe(expected);
+  });
+
+  it('never falls back to win32 on a macOS WebView', () => {
+    setUa(uas[0][1]);
+    expect(evalBridgeWithoutInjection().platform).not.toBe('win32');
+  });
+
+  it('prefers the injected __OET_DESKTOP__ over UA detection', () => {
+    setUa(uas[0][1]); // macOS UA — the injected value must win even against it
+    delete win.desktopBridge;
+    win.__OET_DESKTOP__ = { platform: 'darwin', tauri: '2.9.5' };
+    win.__TAURI_INTERNALS__ = { invoke: vi.fn(() => Promise.resolve({ ok: true })) };
+    // eslint-disable-next-line no-eval
+    (0, eval)(BRIDGE_SOURCE);
+    expect(win.desktopBridge.platform).toBe('darwin');
+    expect(win.desktopBridge.versions.tauri).toBe('2.9.5');
+  });
+
+  it('ships no hardcoded platform literal in the bridge source', () => {
+    expect(BRIDGE_SOURCE).not.toMatch(/platform:\s*'(win32|darwin|linux|android|ios)'/);
+  });
+});

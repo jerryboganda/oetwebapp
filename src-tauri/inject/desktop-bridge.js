@@ -15,7 +15,20 @@
     return t.invoke(cmd, args);
   };
 
-  const meta = globalThis.__OET_DESKTOP__ || { platform: 'win32', tauri: '2' };
+  // bridge_script() (src-tauri/src/lib.rs) prepends the authoritative
+  // __OET_DESKTOP__ assignment to this same initialization script, so the
+  // fallback below only fires if that injection ever regresses. It must not
+  // hardcode a platform (0.7.7 shipped a hardcoded win32 here, so a macOS
+  // binary would have reported itself as win32): detect from the WebView UA.
+  // Android before Linux and iOS before Mac — their UAs embed those tokens.
+  const ua = navigator.userAgent || '';
+  const fallbackPlatform = /Android/.test(ua) ? 'android'
+    : /iPhone|iPad|iPod/.test(ua) ? 'ios'
+      : /Windows/.test(ua) ? 'win32'
+        : /Mac OS X|Macintosh/.test(ua) ? 'darwin'
+          : /Linux|X11/.test(ua) ? 'linux'
+            : 'unknown';
+  const meta = globalThis.__OET_DESKTOP__ || { platform: fallbackPlatform, tauri: '2' };
   const chromeVersion = (navigator.userAgent.match(/Chrom(?:e|ium)\/([0-9.]+)/) || [])[1] || '';
 
   const toBase64 = (bytes) => {
