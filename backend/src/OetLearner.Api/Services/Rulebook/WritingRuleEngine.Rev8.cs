@@ -653,6 +653,16 @@ public sealed partial class WritingRuleEngine
             if (m.Groups["aux"].Success || m.Groups["det"].Success) continue;
             var drug = m.Groups["drug"].Value;
             if (MedicationStopWords.Contains(drug) || IntransitiveParticipleSubjects.Contains(drug)) continue;
+            // Revalidation fix (2026-09-14): "I would be grateful for your
+            // continued care." and "He has become socially withdrawn." are
+            // correct clinical English. A possessive determiner or an adverb
+            // (the "-ly" form) can never be a medication subject, so the
+            // match is a false positive, not a note-form defect.
+            if (drug.Equals("your", StringComparison.OrdinalIgnoreCase)
+                || drug.Equals("my", StringComparison.OrdinalIgnoreCase)
+                || drug.Equals("our", StringComparison.OrdinalIgnoreCase)
+                || (drug.Length > 3 && drug.EndsWith("ly", StringComparison.OrdinalIgnoreCase)))
+                continue;
             var participle = m.Groups["participle"].Value;
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                 $"\"{drug} {participle}\" is note-form English. Use the passive voice, e.g. \"{drug} was discontinued\" or \"{drug} was commenced\".",

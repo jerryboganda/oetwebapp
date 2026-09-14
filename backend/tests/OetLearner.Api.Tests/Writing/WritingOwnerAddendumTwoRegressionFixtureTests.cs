@@ -701,6 +701,43 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     }
 
     // ─────────────────────────────────────────────────────────────────
+    // R2-19 — medication_passive_grammar must not flag correct clinical
+    // English. Found during the 224-catalogue revalidation (14 Sep 2026):
+    // "I would be grateful for your continued care." (possessive determiner
+    // "your" parsed as a drug subject) and "He has become socially
+    // withdrawn." (adverb "socially" parsed as a drug subject) were both
+    // reported as note-form defects. Possessives and "-ly" adverbs can
+    // never be medication subjects.
+    // ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void R2_19_Possessive_Determiner_Before_A_Participle_Is_Not_Note_Form()
+    {
+        var letter = Inject(McDonald,
+            "I would be grateful if you could confirm Mr McDonald's admission for immediate rehabilitation.",
+            "I would be grateful for your continued care of Mr McDonald during his rehabilitation.");
+        AssertRuleDoesNotFire(Lint(letter, "LT-TR"), "medication_passive_grammar");
+    }
+
+    [Fact]
+    public void R2_19_Adverb_Before_A_Participle_Is_Not_Note_Form()
+    {
+        var letter = Inject(Garcia,
+            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.",
+            "The Department of Human Services was notified of Ms Garcia's case, and her mother has become socially withdrawn since the admission.");
+        AssertRuleDoesNotFire(Lint(letter, "LT-DG", caseNotes: GarciaCaseNotes), "medication_passive_grammar");
+    }
+
+    [Fact]
+    public void R2_19_Genuine_Note_Form_Drug_Voice_Still_Fires()
+    {
+        var letter = Inject(McDonald,
+            "I would be grateful if you could confirm Mr McDonald's admission for immediate rehabilitation.",
+            "Colchicine ceased on discharge.");
+        AssertRuleFires(Lint(letter, "LT-TR"), "medication_passive_grammar");
+    }
+
+    // ─────────────────────────────────────────────────────────────────
     // Supplementary: the Re:-line identity the owner review missed entirely.
     // ─────────────────────────────────────────────────────────────────
 
