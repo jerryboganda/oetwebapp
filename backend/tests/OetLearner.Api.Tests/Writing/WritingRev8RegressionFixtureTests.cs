@@ -59,31 +59,31 @@ public sealed class WritingRev8RegressionFixtureTests
     // ─── A. Ms Isabel Garcia — update (LT-DG) ────
 
     internal const string GarciaUpdateLetter = """
-        Dr Lorna Bradbury
-        Stillwater Medical Clinic
-        12 Main Street
-        Stillwater
+Dr Lorna Bradbury
+Stillwater Medical Clinic
+12 Main Street
+Stillwater
 
-        23 May 2015
+23 May 2015
 
-        Dear Dr Bradbury,
-        Re: Ms Isabel Garcia, DOB: 1 January 1995
+Dear Dr Bradbury,
+Re: Ms Isabel Garcia, DOB: 1 January 1995
 
-        I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.
+I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.
 
-        Ms Garcia presented with a one-week history of painful, stiff joints, headache and photophobia. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. The white cell count was 14.0x10^9/L and the C-reactive protein level was 150. Lumbar puncture showed a white cell count of 1000 with polymorphonuclear predominance, reduced glucose 10 mg/dL and elevated protein 70 mg/dL. Culture confirmed Neisseria meningitidis.
+Ms Garcia presented with a one-week history of painful, stiff joints, headache and photophobia. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. The white cell count was 14.0x10^9/L and the C-reactive protein level was 150. Lumbar puncture showed a white cell count of 1000 with polymorphonuclear predominance, reduced glucose 10 mg/dL and elevated protein 70 mg/dL. Culture confirmed Neisseria meningitidis.
 
-        Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily. Dexamethasone was continued six-hourly for four days. Following lumbar puncture results, treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
+Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily. Dexamethasone was continued six-hourly for four days. Following lumbar puncture results, treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
 
-        The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.
+The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.
 
-        I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.
+I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.
 
-        Should there be any queries, kindly do not hesitate to contact me.
+Should there be any queries, kindly do not hesitate to contact me.
 
-        Yours sincerely,
+Yours sincerely,
 
-        Doctor
+Doctor
 """;
 
     [Fact]
@@ -223,31 +223,31 @@ public sealed class WritingRev8RegressionFixtureTests
     // ─── B. Mrs Betty Weston — non-medical referral (LT-NM) ────
 
     internal const string WestonReferralLetter = """
-        Ms Alison Goody
-        Occupational Therapist
-        Northwood Community Health Centre
-        Northwood
+Ms Alison Goody
+Occupational Therapist
+Northwood Community Health Centre
+Northwood
 
-        20 June 2018
+20 June 2018
 
-        Dear Ms Goody,
-        Re: Mrs Betty Weston, DOB: 12 February 1964
+Dear Ms Goody,
+Re: Mrs Betty Weston, DOB: 12 February 1964
 
-        I am writing to request your occupational therapy assessment and management of Mrs Betty Weston, who has been diagnosed with carpal tunnel syndrome.
+I am writing to request your occupational therapy assessment and management of Mrs Betty Weston, who has been diagnosed with carpal tunnel syndrome.
 
-        Mrs Weston presented on 10 June 2018 with a three-week history of numbness and tingling in the right thumb, index and middle fingers. Her sleep was disturbed by pain, which was relieved by moving her fingers. She reported difficulty unscrewing jar tops and gripping a glass or cup, with objects slipping from her fingers. Examination showed decreased grip strength without swelling, with positive Phalen's and Tinel's signs, confirming carpal tunnel syndrome.
+Mrs Weston presented on 10 June 2018 with a three-week history of numbness and tingling in the right thumb, index and middle fingers. Her sleep was disturbed by pain, which was relieved by moving her fingers. She reported difficulty unscrewing jar tops and gripping a glass or cup, with objects slipping from her fingers. Examination showed decreased grip strength without swelling, with positive Phalen's and Tinel's signs, confirming carpal tunnel syndrome.
 
-        Mrs Weston's carpal tunnel syndrome has been managed conservatively with night-time wrist splinting, alongside electromyography and nerve conduction studies to exclude other neurological causes.
+Mrs Weston's carpal tunnel syndrome has been managed conservatively with night-time wrist splinting, alongside electromyography and nerve conduction studies to exclude other neurological causes.
 
-        Mrs Weston works as a supermarket manager, which requires long hours on her feet. She is aware that her weight, with a body mass index of 32 kg/m², is an aggravating factor. She has a background of type two diabetes mellitus, hypothyroidism and arthrosis.
+Mrs Weston works as a supermarket manager, which requires long hours on her feet. She is aware that her weight, with a body mass index of 32 kg/m², is an aggravating factor. She has a background of type two diabetes mellitus, hypothyroidism and arthrosis.
 
-        I would be grateful if you could provide a custom-made wrist splint in a neutral position and undertake an ergonomics assessment.
+I would be grateful if you could provide a custom-made wrist splint in a neutral position and undertake an ergonomics assessment.
 
-        Should there be any queries, kindly do not hesitate to contact me.
+Should there be any queries, kindly do not hesitate to contact me.
 
-        Yours sincerely,
+Yours sincerely,
 
-        Doctor
+Doctor
 """;
 
     [Fact]
@@ -277,32 +277,32 @@ public sealed class WritingRev8RegressionFixtureTests
     // ─── C. Mr Michael Weir — routine referral (LT-RR) ────
 
     internal const string WeirRoutineReferralLetter = """
-        Dr M McLaren
-        Neurologist
-        Suite 3
-        67 The Crescent
-        Newtown
+Dr M McLaren
+Neurologist
+Suite 3
+67 The Crescent
+Newtown
 
-        9 August 2014
+9 August 2014
 
-        Dear Dr McLaren,
-        Re: Mr Michael Weir
+Dear Dr McLaren,
+Re: Mr Michael Weir
 
-        I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.
+I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.
 
-        On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. His blood pressure was 88/70 mmHg. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes.
+On today's review, Mr Weir reported dizziness, two recent blackouts, tingling in both hands, persistent left leg weakness, breathlessness, occasional constipation and low energy. His blood pressure was 88/70 mmHg. Examination revealed sensory loss to sharp and blunt stimuli in both hands and a diminished left patellar reflex. A CT scan of the head and lumbar spine has therefore been ordered to investigate possible central or spinal causes.
 
-        Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. The cholesterol level was 6.37 mmol/L, and the full blood count showed low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months.
+Mr Weir presented in June 2014 with fatigue, stress and lethargy, returning one week later with left leg weakness. The cholesterol level was 6.37 mmol/L, and the full blood count showed low white and red cell counts, haemoglobin and haematocrit. He was assessed for hypercholesterolaemia, with repeat testing planned in three months.
 
-        Mr Weir has depression and has taken sertraline hydrochloride since September 2012. He continues to smoke. He has been overweight for many years.
+Mr Weir has depression and has taken sertraline hydrochloride since September 2012. He continues to smoke. He has been overweight for many years.
 
-        I would be grateful if you could consider MRI if clinically indicated.
+I would be grateful if you could consider MRI if clinically indicated.
 
-        Should there be any queries, kindly do not hesitate to contact me.
+Should there be any queries, kindly do not hesitate to contact me.
 
-        Yours sincerely,
+Yours sincerely,
 
-        Doctor
+Doctor
 """;
 
     private const string WeirTaskText =
@@ -351,32 +351,32 @@ public sealed class WritingRev8RegressionFixtureTests
     // ─── D. Mr Julian McDonald — transfer (LT-TR) ────
 
     internal const string McDonaldTransferLetter = """
-        The Admissions Officer
-        Cabrini Hopetoun Rehabilitation
-        2-6 Hopetoun Street
-        Elsternwick
-        Vic 3185
+The Admissions Officer
+Cabrini Hopetoun Rehabilitation
+2-6 Hopetoun Street
+Elsternwick
+Vic 3185
 
-        24 July 2018
+24 July 2018
 
-        Dear Admissions Officer,
-        Re: Mr Julian McDonald, DOB: 12 January 1950
+Dear Admissions Officer,
+Re: Mr Julian McDonald, DOB: 12 January 1950
 
-        I am writing to transfer Mr McDonald to your rehabilitation service following his elective left total knee replacement on 20 July 2018 under Mr Mossley.
+I am writing to transfer Mr McDonald to your rehabilitation service following his elective left total knee replacement on 20 July 2018 under Mr Mossley.
 
-        Post-operative pain despite morphine patient-controlled analgesia slowed mobilisation. A forty-eight-hour ketamine infusion was effective. Amitriptyline was discontinued because of difficulty urinating. Somnolence and snoring prompted sleep studies for possible obstructive sleep apnoea, and a catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex.
+Post-operative pain despite morphine patient-controlled analgesia slowed mobilisation. A forty-eight-hour ketamine infusion was effective. Amitriptyline was discontinued because of difficulty urinating. Somnolence and snoring prompted sleep studies for possible obstructive sleep apnoea, and a catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex.
 
-        Discharge medications are Zyloric, 300 mg daily; Lipitor, 20 mg at night; Karvina, 300 mg daily and Nicabate patch, 21 mg. Analgesia comprises paracetamol, 1 g four times daily; ibuprofen, 400 mg three times daily; Targin, 20/10 twice daily and oxycodone, 5-10 mg four-hourly as needed. Physiotherapy, an occupational therapy home visit, social work and drug and alcohol support are planned, with a specialist appointment on 7 September 2018.
+Discharge medications are Zyloric, 300 mg daily; Lipitor, 20 mg at night; Karvina, 300 mg daily and Nicabate patch, 21 mg. Analgesia comprises paracetamol, 1 g four times daily; ibuprofen, 400 mg three times daily; Targin, 20/10 twice daily and oxycodone, 5-10 mg four-hourly as needed. Physiotherapy, an occupational therapy home visit, social work and drug and alcohol support are planned, with a specialist appointment on 7 September 2018.
 
-        Mr McDonald has hypertension, osteoarthritis, gout, post-traumatic stress disorder and childhood penicillin allergy. He smokes twenty cigarettes daily and drinks six to ten standard drinks daily. He lives alone in a caravan.
+Mr McDonald has hypertension, osteoarthritis, gout, post-traumatic stress disorder and childhood penicillin allergy. He smokes twenty cigarettes daily and drinks six to ten standard drinks daily. He lives alone in a caravan.
 
-        I would be grateful if you could confirm Mr McDonald's admission for immediate rehabilitation.
+I would be grateful if you could confirm Mr McDonald's admission for immediate rehabilitation.
 
-        Should there be any queries, kindly do not hesitate to contact me.
+Should there be any queries, kindly do not hesitate to contact me.
 
-        Yours faithfully,
+Yours faithfully,
 
-        Doctor
+Doctor
 """;
 
     [Fact]
@@ -476,33 +476,33 @@ public sealed class WritingRev8RegressionFixtureTests
     // ─── E. Mr David Taylor — urgent referral (LT-UR) ────
 
     internal const string TaylorUrgentReferralLetter = """
-        Dr Malcom Still
-        Rheumatologist
-        City Hospital
-        Suite 32
-        55 Main Road
-        Newtown
+Dr Malcom Still
+Rheumatologist
+City Hospital
+Suite 32
+55 Main Road
+Newtown
 
-        13 June 2020
+13 June 2020
 
-        Dear Dr Still,
-        Re: Mr David Taylor, DOB: 1 August 1965
+Dear Dr Still,
+Re: Mr David Taylor, DOB: 1 August 1965
 
-        I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with a gout flare and an associated tophus.
+I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with a gout flare and an associated tophus.
 
-        Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure 120/80 mmHg, heart rate 90 bpm and respiratory rate 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, 1 mg, and NSAIDs.
+Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure 120/80 mmHg, heart rate 90 bpm and respiratory rate 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, 1 mg, and NSAIDs.
 
-        Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine. He experienced a severe attack in June 2010 and a further attack in September 2010. Kidney stones were also noted that year. He remained free of attacks from 2011 to 2020.
+Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine. He experienced a severe attack in June 2010 and a further attack in September 2010. Kidney stones were also noted that year. He remained free of attacks from 2011 to 2020.
 
-        Mr Taylor was diagnosed with depression in 2011, possibly related to gout, and has taken fluoxetine since then. His brother has gout, and his father died of kidney failure.
+Mr Taylor was diagnosed with depression in 2011, possibly related to gout, and has taken fluoxetine since then. His brother has gout, and his father died of kidney failure.
 
-        I would be grateful if you could consider tophus removal, if clinically indicated, at your earliest convenience.
+I would be grateful if you could consider tophus removal, if clinically indicated, at your earliest convenience.
 
-        Should there be any queries, kindly do not hesitate to contact me.
+Should there be any queries, kindly do not hesitate to contact me.
 
-        Yours sincerely,
+Yours sincerely,
 
-        Doctor
+Doctor
 """;
 
     [Fact]

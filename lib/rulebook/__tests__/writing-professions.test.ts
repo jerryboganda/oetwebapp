@@ -25,14 +25,29 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
  * rulebook also carries the 38 owner Rev8 rules OWN-W-001..038 (11 Sep 2026).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 268,
-  nursing: 275,
-  dentistry: 275,
-  pharmacy: 278,
-  physiotherapy: 278,
-  radiography: 275,
+  // Medicine: 268 + OA-01..OA-15 + OA2-01..OA2-20 (the addendum rows are carried
+  // in the registry under profession "Medicine"). Every other canonical pack
+  // gains the same 35 globally scoped rows, because Addendum Two §14 requires
+  // them "active globally — not sample-only edits".
+  medicine: 303,
+  nursing: 310,
+  dentistry: 310,
+  pharmacy: 313,
+  physiotherapy: 313,
+  radiography: 310,
 };
+// 172 base + 38 owner Rev8 rules, PLUS the derived operational modules the
+// ULTIMATE FINAL round appended to the legacy packs (PRD-*) — which is why they
+// no longer share one number. Pinned per profession so drift stays visible.
 const LEGACY_RULE_COUNT = 172 + 38;
+const LEGACY_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
+  dietetics: 219,
+  'occupational-therapy': 218,
+  optometry: 218,
+  podiatry: 218,
+  'speech-pathology': 218,
+  veterinary: 211,
+};
 
 describe('writing rulebooks — Phase D coverage', () => {
   it('registers a writing rulebook for every supported profession', () => {
@@ -66,7 +81,7 @@ describe('writing rulebooks — Phase D coverage', () => {
         });
       } else {
         it('has the legacy 172-rule baseline + 38 owner Rev8 rules (locks against silent deletions)', () => {
-          expect(book.rules.length).toBe(LEGACY_RULE_COUNT);
+          expect(book.rules.length).toBe(LEGACY_PROFESSION_COUNTS[profession] ?? LEGACY_RULE_COUNT);
         });
       }
 

@@ -222,7 +222,11 @@ public sealed class WritingRev8RuleTests
     // ---------------------------------------------------------------------
 
     [Theory]
-    [InlineData("Mr Taylor also reported ankle swelling.")]
+    // Addendum Two: "also" is a defect in CONNECTIVE position only. A bare
+    // adverbial "Mr Taylor also reported ankle swelling." is correct English
+    // and is covered by the false-positive control in
+    // WritingOwnerAddendumTwoRegressionFixtureTests.
+    [InlineData("Mr Taylor was reviewed, and also he reported ankle swelling.")]
     [InlineData("Mr Taylor was stable but reported ankle swelling.")]
     public void LinkerAvoidWords_ModelAnswer_Fires_On_MidSentence_Also_Or_But(string sentence)
         => Assert.Contains(Lint(Letter(TaylorRe, TaylorIntro, sentence, TaylorClosure), model: true),
@@ -270,7 +274,9 @@ public sealed class WritingRev8RuleTests
     [Theory]
     [InlineData("Mr Taylor takes ranitidine, 150 mg twice a day.")]
     [InlineData("Mr Taylor takes ranitidine, 150 mg and paracetamol, 1 g.")]
-    [InlineData("Mr Taylor takes ranitidine, 150 mg; paracetamol, 1 g; and allopurinol, 100 mg.")]
+    // OA2-16 (latest owner override): semicolons BETWEEN the pairs, and NO
+    // semicolon before the final "and".
+    [InlineData("Mr Taylor takes ranitidine, 150 mg; paracetamol, 1 g and allopurinol, 100 mg.")]
     [InlineData("Blood tests showed haemoglobin 110 g/L.")]
     [InlineData("Mr Taylor drinks 20 units of alcohol per week.")]
     public void MedicationListPunctuation_Passes_On_Canonical_Lists_And_Non_Medication_Values(string sentence)

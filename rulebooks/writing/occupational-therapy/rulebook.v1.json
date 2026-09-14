@@ -2301,11 +2301,11 @@
       "section": "11",
       "severity": "major",
       "title": "Medication-list syntax",
-      "body": "Single item: Drug, dose. Two items: Drug, dose and Drug, dose. Three or more: Drug, dose; Drug, dose; and Drug, dose. Keep a comma between medicine and dose, semicolons between items and \"and\" before the final item; translate Latin frequency abbreviations; capitalise trade names, generic names lowercase; never invent a dose absent from the case notes.",
+      "body": "Single item: Drug, dose. Two items: Drug, dose and Drug, dose. Three or more: Drug, dose; Drug, dose and Drug, dose (OA2-16, 14 Sep 2026: semicolons BETWEEN the medication-dose pairs, NO semicolon before the final \"and\" - this supersedes the older \"; and\" house form). Keep a comma between medicine and dose, semicolons between the medication-dose pairs and no semicolon before the final \"and\"; translate Latin frequency abbreviations; capitalise trade names, generic names lowercase; never invent a dose absent from the case notes.",
       "appliesTo": "all",
       "enforcement": "ai-grounded",
       "exemplarPhrases": [
-        "ranitidine, 150 mg twice daily; atorvastatin, 20 mg each morning; and dalteparin, 2500 IU by injection"
+        "ranitidine, 150 mg twice daily; atorvastatin, 20 mg each morning and dalteparin, 2500 IU by injection"
       ],
       "params": {
         "classification": "Owner Override",

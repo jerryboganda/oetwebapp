@@ -24,7 +24,7 @@ const CHECK_ONLY = process.argv.includes("--check");
 // hash went stale silently after the 10 Sep 2026 G-W-116 amendment). After
 // editing the registry: update this constant, the version fields in
 // buildRulebook() and docs/canonical-rules/README.md, then rebuild.
-const REGISTRY_SHA256 = "6745ae3769807ca3e9dc96a4b41cde73809bbd87096acb06bd30b0e5ae67bbb9";
+const REGISTRY_SHA256 = "8fd520248c407b5ad202f00708cdb70b8d6d0f92f934614413e3a77a22d41c16";
 
 // Registry `profession` value -> repo folder name. Only these six have live
 // Writing tasks today; every other registry profession is intentionally
@@ -37,6 +37,19 @@ const SUPPORTED_PROFESSIONS = {
   Physiotherapy: "physiotherapy",
   Radiography: "radiography",
 };
+
+// The owner clarification addenda (OA-01..OA-15, 14 Sep 2026; OA2-01..OA2-20,
+// ADDENDUM TWO, same day) each declare "Scope: Global Model Answer" — they are
+// letter-type scoped, never profession scoped. They are carried in the registry
+// under a single `profession: "Medicine"` row rather than duplicated six times,
+// so a plain profession filter shipped them to the Medicine pack alone while
+// every other pack's authoritySource still CLAIMED them. Addendum Two §14 makes
+// that a stop-gate item: "Background placement, request placement, sentence
+// control, number style, medication-list punctuation and role-based salutation
+// rules are active globally — not sample-only edits." Matching on the id keeps
+// the registry untouched (so REGISTRY_SHA256 stays valid) and means a future
+// OA3- addendum is global by construction.
+const isGlobalOwnerRule = (rule) => /^OA\d*-\d+$/.test(rule.id);
 
 // Owner Rev8 (11 Sep 2026) classifications: "Owner Override" is critical;
 // "Owner Clarification", "Exception", "Avoid", "Acceptable Alternative" and
@@ -135,7 +148,7 @@ function buildRulebook(profession, folder, rules, existing) {
   });
 
   return {
-    version: "2.2.0-canonical-addendum-two",
+    version: "2.2.1-canonical-addendum-two",
     kind: "writing",
     profession: folder,
     publishedAt: "2026-09-14T00:00:00Z",
@@ -160,7 +173,7 @@ function main() {
 
   let failures = 0;
   for (const [regProfession, folder] of Object.entries(SUPPORTED_PROFESSIONS)) {
-    const rules = activeWriting.filter((r) => r.profession === regProfession);
+    const rules = activeWriting.filter((r) => r.profession === regProfession || isGlobalOwnerRule(r));
     if (rules.length === 0) {
       console.error(`FATAL: zero active Writing rules for ${regProfession} — refusing to overwrite ${folder} with an empty set.`);
       failures++;

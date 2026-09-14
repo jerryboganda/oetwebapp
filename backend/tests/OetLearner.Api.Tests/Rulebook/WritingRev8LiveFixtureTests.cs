@@ -81,7 +81,10 @@ Doctor
             "urgent_token_not_repeated",       // "urgently" in the closure
             "closure_contact_offer",           // no universal contact-offer sentence
             "paragraph_start_patient_name",    // body paragraphs open with "He"
-            "linker_avoid_words",              // "his brother also has gout"
+            // "his brother also has gout" is an ADVERBIAL "also" — correct
+            // English, and since Addendum Two deliberately not a finding.
+            // Connective "also" is covered both ways in
+            // WritingOwnerAddendumTwoRegressionFixtureTests.
             "emotional_wording",               // "He suffered attacks"
             "medication_list_punctuation");    // "colchicine 1 mg" without comma
         Assert.NotEmpty(WritingRuleEngine.ModelAnswerBlockingFindings(findings));
@@ -327,7 +330,8 @@ Pharmacist
             "paragraph_start_patient_name",          // final paragraph "... contact her doctor"
             "medication_list_punctuation",           // "ranitidine 150mg"
             "value_unit_spacing",                    // "150mg", "2500IU", "500mg", "10mg"
-            "linker_avoid_words",                    // "have also been added"
+            // "have also been added" is an ADVERBIAL "also" — correct English,
+            // and since Addendum Two deliberately not a finding.
             "closure_contact_offer");
     }
 

@@ -457,6 +457,17 @@ public sealed partial class WritingRuleEngine
             // and joined by list punctuation, not a narrative connective.
             if (separators.Any(x => x.Length > 60 || NonListConnectiveRe.IsMatch(x))) continue;
             bool ok;
+            // A 3+-item list with NO semicolon ANYWHERE is genuinely
+            // ambiguous for any reader — "ranitidine, 150 mg, paracetamol,
+            // 1 g, and allopurinol, 100 mg." gives no signal where one
+            // medicine's entry ends and the next begins. That is a real
+            // clarity defect independent of which exact separator pattern is
+            // preferred, so it stays candidate-scored (OA2-20/firewall item 7:
+            // "the exact house comma/semicolon form is not a universal
+            // template; ambiguity ... is what scores"). Only the PATTERN
+            // question — semicolons present, but "; and" vs "and" before the
+            // final item — is the OA2-16 house nuance, Model-Answer-only.
+            var ambiguousForCandidates = false;
             if (items.Count == 2)
             {
                 ok = Regex.IsMatch(separators[0], @"\band\b", RegexOptions.IgnoreCase) && !separators[0].Contains(';');
@@ -471,8 +482,9 @@ public sealed partial class WritingRuleEngine
                 ok = separators.Take(separators.Count - 1).All(x => x.Contains(';'))
                      && Regex.IsMatch(separators[^1], @"\band\b", RegexOptions.IgnoreCase)
                      && !separators[^1].Contains(';');
+                ambiguousForCandidates = !ok && !separators.Any(x => x.Contains(';'));
             }
-            if (!ok)
+            if (!ok && (input.IsModelAnswer || ambiguousForCandidates))
             {
                 yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                     items.Count == 2
@@ -554,7 +566,7 @@ public sealed partial class WritingRuleEngine
         // ketamine infusion". Medication strengths, dates, clinical
         // measurements and doses stay numeric and never match here.
         new(@"\b(\d{1,3})\s+(?:cigarettes?|standard\s+drinks?)\b", RegexOptions.IgnoreCase),
-        new(@"(\d{1,2})[\-\s](?:hour|day|week|month)s?\s+(?:[a-z]+\s+){0,2}(?:infusion|course|regimen|regime|programme|program|therapy|treatment|block|trial|admission|stay)", RegexOptions.IgnoreCase),
+        new(@"\b(\d{1,2})[\-\s](?:hour|day|week|month)s?\s+(?:[a-z]+\s+){0,2}(?:infusion|course|regimen|regime|programme|program|therapy|treatment|block|trial|admission|stay)\b", RegexOptions.IgnoreCase),
     };
 
     private static IEnumerable<LintFinding> DetectNumberStyleRev8(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -1036,6 +1048,23 @@ public sealed partial class WritingRuleEngine
         if (requestParagraphIndex < 0) yield break;
         var requestParagraph = s.BodyParagraphs[requestParagraphIndex];
         var offset = BodyOffset(s) + s.Body.IndexOf(requestParagraph, StringComparison.Ordinal);
+
+        // OA2-05 / OA2-06 — the request paragraph must BE the closure: either
+        // the last body paragraph, or the second-to-last with only the
+        // contact-offer paragraph after it. The checks below this point only
+        // ever look at s.BodyParagraphs[^1], so a request paragraph followed
+        // by two or more further body paragraphs (clinical content stranded
+        // after the "closure") previously passed with zero findings — the
+        // exact OA2-01 "visible defect + validator PASS" class Addendum Two
+        // exists to close.
+        if (requestParagraphIndex < s.BodyParagraphs.Count - 2)
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "The task-specific request is not the closure — it must be the letter's last or second-to-last body paragraph, immediately before the contact-offer paragraph. Move any content that follows it back into the body above.",
+                Quote: requestParagraph.Length > 90 ? requestParagraph[..90] + "…" : requestParagraph,
+                Start: offset, End: offset + requestParagraph.Length);
+        }
+
         var sentences = SplitSentences(requestParagraph);
         if (!ClosureRequestRe.IsMatch(sentences[0]))
         {
@@ -1362,8 +1391,8 @@ public sealed partial class WritingRuleEngine
     // letters so a referral or transfer can never fire, and source-gated on
     // the markers so a task without proof is never second-guessed.
     private static readonly Regex DischargeFunctionMarkerRe = new(
-        @"\bdischarg\w*|\b(?:was|were|has been|had been) admitted\b|\badmission\b|\binto your care\b"
-        + @"|\bback to (?:your|the) care\b|\btransfer of care\b|\bongoing care\b|\breturn(?:ed|ing)? to (?:your|the) care\b",
+        @"\bdischarg\w*|\b(?:was|were|has been|had been) admitted\b|\badmission\b|\b(?:into|under|back (?:in|to)|in) (?:your|his|her|their|our) (?:ongoing )?care\b"
+        + @"|\btransfer of care\b|\bongoing care\b|\breturn(?:ed|ing)? to (?:your|his|her|their|the) care\b",
         RegexOptions.IgnoreCase);
 
     private static IEnumerable<LintFinding> DetectDischargeFunctionMissed(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -1438,6 +1467,14 @@ public sealed partial class WritingRuleEngine
 
     private static IEnumerable<LintFinding> DetectResultHeadNoun(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        // OA2-11 is a stated PREFERENCE ("prefer 'cholesterol level was...'
+        // over 'a cholesterol of...'"), and WritingRuleProvenance declares
+        // this check id AcceptAlternative, whose contract requires it to
+        // "either not run for candidates or run in a semantic,
+        // equivalence-accepting form". "a cholesterol of 6.37 mmol/L" is
+        // grammatically correct English, so this house-style preference is
+        // Model-Answer-only.
+        if (!input.IsModelAnswer) yield break;
         if (s.Body.Length == 0) yield break;
         var bodyOffset = BodyOffset(s);
         foreach (Match m in ResultHeadNounRe.Matches(s.Body))
@@ -1522,6 +1559,15 @@ public sealed partial class WritingRuleEngine
 
     private static IEnumerable<LintFinding> DetectRoleSalutationMatchesTask(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        // Source-gated, like letter_date_unsupported / recipient_name_mismatch
+        // / re_line_identity_unsupported: this rule can only prove a mismatch
+        // against the exact task, so without it the detector must stay silent.
+        // Missing this gate let the rule fire on every candidate submission —
+        // WritingEvaluationPipeline.EvaluateAsync calls Lint() with no
+        // TaskText — flagging a defensible "Dear Sir/Madam," on any recipient
+        // block that happens to contain a role line, exactly what OA2-20's
+        // firewall (item 23) exists to prevent.
+        if (input.TaskText is not { Length: > 0 } task) yield break;
         if (s.SalutationIndex is null) yield break;
         var boundary = s.DateIndex ?? s.SalutationIndex.Value;
         string? role = null;
@@ -1533,9 +1579,7 @@ public sealed partial class WritingRuleEngine
             break;
         }
         if (role is null) yield break;
-        // Source fidelity: the exact task must actually name this role.
-        if (input.TaskText is { Length: > 0 } task
-            && !task.Contains(role, StringComparison.OrdinalIgnoreCase)) yield break;
+        if (!task.Contains(role, StringComparison.OrdinalIgnoreCase)) yield break;
         var salutation = s.Lines[s.SalutationIndex.Value].Trim();
         if (Regex.IsMatch(salutation, @"^Dear\s+" + Regex.Escape(role) + @"\s*,?\s*$", RegexOptions.IgnoreCase)) yield break;
         yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),

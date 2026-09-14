@@ -155,10 +155,64 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
             "discharge_function_missed");
     }
 
+    // R2-02c — "under your care" is an equally valid discharge-function
+    // phrase to "into your care"; DischargeFunctionMarkerRe used to accept
+    // only the latter, so a source-faithful Model Answer using "under" was
+    // wrongly told it had not stated the discharge function.
+    [Fact]
+    public void R2_02c_Under_Your_Care_Phrasing_Also_Satisfies_The_Discharge_Function()
+    {
+        var letter = Inject(Garcia,
+            "I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis",
+            "I am writing to update you regarding Ms Isabel Garcia, who was admitted with bacterial meningitis and is now home under your care");
+        AssertRuleDoesNotFire(Lint(letter, "LT-DG", markers: AdmissionAndDischargeProven),
+            "discharge_function_missed");
+    }
+
     [Fact]
     public void R2_02_Is_Silent_When_The_Notes_Do_Not_Prove_Admission_And_Discharge()
         => AssertRuleDoesNotFire(Lint(Garcia, "LT-DG", markers: NoAdmissionOrDischarge),
             "discharge_function_missed");
+
+    // R2-02b — the extractor itself, not a hand-built marker fixture. Every
+    // R2-02 test above passes hand-constructed WritingCaseNotesMarkers, so
+    // none of them exercise WritingCaseNotesMarkerExtractor.Derive() at all.
+    // The extractor used to match bare venue nouns ("hospital", "ward") and
+    // any "discharg\w*" substring, so an outpatient referral whose notes
+    // merely name a hospital and hand over a discharge leaflet armed BOTH
+    // markers with no admission or discharge episode ever having happened —
+    // exactly the OA2-01 "visible defect + PASS" failure the addendum exists
+    // to close, one layer below the detectors themselves.
+    [Fact]
+    public void R2_02b_Extractor_Does_Not_Infer_Admission_Or_Discharge_From_Outpatient_Wording()
+    {
+        var markers = WritingCaseNotesMarkerExtractor.Derive(
+            "GP referred her to the outpatient clinic at City Hospital. Discharge advice leaflet given.");
+        Assert.False(markers.AdmissionDocumented);
+        Assert.False(markers.DischargeDocumented);
+    }
+
+    [Fact]
+    public void R2_02b_Extractor_Still_Proves_A_Genuine_Admission_And_Discharge()
+    {
+        var markers = WritingCaseNotesMarkerExtractor.Derive(
+            "Mrs Jones was admitted with pneumonia and treated with IV antibiotics. " +
+            "She is now fit for discharge and will return home today under your ongoing care.");
+        Assert.True(markers.AdmissionDocumented);
+        Assert.True(markers.DischargeDocumented);
+    }
+
+    [Fact]
+    public void R2_02b_Extractor_Recognises_The_Noun_Form_Admission()
+        => Assert.True(WritingCaseNotesMarkerExtractor.Derive("Admission date 20/7/18 for elective knee replacement.").AdmissionDocumented);
+
+    [Fact]
+    public void R2_02b_Extractor_Does_Not_Infer_Admission_From_Transfer_Or_Post_Op_History_Alone()
+    {
+        var markers = WritingCaseNotesMarkerExtractor.Derive(
+            "Transfer date 24/7/18. Reason for transfer: rehabilitation care. Post-operative review planned.");
+        Assert.False(markers.AdmissionDocumented);
+    }
 
     // ─────────────────────────────────────────────────────────────────
     // R2-03 — vague purpose / buried action.  intro_purpose_vague
@@ -312,6 +366,26 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     public void R2_08_Request_In_Its_Own_Closure_Paragraph_Passes()
         => AssertRuleDoesNotFire(Lint(Garcia, "LT-DG"), "closure_request_paragraph");
 
+    // R2-08b — the request paragraph's POSITION, not just its own contents.
+    // The checks in DetectClosureRequestParagraph only ever examined
+    // BodyParagraphs[^1], so a request paragraph that IS well-formed but sits
+    // two or more paragraphs before the end — with real clinical content
+    // stranded after it — linted 100% clean. Swaps the request paragraph and
+    // the public-health paragraph so the request becomes the THIRD-from-last
+    // body paragraph while the letter otherwise stays word-for-word
+    // identical and every other rule (naming, grammar, semicolons,
+    // medication syntax) still passes.
+    [Fact]
+    public void R2_08b_Request_Paragraph_Stranded_Mid_Letter_Is_Flagged()
+    {
+        var letter = Inject(Garcia,
+            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.\n\n"
+            + "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.",
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.\n\n"
+            + "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.");
+        AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // R2-09 — duplicate request.  no_duplicated_request
     // ─────────────────────────────────────────────────────────────────
@@ -457,6 +531,33 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
         // yours_sincerely_vs_faithfully (Critical) on a correct transfer letter.
         => AssertRuleDoesNotFire(Lint(McDonald, "LT-TR", taskText: McDonaldTaskText),
             "yours_sincerely_vs_faithfully");
+
+    [Fact]
+    public void R2_13_Is_Silent_Without_The_Exact_Task()
+    {
+        // The rule can only prove a role mismatch against the exact task, so
+        // it must stay silent without one — exactly like
+        // letter_date_unsupported / recipient_name_mismatch /
+        // re_line_identity_unsupported. Missing this gate let the rule fire
+        // on every real CANDIDATE submission: WritingEvaluationPipeline's
+        // production Lint() call never supplies TaskText, so a candidate who
+        // correctly wrote "Dear Sir/Madam," to a recipient block that happens
+        // to contain a role line was flagged regardless — exactly what
+        // OA2-20's firewall (item 23) exists to prevent.
+        var letter = McDonald.Replace("Dear Admissions Officer,", "Dear Sir/Madam,");
+        Assert.NotEqual(McDonald, letter);
+        AssertRuleDoesNotFire(Lint(letter, "LT-TR", taskText: null), "role_salutation_matches_task");
+    }
+
+    [Fact]
+    public void R2_13_Candidate_Without_Task_Text_Is_Never_Penalised_For_A_Generic_Salutation()
+    {
+        // The exact scenario the live candidate evaluation pipeline produces:
+        // IsModelAnswer=false, TaskText=null.
+        var letter = McDonald.Replace("Dear Admissions Officer,", "Dear Sir/Madam,");
+        AssertRuleDoesNotFire(Lint(letter, "LT-TR", taskText: null, isModelAnswer: false),
+            "role_salutation_matches_task");
+    }
 
     // ─────────────────────────────────────────────────────────────────
     // R2-14 — relevant current vital sign, no invented interpretation.

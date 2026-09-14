@@ -21,14 +21,26 @@ public static class WritingCaseNotesMarkerExtractor
             ConsentDocumented: Regex.IsMatch(text, @"\b(consent|fully informed|discussed with patient|safety plan completed)\b"),
             FollowUpDate: followUpDate,
             ResultsEnclosed: Regex.IsMatch(text, @"\b(enclosed|attached|please find enclosed|copy of results|copy of imaging)\b"),
-            // Ultimate Final §3.3 — discharge language is only supported when
-            // the canonical notes document the underlying admission/discharge.
-            // Deliberately broad on the SOURCE side: "came into hospital",
-            // "ward", "theatre", "under our team" all count as admission
-            // evidence so a genuine discharge letter is never false-failed;
-            // only a letter whose notes contain none of it can invent one.
-            AdmissionDocumented: Regex.IsMatch(text, @"\b(admit(?:ted|s|tance)?|inpatient|in-patient|hospitalis?ed?|hospital|ward|theatre|overnight stay|post-?operat\w*|under (?:our|the) (?:team|care|management))\b"),
-            DischargeDocumented: Regex.IsMatch(text, @"\b(discharg\w*|sent home|returning home|returned home|back to (?:your|his|her|their) care|transfer of care|fit for discharge)\b"));
+            // Ultimate Final §3.3 / OA2-02 — discharge language is only
+            // supported when the canonical notes document a genuine
+            // admission EPISODE and a genuine discharge EVENT, not a bare
+            // mention of a venue or clinical word. The original version
+            // matched bare "hospital", "ward", "theatre", "post-operat*" and
+            // any "discharg\w*" anywhere in the notes, so an outpatient
+            // referral note reading "seen at City Hospital ... discharge
+            // advice leaflet given" armed BOTH markers with no admission or
+            // discharge ever having happened (proved by the R2-02b fixtures
+            // in WritingOwnerAddendumTwoRegressionFixtureTests — that exact
+            // sentence).
+            // Admission requires an episode phrase (admitted/admission,
+            // inpatient status, hospitalised, an actual ward stay, or the
+            // existing "under our/the team/care/management" phrase);
+            // discharge requires the verb "discharged", a readiness/fitness
+            // statement, or a completed discharge document, not any word
+            // beginning "discharg" (which also matches "discharge advice",
+            // "discharge planning discussed" and "wound discharge").
+            AdmissionDocumented: Regex.IsMatch(text, @"\b(admit(?:ted|s|tance)?|admissions?|(?:was |is |as )?an? inpatient|in-patient|hospitalis(?:ed|ation)|on (?:the|a) ward|overnight (?:stay|admission)|under (?:our|the) (?:team|care|management))\b"),
+            DischargeDocumented: Regex.IsMatch(text, @"\b(discharged|(?:fit|ready) for discharge|sent home|returning home|returned home|back to (?:your|his|her|their|our) care|transfer(?:red)? of care|discharge (?:summary|letter) (?:issued|completed|sent))\b"));
     }
 
     private static string? ExtractFollowUp(string? caseNotes)

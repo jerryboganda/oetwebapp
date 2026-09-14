@@ -33,7 +33,10 @@ describe('Writing canon parity — rulebook IDs vs legacy SC-* namespace', () =>
     for (const profession of IN_SCOPE_PROFESSIONS) {
       const book = loadRulebook('writing', profession);
       for (const rule of book.rules) {
-        if (!/^(R\d|OW-|DH-W-|G-W-|[A-Z]+-W-)/.test(rule.id)) {
+        // OA-01..OA-15 and OA2-01..OA2-20 are the owner-clarification
+        // namespaces; they reach the built Medicine pack from the canonical
+        // registry (every such row is profession: "Medicine").
+        if (!/^(R\d|OW-|DH-W-|G-W-|OA-|OA2-|PRD-|[A-Z]+-W-)/.test(rule.id)) {
           offenders.push({ profession, id: rule.id });
         }
       }

@@ -33,9 +33,17 @@ public sealed class WritingRev8ModelAnswerGateTests
     // gate held on Critical findings only, which is how such letters became
     // "Ready". Here the compliant exemplar's text is degraded with one
     // Major-only defect (a mid-sentence "also").
+    // "Also, ..." at a sentence start is a CONNECTIVE use and still fails.
+    // (An adverbial "also" inside a clause — "kidney stones were also noted" —
+    // is correct English and, since Addendum Two, is deliberately not flagged.)
     private static string MajorOnlyDefect()
-        => WritingModelAnswerBatchTests.ExemplarText()
-            .Replace("continues to smoke and has long been overweight.", "continues to smoke and has also been overweight.");
+    {
+        var defect = WritingModelAnswerBatchTests.ExemplarText()
+            .Replace("He has been overweight for many years.", "Also, he has been overweight for many years.");
+        if (defect == WritingModelAnswerBatchTests.ExemplarText())
+            throw new InvalidOperationException("MajorOnlyDefect injected nothing — the exemplar wording changed.");
+        return defect;
+    }
 
     [Fact]
     public async Task Import_Holds_A_Letter_With_Only_Major_Violations_And_Records_The_Report()
@@ -187,7 +195,7 @@ public sealed class WritingRev8ModelAnswerGateTests
         var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
         var failing = new FixedSemantic(new WritingModelAnswerSemanticResult(false, false,
             [new WritingModelAnswerSemanticViolation("OWN-W-031", "Mr Weir has depression", "Background placed before the presenting complaint.")],
-            "claude-sonnet-5", "2.2.0-canonical-addendum-two", null));
+            "claude-sonnet-5", "2.2.1-canonical-addendum-two", null));
         var held = await Service(db, new ScriptedGateway(), failing)
             .ImportAsync(scenarioId, WritingModelAnswerBatchTests.ExemplarText(), "admin-1");
         Assert.Equal("model_answer_semantic_violations", held.HoldReason);
@@ -199,7 +207,7 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal("model_answer_semantic_validator_unavailable", transient.HoldReason);
         Assert.True(WritingTaskModelAnswerService.IsTransientHold(transient.HoldReason));
 
-        var passing = new FixedSemantic(new WritingModelAnswerSemanticResult(true, false, [], "claude-sonnet-5", "2.2.0-canonical-addendum-two", null));
+        var passing = new FixedSemantic(new WritingModelAnswerSemanticResult(true, false, [], "claude-sonnet-5", "2.2.1-canonical-addendum-two", null));
         var ready = await Service(db, new ScriptedGateway(), passing)
             .ImportAsync(scenarioId, WritingModelAnswerBatchTests.ExemplarText(), "admin-1");
         Assert.Equal("Ready", ready.Status);

@@ -38,11 +38,11 @@ addendum's precedence rule (§7) the latest owner rule wins over older conflicti
 
 | Item | Value |
 |---|---|
-| Registry release | `v1.1-rev8` = v1.0 of 2026-08-31 + OWN-W-001..038 + the supersession amendments below |
-| `OET_AI_Rules_Master.jsonl` SHA-256 | `6745ae3769807ca3e9dc96a4b41cde73809bbd87096acb06bd30b0e5ae67bbb9` (2535 lines, LF) |
-| Canonical rulebook version (6 built packs) | `2.2.0-canonical-addendum-two`, `publishedAt` `2026-09-14T00:00:00Z` |
+| Registry release | `v1.2-addendum-two` = v1.1-rev8 + OA-01..OA-15 + OA2-01..OA2-20 |
+| `OET_AI_Rules_Master.jsonl` SHA-256 | `8fd520248c407b5ad202f00708cdb70b8d6d0f92f934614413e3a77a22d41c16` (2535 lines, LF) |
+| Canonical rulebook version (6 built packs) | `2.2.1-canonical-addendum-two`, `publishedAt` `2026-09-14T00:00:00Z` |
 | Legacy rulebook version (7 hand-maintained packs) | `1.1.0-rev8` |
-| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.rev8.2026-09-11.1` (81 check-ids) |
+| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.owner-addendum-two.2026-09-14.2` (107 check-ids) |
 
 The v1.0 hashes in the table at the top of this file stay as original-release provenance only.
 `HANDOFF_SHA256SUMS.txt`, `OET_AI_DEPLOYMENT_CONTRACT.json` and `OET_AI_Source_Manifest.json` are
@@ -50,9 +50,12 @@ the handoff package's own v1.0 artefacts and are deliberately not edited (the co
 per-profession Writing `active_rules` are v1.0 figures; v1.1-rev8 adds 38 to each).
 
 **Added.** 38 rows `OWN-W-001`..`OWN-W-038` appended to the end of each of the six professions'
-Writing blocks (Medicine 303 — including OA-01..OA-15 and OA2-01..OA2-20, Nursing 275, Dentistry 275, Pharmacy 278, Physiotherapy 278,
-Radiography 275 active Writing rows). Every row uses an existing section of that profession, so
-no section is added. `authority` is `DR_HESHAM_DIRECT`; `classification` comes from the catalogue
+Writing blocks, plus the 15 `OA-01`..`OA-15` and 20 `OA2-01`..`OA2-20` owner-clarification rows,
+which are `profession: "Medicine"` in the registry but carry across EVERY canonical pack (the
+generator's `isGlobalOwnerRule` matches on id, per Addendum Two §14: "active globally — not
+sample-only edits"). Active Writing rows per pack: Medicine 303, Nursing 310, Dentistry 310,
+Pharmacy 313, Physiotherapy 313, Radiography 310. Every row uses an existing section of that
+profession, so no section is added. `authority` is `DR_HESHAM_DIRECT`; `classification` comes from the catalogue
 (`Owner Override`, `Hard Rule`, `Owner Clarification`, `Exception`, `Avoid`,
 `Acceptable Alternative`, `Preferred Style`). Rows also carry three optional fields, used only by
 these rows:

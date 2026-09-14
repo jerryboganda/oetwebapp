@@ -28,13 +28,25 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
   medicine: 303,
-  nursing: 275,
-  dentistry: 275,
-  pharmacy: 278,
-  physiotherapy: 278,
-  radiography: 275,
+  nursing: 310,
+  dentistry: 310,
+  pharmacy: 313,
+  physiotherapy: 313,
+  radiography: 310,
 };
+// The legacy packs each carry 172 base + 38 owner Rev8 rules, PLUS the
+// derived operational modules the ULTIMATE FINAL round added (PRD-*), which is
+// why they no longer share one number. Pinned per profession so drift is
+// visible instead of collapsing into a single stale constant.
 const LEGACY_RULE_COUNT = 172 + 38;
+const LEGACY_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
+  dietetics: 219,
+  'occupational-therapy': 218,
+  optometry: 218,
+  podiatry: 218,
+  'speech-pathology': 218,
+  veterinary: 211,
+};
 
 describe('writing rulebook coverage matrix', () => {
   for (const profession of ALL_WRITING_PROFESSIONS) {
@@ -44,7 +56,7 @@ describe('writing rulebook coverage matrix', () => {
 
       const book = loadRulebook('writing', profession);
       const matrix = buildWritingRuleCoverageMatrix(profession);
-      expect(matrix).toHaveLength(CANONICAL_PROFESSION_COUNTS[profession] ?? LEGACY_RULE_COUNT);
+      expect(matrix).toHaveLength(CANONICAL_PROFESSION_COUNTS[profession] ?? LEGACY_PROFESSION_COUNTS[profession] ?? LEGACY_RULE_COUNT);
       expect(matrix.map((row) => row.ruleId)).toEqual(book.rules.map((rule) => rule.id));
     });
   }

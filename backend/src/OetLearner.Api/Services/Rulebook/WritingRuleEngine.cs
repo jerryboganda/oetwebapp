@@ -1872,7 +1872,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         // The bare alternatives used to be unanchored, so the letter "g" inside
         // the KEYWORD itself satisfied the check: glucose, haemoglobin, weight
         // and height could never fire. Word boundaries make every keyword live.
-        var unitRe = new Regex(@"(mmol\/l|mg\/dl|g\/dl|g\/l|\bmg\b|\bkg\b|\bg\b|\bcm\b|\bmm\b|\bmL\b|mmHg|bpm|breaths\/min|\/min|\u00b0c|celsius|mmol|%|\d+\s*\/\s*\d+)", RegexOptions.IgnoreCase);
+        var unitRe = new Regex(@"(mmol\/l|mg\/dl|g\/dl|g\/l|kg\/m|\bmg\b|\bkg\b|\bg\b|\bcm\b|\bmm\b|\bmL\b|mmHg|bpm|breaths\/min|\/min|\u00b0c|celsius|mmol|%|\d+\s*\/\s*\d+)", RegexOptions.IgnoreCase);
         var findings = 0;
         foreach (var keyword in keywords)
         {
@@ -1883,7 +1883,13 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             // ever appears, and flagging a value that plainly has one. A
             // '.' is only excluded when it is NOT immediately between two
             // digits (i.e. a genuine sentence end, not a decimal point).
-            var re = new Regex(@"\b" + Regex.Escape(keyword) + @"\b(?:\.(?=\d)|[^.\n]){0,30}", RegexOptions.IgnoreCase);
+            // 30 characters was too short once the word-boundary fix above
+            // brought `weight`, `height`, `glucose` and `haemoglobin` back to
+            // life: "her weight, with a body mass index of 32 kg/m2" puts the
+            // unit 41 characters after the keyword, so the check reported a
+            // perfectly united value as unitless. Widening only ever makes the
+            // rule more permissive.
+            var re = new Regex(@"\b" + Regex.Escape(keyword) + @"\b(?:\.(?=\d)|[^.\n]){0,48}", RegexOptions.IgnoreCase);
             foreach (Match m in re.Matches(input.LetterText))
             {
                 var snippet = m.Value;
