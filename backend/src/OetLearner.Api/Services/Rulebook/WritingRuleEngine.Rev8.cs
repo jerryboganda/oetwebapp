@@ -1842,16 +1842,28 @@ public sealed partial class WritingRuleEngine
         // ("Name: Mr Michael Weir") and without ("Name: Michael Weir") a
         // title must resolve.
         var nameLine = Regex.Match(notes, @"Name\s*[:\-]\s*(?:(?<t>(?:Mr|Mrs|Ms|Miss|Master|Dr)\.?)\s+)?(?<first>[A-Z][a-zA-Z'’\-]+)\s+(?<last>[A-Z][a-zA-Z'’\-]+)", RegexOptions.IgnoreCase);
-        if (nameLine.Success)
+        if (nameLine.Success && IsTitleCaseName(nameLine.Groups["first"].Value, nameLine.Groups["last"].Value))
             return (nameLine.Groups["first"].Value, nameLine.Groups["last"].Value);
         foreach (Match m in NotesPatientNameRe.Matches(notes))
         {
             var last = m.Groups["last"].Value;
             if (PersonSubjects.Contains(last) || NonNameReWords.Contains(last)) continue;
+            // RegexOptions.IgnoreCase lets "Patient is anxious and believe..."
+            // resolve as first="anxious", last="and" — notes that name NOBODY
+            // (Mrs Lucy Clarke round, 16 Sep 2026). A real name is title-case;
+            // lowercase pseudo-names must not become the canonical name.
+            if (!IsTitleCaseName(m.Groups["first"].Value, last)) continue;
             return (m.Groups["first"].Value, last);
         }
         return null;
     }
+
+    // A resolved canonical name must be title-case. Under RegexOptions.
+    // IgnoreCase the [A-Z] classes match any letter, so ordinary sentence
+    // words after "Patient is" passed the pattern; this guard rejects them
+    // so a nameless note set yields null (rule silent) instead of garbage.
+    private static bool IsTitleCaseName(string first, string last)
+        => first.Length > 0 && last.Length > 0 && char.IsUpper(first[0]) && char.IsUpper(last[0]);
 
     private static readonly Regex NotesPatientNameRe = new(
         @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?<first>[A-Z][a-z'’-]+)\s+(?<last>[A-Z][a-z'’-]+)\b|\bPatient is\s+(?<first>[A-Z][a-z'’-]+)\s+(?<last>[A-Z][a-z'’-]+)\b",
@@ -2190,7 +2202,7 @@ private static string? ReLineSurname(string reLine)
         if (string.Equals(canonical, "Dr", StringComparison.OrdinalIgnoreCase)) yield break;
         var surname = ReLineSurname(s.Lines[s.ReLineIndex.Value]);
         if (string.IsNullOrEmpty(surname)) yield break;
-        foreach (Match m in Regex.Matches(input.LetterText, @"(?:Mr|Mrs|Ms|Miss)\.?\s+(?:(?<first>[A-Z][a-zA-Z'’\-]+)\s+)?(?<surname>" + Regex.Escape(surname) + @")"))
+        foreach (Match m in Regex.Matches(input.LetterText, @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?:(?<first>[A-Z][a-zA-Z'’\-]+)\s+)?(?<surname>" + Regex.Escape(surname) + @")\b"))
         {
             var used = m.Value.TrimEnd(':').Split()[0].TrimEnd('.');
             if (string.Equals(used, canonical, StringComparison.OrdinalIgnoreCase)) continue;

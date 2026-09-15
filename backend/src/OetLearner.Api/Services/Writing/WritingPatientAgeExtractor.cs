@@ -21,18 +21,23 @@ internal static class WritingPatientAgeExtractor
 
     // The (?!...) lookahead rejects ages that continue into a list:
     // "aged 13, 10 and 8" can never be a single patient's age.
-    // The (?<!at ...) lookbehind rejects historical past-event references
+    // The (?<!at ...) lookbehinds reject historical past-event references
     // ("appendectomy at age 15", "at the age of 40"): the patient's age AT a
-    // past event is not the patient's age now. Without this, adult patients
-    // with childhood-event history were classed as minors and
-    // minor_naming_convention fired against their correctly-titled Re: line.
+    // past event is not the patient's age now. The leading lookbehind is the
+    // load-bearing one — the age label itself sits right after "at " in both
+    // phrasings. Without these, adult patients with childhood-event history
+    // were classed as minors and minor_naming_convention fired against their
+    // correctly-titled Re: line (Sandra Marcus round, 16 Sep 2026).
     private static readonly Regex AgeLabelRegex =
-        new(@"\b(?:age|aged)\s*:?\s*(\d{1,3})\b(?<!\bat\s+(?:the\s+)?\d)(?!\s*,?(?:\s*(?:and|or)\s*)?\s*\d)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"(?<!\bat\s+)\b(?:age|aged)\s*:?\s*(\d{1,3})\b(?<!\bat\s+(?:the\s+)?\d)(?!\s*,?(?:\s*(?:and|or)\s*)?\s*\d)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // A relative noun between the start of the current sentence and the age
-    // attributes the age to the relative, not the patient.
+    // attributes the age to the relative, not the patient. Parents and other
+    // relatives are included: "Mother died aged 72" is the mother's age at
+    // death, never the patient's (family-history notes are common in the
+    // held-letter corpus).
     private static readonly Regex RelativeLedRegex =
-        new(@"\b(?:children|child|sons?|daughters?|wife|husband|partner|brothers?|sisters?|twins?|grandsons?|granddaughters?|grandchildren|grandchild|baby|infant|nephews?|nieces?)\b[^.!?\n]*$",
+        new(@"\b(?:children|child|sons?|daughters?|wife|husband|partner|brothers?|sisters?|twins?|grandsons?|granddaughters?|grandchildren|grandchild|baby|infant|nephews?|nieces?|mother|father|mum|mom|dad|parents?|aunt|uncle|cousins?|grandmother|grandfather|grandparents?)\b[^.!?\n]*$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static int? Extract(string caseNotes)

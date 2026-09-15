@@ -269,23 +269,21 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
     [Fact]
     public void OA4_01_Slash_Joined_Address_Component_Is_Flagged()
     {
-        var letter = Inject(McDonald, "Elsternwick
-Vic 3185", "Elsternwick/Vic 3185");
+        var letter = Inject(McDonald, "Elsternwick\nVic 3185", "Elsternwick/Vic 3185");
         AssertRuleFires(Lint(letter, "LT-TR"), "address_slash_separator");
     }
 
     [Fact]
     public void OA4_01_Salutation_And_Re_On_One_Physical_Line_Is_Flagged()
     {
-        var letter = Inject(Taylor, "Dear Dr Still,
-Re: Mr David Taylor", "Dear Dr Still, Re: Mr David Taylor");
+        var letter = Inject(Taylor, "Dear Dr Still,\nRe: Mr David Taylor", "Dear Dr Still, Re: Mr David Taylor");
         AssertRuleFires(Lint(letter, "LT-UR"), "salutation_re_same_line");
     }
 
     [Fact]
     public void OA4_02_Missing_Comma_After_Today_Is_Flagged()
     {
-        var letter = Inject(Taylor, "Today, Mr Taylor reported", "Today Mr Taylor reported");
+        var letter = Inject(Taylor, "Today, Mr Taylor presented", "Today Mr Taylor presented");
         AssertRuleFires(Lint(letter, "LT-UR"), "intro_adverbial_comma");
     }
 
@@ -376,5 +374,57 @@ Re: Mr David Taylor", "Dear Dr Still, Re: Mr David Taylor");
             "She responded well to the treatment.",
             "She presented with photophobia, treated with simple analgesia at home, and responded well to the treatment.");
         AssertRuleDoesNotFire(Lint(letter, "LT-DG"), "dangling_treatment_modifier");
+    }
+
+    // ─── Sandra Marcus round (16 Sep 2026): "Had an appendectomy at age 15"
+    // is a historical past-event age, not the patient's current age — the
+    // extractor returned 15, classed the 36-year-old as a minor, and
+    // minor_naming_convention fired against a correctly-titled Re: line. ───
+
+    [Fact]
+    public void R3_Age_Extractor_Never_Attributes_Past_Event_Ages_To_The_Patient()
+    {
+        Assert.Null(OetLearner.Api.Services.Writing.WritingPatientAgeExtractor.Extract(
+            "Patient is Sandra Marcus, DOB 15/01/1983. Had an appendectomy at age 15."));
+        Assert.Null(OetLearner.Api.Services.Writing.WritingPatientAgeExtractor.Extract(
+            "His father died at the age of 75. Mother died aged 72."));
+        Assert.Null(OetLearner.Api.Services.Writing.WritingPatientAgeExtractor.Extract(
+            "She was treated at age 6 for asthma."));
+        Assert.Equal(64, OetLearner.Api.Services.Writing.WritingPatientAgeExtractor.Extract("Patient is 64 years old."));
+        Assert.Equal(28, OetLearner.Api.Services.Writing.WritingPatientAgeExtractor.Extract("Ms Alison Martin, aged 28, works full-time."));
+    }
+
+    // ─── Mrs Lucy Clarke round (16 Sep 2026): notes that name NOBODY
+    // ("Patient is 64 years old... Patient is anxious and believes...")
+    // resolved as canonical name first="anxious", last="and" under
+    // RegexOptions.IgnoreCase, so patient_name_spelling fired against a
+    // correctly-spelled Re: line with no possible letter-side fix. ───
+
+    [Fact]
+    public void R3_PatientNameSpelling_Is_Silent_When_Notes_Name_Nobody()
+    {
+        var notes = "Patient is 64 years old. Patient is anxious and believes she has had a heart attack. " +
+                    "Plan: hospital admission for urgent assessment.";
+        var letter = string.Join('\n',
+            "Dr David Smith",
+            "Cardiologist",
+            "20 September 2015",
+            "",
+            "Dear Dr Smith,",
+            "Re: Mrs Lucy Clarke, DOB: 11 March 1951",
+            "",
+            "I am writing to refer Mrs Clarke for urgent assessment of chest pain.",
+            "",
+            "Mrs Clarke presented today with chest pain. She has had type two diabetes mellitus since 2001. Her pulse is 80 bpm.",
+            "",
+            "I would be grateful if you could arrange Mrs Clarke's hospital admission for assessment.",
+            "",
+            "Should there be any queries, kindly do not hesitate to contact me.",
+            "",
+            "Yours sincerely,",
+            "",
+            "Doctor");
+        var findings = Lint(letter, "urgent_referral", caseNotes: notes);
+        AssertRuleDoesNotFire(findings, "patient_name_spelling");
     }
 }
