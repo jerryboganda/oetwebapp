@@ -1826,7 +1826,10 @@ public sealed partial class WritingRuleEngine
     // stopword last token ("is" from "Mrs Osburn is ...") never counts.
     private static (string first, string last)? NotesCanonicalName(string notes)
     {
-        var nameLine = Regex.Match(notes, @"Name\s*[:\-]\s*(?<t>(?:Mr|Mrs|Ms|Miss|Master|Dr)\.?)\s+(?<first>[A-Z][a-zA-Z'’\-]+)\s+(?<last>[A-Z][a-zA-Z'’\-]+)", RegexOptions.IgnoreCase);
+        // The title after "Name:" is optional — canonical notes both with
+        // ("Name: Mr Michael Weir") and without ("Name: Michael Weir") a
+        // title must resolve.
+        var nameLine = Regex.Match(notes, @"Name\s*[:\-]\s*(?:(?<t>(?:Mr|Mrs|Ms|Miss|Master|Dr)\.?)\s+)?(?<first>[A-Z][a-zA-Z'’\-]+)\s+(?<last>[A-Z][a-zA-Z'’\-]+)", RegexOptions.IgnoreCase);
         if (nameLine.Success)
             return (nameLine.Groups["first"].Value, nameLine.Groups["last"].Value);
         foreach (Match m in NotesPatientNameRe.Matches(notes))
@@ -1855,7 +1858,10 @@ private static string? ReLineSurname(string reLine)
     }
 
     // True when the two name tokens are a plausible typo pair: identical,
-    // or within a small edit distance with the same first letter.
+    // within a small edit distance with the same first letter, or a single
+    // adjacent transposition ("Wier" / "Weir" — a Levenshtein distance of 2
+    // but exactly the one-missing-letter class the owner's OA3-02 contract
+    // names).
     private static bool IsNearSpelling(string a, string b)
     {
         if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
@@ -1864,7 +1870,21 @@ private static string? ReLineSurname(string reLine)
         var sa = a.ToLowerInvariant();
         var sb = b.ToLowerInvariant();
         if (Math.Abs(sa.Length - sb.Length) > 2) return false;
-        return Levenshtein(sa, sb) <= (Math.Max(sa.Length, sb.Length) <= 5 ? 1 : 2);
+        if (Levenshtein(sa, sb) <= (Math.Max(sa.Length, sb.Length) <= 5 ? 1 : 2)) return true;
+        // Adjacent transposition of two neighbouring letters, rest identical.
+        if (sa.Length == sb.Length)
+        {
+            for (int i = 0; i + 1 < sa.Length; i++)
+            {
+                if (sa[i] != sb[i])
+                {
+                    if (sa[i] == sb[i + 1] && sa[i + 1] == sb[i] && sa[(i + 2)..] == sb[(i + 2)..])
+                        return true;
+                    break;
+                }
+            }
+        }
+        return false;
     }
 
     private static int Levenshtein(string s, string t)

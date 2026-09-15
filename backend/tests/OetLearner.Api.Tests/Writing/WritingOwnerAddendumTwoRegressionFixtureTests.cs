@@ -942,7 +942,6 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     public void Genuine_Source_And_English_Failures_Stay_Score_Bearing(string checkId)
         => Assert.Equal(WritingCandidateBehaviors.ScoreBearing,
             WritingRuleProvenance.For(checkId).CandidateBehavior);
-}
 
     // ─────────────────────────────────────────────────────────────────
     // R2-21 — patient_name_spelling must not flag correct names. Found
@@ -985,3 +984,4 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
             "Re: Mr Michacl Weir");
         AssertRuleFires(Lint(letter, "LT-RR", caseNotes: notes), "patient_name_spelling");
     }
+}
