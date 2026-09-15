@@ -1941,6 +1941,7 @@ private static string? ReLineSurname(string reLine)
             // spelling is source-faithful.
             if (surname is not null
                 && !string.Equals(surname, sourceLast, StringComparison.OrdinalIgnoreCase)
+                && !IsNearSpelling(surname, sourceLast)
                 && !notes.Contains(surname, StringComparison.OrdinalIgnoreCase))
             {
                 yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
