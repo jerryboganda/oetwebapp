@@ -21,8 +21,13 @@ internal static class WritingPatientAgeExtractor
 
     // The (?!...) lookahead rejects ages that continue into a list:
     // "aged 13, 10 and 8" can never be a single patient's age.
+    // The (?<!at ...) lookbehind rejects historical past-event references
+    // ("appendectomy at age 15", "at the age of 40"): the patient's age AT a
+    // past event is not the patient's age now. Without this, adult patients
+    // with childhood-event history were classed as minors and
+    // minor_naming_convention fired against their correctly-titled Re: line.
     private static readonly Regex AgeLabelRegex =
-        new(@"\b(?:age|aged)\s*:?\s*(\d{1,3})\b(?!\s*,?(?:\s*(?:and|or)\s*)?\s*\d)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        new(@"\b(?:age|aged)\s*:?\s*(\d{1,3})\b(?<!\bat\s+(?:the\s+)?\d)(?!\s*,?(?:\s*(?:and|or)\s*)?\s*\d)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     // A relative noun between the start of the current sentence and the age
     // attributes the age to the relative, not the patient.

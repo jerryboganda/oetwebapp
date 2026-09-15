@@ -250,6 +250,20 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
         AssertRuleFires(Lint(letter, "LT-RR", caseNotes: closedNotes), "letter_date_unsupported");
     }
 
+    [Fact]
+    public void R3_02_Historical_At_Age_Reference_Does_Not_Classify_An_Adult_As_A_Minor()
+    {
+        // Medicine - Sandra Marcus: notes contain "appendectomy at age 15"
+        // alongside the patient's DOB 15/01/1983. The extractor took 15 as
+        // her CURRENT age, classed the 36-year-old as a minor, and
+        // minor_naming_convention fired against her correctly-titled Re:
+        // line. Past-event ages never classify the patient.
+        const string notes = "Patient is Sandra Marcus, DOB 15/01/1983, a single woman with one child aged 7 years. " +
+            "Had an appendectomy at age 15. " +
+            "Assessment: thyroid nodule. Plan: refer to endocrine surgeon.";
+        AssertRuleDoesNotFire(Lint(Weir, "LT-RR", caseNotes: notes), "minor_naming_convention");
+    }
+
     // ─── R3-04 — canonical "at" result wording ────
 
     [Fact]

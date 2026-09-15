@@ -1164,7 +1164,7 @@ public sealed partial class WritingRuleEngine
     // scoped to clause-final was/were on both sides so article/telegraphic
     // results lists never false-fire.
     private static readonly Regex ResultsCommaSpliceRe = new(
-        @"\b(?:was|were)\s+(?:(?!\.\s)[^;\n]){1,60}?,\s*(?:the\s+)?(?!which\b|that\b|who\b|whom\b|whose\b|because\b|although\b|though\b|since\b|while\b|when\b|if\b|unless\b|until\b|but\b|and\b|or\b|with\b|despite\b)[A-Za-z][A-Za-z\- ]{1,38}?\s+(?:was|were)\b",
+        @"\b(?:was|were)\s+(?:(?!\.\s)[^;\n]){1,60}?,\s*(?:the\s+)?(?!which\b|that\b|who\b|whom\b|whose\b|because\b|although\b|though\b|since\b|while\b|when\b|if\b|unless\b|until\b|but\b|and\b|or\b|with\b|despite\b|as\b)[A-Za-z][A-Za-z\- ]{1,38}?\s+(?:was|were)\b",
         RegexOptions.IgnoreCase);
 
     private static IEnumerable<LintFinding> DetectResultsCommaSplice(OetRule rule, WritingLintInput input, LetterStructure s)
