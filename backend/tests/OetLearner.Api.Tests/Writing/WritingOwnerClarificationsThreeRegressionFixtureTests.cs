@@ -264,6 +264,46 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
         AssertRuleDoesNotFire(Lint(Weir, "LT-RR", caseNotes: notes), "minor_naming_convention");
     }
 
+    // ─── OA4 — final layout/punctuation patch (16 Sep 2026) ────
+
+    [Fact]
+    public void OA4_01_Slash_Joined_Address_Component_Is_Flagged()
+    {
+        var letter = Inject(McDonald, "Elsternwick
+Vic 3185", "Elsternwick/Vic 3185");
+        AssertRuleFires(Lint(letter, "LT-TR"), "address_slash_separator");
+    }
+
+    [Fact]
+    public void OA4_01_Salutation_And_Re_On_One_Physical_Line_Is_Flagged()
+    {
+        var letter = Inject(Taylor, "Dear Dr Still,
+Re: Mr David Taylor", "Dear Dr Still, Re: Mr David Taylor");
+        AssertRuleFires(Lint(letter, "LT-UR"), "salutation_re_same_line");
+    }
+
+    [Fact]
+    public void OA4_02_Missing_Comma_After_Today_Is_Flagged()
+    {
+        var letter = Inject(Taylor, "Today, Mr Taylor reported", "Today Mr Taylor reported");
+        AssertRuleFires(Lint(letter, "LT-UR"), "intro_adverbial_comma");
+    }
+
+    [Fact]
+    public void OA4_02_Comma_After_Today_Passes()
+        => AssertRuleDoesNotFire(Lint(Taylor, "LT-UR"), "intro_adverbial_comma");
+
+    [Fact]
+    public void OA4_03_Title_Mismatch_Mrs_To_Ms_Is_Flagged()
+    {
+        var letter = Inject(Weston, "Mrs Weston presented on 10 June 2018", "Ms Weston presented on 10 June 2018");
+        AssertRuleFires(Lint(letter, "LT-NM"), "patient_title_mismatch");
+    }
+
+    [Fact]
+    public void OA4_03_Consistent_Title_Passes()
+        => AssertRuleDoesNotFire(Lint(Weston, "LT-NM"), "patient_title_mismatch");
+
     // ─── R3-04 — canonical "at" result wording ────
 
     [Fact]

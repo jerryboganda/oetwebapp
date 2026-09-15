@@ -71,6 +71,7 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
         new Dictionary<string, (string Criterion, string Category)>(StringComparer.OrdinalIgnoreCase)
         {
             ["address_punctuation"] = Layout,
+            ["address_slash_separator"] = Layout,
             ["age_not_duplicated_in_intro"] = Excess,
             ["ago_requires_past_simple"] = Grammar,
             ["blank_before_closing_phrase"] = Layout,
@@ -109,6 +110,7 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["intro_contains_purpose"] = Purpose,
             ["intro_opens_i_am_writing_to"] = Purpose,
             ["intro_purpose_vague"] = Purpose,
+            ["intro_adverbial_comma"] = Purpose,
             ["intro_sentence_count"] = Excess,
             ["judgmental_labels"] = Register,
             ["latin_abbreviations_translated"] = Language,
@@ -138,6 +140,7 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["numerical_values_have_units"] = Language,
             ["paragraph_start_patient_name"] = Register,
             ["patient_name_spelling"] = Content,
+            ["patient_title_mismatch"] = Register,
             ["re_line_age_dob"] = Layout,
             ["re_line_full_name"] = Layout,
             ["re_line_dob_priority"] = Layout,
@@ -149,6 +152,7 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["result_at_wording"] = Language,
             ["salutation_last_name_only"] = Layout,
             ["salutation_re_adjacent"] = Layout,
+            ["salutation_re_same_line"] = Layout,
             ["sentence_length_guard"] = ("conciseness_clarity", "language"),
             ["dangling_treatment_modifier"] = Grammar,
             ["semicolon_overuse"] = Grammar,

@@ -46,7 +46,7 @@ public sealed partial class WritingRuleEngine
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.owner-clarifications-3.2026-09-15.1";
+    public const string ValidatorVersion = "writing-rules.owner-clarifications-3.2026-09-16.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -2117,6 +2117,87 @@ private static string? ReLineSurname(string reLine)
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                 "The treatment clause dangles on the specimen (\"... culture grew ..., treated with ...\") — the PATIENT was treated. Write \"..., and <patient reference> was treated with ... for ...\".",
                 Quote: m.Value.Trim(), Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Final Medicine layout/punctuation patch (16 Sep 2026, OA4-01..OA4-03).
+    // ---------------------------------------------------------------------
+
+    // OA4-01a — address contract: "/" is never an address separator. The
+    // recipient block must carry every source component on its own line so
+    // the web render shows the same structure as storage.
+    private static IEnumerable<LintFinding> DetectAddressSlashSeparator(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var boundary = s.DateIndex ?? s.SalutationIndex ?? s.Lines.Length;
+        for (int i = 0; i < boundary && i < s.Lines.Length; i++)
+        {
+            var trimmed = s.Lines[i].Trim();
+            if (trimmed.Length > 2 && trimmed.Contains('/') &&
+                Regex.IsMatch(trimmed, @"\d|\b(?:St|St\.|Rd|Road|Ave|Avenue|Cl|Ct)\b|Suite|PO|GPO|Level", RegexOptions.IgnoreCase))
+            {
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                    "Address components must sit on separate lines: \"" + trimmed + "\" joins components with a slash. Copy each component from the task onto its own line.",
+                    Quote: trimmed);
+            }
+        }
+    }
+
+    // OA4-01b — render contract: the salutation line must never carry the
+    // Re: line. "Dear Dr Bradbury, Re: Ms Garcia, DOB: ..." on one physical
+    // line collapses the letter's visual structure.
+    private static IEnumerable<LintFinding> DetectSalutationReSameLine(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.SalutationIndex is int sal && sal < s.Lines.Length
+            && Regex.IsMatch(s.Lines[sal], @"\bRe\s*:", RegexOptions.IgnoreCase))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "The salutation and the Re: line must NEVER render on the same physical line. Put the Re: line on its own line immediately below the salutation.",
+                Quote: s.Lines[sal].Trim());
+        }
+    }
+
+    // OA4-02 — introductory time/examination phrases are followed by a comma
+    // in canonical Model Answers ("Today, Mr Taylor reported...", "On
+    // examination, ...", "Initially, ...").
+    private static readonly Regex IntroAdverbialNoCommaRe = new(
+        @"(?:^|[.!?]\s+)((?:Today|On today's review|On examination|On presentation|On the following visit|On subsequent visits|Initially|Later on|On [A-Z][a-z]+ \d{1,2})(?!,)\s+)(?=[A-Z])",
+        RegexOptions.Multiline);
+
+    private static IEnumerable<LintFinding> DetectIntroAdverbialComma(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (!input.IsModelAnswer || s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in IntroAdverbialNoCommaRe.Matches(s.Body))
+        {
+            var phrase = m.Groups[1].Value.Trim();
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "Introductory time phrases take a comma: \"" + phrase + ", ...\"",
+                Quote: m.Value.Trim(), Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: phrase + ",");
+        }
+    }
+
+    // OA4-03 — title fidelity: once the Re: line fixes the patient's title
+    // (Mrs/Ms/Mr/Miss), every later reference carries the SAME title. A
+    // Mrs→Ms (or Ms→Mrs) switch is a hard identity error.
+    private static IEnumerable<LintFinding> DetectPatientTitleMismatch(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.ReLineIndex is null) yield break;
+        var titled = ReTitledNameRe.Match(s.Lines[s.ReLineIndex.Value]);
+        if (!titled.Success) yield break;
+        var canonical = titled.Groups[1].Value;
+        if (string.Equals(canonical, "Dr", StringComparison.OrdinalIgnoreCase)) yield break;
+        var surname = ReLineSurname(s.Lines[s.ReLineIndex.Value]);
+        if (string.IsNullOrEmpty(surname)) yield break;
+        foreach (Match m in Regex.Matches(input.LetterText, @"(?:Mr|Mrs|Ms|Miss)\.?\s+(?:(?<first>[A-Z][a-zA-Z'’\-]+)\s+)?(?<surname>" + Regex.Escape(surname) + @")"))
+        {
+            var used = m.Value.TrimEnd(':').Split()[0].TrimEnd('.');
+            if (string.Equals(used, canonical, StringComparison.OrdinalIgnoreCase)) continue;
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "Title mismatch: the Re: line uses \"" + canonical + "\" but this reference uses \"" + used + "\". The patient's title is fixed by the source — use \"" + canonical + " " + surname + "\" consistently.",
+                Quote: m.Value);
+            yield break;
         }
     }
 }

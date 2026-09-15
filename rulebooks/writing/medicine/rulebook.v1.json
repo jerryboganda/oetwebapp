@@ -1,9 +1,9 @@
 {
-  "version": "2.3.0-owner-clarifications-3",
+  "version": "2.3.1-owner-clarifications-3",
   "kind": "writing",
   "profession": "medicine",
   "publishedAt": "2026-09-14T00:00:00Z",
-  "authoritySource": "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner clarifications OA-01..OA-15 and OA2-01..OA2-20), sha256:95fac922d25e77493a84af3cf69dc9722d42de1acc4cd4d62b14df47747b5eb5",
+  "authoritySource": "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner clarifications OA-01..OA-15 and OA2-01..OA2-20), sha256:07c95437a6365a2d69f4ec9360c7edc4fa8bfe56e101621d3533a7942ac97123",
   "sections": [
     {
       "id": "official-assessment",
@@ -414,6 +414,16 @@
       "id": "grammar",
       "title": "Grammar",
       "order": 82
+    },
+    {
+      "id": "layout",
+      "title": "Layout",
+      "order": 83
+    },
+    {
+      "id": "identity",
+      "title": "Identity",
+      "order": 84
     }
   ],
   "rules": [
@@ -6688,6 +6698,73 @@
         "notes": "Round-3 owner overrides. Consumers: generation prompt (WritingRev8HouseStyle), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression: R3 classes alongside the R2 battery.",
         "checkIds": [
           "dangling_treatment_modifier"
+        ]
+      }
+    },
+    {
+      "id": "OA4-01",
+      "section": "Layout",
+      "severity": "critical",
+      "title": "Address and render layout contract",
+      "body": "Every logical address component sits on its own line. Where the source separates address components with commas or slashes, those separators become line breaks; slashes are never printed in the canonical address block, and the exact source address content is preserved. Layout: recipient block, exactly one blank line, date, exactly one blank line, salutation, Re line IMMEDIATELY on the next line (never the same physical line as the salutation), one blank line, then the introduction. The rendered web presentation must show the same physical structure as the stored text.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Writing Reply received 16 Sep 2026 (OA4-01)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: layout/house rows are coaching-only or accept-alternative; identity and salutation-structure rows are score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Writing Reply 16 Sep 2026"
+        ],
+        "notes": "Final Medicine layout/punctuation patch. Consumers: generation prompt, deterministic validator, candidate grader, render QA. Regression: R3 battery.",
+        "checkIds": [
+          "address_slash_separator",
+          "salutation_re_same_line"
+        ]
+      }
+    },
+    {
+      "id": "OA4-02",
+      "section": "Language",
+      "severity": "critical",
+      "title": "Introductory adverbial punctuation",
+      "body": "Canonical Model Answers follow introductory time and examination phrases with a comma: Today, ... / On today's review, ... / On examination, ... / On presentation, ... / On the following visit, ... / On subsequent visits, ... / Initially, ... / Later on, ... / On 12 June 2026, ...",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Writing Reply received 16 Sep 2026 (OA4-02)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: layout/house rows are coaching-only or accept-alternative; identity and salutation-structure rows are score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Writing Reply 16 Sep 2026"
+        ],
+        "notes": "Final Medicine layout/punctuation patch. Consumers: generation prompt, deterministic validator, candidate grader, render QA. Regression: R3 battery.",
+        "checkIds": [
+          "intro_adverbial_comma"
+        ]
+      }
+    },
+    {
+      "id": "OA4-03",
+      "section": "Identity",
+      "severity": "critical",
+      "title": "Patient title fidelity",
+      "body": "The patient's title (Mrs/Ms/Mr/Miss) is fixed by the source and the Re: line. Once the Re: line establishes the title, every later reference carries the SAME title: a Mrs patient is never Ms in the body, and vice versa. Title switches are hard identity errors. Candidate grading: a consistent, correct title for the patient is required; the specific title follows the source.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Writing Reply received 16 Sep 2026 (OA4-03)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: layout/house rows are coaching-only or accept-alternative; identity and salutation-structure rows are score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Writing Reply 16 Sep 2026"
+        ],
+        "notes": "Final Medicine layout/punctuation patch. Consumers: generation prompt, deterministic validator, candidate grader, render QA. Regression: R3 battery.",
+        "checkIds": [
+          "patient_title_mismatch"
         ]
       }
     }

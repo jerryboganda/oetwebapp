@@ -23,7 +23,7 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     const book = loadRulebook('writing', 'medicine');
     expect(book.kind).toBe('writing');
     expect(book.profession).toBe('medicine');
-    expect(book.version).toBe('2.3.0-owner-clarifications-3');
+    expect(book.version).toBe('2.3.1-owner-clarifications-3');
     // 43 + one section per OA-01..OA-15, OA2-01..OA2-20 and OA3-01..OA3-05
     // registry row (rows that share a section title collapse) = 82.
     expect(book.sections.length).toBe(82);

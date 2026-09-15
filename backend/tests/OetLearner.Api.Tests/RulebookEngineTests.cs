@@ -17,7 +17,7 @@ public class RulebookLoaderTests
         Assert.Equal(ExamProfession.Medicine, book.Profession);
         // Owner Rev8 (11 Sep 2026): canonical Writing rulebooks are regenerated
         // with the Rev8 registry additions (OWN-W-001..038) under this version.
-        Assert.Equal("2.3.0-owner-clarifications-3", book.Version);
+        Assert.Equal("2.3.1-owner-clarifications-3", book.Version);
         // Sections grew as the global owner rows (OWN-W + OA/OA2/OA3) joined
         // the canonical pack; the 43 from the pre-OA2 pack is long stale.
         Assert.Equal(82, book.Sections.Count);
@@ -1456,7 +1456,7 @@ public class AiGatewayAndPromptTests
         });
         var result = await gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt });
         Assert.False(string.IsNullOrWhiteSpace(result.Completion));
-        Assert.Equal("2.3.0-owner-clarifications-3", result.RulebookVersion);
+        Assert.Equal("2.3.1-owner-clarifications-3", result.RulebookVersion);
         Assert.NotEmpty(result.AppliedRuleIds);
     }
 

@@ -47,15 +47,15 @@ const LEGACY_PROFESSIONS: ExamProfession[] = [
  * sample-only edits" (see isGlobalOwnerRule in the rulebook build script).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 308,
-  nursing: 315,
-  dentistry: 315,
-  pharmacy: 318,
-  physiotherapy: 318,
-  radiography: 315,
+  medicine: 311,
+  nursing: 318,
+  dentistry: 318,
+  pharmacy: 321,
+  physiotherapy: 321,
+  radiography: 318,
 };
 
-const CANONICAL_VERSION = '2.3.0-owner-clarifications-3';
+const CANONICAL_VERSION = '2.3.1-owner-clarifications-3';
 const LEGACY_VERSION = '1.1.0-rev8';
 
 /**

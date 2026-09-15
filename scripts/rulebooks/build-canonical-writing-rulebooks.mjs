@@ -24,7 +24,7 @@ const CHECK_ONLY = process.argv.includes("--check");
 // hash went stale silently after the 10 Sep 2026 G-W-116 amendment). After
 // editing the registry: update this constant, the version fields in
 // buildRulebook() and docs/canonical-rules/README.md, then rebuild.
-const REGISTRY_SHA256 = "95fac922d25e77493a84af3cf69dc9722d42de1acc4cd4d62b14df47747b5eb5";
+const REGISTRY_SHA256 = "07c95437a6365a2d69f4ec9360c7edc4fa8bfe56e101621d3533a7942ac97123";
 
 // Registry `profession` value -> repo folder name. Only these six have live
 // Writing tasks today; every other registry profession is intentionally
@@ -148,7 +148,7 @@ function buildRulebook(profession, folder, rules, existing) {
   });
 
   return {
-    version: "2.3.0-owner-clarifications-3",
+    version: "2.3.1-owner-clarifications-3",
     kind: "writing",
     profession: folder,
     publishedAt: "2026-09-14T00:00:00Z",

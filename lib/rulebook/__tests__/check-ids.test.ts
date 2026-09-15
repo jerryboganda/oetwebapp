@@ -36,7 +36,7 @@ describe('rulebook check-id registry', () => {
     // dangling_treatment_modifier) = 111.
     // Keep this in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) —
     // see that file's own header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(111);
+    expect(WRITING_CHECK_IDS.size).toBe(115);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);

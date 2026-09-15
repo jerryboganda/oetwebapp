@@ -40,6 +40,7 @@ import { LISTENING_EXAM_MODE_ENFORCERS, READING_EXAM_MODE_ENFORCERS } from './ex
  */
 const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'address_punctuation',
+  'address_slash_separator',
   'age_not_duplicated_in_intro',
   'ago_requires_past_simple',
   'background_paragraph_placement',
@@ -84,6 +85,7 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'incomplete_clinical_construction',
   'intro_contains_purpose',
   'intro_opens_i_am_writing_to',
+  'intro_adverbial_comma',
   'intro_purpose_vague',
   'intro_sentence_count',
   'judgmental_labels',
@@ -113,6 +115,7 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'number_style_words_vs_digits',
   'numerical_values_have_units',
   'paragraph_start_patient_name',
+  'patient_title_mismatch',
   'patient_name_spelling',
   're_line_age_dob',
   're_line_dob_priority',
@@ -129,6 +132,7 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'role_salutation_matches_task',
   'salutation_last_name_only',
   'salutation_re_adjacent',
+  'salutation_re_same_line',
   'sentence_length_guard',
   'semicolon_overuse',
   'signoff_designation_present',

@@ -195,7 +195,7 @@ public sealed class WritingRev8ModelAnswerGateTests
         var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
         var failing = new FixedSemantic(new WritingModelAnswerSemanticResult(false, false,
             [new WritingModelAnswerSemanticViolation("OWN-W-031", "Mr Weir has depression", "Background placed before the presenting complaint.")],
-            "claude-sonnet-5", "2.3.0-owner-clarifications-3", null));
+            "claude-sonnet-5", "2.3.1-owner-clarifications-3", null));
         var held = await Service(db, new ScriptedGateway(), failing)
             .ImportAsync(scenarioId, WritingModelAnswerBatchTests.ExemplarText(), "admin-1");
         Assert.Equal("model_answer_semantic_violations", held.HoldReason);
@@ -207,7 +207,7 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal("model_answer_semantic_validator_unavailable", transient.HoldReason);
         Assert.True(WritingTaskModelAnswerService.IsTransientHold(transient.HoldReason));
 
-        var passing = new FixedSemantic(new WritingModelAnswerSemanticResult(true, false, [], "claude-sonnet-5", "2.3.0-owner-clarifications-3", null));
+        var passing = new FixedSemantic(new WritingModelAnswerSemanticResult(true, false, [], "claude-sonnet-5", "2.3.1-owner-clarifications-3", null));
         var ready = await Service(db, new ScriptedGateway(), passing)
             .ImportAsync(scenarioId, WritingModelAnswerBatchTests.ExemplarText(), "admin-1");
         Assert.Equal("Ready", ready.Status);
