@@ -1923,8 +1923,8 @@ private static string? ReLineSurname(string reLine)
         if (input.CaseNotesText is not { Length: > 0 } notes || string.IsNullOrEmpty(input.LetterText)) yield break;
         var named = NotesCanonicalName(notes);
         if (named is null) yield break;
-        var sourceFirst = named.Value.first;
-        var sourceLast = named.Value.last;
+        var sourceFirst = StripPossessive(named.Value.first);
+        var sourceLast = StripPossessive(named.Value.last);
 
         // The Re: line carries the patient surname — it must be the source
         // spelling exactly. The surname is the LAST name token on the Re:
