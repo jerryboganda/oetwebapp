@@ -23,10 +23,10 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     const book = loadRulebook('writing', 'medicine');
     expect(book.kind).toBe('writing');
     expect(book.profession).toBe('medicine');
-    expect(book.version).toBe('2.2.1-canonical-addendum-two');
-    // 43 + one section per OA-01..OA-15 and OA2-01..OA2-20 registry row
-    // (two rows share a section title) = 77.
-    expect(book.sections.length).toBe(77);
+    expect(book.version).toBe('2.3.0-owner-clarifications-3');
+    // 43 + one section per OA-01..OA-15, OA2-01..OA2-20 and OA3-01..OA3-05
+    // registry row (rows that share a section title collapse) = 82.
+    expect(book.sections.length).toBe(82);
     expect(book.rules.length).toBeGreaterThan(90);
   });
 
@@ -98,9 +98,10 @@ describe('rulebook — critical rule coverage (canonical writing book)', () => {
 
   it('has the canonical critical-rule count', () => {
     // 60 canonical v1.0 + 13 critical owner Rev8 rules (OWN-W-001..038).
-    // 73 + the 35 owner-clarification rows (OA-01..OA-15, OA2-01..OA2-20),
-    // all of which the registry marks critical = 108.
-    expect(criticalRules(book)).toHaveLength(108);
+    // 73 + the 35 owner-clarification rows (OA-01..OA-15, OA2-01..OA2-20)
+    // + the 5 OA3 rows (OA3-01..OA3-05), all of which the registry marks
+    // critical = 113.
+    expect(criticalRules(book)).toHaveLength(113);
   });
 
   it.each(['OW-001', 'DH-W-001'])('%s exists and is severity=critical', (id) => {

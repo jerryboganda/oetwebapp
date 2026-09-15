@@ -168,15 +168,27 @@ describe('CHALLENGER 1 M2 EMPIRICAL AUDIT: WRITING RUBRIC & 12 PROFESSIONS & COU
 
   // Migrated to the canonical OET_AI_Rules_Master.jsonl registry
   // (docs/canonical-rules/README.md); everything else stays on the legacy
-  // 172-rule baseline until a canonical pack exists for it. Owner Rev8
-  // (11 Sep 2026) adds OWN-W-001..038 to every Writing rulebook (+38).
+  // 172-rule baseline until a canonical pack exists for it. Every canonical
+  // pack also carries the globally scoped owner rows: OWN-W-001..038 (Rev8,
+  // 11 Sep 2026) + OA-01..OA-15 + OA2-01..OA2-20 (14 Sep 2026) +
+  // OA3-01..OA3-05 (15 Sep 2026). Keep in lockstep with the rulebook
+  // __tests__ CANONICAL_PROFESSION_COUNTS constants.
   const CANONICAL_PROFESSION_COUNTS: Partial<Record<(typeof ALL_12_PROFESSIONS)[number], number>> = {
-    medicine: 268,
-    nursing: 275,
-    dentistry: 275,
-    pharmacy: 278,
-    physiotherapy: 278,
-    radiography: 275,
+    medicine: 308,
+    nursing: 315,
+    dentistry: 315,
+    pharmacy: 318,
+    physiotherapy: 318,
+    radiography: 315,
+    // Legacy (pre-canonical-registry) packs: 172 base + 38 owner Rev8 rules
+    // plus the ULTIMATE FINAL derived PRD-* modules, per profession.
+    veterinary: 211,
+    optometry: 218,
+    'occupational-therapy': 218,
+    'speech-pathology': 218,
+    podiatry: 218,
+    dietetics: 219,
+    'other-allied-health': 210,
   };
 
   it('Rulebook integrity: All professions exist, load without error, and contain their expected rule baseline', () => {

@@ -51,7 +51,7 @@ public static class WritingCandidateBehaviors
 /// </summary>
 public static class WritingRuleProvenance
 {
-    public const string Version = "owner-addendum-two-2026-09-14";
+    public const string Version = "owner-clarifications-3-2026-09-15";
 
     public sealed record Provenance(string Tag, string CandidateBehavior);
 
@@ -127,6 +127,12 @@ public static class WritingRuleProvenance
             ["letter_date_unsupported"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
             ["recipient_name_mismatch"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
             ["semicolon_overuse"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
+
+            // --- Owner Clarifications Round 3 (15 Sep 2026, OA3-01..OA3-05) ---
+            ["patient_name_spelling"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
+            ["re_line_dob_priority"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
+            ["result_at_wording"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.AcceptAlternative),
+            ["dangling_treatment_modifier"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
 
             // --- Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20 ---
             // OA2-20 is the firewall: the strict canonical requirements in this

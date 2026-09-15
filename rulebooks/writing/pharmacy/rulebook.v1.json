@@ -1,9 +1,9 @@
 {
-  "version": "2.2.1-canonical-addendum-two",
+  "version": "2.3.0-owner-clarifications-3",
   "kind": "writing",
   "profession": "pharmacy",
   "publishedAt": "2026-09-14T00:00:00Z",
-  "authoritySource": "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner clarifications OA-01..OA-15 and OA2-01..OA2-20), sha256:8fd520248c407b5ad202f00708cdb70b8d6d0f92f934614413e3a77a22d41c16",
+  "authoritySource": "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner clarifications OA-01..OA-15 and OA2-01..OA2-20), sha256:95fac922d25e77493a84af3cf69dc9722d42de1acc4cd4d62b14df47747b5eb5",
   "sections": [
     {
       "id": "official-assessment",
@@ -389,6 +389,31 @@
       "id": "house-style-rules-must-not-become-candidate-false-positives",
       "title": "House-style rules must not become candidate false positives",
       "order": 77
+    },
+    {
+      "id": "patient-reference",
+      "title": "Patient reference",
+      "order": 78
+    },
+    {
+      "id": "source-fidelity",
+      "title": "Source fidelity",
+      "order": 79
+    },
+    {
+      "id": "identification",
+      "title": "Identification",
+      "order": 80
+    },
+    {
+      "id": "results-grammar",
+      "title": "Results grammar",
+      "order": 81
+    },
+    {
+      "id": "grammar",
+      "title": "Grammar",
+      "order": 82
     }
   ],
   "rules": [
@@ -5978,7 +6003,7 @@
           "FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026)",
           "Writing Master Specification ULTIMATE FINAL (13 Sep 2026)"
         ],
-        "notes": "Owner Clarifications Addendum (14 Sep 2026). Consumers: generation prompt (WritingRev8HouseStyle.ModelAnswerCanonicalRules), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression coverage: WritingRev8RegressionFixtureTests (injected defects + false-positive controls).",
+        "notes": "Owner Clarifications Addendum (14 Sep 2026). Consumers: generation prompt (WritingRev8HouseStyle.ModelAnswerCanonicalRules), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression coverage: WritingRev8RegressionFixtureTests (injected defects + false-positive controls). OA3-01 (15 Sep 2026) SUPERSEDES the purpose-clause-only restriction: the introduction may use the full patient name freely.",
         "checkIds": [
           "re_line_full_name",
           "body_uses_last_name_only"
@@ -6145,7 +6170,7 @@
           "FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026)",
           "Writing Master Specification ULTIMATE FINAL (13 Sep 2026)"
         ],
-        "notes": "Owner Clarifications Addendum (14 Sep 2026). Consumers: generation prompt (WritingRev8HouseStyle.ModelAnswerCanonicalRules), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression coverage: WritingRev8RegressionFixtureTests (injected defects + false-positive controls).",
+        "notes": "Owner Clarifications Addendum (14 Sep 2026). Consumers: generation prompt (WritingRev8HouseStyle.ModelAnswerCanonicalRules), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression coverage: WritingRev8RegressionFixtureTests (injected defects + false-positive controls). OA3-04 (15 Sep 2026) supersedes the of-preference for CANONICAL MODEL ANSWERS: results use the at-construction on a complete result noun; candidates keep all grammatical alternatives.",
         "checkIds": [
           "results_comma_splice"
         ]
@@ -6756,6 +6781,123 @@
         "notes": "Owner Clarifications Addendum Two (14 Sep 2026). Consumers: generation prompt (WritingRev8HouseStyle.ModelAnswerCanonicalRules), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression coverage: WritingOwnerAddendumTwoRegressionFixtureTests (R2-01..R2-18 injected defects, valid alternatives and candidate false-positive controls).",
         "checkIds": [
           "brand_generic_duplication"
+        ]
+      }
+    },
+    {
+      "id": "OA3-01",
+      "section": "Patient reference",
+      "severity": "critical",
+      "title": "Introduction full-name freedom",
+      "body": "The introduction may use EITHER title + surname (\"Mr Weir\") OR the full patient name (\"Mr Michael Weir\") — both are correct and acceptable, whether or not the full name appears in the Re: line. This SUPERSEDES any older rule that prohibited repeating the full name after the Re: line (including the OA-03 purpose-clause-only allowance). After the introduction, the remaining body uses the normal adult reference (title + surname) only; a full name recurring in later body paragraphs fails. Candidate grading accepts both correct introduction forms.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner clarifications received 15 Sep 2026 before final Medicine sign-off (OA3-01)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: per the owner's candidate-grading column and WritingRuleProvenance — the canonical house forms are Model-Answer-only where the owner says so; genuine grammar/source-fidelity rows stay score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner clarifications 15 Sep 2026",
+          "FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026)"
+        ],
+        "notes": "Round-3 owner overrides. Consumers: generation prompt (WritingRev8HouseStyle), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression: R3 classes alongside the R2 battery.",
+        "checkIds": [
+          "body_uses_last_name_only"
+        ]
+      }
+    },
+    {
+      "id": "OA3-02",
+      "section": "Source fidelity",
+      "severity": "critical",
+      "title": "Patient-name spelling is hard source fidelity",
+      "body": "The patient's exact name is verified against the canonical case notes EVERY time. One missing letter, one additional letter, or any spelling change in the patient's first or last name is a source-fidelity error. The system never guesses, shortens incorrectly, autocorrects or alters a patient name; the exact source spelling controls the Re: line, the introduction and all later surname references.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner clarifications received 15 Sep 2026 before final Medicine sign-off (OA3-02)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: per the owner's candidate-grading column and WritingRuleProvenance — the canonical house forms are Model-Answer-only where the owner says so; genuine grammar/source-fidelity rows stay score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner clarifications 15 Sep 2026",
+          "FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026)"
+        ],
+        "notes": "Round-3 owner overrides. Consumers: generation prompt (WritingRev8HouseStyle), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression: R3 classes alongside the R2 battery.",
+        "checkIds": [
+          "patient_name_spelling"
+        ]
+      }
+    },
+    {
+      "id": "OA3-03",
+      "section": "Identification",
+      "severity": "critical",
+      "title": "DOB has priority over age",
+      "body": "Where the canonical notes supply a date of birth, the Re: line uses it (\"Re: Mr John Smith, DOB: 1 January 1980\"). If BOTH DOB and age are supplied, DOB takes priority — never \"Re: Mr John Smith, aged 45\" when a DOB is available. \"aged X\" is used only when DOB is absent and age is the only available identification. A DOB present in the notes but omitted or replaced by age in the Re: line fails.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner clarifications received 15 Sep 2026 before final Medicine sign-off (OA3-03)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: per the owner's candidate-grading column and WritingRuleProvenance — the canonical house forms are Model-Answer-only where the owner says so; genuine grammar/source-fidelity rows stay score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner clarifications 15 Sep 2026",
+          "FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026)"
+        ],
+        "notes": "Round-3 owner overrides. Consumers: generation prompt (WritingRev8HouseStyle), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression: R3 classes alongside the R2 battery.",
+        "checkIds": [
+          "re_line_dob_priority"
+        ]
+      }
+    },
+    {
+      "id": "OA3-04",
+      "section": "Results grammar",
+      "severity": "critical",
+      "title": "Canonical at-result wording",
+      "body": "Canonical Model Answers state investigation results with the owner's at-construction on a COMPLETE result noun: \"a white cell count at 1,000\", \"a reduced glucose level at 10 mg/dL\", \"an elevated protein level at 70 mg/dL\", \"the cholesterol level at 6.37 mmol/L\"; blood results may use \"the C-reactive protein level was/was recorded at 150\". Headless wording (\"reduced glucose 10 mg/dL\", \"1000 white cells\") and of-forms fail the Model Answer. Candidate grading still accepts every grammatically correct professional result construction where the clinical meaning is accurate.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner clarifications received 15 Sep 2026 before final Medicine sign-off (OA3-04)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: per the owner's candidate-grading column and WritingRuleProvenance — the canonical house forms are Model-Answer-only where the owner says so; genuine grammar/source-fidelity rows stay score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner clarifications 15 Sep 2026",
+          "FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026)"
+        ],
+        "notes": "Round-3 owner overrides. Consumers: generation prompt (WritingRev8HouseStyle), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression: R3 classes alongside the R2 battery.",
+        "checkIds": [
+          "result_at_wording",
+          "result_noun_fragment",
+          "result_head_noun"
+        ]
+      }
+    },
+    {
+      "id": "OA3-05",
+      "section": "Grammar",
+      "severity": "critical",
+      "title": "No dangling treatment modifier",
+      "body": "A treatment clause never dangles on a specimen: \"Catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex\" reads as if the culture were treated. Write \"A catheter urine culture grew Staphylococcus saprophyticus, and Mr McDonald was treated with Keflex for five days\" or another equally clear source-faithful equivalent.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner clarifications received 15 Sep 2026 before final Medicine sign-off (OA3-05)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: per the owner's candidate-grading column and WritingRuleProvenance — the canonical house forms are Model-Answer-only where the owner says so; genuine grammar/source-fidelity rows stay score-bearing. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner clarifications 15 Sep 2026",
+          "FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026)"
+        ],
+        "notes": "Round-3 owner overrides. Consumers: generation prompt (WritingRev8HouseStyle), deterministic validator (WritingRuleEngine), candidate grader (CandidateGradingRules + WritingRuleProvenance). Regression: R3 classes alongside the R2 battery.",
+        "checkIds": [
+          "dangling_treatment_modifier"
         ]
       }
     }

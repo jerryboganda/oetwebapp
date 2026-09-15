@@ -1,4 +1,5 @@
 using OetLearner.Api.Services.Rulebook;
+using OetLearner.Api.Tests.Writing;
 
 namespace OetLearner.Api.Tests.Rulebook;
 
@@ -74,7 +75,11 @@ Doctor
         AssertFires(findings,
             "blank_line_after_re_line",        // no blank line between Re: and introduction
             "age_not_duplicated_in_intro",     // "aged 55" in Re: AND introduction
-            "body_uses_last_name_only",        // full name repeated after the Re: line
+            // OA3-01 (15 Sep 2026) supersedes the old "full name anywhere
+            // after the Re: line" reading: the full name is free in the
+            // INTRODUCTION, and this legacy defect letter uses it only there.
+            // body_uses_last_name_only is asserted silent below; the
+            // post-introduction recurrence case lives in the R3-01 battery.
             "urgent_body_starts_today",        // urgent body starts with 2000 history
             "body_no_todays_date",             // "13 June 2020" repeated in the body
             "urgent_closure_phrase",           // no "at your earliest convenience"
@@ -88,6 +93,7 @@ Doctor
             "emotional_wording",               // "He suffered attacks"
             "medication_list_punctuation");    // "colchicine 1 mg" without comma
         Assert.NotEmpty(WritingRuleEngine.ModelAnswerBlockingFindings(findings));
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_uses_last_name_only");
     }
 
     [Fact]
@@ -103,8 +109,11 @@ Doctor
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.intro_opens_i_am_writing_to");
         // ...while the same hard rules still apply to the candidate.
         AssertFires(findings, "blank_line_after_re_line", "age_not_duplicated_in_intro",
-            "body_uses_last_name_only", "urgent_body_starts_today", "paragraph_start_patient_name",
+            "urgent_body_starts_today", "paragraph_start_patient_name",
             "closure_contact_offer");
+        // OA3-01: the full name is free in the introduction (this legacy
+        // defect letter uses it only there), so the rule is correctly silent.
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_uses_last_name_only");
     }
 
     private const string TaylorCorrected = """
@@ -175,7 +184,9 @@ Doctor
         var findings = Model(WeirLiveDefect, "LT-RR", ExamProfession.Medicine);
         AssertFires(findings,
             "year_not_abbreviated",                // "11.08.14", "29.06.14" ...
-            "body_uses_last_name_only",            // "Mr Michael Weir" in the introduction
+            // OA3-01: "Mr Michael Weir" appears only in the INTRODUCTION of
+            // this legacy defect letter, which the owner override permits.
+            // body_uses_last_name_only asserted silent below.
             "body_forbidden_phrase_the_patient",   // "a patient at this practice"
             "judgmental_labels",                   // "is a smoker"
             "paragraph_start_patient_name",        // "He first presented" / "On 09.08.14, he"
@@ -188,6 +199,7 @@ Doctor
         // construction — the owner-endorsed way to name a trade name without
         // brackets. linker_avoid_words correctly does not fire on it.
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.linker_avoid_words");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_uses_last_name_only");
     }
 
     private const string WeirCorrected = """
@@ -264,33 +276,10 @@ Doctor
             "signoff_designation_present");
     }
 
-    private const string GarciaCorrected = """
-Dr Lorna Bradbury
-Stillwater Medical Clinic
-12 Main Street
-Stillwater
-
-23 May 2015
-
-Dear Dr Bradbury,
-Re: Ms Isabel Garcia, DOB: 1 January 1995
-
-I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.
-
-Ms Garcia presented with a one-week history of painful, stiff joints, headache and photophobia. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. The white cell count was 14.0x10^9/L and the C-reactive protein level was 150. Lumbar puncture showed a white cell count of 1000 with polymorphonuclear predominance, reduced glucose 10 mg/dL and elevated protein 70 mg/dL. Culture confirmed Neisseria meningitidis.
-
-Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily. Dexamethasone was continued six-hourly for four days. Following lumbar puncture results, treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
-
-The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.
-
-I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.
-
-Should there be any queries, kindly do not hesitate to contact me.
-
-Yours sincerely,
-
-Doctor
-""";
+    // Single source of truth: the canonical Garcia letter lives with the
+    // other fixtures; an independent copy drifted out of sync after the
+    // OA3 rewrite, so this is an alias now, never a duplicate.
+    private const string GarciaCorrected = WritingRev8RegressionFixtureTests.GarciaUpdateLetter;
 
     [Fact]
     public void Garcia_OwnerCompliant_Correction_Passes_With_Zero_Blocking_Findings()
@@ -325,7 +314,9 @@ Pharmacist
         var findings = Model(RamseyLiveDefect, "LT-OT", ExamProfession.Pharmacy);
         AssertFires(findings,
             "intro_opens_i_am_writing_to",           // opens "Your mother, ..."
-            "body_uses_last_name_only",              // "Mrs Alice Ramsey" repeated in the letter
+            // OA3-01: the full name appears only in the INTRODUCTION of this
+            // legacy defect letter, which the owner override permits.
+            // body_uses_last_name_only asserted silent below.
             "relationship_label_patient_reference",  // "Your mother will continue ..."
             "paragraph_start_patient_name",          // final paragraph "... contact her doctor"
             "medication_list_punctuation",           // "ranitidine 150mg"
@@ -333,6 +324,7 @@ Pharmacist
             // "have also been added" is an ADVERBIAL "also" — correct English,
             // and since Addendum Two deliberately not a finding.
             "closure_contact_offer");
+        Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_uses_last_name_only");
     }
 
     private const string RamseyCorrected = """
@@ -436,7 +428,7 @@ Physiotherapist
     [Fact]
     public void Validator_Version_Is_Stamped_And_RulePack_Fingerprint_Is_Stable()
     {
-        Assert.Equal("writing-rules.owner-addendum-two.2026-09-14.2", WritingRuleEngine.ValidatorVersion);
+        Assert.Equal("writing-rules.owner-clarifications-3.2026-09-15.1", WritingRuleEngine.ValidatorVersion);
         var a = _engine.RulePackFingerprint(ExamProfession.Medicine);
         var b = _engine.RulePackFingerprint(ExamProfession.Medicine);
         Assert.StartsWith("rp-", a);

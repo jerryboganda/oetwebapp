@@ -125,8 +125,8 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [Fact]
     public void R2_01_Injected_Discharge_Language_Without_Admission_Evidence_Is_Flagged()
     {
-        var letter = Inject(Taylor, "He had shortness of breath.",
-            "He had shortness of breath and will be discharged into your care.");
+        var letter = Inject(Taylor, "He reported shortness of breath.",
+            "He reported shortness of breath and will be discharged into your care.");
         AssertRuleFires(Lint(letter, "LT-UR", markers: NoAdmissionOrDischarge),
             "discharge_language_unsupported");
     }
@@ -273,7 +273,7 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [Fact]
     public void R2_05_Injected_Bare_White_Cells_Is_Flagged()
     {
-        var letter = Inject(Garcia, "a white cell count of 1000 with", "1000 white cells with");
+        var letter = Inject(Garcia, "a white cell count at 1000 with", "1000 white cells with");
         AssertRuleFires(Lint(letter, "LT-DG"), "result_noun_fragment");
     }
 
@@ -288,17 +288,24 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [Fact]
     public void R2_06_Was_Form_Of_A_Result_Passes()
     {
-        // "the white cell count was ..." — the canonical Garcia form.
+        // "the white cell count was ..." — a complete result noun with a
+        // finite verb stays correct under OA3-04.
         AssertRuleDoesNotFire(Lint(Garcia, "LT-DG"), "result_head_noun");
         AssertRuleDoesNotFire(Lint(Garcia, "LT-DG"), "result_noun_fragment");
+        AssertRuleDoesNotFire(Lint(Garcia, "LT-DG"), "result_at_wording");
     }
 
     [Fact]
-    public void R2_06_Of_Form_Of_A_Result_Also_Passes()
+    public void R2_06_Of_Form_Is_A_Candidate_Alternative_But_Fails_The_Model_Answer()
     {
+        // OA3-04 (15 Sep 2026) supersedes the old "never force at" scope: the
+        // of-form is a CANDIDATE alternative, but the canonical Model Answer
+        // uses the owner's at-construction on a complete result noun.
         var letter = Inject(Garcia,
             "The white cell count was 14.0x10^9/L",
             "Blood tests showed a white cell count of 14.0x10^9/L");
+        AssertRuleFires(Lint(letter, "LT-DG"), "result_at_wording");
+        AssertRuleDoesNotFire(Lint(letter, "LT-DG", isModelAnswer: false), "result_at_wording");
         AssertRuleDoesNotFire(Lint(letter, "LT-DG"), "result_head_noun");
         AssertRuleDoesNotFire(Lint(letter, "LT-DG"), "result_noun_fragment");
     }
@@ -327,7 +334,7 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [Fact]
     public void R2_07_Injected_On_Supine_Position_Is_Flagged()
     {
-        var letter = Inject(Garcia, "chin to chest when supine", "chin to chest on supine position");
+        var letter = Inject(Garcia, "to her chest when supine", "to her chest on supine position");
         AssertRuleFires(Lint(letter, "LT-DG"), "supine_position_wording");
     }
 
@@ -338,14 +345,14 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [Fact]
     public void R2_07_In_The_Supine_Position_Passes()
     {
-        var letter = Inject(Garcia, "chin to chest when supine", "chin to chest in the supine position");
+        var letter = Inject(Garcia, "to her chest when supine", "to her chest in the supine position");
         AssertRuleDoesNotFire(Lint(letter, "LT-DG"), "supine_position_wording");
     }
 
     [Fact]
     public void R2_07_While_Lying_Supine_Passes()
     {
-        var letter = Inject(Garcia, "chin to chest when supine", "chin to chest when lying supine");
+        var letter = Inject(Garcia, "to her chest when supine", "to her chest when lying supine");
         AssertRuleDoesNotFire(Lint(letter, "LT-DG"), "supine_position_wording");
     }
 
@@ -379,10 +386,10 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     public void R2_08b_Request_Paragraph_Stranded_Mid_Letter_Is_Flagged()
     {
         var letter = Inject(Garcia,
-            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.\n\n"
-            + "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.\n\n"
-            + "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.");
+            "The Department of Human Services was notified, and family immunisation was discussed.\n\n"
+            + "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.",
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.\n\n"
+            + "The Department of Human Services was notified, and family immunisation was discussed.");
         AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
     }
 
@@ -723,8 +730,8 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     public void R2_19_Adverb_Before_A_Participle_Is_Not_Note_Form()
     {
         var letter = Inject(Garcia,
-            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.",
-            "The Department of Human Services was notified of Ms Garcia's case, and her mother has become socially withdrawn since the admission.");
+            "The Department of Human Services was notified, and family immunisation was discussed.",
+            "The Department of Human Services was notified, and her mother has become socially withdrawn since the admission.");
         AssertRuleDoesNotFire(Lint(letter, "LT-DG", caseNotes: GarciaCaseNotes), "medication_passive_grammar");
     }
 
@@ -734,7 +741,7 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
         // "She commenced smoking" and "the school doctor commenced him on
         // doxycycline" are correct active-voice clinical English.
         var letter = Inject(Garcia,
-            "She responded well to treatment.",
+            "She responded well to the treatment.",
             "She commenced smoking in 2013, and the school doctor commenced her on iron infusions.");
         AssertRuleDoesNotFire(Lint(letter, "LT-DG", caseNotes: GarciaCaseNotes), "medication_passive_grammar");
     }
@@ -742,21 +749,26 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [Fact]
     public void R2_19_Dob_Is_Not_A_Treatment_Date_Ceiling()
     {
-        // Greerson's notes carry "DOB 09.10.1951" and no later dates; the
-        // detector treated the birth date as the latest documented treatment
-        // date, so any sane letter date was "an invented date". A DOB is an
-        // identity fact, not a treatment-date ceiling: with the DOB excluded,
-        // a letter dated after the admission passes.
+        // A birth date is an identity fact, not a documented treatment date.
+        // With ONLY a DOB in the notes there is no treatment-date ceiling at
+        // all, so no letter date can be "later than every documented date".
+        const string dobOnlyNotes = "Patient: Mrs Maeve Greerson. DOB 09.10.1951.";
+        var dobOnlyLetter = Weir.Replace("9 August 2014", "15 October 1951");
+        AssertRuleDoesNotFire(Lint(dobOnlyLetter, "LT-RR", caseNotes: dobOnlyNotes), "letter_date_unsupported");
+
+        // A DOB label must not swallow a LATER admission date: the label
+        // scopes only the date it introduces, so the admission remains the
+        // ceiling and a letter dated on the admission day passes (regression
+        // for the fixed-width look-back window that hid this).
         const string notes = "Patient: Mrs Maeve Greerson. DOB 09.10.1951. " +
             "Admitted 24 July 1951 with dehydration. Review in 2/52.";
-        var letter = Weir.Replace("9 August 2014", "15 October 1951");
+        var letter = Weir.Replace("9 August 2014", "24 July 1951");
         AssertRuleDoesNotFire(Lint(letter, "LT-RR", caseNotes: notes), "letter_date_unsupported");
-        // Structured extraction can isolate the birth date into its own
-        // bare fragment with no label at all; a bare date line is still not
-        // a treatment-date ceiling.
-        const string bareNotes = "Greerson. 
-09.10.1951
-Admitted 24 July 1951 with dehydration.";
+
+        // Structured extraction can isolate the birth date into its own bare
+        // fragment with no label at all; a bare date line is still not a
+        // treatment-date ceiling.
+        const string bareNotes = "Greerson.\n09.10.1951";
         var letter2 = Weir.Replace("9 August 2014", "15 October 1951");
         AssertRuleDoesNotFire(Lint(letter2, "LT-RR", caseNotes: bareNotes), "letter_date_unsupported");
     }

@@ -1,6 +1,6 @@
 # OET Writing Model Answer Rules — PERMANENT OWNER DIRECTIVES
 
-**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026) the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15) and ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20). Latest owner clarification supersedes conflicting older internal wording.
+**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026) the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15) ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20) and OWNER CLARIFICATIONS ROUND 3 (15 Sep 2026, rules OA3-01..OA3-05; active validator `writing-rules.owner-clarifications-3.2026-09-15.1`). Latest owner clarification supersedes conflicting older internal wording.
 **Applies to:** every person or AI agent who generates, repairs, validates, imports, or assesses OET Writing Model Answers in this repository — regardless of which tool or agent is used.
 **Enforcement:** every language rule below is enforced by a named deterministic detector in the deployed validator (`WritingRuleEngine` / `WritingRuleEngine.Rev8`), registry rows `OA-01..OA-15` and `OA2-01..OA2-20` in `docs/canonical-rules/OET_AI_Rules_Master.jsonl`, provenance rows in `WritingRuleProvenance`, and pinned by regression tests (`WritingRev8RegressionFixtureTests.cs` — five clean-letter positives plus every injected defect — and `WritingOwnerAddendumTwoRegressionFixtureTests.cs` — regression classes R2-01..R2-18, each proving BOTH that the injected defect is caught and that the valid alternative passes). If a rule here and the validator ever disagree, BOTH are wrong — fix the validator and update this doc together. A stored Ready flag is valid only for the exact validator version it was verified under: any rule-pack change (bump of `WritingRuleEngine.ValidatorVersion`) invalidates affected answers until revalidated.
 
@@ -74,10 +74,15 @@ The 180–200-word body cap means selection is a tested skill: **do NOT copy eve
 | Anonymous recipient | "Dear Sir/Madam" + "Yours sincerely" | "Dear Sir/Madam" + "Yours **faithfully**" |
 | Recipient spelling (source fidelity) | letter "Dr Malcom Still" when the task says "Dr Malcolm Still" (or vice versa) | copy the task's spelling exactly (checked when the task carries "Address the letter to ...") |
 | Invented letter date (source fidelity) | letter dated 30 May 2015 when the notes' latest date is 23 May 2015 | use the source-supported treatment date (checked whenever the canonical notes are supplied) |
+| Full name is free in the introduction (OA3-01, supersedes OA-03) | full name flagged merely because it also sits in the Re: line | the intro may use title + surname OR the full patient name; a full name recurring in any LATER body paragraph still fails |
+| Patient-name spelling is hard source fidelity (OA3-02) | "Mr David Taylr" / "Mr Davod Taylor" / Re: surname altered when the notes spell it exactly | copy the canonical notes' spelling everywhere (inert when the notes never name the patient; another person's name is never a spelling error) |
+| DOB has priority over age (OA3-03) | "Re: Mr David Taylor, aged 55", or no DOB, when the notes record "DOB 01/08/1965" | "Re: Mr David Taylor, DOB: 1 August 1965"; "aged X" is correct only when the source supplies no DOB |
+| Canonical "at" result wording (OA3-04, supersedes OA-10) | "a reduced glucose of 10 mg/dL" / headless "white cell count 14.0x10^9/L" | "a reduced glucose level at 10 mg/dL" / "the white cell count was 14.0x10^9/L" (Model Answer only; candidates keep every grammatical alternative) |
+| No dangling treatment modifier (OA3-05) | "A catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex." | "... grew Staphylococcus saprophyticus, and Mr McDonald was treated with Keflex for five days." |
 
 Grounding note: premium wording still grounds — "fatigue, stress and lethargy" maps to case notes saying "tired, stressed and sluggish" (proven in production). Grounding is sentence-level traceability, not verbatim copying.
 
-## 5. DETECTOR ↔ RULE MAP (as deployed 14 Sep 2026, Addendum Two)
+## 5. DETECTOR ↔ RULE MAP (as deployed 15 Sep 2026, Owner Clarifications Round 3)
 
 | Owner rule | Detector |
 |---|---|
@@ -123,6 +128,11 @@ Grounding note: premium wording still grounds — "fatigue, stress and lethargy"
 | Latin abbreviations (incl. nocte, mane) | `latin_abbreviations_translated` |
 | Dose/list syntax (ranges, ratios, semicolons) | `medication_list_punctuation` + `MedicationItemRe` |
 | Minor/adult naming (age attribution) | `WritingPatientAgeExtractor` (relatives' ages never classify the patient) |
+| OA3-01 introduction full-name freedom | `body_uses_last_name_only` (intro free; post-introduction recurrence fires) |
+| OA3-02 patient-name spelling fidelity | `patient_name_spelling` (needs canonical notes that name the patient) |
+| OA3-03 DOB priority over age | `re_line_dob_priority` (needs canonical notes carrying a DOB) |
+| OA3-04 canonical "at" result wording | `result_at_wording` (Model Answer only) + `result_noun_fragment` (of -> at repair) |
+| OA3-05 no dangling treatment modifier | `dangling_treatment_modifier` (both modes) |
 
 Every check id carries provenance (authority tag + score-bearing/coaching-only/accept-alternative) in `WritingRuleProvenance.cs` and an OET criterion mapping in `WritingAssessmentV11RuleEngine.CheckIdCriteria`; the completeness contract is test-enforced.
 

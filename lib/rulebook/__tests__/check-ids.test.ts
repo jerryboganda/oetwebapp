@@ -30,10 +30,13 @@ describe('rulebook check-id registry', () => {
     // discharge_function_missed, re_line_identity_unsupported,
     // result_head_noun, result_noun_fragment, role_salutation_matches_task,
     // supine_position_wording, vital_sign_interpretation_unsupported) = 106,
-    // + brand_generic_duplication (OA2 Taylor defect / R2-18) = 107.
+    // + brand_generic_duplication (OA2 Taylor defect / R2-18) = 107, + 4 from
+    // the OWNER CLARIFICATIONS ROUND 3 (2026-09-15, OA3-01..OA3-05:
+    // patient_name_spelling, re_line_dob_priority, result_at_wording,
+    // dangling_treatment_modifier) = 111.
     // Keep this in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) —
     // see that file's own header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(107);
+    expect(WRITING_CHECK_IDS.size).toBe(111);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
@@ -90,6 +93,11 @@ describe('rulebook check-id registry', () => {
       'vital_sign_interpretation_unsupported',
     ];
     expect(ownerAddendumTwo.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
+  });
+
+  it('includes every OWNER CLARIFICATIONS ROUND 3 (2026-09-15, OA3) detector check-id', () => {
+    const oa3 = ['patient_name_spelling', 're_line_dob_priority', 'result_at_wording', 'dangling_treatment_modifier'];
+    expect(oa3.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
   });
 
   it('includes every ULTIMATE FINAL (2026-09-13) detector check-id', () => {

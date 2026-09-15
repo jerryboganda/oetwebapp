@@ -440,9 +440,16 @@ public sealed class WritingRev8RuleTests
     // body_uses_last_name_only (OWN-W-011)
     // ---------------------------------------------------------------------
 
+    // OA3-01 (15 Sep 2026): the INTRODUCTION may use the full patient name —
+    // with or without a purpose clause, whether or not the Re: line has it.
     [Fact]
-    public void FullName_Fires_When_Repeated_In_The_Introduction()
-        => Assert.Contains(Lint(Letter(TaylorRe, "I am writing to refer Mr David Taylor for assessment of his painful right knee.", TaylorBody, TaylorClosure), model: false),
+    public void FullName_In_The_Introduction_Is_Valid()
+        => Assert.DoesNotContain(Lint(Letter(TaylorRe, "I am writing to refer Mr David Taylor for assessment of his painful right knee.", TaylorBody, TaylorClosure), model: false),
+            f => f.RuleId == "BUILTIN.body_uses_last_name_only");
+
+    [Fact]
+    public void FullName_Still_Fires_When_Repeated_After_The_Introduction()
+        => Assert.Contains(Lint(Letter(TaylorRe, TaylorIntro, "Mr David Taylor presented today with a painful, swollen right knee.", TaylorClosure), model: false),
             f => f.RuleId == "BUILTIN.body_uses_last_name_only" && f.FixSuggestion == "Mr Taylor");
 
     [Fact]

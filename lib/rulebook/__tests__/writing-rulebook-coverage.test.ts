@@ -27,12 +27,14 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
  * on legacy 172. Every book also carries the 38 owner Rev8 rules (OWN-W-001..038).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 303,
-  nursing: 310,
-  dentistry: 310,
-  pharmacy: 313,
-  physiotherapy: 313,
-  radiography: 310,
+  // + the 5 OA3 rows (OA3-01..OA3-05, 15 Sep 2026); keep in lockstep with
+  // writing-rulebook-baseline.test.ts and the registry rule counts.
+  medicine: 308,
+  nursing: 315,
+  dentistry: 315,
+  pharmacy: 318,
+  physiotherapy: 318,
+  radiography: 315,
 };
 // The legacy packs each carry 172 base + 38 owner Rev8 rules, PLUS the
 // derived operational modules the ULTIMATE FINAL round added (PRD-*), which is

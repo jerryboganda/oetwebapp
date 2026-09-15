@@ -71,13 +71,13 @@ Re: Ms Isabel Garcia, DOB: 1 January 1995
 
 I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.
 
-Ms Garcia presented with a one-week history of painful, stiff joints, headache and photophobia. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch chin to chest when supine. The white cell count was 14.0x10^9/L and the C-reactive protein level was 150. Lumbar puncture showed a white cell count of 1000 with polymorphonuclear predominance, reduced glucose 10 mg/dL and elevated protein 70 mg/dL. Culture confirmed Neisseria meningitidis.
+Ms Garcia presented with one week of painful, stiff joints, headache and photophobia. On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch her chin to her chest when supine. The white cell count was 14.0x10^9/L and the C-reactive protein level was 150. Lumbar puncture showed a white cell count at 1000 with polymorphonuclear predominance, a reduced glucose level at 10 mg/dL and an elevated protein level at 70 mg/dL. Culture confirmed Neisseria meningitidis.
 
-Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily. Dexamethasone was continued six-hourly for four days. Following lumbar puncture results, treatment was changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to treatment.
+Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice daily. Dexamethasone was continued six-hourly for four days. Treatment was then changed to benzylpenicillin, 1.8 g IV four-hourly for five days. She responded well to the treatment.
 
-The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.
+The Department of Human Services was notified, and family immunisation was discussed.
 
-I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.
+I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.
 
 Should there be any queries, kindly do not hesitate to contact me.
 
@@ -145,8 +145,8 @@ Doctor
     public void Injected_Unsupported_Discharge_Wording_Is_Flagged()
     {
         var letter = TaylorUrgentReferralLetter.Replace(
-            "He had shortness of breath.",
-            "He had shortness of breath and is ready for discharge.");
+            "He reported shortness of breath.",
+            "He reported shortness of breath and is ready for discharge.");
         AssertRuleFires(
             Lint(letter, "LT-UR", markers: new WritingCaseNotesMarkers()),
             "discharge_language_unsupported");
@@ -176,8 +176,8 @@ Doctor
     public void Injected_Treatment_Changed_Without_Auxiliary_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "treatment was changed to benzylpenicillin",
-            "treatment changed to benzylpenicillin");
+            "Treatment was then changed to benzylpenicillin",
+            "Treatment changed to benzylpenicillin");
         AssertRuleFires(Lint(letter, "LT-DG"), "treatment_change_grammar");
     }
 
@@ -186,8 +186,8 @@ Doctor
     public void Injected_Request_Merged_Into_Body_Paragraph_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed.\n\nI would be grateful",
-            "The Department of Human Services was notified of Ms Garcia's case, and family immunisation was discussed. I would be grateful");
+            "The Department of Human Services was notified, and family immunisation was discussed.\n\nI would be grateful",
+            "The Department of Human Services was notified, and family immunisation was discussed. I would be grateful");
         AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
     }
 
@@ -197,8 +197,8 @@ Doctor
     public void Injected_Contact_Offer_Merged_Into_Request_Paragraph_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
         AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
     }
 
@@ -362,9 +362,9 @@ Vic 3185
 Dear Admissions Officer,
 Re: Mr Julian McDonald, DOB: 12 January 1950
 
-I am writing to transfer Mr McDonald to your rehabilitation service following his elective left total knee replacement on 20 July 2018 under Mr Mossley.
+I am writing to transfer Mr McDonald to your rehabilitation service following elective left total knee replacement on 20 July 2018.
 
-Post-operative pain despite morphine patient-controlled analgesia slowed mobilisation. A forty-eight-hour ketamine infusion was effective. Amitriptyline was discontinued because of difficulty urinating. Somnolence and snoring prompted sleep studies for possible obstructive sleep apnoea, and a catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex.
+Post-operative pain despite morphine patient-controlled analgesia slowed mobilisation. A forty-eight-hour ketamine infusion was effective. Amitriptyline was discontinued because of difficulty urinating. Somnolence and snoring prompted sleep studies for possible obstructive sleep apnoea. A catheter urine culture grew Staphylococcus saprophyticus, and Mr McDonald was treated with Keflex for five days.
 
 Discharge medications are Zyloric, 300 mg daily; Lipitor, 20 mg at night; Karvina, 300 mg daily and Nicabate patch, 21 mg. Analgesia comprises paracetamol, 1 g four times daily; ibuprofen, 400 mg three times daily; Targin, 20/10 twice daily and oxycodone, 5-10 mg four-hourly as needed. Physiotherapy, an occupational therapy home visit, social work and drug and alcohol support are planned, with a specialist appointment on 7 September 2018.
 
@@ -490,7 +490,7 @@ Re: Mr David Taylor, DOB: 1 August 1965
 
 I am writing to request your urgent rheumatological assessment and management of Mr Taylor, who has presented with a gout flare and an associated tophus.
 
-Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure 120/80 mmHg, heart rate 90 bpm and respiratory rate 22 breaths/min. He had shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, 1 mg, and NSAIDs.
+Today, Mr Taylor presented with pain in his right big toe, swelling of the toe and foot, right flank pain and red-coloured urine. Observations recorded a temperature of 37.8 °C, blood pressure 120/80 mmHg, heart rate 90 bpm and respiratory rate 22 breaths/min. He reported shortness of breath. Examination revealed an inflamed, red right first toe with an underlying tophus, treated with colchicine, 1 mg, and NSAIDs.
 
 Mr Taylor has had gout since 2000, managed with allopurinol, paracetamol and colchicine. He experienced a severe attack in June 2010 and a further attack in September 2010. Kidney stones were also noted that year. He remained free of attacks from 2011 to 2020.
 
@@ -571,7 +571,7 @@ Doctor
     public void Injected_Judgmental_Observation_Is_Flagged()
     {
         var letter = TaylorUrgentReferralLetter.Replace(
-            "He had shortness of breath.",
+            "He reported shortness of breath.",
             "He appeared anxious with shortness of breath.");
         AssertRuleFires(Lint(letter, "LT-UR"), "register_colloquial");
     }
@@ -585,8 +585,8 @@ Doctor
     public void Candidate_Merged_Closure_Paragraphs_Are_Not_Penalised()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt attention for unexplained illness and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
+            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
         Assert.DoesNotContain(Lint(letter, "LT-DG", isModelAnswer: false),
             f => f.RuleId.EndsWith("closure_request_paragraph", StringComparison.Ordinal));
     }

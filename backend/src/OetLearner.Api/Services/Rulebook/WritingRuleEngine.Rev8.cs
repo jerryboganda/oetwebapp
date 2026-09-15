@@ -46,7 +46,7 @@ public sealed partial class WritingRuleEngine
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.owner-addendum-two.2026-09-14.2";
+    public const string ValidatorVersion = "writing-rules.owner-clarifications-3.2026-09-15.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -183,35 +183,25 @@ public sealed partial class WritingRuleEngine
         }
     }
 
-    // OWN-W-011 — "Do not repeat the full first + last name in the body after
-    // it has been used in the Re: line." The introduction counts (Weir /
-    // Taylor / Ramsey defects: "I am writing to refer Mr David Taylor ...").
-    // Owner addendum OA-03 (14 Sep 2026) override: the introduction MAY use
-    // the full patient name ONCE when it is syntactically part of the
-    // purpose clause ("I am writing to update you regarding Ms Isabel Garcia
-    // ..."); every later adult reference returns to title + surname.
+    // OWN-W-011 — full-name repetition. Owner override (15 Sep 2026, OA3-01):
+    // the INTRODUCTION may use EITHER title + surname OR the full patient
+    // name — both are correct, whether or not the full name is already in
+    // the Re: line ("Mr Weir" / "Mr Michael Weir", "Mrs Weston" /
+    // "Mrs Betty Weston"). Only the remaining body is restricted to the
+    // normal adult reference (title + surname); a full name used in any
+    // later paragraph still fails.
     private static IEnumerable<LintFinding> DetectFullNameRepeated(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var name = ResolvePatientName(input, s);
         if (name is null || !name.HasFullName || s.Body.Length == 0) yield break;
-        var re = new Regex($@"\b(?:(?:Mr|Mrs|Ms|Miss|Master|Dr)\.?\s+)?{Regex.Escape(name.First!)}\s+{Regex.Escape(name.Last!)}\b");
+        var re = new Regex($@"(?:(?:Mr|Mrs|Ms|Miss|Master|Dr)\.?\s+)?{Regex.Escape(name.First!)}\s+{Regex.Escape(name.Last!)}");
         var introLength = s.BodyParagraphs.Count > 0 ? s.BodyParagraphs[0].Length : 0;
-        var purposeAllowanceUsed = false;
         foreach (Match m in re.Matches(s.Body))
         {
-            var inIntroduction = m.Index <= introLength;
-            var purposeClause = inIntroduction && Regex.IsMatch(
-                s.Body.Substring(Math.Max(0, m.Index - 14), Math.Min(14, m.Index)),
-                @"\b(?:regarding|concerning|about|for|of|on)\s+$",
-                RegexOptions.IgnoreCase);
-            if (inIntroduction && purposeClause && !purposeAllowanceUsed)
-            {
-                purposeAllowanceUsed = true;
-                continue;
-            }
+            if (m.Index <= introLength) continue;
             var approved = name.Child ? name.First : $"{name.Title ?? "Mr/Ms"} {name.Last}";
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
-                $"The full name \"{m.Value}\" is already in the Re: line — do not repeat it in the letter. Use \"{approved}\" instead (the introduction may use the full name once as part of the purpose clause, e.g. \"regarding {name.Title} {name.First} {name.Last}\").",
+                $"The full name \"{m.Value}\" appears after the introduction. After the opening, use the normal adult reference \"{approved}\" throughout the body (the full name is welcome in the introduction; it must not recur later).",
                 Quote: m.Value, Start: BodyOffset(s) + m.Index, End: BodyOffset(s) + m.Index + m.Length,
                 FixSuggestion: approved);
             yield break;
@@ -1309,8 +1299,20 @@ public sealed partial class WritingRuleEngine
             // date "later than every documented date" — an invented-date
             // finding on a perfectly supported letter. Birth dates are
             // excluded from the treatment-date ceiling.
-            var windowStart = Math.Max(0, m.Index - 60);
-            var window = notes.Substring(windowStart, Math.Min(100, notes.Length - windowStart));
+            // The DOB label scopes only the date it introduces: look back no
+            // further than the previous sentence/line boundary (and at most 60
+            // characters). A fixed-width look-back swallowed a FOLLOWING
+            // admission date whenever the DOB label sat within 60 characters
+            // of it ("DOB 09.10.1951. Admitted 24 July 1951"), which left no
+            // treatment-date ceiling at all and masked genuinely invented
+            // letter dates.
+            var lookBack = Math.Max(0, m.Index - 60);
+            var windowStart = lookBack;
+            for (var i = m.Index - 1; i >= lookBack; i--)
+            {
+                if (notes[i] is '.' or '\n' or '\r' or ';' or '|') { windowStart = i + 1; break; }
+            }
+            var window = notes.Substring(windowStart, m.Index - windowStart);
             if (Regex.IsMatch(window, @"\b(?:dob|date\s+of\s+birth|birth\s+date|born)\b", RegexOptions.IgnoreCase)) continue;
             var lineStart = notes.LastIndexOf('\n', Math.Max(0, m.Index - 1)) + 1;
             var lineEnd = notes.IndexOf('\n', m.Index + m.Length);
@@ -1469,7 +1471,7 @@ public sealed partial class WritingRuleEngine
         {
             var kind = m.Groups["kind"].Value.ToLowerInvariant();
             var value = m.Groups["value"].Value;
-            var fix = "a " + kind + " cell count of " + value;
+            var fix = "a " + kind + " cell count at " + value;
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                 "\"" + m.Value + "\" is a fragment: the intended datum is a count, so it needs its measurement noun.",
                 Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
@@ -1789,5 +1791,228 @@ public sealed partial class WritingRuleEngine
         yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
             "The Re: line states an age (\"aged " + value + "\") that the canonical case notes do not record. Carry only source-supported patient identification.",
             Quote: reLine.Trim());
+    }
+
+    // ---------------------------------------------------------------------
+    // Owner Clarifications Round 3 (15 Sep 2026, OA3-01..OA3-05) — the
+    // owner's latest overrides as global rules: introduction full-name
+    // freedom (implemented in DetectFullNameRepeated), hard patient-name
+    // spelling fidelity, DOB priority over age, the canonical "at" result
+    // wording, and the dangling treatment modifier.
+    // ---------------------------------------------------------------------
+
+    // OA3-02 — patient-name spelling is HARD source fidelity: one missing or
+    // extra letter in the patient's first or last name is an error. The
+    // canonical notes are the spelling authority; when they name the patient,
+    // the Re:-line surname and every full-name mention in the letter must
+    // match exactly (case-insensitive, spelling exact). Notes that never name
+    // the patient leave the check inert — nothing may be invented to compare
+    // against.
+    private static readonly Regex NotesPatientNameRe = new(
+        @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?<first>[A-Z][a-z'’-]+)\s+(?<last>[A-Z][a-z'’-]+)\b|\bPatient is\s+(?<first>[A-Z][a-z'’-]+)\s+(?<last>[A-Z][a-z'’-]+)\b",
+        RegexOptions.IgnoreCase);
+
+private static string? ReLineSurname(string reLine)
+    {
+        var titled = ReTitledNameRe.Match(reLine);
+        if (!titled.Success) return null;
+        var tokens = new List<string> { titled.Groups[2].Value };
+        if (titled.Groups[3].Success) tokens.Add(titled.Groups[3].Value);
+        if (titled.Groups[4].Success) tokens.Add(titled.Groups[4].Value);
+        while (tokens.Count > 1 && (NonNameReWords.Contains(tokens[^1]) || ReIdentifierWords.Contains(tokens[^1])))
+            tokens.RemoveAt(tokens.Count - 1);
+        return tokens[^1];
+    }
+
+    private static string StripPossessive(string token)
+        => token.EndsWith("'s", StringComparison.OrdinalIgnoreCase) || token.EndsWith("\u2019s", StringComparison.OrdinalIgnoreCase)
+            ? token[..^2]
+            : token;
+
+    private static IEnumerable<LintFinding> DetectPatientNameSpelling(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesText is not { Length: > 0 } notes || string.IsNullOrEmpty(input.LetterText)) yield break;
+        var named = NotesPatientNameRe.Match(notes);
+        if (!named.Success) yield break;
+        var sourceFirst = named.Groups["first"].Value;
+        var sourceLast = named.Groups["last"].Value;
+
+        // The Re: line carries the patient surname — it must be the source
+        // spelling exactly. The surname is the LAST name token on the Re:
+        // line (identifier words such as DOB trimmed), so a full-name Re:
+        // line ("Re: Mr David Taylor, DOB: ...") is compared by its surname,
+        // never by its first name.
+        if (s.ReLineIndex is int reIdx)
+        {
+            var surname = ReLineSurname(s.Lines[reIdx]);
+            if (surname is not null
+                && !string.Equals(surname, sourceLast, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                    "The patient's surname in the Re: line (\"" + surname + "\") does not match the canonical case notes (\"" + sourceLast + "\"). The exact source spelling controls — never guess, shorten or autocorrect a patient name.",
+                    Quote: s.Lines[reIdx].Trim());
+                yield break;
+            }
+        }
+
+        // Every full-name mention in the letter: first and last must each
+        // match the source spelling (possessives tolerated: "Ms Isabel
+        // Garcia's"). Another person's full name matches neither source token
+        // and is skipped — only a NEAR match to the patient's own name is a
+        // spelling error.
+        foreach (Match m in Regex.Matches(input.LetterText, @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?<first>[A-Z][a-z'’-]+)\s+(?<last>[A-Z][a-z'’-]+)\b"))
+        {
+            var first = m.Groups["first"].Value;
+            var last = m.Groups["last"].Value;
+            var firstOk = string.Equals(StripPossessive(first), sourceFirst, StringComparison.OrdinalIgnoreCase);
+            var lastOk = string.Equals(StripPossessive(last), sourceLast, StringComparison.OrdinalIgnoreCase);
+            if (firstOk && lastOk) continue;
+            if (!firstOk && !lastOk) continue; // a different person entirely
+            var wrong = firstOk ? StripPossessive(last) : first;
+            var right = firstOk ? sourceLast : sourceFirst;
+            var at = input.LetterText.IndexOf(m.Value, StringComparison.Ordinal);
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "The patient's name is misspelled: \"" + wrong + "\" should be \"" + right + "\" per the canonical case notes. The exact source spelling controls in the Re: line, the introduction and every later reference.",
+                Quote: m.Value, Start: at, End: at + m.Length,
+                FixSuggestion: firstOk ? StripPossessive(first) + " " + right : right + " " + StripPossessive(last));
+            yield break;
+        }
+    }
+
+    // OA3-03 — DOB has priority over age in the Re: line. When the canonical
+    // notes record a date of birth, the Re: line must carry it ("Re: Mr John
+    // Smith, DOB: 1 January 1980"); "aged X" — or an identification without
+    // the DOB — fails. (The inverse — inventing a DOB the source does not
+    // record — stays with re_line_identity_unsupported.)
+    private static readonly Regex NotesDobLabelRe = new(
+        @"\b(?:DOB|date of birth)\b\s*:?\s*", RegexOptions.IgnoreCase);
+
+    private static DateTime? FindNotesDob(string notes)
+    {
+        foreach (Match label in NotesDobLabelRe.Matches(notes))
+        {
+            var start = label.Index + label.Length;
+            var tail = notes.Substring(start, Math.Min(24, notes.Length - start));
+            var numeric = NumericDateRe.Match(tail);
+            if (numeric.Success
+                && int.TryParse(numeric.Groups["d"].Value, out var d)
+                && int.TryParse(numeric.Groups["m"].Value, out var m)
+                && int.TryParse(numeric.Groups["y"].Value, out var yRaw))
+            {
+                var y = yRaw < 100 ? (yRaw <= 30 ? 2000 + yRaw : 1900 + yRaw) : yRaw;
+                try { return new DateTime(y, m, d); } catch (ArgumentOutOfRangeException) { }
+            }
+            var written = DateTokenRe.Match(tail);
+            if (written.Success && TryParseDateToken(written, out var wd)) return wd;
+        }
+        return null;
+    }
+
+    private static string? ReLineDobKey(string raw)
+    {
+        var written = DateTokenRe.Match(raw);
+        if (written.Success && TryParseDateToken(written, out var wd)) return DateKey(wd.Day, wd.Month, wd.Year);
+        var numeric = NumericDateRe.Match(raw);
+        if (numeric.Success
+            && int.TryParse(numeric.Groups["d"].Value, out var nd)
+            && int.TryParse(numeric.Groups["m"].Value, out var nm)
+            && int.TryParse(numeric.Groups["y"].Value, out var nyRaw))
+        {
+            var ny = nyRaw < 100 ? (nyRaw <= 30 ? 2000 + nyRaw : 1900 + nyRaw) : nyRaw;
+            return DateKey(nd, nm, ny);
+        }
+        return null;
+    }
+
+    private static IEnumerable<LintFinding> DetectReLineDobPriority(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (input.CaseNotesText is not { Length: > 0 } notes || s.ReLineIndex is null) yield break;
+        var notesDob = FindNotesDob(notes);
+        if (notesDob is null) yield break;
+        var reLine = s.Lines[s.ReLineIndex.Value];
+
+        // A DOB already in the Re: line satisfies the rule when it matches the
+        // source (its accuracy against the notes is
+        // re_line_identity_unsupported's contract, so a mismatching DOB is
+        // that rule's finding, not this one's).
+        var dob = ReLineDobRe.Match(reLine);
+        if (dob.Success)
+        {
+            var key = ReLineDobKey(dob.Groups["dob"].Value.Trim());
+            if (key is not null && key == DateKey(notesDob.Value.Day, notesDob.Value.Month, notesDob.Value.Year)) yield break;
+            yield break;
+        }
+        var display = notesDob.Value.ToString("d MMMM yyyy", System.Globalization.CultureInfo.InvariantCulture);
+        yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+            "The canonical case notes record the patient's date of birth (" + display + "), and DOB takes priority over age in the Re: line. Write \"Re: <title> <full name>, DOB: " + display + "\" — use \"aged X\" only when the source supplies no DOB.",
+            Quote: reLine.Trim());
+    }
+
+    // OA3-04 — canonical Model Answer result wording: values are stated with
+    // the owner's "at" construction on a complete result noun ("a white cell
+    // count at 1,000", "a reduced glucose level at 10 mg/dL", "the
+    // C-reactive protein level was 150"). Headless values ("reduced glucose
+    // 10 mg/dL") and "of" forms ("a white cell count of 1000") fail the
+    // Model Answer; candidates keep every grammatical professional
+    // alternative (AcceptAlternative). Cholesterol/CRP/"C-reactive protein"
+    // headless forms stay with result_head_noun, whose "the ... level was"
+    // repair is the owner-approved completion of the same rule.
+    private const string ResultAtNounList =
+        "white cell count|red cell count|platelet count|glucose|protein|urea|creatinine|potassium|sodium|haemoglobin|hemoglobin|albumin|bilirubin|ferritin|HbA1c";
+
+    private static readonly Regex ResultBareValueRe = new(
+        @"\b(?<noun>" + ResultAtNounList + @")\s+(?=[\d.])", RegexOptions.IgnoreCase);
+
+    // A clinical qualifier may sit between the article and the result noun
+    // ("a reduced glucose of 10 mg/dL", "a raised white cell count of 14.0"),
+    // so up to two qualifier tokens are tolerated; the noun itself must still
+    // be one of the canonical result nouns.
+    private static readonly Regex ResultOfValueRe = new(
+        @"\b(?:a|an)\s+(?:[A-Za-z][A-Za-z'’-]*\s+){0,2}(?<noun>" + ResultAtNounList + @")\s+of\s+(?=[\d.])", RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectResultAtWording(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (!input.IsModelAnswer || s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in ResultOfValueRe.Matches(s.Body))
+        {
+            var noun = m.Groups["noun"].Value;
+            var count = noun.EndsWith("count", StringComparison.OrdinalIgnoreCase);
+            var fix = count ? "a " + noun + " at ..." : "a " + noun + " level at ...";
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "State the result with the canonical \"at\" wording on a complete result noun: \"" + fix + "\" — never an \"of\" form.",
+                Quote: m.Value.Trim(), Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: fix);
+        }
+        foreach (Match m in ResultBareValueRe.Matches(s.Body))
+        {
+            var noun = m.Groups["noun"].Value;
+            var count = noun.EndsWith("count", StringComparison.OrdinalIgnoreCase);
+            var fix = count ? "a " + noun + " at ..." : "a " + noun + " level at ...";
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "The result value is stated without its measurement noun and connector. Use the canonical wording \"" + fix + "\" (e.g. \"a reduced glucose level at 10 mg/dL\").",
+                Quote: m.Value.Trim(), Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length,
+                FixSuggestion: fix);
+        }
+    }
+
+    // OA3-05 — a dangling treatment modifier: "A catheter urine culture grew
+    // Staphylococcus saprophyticus, treated with five days of Keflex." reads
+    // as if the CULTURE were treated. The patient was: "..., and Mr McDonald
+    // was treated with Keflex for five days." Genuine grammar, both modes.
+    private static readonly Regex DanglingTreatmentRe = new(
+        @"\b(?:catheter\s+urine\s+culture|catheter\s+specimen\s+of\s+urine|urine\s+culture|CSU|wound\s+swab|throat\s+swab|swab|culture|specimen|sample)\s+(?:grew|grown|yielded|isolated|identified|detected|revealed)\b[^.;\n]{0,120}?,\s*(?:then\s+)?treated\s+with\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectDanglingTreatmentModifier(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (s.Body.Length == 0) yield break;
+        var bodyOffset = BodyOffset(s);
+        foreach (Match m in DanglingTreatmentRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "The treatment clause dangles on the specimen (\"... culture grew ..., treated with ...\") — the PATIENT was treated. Write \"..., and <patient reference> was treated with ... for ...\".",
+                Quote: m.Value.Trim(), Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
+        }
     }
 }

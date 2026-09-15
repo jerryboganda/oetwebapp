@@ -25,16 +25,16 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
  * rulebook also carries the 38 owner Rev8 rules OWN-W-001..038 (11 Sep 2026).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  // Medicine: 268 + OA-01..OA-15 + OA2-01..OA2-20 (the addendum rows are carried
+  // Medicine: 268 + OA-01..OA-15 + OA2-01..OA2-20 + OA3-01..OA3-05 (the addendum rows are carried
   // in the registry under profession "Medicine"). Every other canonical pack
-  // gains the same 35 globally scoped rows, because Addendum Two §14 requires
+  // gains the same 40 globally scoped rows, because Addendum Two §14 requires
   // them "active globally — not sample-only edits".
-  medicine: 303,
-  nursing: 310,
-  dentistry: 310,
-  pharmacy: 313,
-  physiotherapy: 313,
-  radiography: 310,
+  medicine: 308,
+  nursing: 315,
+  dentistry: 315,
+  pharmacy: 318,
+  physiotherapy: 318,
+  radiography: 315,
 };
 // 172 base + 38 owner Rev8 rules, PLUS the derived operational modules the
 // ULTIMATE FINAL round appended to the legacy packs (PRD-*) — which is why they
