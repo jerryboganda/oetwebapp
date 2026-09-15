@@ -1892,8 +1892,14 @@ private static string? ReLineSurname(string reLine)
         if (s.ReLineIndex is int reIdx)
         {
             var surname = ReLineSurname(s.Lines[reIdx]);
+            // Revalidation follow-up (15 Sep 2026): the canonical extraction
+            // can mismatch on PDF fragments even when the letter's surname is
+            // spelled exactly as the source spells it somewhere in the notes.
+            // If the Re: surname occurs anywhere in the canonical notes, the
+            // spelling is source-faithful.
             if (surname is not null
-                && !string.Equals(surname, sourceLast, StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(surname, sourceLast, StringComparison.OrdinalIgnoreCase)
+                && !notes.Contains(surname, StringComparison.OrdinalIgnoreCase))
             {
                 yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
                     "The patient's surname in the Re: line (\"" + surname + "\") does not match the canonical case notes (\"" + sourceLast + "\"). The exact source spelling controls — never guess, shorten or autocorrect a patient name.",
