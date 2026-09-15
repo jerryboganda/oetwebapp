@@ -216,6 +216,22 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
         AssertRuleFires(Lint(letter, "LT-NM", caseNotes: WestonCaseNotes), "re_line_dob_priority");
     }
 
+    [Fact]
+    public void R3_03_Abbreviated_Month_Dob_In_Notes_Grounds_The_Re_Line()
+    {
+        // Physiotherapy - Sophie Bennett: the canonical notes write
+        // "DOB 14 Nov 1969" while the letter writes "DOB: 14 November 1969".
+        // The abbreviated month must parse, or a source-supported DOB reads
+        // as invented (re_line_identity_unsupported) and the DOB-priority
+        // rule goes blind.
+        const string notes = "Patient: Ms Sophie Bennett, DOB 14 Nov 1969 (49 years old). " +
+            "Occupation: nurse. 28 Aug 2019 initial assessment: constant right buttock pain.";
+        AssertRuleDoesNotFire(Lint(Taylor.Replace("Re: Mr David Taylor, DOB: 1 August 1965", "Re: Mr David Taylor, DOB: 14 November 1969"),
+            "LT-UR", caseNotes: notes), "re_line_identity_unsupported");
+        AssertRuleFires(Lint(Taylor.Replace("Re: Mr David Taylor, DOB: 1 August 1965", "Re: Mr David Taylor, aged 49"),
+            "LT-UR", caseNotes: notes), "re_line_dob_priority");
+    }
+
     // ─── R3-04 — canonical "at" result wording ────
 
     [Fact]

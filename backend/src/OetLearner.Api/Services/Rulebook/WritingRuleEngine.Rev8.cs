@@ -1266,8 +1266,18 @@ public sealed partial class WritingRuleEngine
     // date LATER than every date documented in the canonical case notes is
     // an invented fact. Runs whenever the canonical notes are supplied
     // (Model Answer gate); the date itself must be a whole-line date.
+    // Abbreviated month names (Jan/Feb/.../Sept/Dec) are accepted alongside
+    // the full forms: canonical case notes routinely write "DOB 14 Nov 1969",
+    // and a source-supported date of birth must still ground a Re: line
+    // written in full ("DOB: 14 November 1969"). DateTime.TryParse with the
+    // invariant culture parses every abbreviation, so only the token regex
+    // needed widening.
+    private const string MonthNames =
+        @"January|February|March|April|May|June|July|August|September|October|November|December|" +
+        @"Jan\.?|Feb\.?|Mar\.?|Apr\.?|Jun\.?|Jul\.?|Aug\.?|Sept\.?|Sep\.?|Oct\.?|Nov\.?|Dec\.?";
+
     private static readonly Regex DateTokenRe = new(
-        @"\b(?:(?<d>\d{1,2})(?:st|nd|rd|th)?\s+(?<mon>January|February|March|April|May|June|July|August|September|October|November|December)\s+(?<y>\d{4})|(?<mon2>January|February|March|April|May|June|July|August|September|October|November|December)\s+(?<d2>\d{1,2})(?:st|nd|rd|th)?,?\s+(?<y2>\d{4}))\b",
+        $@"\b(?:(?<d>\d{{1,2}})(?:st|nd|rd|th)?\s+(?<mon>{MonthNames})\s+(?<y>\d{{4}})|(?<mon2>{MonthNames})\s+(?<d2>\d{{1,2}})(?:st|nd|rd|th)?,?\s+(?<y2>\d{{4}}))\b",
         RegexOptions.IgnoreCase);
 
     private static bool TryParseDateToken(Match m, out DateTime date)
