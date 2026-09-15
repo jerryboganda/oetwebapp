@@ -1332,6 +1332,18 @@ public sealed partial class WritingRuleEngine
             if (latestNoteDate is null || noteDate > latestNoteDate) latestNoteDate = noteDate;
         }
         if (latestNoteDate is null || letterDate <= latestNoteDate.Value) yield break;
+        // A forward relative reference ("review in 2 days", "review in two
+        // weeks") extends the documented timeline beyond the last absolute
+        // date, so a letter written within 31 days of it is not provably
+        // invented — the writing date simply was never documented. Only a
+        // date beyond any plausible continuation of the documented timeline
+        // (Garcia: 30 May vs 23 May with no forward reference; the 2009
+        // regression fixture) is flagged.
+        var forwardTimeline = Regex.IsMatch(
+            notes,
+            @"\b(?:review|appointment|follow[- ]?up|see|seen|recheck)\b[^.;\n]{0,60}\bin\s+(?:\d+|one|two|three|four|five|six|seven|a\s+few|a)\s+(?:days?|weeks?|months?)\b",
+            RegexOptions.IgnoreCase);
+        if (forwardTimeline && (letterDate - latestNoteDate.Value).TotalDays <= 31) yield break;
         yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
             $"The letter date ({letterDate:dd MMMM yyyy}) is later than every date documented in the case notes ({latestNoteDate.Value:dd MMMM yyyy} at the latest) — an unsupported, invented date. Use the source-supported date of treatment.",
             Quote: s.Lines[s.DateIndex.Value].Trim());

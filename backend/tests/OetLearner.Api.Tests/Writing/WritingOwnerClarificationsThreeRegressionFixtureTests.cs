@@ -232,6 +232,24 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
             "LT-UR", caseNotes: notes), "re_line_dob_priority");
     }
 
+    [Fact]
+    public void R3_03_Letter_Date_Within_A_Forward_Relative_Review_Window_Passes()
+    {
+        // Physiotherapy - Sophie Bennett pattern: the notes end with a
+        // relative forward reference ("review in 2 days") and no documented
+        // transfer date, so a letter written inside the continuing timeline
+        // (14 days after the last absolute date) is not provably invented.
+        const string notes = "Patient: Ms Sophie Bennett, DOB 14 Nov 1969. " +
+            "28 Aug 2019 initial assessment: constant right buttock pain. " +
+            "To see the doctor to change medication to tramadol; review in 2 days.";
+        var letter = Weir.Replace("9 August 2014", "11 September 2019");
+        AssertRuleDoesNotFire(Lint(letter, "LT-RR", caseNotes: notes), "letter_date_unsupported");
+        // Without a forward reference the provable-invention rule stays armed.
+        const string closedNotes = "Patient: Ms Sophie Bennett, DOB 14 Nov 1969. " +
+            "28 Aug 2019 initial assessment: constant right buttock pain.";
+        AssertRuleFires(Lint(letter, "LT-RR", caseNotes: closedNotes), "letter_date_unsupported");
+    }
+
     // ─── R3-04 — canonical "at" result wording ────
 
     [Fact]
