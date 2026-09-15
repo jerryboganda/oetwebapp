@@ -943,3 +943,45 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
         => Assert.Equal(WritingCandidateBehaviors.ScoreBearing,
             WritingRuleProvenance.For(checkId).CandidateBehavior);
 }
+
+    // ─────────────────────────────────────────────────────────────────
+    // R2-21 — patient_name_spelling must not flag correct names. Found
+    // during the 224-catalogue revalidation (15 Sep 2026): the canonical
+    // name extraction took the FIRST titled name in the notes (often the
+    // recipient, a relative, or a PDF fragment like "Ms Osbur is"), and
+    // the near-match scan flagged a relative sharing the patient's
+    // surname ("Mr Krishnan Ramamurthy") as the patient's misspelling.
+    // ─────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void R2_21_Canonical_Name_Comes_From_The_Name_Line()
+    {
+        // The notes name the patient on a "Name:" line and also contain a
+        // fragment "Mrs Osburn is ..." whose last token is a stopword; the
+        // correct Re: line must pass.
+        const string notes = "Patient: Mrs Weir. Name: Michael Weir. Mrs Weir is 69 years old. " +
+            "Admitted 24 July 1951 with dehydration.";
+        AssertRuleDoesNotFire(Lint(Weir, "LT-RR", caseNotes: notes), "patient_name_spelling");
+    }
+
+    [Fact]
+    public void R2_21_Relative_With_The_Same_Surname_Is_Not_A_Spelling_Error()
+    {
+        // "Mr Robert Weir" is the patient's father, not a misspelling of
+        // "Michael"; the near-match scan must skip a far first token.
+        const string notes = "Name: Michael Weir. Admitted 24 July 1951. Review in 2/52.";
+        var letter = Inject(Weir,
+            "I am writing to request your neurological assessment",
+            "Mr Robert Weir attended with his son. I am writing to request your neurological assessment");
+        AssertRuleDoesNotFire(Lint(letter, "LT-RR", caseNotes: notes), "patient_name_spelling");
+    }
+
+    [Fact]
+    public void R2_21_True_Spelling_Error_Still_Fires()
+    {
+        const string notes = "Name: Michael Weir. Admitted 24 July 1951. Review in 2/52.";
+        var letter = Inject(Weir,
+            "Re: Mr Michael Weir",
+            "Re: Mr Michacl Weir");
+        AssertRuleFires(Lint(letter, "LT-RR", caseNotes: notes), "patient_name_spelling");
+    }

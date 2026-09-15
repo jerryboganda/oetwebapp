@@ -1808,6 +1808,26 @@ public sealed partial class WritingRuleEngine
     // match exactly (case-insensitive, spelling exact). Notes that never name
     // the patient leave the check inert — nothing may be invented to compare
     // against.
+    // Revalidation fix (15 Sep 2026): the notes can name the patient in a
+    // clean "Name: <First> <Last>" line, but they also contain the
+    // recipient's titled name ("Ms. Nina Gill"), PDF-extraction fragments
+    // ("Ms Osbur is") and source typos ("Tallor"). The canonical patient
+    // name is therefore resolved from a Name: line when one exists; a
+    // stopword last token ("is" from "Mrs Osburn is ...") never counts.
+    private static (string first, string last)? NotesCanonicalName(string notes)
+    {
+        var nameLine = Regex.Match(notes, @"Name\s*[:\-]\s*(?<t>(?:Mr|Mrs|Ms|Miss|Master|Dr)\.?)\s+(?<first>[A-Z][a-zA-Z'’\-]+)\s+(?<last>[A-Z][a-zA-Z'’\-]+)", RegexOptions.IgnoreCase);
+        if (nameLine.Success)
+            return (nameLine.Groups["first"].Value, nameLine.Groups["last"].Value);
+        foreach (Match m in NotesPatientNameRe.Matches(notes))
+        {
+            var last = m.Groups["last"].Value;
+            if (PersonSubjects.Contains(last) || NonNameReWords.Contains(last)) continue;
+            return (m.Groups["first"].Value, last);
+        }
+        return null;
+    }
+
     private static readonly Regex NotesPatientNameRe = new(
         @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?<first>[A-Z][a-z'’-]+)\s+(?<last>[A-Z][a-z'’-]+)\b|\bPatient is\s+(?<first>[A-Z][a-z'’-]+)\s+(?<last>[A-Z][a-z'’-]+)\b",
         RegexOptions.IgnoreCase);
@@ -1824,6 +1844,33 @@ private static string? ReLineSurname(string reLine)
         return tokens[^1];
     }
 
+    // True when the two name tokens are a plausible typo pair: identical,
+    // or within a small edit distance with the same first letter.
+    private static bool IsNearSpelling(string a, string b)
+    {
+        if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase)) return true;
+        if (a.Length == 0 || b.Length == 0) return false;
+        if (!string.Equals(a[0].ToString(), b[0].ToString(), StringComparison.OrdinalIgnoreCase)) return false;
+        var sa = a.ToLowerInvariant();
+        var sb = b.ToLowerInvariant();
+        if (Math.Abs(sa.Length - sb.Length) > 2) return false;
+        return Levenshtein(sa, sb) <= (Math.Max(sa.Length, sb.Length) <= 5 ? 1 : 2);
+    }
+
+    private static int Levenshtein(string s, string t)
+    {
+        var d = new int[s.Length + 1, t.Length + 1];
+        for (var i = 0; i <= s.Length; i++) d[i, 0] = i;
+        for (var j = 0; j <= t.Length; j++) d[0, j] = j;
+        for (var i = 1; i <= s.Length; i++)
+            for (var j = 1; j <= t.Length; j++)
+            {
+                var cost = s[i - 1] == t[j - 1] ? 0 : 1;
+                d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+            }
+        return d[s.Length, t.Length];
+    }
+
     private static string StripPossessive(string token)
         => token.EndsWith("'s", StringComparison.OrdinalIgnoreCase) || token.EndsWith("\u2019s", StringComparison.OrdinalIgnoreCase)
             ? token[..^2]
@@ -1832,10 +1879,10 @@ private static string? ReLineSurname(string reLine)
     private static IEnumerable<LintFinding> DetectPatientNameSpelling(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesText is not { Length: > 0 } notes || string.IsNullOrEmpty(input.LetterText)) yield break;
-        var named = NotesPatientNameRe.Match(notes);
-        if (!named.Success) yield break;
-        var sourceFirst = named.Groups["first"].Value;
-        var sourceLast = named.Groups["last"].Value;
+        var named = NotesCanonicalName(notes);
+        if (named is null) yield break;
+        var sourceFirst = named.Value.first;
+        var sourceLast = named.Value.last;
 
         // The Re: line carries the patient surname — it must be the source
         // spelling exactly. The surname is the LAST name token on the Re:
@@ -1868,8 +1915,16 @@ private static string? ReLineSurname(string reLine)
             var lastOk = string.Equals(StripPossessive(last), sourceLast, StringComparison.OrdinalIgnoreCase);
             if (firstOk && lastOk) continue;
             if (!firstOk && !lastOk) continue; // a different person entirely
-            var wrong = firstOk ? StripPossessive(last) : first;
-            var right = firstOk ? sourceLast : sourceFirst;
+            // Revalidation fix (15 Sep 2026): a relative sharing the
+            // surname ("Mr Krishnan Ramamurthy", husband of the patient)
+            // is a different person, not a spelling error. Flag only a
+            // NEAR miss of the mismatching token (the OA3-02 examples,
+            // "Taylr"/"Davod", are off by one or two characters).
+            var mismatch = firstOk ? StripPossessive(last) : first;
+            var expected = firstOk ? sourceLast : sourceFirst;
+            if (!IsNearSpelling(mismatch, expected)) continue;
+            var wrong = mismatch;
+            var right = expected;
             var at = input.LetterText.IndexOf(m.Value, StringComparison.Ordinal);
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
                 "The patient's name is misspelled: \"" + wrong + "\" should be \"" + right + "\" per the canonical case notes. The exact source spelling controls in the Re: line, the introduction and every later reference.",
