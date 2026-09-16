@@ -88,10 +88,19 @@ jobs:
            const version = process.env.MOBILE_VERSION;
            const versionCode = process.env.MOBILE_VERSION_CODE;
            let content = fs.readFileSync(file, 'utf8');
-           if (!/versionCode\s+\d+/.test(content)) throw new Error('build.gradle is missing versionCode');
-           if (!/versionName\s+"[^"]+"/.test(content)) throw new Error('build.gradle is missing versionName');
-           content = content.replace(/versionCode\s+\d+/, `versionCode ${versionCode}`);
-           content = content.replace(/versionName\s+"[^"]+"/, `versionName "${version}"`);
+           // Anchored to line-start (after only whitespace) so the file's own
+           // explanatory comments -- which mention past "versionCode N" values
+           // in prose above the real declaration -- can never be mistaken for
+           // it. An unanchored /versionCode\s+\d+/ matches whichever occurs
+           // first in the file, silently stamping the comment text and
+           // leaving the real declaration (and thus the built AAB) on the
+           // stale committed version -- exactly what happened on 2026-09-16.
+           const versionCodeRe = /^(\s*)versionCode\s+\d+/m;
+           const versionNameRe = /^(\s*)versionName\s+"[^"]+"/m;
+           if (!versionCodeRe.test(content)) throw new Error('build.gradle is missing versionCode');
+           if (!versionNameRe.test(content)) throw new Error('build.gradle is missing versionName');
+           content = content.replace(versionCodeRe, `$1versionCode ${versionCode}`);
+           content = content.replace(versionNameRe, `$1versionName "${version}"`);
            fs.writeFileSync(file, content);
           NODE
 
