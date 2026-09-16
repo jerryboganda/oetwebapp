@@ -259,6 +259,8 @@ scripts/videos/state/
 
 # Materials ingest scratch (state, manifest, logs) — never commit
 scripts/materials/state/
+# Listening audio-boundary audit/repair scratch (state, transcripts, reports)
+scripts/listening/state/
 
 # CodeGraph index (per-environment artifact — never commit)
 .codegraph/

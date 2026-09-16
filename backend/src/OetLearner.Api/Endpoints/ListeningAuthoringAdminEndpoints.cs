@@ -1002,6 +1002,73 @@ public static class ListeningAuthoringAdminEndpoints
         .WithName("BulkValidateListeningPapers")
         .WithSummary("Validate multiple papers for publish readiness.");
 
+        // ─── QA: STT-transcribe an uploaded audio window ───────────────────
+        //
+        // Powers the Listening audio-boundary audit (scripts/listening/
+        // fix-audio-boundaries.mjs): Extract Two cue detection needs a
+        // segment-timed transcript of an arbitrary window, and the STT
+        // credential only resolves inside the app (Admin → AI Providers →
+        // whisper-asr, or Speaking:Whisper runtime settings). Writes the
+        // upload into IFileStorage, runs the SAME ISpeakingTranscriptionProvider
+        // the Speaking pipeline uses, and returns its segments — never any
+        // credential material. AdminContentWrite because each call spends
+        // provider budget.
+        app.MapPost("/v1/admin/listening/qa/transcribe", async (
+            HttpRequest request,
+            OetLearner.Api.Services.Content.IFileStorage storage,
+            OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider stt,
+            CancellationToken ct) =>
+        {
+            if (!request.HasFormContentType)
+                return Results.Json(
+                    new { error = "Expected multipart/form-data with an 'audio' file.", errorCode = "listening_qa_bad_content_type" },
+                    statusCode: 415);
+
+            var form = await request.ReadFormAsync(ct);
+            var audio = form.Files.GetFile("audio") ?? form.Files.GetFile("file");
+            if (audio is null || audio.Length == 0)
+                return Results.Json(
+                    new { error = "Upload an audio window (field 'audio').", errorCode = "listening_qa_missing_file" },
+                    statusCode: 400);
+            if (audio.Length > 25 * 1024 * 1024)
+                return Results.Json(
+                    new { error = "Audio window exceeds the 25 MB STT limit.", errorCode = "listening_qa_too_large" },
+                    statusCode: 400);
+
+            var key = $"qa/cuescan/{Guid.NewGuid():N}{Path.GetExtension(audio.FileName)}";
+            await using (var source = audio.OpenReadStream())
+            {
+                await storage.WriteAsync(key, source, ct);
+            }
+
+            try
+            {
+                var language = form["language"].ToString();
+                var result = await stt.TranscribeAsync(key, language.Length >= 2 ? language[..2] : "en", ct);
+                if (string.Equals(result.Provider, "mock", StringComparison.OrdinalIgnoreCase))
+                    return Results.Json(
+                        new { error = "Speech-to-text is not configured (mock provider active).", errorCode = "listening_qa_stt_unconfigured" },
+                        statusCode: 503);
+                return Results.Ok(new
+                {
+                    provider = result.Provider,
+                    language = result.Language,
+                    model = result.Model,
+                    wordCount = result.WordCount,
+                    meanConfidence = result.MeanConfidence,
+                    segments = JsonSerializer.Deserialize<JsonElement>(string.IsNullOrWhiteSpace(result.SegmentsJson) ? "[]" : result.SegmentsJson),
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message, errorCode = "listening_qa_transcribe_failed" }, statusCode: 502);
+            }
+        })
+        .RequireAuthorization("AdminContentWrite")
+        .RequireRateLimiting("PerUserWrite")
+        .WithName("QaTranscribeListeningWindow")
+        .WithSummary("Transcribe an uploaded audio window through the platform speech-to-text provider (QA tooling).");
+
         // ─── WS4: Admin Sequence Builder ───────────────────────────────────
         //
         // Optional explicit exam-sequence (ordered FSM phases + per-phase
