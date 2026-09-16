@@ -272,3 +272,11 @@ config/local-prod-db.password
 pdf-policy-release/
 pdf-policy-release2/
 scripts/materials/.cache/
+
+# --- added 2026-09-16: local agent/tool state - never commit (~50 MB of machine state) ---
+.swarm/
+.claude-flow/
+.claude.backup-*/
+.mcp.json
+ruvector.db
+
