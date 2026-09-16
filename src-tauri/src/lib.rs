@@ -531,7 +531,9 @@ mod tests {
 
     #[test]
     fn keeps_the_protected_bunny_player_in_the_window() {
-        assert!(allowed("https://iframe.mediadelivery.net/embed/123/abc?token=t&expires=1"));
+        assert!(allowed(
+            "https://iframe.mediadelivery.net/embed/123/abc?token=t&expires=1"
+        ));
         assert!(allowed("https://player.mediadelivery.net/embed/123/abc"));
         assert!(allowed("about:blank"));
         assert!(allowed("about:srcdoc"));
@@ -541,7 +543,9 @@ mod tests {
     #[test]
     fn still_routes_everything_else_out() {
         assert!(!allowed("http://iframe.mediadelivery.net/embed/123/abc"));
-        assert!(!allowed("https://iframe.mediadelivery.net.evil.example/embed"));
+        assert!(!allowed(
+            "https://iframe.mediadelivery.net.evil.example/embed"
+        ));
         assert!(!allowed("https://evil.example/?u=iframe.mediadelivery.net"));
         assert!(!allowed("https://www.youtube.com/watch?v=x"));
         assert!(!allowed("http://app.oetwithdrhesham.co.uk/"));
