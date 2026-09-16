@@ -20,6 +20,7 @@ import {
   hasAutoSendRequested,
   markAutoSendRequested,
 } from './auto-send-guard';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 
 const VERIFY_EMAIL_CHALLENGE_KEY = 'oet.verify-email.challenge';
 
@@ -274,7 +275,7 @@ function VerifyEmailContent() {
     submitLockRef.current = true;
 
     try {
-      const normalizedOtp = code.replace(/\D/g, '');
+      const normalizedOtp = toAsciiDigits(code);
 
       if (normalizedOtp.length !== 6) {
         setErrorMessage('The OTP is invalid. Enter the 6 digit verification code.');
@@ -357,7 +358,7 @@ function VerifyEmailContent() {
         <OtpCodeInput
           value={otp}
           onChange={(value) => {
-            const next = value.replace(/\D/g, '').slice(0, 6);
+            const next = toAsciiDigits(value).slice(0, 6);
             // `otp` here is the PREVIOUS committed value. The same stale closure
             // that caused the bug is exactly what makes this a correct
             // "did the code actually change?" test.

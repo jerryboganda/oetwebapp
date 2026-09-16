@@ -3,6 +3,7 @@ import CountryCodeSelect from '@/components/auth/lazy-country-code-select';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import type { SignupPayloadFormValues } from '@/lib/auth/schemas';
 import { RegisterErrorText } from './register-error-text';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 
 interface RegisterPersonalStepProps {
   form: UseFormReturn<SignupPayloadFormValues>;
@@ -81,7 +82,7 @@ export function RegisterPersonalStep({
             value={mobileLocalNumber}
             autoComplete="tel-national"
             inputMode="numeric"
-            onChange={(event) => onMobileLocalNumberChange(event.target.value.replace(/\D/g, ''))}
+            onChange={(event) => onMobileLocalNumberChange(toAsciiDigits(event.target.value))}
           />
         </div>
         <p className={styles.fieldHint}>

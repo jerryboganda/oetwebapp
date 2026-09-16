@@ -318,7 +318,7 @@ public sealed class EmailOtpService(
 
         // Email verification is always a local hash compare. SMS must never
         // mark EmailVerifiedAt.
-        var codeHash = HashOtp(challenge.Id, code.Trim(), account.Id, EmailVerificationPurpose);
+        var codeHash = HashOtp(challenge.Id, VerificationCodeDigits.Normalize(code), account.Id, EmailVerificationPurpose);
         // M6 (security): constant-time comparison of the hex-encoded hashes to
         // avoid any micro-timing leak around the stored code hash.
         if (!FixedTimeHexEquals(challenge.CodeHash, codeHash))
@@ -357,7 +357,7 @@ public sealed class EmailOtpService(
             return null;
         }
 
-        var presentedHash = HashOtp(lastVerified.Id, code.Trim(), accountId, purpose);
+        var presentedHash = HashOtp(lastVerified.Id, VerificationCodeDigits.Normalize(code), accountId, purpose);
         return FixedTimeHexEquals(lastVerified.CodeHash, presentedHash) ? lastVerified : null;
     }
 
@@ -433,7 +433,7 @@ public sealed class EmailOtpService(
             throw ApiException.Validation("invalid_reset_token", "The password reset token is invalid.");
         }
 
-        if (!await MatchesChallengeCodeAsync(challenge, account, code.Trim(), cancellationToken))
+        if (!await MatchesChallengeCodeAsync(challenge, account, VerificationCodeDigits.Normalize(code), cancellationToken))
         {
             challenge.AttemptCount += 1;
             await db.SaveChangesAsync(cancellationToken);
@@ -497,7 +497,7 @@ public sealed class EmailOtpService(
             throw ApiException.Validation("otp_attempts_exceeded", "Too many invalid attempts. Request a new code.");
         }
 
-        if (!await MatchesChallengeCodeAsync(challenge, account, code.Trim(), cancellationToken))
+        if (!await MatchesChallengeCodeAsync(challenge, account, VerificationCodeDigits.Normalize(code), cancellationToken))
         {
             challenge.AttemptCount += 1;
             await db.SaveChangesAsync(cancellationToken);

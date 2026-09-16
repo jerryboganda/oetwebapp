@@ -26,6 +26,7 @@ import { analytics } from '@/lib/analytics';
 import { queryKeys } from '@/lib/query/hooks';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { isEditableEventTarget } from '@/lib/is-editable-target';
 import { cleanExampleSentencesForList } from '@/lib/vocabulary-example-sentence';
 import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
@@ -251,6 +252,7 @@ export default function BrowseVocabularyPage() {
                     tabIndex={0}
                     onClick={() => setShowLockedModal(true)}
                     onKeyDown={(event: React.KeyboardEvent) => {
+                      if (isEditableEventTarget(event.target)) return;
                       if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
                         event.preventDefault();
                         setShowLockedModal(true);

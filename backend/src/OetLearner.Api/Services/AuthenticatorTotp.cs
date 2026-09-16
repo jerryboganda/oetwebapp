@@ -20,7 +20,9 @@ internal static class AuthenticatorTotp
             return false;
         }
 
-        var normalizedCode = code.Trim();
+        // Arabic-Indic digits pass char.IsDigit but would be mangled by the
+        // ASCII compare below, so map them to ASCII first.
+        var normalizedCode = VerificationCodeDigits.Normalize(code);
         if (normalizedCode.Length != VerificationDigits || normalizedCode.Any(character => !char.IsDigit(character)))
         {
             return false;

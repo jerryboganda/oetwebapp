@@ -9,6 +9,7 @@ import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import { describeOtpDelivery } from '@/lib/auth/otp-delivery';
 import { loadPasswordResetOtp } from '@/lib/auth/password-reset-otp';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 
 export function ForgotPasswordVerifyPageContent() {
   const router = useRouter();
@@ -34,7 +35,7 @@ export function ForgotPasswordVerifyPageContent() {
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalizedOtp = otp.replace(/\D/g, '');
+    const normalizedOtp = toAsciiDigits(otp);
 
     if (normalizedOtp.length !== 6) {
       setErrorMessage('The OTP is invalid. Enter the 6 digit reset code.');
@@ -71,7 +72,7 @@ export function ForgotPasswordVerifyPageContent() {
         <OtpCodeInput
           value={otp}
           onChange={(value) => {
-            setOtp(value.replace(/\D/g, '').slice(0, 6));
+            setOtp(toAsciiDigits(value).slice(0, 6));
             setErrorMessage(null);
           }}
           length={6}

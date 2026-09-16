@@ -6,6 +6,7 @@ import { OtpCodeInput } from '@/components/auth/otp-code-input';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 
 export interface StepUpConfirmDialogProps {
   open: boolean;
@@ -85,7 +86,7 @@ export function StepUpConfirmDialog({
               autoFocus
               value={code}
               disabled={loading}
-              onChange={(next) => setCode(next.replace(/\D/g, '').slice(0, 6))}
+              onChange={(next) => setCode(toAsciiDigits(next).slice(0, 6))}
             />
           </div>
           <p id={codeHintId} className="text-xs leading-5 text-muted">

@@ -35,6 +35,7 @@ import type { PlaybackSession, VideoChapter, VideoLibraryProgress } from '@/lib/
 import { UpdateAppNotice } from '@/components/videos/update-app-notice';
 import { WebNotAllowedNotice } from '@/components/videos/web-not-allowed-notice';
 import { WatermarkOverlay } from '@/components/videos/watermark-overlay';
+import { isEditableEventTarget } from '@/lib/is-editable-target';
 import {
   SecureEmbedPlayer,
   type SecureEmbedPlayerHandle,
@@ -686,6 +687,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const handleKeyDown = useCallback(
     (event: ReactKeyboardEvent<HTMLDivElement>) => {
       const video = videoRef.current;
+      // Player shortcuts must never swallow typing inside the player chrome.
+      if (isEditableEventTarget(event.target)) return;
       const key = event.key;
       if (key === ' ' || key.toLowerCase() === 'k') {
         event.preventDefault();

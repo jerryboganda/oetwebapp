@@ -10,6 +10,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Services.StepUp;
 
@@ -66,7 +67,7 @@ public sealed class StepUpService(
             throw ApiException.Validation("step_up_scope_required", "A step-up scope is required.");
         }
 
-        var normalizedCode = code?.Trim() ?? string.Empty;
+        var normalizedCode = VerificationCodeDigits.Normalize(code);
         if (normalizedCode.Length != 6 || normalizedCode.Any(character => !char.IsDigit(character)))
         {
             throw ApiException.Forbidden("step_up_invalid_code", InvalidCodeMessage);

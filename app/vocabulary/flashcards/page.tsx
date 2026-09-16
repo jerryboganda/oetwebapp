@@ -17,6 +17,7 @@ import { fetchDueFlashcards, fetchRecallsAudio, submitFlashcardReview } from '@/
 import { analytics } from '@/lib/analytics';
 import { useRecallsAudioUpgrade } from '@/components/domain/recalls/audio-upgrade-modal';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { isEditableEventTarget } from '@/lib/is-editable-target';
 import { cleanExampleSentence } from '@/lib/vocabulary-example-sentence';
 import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
 
@@ -93,6 +94,8 @@ export default function FlashcardsPage() {
   useEffect(() => {
     function onKey(ev: KeyboardEvent) {
       if (!card || done) return;
+      // A window-level shortcut must never eat a keystroke aimed at a field.
+      if (isEditableEventTarget(ev.target)) return;
       if (ev.key === ' ' || ev.key === 'Enter') {
         ev.preventDefault();
         if (!flipped) setFlipped(true);

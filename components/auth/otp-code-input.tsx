@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 import styles from './auth-screen-shell.module.scss';
 
 interface OtpCodeInputProps {
@@ -27,7 +28,11 @@ export function OtpCodeInput({ value, onChange, length = 6, disabled = false, id
     inputRefs.current[index]?.select();
   };
 
-  const distributeDigits = (digits: string, startIndex: number) => {
+  const distributeDigits = (digits: string, fromIndex: number) => {
+    // A complete code always fills from the first box, wherever it entered —
+    // OS one-time-code AutoFill and a paste both land on whichever box happens
+    // to have focus, and the learner means "this is the whole code".
+    const startIndex = digits.length >= length ? 0 : fromIndex;
     const next = Array.from({ length }, (_, slot) => value[slot] ?? '');
 
     digits.split('').forEach((digit, offset) => {
@@ -52,23 +57,45 @@ export function OtpCodeInput({ value, onChange, length = 6, disabled = false, id
             inputRefs.current[index] = element;
           }}
           className={styles.otpInput}
+          type="text"
           inputMode="numeric"
-          autoComplete={index === 0 ? 'one-time-code' : 'off'}
-          maxLength={1}
+          pattern="[0-9]*"
+          enterKeyHint="done"
+          // Every box advertises one-time-code so OS AutoFill works whichever
+          // box has focus; a full code delivered to any box fills them all.
+          autoComplete="one-time-code"
+          // NOT maxLength={1}: that cap blocks typing into an already-filled box
+          // (tap-to-correct on iPad) and truncates a six-digit AutoFill to one
+          // character. Selecting on focus makes typing replace instead.
+          maxLength={length}
           value={value[index] ?? ''}
           disabled={disabled}
           aria-label={id ? `${id}-digit-${index + 1}` : `OTP digit ${index + 1}`}
           autoFocus={autoFocus && index === 0}
+          onFocus={(event) => event.target.select()}
           onChange={(event) => {
-            const digits = event.target.value.replace(/\D/g, '');
+            // Normalize BEFORE filtering: `\D` is ASCII-only, so an Arabic
+            // keyboard's digits would otherwise be deleted as "not a digit"
+            // and the box would stay empty while the keyboard is open.
+            let digits = toAsciiDigits(event.target.value);
 
             if (!digits) {
               onChange(updateCodeAtIndex(value, index, '', length));
               return;
             }
 
+            // Typing into a box that already holds a digit (tap-to-correct)
+            // yields two characters — the kept one plus the new one, in caret
+            // order. Keep only the new one instead of spilling into the next
+            // box. A longer run is a real paste and falls through.
+            const existing = value[index] ?? '';
+            if (existing && digits.length === 2) {
+              if (digits[0] === existing) digits = digits.slice(1);
+              else if (digits[1] === existing) digits = digits.slice(0, 1);
+            }
+
             if (digits.length > 1) {
-              distributeDigits(digits.slice(0, length - index), index);
+              distributeDigits(digits, index);
               return;
             }
 
@@ -95,13 +122,13 @@ export function OtpCodeInput({ value, onChange, length = 6, disabled = false, id
             }
           }}
           onPaste={(event) => {
-            const digits = event.clipboardData.getData('text').replace(/\D/g, '');
+            const digits = toAsciiDigits(event.clipboardData.getData('text'));
             if (!digits) {
               return;
             }
 
             event.preventDefault();
-            distributeDigits(digits.slice(0, length - index), index);
+            distributeDigits(digits.slice(0, length), index);
           }}
         />
       ))}

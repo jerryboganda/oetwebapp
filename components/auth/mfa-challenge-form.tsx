@@ -10,6 +10,7 @@ import { AuthScreenShell } from './auth-screen-shell';
 import { OtpCodeInput } from './otp-code-input';
 import styles from './auth-screen-shell.module.scss';
 import { readErrorMessage } from '@/lib/read-error-message';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 
 interface MfaChallengeFormProps {
   nextHref?: string | null;
@@ -26,7 +27,7 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
 
   const handleCodeSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const normalizedCode = code.replace(/\D/g, '');
+    const normalizedCode = toAsciiDigits(code);
 
     if (normalizedCode.length !== 6) {
       setError('Enter the 6-digit code from your authenticator app.');
@@ -104,7 +105,7 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
           <div className={styles.field}>
             <label htmlFor="mfa-code">Authenticator code</label>
             <OtpCodeInput id="mfa-code" autoFocus value={code} onChange={(next) => {
-              setCode(next.replace(/\D/g, '').slice(0, 6));
+              setCode(toAsciiDigits(next).slice(0, 6));
               setError(null);
             }} disabled={!pendingMfaChallenge || isSubmittingCode} />
             <p className={styles.fieldHint}>Use the live code from your authenticator app.</p>

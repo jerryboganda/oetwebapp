@@ -14,6 +14,7 @@ import { AuthScreenShell } from './auth-screen-shell';
 import { OtpCodeInput } from './otp-code-input';
 import styles from './auth-screen-shell.module.scss';
 import { readErrorMessage } from '@/lib/read-error-message';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 
 interface DeviceChallengeFormProps {
   nextHref?: string | null;
@@ -219,7 +220,7 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
       setError('Select which device to replace before verifying the code.');
       return;
     }
-    const normalizedCode = code.replace(/\D/g, '');
+    const normalizedCode = toAsciiDigits(code);
 
     if (normalizedCode.length !== 6) {
       setError(deliveryChannel === 'sms'
@@ -354,7 +355,7 @@ export function DeviceChallengeForm({ nextHref }: DeviceChallengeFormProps) {
         <div className={styles.field}>
           <label htmlFor="device-otp-code">Verification code</label>
           <OtpCodeInput value={code} onChange={(next) => {
-            setCode(next.replace(/\D/g, '').slice(0, 6));
+            setCode(toAsciiDigits(next).slice(0, 6));
             setError(null);
           }} disabled={!pendingDeviceChallenge || isSubmitting || (isReplacementRequired && !selectedDeviceId)} />
           <p className={styles.fieldHint}>

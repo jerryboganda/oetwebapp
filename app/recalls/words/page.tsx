@@ -28,6 +28,7 @@ import {
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { playTransientAudio } from '@/lib/recalls-audio';
+import { isEditableEventTarget } from '@/lib/is-editable-target';
 import { cleanExampleSentencesForList } from '@/lib/vocabulary-example-sentence';
 import { PracticeSpelling } from '@/components/domain/recalls/practice-spelling';
 import { SpellingTest } from '@/components/domain/recalls/spelling-test';
@@ -544,6 +545,7 @@ export default function RecallsWordsPage() {
                         tabIndex={0}
                         onClick={() => setShowLockedModal(true)}
                         onKeyDown={(event) => {
+                          if (isEditableEventTarget(event.target)) return;
                           if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
                             event.preventDefault();
                             setShowLockedModal(true);
@@ -580,6 +582,10 @@ export default function RecallsWordsPage() {
                       role="group"
                       tabIndex={0}
                       onKeyDown={(event) => {
+                        // Practice Spelling renders inside this card, so Space
+                        // must reach the input as a space instead of replaying
+                        // the audio and being swallowed by preventDefault().
+                        if (isEditableEventTarget(event.target)) return;
                         if (event.key === ' ' || event.code === 'Space') {
                           event.preventDefault();
                           playTerm(term);

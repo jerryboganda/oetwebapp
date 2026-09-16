@@ -351,4 +351,37 @@ describe('Recalls words page spelling practice and test (§3B, §3C)', () => {
     // Audio came from the existing recalls endpoint — no regeneration call exists.
     expect(mockFetchRecallsAudio).toHaveBeenCalledWith('term-dyspnoea', 'normal');
   });
+
+  // Remaining Work brief, issue 3 (15 Sep 2026): the spelling input renders
+  // INSIDE the term card, whose onKeyDown replayed the audio on Space and
+  // called preventDefault() unconditionally — so every space was swallowed and
+  // a multi-word answer was impossible to type.
+  it('types a space inside Practice Spelling instead of replaying the audio', async () => {
+    const user = userEvent.setup();
+    render(<RecallsWordsPage />);
+
+    await user.click(await screen.findByRole('button', { name: 'Practice Spelling' }));
+    const input = screen.getByPlaceholderText('Type the word you hear');
+
+    // Opening practice auto-plays the word once; nothing after that may replay.
+    await waitFor(() => expect(mockPlayTransientAudio).toHaveBeenCalledTimes(1));
+
+    await user.type(input, 'abdominal myomectomy');
+
+    expect(input).toHaveValue('abdominal myomectomy');
+    expect(mockPlayTransientAudio).toHaveBeenCalledTimes(1);
+  });
+
+  it('still replays the audio when Space is pressed on the card itself', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<RecallsWordsPage />);
+    await screen.findAllByText('dyspnoea');
+
+    const card = container.querySelector('article');
+    expect(card).not.toBeNull();
+    (card as HTMLElement).focus();
+    await user.keyboard(' ');
+
+    await waitFor(() => expect(mockPlayTransientAudio).toHaveBeenCalled());
+  });
 });

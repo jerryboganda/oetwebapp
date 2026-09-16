@@ -28,6 +28,7 @@ import {
 import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { COUNTRY_OPTIONS } from '@/lib/countries';
+import { toAsciiDigits } from '@/lib/normalize-digits';
 
 const stepMeta = [
   { title: 'Personal', caption: 'Name, email, mobile' },
@@ -362,7 +363,7 @@ export function RegisterForm() {
                   autoComplete="tel-national"
                   inputMode="numeric"
                   onChange={(event) =>
-                    setMobileLocalNumber(event.target.value.replace(/\D/g, ''))
+                    setMobileLocalNumber(toAsciiDigits(event.target.value))
                   }
                 />
               </div>
