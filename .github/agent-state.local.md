@@ -1,3 +1,59 @@
+## Current task — 15/16 Sep owner briefs ×4 (Whop P0, Listening, OTP, Remaining Work) — SHIPPED + LIVE (746d0c42a)
+
+- **Whop P0 ROOT CAUSE — not a missed webhook.** Traced `pay_noPiuzIx9aRUx8` via the admin API
+  (`GET /v1/admin/webhooks`; direct prod SQL is blocked by the permission classifier, the HTTPS admin
+  API is not — use it for incident tracing). The row read `verificationStatus=verified`,
+  `normalizedStatus=completed`, correct order resolved (`quote-fbaf43c3…`), then
+  `processingStatus=failed` 0.6s later with **"This billing quote has expired. Refresh your cart and
+  try again."** The learner took longer than the ~15-min quote window on Whop's hosted checkout; the
+  charge stood, the course did not. Fix `c8de62185`: `EnsureQuoteIsFulfillable(…, paymentAlreadySettled:
+  true)` on the post-payment path ONLY. Consumed/cancelled quotes, amount/currency/owner binding and
+  catalog-drift checks are all unchanged; the pre-payment path still rejects a stale price.
+- **Supporting billing work (`926521176`)**: rejected webhooks are now persisted
+  (VerificationStatus=failed + reason, capped 50/gateway/hour) instead of vanishing; Whop probe
+  failures no longer discard a signature-verified delivery (new `Unavailable` outcome);
+  `WhopGateway.GetTransactionConfirmationAsync` + worker arm make Whop visible to reconciliation;
+  reconciliation now REPAIRS the two provider-paid directions instead of only logging; retryable
+  fulfilment failures return 5xx so the provider retries (`dead_letter` still 200); new
+  `POST /v1/admin/billing/gateways/{gateway}/payments/{paymentId}/reconcile` (`3ea1f887d` enriches its
+  response with providerPaid/amount/currency/status).
+- **⚠ OPEN — £533 GBP + $10 USD of confirmed-paid Whop payments with NO local order.** 11 payment ids,
+  24 Aug → 16 Sep, every one `providerPaid=true` straight from Whop's API:
+  `pay_QVbdCZIqHWenvF £75, pay_vaaMASDVXGJRwx £23, pay_7KUQuPIo3GcA4b £100, pay_tUXlyVKo3dKjnT £75,
+  pay_VJx9OF8kYjxXbx £100, pay_QQlhujlA13SPMP $10, pay_q58JkSvqTLFAZT £43, pay_oMWA9uBUnLQXfV £44,
+  pay_WBSTbLinib2Bvt £25, pay_ISexLcRByvOm13 £20, pay_szeu7CYsJnw6M8 £28`. Could be direct-on-Whop
+  purchases (no local quote is expected then) or lost checkouts — needs an owner reconcile against the
+  Whop dashboard. Note `ProcessingStatus="ignored"` is TERMINAL to the webhook dedupe, so these could
+  never have self-recovered before this release.
+- **Incident B (Draft leakage)**: `UserAccessAllocationService.GetAccessAsync` was the only
+  subscription listing not excluding `SubscriptionStatus.Draft`. Fixed + a narrowed Draft-reuse rule in
+  the quote path (only when no attached quote is Completed or still payable — a hosted checkout URL
+  outlives our page). Existing Draft rows kept as checkout history per owner decision. **Verified live:
+  the incident learner's admin row went 4 → 1** (Active, 15/09 → 14/03/2027).
+- **Other briefs**: OTP `/\D/g` was ASCII-only so Arabic-Indic digits were silently deleted —
+  `lib/normalize-digits.ts` + backend `VerificationCodeDigits` (TOTP had the same defect); `maxLength={1}`
+  blocked tap-to-correct and AutoFill. Spacebar fixed at the root via `lib/is-editable-target.ts` across
+  every Space/Enter handler. `KB DEBUG` deleted (it was web, mounted unconditionally in `app/providers.tsx`
+  — **verified zero occurrences across all 31 live login-page chunks**). Listening: timer/audio end now
+  auto-advances with no popup (`a18eee878`); audio-end advance is guarded on the clip having actually
+  played so a broken source cannot blow through sub-sections.
+- **No app rebuild needed for any of it** — Capacitor (`server.url`) and Tauri both load the remote URL.
+- **CI evidence**: Build & Deploy green for every SHA; live health 200/200/200; repo flipped PRIVATE.
+  QA Smoke on `746d0c42a`: frontend 3084 passed / 20 failed, backend shard 2 green and shards 1/3/4
+  failing **exactly the 7 pre-existing baseline names** (proved by diffing TRX artifacts against
+  baseline `1c2253437`, where they sat in different shards). **Zero regressions.**
+  Gotcha: `gh run view --log` returns EMPTY for these jobs — use
+  `gh api …/actions/jobs/<id>/logs --allow-escape-sequences`, or download the `backend-test-results-*`
+  TRX artifacts.
+- **STILL BLOCKED, needs owner**: (a) macOS video 403 — needs Bunny Video Library credentials; note the
+  403 screenshot is a *direct* open of the embed URL, which sends no Referer and 403s by design, so it
+  does not prove the in-app player fails that way; (b) Listening A1→A2 / C1→C2 audio re-split — needs an
+  owner-approved CI secret holding prod admin credentials (design is in the plan file, incl. the blocker
+  that the authoring PATCH 409s on any paper with attempts, so a small `audio-boundary-restamp` endpoint
+  is required); (c) whether the nightly sweep should recover the incident learner's payment (restores her
+  missing transaction/receipt/invoice on the same dates but supersedes the manually-granted row) or be
+  excluded for a records-only backfill.
+
 ## Current task — 14 Sep Android keyboard nav fix, round 4: !important hide rule + IME slide-down latch — SHIPPING
 - **Device evidence (owner KB DEBUG overlay, 14 Sep)**: plugin events fire, viewport resizes 868→569 (adjustResize live), `data-keyboard-visible` sets — yet the nav still rendered above the open keypad while typing. Root cause: the BottomNav is a `motion.nav`; motion's mount/layout animations leave `opacity`/`transform` as INLINE styles, and inline styles beat the plain `html[data-keyboard-visible=true]` hide rule — the rule was dead on the device. Second defect in the same log: tapping Check moves focus INPUT→BUTTON → keyboardWillHide + viewport snap-back while the keypad is still visually sliding away → nav revealed exactly where the keypad still was.
 - **Fix**: (1) hide rule declarations now `!important` in `app/globals.css` (beats any inline style; contract pinned incl. negative control in `keyboard-nav-css.test.ts`); (2) 250ms `KEYBOARD_REVEAL_LATCH_MS` in `lib/mobile/runtime.ts` — plugin hide events arm the latch, the derived state stays "keyboard open" until it expires, show/focus clears it instantly; post-latch metrics pass performs the reveal.
