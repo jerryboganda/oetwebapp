@@ -11,6 +11,22 @@ using OetLearner.Api.Services.Billing.Gateways;
 namespace OetLearner.Api.Services.Billing;
 
 /// <summary>
+/// Result of an on-demand payment recovery. <see cref="Outcome"/> is the
+/// human-readable trace; the provider fields carry what the gateway itself
+/// reported during the server-side check, so an admin triaging a backlog of
+/// unmatched payments can see amount and status without opening the gateway
+/// dashboard. Provider fields are null when the provider could not be reached.
+/// </summary>
+public sealed record PaymentRecoveryResult(
+    string Outcome,
+    bool? ProviderPaid = null,
+    decimal? ProviderAmount = null,
+    string? ProviderCurrency = null,
+    string? ProviderStatus = null,
+    string? LearnerUserId = null,
+    string? GatewayTransactionId = null);
+
+/// <summary>
 /// PAY-19 / MON-07 — daily billing reconciliation sweep.
 ///
 /// The only pre-existing reconciliation was the inline, learner-poll driven
@@ -148,11 +164,11 @@ public sealed class BillingReconciliationWorker(
     ///
     /// Returns a human-readable trace for the admin response. Never throws.
     /// </summary>
-    public async Task<string> RecoverPaymentAsync(string gatewayName, string paymentId, CancellationToken ct)
+    public async Task<PaymentRecoveryResult> RecoverPaymentAsync(string gatewayName, string paymentId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(gatewayName) || string.IsNullOrWhiteSpace(paymentId))
         {
-            return "no_action (gateway and payment id are both required)";
+            return new PaymentRecoveryResult("no_action (gateway and payment id are both required)");
         }
 
         try
@@ -171,7 +187,9 @@ public sealed class BillingReconciliationWorker(
 
             if (recorded is not null && string.Equals(recorded.ProcessingStatus, "completed", StringComparison.OrdinalIgnoreCase))
             {
-                return $"already_fulfilled (event {recorded.GatewayEventId} processed at {recorded.ProcessedAt:O})";
+                return new PaymentRecoveryResult(
+                    $"already_fulfilled (event {recorded.GatewayEventId} processed at {recorded.ProcessedAt:O})",
+                    GatewayTransactionId: recorded.GatewayTransactionId);
             }
 
             // 2. Confirm with the provider server-side before anything is granted —
@@ -179,12 +197,27 @@ public sealed class BillingReconciliationWorker(
             var status = await QueryProviderStatusAsync(gateways, db, gatewayName, paymentId, ct);
             if (status is null)
             {
-                return "unverified (the provider could not confirm this payment; nothing was granted)";
+                return new PaymentRecoveryResult(
+                    "unverified (the provider could not confirm this payment; nothing was granted)",
+                    GatewayTransactionId: recorded?.GatewayTransactionId);
             }
+
+            // Everything from here on carries what the PROVIDER says, so an admin can
+            // triage a backlog without opening the gateway dashboard.
+            var providerFacts = new PaymentRecoveryResult(
+                string.Empty,
+                ProviderPaid: status.Paid,
+                ProviderAmount: status.Amount,
+                ProviderCurrency: status.Currency,
+                ProviderStatus: status.RawStatus,
+                GatewayTransactionId: recorded?.GatewayTransactionId);
 
             if (!status.Paid)
             {
-                return $"not_paid (provider status: {status.RawStatus ?? "unpaid"}; nothing was granted)";
+                return providerFacts with
+                {
+                    Outcome = $"not_paid (provider status: {status.RawStatus ?? "unpaid"}; nothing was granted)",
+                };
             }
 
             if (recorded is not null)
@@ -193,7 +226,10 @@ public sealed class BillingReconciliationWorker(
                 recorded.VerificationStatus = "verified";
                 recorded.VerifiedAt ??= now;
                 await db.SaveChangesAsync(ct);
-                return await TryReapplyWebhookEventAsync(db, fulfilment, recorded, ct);
+                return providerFacts with
+                {
+                    Outcome = await TryReapplyWebhookEventAsync(db, fulfilment, recorded, ct),
+                };
             }
 
             // 3. No event at all — the webhook was never delivered. Find the local
@@ -208,16 +244,24 @@ public sealed class BillingReconciliationWorker(
 
             if (txn is null)
             {
-                return "unmatched (the provider confirms this payment but no local order references it; "
-                    + "resolve the order manually before granting)";
+                return providerFacts with
+                {
+                    Outcome = "unmatched (the provider confirms this payment but no local order references it; "
+                        + "resolve the order manually before granting)",
+                };
             }
 
-            return await TryRecoverPaidTransactionAsync(db, fulfilment, txn, status, now, ct);
+            return providerFacts with
+            {
+                Outcome = await TryRecoverPaidTransactionAsync(db, fulfilment, txn, status, now, ct),
+                LearnerUserId = txn.LearnerUserId,
+                GatewayTransactionId = txn.GatewayTransactionId,
+            };
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "On-demand reconciliation failed for {Gateway} payment {PaymentId}.", gatewayName, paymentId);
-            return $"recovery_failed ({ex.GetType().Name})";
+            return new PaymentRecoveryResult($"recovery_failed ({ex.GetType().Name})");
         }
     }
 

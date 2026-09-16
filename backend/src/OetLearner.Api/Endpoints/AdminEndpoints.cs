@@ -842,12 +842,7 @@ public static class AdminEndpoints
                 string paymentId,
                 OetLearner.Api.Services.Billing.BillingReconciliationWorker reconciliation,
                 CancellationToken ct)
-            => Results.Ok(new
-            {
-                gateway,
-                paymentId,
-                outcome = await reconciliation.RecoverPaymentAsync(gateway, paymentId, ct),
-            }))
+            => Results.Ok(await reconciliation.RecoverPaymentAsync(gateway, paymentId, ct)))
             .WithAdminWrite("AdminSystemAdmin");
 
         // ── Review Escalation (Disagreement Resolution) ─────
