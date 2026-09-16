@@ -13,6 +13,9 @@ export function isEditableEventTarget(target: EventTarget | null): boolean {
     target instanceof HTMLInputElement
     || target instanceof HTMLTextAreaElement
     || target instanceof HTMLSelectElement
-    || target.isContentEditable
+    // `=== true`, not a bare truthiness check: `isContentEditable` is typed
+    // boolean but is undefined on a detached element (and in jsdom), which would
+    // leak undefined out of a function that promises a boolean.
+    || target.isContentEditable === true
   );
 }
