@@ -20,6 +20,11 @@ on:
         description: 'Version code / build number (integer)'
         required: true
         type: string
+      publish_vps_ipa:
+        description: 'Also publish the IPA to the VPS feed (INTERNAL/ADMIN ONLY — never candidate-facing; candidates install via TestFlight/App Store)'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: mobile-release
@@ -313,9 +318,9 @@ jobs:
           MOBILE_VERSION: ${{ inputs.version }}
           MOBILE_VERSION_CODE: ${{ inputs.version_code }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          IOS_DISTRIBUTION_CERT_BASE64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
-          IOS_DISTRIBUTION_CERT_PASSWORD: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_ID_IOS: ${{ secrets.ASC_KEY_ID_IOS }}
+          ASC_PRIVATE_KEY_IOS: ${{ secrets.ASC_PRIVATE_KEY_IOS }}
 
       - name: Build Next.js
         run: pnpm run build
@@ -374,32 +379,55 @@ jobs:
             || /usr/libexec/PlistBuddy -c "Set :OET_ATTEST_SECRET $OET_MOBILE_ATTEST_SECRET" ios/App/App/Info.plist
           echo "Injected OET_ATTEST_SECRET into ios/App/App/Info.plist."
 
-      - name: Import signing certificate
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.IOS_DISTRIBUTION_CERT_BASE64 }}
-          p12-password: ${{ secrets.IOS_DISTRIBUTION_CERT_PASSWORD }}
-
-      - name: Install provisioning profile
+      # 17 Sep 2026 handover: signing moved from manually-supplied cert/profile
+      # secrets (never configured) to App Store Connect API-key cloud signing.
+      # xcodebuild -allowProvisioningUpdates with -authenticationKey* creates
+      # and fetches the Apple Distribution certificate and App Store profile
+      # on demand via the ASC API (Developer-role key ASC_KEY_ID_IOS), so no
+      # .p12/.mobileprovision secrets are needed. Dormant until the ASC keys
+      # authenticate (currently 401-blocked; see .tools-state/apple-api-keys).
+      - name: Stage App Store Connect API key
         env:
-          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          ASC_KEY_ID_IOS: ${{ secrets.ASC_KEY_ID_IOS }}
+          ASC_PRIVATE_KEY_IOS: ${{ secrets.ASC_PRIVATE_KEY_IOS }}
         run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | base64 -d > ~/Library/MobileDevice/Provisioning\ Profiles/oetprep.mobileprovision
+          set -euo pipefail
+          if [ -z "$ASC_KEY_ID_IOS" ] || [ -z "$ASC_PRIVATE_KEY_IOS" ]; then
+            echo "::error::ASC_KEY_ID_IOS / ASC_PRIVATE_KEY_IOS are not configured — cannot sign the iOS build."
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/asc" "$HOME/private_keys"
+          printf '%s\n' "$ASC_PRIVATE_KEY_IOS" > "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID_IOS}.p8"
+          # altool/notarytool look the key up in well-known paths:
+          cp "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID_IOS}.p8" "$HOME/private_keys/"
+          chmod 600 "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID_IOS}.p8" "$HOME/private_keys/AuthKey_${ASC_KEY_ID_IOS}.p8"
+          echo "ASC key staged for ${ASC_KEY_ID_IOS}."
 
       - name: Build archive
         working-directory: ios/App
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID_IOS: ${{ secrets.ASC_KEY_ID_IOS }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           xcodebuild archive \
             -workspace App.xcworkspace \
             -scheme App \
-            -archivePath $RUNNER_TEMP/App.xcarchive \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
             -destination 'generic/platform=iOS' \
-            -configuration Release
+            -configuration Release \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID_IOS}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID_IOS" \
+            -authenticationKeyIssuer "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic
 
       - name: Export IPA
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          ASC_KEY_ID_IOS: ${{ secrets.ASC_KEY_ID_IOS }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
@@ -422,14 +450,22 @@ jobs:
             <string>app-store-connect</string>
             <key>teamID</key>
             <string>${escapedTeamId}</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadSymbols</key>
+            <true/>
           </dict>
           </plist>
           `);
           NODE
           xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/App.xcarchive \
-            -exportPath $RUNNER_TEMP/ipa \
-            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            -exportPath "$RUNNER_TEMP/ipa" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/asc/AuthKey_${ASC_KEY_ID_IOS}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID_IOS" \
+            -authenticationKeyIssuer "$ASC_ISSUER_ID"
 
       # Inspects the exported IPA itself. The artifact is what the App Store and
       # the device act on, and Xcode resolves the deployment target, device
@@ -442,6 +478,19 @@ jobs:
             --root "$RUNNER_TEMP/ipa" \
             --require-signature
 
+      # Handover 4A/4E: production iOS updates are distributed through the
+      # App Store, so the signed IPA goes straight to TestFlight. The raw
+      # IPA is never a candidate download (no .ipa buttons anywhere).
+      - name: Upload to TestFlight
+        env:
+          ASC_KEY_ID_IOS: ${{ secrets.ASC_KEY_ID_IOS }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          ipa="$(find "$RUNNER_TEMP/ipa" -name '*.ipa' -print -quit)"
+          test -n "$ipa" && test -s "$ipa"
+          xcrun altool --upload-app --type ios -f "$ipa" \
+            --apiKey "$ASC_KEY_ID_IOS" --apiIssuer "$ASC_ISSUER_ID"
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
@@ -450,9 +499,12 @@ jobs:
           retention-days: 90
 
   publish-ios:
-    name: Publish signed iOS release
+    name: Publish signed iOS release (internal VPS copy)
     needs: ios-release
-    if: inputs.platform == 'ios' || inputs.platform == 'both'
+    # Internal/administrative IPA mirror only. Candidates must install via
+    # TestFlight / the App Store - a raw .ipa is never candidate-facing
+    # (handover 4A). Defaults to skip.
+    if: (inputs.platform == 'ios' || inputs.platform == 'both') && inputs.publish_vps_ipa == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
