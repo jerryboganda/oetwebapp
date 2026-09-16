@@ -61,7 +61,8 @@ fn normalize(value: &str) -> Option<String> {
 /// overridden — in DEV builds only — by a copy in userData, then by env (so a
 /// developer can target a local/staging deployment without rebuilding).
 ///
-/// Packaged builds ignore both overrides: the navigation guard trusts whatever
+/// Packaged builds ignore both overrides and always load the production web
+/// origin (DEFAULT_WEB_URL), whatever any config file says: the navigation guard trusts whatever
 /// origin this returns, and the compiled-in dev-localhost capability grants
 /// sign-video-challenge to loopback, so an override let anyone with the app point
 /// it at a local page and mint real video-playback attestations outside the
@@ -102,6 +103,10 @@ fn load_runtime_config_with(
         }
     }
     if !allow_overrides {
+        // Even the resource copy is user-writable (per-user Windows install dir,
+        // a user-owned .app), so a packaged build never takes its web origin from
+        // disk: resolve_web_url falls back to the production DEFAULT_WEB_URL.
+        merged.public_web_base_url = None;
         return merged;
     }
     // Env wins (dev/staging overrides).
@@ -203,7 +208,7 @@ mod tests {
         std::fs::create_dir_all(&ud).unwrap();
         std::fs::write(
             res.join("desktop-runtime-config.json"),
-            "{\"publicWebBaseUrl\":\"https://app.oetwithdrhesham.co.uk\"}",
+            "{\"publicWebBaseUrl\":\"http://127.0.0.1:8080\"}",
         )
         .unwrap();
         std::fs::write(
@@ -212,7 +217,7 @@ mod tests {
         )
         .unwrap();
         let cfg = load_runtime_config_with(&res, &ud, false);
-        assert_eq!(resolve_web_url(&cfg), "https://app.oetwithdrhesham.co.uk");
+        assert_eq!(resolve_web_url(&cfg), DEFAULT_WEB_URL);
         std::fs::remove_dir_all(&tmp).ok();
     }
 
