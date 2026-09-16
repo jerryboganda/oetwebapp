@@ -1,4 +1,5 @@
 using OetLearner.Api.Services;
+using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
