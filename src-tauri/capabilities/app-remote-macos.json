@@ -1,0 +1,19 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "app-remote-macos",
+  "description": "macOS-only IPC for the live web app (0.7.9): native fullscreen of this app's OWN main window. The protected video player uses it so fullscreen stays inside the same capture-protected NSWindow instead of WebKit element fullscreen, which moves the web view into a new, unprotected window. It reads/writes no data. Kept out of app-remote.json so Windows/Linux shells never expose a fullscreen toggle to the remote origin.",
+  "remote": {
+    "urls": [
+      "https://app.oetwithdrhesham.co.uk"
+    ]
+  },
+  "platforms": [
+    "macOS"
+  ],
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:window:allow-set-fullscreen"
+  ]
+}

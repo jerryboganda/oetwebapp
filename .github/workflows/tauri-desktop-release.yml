@@ -341,10 +341,26 @@ jobs:
           app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' -print -quit)"
           dmg="$(find src-tauri/target -type f -name '*.dmg' -print -quit)"
 
+          # dmg-only bundle.targets: Tauri deletes the intermediate .app (see the
+          # architecture gate above), so verify the .app inside the shipped DMG.
+          mountpoint=""
+          if [ -z "$app" ] && [ -n "$dmg" ]; then
+            mountpoint="$(mktemp -d)"
+            hdiutil attach "$dmg" -nobrowse -readonly -mountpoint "$mountpoint" >/dev/null
+            app="$(find "$mountpoint" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          fi
+          if [ -z "$app" ]; then
+            echo "No .app found to verify (neither bundle/macos nor inside the DMG)." >&2
+            exit 1
+          fi
+
           echo "== .app: $app =="
           codesign --verify --deep --strict --verbose=2 "$app"
           xcrun stapler validate "$app"
           spctl --assess --type exec --verbose=4 "$app"
+          if [ -n "$mountpoint" ]; then
+            hdiutil detach "$mountpoint" >/dev/null
+          fi
 
           if [ -z "$dmg" ]; then
             echo "::warning::No .dmg was produced, so only the .app could be verified."

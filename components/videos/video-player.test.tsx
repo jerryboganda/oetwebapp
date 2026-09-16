@@ -138,6 +138,7 @@ describe('VideoPlayer presentation controls', () => {
       platform: 'darwin',
       window: { setFullscreen },
       runtime: {
+        info: () => Promise.resolve({ windowState: { isFullScreen: false } }),
         onWindowStateChange: (listener: (state: { isFullScreen: boolean }) => void) => {
           emitWindowState = listener;
           return () => {};
@@ -153,8 +154,9 @@ describe('VideoPlayer presentation controls', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
     await screen.findByRole('button', { name: 'Exit fullscreen' });
-    expect(setFullscreen).toHaveBeenLastCalledWith(true);
+    await waitFor(() => expect(setFullscreen).toHaveBeenLastCalledWith(true));
     expect(player).toHaveClass('fixed', 'inset-0');
+    expect(document.documentElement).toHaveAttribute('data-video-fill');
     expect(requestFullscreen).not.toHaveBeenCalled();
 
     // Leaving native fullscreen from the green button / View menu ends it too.
@@ -165,12 +167,31 @@ describe('VideoPlayer presentation controls', () => {
     await screen.findByRole('button', { name: 'Fullscreen' });
     expect(setFullscreen).toHaveBeenLastCalledWith(false);
     expect(player).not.toHaveClass('fixed');
+    expect(document.documentElement).not.toHaveAttribute('data-video-fill');
 
     fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
     await screen.findByRole('button', { name: 'Exit fullscreen' });
     fireEvent.keyDown(window, { key: 'Escape' });
     await screen.findByRole('button', { name: 'Fullscreen' });
     expect(requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('macOS fullscreen leaves native fullscreen alone when the learner already had it on', async () => {
+    const setFullscreen = vi.fn(() => Promise.resolve());
+    window.desktopBridge = {
+      platform: 'darwin',
+      window: { setFullscreen },
+      runtime: {
+        info: () => Promise.resolve({ windowState: { isFullScreen: true } }),
+        onWindowStateChange: () => () => {},
+      },
+    } as unknown as DesktopBridge;
+    renderPlayer();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Fullscreen' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Exit fullscreen' }));
+    await screen.findByRole('button', { name: 'Fullscreen' });
+    expect(setFullscreen).not.toHaveBeenCalled();
   });
 
   it('"Try again" goes back through the capture-protection gate instead of starting playback directly', async () => {

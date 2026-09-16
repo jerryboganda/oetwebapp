@@ -92,13 +92,14 @@
     },
     captureProtection: {
       // OS-level screen-capture exclusion for the whole window (Windows
-      // WDA_EXCLUDEFROMCAPTURE / macOS NSWindow sharingType None). Since 0.7.9 the
-      // window is protected from creation and set(false) is refused, so the video
-      // player's set(true) only re-asserts it. Resolves { ok: boolean }.
+      // WDA_EXCLUDEFROMCAPTURE / macOS NSWindow sharingType None). On macOS (0.7.9+)
+      // the window is protected from creation and set(false) is refused; Windows
+      // toggles it per playback. Resolves { ok: boolean }.
       set: (enabled) => invoke('set_capture_protection', { enabled: !!enabled }),
     },
     window: {
-      // Native fullscreen of THIS window (0.7.9). The macOS video player uses it
+      // Native fullscreen of THIS window (0.7.9, granted on macOS only by
+      // capabilities/app-remote-macos.json). The macOS video player uses it
       // instead of WebKit element fullscreen, which would move the web view into
       // a separate NSWindow that capture protection does not cover.
       setFullscreen: (enabled) =>

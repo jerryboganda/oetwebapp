@@ -11,7 +11,7 @@
     "windows": [],
     "security": {
       "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://app.oetwithdrhesham.co.uk https://api.oetwithdrhesham.co.uk; object-src 'none'; base-uri 'self'; frame-ancestors 'none'",
-      "capabilities": ["default", "app-remote", "dev-localhost"]
+      "capabilities": ["default", "app-remote", "app-remote-macos", "dev-localhost"]
     }
   },
   "plugins": {

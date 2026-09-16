@@ -219,21 +219,24 @@ pub fn hard_reload(app: AppHandle, state: State<'_, RuntimeState>) -> Result<(),
 
 // ── screen-capture protection ────────────────────────────────────────
 
-/// Re-assert OS-level screen-capture exclusion on the main window (Windows
+/// Toggle OS-level screen-capture exclusion on the main window (Windows
 /// WDA_EXCLUDEFROMCAPTURE / macOS NSWindow.sharingType = None, via Tauri's
-/// set_content_protected). The window is already built protected (lib.rs
-/// `content_protected(true)`) and stays protected for its whole life, so this can
-/// only harden: `enabled: false` is refused with `ok: false` — neither the page nor
-/// an injected script can lift protection. The video player treats `ok: false` on
-/// enable as a hard playback gate. `ok` means the OS call was applied, NOT that
-/// capture is proven blocked: macOS documents sharingType as a legacy hint that
-/// ScreenCaptureKit recorders (QuickTime, ⇧⌘5) do not honour.
+/// set_content_protected). The video player requires `ok: true` on enable as a
+/// hard playback gate; other OSes have no such control and return `ok: false`.
+/// macOS builds the window protected (lib.rs) and REFUSES `enabled: false`, so
+/// neither the page nor an injected script can lift it there; Windows keeps
+/// per-playback protection (see lib.rs for why). `ok` means the OS call was
+/// dispatched, NOT that capture is proven blocked: macOS documents sharingType as a
+/// legacy hint that ScreenCaptureKit recorders (QuickTime, ⇧⌘5) do not honour.
 #[tauri::command]
 pub fn set_capture_protection(app: AppHandle, enabled: bool) -> Value {
-    let ok = enabled
+    let supported = cfg!(any(windows, target_os = "macos"));
+    let lift_refused = !enabled && cfg!(target_os = "macos");
+    let ok = supported
+        && !lift_refused
         && app
             .get_webview_window("main")
-            .is_some_and(|win| win.set_content_protected(true).is_ok());
+            .is_some_and(|win| win.set_content_protected(enabled).is_ok());
     json!({ "ok": ok })
 }
 

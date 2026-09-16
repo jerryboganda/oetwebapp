@@ -9,8 +9,8 @@ import { reportProtectionEvent } from '@/lib/api/video-protection';
  * native shells the app window is excluded from capture where the OS honours it:
  *
  *   - Desktop (Tauri, shell >= 0.6.2): Windows SetWindowDisplayAffinity
- *     (WDA_EXCLUDEFROMCAPTURE) / macOS NSWindow.sharingType = None. From 0.7.9 the
- *     window is protected from creation and this only re-asserts it. macOS treats
+ *     (WDA_EXCLUDEFROMCAPTURE) / macOS NSWindow.sharingType = None. On macOS 0.7.9+
+ *     the window is protected from creation and this only re-asserts it. macOS treats
  *     sharingType as a legacy hint: ScreenCaptureKit recorders (QuickTime, ⇧⌘5)
  *     are documented to ignore it — only FairPlay DRM reliably blacks out video.
  *   - Mobile (Capacitor): Android FLAG_SECURE (blocks stills AND recordings —

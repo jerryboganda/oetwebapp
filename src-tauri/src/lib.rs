@@ -60,7 +60,8 @@ fn handle_deep_link_url(app: &AppHandle, url: &str) {
 /// decidePolicyForNavigationAction has no main-frame filter; WebView2 only
 /// reports main-frame navigations), so without this the protected Bunny player
 /// was cancelled and its signed URL handed to Safari (0.7.8 P0).
-const EMBED_HOSTS: &[&str] = &["iframe.mediadelivery.net"];
+// Mirrors the Bunny entries of the web CSP frame-src (proxy.ts bunnyPlayerOrigins).
+const EMBED_HOSTS: &[&str] = &["iframe.mediadelivery.net", "player.mediadelivery.net"];
 
 /// HTTPS-only origin lock. Allows the bundled splash, the trusted remote origin
 /// (and its sub-paths — same-origin SPA routing), the embedded video player host,
@@ -295,11 +296,6 @@ pub fn run() {
                     .title("OET with Dr. Hesham")
                     .inner_size(1440.0, 980.0)
                     .min_inner_size(1200.0, 800.0)
-                    // Capture-protected from the moment the window exists (Windows
-                    // WDA_EXCLUDEFROMCAPTURE / macOS NSWindow.sharingType = None) and
-                    // for its whole life — never dependent on the remote page asking
-                    // (commands::set_capture_protection can only re-assert it).
-                    .content_protected(true)
                     .initialization_script(bridge_script(&remote_url))
                     .on_navigation(move |url| {
                         if is_allowed_origin(url, &guard_remote) {
@@ -344,8 +340,17 @@ pub fn run() {
             //    (WebView2 blank-screen / perf risk). A bare
             //    --disable-features=DirectCompositionVideoOverlays is a NO-OP (no such
             //    base::Feature). macOS uses NSWindow.sharingType and is unaffected.
-            //    The window is now protected from creation (content_protected above),
-            //    so these flags matter for every page, not just the video player.
+            // macOS: capture-protected (NSWindow.sharingType = None) from the moment
+            // the window exists and for its whole life — never dependent on the
+            // remote page asking; commands::set_capture_protection refuses to lift
+            // it. Windows keeps per-playback protection: WDA_EXCLUDEFROMCAPTURE
+            // makes the window vanish from shares, which would break screen sharing
+            // in the in-app Zoom classes on every page.
+            #[cfg(target_os = "macos")]
+            {
+                builder = builder.content_protected(true);
+            }
+
             #[cfg(windows)]
             {
                 builder = builder.additional_browser_args(
@@ -354,6 +359,8 @@ pub fn run() {
             }
 
             let window = builder.build()?;
+            #[cfg(target_os = "macos")]
+            disable_picture_in_picture(&window);
             let _ = window.show();
 
             // Deep links arriving while the app runs (macOS open-url & runtime registration).
@@ -470,6 +477,32 @@ pub fn run() {
     app.run(|_handle, _event| {});
 }
 
+/// wry turns WKWebView picture-in-picture ON for every webview (private KVC key
+/// `allowsPictureInPictureMediaPlayback`). A PiP window floats outside this
+/// capture-protected NSWindow and outside the watermark overlay, and WebKit has no
+/// `picture-in-picture` Permissions-Policy, so an iframe `allow` list can't stop
+/// it — switch the preference back off natively.
+#[cfg(target_os = "macos")]
+fn disable_picture_in_picture(window: &tauri::WebviewWindow) {
+    let _ = window.with_webview(|webview| {
+        use objc2::runtime::AnyObject;
+        use objc2::{class, msg_send};
+        // SAFETY: inner() is the live WKWebView*; with_webview runs this on the main
+        // thread. configuration/preferences return the webview's live WKPreferences.
+        unsafe {
+            let wk_webview = webview.inner() as *mut AnyObject;
+            let configuration: *mut AnyObject = msg_send![wk_webview, configuration];
+            let preferences: *mut AnyObject = msg_send![configuration, preferences];
+            let no: *mut AnyObject = msg_send![class!(NSNumber), numberWithBool: false];
+            let key: *mut AnyObject = msg_send![
+                class!(NSString),
+                stringWithUTF8String: c"allowsPictureInPictureMediaPlayback".as_ptr()
+            ];
+            let _: () = msg_send![preferences, setValue: no, forKey: key];
+        }
+    });
+}
+
 fn bridge_script(remote_url: &str) -> String {
     let platform = match std::env::consts::OS {
         "windows" => "win32",
@@ -499,6 +532,7 @@ mod tests {
     #[test]
     fn keeps_the_protected_bunny_player_in_the_window() {
         assert!(allowed("https://iframe.mediadelivery.net/embed/123/abc?token=t&expires=1"));
+        assert!(allowed("https://player.mediadelivery.net/embed/123/abc"));
         assert!(allowed("about:blank"));
         assert!(allowed("about:srcdoc"));
         assert!(allowed("https://app.oetwithdrhesham.co.uk/videos/abc"));

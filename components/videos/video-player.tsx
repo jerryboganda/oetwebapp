@@ -536,23 +536,32 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     if (phase.kind === 'error') setWindowFill(false);
   }, [phase.kind]);
 
-  // macOS same-window fullscreen (see usesWindowFullscreen). The container is
-  // lifted into the top layer (popover) so the app's header/sidebar stacking
-  // contexts can't cover it — without moving the iframe, which would reload the
-  // video — and the window itself goes native fullscreen (shell >= 0.7.9; older
-  // shells just fill the window). Leaving native fullscreen via the green button
-  // or View menu, Escape, the exit button, or unmounting all end it.
+  // macOS same-window fullscreen (see usesWindowFullscreen). The container turns
+  // position:fixed over the whole window — no DOM move, which would reload the
+  // iframe — and <html data-video-fill> hides the app header, whose stacking
+  // context would otherwise paint over it. The window itself goes native
+  // fullscreen (shell >= 0.7.9; older shells just fill the window) unless the
+  // learner already had it fullscreen, which is then left as they set it. The exit
+  // button, Escape (only while focus is outside the Bunny iframe), leaving native
+  // fullscreen via the green button / View menu, or unmounting all end it.
   useEffect(() => {
-    const container = containerRef.current;
-    if (!windowFill || !container) return;
+    if (!windowFill) return;
     const bridge = window.desktopBridge;
-    const topLayer = typeof container.showPopover === 'function';
-    if (topLayer) {
-      container.setAttribute('popover', 'manual');
-      container.showPopover();
-    }
-    void bridge?.window?.setFullscreen(true).catch(() => undefined);
+    const root = document.documentElement;
+    root.dataset.videoFill = '';
+    let disposed = false;
     let sawNativeFullscreen = false;
+    let ownsNativeFullscreen = false;
+    void (async () => {
+      const info = await bridge?.runtime.info().catch(() => null);
+      if (disposed) return;
+      if (info?.windowState?.isFullScreen) {
+        sawNativeFullscreen = true;
+        return;
+      }
+      ownsNativeFullscreen = true;
+      await bridge?.window?.setFullscreen(true);
+    })().catch(() => undefined);
     const removeStateListener = bridge?.runtime.onWindowStateChange?.((state) => {
       if (state.isFullScreen) sawNativeFullscreen = true;
       else if (sawNativeFullscreen) setWindowFill(false);
@@ -562,10 +571,11 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
+      disposed = true;
+      delete root.dataset.videoFill;
       window.removeEventListener('keydown', onKeyDown);
       removeStateListener?.();
-      if (topLayer) container.removeAttribute('popover');
-      void bridge?.window?.setFullscreen(false).catch(() => undefined);
+      if (ownsNativeFullscreen) void bridge?.window?.setFullscreen(false).catch(() => undefined);
     };
   }, [windowFill]);
 
@@ -826,7 +836,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       ref={containerRef}
       className={`oet-video-player group overflow-hidden bg-black outline-none ${
         windowFill
-          ? 'fixed inset-0 z-[2147483647] m-0 h-screen max-h-none w-screen max-w-none border-0 p-0'
+          ? 'fixed inset-0 z-[2147483647]'
           : 'relative h-full w-full'
       }`}
       tabIndex={0}

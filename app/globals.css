@@ -878,3 +878,9 @@ html[data-keyboard-hints='true'] [data-kbd-hint] {
   color: var(--color-primary);
   user-select: none;
 }
+
+/* macOS same-window video fullscreen (components/videos/video-player.tsx): the
+   fixed player can't paint above the sticky app header's stacking context. */
+html[data-video-fill] header {
+  visibility: hidden;
+}
