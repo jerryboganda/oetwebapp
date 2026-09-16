@@ -200,8 +200,8 @@ func runControls(output: String) -> Never {
     _ = makeWindow(aRect, NSColor(srgbRed: 1, green: 0, blue: 1, alpha: 1), .readOnly, .floating)
     _ = makeWindow(bRect, NSColor(srgbRed: 0, green: 1, blue: 1, alpha: 1), .none, .floating)
     // Blinking ticker so stream-based recorders keep receiving new frames.
-    let ticker = makeWindow(NSRect(x: frame.maxX - 60, y: frame.minY + 90, width: 40, height: 40),
-                            .white, .readOnly, .floating)
+    let tickerRect = NSRect(x: frame.maxX - 60, y: frame.minY + 90, width: 40, height: 40)
+    let ticker = makeWindow(tickerRect, .white, .readOnly, .floating)
     Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
         ticker.backgroundColor = ticker.backgroundColor == .white ? .darkGray : .white
     }
@@ -210,7 +210,9 @@ func runControls(output: String) -> Never {
         ["x": rect.minX, "y": frame.maxY - rect.maxY, "w": rect.width, "h": rect.height]
     }
     let payload: [String: Any] = [
-        "a": topLeft(aRect), "b": topLeft(bRect),
+        "a": topLeft(aRect), "b": topLeft(bRect), "ticker": topLeft(tickerRect),
+        // Excludes the menu bar and Dock, which are drawn above everything.
+        "visible": topLeft(screen.visibleFrame),
         "screen": ["w": frame.width, "h": frame.height],
     ]
     let data = try! JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
@@ -267,7 +269,10 @@ func readJSON(_ path: String) -> [String: Any] {
     return object
 }
 
-func classify(png: String, windowsPath: String, controlsPath: String) {
+/// `fullscreen`: a hidden fullscreen window may come out black rather than showing
+/// the backdrop, so black also counts as hidden — unless the player's white "Exit
+/// fullscreen" icon (top-right corner) is visible, which proves a dark frame leaked.
+func classify(png: String, windowsPath: String, controlsPath: String, fullscreen: Bool) {
     guard let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: png) as CFURL, nil),
           let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
     else { fail("cannot read \(png)") }
@@ -292,7 +297,9 @@ func classify(png: String, windowsPath: String, controlsPath: String) {
         return CGRect(x: (r["x"] ?? 0) * scale, y: (r["y"] ?? 0) * scale,
                       width: (r["w"] ?? 0) * scale, height: (r["h"] ?? 0) * scale)
     }
-    let a = rect(controls["a"]), b = rect(controls["b"]), app = rect(appWindow)
+    let a = rect(controls["a"]), b = rect(controls["b"]), ticker = rect(controls["ticker"])
+    let windowRect = rect(appWindow)
+    let app = fullscreen ? windowRect : windowRect.intersection(rect(controls["visible"]))
 
     // Fraction of sampled pixels in `area` (skipping `excluded`) that satisfy `test`.
     func fraction(_ area: CGRect, excluding excluded: [CGRect] = [], _ test: (Int, Int, Int) -> Bool) -> Double {
@@ -312,15 +319,19 @@ func classify(png: String, windowsPath: String, controlsPath: String) {
     }
     let magenta = fraction(a) { r, g, b in r > 200 && g < 70 && b > 200 }
     let cyan = fraction(b) { r, g, b in r < 70 && g > 200 && b > 200 }
-    let appHidden = fraction(app, excluding: [a, b]) { r, g, b in
-        (g > 200 && r < 70 && b < 70) || (r < 24 && g < 24 && b < 24)
+    let appHidden = fraction(app, excluding: [a, b, ticker]) { r, g, b in
+        (g > 200 && r < 70 && b < 70) || (fullscreen && r < 24 && g < 24 && b < 24)
     }
+    let exitIconArea = CGRect(x: windowRect.maxX - 70 * scale, y: windowRect.minY, width: 70 * scale, height: 70 * scale)
+    let exitIconVisible = fullscreen && fraction(exitIconArea) { r, g, b in r > 220 && g > 220 && b > 220 } > 0.01
 
     let verdict: String
     if magenta < 0.9 {
         verdict = "INCONCLUSIVE"   // control window missing: this path lacked capture permission
-    } else if app.width < 10 || appHidden < 0 {
+    } else if app.isNull || app.width < 10 || appHidden < 0 {
         verdict = "INCONCLUSIVE"   // app window not on screen
+    } else if exitIconVisible {
+        verdict = "VISIBLE"
     } else if appHidden >= 0.97 {
         verdict = "HIDDEN"
     } else {
@@ -425,9 +436,14 @@ case "type-password":
 case "set-slider":
     requireArgs(4, "set-slider <label> <value>")
     guard let slider = find(args[2], role: "AXSlider") else { fail("slider '\(args[2])' not exposed") }
-    let result = AXUIElementSetAttributeValue(slider, kAXValueAttribute as CFString,
-                                              NSNumber(value: Double(args[3]) ?? 0))
+    // WebKit only applies AXValue to a range input when it is a STRING (an NSNumber
+    // is silently ignored yet still reports success), so set a string and read back.
+    let target = Double(args[3]) ?? 0
+    let result = AXUIElementSetAttributeValue(slider, kAXValueAttribute as CFString, args[3] as CFString)
     if result != .success { fail("setting slider '\(args[2])' failed: \(result.rawValue)") }
+    usleep(800_000)
+    let now = (attr(slider, kAXValueAttribute) as NSNumber?)?.doubleValue ?? -1
+    if abs(now - target) > 2 { fail("slider '\(args[2])' is at \(now), not \(target)") }
 
 case "fullscreen-state":
     guard let window = mainWindow() else { fail("no app window") }
@@ -442,8 +458,9 @@ case "frames":
     await frames(args[2], args[3], args[4].split(separator: ",").compactMap { Double($0) })
 
 case "classify":
-    requireArgs(5, "classify <png> <window.json> <controls.json>")
-    classify(png: args[2], windowsPath: args[3], controlsPath: args[4])
+    requireArgs(5, "classify <png> <window.json> <controls.json> [fullscreen]")
+    classify(png: args[2], windowsPath: args[3], controlsPath: args[4],
+             fullscreen: args.count > 5 && args[5] == "fullscreen")
 
 case "dump":
     requireArgs(3, "dump <out.txt>")
