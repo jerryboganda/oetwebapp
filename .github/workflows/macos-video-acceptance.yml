@@ -1,0 +1,129 @@
+name: macOS Desktop Video Acceptance
+
+# Manual only. Installs a real desktop DMG on GitHub-hosted macOS runners and, with
+# the REAL app (no test hooks), signs in to PRODUCTION as the CI learner, plays 3
+# protected videos from different sections (play/pause, seek, fullscreen in/out,
+# back to the library), checks that no external browser opened and that saved
+# progress advanced, and captures screenshots + a screen recording while protected
+# video plays to classify whether the app window is hidden from capture
+# (scripts/macos-acceptance/run.sh). Results land in the job summary.
+#
+# What it cannot prove: real Zoom/Meet/QuickTime-app sharing, physical displays,
+# Intel Macs, or what a person sees — that stays a real-Mac test.
+#
+# Required secrets: OET_CI_LEARNER_EMAIL / OET_CI_LEARNER_PASSWORD — a learner
+# with access to the 3 videos and on the OTP-exemption list (a runner is a new
+# device every run). Every sign-in revokes that account's other sessions, so jobs
+# run one at a time and the account should not be shared with real users.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run_id:
+        description: 'Tauri Desktop Release run id whose macOS DMG artifact to test (leave empty to use dmg_url)'
+        required: false
+        type: string
+      dmg_url:
+        description: 'Published DMG URL (used when release_run_id is empty)'
+        required: false
+        type: string
+      dmg_sha256:
+        description: 'Expected sha256 of dmg_url (optional)'
+        required: false
+        type: string
+      video_ids:
+        description: '3 protected video ids from different sections'
+        required: false
+        type: string
+        default: 'vid_309d2157b28048b1a5f89525fbdc56c5,vid_393d1d17f318463083972da2e15d3a57,vid_557dc5798e04457086a0748ab2e93c4c'
+      upload_media:
+        description: 'Upload screenshots/recordings (contain paid video frames + the learner watermark; kept 3 days)'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: macos-video-acceptance
+  cancel-in-progress: false
+
+jobs:
+  acceptance:
+    name: macOS acceptance (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      max-parallel: 1 # one sign-in at a time on the shared CI learner
+      matrix:
+        os: [macos-15, macos-latest] # macOS 15 Sequoia and 26 Tahoe, Apple silicon
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      OUT: ${{ github.workspace }}/acceptance-out
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download DMG from the release run
+        if: inputs.release_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.release_run_id }}
+          github-token: ${{ github.token }}
+          pattern: tauri-desktop-macOS-*
+          merge-multiple: true
+          path: dmg
+
+      - name: Download published DMG
+        if: inputs.release_run_id == ''
+        shell: bash
+        env:
+          DMG_URL: ${{ inputs.dmg_url }}
+          DMG_SHA256: ${{ inputs.dmg_sha256 }}
+        run: |
+          set -euo pipefail
+          [ -n "$DMG_URL" ] || { echo "Set release_run_id or dmg_url."; exit 1; }
+          mkdir -p dmg
+          curl -fsSL "$DMG_URL" -o dmg/app.dmg
+          if [ -n "$DMG_SHA256" ]; then echo "$DMG_SHA256  dmg/app.dmg" | shasum -a 256 -c; fi
+
+      - name: Run acceptance
+        shell: bash
+        env:
+          OET_CI_LEARNER_EMAIL: ${{ secrets.OET_CI_LEARNER_EMAIL }}
+          OET_CI_LEARNER_PASSWORD: ${{ secrets.OET_CI_LEARNER_PASSWORD }}
+          VIDEO_IDS: ${{ inputs.video_ids }}
+        run: |
+          dmg="$(find dmg -type f -name '*.dmg' -print -quit)"
+          [ -n "$dmg" ] || { echo "No DMG found."; exit 1; }
+          shasum -a 256 "$dmg"
+          bash scripts/macos-acceptance/run.sh "$dmg"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-acceptance-results-${{ matrix.os }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            acceptance-out/*.tsv
+            acceptance-out/*.md
+            acceptance-out/*.json
+            acceptance-out/*.jsonl
+            acceptance-out/*.txt
+            acceptance-out/*.log
+            !acceptance-out/sign-in.json
+            !acceptance-out/last-body.json
+
+      - name: Upload screenshots and recordings
+        if: always() && inputs.upload_media
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-acceptance-media-${{ matrix.os }}
+          retention-days: 3
+          if-no-files-found: warn
+          path: |
+            acceptance-out/*.png
+            acceptance-out/*.mov
