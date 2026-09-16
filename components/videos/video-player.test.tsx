@@ -188,7 +188,10 @@ describe('VideoPlayer presentation controls', () => {
     } as unknown as DesktopBridge;
     renderPlayer();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Fullscreen' }));
+    // Wait for the protected player: while attesting, the legacy HLS controls
+    // briefly render their own (soon replaced) "Fullscreen" button.
+    await screen.findByTitle('Protected course video');
+    fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Exit fullscreen' }));
     await screen.findByRole('button', { name: 'Fullscreen' });
     expect(setFullscreen).not.toHaveBeenCalled();
