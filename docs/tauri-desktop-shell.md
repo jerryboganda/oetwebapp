@@ -15,14 +15,16 @@ oet-desktop (Rust core)
  ├─ WebviewWindow "main"
  │   ├─ loads bundled splash (src-tauri/splash/) → probes reachability
  │   └─ navigates to https://app.oetwithdrhesham.co.uk (the live web app)
- ├─ navigation guard  → HTTPS + trusted origin only; other links → system browser
+ ├─ navigation guard  → HTTPS + trusted origin + Bunny embed hosts; other links → system browser
  ├─ initialization_script → injects window.desktopBridge (inject/desktop-bridge.js)
  ├─ tray (Dashboard / Study Plan / Quit) · deep link (oet-prep://) · single-instance
  └─ updater (tauri-plugin-updater, minisign + VPS latest.json)
 ```
 
 - The remote URLs come from `src-tauri/desktop-runtime-config.json` (bundled as a
-  resource), overridable by `OET_DESKTOP_WEB_URL` / `OET_DESKTOP_API_URL`.
+  resource), overridable by `OET_DESKTOP_WEB_URL` / `OET_DESKTOP_API_URL` or a
+  userData copy **in dev builds only** — packaged builds ignore overrides (0.7.9),
+  otherwise a local page could obtain real video-playback attestations.
 - **Offline UX:** if the remote is unreachable at launch, the splash shows a
   "You're offline — Retry" screen and auto-retries on the OS `online` event.
 - **Engine gate:** the splash probes for the CSS/JS features the remote
@@ -50,8 +52,21 @@ consumers work unchanged. Verified by
 ## Security & capabilities (least privilege)
 
 - **Origin lock:** `lib.rs::is_allowed_origin` permits only the bundled splash,
-  the trusted HTTPS origin (and same-origin SPA routes), and — in dev builds —
-  `localhost`. Everything else opens in the system browser.
+  the trusted HTTPS origin (and same-origin SPA routes), the Bunny player embed
+  hosts (`iframe.`/`player.mediadelivery.net`) plus `about:blank`/`about:srcdoc`
+  child frames, and — in dev builds — `localhost`. Everything else opens in the
+  system browser. **macOS caveat:** wry's WKWebView guard also sees *iframe* loads
+  (WebView2 only reports main-frame navigations), so any other cross-origin iframe
+  the page embeds (reCAPTCHA, PayPal/Whop checkout, Zoom) is still cancelled and
+  opened in the browser on macOS until its host is added here.
+- **Screen-capture protection (macOS, 0.7.9):** the window is built
+  `content_protected(true)` (NSWindow.sharingType = None) and
+  `set_capture_protection(false)` is refused; WKWebView picture-in-picture is
+  switched off natively; video fullscreen fills the same window + native window
+  fullscreen (`capabilities/app-remote-macos.json`), never WebKit element
+  fullscreen (a separate, unprotected NSWindow). Apple documents sharingType as a
+  legacy hint that ScreenCaptureKit recorders ignore — only FairPlay DRM reliably
+  blacks out video. Windows keeps per-playback WDA_EXCLUDEFROMCAPTURE.
 - **CSP** for the bundled splash is set in `tauri.conf.json`
   (`app.security.csp`); `connect-src` allows only the app + API origins for the
   reachability probe.
