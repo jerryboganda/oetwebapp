@@ -74,10 +74,17 @@
   // The remote content is a Next.js 16 + Tailwind v4 build, which requires
   // Safari 16.4+. macOS ships that engine with Safari rather than with the OS
   // version, so a supported macOS release can still be too old. Detect it and
-  // explain the fix instead of navigating into a half-rendered UI. Plain
-  // ES2017 on purpose: the probe runs before any modern content is loaded, so
-  // it must not throw on the very engines it is meant to catch.
+  // explain the fix instead of navigating into a half-rendered UI. This is a
+  // macOS/WebKit-only concern — Windows renders through WebView2 (Chromium),
+  // which isn't tied to the OS version and always has these features — so the
+  // gate must not run there (see bridge_script() in src-tauri/src/lib.rs for
+  // the __OET_DESKTOP__.platform injection). Plain ES2017 on purpose: the
+  // probe runs before any modern content is loaded, so it must not throw on
+  // the very engines it is meant to catch.
   function detectUnsupportedEngine() {
+    const platform = globalThis.__OET_DESKTOP__ && globalThis.__OET_DESKTOP__.platform;
+    if (platform !== 'darwin') return null;
+
     const missing = [];
 
     try {
