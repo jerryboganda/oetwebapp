@@ -540,7 +540,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   // position:fixed over the whole window — no DOM move, which would reload the
   // iframe — and <html data-video-fill> hides the app header, whose stacking
   // context would otherwise paint over it. The window itself goes native
-  // fullscreen (shell >= 0.7.9; older shells just fill the window) unless the
+  // fullscreen (shell >= 0.7.10; older shells just fill the window) unless the
   // learner already had it fullscreen, which is then left as they set it. The exit
   // button, Escape (only while focus is outside the Bunny iframe), leaving native
   // fullscreen via the green button / View menu, or unmounting all end it.

@@ -23,7 +23,7 @@ oet-desktop (Rust core)
 
 - The remote URLs come from `src-tauri/desktop-runtime-config.json` (bundled as a
   resource), overridable by `OET_DESKTOP_WEB_URL` / `OET_DESKTOP_API_URL` or a
-  userData copy **in dev builds only** — packaged builds ignore overrides (0.7.9),
+  userData copy **in dev builds only** — packaged builds ignore overrides (0.7.10),
   otherwise a local page could obtain real video-playback attestations.
 - **Offline UX:** if the remote is unreachable at launch, the splash shows a
   "You're offline — Retry" screen and auto-retries on the OS `online` event.
@@ -59,7 +59,7 @@ consumers work unchanged. Verified by
   (WebView2 only reports main-frame navigations), so any other cross-origin iframe
   the page embeds (reCAPTCHA, PayPal/Whop checkout, Zoom) is still cancelled and
   opened in the browser on macOS until its host is added here.
-- **Screen-capture protection (macOS, 0.7.9):** the window is built
+- **Screen-capture protection (macOS, 0.7.10):** the window is built
   `content_protected(true)` (NSWindow.sharingType = None) and
   `set_capture_protection(false)` is refused; WKWebView picture-in-picture is
   switched off natively; video fullscreen fills the same window + native window

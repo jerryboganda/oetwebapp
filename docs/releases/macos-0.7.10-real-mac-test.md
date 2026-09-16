@@ -1,4 +1,4 @@
-# Real-Mac acceptance test — desktop 0.7.9
+# Real-Mac acceptance test — desktop 0.7.10
 
 For the person running the test on a physical Mac. Takes about 30 minutes.
 Record the **whole session on a phone pointed at the Mac screen**. Screen
@@ -9,7 +9,7 @@ serve as the reference for what the learner actually sees.
 
 - A Mac (Apple silicon or Intel) on macOS 13 or later. Note the exact version:
    Apple menu → About This Mac.
-- The 0.7.9 DMG link you were sent.
+- The 0.7.10 DMG link you were sent. (A "0.7.9" was published earlier on 16 Sep 2026 **without** the Mac video fix. Do not test that one.)
 - A learner account with Video Library access. Every sign-in logs the account
   out everywhere else, so don't use an account someone is using right now.
 - A phone on a stand filming the Mac screen, with sound.
@@ -23,7 +23,7 @@ serve as the reference for what the learner actually sees.
    If it is, go to **System Settings → Privacy & Security** and click **Open Anyway**.
 2. Open the app from Applications (not Safari, not Chrome).
 3. Show the version on camera: menu bar **OET with Dr. Hesham → About OET with
-   Dr. Hesham**. It must say **0.7.9**. Say the macOS version out loud as well.
+   Dr. Hesham**. It must say **0.7.10**. Say the macOS version out loud as well.
 4. Sign in with the learner account.
 
 ## A. Video playback (3 videos from 3 different sections)
@@ -79,7 +79,7 @@ For every capture, write down one of:
 
 - The phone video of the whole session.
 - The screenshot files and the screen-recording files (step B1–B3).
-- macOS version and Mac model; app version (0.7.9).
+- macOS version and Mac model; app version (0.7.10).
 - The result table:
 
 | Check | Video 1 | Video 2 | Video 3 |
@@ -100,7 +100,7 @@ For every capture, write down one of:
 | Zoom share | |
 | Google Meet share | |
 
-**Expected capture result, stated up front:** 0.7.9 uses the macOS window
+**Expected capture result, stated up front:** 0.7.10 uses the macOS window
 setting Apple provides (`NSWindow.sharingType = none`). Apple documents it as a
 legacy hint that modern recorders ignore. Screen recordings (Shift-Cmd-5,
 QuickTime) and some screen shares are therefore **expected to still show the
