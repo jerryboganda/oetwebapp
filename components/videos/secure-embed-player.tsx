@@ -103,7 +103,9 @@ export const SecureEmbedPlayer = forwardRef<SecureEmbedPlayerHandle, SecureEmbed
         src={src}
         title={title}
         className="h-full w-full border-0"
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        // No picture-in-picture: a PiP window lives outside the capture-protected
+        // app window and outside the watermark overlay.
+        allow="autoplay; encrypted-media; fullscreen"
         allowFullScreen
         referrerPolicy="strict-origin-when-cross-origin"
         sandbox="allow-scripts allow-same-origin allow-presentation"

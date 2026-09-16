@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { VideoPlayer } from './video-player';
 
@@ -93,6 +93,7 @@ describe('VideoPlayer presentation controls', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    delete window.desktopBridge;
     Object.defineProperty(document, 'fullscreenElement', { configurable: true, value: null });
   });
 
@@ -128,6 +129,64 @@ describe('VideoPlayer presentation controls', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Exit fullscreen' }));
     await waitFor(() => expect(exitFullscreen).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Fullscreen' })).toBeInTheDocument());
+  });
+
+  it('macOS fullscreen stays inside the same protected app window (native window fullscreen, never WebKit element fullscreen)', async () => {
+    let emitWindowState: (state: { isFullScreen: boolean }) => void = () => {};
+    const setFullscreen = vi.fn(() => Promise.resolve());
+    window.desktopBridge = {
+      platform: 'darwin',
+      window: { setFullscreen },
+      runtime: {
+        onWindowStateChange: (listener: (state: { isFullScreen: boolean }) => void) => {
+          emitWindowState = listener;
+          return () => {};
+        },
+      },
+    } as unknown as DesktopBridge;
+    renderPlayer();
+
+    await screen.findByRole('button', { name: 'Fullscreen' });
+    const player = screen.getByRole('application', { name: 'Video player' });
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    Object.defineProperty(player, 'requestFullscreen', { configurable: true, value: requestFullscreen });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
+    await screen.findByRole('button', { name: 'Exit fullscreen' });
+    expect(setFullscreen).toHaveBeenLastCalledWith(true);
+    expect(player).toHaveClass('fixed', 'inset-0');
+    expect(requestFullscreen).not.toHaveBeenCalled();
+
+    // Leaving native fullscreen from the green button / View menu ends it too.
+    act(() => {
+      emitWindowState({ isFullScreen: true });
+      emitWindowState({ isFullScreen: false });
+    });
+    await screen.findByRole('button', { name: 'Fullscreen' });
+    expect(setFullscreen).toHaveBeenLastCalledWith(false);
+    expect(player).not.toHaveClass('fixed');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fullscreen' }));
+    await screen.findByRole('button', { name: 'Exit fullscreen' });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await screen.findByRole('button', { name: 'Fullscreen' });
+    expect(requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it('"Try again" goes back through the capture-protection gate instead of starting playback directly', async () => {
+    mocks.setVideoScreenProtection.mockResolvedValue(false);
+    renderPlayer();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(mocks.setVideoScreenProtection).toHaveBeenCalledTimes(2));
+    await screen.findByRole('button', { name: 'Try again' });
+    expect(mocks.requestPlaybackSession).not.toHaveBeenCalled();
+
+    mocks.setVideoScreenProtection.mockResolvedValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await screen.findByTitle('Protected course video');
+    expect(mocks.setVideoScreenProtection).toHaveBeenCalledTimes(3);
+    expect(mocks.requestPlaybackSession).toHaveBeenCalledTimes(1);
   });
 
   it('keeps legacy direct-HLS playback free of stretch/fit controls', async () => {

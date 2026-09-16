@@ -55,14 +55,23 @@ fn handle_deep_link_url(app: &AppHandle, url: &str) {
     navigate_to_route(app, &route);
 }
 
+/// Hosts the trusted page embeds in an <iframe> that must load IN the window.
+/// On macOS wry runs the navigation guard for iframe loads too (WKWebView's
+/// decidePolicyForNavigationAction has no main-frame filter; WebView2 only
+/// reports main-frame navigations), so without this the protected Bunny player
+/// was cancelled and its signed URL handed to Safari (0.7.8 P0).
+const EMBED_HOSTS: &[&str] = &["iframe.mediadelivery.net"];
+
 /// HTTPS-only origin lock. Allows the bundled splash, the trusted remote origin
-/// (and its sub-paths — same-origin SPA routing), and the local dev server in
-/// dev builds. Everything else is blocked; external http(s) links open in the
-/// system browser instead.
+/// (and its sub-paths — same-origin SPA routing), the embedded video player host,
+/// and the local dev server in dev builds. Everything else is blocked; external
+/// http(s) links open in the system browser instead.
 fn is_allowed_origin(url: &Url, remote_base: &str) -> bool {
     match url.scheme() {
         // Bundled splash / Tauri internal asset origin.
         "tauri" => return true,
+        // Blank/srcdoc child frames (macOS reports them to the guard as well).
+        "about" => return matches!(url.as_str(), "about:blank" | "about:srcdoc"),
         "http" | "https" => {}
         _ => return false,
     }
@@ -71,6 +80,9 @@ fn is_allowed_origin(url: &Url, remote_base: &str) -> bool {
     };
     // Tauri serves bundled assets from tauri.localhost on some platforms.
     if host == "tauri.localhost" {
+        return true;
+    }
+    if url.scheme() == "https" && EMBED_HOSTS.contains(&host) {
         return true;
     }
     // The trusted remote origin (scheme + host + port must match).
@@ -283,6 +295,11 @@ pub fn run() {
                     .title("OET with Dr. Hesham")
                     .inner_size(1440.0, 980.0)
                     .min_inner_size(1200.0, 800.0)
+                    // Capture-protected from the moment the window exists (Windows
+                    // WDA_EXCLUDEFROMCAPTURE / macOS NSWindow.sharingType = None) and
+                    // for its whole life — never dependent on the remote page asking
+                    // (commands::set_capture_protection can only re-assert it).
+                    .content_protected(true)
                     .initialization_script(bridge_script(&remote_url))
                     .on_navigation(move |url| {
                         if is_allowed_origin(url, &guard_remote) {
@@ -327,6 +344,8 @@ pub fn run() {
             //    (WebView2 blank-screen / perf risk). A bare
             //    --disable-features=DirectCompositionVideoOverlays is a NO-OP (no such
             //    base::Feature). macOS uses NSWindow.sharingType and is unaffected.
+            //    The window is now protected from creation (content_protected above),
+            //    so these flags matter for every page, not just the video player.
             #[cfg(windows)]
             {
                 builder = builder.additional_browser_args(
@@ -464,4 +483,35 @@ fn bridge_script(remote_url: &str) -> String {
         tauri::VERSION,
         BRIDGE_JS
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_origin;
+    use tauri::Url;
+
+    const REMOTE: &str = "https://app.oetwithdrhesham.co.uk";
+
+    fn allowed(url: &str) -> bool {
+        is_allowed_origin(&Url::parse(url).unwrap(), REMOTE)
+    }
+
+    #[test]
+    fn keeps_the_protected_bunny_player_in_the_window() {
+        assert!(allowed("https://iframe.mediadelivery.net/embed/123/abc?token=t&expires=1"));
+        assert!(allowed("about:blank"));
+        assert!(allowed("about:srcdoc"));
+        assert!(allowed("https://app.oetwithdrhesham.co.uk/videos/abc"));
+    }
+
+    #[test]
+    fn still_routes_everything_else_out() {
+        assert!(!allowed("http://iframe.mediadelivery.net/embed/123/abc"));
+        assert!(!allowed("https://iframe.mediadelivery.net.evil.example/embed"));
+        assert!(!allowed("https://evil.example/?u=iframe.mediadelivery.net"));
+        assert!(!allowed("https://www.youtube.com/watch?v=x"));
+        assert!(!allowed("http://app.oetwithdrhesham.co.uk/"));
+        assert!(!allowed("about:config"));
+        assert!(!allowed("file:///etc/passwd"));
+    }
 }

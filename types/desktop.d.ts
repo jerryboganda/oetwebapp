@@ -111,13 +111,23 @@ declare global {
       hard: () => Promise<void>;
     };
     /**
-     * OS-level screen-capture exclusion (desktop shell >= 0.6.0). When enabled the
-     * window renders BLACK in screenshots / screen recorders / screen shares
-     * (Windows WDA_EXCLUDEFROMCAPTURE, macOS NSWindow sharingType None). The video
-     * player toggles it on during playback. Optional; feature-detect before calling.
+     * OS-level screen-capture exclusion (desktop shell >= 0.6.2; Windows
+     * WDA_EXCLUDEFROMCAPTURE, macOS NSWindow sharingType None — a hint that macOS
+     * ScreenCaptureKit recorders do not honour). From 0.7.9 the window is protected
+     * from creation and `set(false)` resolves `{ ok: false }` without lifting it.
+     * The video player requires `set(true)` → `ok` before playback. Optional;
+     * feature-detect before calling.
      */
     captureProtection?: {
       set: (enabled: boolean) => Promise<{ ok: boolean }>;
+    };
+    /**
+     * Native fullscreen of the app's own window (desktop shell >= 0.7.9). The macOS
+     * video player uses it so fullscreen stays inside the capture-protected window.
+     * Optional; feature-detect before calling.
+     */
+    window?: {
+      setFullscreen: (enabled: boolean) => Promise<void>;
     };
     /**
      * Native HMAC signer for app-only video playback (desktop shell >= 0.4.0).
