@@ -139,6 +139,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # Default installs the legacy 'tools' meta-package, which Google has
+          # pulled from the SDK repository index (fails with "Failed to find
+          # package 'tools'"). Gradle/AGP fetches platforms/build-tools itself.
+          packages: 'platform-tools'
 
       - run: pnpm install --frozen-lockfile
 
