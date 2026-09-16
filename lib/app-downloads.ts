@@ -15,6 +15,33 @@ export const WINDOWS_DOWNLOAD_URL = '/api/download/windows';
 export const MAC_DOWNLOAD_URL = '/api/download/mac';
 export const ANDROID_DOWNLOAD_URL = '/api/download/android';
 
+/**
+ * Temporary kill-switch for the public macOS download (17 Sep 2026 handover):
+ * the public Mac DMG has not passed protected in-app Bunny playback QA on a
+ * real Mac, so the Mac download is disabled and candidates are directed to the
+ * Web App until a signed, notarized build passes. Windows is unaffected.
+ * Set NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED=1 (deploy.yml build arg) to arm it;
+ * remove the arg (or set 0) to re-enable. A function (not a load-time const)
+ * so server routes see the value per request and tests can arm it per test —
+ * Next's build-time inlining of NEXT_PUBLIC_* applies the same way inside the
+ * function body.
+ */
+export function isMacDownloadDisabled(): boolean {
+  const raw = process.env.NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED;
+  return raw === '1' || raw === 'true';
+}
+
+/**
+ * UI-facing Mac destination: the resolver endpoint, or `null` while the
+ * kill-switch is armed. `null` renders the disabled (non-clickable) download
+ * badge — the same mechanism iOS uses before its store link exists. Call this
+ * at render time (do not bake it into module scope) so the armed state is
+ * testable and stays consistent with the server-side routes.
+ */
+export function macDownloadHref(): string | null {
+  return isMacDownloadDisabled() ? null : MAC_DOWNLOAD_URL;
+}
+
 export const GET_APP_PATH = '/get-app';
 
 /**

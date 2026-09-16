@@ -12,7 +12,7 @@ import {
 import {
   ANDROID_INSTALL_URL,
   IOS_DOWNLOAD_URL,
-  MAC_DOWNLOAD_URL,
+  macDownloadHref,
   WINDOWS_DOWNLOAD_URL,
 } from '@/lib/app-downloads';
 
@@ -27,13 +27,16 @@ interface AppDownloadPromoProps {
 // keeps the install-instructions page because a bare .apk link downloads a
 // file without ever triggering Android's install step. iOS resolves to the
 // App Store / TestFlight, or renders a disabled "coming soon" badge when
-// neither is configured (IOS_DOWNLOAD_URL is null).
-const APP_DOWNLOAD_LINKS: AppDownloadLinks = {
-  windows: WINDOWS_DOWNLOAD_URL,
-  mac: MAC_DOWNLOAD_URL,
-  android: ANDROID_INSTALL_URL,
-  ios: IOS_DOWNLOAD_URL,
-};
+// neither is configured (IOS_DOWNLOAD_URL is null). Built per render so the
+// mac kill-switch (17 Sep 2026 handover) is honored on every render.
+function appDownloadLinks(): AppDownloadLinks {
+  return {
+    windows: WINDOWS_DOWNLOAD_URL,
+    mac: macDownloadHref(),
+    android: ANDROID_INSTALL_URL,
+    ios: IOS_DOWNLOAD_URL,
+  };
+}
 
 function PlatformIconCluster({ className = '' }: { className?: string }) {
   return (
@@ -69,7 +72,7 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
               All prices are in GBP (£). Checkout happens securely inside the Candidates App.
             </p>
           </div>
-          <AppDownloadGrid links={APP_DOWNLOAD_LINKS} compact />
+          <AppDownloadGrid links={appDownloadLinks()} disabledNotes={{ mac: 'Use Web App' }} compact />
         </div>
       </section>
     );
@@ -95,7 +98,7 @@ export function AppDownloadPromo({ variant = 'card', onClose }: AppDownloadPromo
         Course videos and interactive practice tools are available through our official Candidates App. All prices are in GBP (£). Checkout happens securely inside the Candidates App, with full access activated upon payment verification.
       </p>
 
-      <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-4" />
+      <AppDownloadGrid links={appDownloadLinks()} disabledNotes={{ mac: 'Use Web App' }} className="mt-4" />
     </div>
   );
 }
@@ -144,7 +147,7 @@ function PostLoginAppModalContent({ onClose }: { onClose?: () => void }) {
               Course videos and interactive practice tools are available through our official Candidates App. Download the app on your preferred platform for secure video playback, live sync, and offline study.
             </p>
 
-            <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-6 grid-cols-1 min-[400px]:grid-cols-2" />
+            <AppDownloadGrid links={appDownloadLinks()} disabledNotes={{ mac: 'Use Web App' }} className="mt-6 grid-cols-1 min-[400px]:grid-cols-2" />
 
             <button
               type="button"

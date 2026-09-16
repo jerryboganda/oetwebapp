@@ -5,16 +5,20 @@ import { AppDownloadGrid, type AppDownloadLinks } from '@/components/marketing/s
 import {
   ANDROID_INSTALL_URL,
   IOS_DOWNLOAD_URL,
-  MAC_DOWNLOAD_URL,
+  macDownloadHref,
   WINDOWS_DOWNLOAD_URL,
 } from '@/lib/app-downloads';
 
-const APP_DOWNLOAD_LINKS: AppDownloadLinks = {
-  windows: WINDOWS_DOWNLOAD_URL,
-  mac: MAC_DOWNLOAD_URL,
-  android: ANDROID_INSTALL_URL,
-  ios: IOS_DOWNLOAD_URL,
-};
+// Render-time build so the mac kill-switch (17 Sep 2026 handover) is honored
+// on every render instead of being baked in at module load.
+function appDownloadLinks(): AppDownloadLinks {
+  return {
+    windows: WINDOWS_DOWNLOAD_URL,
+    mac: macDownloadHref(),
+    android: ANDROID_INSTALL_URL,
+    ios: IOS_DOWNLOAD_URL,
+  };
+}
 
 export function WebNotAllowedNotice() {
   return (
@@ -35,7 +39,7 @@ export function WebNotAllowedNotice() {
         </p>
       </div>
 
-      <AppDownloadGrid links={APP_DOWNLOAD_LINKS} className="mt-2 max-w-2xl" />
+      <AppDownloadGrid links={appDownloadLinks()} disabledNotes={{ mac: 'Use Web App' }} className="mt-2 max-w-2xl" />
     </div>
   );
 }
