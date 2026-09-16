@@ -326,6 +326,60 @@ public class WhopFawaterakGatewayTests
     }
 
     [Fact]
+    public async Task WhopWebhook_SignedEventIsAcceptedWhenTheWhopApiCannotBeReached()
+    {
+        // 15 Sep 2026 P0: ProbePaymentAsync collapsed every failure — including a
+        // rejected API key, a 5xx and a timeout — into "not confirmed", and the
+        // webhook was then rejected AND persisted nowhere. A real GBP 100 payment
+        // could therefore vanish because of an outage on OUR side. Whop signed this
+        // delivery, so it must be accepted; server-side re-verification happens in
+        // reconciliation before anything is granted.
+        const string secret = "ws_live_secret_key_123";
+        const string msgId = "msg_probe_down_01";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_realbutunreachable","status":"paid","metadata":{"quote_id":"quote-1"}}}""";
+        var signature = PaymentCallbackHmac.HmacSha256Base64(secret, $"{msgId}.{timestamp}.{payload}");
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.ServiceUnavailable };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", secret, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions { WebhookMaxAgeSeconds = 300 }), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>
+        {
+            ["webhook-signature"] = $"v1,{signature}",
+            ["webhook-id"] = msgId,
+            ["webhook-timestamp"] = timestamp,
+        }, default);
+
+        Assert.True(result.Processed, $"Rejected with: {result.EventType} {result.Error}");
+        Assert.Equal("completed", result.NormalizedStatus);
+        // The unverified probe is recorded so reconciliation knows to re-check it.
+        Assert.Contains("probe_unavailable", result.SafePayloadJson);
+    }
+
+    [Fact]
+    public async Task WhopWebhook_UnsignedEventIsStillRejectedWhenTheWhopApiCannotBeReached()
+    {
+        // Without a signature the API probe is the ONLY evidence, so "we could not
+        // ask" must never be treated as proof of payment.
+        const string payload = """{"type":"payment.succeeded","data":{"id":"pay_unsigned_unreachable","status":"paid"}}""";
+
+        var handler = new StubHandler { StatusCode = System.Net.HttpStatusCode.ServiceUnavailable };
+        var runtime = new TestRuntimeSettingsProvider(TestRuntimeSettingsProvider.Base() with
+        {
+            Whop = new WhopSettings("https://api.whop.com/api/v1", "apik_test", "biz_1", null, null, null),
+        });
+        var gateway = new WhopGateway(new HttpClient(handler), Options.Create(new BillingOptions()), runtime);
+
+        var result = await gateway.HandleWebhookAsync(payload, new Dictionary<string, string>(), default);
+
+        Assert.False(result.Processed);
+    }
+
+    [Fact]
     public async Task WhopWebhook_SignedEventWithUnpaidRealPayment_IsRejected()
     {
         const string secret = "ws_live_secret_key_123";

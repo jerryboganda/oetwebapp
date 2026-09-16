@@ -21,7 +21,17 @@ namespace OetLearner.Api.Services.Billing;
 ///
 /// This worker closes that gap. Once per day (leader-independent — see below) it
 /// sweeps three classes of divergence and records each as a
-/// <see cref="BillingEvent"/> of type <c>reconciliation.mismatch</c>:
+/// <see cref="BillingEvent"/> of type <c>reconciliation.mismatch</c>.
+///
+/// It also REPAIRS the two "provider paid, we did not grant" directions rather than
+/// only reporting them (owner P0, 15 Sep 2026: "a missed/rejected webhook is
+/// automatically recovered by reconciliation without manual fulfilment"). Recovery
+/// re-drives the same verified-fulfilment path the webhook endpoint uses, so every
+/// idempotency layer it carries applies unchanged and a recovered payment can never
+/// double-grant, double-invoice or re-gift credits. Where no webhook was ever
+/// delivered, a verified event is synthesised under a deterministic id from the
+/// provider's own server-to-server answer. The finding row is still written either
+/// way and records the outcome:
 ///
 ///   1. <b>Stale pending</b> — <see cref="PaymentTransaction"/> rows still
 ///      <c>pending</c> past the configured age. The provider is queried
@@ -132,6 +142,86 @@ public sealed class BillingReconciliationWorker(
     }
 
     /// <summary>
+    /// Recover ONE named provider payment on demand, for an admin working a live
+    /// incident instead of waiting for the daily sweep. Same path the sweep uses, so
+    /// it is idempotent: running it twice grants once.
+    ///
+    /// Returns a human-readable trace for the admin response. Never throws.
+    /// </summary>
+    public async Task<string> RecoverPaymentAsync(string gatewayName, string paymentId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(gatewayName) || string.IsNullOrWhiteSpace(paymentId))
+        {
+            return "no_action (gateway and payment id are both required)";
+        }
+
+        try
+        {
+            await using var scope = scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var gateways = scope.ServiceProvider.GetRequiredService<IPaymentGatewayProvider>();
+            var fulfilment = scope.ServiceProvider.GetRequiredService<LearnerService>();
+            var now = clock.GetUtcNow();
+
+            // 1. An event may already exist for this payment (Whop stamps the payment
+            //    id as the event id) — re-drive it rather than inventing a new one.
+            var recorded = await db.PaymentWebhookEvents
+                .Where(e => e.Gateway == gatewayName && e.GatewayEventId == paymentId)
+                .FirstOrDefaultAsync(ct);
+
+            if (recorded is not null && string.Equals(recorded.ProcessingStatus, "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"already_fulfilled (event {recorded.GatewayEventId} processed at {recorded.ProcessedAt:O})";
+            }
+
+            // 2. Confirm with the provider server-side before anything is granted —
+            //    an admin asking nicely is not evidence of payment.
+            var status = await QueryProviderStatusAsync(gateways, db, gatewayName, paymentId, ct);
+            if (status is null)
+            {
+                return "unverified (the provider could not confirm this payment; nothing was granted)";
+            }
+
+            if (!status.Paid)
+            {
+                return $"not_paid (provider status: {status.RawStatus ?? "unpaid"}; nothing was granted)";
+            }
+
+            if (recorded is not null)
+            {
+                recorded.NormalizedStatus = "completed";
+                recorded.VerificationStatus = "verified";
+                recorded.VerifiedAt ??= now;
+                await db.SaveChangesAsync(ct);
+                return await TryReapplyWebhookEventAsync(db, fulfilment, recorded, ct);
+            }
+
+            // 3. No event at all — the webhook was never delivered. Find the local
+            //    order this payment belongs to and recover through it.
+            var txn = await db.PaymentTransactions
+                .AsNoTracking()
+                .Where(t => t.Gateway == gatewayName
+                    && (t.GatewayTransactionId == paymentId
+                        || (t.MetadataJson != null && t.MetadataJson.Contains(paymentId))))
+                .OrderByDescending(t => t.UpdatedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (txn is null)
+            {
+                return "unmatched (the provider confirms this payment but no local order references it; "
+                    + "resolve the order manually before granting)";
+            }
+
+            return await TryRecoverPaidTransactionAsync(db, fulfilment, txn, status, now, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "On-demand reconciliation failed for {Gateway} payment {PaymentId}.", gatewayName, paymentId);
+            return $"recovery_failed ({ex.GetType().Name})";
+        }
+    }
+
+    /// <summary>
     /// Single sweep, exposed for deterministic tests. Returns the number of NEW
     /// mismatch findings recorded (findings already reported earlier the same day
     /// count as zero). Never throws.
@@ -148,11 +238,17 @@ public sealed class BillingReconciliationWorker(
             await using var scope = scopeFactory.CreateAsyncScope();
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var gateways = scope.ServiceProvider.GetRequiredService<IPaymentGatewayProvider>();
+            // Recovery re-uses the ONE verified-fulfilment path the webhook uses, so
+            // every idempotency layer it already carries (event dedupe, order
+            // binding, quote-completed early return, terminal-state downgrade
+            // guards) applies unchanged. It runs request-free here exactly as it
+            // does from the unauthenticated webhook endpoint.
+            var fulfilment = scope.ServiceProvider.GetRequiredService<LearnerService>();
             var now = clock.GetUtcNow();
 
             var findings = 0;
-            findings += await ReconcileStalePendingTransactionsAsync(db, gateways, now, ct);
-            findings += await ReconcileProviderPaidEventsWithoutFulfilmentAsync(db, now, ct);
+            findings += await ReconcileStalePendingTransactionsAsync(db, gateways, fulfilment, now, ct);
+            findings += await ReconcileProviderPaidEventsWithoutFulfilmentAsync(db, fulfilment, now, ct);
             findings += await ReconcileLocallyCompletedWithoutProviderEvidenceAsync(db, gateways, now, ct);
             findings += await ReconcileUnfulfilledSessionsAndQuotesAsync(db, now, ct);
 
@@ -185,6 +281,7 @@ public sealed class BillingReconciliationWorker(
     private async Task<int> ReconcileStalePendingTransactionsAsync(
         LearnerDbContext db,
         IPaymentGatewayProvider gateways,
+        LearnerService fulfilment,
         DateTimeOffset now,
         CancellationToken ct)
     {
@@ -211,7 +308,7 @@ public sealed class BillingReconciliationWorker(
 
             try
             {
-                var status = await QueryProviderStatusAsync(gateways, txn.Gateway, txn.GatewayTransactionId, ct);
+                var status = await QueryProviderStatusAsync(gateways, db, txn.Gateway, txn.GatewayTransactionId, ct);
 
                 if (status is not null)
                 {
@@ -235,6 +332,11 @@ public sealed class BillingReconciliationWorker(
                 }
                 else if (status.Paid)
                 {
+                    // Do not just report it — recover it. The brief this closes is
+                    // explicit: "a missed/rejected webhook is automatically recovered
+                    // by reconciliation without manual fulfilment."
+                    var recovery = await TryRecoverPaidTransactionAsync(db, fulfilment, txn, status, now, ct);
+
                     findings += await RecordFindingAsync(
                         db,
                         direction: "provider_paid_not_fulfilled",
@@ -245,7 +347,7 @@ public sealed class BillingReconciliationWorker(
                         amount: txn.Amount,
                         currency: txn.Currency,
                         detail: $"Provider reports this payment settled (provider status: {status.RawStatus ?? "paid"}) "
-                            + "but the local transaction is still pending — grant missing.",
+                            + $"but the local transaction was still pending. Automatic recovery: {recovery}.",
                         ct: ct);
                 }
                 else
@@ -348,6 +450,7 @@ public sealed class BillingReconciliationWorker(
     /// </summary>
     private async Task<int> ReconcileProviderPaidEventsWithoutFulfilmentAsync(
         LearnerDbContext db,
+        LearnerService fulfilment,
         DateTimeOffset now,
         CancellationToken ct)
     {
@@ -363,6 +466,14 @@ public sealed class BillingReconciliationWorker(
         var findings = 0;
         foreach (var evt in candidates)
         {
+            // "ignored" is TERMINAL to the webhook dedupe, so once an event lands
+            // there — which is what happens when the transaction lookup misses, e.g.
+            // the event arrived before the local row existed — every provider retry
+            // short-circuits as a duplicate and a real payment stays buried forever.
+            // Re-driving it here is the only thing that un-buries it, and it is safe:
+            // the fulfilment path is idempotent end to end.
+            var recovery = await TryReapplyWebhookEventAsync(db, fulfilment, evt, ct);
+
             findings += await RecordFindingAsync(
                 db,
                 direction: "provider_paid_event_unfulfilled",
@@ -373,11 +484,128 @@ public sealed class BillingReconciliationWorker(
                 amount: null,
                 currency: null,
                 detail: "Provider reported a completed payment event that local fulfilment did not apply "
-                    + $"(processing status: {evt.ProcessingStatus}; reason: {evt.ErrorMessage ?? "none recorded"}).",
+                    + $"(processing status: {evt.ProcessingStatus}; reason: {evt.ErrorMessage ?? "none recorded"}). "
+                    + $"Automatic recovery: {recovery}.",
                 ct: ct);
         }
 
         return findings;
+    }
+
+    /// <summary>
+    /// Re-drive one already-recorded, provider-verified completion through the normal
+    /// fulfilment path. Returns a short outcome string for the audit row; never throws.
+    /// </summary>
+    private async Task<string> TryReapplyWebhookEventAsync(
+        LearnerDbContext db,
+        LearnerService fulfilment,
+        PaymentWebhookEvent evt,
+        CancellationToken ct)
+    {
+        try
+        {
+            var applied = await fulfilment.ApplyVerifiedPaymentWebhookEventAsync(
+                evt.Id,
+                evt.GatewayTransactionId,
+                evt.NormalizedStatus,
+                PaymentWebhookCategories.Payment,
+                evt.GatewayEventId,
+                ct);
+
+            return applied.ProcessingStatus == "completed"
+                ? "recovered"
+                : $"not_recovered ({applied.ProcessingStatus})";
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Reconciliation could not re-apply {Gateway} webhook event {EventId}.",
+                evt.Gateway,
+                evt.GatewayEventId);
+            db.ChangeTracker.Clear();
+            return $"recovery_failed ({ex.GetType().Name})";
+        }
+    }
+
+    /// <summary>
+    /// Recover a payment the provider says is settled but that never got fulfilled
+    /// locally. Prefers an existing verified webhook event; when the webhook was never
+    /// delivered at all there is nothing to re-drive, so a verified event is
+    /// synthesised from the provider's own server-to-server answer.
+    ///
+    /// The synthesised event id is deterministic, so the unique
+    /// (Gateway, GatewayEventId) index makes repeat sweeps a no-op, and a real webhook
+    /// arriving later dedupes against the completed quote rather than granting twice.
+    /// </summary>
+    private async Task<string> TryRecoverPaidTransactionAsync(
+        LearnerDbContext db,
+        LearnerService fulfilment,
+        PaymentTransaction txn,
+        ProviderStatus status,
+        DateTimeOffset now,
+        CancellationToken ct)
+    {
+        try
+        {
+            var existing = await db.PaymentWebhookEvents
+                .Where(e => e.Gateway == txn.Gateway
+                    && e.GatewayTransactionId == txn.GatewayTransactionId
+                    && e.NormalizedStatus == "completed")
+                .OrderByDescending(e => e.ReceivedAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (existing is null)
+            {
+                var syntheticId = $"reconciliation:{txn.Gateway}:{txn.GatewayTransactionId}";
+                existing = await db.PaymentWebhookEvents
+                    .FirstOrDefaultAsync(e => e.Gateway == txn.Gateway && e.GatewayEventId == syntheticId, ct);
+
+                if (existing is null)
+                {
+                    existing = new PaymentWebhookEvent
+                    {
+                        Id = Guid.NewGuid(),
+                        Gateway = txn.Gateway,
+                        GatewayEventId = syntheticId,
+                        EventType = "reconciliation.provider_confirmed",
+                        GatewayTransactionId = txn.GatewayTransactionId,
+                        NormalizedStatus = "completed",
+                        ProcessingStatus = "processing",
+                        // The provider was queried server-to-server, which is stronger
+                        // proof than a signed callback body.
+                        VerificationStatus = "verified",
+                        VerifiedAt = now,
+                        ReceivedAt = now,
+                        LastAttemptedAt = now,
+                        AttemptCount = 1,
+                        PayloadJson = JsonSerializer.Serialize(new
+                        {
+                            source = "billing_reconciliation",
+                            gateway = txn.Gateway,
+                            gatewayTransactionId = txn.GatewayTransactionId,
+                            providerStatus = status.RawStatus,
+                            providerAmount = status.Amount,
+                            providerCurrency = status.Currency,
+                        }),
+                    };
+                    db.PaymentWebhookEvents.Add(existing);
+                    await db.SaveChangesAsync(ct);
+                }
+            }
+
+            return await TryReapplyWebhookEventAsync(db, fulfilment, existing, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(
+                ex,
+                "Reconciliation could not recover {Gateway} transaction {TransactionId}.",
+                txn.Gateway,
+                txn.GatewayTransactionId);
+            db.ChangeTracker.Clear();
+            return $"recovery_failed ({ex.GetType().Name})";
+        }
     }
 
     /// <summary>
@@ -433,7 +661,7 @@ public sealed class BillingReconciliationWorker(
 
             try
             {
-                var status = await QueryProviderStatusAsync(gateways, txn.Gateway, txn.GatewayTransactionId, ct);
+                var status = await QueryProviderStatusAsync(gateways, db, txn.Gateway, txn.GatewayTransactionId, ct);
 
                 if (status is { Paid: true })
                 {
@@ -594,6 +822,7 @@ public sealed class BillingReconciliationWorker(
     /// </summary>
     private static async Task<ProviderStatus?> QueryProviderStatusAsync(
         IPaymentGatewayProvider gateways,
+        LearnerDbContext db,
         string gatewayName,
         string transactionId,
         CancellationToken ct)
@@ -606,6 +835,36 @@ public sealed class BillingReconciliationWorker(
         var gateway = gateways.GetGateway(gatewayName);
         switch (gateway)
         {
+            case WhopGateway whop:
+            {
+                // Whop's payments resource is addressed by its own payment id
+                // (pay_...), but PaymentTransaction.GatewayTransactionId holds the
+                // checkout_configuration_id (ch_...) or our quote id. Whop stamps the
+                // payment id as the webhook event id, so recover it from there when
+                // the ledger does not already hold one.
+                var paymentId = transactionId.StartsWith("pay_", StringComparison.OrdinalIgnoreCase)
+                    ? transactionId
+                    : await db.PaymentWebhookEvents
+                        .AsNoTracking()
+                        .Where(e => e.Gateway == gatewayName
+                            && e.GatewayTransactionId == transactionId
+                            && e.GatewayEventId.StartsWith("pay_"))
+                        .OrderByDescending(e => e.ReceivedAt)
+                        .Select(e => e.GatewayEventId)
+                        .FirstOrDefaultAsync(ct);
+
+                if (string.IsNullOrWhiteSpace(paymentId))
+                {
+                    // No addressable payment id: UNKNOWN, never "unpaid".
+                    return null;
+                }
+
+                var confirmation = await whop.GetTransactionConfirmationAsync(paymentId, ct);
+                return confirmation is null
+                    ? null
+                    : new ProviderStatus(confirmation.Paid, confirmation.Amount, confirmation.Currency, confirmation.RawStatus);
+            }
+
             case FawaterakGateway fawaterak:
             {
                 var status = await fawaterak.GetInvoiceStatusAsync(transactionId, ct);
@@ -647,8 +906,8 @@ public sealed class BillingReconciliationWorker(
             }
 
             default:
-                // Stripe / PayPal / Whop expose no server-to-server status lookup on the
-                // shared IPaymentGateway contract — state is "unknown" for reconciliation.
+                // Stripe / PayPal expose no server-to-server status lookup on the shared
+                // IPaymentGateway contract — state is "unknown" for reconciliation.
                 return null;
         }
     }

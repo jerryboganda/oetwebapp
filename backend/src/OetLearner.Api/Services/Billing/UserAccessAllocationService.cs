@@ -50,8 +50,21 @@ public sealed class UserAccessAllocationService(
         var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct)
             ?? throw ApiException.NotFound("user_not_found", "User not found.");
 
+        // Draft is an internal checkout-lifecycle state, never a course allocation:
+        // one row is scaffolded when a quote is created and only becomes
+        // Pending/Active once a payment actually completes. Every other
+        // subscription listing already excludes it — learner
+        // (BillingSubscriptionEndpoints.QueryUserSubscriptions), the admin billing
+        // list (AdminService.GetBillingSubscriptionsAsync), the admin user summary
+        // card (AdminService.BuildLearnerSubscriptionAsync) and the fulfilment queue.
+        // This one did not, so abandoned checkouts surfaced in admin User Management
+        // as "Status: Draft · Starts <date> · No expiry" rows that read as owned
+        // courses (owner P0 report, 15 Sep 2026). Auto-pending rows are deliberately
+        // still shown here: an admin needs to see what is awaiting fulfilment.
         var subs = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == userId && s.Status != SubscriptionStatus.Cancelled)
+            .Where(s => s.UserId == userId
+                && s.Status != SubscriptionStatus.Cancelled
+                && s.Status != SubscriptionStatus.Draft)
             .OrderByDescending(s => s.ChangedAt)
             .ToListAsync(ct);
         var visibleSubs = subs.Where(s => !IsStandaloneAddonPlan(s.PlanId)).ToList();

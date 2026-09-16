@@ -229,6 +229,16 @@ export function PackageList({
     }
   }
 
+  // Defence in depth for the 15 Sep 2026 P0: SubscriptionStatus.Draft is an
+  // internal checkout-lifecycle state, never a course allocation. The backend
+  // (UserAccessAllocationService.GetAccessAsync) no longer returns Draft rows;
+  // this makes sure a regression there can never render one as owned access
+  // again. Unrelated to the local `draft` row the add-package form builds — that
+  // one is created with status 'pending'.
+  const visibleSubscriptions = subscriptions.filter(
+    (sub) => (sub.status ?? '').toLowerCase() !== 'draft',
+  );
+
   return (
     <div className="space-y-3">
       <div className="space-y-3 rounded-2xl border border-dashed border-border p-3">
@@ -352,11 +362,11 @@ export function PackageList({
         </div>
       </div>
 
-      {subscriptions.length === 0 ? (
+      {visibleSubscriptions.length === 0 ? (
         <p className="text-sm text-muted">No packages assigned yet.</p>
       ) : (
         <ul className="divide-y divide-border rounded-2xl border border-border">
-          {subscriptions.map((sub) => {
+          {visibleSubscriptions.map((sub) => {
             const isSuspended = sub.status.toLowerCase() === 'suspended';
             const startedAtRaw = sub.startedAt ?? sub.startsAt ?? null;
             const startedOk = !startedAtRaw || new Date(startedAtRaw).getTime() <= Date.now();

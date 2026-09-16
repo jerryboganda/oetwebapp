@@ -190,15 +190,43 @@ public sealed class WhopGateway : IPaymentGateway
             // reliable match even when metadata did not propagate to the payment.
             var checkoutConfigurationId = ReadString(data, "checkout_configuration_id");
 
+            var probeState = "skipped";
             if (!string.IsNullOrWhiteSpace(opts.ApiKey) && !paymentId.StartsWith("whop_sandbox_", StringComparison.OrdinalIgnoreCase))
             {
                 var probe = await ProbePaymentAsync(opts, paymentId, ct);
-                if (probe is WhopPaymentProbe.NotConfirmed
-                    || (probe is WhopPaymentProbe.NotFound && !signatureVerified))
+                probeState = probe switch
+                {
+                    WhopPaymentProbe.Confirmed => "confirmed",
+                    WhopPaymentProbe.NotFound => "not_found",
+                    WhopPaymentProbe.Unavailable => "probe_unavailable",
+                    _ => "not_confirmed",
+                };
+
+                // Whop explicitly saying "not paid" always rejects.
+                if (probe is WhopPaymentProbe.NotConfirmed)
                 {
                     return new WebhookProcessResult(paymentId, type, false, "Whop API did not confirm this payment");
                 }
 
+                // Without a verified signature the probe is the ONLY evidence, so
+                // anything short of a confirmation rejects.
+                if (!signatureVerified && probe is not WhopPaymentProbe.Confirmed)
+                {
+                    return new WebhookProcessResult(
+                        paymentId,
+                        type,
+                        false,
+                        probe is WhopPaymentProbe.Unavailable
+                            ? "Whop API could not be reached to confirm this unsigned payment"
+                            : "Whop API did not confirm this payment");
+                }
+
+                // Signature verified but we could not ask Whop (bad/rotated key,
+                // 5xx, timeout): accept the delivery rather than silently discard a
+                // real payment on our own outage — Whop signed it. The state is
+                // recorded on the event so reconciliation re-verifies it server-side
+                // before anything is granted.
+                //
                 // NotFound with a verified signature: Whop's dashboard test events
                 // reference placeholder payments that do not exist in the API. The
                 // delivery is trusted because Whop signed it; fulfilment ignores it
@@ -226,6 +254,9 @@ public sealed class WhopGateway : IPaymentGateway
                     paymentId,
                     quoteId,
                     status = statusRaw,
+                    checkoutConfigurationId,
+                    signatureVerified,
+                    apiVerification = probeState,
                 }),
                 EventCategory: PaymentWebhookCategories.Payment,
                 GatewayObjectId: paymentId);
@@ -346,6 +377,111 @@ public sealed class WhopGateway : IPaymentGateway
         Confirmed,
         NotFound,
         NotConfirmed,
+
+        /// <summary>
+        /// We could not ASK Whop — the key is missing/rejected, or the call failed
+        /// or timed out. Categorically different from Whop answering "not paid":
+        /// discarding a signature-verified delivery on our own outage is how a real
+        /// payment goes unrecorded (15 Sep 2026 P0).
+        /// </summary>
+        Unavailable,
+    }
+
+    /// <summary>
+    /// Server-to-server confirmation of one Whop payment, for the daily billing
+    /// reconciliation sweep (PAY-19). Whop was previously invisible to that sweep —
+    /// <c>BillingReconciliationWorker.QueryProviderStatusAsync</c> returned "unknown"
+    /// for it — which is why a settled payment with no local fulfilment could sit
+    /// undetected indefinitely (15 Sep 2026 P0).
+    ///
+    /// Takes a Whop payment id (<c>pay_...</c>). Anything else — a
+    /// checkout_configuration_id or one of our own quote ids, which is what
+    /// <c>PaymentTransaction.GatewayTransactionId</c> holds for Whop — is not
+    /// addressable on Whop's payments resource, so the answer is <c>null</c>
+    /// (UNKNOWN, never "unpaid"). The worker resolves the real payment id from the
+    /// recorded webhook event before calling this.
+    /// </summary>
+    public async Task<PaymentConfirmation?> GetTransactionConfirmationAsync(string transactionId, CancellationToken ct)
+    {
+        var opts = (await _runtimeSettings.GetAsync(ct)).Whop;
+        if (string.IsNullOrWhiteSpace(opts.ApiKey)
+            || string.IsNullOrWhiteSpace(transactionId)
+            || !transactionId.StartsWith("pay_", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var response = await SendPaymentGetAsync(opts.ApiBaseUrl, opts, transactionId, ct);
+            if (response.IsSuccessStatusCode)
+            {
+                return await ReadPaymentConfirmationAsync(response, transactionId, ct);
+            }
+
+            if (response.StatusCode != HttpStatusCode.NotFound || !opts.ApiBaseUrl.Contains("/v1"))
+            {
+                // Refused, rate-limited or genuinely absent: unknown, not unpaid.
+                return null;
+            }
+
+            using var v2Response = await SendPaymentGetAsync(opts.ApiBaseUrl.Replace("/v1", "/v2"), opts, transactionId, ct);
+            return v2Response.IsSuccessStatusCode
+                ? await ReadPaymentConfirmationAsync(v2Response, transactionId, ct)
+                : null;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Whop payment lookup failed for {PaymentId}.", transactionId);
+            return null;
+        }
+    }
+
+    private static async Task<PaymentConfirmation?> ReadPaymentConfirmationAsync(
+        HttpResponseMessage response,
+        string paymentId,
+        CancellationToken ct)
+    {
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: ct);
+        var root = doc.RootElement.TryGetProperty("data", out var data) ? data : doc.RootElement;
+
+        var status = ReadString(root, "status");
+        var paid = !string.IsNullOrWhiteSpace(status)
+            && (status.Contains("paid", StringComparison.OrdinalIgnoreCase)
+                || status.Contains("succeed", StringComparison.OrdinalIgnoreCase)
+                || status.Contains("complete", StringComparison.OrdinalIgnoreCase)
+                || status.Contains("valid", StringComparison.OrdinalIgnoreCase));
+
+        // Amount/currency are best-effort: Whop has used several field names and may
+        // have FX-converted the charge. A zero amount simply means the reconciliation
+        // sweep skips its amount cross-check — it must never be read as "free".
+        var amount = ReadDecimal(root, "final_amount")
+            ?? ReadDecimal(root, "amount")
+            ?? ReadDecimal(root, "subtotal")
+            ?? 0m;
+        var currency = ReadString(root, "currency") ?? string.Empty;
+
+        return new PaymentConfirmation(paid, amount, currency.ToUpperInvariant(), paymentId, status);
+    }
+
+    private static decimal? ReadDecimal(JsonElement element, string name)
+    {
+        if (element.ValueKind != JsonValueKind.Object || !element.TryGetProperty(name, out var value))
+        {
+            return null;
+        }
+
+        return value.ValueKind switch
+        {
+            JsonValueKind.Number when value.TryGetDecimal(out var number) => number,
+            JsonValueKind.String when decimal.TryParse(
+                value.GetString(),
+                NumberStyles.Any,
+                CultureInfo.InvariantCulture,
+                out var parsed) => parsed,
+            _ => null,
+        };
     }
 
     private async Task<WhopPaymentProbe> ProbePaymentAsync(WhopSettings opts, string paymentId, CancellationToken ct)
@@ -362,7 +498,8 @@ public sealed class WhopGateway : IPaymentGateway
         }
         catch (Exception)
         {
-            return WhopPaymentProbe.NotConfirmed;
+            // Network error, timeout, bad JSON: we do not know, so say so.
+            return WhopPaymentProbe.Unavailable;
         }
     }
 
@@ -379,7 +516,9 @@ public sealed class WhopGateway : IPaymentGateway
 
         if (response.StatusCode != HttpStatusCode.NotFound)
         {
-            return WhopPaymentProbe.NotConfirmed;
+            // 401/403 (bad or rotated key), 429, 5xx — Whop did not tell us this
+            // payment is unpaid, it refused to tell us anything.
+            return WhopPaymentProbe.Unavailable;
         }
 
         // Whop only exposes the payments resource on /api/v2; retry there when
@@ -397,7 +536,7 @@ public sealed class WhopGateway : IPaymentGateway
 
         return v2Response.StatusCode == HttpStatusCode.NotFound
             ? WhopPaymentProbe.NotFound
-            : WhopPaymentProbe.NotConfirmed;
+            : WhopPaymentProbe.Unavailable;
     }
 
     private async Task<HttpResponseMessage> SendPaymentGetAsync(string baseUrl, WhopSettings opts, string paymentId, CancellationToken ct)

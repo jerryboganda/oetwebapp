@@ -1397,7 +1397,11 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Billing.RetentionDispa
 builder.Services.AddHostedService<OetLearner.Api.Services.Billing.ExperimentConversionWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Billing.IBillingMetricsService, OetLearner.Api.Services.Billing.BillingMetricsService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Billing.BillingMetricsRollupWorker>();
-builder.Services.AddHostedService<OetLearner.Api.Services.Billing.BillingReconciliationWorker>();
+// Registered as a singleton as well as a hosted service so the admin
+// "reconcile this payment now" endpoint can drive the same recovery path the
+// daily sweep uses, instead of a second copy of that logic.
+builder.Services.AddSingleton<OetLearner.Api.Services.Billing.BillingReconciliationWorker>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<OetLearner.Api.Services.Billing.BillingReconciliationWorker>());
 builder.Services.AddScoped<WalletService>();
 builder.Services.AddScoped<EngagementService>();
 

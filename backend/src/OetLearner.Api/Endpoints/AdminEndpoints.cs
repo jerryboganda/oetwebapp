@@ -829,6 +829,27 @@ public static class AdminEndpoints
             => Results.Ok(await service.RetryWebhookAsync(http.AdminId(), http.AdminName(), eventId, ct)))
             .WithAdminWrite("AdminSystemAdmin");
 
+        // Recover ONE named gateway payment that settled at the provider but was
+        // never fulfilled locally — the tool for working a live billing incident
+        // without waiting for the daily reconciliation sweep (owner P0, 15 Sep 2026:
+        // a GBP 100 Whop payment succeeded and no OET record existed).
+        //
+        // It is not a grant button: the provider is queried server-to-server first
+        // and nothing is granted unless the provider itself reports the payment
+        // settled. Idempotent — running it twice grants once.
+        admin.MapPost("/billing/gateways/{gateway}/payments/{paymentId}/reconcile", async (
+                string gateway,
+                string paymentId,
+                OetLearner.Api.Services.Billing.BillingReconciliationWorker reconciliation,
+                CancellationToken ct)
+            => Results.Ok(new
+            {
+                gateway,
+                paymentId,
+                outcome = await reconciliation.RecoverPaymentAsync(gateway, paymentId, ct),
+            }))
+            .WithAdminWrite("AdminSystemAdmin");
+
         // ── Review Escalation (Disagreement Resolution) ─────
 
         admin.MapGet("/escalations", async (AdminService service, CancellationToken ct,

@@ -142,6 +142,16 @@ public partial class LearnerService(
     global::OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettings = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
+
+    /// <summary>
+    /// How many signature/verification REJECTIONS per gateway we are willing to
+    /// record per hour. Payment webhook endpoints are unauthenticated and
+    /// deliberately unthrottled, so the audit trail for rejected deliveries needs
+    /// its own bound; past this we log and drop rather than let varied junk
+    /// payloads grow the table. Identical replays collapse onto one row via the
+    /// unique (Gateway, GatewayEventId) index and never reach this cap.
+    /// </summary>
+    private const int RejectedWebhookAuditCapPerHour = 50;
     private const int PaymentIdempotencyKeyMaxLength = 38;
     private const int WritingRevisionContentMaxLength = 30000;
     private const int WritingRevisionIdempotencyKeyMaxLength = 64;
@@ -9316,9 +9326,26 @@ public partial class LearnerService(
                 targetPlan,
                 cancellationToken);
 
+            // A pre-payment Draft scaffold may be REUSED for this quote unless one of
+            // its earlier quotes still matters. Previously any quote at all — even a
+            // long-dead one from an abandoned checkout — forced a brand-new Draft row,
+            // so three failed attempts left three Draft subscriptions on the learner
+            // (owner P0 report, 15 Sep 2026).
+            //
+            // Deliberately still minting a new row when a prior quote is Completed (the
+            // Draft is being promoted) or is STILL PAYABLE (Created/Applied and not yet
+            // expired). A hosted gateway checkout URL outlives our page — see
+            // ResolveReusableCheckoutUrl — so mutating a Draft that a live checkout can
+            // still settle against would be a far worse defect than a spare row.
             var draftIsUncommitted = subscription.Status == SubscriptionStatus.Draft
                 && !await db.BillingQuotes.AsNoTracking()
-                    .AnyAsync(quote => quote.SubscriptionId == subscription.Id, cancellationToken);
+                    .AnyAsync(
+                        quote => quote.SubscriptionId == subscription.Id
+                            && (quote.Status == BillingQuoteStatus.Completed
+                                || ((quote.Status == BillingQuoteStatus.Created
+                                        || quote.Status == BillingQuoteStatus.Applied)
+                                    && quote.ExpiresAt > now)),
+                        cancellationToken);
             if (!draftIsUncommitted)
             {
                 subscription = new Subscription
@@ -10764,6 +10791,33 @@ public partial class LearnerService(
     public static bool IsRejectedWebhookOutcome(object outcome)
         => outcome.GetType().GetProperty("received")?.GetValue(outcome) is false;
 
+    /// <summary>
+    /// True when the delivery was accepted and verified but local fulfilment failed
+    /// in a way that is still worth retrying.
+    ///
+    /// We used to answer HTTP 200 to every post-ingestion failure, so a provider was
+    /// told "handled" for an order we had not fulfilled and never redelivered it —
+    /// the only route back was an admin pressing Retry. docs/BILLING.md §6.2 is
+    /// explicit that a 5xx is what asks the provider to retry with backoff, so a
+    /// retryable failure now answers 5xx.
+    ///
+    /// <c>dead_letter</c> (the existing terminal state, reached after repeated
+    /// attempts) deliberately still answers 200: past that point redelivery cannot
+    /// help and a retry storm is worse than a quiet queue entry an admin can see.
+    /// Ingestion rejections are handled separately by
+    /// <see cref="IsRejectedWebhookOutcome"/> and answer 400.
+    /// </summary>
+    public static bool IsRetryableWebhookOutcome(object outcome)
+    {
+        if (IsRejectedWebhookOutcome(outcome))
+        {
+            return false;
+        }
+
+        var state = outcome.GetType().GetProperty("state")?.GetValue(outcome) as string;
+        return string.Equals(state, "failed", StringComparison.OrdinalIgnoreCase);
+    }
+
     public static string? GetPaymentWebhookRetryBlockedReason(PaymentWebhookEvent evt)
     {
         if (!string.Equals(evt.ProcessingStatus, "failed", StringComparison.OrdinalIgnoreCase))
@@ -10911,17 +10965,51 @@ public partial class LearnerService(
                 Error: ex.Message);
         }
 
+        // A REJECTED delivery used to return here without persisting anything, so
+        // a bad signature, an unconfigured gateway, an unparseable body or a failed
+        // server-side payment probe left no trace at all — the admin webhook backlog
+        // showed nothing and support could not tell "the gateway never called us"
+        // from "we threw the call away". That blind spot is what made the 15 Sep 2026
+        // Whop P0 untraceable. Rejections now fall through to the same persistence
+        // block below, which already knows how to record an unverified event
+        // (VerificationStatus = "failed" + ErrorMessage), and we return the rejected
+        // response after saving instead of before.
+        //
+        // Bounded on purpose: these endpoints are deliberately unauthenticated and
+        // unthrottled (providers retry from rotating IPs), so an attacker could
+        // otherwise grow this table with varied junk payloads. Replays of the SAME
+        // payload collapse onto one row via the unique (Gateway, GatewayEventId)
+        // index; beyond RejectedWebhookAuditCapPerHour distinct rejections in an hour
+        // we log and drop, which still leaves ample evidence that something is wrong.
         if (!result.Processed)
         {
-            return new
+            var rejectionCutoff = receivedAt.AddHours(-1);
+            var recentRejections = await db.PaymentWebhookEvents
+                .AsNoTracking()
+                .CountAsync(
+                    x => x.Gateway == gatewayName
+                        && x.VerificationStatus == "failed"
+                        && x.ReceivedAt >= rejectionCutoff,
+                    ct);
+
+            if (recentRejections >= RejectedWebhookAuditCapPerHour)
             {
-                received = false,
-                gateway = gatewayName,
-                eventId = result.EventId,
-                eventType = result.EventType,
-                error = result.Error ?? "Webhook verification failed.",
-                state = "rejected"
-            };
+                logger?.LogWarning(
+                    "Dropping the audit row for a rejected {Gateway} webhook: more than {Cap} rejections in the last hour. Reason: {Reason}",
+                    gatewayName,
+                    RejectedWebhookAuditCapPerHour,
+                    result.Error ?? "Webhook verification failed.");
+
+                return new
+                {
+                    received = false,
+                    gateway = gatewayName,
+                    eventId = result.EventId,
+                    eventType = result.EventType,
+                    error = result.Error ?? "Webhook verification failed.",
+                    state = "rejected"
+                };
+            }
         }
 
         var webhookEvent = await db.PaymentWebhookEvents
@@ -11006,6 +11094,22 @@ public partial class LearnerService(
                 eventId = existingWebhookEvent.GatewayEventId,
                 eventType = existingWebhookEvent.EventType,
                 state = existingWebhookEvent.ProcessingStatus
+            };
+        }
+
+        if (!result.Processed)
+        {
+            // Persisted above with VerificationStatus "failed" — now refuse it. HTTP
+            // 400 is still the answer, so a provider that signs correctly next time
+            // retries, but the attempt is on record either way.
+            return new
+            {
+                received = false,
+                gateway = gatewayName,
+                eventId = result.EventId,
+                eventType = result.EventType,
+                error = result.Error ?? "Webhook verification failed.",
+                state = "rejected"
             };
         }
 

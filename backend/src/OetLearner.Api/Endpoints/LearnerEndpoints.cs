@@ -431,6 +431,29 @@ public static class LearnerEndpoints
         // RequireRateLimiting to this group. Compensating controls: signature
         // verification at ingestion, replay window, and idempotent event dedup.
         var webhooks = app.MapGroup("/v1/payment/webhooks");
+
+        // One status contract for every gateway:
+        //   400 — the delivery was refused at ingestion (bad/missing signature,
+        //         unconfigured gateway, unparseable body, provider says unpaid).
+        //   5xx — accepted and verified, but local fulfilment failed and is still
+        //         retryable; per docs/BILLING.md §6.2 this is what asks the provider
+        //         to redeliver with backoff. Answering 200 here (the old behaviour)
+        //         told the provider "handled" for an order we had NOT fulfilled, so
+        //         it never came back and only an admin Retry could recover it.
+        //   200 — handled, duplicate, deliberately ignored, or dead-lettered
+        //         (terminal: redelivery cannot help and a retry storm would be worse).
+        static IResult WebhookOutcomeResult(object outcome)
+        {
+            if (LearnerService.IsRejectedWebhookOutcome(outcome))
+            {
+                return Results.StatusCode(StatusCodes.Status400BadRequest);
+            }
+
+            return LearnerService.IsRetryableWebhookOutcome(outcome)
+                ? Results.Json(outcome, statusCode: StatusCodes.Status503ServiceUnavailable)
+                : Results.Ok(outcome);
+        }
+
         webhooks.MapPost("/stripe", async (HttpContext http, LearnerService service, CancellationToken ct) =>
         {
             var payload = await new StreamReader(http.Request.Body).ReadToEndAsync(ct);
@@ -439,9 +462,7 @@ public static class LearnerEndpoints
                 header => header.Value.ToString(),
                 StringComparer.OrdinalIgnoreCase);
             var outcome = await service.HandleStripeWebhookAsync(payload, headers, ct);
-            return LearnerService.IsRejectedWebhookOutcome(outcome)
-                ? Results.StatusCode(StatusCodes.Status400BadRequest)
-                : Results.Ok(outcome);
+            return WebhookOutcomeResult(outcome);
         });
         webhooks.MapPost("/paypal", async (HttpContext http, LearnerService service, CancellationToken ct) =>
         {
@@ -451,9 +472,7 @@ public static class LearnerEndpoints
                 header => header.Value.ToString(),
                 StringComparer.OrdinalIgnoreCase);
             var outcome = await service.HandlePayPalWebhookAsync(payload, headers, ct);
-            return LearnerService.IsRejectedWebhookOutcome(outcome)
-                ? Results.StatusCode(StatusCodes.Status400BadRequest)
-                : Results.Ok(outcome);
+            return WebhookOutcomeResult(outcome);
         });
 
         // Regional gateways — same raw-body → verify → idempotent-fulfil contract as
@@ -470,9 +489,7 @@ public static class LearnerEndpoints
                 header => header.Value.ToString(),
                 StringComparer.OrdinalIgnoreCase);
             var outcome = await handler(payload, headers, ct);
-            return LearnerService.IsRejectedWebhookOutcome(outcome)
-                ? Results.StatusCode(StatusCodes.Status400BadRequest)
-                : Results.Ok(outcome);
+            return WebhookOutcomeResult(outcome);
         }
 
         webhooks.MapPost("/checkoutcom", (HttpContext http, LearnerService service, CancellationToken ct) =>
@@ -534,9 +551,7 @@ public static class LearnerEndpoints
                 header => header.Value.ToString(),
                 StringComparer.OrdinalIgnoreCase);
             var outcome = await handler(payloadJson, headers, ct);
-            return LearnerService.IsRejectedWebhookOutcome(outcome)
-                ? Results.StatusCode(StatusCodes.Status400BadRequest)
-                : Results.Ok(outcome);
+            return WebhookOutcomeResult(outcome);
         }
 
         webhooks.MapMethods("/easykash", new[] { "GET", "POST" }, (HttpContext http, LearnerService service, CancellationToken ct)
