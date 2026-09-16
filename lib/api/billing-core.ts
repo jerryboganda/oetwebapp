@@ -278,6 +278,9 @@ export async function fetchBillingPaymentStatus(input: {
     expiresAt: toNullableString(response.expiresAt),
     manualDeliveryRequired: response.manualDeliveryRequired === true,
     whatsAppUrl: toNullableString(response.whatsAppUrl),
+    verificationRequired: response.verificationRequired === true,
+    verificationWhatsAppUrl: toNullableString(response.verificationWhatsAppUrl),
+    verificationMessage: toNullableString(response.verificationMessage),
   };
 }
 

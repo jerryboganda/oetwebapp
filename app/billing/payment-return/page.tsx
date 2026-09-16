@@ -145,12 +145,13 @@ function BillingPaymentReturnContent() {
       status={status}
       error={error}
       cancelledHint={cancelledHint}
+      successHint={initialStatus === 'success'}
       onCheckAgain={() => setPollAttempt((attempt) => attempt + 1)}
     />
   );
 }
 
-function PaymentReturnShell({ phase, status, error, onCheckAgain, cancelledHint }: { phase: Phase; status?: BillingPaymentStatus | null; error?: string | null; onCheckAgain?: () => void; cancelledHint?: boolean }) {
+function PaymentReturnShell({ phase, status, error, onCheckAgain, cancelledHint, successHint }: { phase: Phase; status?: BillingPaymentStatus | null; error?: string | null; onCheckAgain?: () => void; cancelledHint?: boolean; successHint?: boolean }) {
   const destination = useMemo(() => {
     if (status?.productType === 'addon_purchase' && status.addOnCodes.some((code) => code.startsWith('pkg_'))) return '/ai-packages';
     if (status?.productType === 'addon_purchase') return '/billing';
@@ -173,7 +174,7 @@ function PaymentReturnShell({ phase, status, error, onCheckAgain, cancelledHint 
     polling: 'Confirming your payment',
     completed: 'Payment confirmed',
     failed: 'Payment could not be confirmed',
-    expired: 'Checkout expired',
+    expired: 'Your checkout session has expired',
     cancelled: 'Checkout cancelled',
     timeout: 'Still processing',
   }[phase];
@@ -186,11 +187,17 @@ function PaymentReturnShell({ phase, status, error, onCheckAgain, cancelledHint 
             <StatusIcon phase={phase} />
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-              <p className="mt-2 text-sm leading-6 text-muted">{messageFor(phase, status, cancelledHint)}</p>
+              <p className="mt-2 text-sm leading-6 text-muted">{messageFor(phase, status, cancelledHint, successHint)}</p>
             </div>
           </div>
 
           {error ? <InlineAlert className="mt-5" variant="error">{error}</InlineAlert> : null}
+          {phase === 'expired' ? (
+            <InlineAlert className="mt-5" variant="info">
+              If you already paid, do not worry — a successful payment is honoured even after this
+              checkout window has closed. Check your email or Billing centre, or start a new checkout below.
+            </InlineAlert>
+          ) : null}
 
           {status ? (
             <div className="mt-6 rounded-lg border border-border bg-background-light p-4">
@@ -242,7 +249,12 @@ function PaymentReturnShell({ phase, status, error, onCheckAgain, cancelledHint 
                 <RefreshCw className="h-4 w-4" /> Check again
               </Button>
             ) : null}
-            {phase === 'failed' || phase === 'expired' || phase === 'cancelled' ? (
+            {phase === 'expired' ? (
+              <Button asChild>
+                <Link href={retryHref}>Start New Checkout</Link>
+              </Button>
+            ) : null}
+            {phase === 'failed' || phase === 'cancelled' ? (
               <Button asChild>
                 <Link href={retryHref}>Try again</Link>
               </Button>
@@ -264,7 +276,7 @@ function StatusIcon({ phase }: { phase: Phase }) {
   return <AlertCircle className="mt-1 h-7 w-7 flex-none text-danger" />;
 }
 
-function messageFor(phase: Phase, status?: BillingPaymentStatus | null, cancelledHint?: boolean) {
+function messageFor(phase: Phase, status?: BillingPaymentStatus | null, cancelledHint?: boolean, successHint?: boolean) {
   if (phase === 'completed' && status?.verificationRequired) {
     return status.verificationMessage
       ?? 'Payment received — your order is Pending Verification. An admin will approve it shortly; you can also send your receipt on WhatsApp.';
@@ -274,9 +286,16 @@ function messageFor(phase: Phase, status?: BillingPaymentStatus | null, cancelle
   }
   if (phase === 'completed') return 'Your payment has been received and your account has been updated.';
   if (phase === 'cancelled') return status?.failureReason ?? 'No charge was made. You can safely retry when ready.';
-  if (phase === 'expired') return status?.failureReason ?? 'The checkout window expired before payment was completed.';
+  // Exact required copy: even though the 15-minute checkout window closed, a payment
+  // the gateway already confirmed is still honoured — this only means no confirmed
+  // payment is on record for this checkout.
+  if (phase === 'expired') return 'Your checkout session has expired. Please start a new checkout.';
   if (phase === 'failed') return status?.failureReason ?? 'The payment portal did not complete this order.';
   if (phase === 'timeout') return 'Your payment may still be processing — your purchase activates automatically once it is confirmed. Use "Check again", or look at Billing or your email in a few minutes. You will not be charged twice for this order.';
+  // Polling: the gateway already told us payment went through (redirect/onComplete
+  // carried status=success) — say so plainly rather than a generic "confirming" line,
+  // and never say "failed" while this verification is still in flight.
+  if (successHint) return 'Payment received. We are confirming your purchase.';
   if (cancelledHint) return 'You cancelled this checkout. We are confirming the final status with the provider.';
   return 'We are confirming your payment with the provider. This usually takes a few seconds.';
 }

@@ -139,7 +139,8 @@ public partial class LearnerService(
     IAssessmentScoreConversionService? scoreConversionService = null,
     IAssessmentMarkingPolicyService? markingPolicyService = null,
     IPaymentGatewayCatalog? paymentGatewayCatalog = null,
-    global::OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettings = null)
+    global::OetLearner.Api.Services.Settings.IRuntimeSettingsProvider? runtimeSettings = null,
+    OetLearner.Api.Services.Billing.BillingReconciliationWorker? billingReconciliation = null)
 {
     private const string PaymentWebhookParserVersion = "payment-webhook-v1";
 
@@ -3869,21 +3870,30 @@ public partial class LearnerService(
             throw ApiException.NotFound("billing_payment_not_found", "Payment status was not found for this checkout.");
         }
 
-        // Fawaterak safety net: the verified gateway callback is the primary fulfilment
-        // path, but if it was missed or rejected the learner would stay "pending" forever
-        // despite a successful charge. Verify the invoice directly with the provider
-        // (server-to-server) and complete through the same idempotent fulfilment a
-        // genuine callback uses. Best-effort — failures fall through to the normal read.
+        // Gateway safety net: the verified webhook callback is the primary fulfilment
+        // path, but if it was missed, delayed or rejected the learner would stay
+        // "pending" (or see the quote's 15-minute window read as "expired" — see
+        // NormalizeBillingPaymentStatus) despite a successful charge at the gateway.
+        // Whop is explicitly in scope here: the 15 Sep 2026 P0 was a real Whop charge
+        // that settled while the local quote had already timed out. Verify directly
+        // with the provider (server-to-server) and complete through the same
+        // idempotent fulfilment a genuine webhook uses. Best-effort — failures fall
+        // through to the normal read; the frontend keeps polling either way.
         if (transaction is not null
             && !string.Equals(transaction.Status, "completed", StringComparison.OrdinalIgnoreCase)
-            && string.Equals(transaction.Gateway, PaymentGatewayNames.Fawaterak, StringComparison.OrdinalIgnoreCase)
-            && !string.IsNullOrWhiteSpace(transaction.GatewayTransactionId)
-            && await TryReconcilePendingFawaterakPaymentAsync(transaction, cancellationToken))
+            && !string.IsNullOrWhiteSpace(transaction.GatewayTransactionId))
         {
-            transaction = await db.PaymentTransactions.AsNoTracking()
-                .Where(x => x.LearnerUserId == userId && (x.QuoteId == quote.Id || x.GatewayTransactionId == quote.CheckoutSessionId))
-                .OrderByDescending(x => x.UpdatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
+            var recoveredLive = string.Equals(transaction.Gateway, PaymentGatewayNames.Fawaterak, StringComparison.OrdinalIgnoreCase)
+                ? await TryReconcilePendingFawaterakPaymentAsync(transaction, cancellationToken)
+                : await TryReconcilePendingPaymentLiveAsync(transaction, cancellationToken);
+
+            if (recoveredLive)
+            {
+                transaction = await db.PaymentTransactions.AsNoTracking()
+                    .Where(x => x.LearnerUserId == userId && (x.QuoteId == quote.Id || x.GatewayTransactionId == quote.CheckoutSessionId))
+                    .OrderByDescending(x => x.UpdatedAt)
+                    .FirstOrDefaultAsync(cancellationToken);
+            }
         }
 
         var quoteResponse = DeserializeQuoteResponse(quote);
@@ -11449,6 +11459,69 @@ public partial class LearnerService(
         }
     }
 
+    /// <summary>Gateways with a server-to-server payment status lookup that
+    /// <see cref="OetLearner.Api.Services.Billing.BillingReconciliationWorker.RecoverPaymentAsync"/>
+    /// can query. Stripe/PayPal are excluded here — their webhook path is fast enough that
+    /// this live safety net was never built for them, and they expose no such lookup on
+    /// the shared gateway contract.</summary>
+    private static readonly string[] LivePollReconciliationGateways =
+    [
+        PaymentGatewayNames.Whop,
+        PaymentGatewayNames.Paymob,
+        PaymentGatewayNames.PayTabs,
+        PaymentGatewayNames.CheckoutCom,
+        PaymentGatewayNames.EasyKash,
+    ];
+
+    /// <summary>
+    /// Generalises <see cref="TryReconcilePendingFawaterakPaymentAsync"/> to every other
+    /// gateway that exposes a provider status lookup, by delegating to
+    /// <see cref="OetLearner.Api.Services.Billing.BillingReconciliationWorker.RecoverPaymentAsync"/>
+    /// — the same admin on-demand recovery path, and the same idempotent fulfilment the
+    /// nightly sweep and the webhook endpoint both use. Reusing it here means a learner who
+    /// simply returns to check their payment status gets the missed-webhook recovery
+    /// immediately instead of waiting for the next daily sweep.
+    ///
+    /// Whop in particular can only be queried by its own payment id (pay_...), never by our
+    /// checkout_configuration_id, so this cannot recover a Whop payment for which literally
+    /// no webhook-ish event has ever been recorded (see WhopGateway.GetTransactionConfirmationAsync).
+    /// That residual gap is closed by the nightly BillingReconciliationWorker sweep and by a
+    /// later webhook retry, both of which fulfil independently of whatever this endpoint
+    /// answered — never a lost payment, only a delayed confirmation on this one polled read.
+    /// </summary>
+    private async Task<bool> TryReconcilePendingPaymentLiveAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        if (billingReconciliation is null) return false;
+        if (!LivePollReconciliationGateways.Contains(transaction.Gateway, StringComparer.OrdinalIgnoreCase)) return false;
+
+        try
+        {
+            // Throttle so rapid learner polling does not hammer the provider.
+            var metadata = JsonSupport.Deserialize<Dictionary<string, object?>>(transaction.MetadataJson ?? "{}", new Dictionary<string, object?>());
+            var lastVerifyRaw = metadata.TryGetValue("lastLivePollVerifyAt", out var lastVerifyObj) ? lastVerifyObj?.ToString() : null;
+            if (DateTimeOffset.TryParse(lastVerifyRaw, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var lastVerify)
+                && DateTimeOffset.UtcNow - lastVerify < TimeSpan.FromSeconds(15))
+            {
+                return false;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+            metadata["lastLivePollVerifyAt"] = now.ToString("O", CultureInfo.InvariantCulture);
+            var tracked = await db.PaymentTransactions.FirstAsync(x => x.Id == transaction.Id, ct);
+            tracked.MetadataJson = JsonSerializer.Serialize(metadata);
+            tracked.UpdatedAt = now;
+            await db.SaveChangesAsync(ct);
+
+            var recovery = await billingReconciliation.RecoverPaymentAsync(transaction.Gateway, transaction.GatewayTransactionId!, ct);
+            return recovery.ProviderPaid == true;
+        }
+        catch (Exception)
+        {
+            // Reconciliation is best-effort; never fail the status endpoint over it.
+            return false;
+        }
+    }
+
     /// <summary>
     /// Synchronous fulfilment entry for PayPal Expanded (embedded) checkout. The browser
     /// SDK approves an order and posts its id here; we capture server-side and run the SAME
@@ -13539,7 +13612,7 @@ public partial class LearnerService(
         {
             "cancelled" => "Checkout was cancelled before payment completed.",
             "failed" => "Payment did not complete.",
-            "expired" => "Checkout expired before payment completed.",
+            "expired" => "Your checkout session has expired. Please start a new checkout.",
             _ => null
         };
 

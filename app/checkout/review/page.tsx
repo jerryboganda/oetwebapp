@@ -381,7 +381,13 @@ function CheckoutReviewContent() {
           idempotencyKey: newIdempotencyKey(),
         });
       } catch (err) {
-        if (!(err instanceof ApiError) || err.code !== 'billing_quote_already_applied') {
+        // billing_quote_expired: the 15-minute quote window closed in the narrow race
+        // between the countdown's own auto-refresh and this click. Recover the same way
+        // as an already-applied quote — fetch a fresh one and retry — so the learner is
+        // never told to manually refresh the page.
+        const isRecoverableQuoteError =
+          err instanceof ApiError && (err.code === 'billing_quote_already_applied' || err.code === 'billing_quote_expired');
+        if (!isRecoverableQuoteError) {
           throw err;
         }
         const refreshed = await fetchBillingQuote({
