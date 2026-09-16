@@ -174,8 +174,11 @@ public sealed class BillingReconciliationRecoveryTests : IClassFixture<TestWebAp
         {
             var db = reassertScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
 
+            // Scoped to the plan under test: EnsureLearnerProfileAsync seeds every
+            // test learner with a default legacy subscription of its own, so an
+            // unscoped count here measures the fixture, not the recovery.
             var subscriptions = await db.Subscriptions.AsNoTracking()
-                .Where(s => s.UserId == userId)
+                .Where(s => s.UserId == userId && s.PlanId == planCode)
                 .ToListAsync();
             Assert.Single(subscriptions);
 
