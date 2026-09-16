@@ -1,6 +1,7 @@
 'use client';
 
 import { CartPageView } from '@/components/cart';
+import { IosPurchaseGate } from '@/components/compliance/ios-purchase-gate';
 
 /**
  * Full-page cart. The heavy lifting (line items, promo codes, totals,
@@ -9,9 +10,13 @@ import { CartPageView } from '@/components/cart';
  * cart inside the learner dashboard.
  */
 export default function CartPage() {
+  // App Store compliance: iOS renders an enrol-on-website notice instead of
+  // any purchase UI (docs/IOS-PURCHASE-COMPLIANCE.md).
   return (
-    <div className="min-h-screen bg-background-light text-navy">
-      <CartPageView />
-    </div>
+    <IosPurchaseGate>
+      <div className="min-h-screen bg-background-light text-navy">
+        <CartPageView />
+      </div>
+    </IosPurchaseGate>
   );
 }
