@@ -455,4 +455,132 @@ describe('ListeningPaperPlayerPage', () => {
       .toContain('https://cdn.example/c2.mp3');
     expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-c-303', 3);
   });
+
+  // ── Urgent Listening Modification (owner brief, 15 Sep 2026) ──────────────
+  // A learner-initiated move still confirms. A SYSTEM-initiated move — the
+  // countdown reaching 00:00 or the audio playing to its end — must never show
+  // "Continue / Keep working"; it saves, locks and opens the next sub-section
+  // with no learner action, so a popup can never buy extra working time.
+
+  function playAudioToEnd(element: HTMLAudioElement, atSeconds = 120) {
+    Object.defineProperty(element, 'currentTime', { value: atSeconds, configurable: true });
+    fireEvent.play(element);
+    fireEvent.ended(element);
+  }
+
+  it('auto-advances when the audio reaches its end, with no confirmation popup', async () => {
+    const session = makeMockSession({
+      attempt: {
+        attemptId: 'attempt-auto-1',
+        paperId: 'paper-1',
+        mode: 'exam',
+        sectionCursor: 0,
+        answers: {},
+        serverNow: new Date().toISOString(),
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(session);
+    mockSaveListeningAnswer.mockResolvedValue({ success: true });
+    mockAdvanceListeningSection.mockResolvedValue({ sectionCursor: 1 });
+
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+    await waitFor(() => expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument());
+
+    const audioElement = document.querySelector('audio') as HTMLAudioElement;
+    await act(async () => {
+      playAudioToEnd(audioElement);
+    });
+
+    await waitFor(() => expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-auto-1', 1));
+    expect(screen.queryByRole('button', { name: /keep working/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/move to the next sub-section\?/i)).not.toBeInTheDocument();
+  });
+
+  it('does not auto-advance when the audio ends without having played (broken source)', async () => {
+    const session = makeMockSession({
+      attempt: {
+        attemptId: 'attempt-auto-2',
+        paperId: 'paper-1',
+        mode: 'exam',
+        sectionCursor: 0,
+        answers: {},
+        serverNow: new Date().toISOString(),
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(session);
+    mockAdvanceListeningSection.mockResolvedValue({ sectionCursor: 1 });
+
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+    await waitFor(() => expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument());
+
+    // An empty or failed source fires `ended` immediately at currentTime 0 and
+    // must NOT blow the candidate through the remaining sub-sections.
+    const audioElement = document.querySelector('audio') as HTMLAudioElement;
+    await act(async () => {
+      fireEvent.ended(audioElement);
+    });
+
+    expect(mockAdvanceListeningSection).not.toHaveBeenCalled();
+  });
+
+  it('still confirms when the learner taps Next Sub-section before time ends', async () => {
+    const session = makeMockSession({
+      attempt: {
+        attemptId: 'attempt-manual-1',
+        paperId: 'paper-1',
+        mode: 'exam',
+        sectionCursor: 0,
+        answers: {},
+        serverNow: new Date().toISOString(),
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(session);
+    mockSaveListeningAnswer.mockResolvedValue({ success: true });
+    mockAdvanceListeningSection.mockResolvedValue({ sectionCursor: 1 });
+
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+    await waitFor(() => expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /advance to next sub-section/i }));
+
+    expect(await screen.findByText(/move to the next sub-section\?/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /keep working/i })).toBeInTheDocument();
+    expect(mockAdvanceListeningSection).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: /^continue$/i }));
+    await waitFor(() => expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-manual-1', 1));
+  });
+
+  it('no longer carries the timer-expired confirmation copy', async () => {
+    const session = makeMockSession({
+      attempt: {
+        attemptId: 'attempt-copy-1',
+        paperId: 'paper-1',
+        mode: 'exam',
+        sectionCursor: 0,
+        answers: {},
+        serverNow: new Date().toISOString(),
+      },
+    });
+    mockGetListeningSession.mockResolvedValue(session);
+
+    const user = userEvent.setup();
+    await act(async () => {
+      render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+    });
+    await waitFor(() => expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument());
+
+    await user.click(screen.getByRole('button', { name: /advance to next sub-section/i }));
+    await screen.findByText(/move to the next sub-section\?/i);
+
+    // The only remaining confirm is the learner-initiated one.
+    expect(screen.queryByText(/the sub-section timer has ended/i)).not.toBeInTheDocument();
+  });
 });

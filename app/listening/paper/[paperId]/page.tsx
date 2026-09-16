@@ -1036,7 +1036,6 @@ function ActiveSubSectionPanel({
   onPendingQuestionChange: (questionId: string | null) => void;
 }) {
   const [showConfirm, setShowConfirm] = useState(false);
-  const [timerExpired, setTimerExpired] = useState(false);
   const [audioFailure, setAudioFailure] = useState(false);
   const [audioBuffering, setAudioBuffering] = useState(true);
 
@@ -1081,13 +1080,22 @@ function ActiveSubSectionPanel({
   const notesBody = subSection.extract?.notesBody?.trim() || '';
   const showNotes = isPartA && notesBody.length > 0;
 
+  // Owner brief, 15 Sep 2026: a SYSTEM-initiated move — the countdown reaching
+  // 00:00, or the audio playing to its end — must never prompt. It auto-saves,
+  // locks the sub-section and opens the next one with no learner action. Only a
+  // learner-initiated tap still confirms (`requestAdvance`).
+  //
+  // Timer expiry also wins over an already-open manual confirm: closing it here
+  // means a popup can never buy extra working time. One-shot via `expiredRef`,
+  // so audio-end followed by timer-end cannot advance twice; the parent's
+  // `advanceInFlight` guard covers a tap racing either.
   const expiredRef = useRef(false);
-  const handleExpire = useCallback(() => {
+  const finishSubSectionAutomatically = useCallback(() => {
     if (expiredRef.current) return;
     expiredRef.current = true;
-    setTimerExpired(true);
-    setShowConfirm(true);
-  }, []);
+    setShowConfirm(false);
+    onAdvance();
+  }, [onAdvance]);
 
   const handleAudioFailure = useCallback(() => setAudioFailure(true), []);
 
@@ -1111,7 +1119,7 @@ function ActiveSubSectionPanel({
   const { remaining, pause: pauseTimer, resume: resumeTimer } = useTimer(
     subSection.timeLimitSeconds > 0 ? subSection.timeLimitSeconds : LISTENING_EXAM_DEFAULT_TIME_LIMIT_SECONDS,
     'down',
-    handleExpire,
+    finishSubSectionAutomatically,
     // Listening-namespaced sessionStorage key so a mid-countdown refresh
     // resumes this sub-section (and never collides with the Reading timer).
     `listening-exam:${attemptId}:${subSection.index}`,
@@ -1149,6 +1157,9 @@ function ActiveSubSectionPanel({
         subSection={subSection}
         resumeState={resumeAudioState}
         resumeAtMs={resumeAudioAtMs}
+        // The audio reaching its end is a system-initiated move, same as the
+        // countdown hitting 00:00 — advance, never prompt.
+        onExtractComplete={finishSubSectionAutomatically}
         onIntegrityEvent={onIntegrityEvent}
         onBufferingChange={setAudioBuffering}
         onAudioFailure={handleAudioFailure}
@@ -1354,9 +1365,7 @@ function ActiveSubSectionPanel({
       >
         <div className="space-y-4">
           <p className="text-sm leading-6 text-muted">
-            {timerExpired
-              ? 'The sub-section timer has ended. Confirm below to save and permanently lock this sub-section.'
-              : isLastSection
+            {isLastSection
               ? 'This is the final sub-section. Submitting grades your attempt and you cannot return.'
               : 'You cannot return to this sub-section once you continue. Its audio and answers will be locked.'}
           </p>
@@ -1749,6 +1758,7 @@ function SubSectionAudio({
           onEnded={() => {
             setBuffering(false);
             setIsPlaying(false);
+            const playedForReal = hasStartedRef.current && (audioRef.current?.currentTime ?? 0) > 1;
             hasStartedRef.current = false;
             setHasPlayedToEnd(true);
             onIntegrityEvent('audio_ended', {
@@ -1756,7 +1766,11 @@ function SubSectionAudio({
               cuePointMs: Math.round((audioRef.current?.currentTime ?? 0) * 1000),
               questionIndex,
             });
-            if (onExtractComplete) onExtractComplete();
+            // Only a recording that actually played may auto-advance. An empty
+            // or broken source fires `ended` immediately, and advancing on that
+            // would blow the candidate through every remaining sub-section —
+            // the countdown stays as the backstop for that case.
+            if (playedForReal) onExtractComplete?.();
           }}
           onError={() => {
             setBuffering(true);
