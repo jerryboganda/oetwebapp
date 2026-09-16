@@ -29,13 +29,19 @@ name: Tauri Desktop Release
 #  - APPLE_SIGNING_IDENTITY (e.g. "Developer ID Application: Name (TEAMID)").
 #  - APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID — notarization credentials
 #    (APPLE_PASSWORD is an app-specific password, not the account password).
-#    tauri-cli reads all of these directly.
+#    tauri-cli reads all of these directly. Alternative: the App Store Connect
+#    API key family below; the verify step prefers it when present.
+#  - ASC_KEY_ID_CI / ASC_PRIVATE_KEY_PATH / ASC_ISSUER_ID — ASC API-key
+#    notarization (17 Sep 2026 handover): key id (App Manager key), path to the
+#    AuthKey_<ID>.p8 staged on the runner, and the issuer id. Dormant until set.
 #    When they are absent the macOS artifact is UNSIGNED and unnotarized, which
 #    means Gatekeeper blocks it — and since macOS 15 the old right-click -> Open
 #    bypass no longer exists, so users must go through System Settings ->
 #    Privacy & Security -> Open Anyway. The build stays green and prints an
 #    explicit warning, so an unsigned release can never be mistaken for a signed
-#    one.
+#    one. Unsigned runs also strip the darwin updater entries and downloads.mac
+#    from the published feed: a self-updated unsigned app breaks under
+#    Gatekeeper, so mac auto-update ships only together with signing.
 #
 # NOTE: a green macOS build here does NOT discharge the migration plan's macOS
 # gate — WKWebView microphone capture needs a one-time manual run on real
@@ -274,6 +280,14 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # App Store Connect API-key notarization alternative (17 Sep 2026
+          # handover): when an ASC key (.p8) is configured, tauri-cli can drive
+          # notarytool with it instead of an Apple-ID app-specific password.
+          # Dormant until the secrets exist; the verify step below re-runs
+          # notarytool with whichever credential family is present either way.
+          APPLE_API_KEY: ${{ secrets.ASC_KEY_ID_CI }}
+          APPLE_API_KEY_PATH: ${{ secrets.ASC_PRIVATE_KEY_PATH }}
+          APPLE_API_KEY_ISSUER: ${{ secrets.ASC_ISSUER_ID }}
           # The shell loads the remote web app over HTTPS — there is no Next.js or
           # .NET build here. The remote URLs live in src-tauri/desktop-runtime-config.json.
         run: |
@@ -285,6 +299,7 @@ jobs:
             echo "No Apple signing certificate configured — building unsigned."
             unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY
             unset APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
+            unset APPLE_API_KEY APPLE_API_KEY_PATH APPLE_API_KEY_ISSUER
           fi
           node scripts/tauri-dist.cjs build
 
@@ -336,8 +351,23 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # ASC API-key notarization inputs (dormant until the secrets exist):
+          # .p8 path + key id + issuer for the App Manager (CI) key.
+          ASC_KEY_ID_CI: ${{ secrets.ASC_KEY_ID_CI }}
+          ASC_PRIVATE_KEY_PATH: ${{ secrets.ASC_PRIVATE_KEY_PATH }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           set -euo pipefail
+          # Prefer the ASC API key when configured; fall back to the Apple-ID
+          # app-specific password otherwise.
+          notarize_dmg() {
+            local target="$1"
+            if [ -n "$ASC_PRIVATE_KEY_PATH" ] && [ -n "$ASC_KEY_ID_CI" ] && [ -n "$ASC_ISSUER_ID" ]; then
+              xcrun notarytool submit "$target" --key "$ASC_PRIVATE_KEY_PATH" --key-id "$ASC_KEY_ID_CI" --issuer "$ASC_ISSUER_ID" --wait
+            else
+              xcrun notarytool submit "$target" --apple-id "$APPLE_ID" --password "$APPLE_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+            fi
+          }
           app="$(find src-tauri/target -type d -name '*.app' -path '*bundle/macos/*' -print -quit)"
           dmg="$(find src-tauri/target -type f -name '*.dmg' -print -quit)"
 
@@ -377,11 +407,7 @@ jobs:
           fi
           if ! xcrun stapler validate "$dmg" >/dev/null 2>&1; then
             echo "The .dmg is not stapled — submitting it for notarization."
-            xcrun notarytool submit "$dmg" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait
+            notarize_dmg "$dmg"
             xcrun stapler staple "$dmg"
           fi
           spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
@@ -455,9 +481,21 @@ jobs:
 
       - name: Assemble production updater feed
         shell: bash
+        env:
+          # Presence of the Developer ID certificate decides whether mac
+          # updater entries may ship: a self-updated UNSIGNED app breaks under
+          # Gatekeeper, so unsigned runs must never publish darwin entries.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
         run: |
           set -euo pipefail
           mkdir -p stage
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "Unsigned macOS build — stripping darwin updater entries and downloads.mac from the feed."
+            export OET_STRIP_MAC_UPDATER=1
+            export OET_STRIP_MAC_DOWNLOAD=1
+          else
+            echo "Signed macOS build — darwin updater entries may ship."
+          fi
           node scripts/release/assemble-desktop-feed.mjs \
             --version="${{ steps.version.outputs.version }}" \
             --artifact-dir=artifacts \
