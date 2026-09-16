@@ -6,11 +6,13 @@ import { reportProtectionEvent } from '@/lib/api/video-protection';
 
 /**
  * Best-effort OS-level screen-capture protection while a video plays. On the
- * native shells the app window is EXCLUDED from screenshots, screen recorders,
- * screen shares and mirroring — capture tools see solid black:
+ * native shells the app window is excluded from capture where the OS honours it:
  *
- *   - Desktop (Tauri, shell >= 0.6.0): Windows SetWindowDisplayAffinity
- *     (WDA_EXCLUDEFROMCAPTURE) / macOS NSWindow.sharingType = None.
+ *   - Desktop (Tauri, shell >= 0.6.2): Windows SetWindowDisplayAffinity
+ *     (WDA_EXCLUDEFROMCAPTURE) / macOS NSWindow.sharingType = None. On macOS 0.7.10+
+ *     the window is protected from creation and this only re-asserts it. macOS treats
+ *     sharingType as a legacy hint: ScreenCaptureKit recorders (QuickTime, ⇧⌘5)
+ *     are documented to ignore it — only FairPlay DRM reliably blacks out video.
  *   - Mobile (Capacitor): Android FLAG_SECURE (blocks stills AND recordings —
  *     no detection needed, the OS just makes them black). iOS cannot block a
  *     still screenshot of an arbitrary WKWebView (only DRM/AVPlayer-protected

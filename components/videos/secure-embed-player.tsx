@@ -103,8 +103,12 @@ export const SecureEmbedPlayer = forwardRef<SecureEmbedPlayerHandle, SecureEmbed
         src={src}
         title={title}
         className="h-full w-full border-0"
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-        allowFullScreen
+        // No fullscreen or picture-in-picture delegation: either would show the
+        // video without the sibling watermark overlay (PiP also outside the
+        // capture-protected window). The app's own fullscreen button takes the
+        // whole player container, watermark included. WebKit ignores the PiP
+        // token, so the macOS shell also disables PiP natively.
+        allow="autoplay; encrypted-media"
         referrerPolicy="strict-origin-when-cross-origin"
         sandbox="allow-scripts allow-same-origin allow-presentation"
       />

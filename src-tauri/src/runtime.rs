@@ -58,14 +58,35 @@ fn normalize(value: &str) -> Option<String> {
 }
 
 /// Reads `desktop-runtime-config.json`: the packaged copy from the resource dir,
-/// overridden by a copy in userData, then by env (so a developer can target a
-/// local/staging deployment without rebuilding).
+/// overridden — in DEV builds only — by a copy in userData, then by env (so a
+/// developer can target a local/staging deployment without rebuilding).
+///
+/// Packaged builds ignore both overrides and always load the production web
+/// origin (DEFAULT_WEB_URL), whatever any config file says: the navigation guard trusts whatever
+/// origin this returns, and the compiled-in dev-localhost capability grants
+/// sign-video-challenge to loopback, so an override let anyone with the app point
+/// it at a local page and mint real video-playback attestations outside the
+/// protected window.
 pub fn load_runtime_config(resource_dir: &Path, user_data: &Path) -> DesktopRuntimeConfig {
+    load_runtime_config_with(resource_dir, user_data, tauri::is_dev())
+}
+
+fn load_runtime_config_with(
+    resource_dir: &Path,
+    user_data: &Path,
+    allow_overrides: bool,
+) -> DesktopRuntimeConfig {
     let mut merged = DesktopRuntimeConfig::default();
-    for candidate in [
-        resource_dir.join("desktop-runtime-config.json"),
-        user_data.join("desktop-runtime-config.json"),
-    ] {
+    let user_override = user_data.join("desktop-runtime-config.json");
+    let candidates = if allow_overrides {
+        vec![
+            resource_dir.join("desktop-runtime-config.json"),
+            user_override,
+        ]
+    } else {
+        vec![resource_dir.join("desktop-runtime-config.json")]
+    };
+    for candidate in candidates {
         if let Ok(raw) = std::fs::read_to_string(&candidate) {
             let raw = raw.trim_start_matches('\u{feff}');
             if let Ok(cfg) = serde_json::from_str::<DesktopRuntimeConfig>(raw) {
@@ -80,6 +101,13 @@ pub fn load_runtime_config(resource_dir: &Path, user_data: &Path) -> DesktopRunt
                 }
             }
         }
+    }
+    if !allow_overrides {
+        // Even the resource copy is user-writable (per-user Windows install dir,
+        // a user-owned .app), so a packaged build never takes its web origin from
+        // disk: resolve_web_url falls back to the production DEFAULT_WEB_URL.
+        merged.public_web_base_url = None;
+        return merged;
     }
     // Env wins (dev/staging overrides).
     for var in [
@@ -168,6 +196,28 @@ mod tests {
         .unwrap();
         let cfg = load_runtime_config(&res, &ud);
         assert_eq!(resolve_web_url(&cfg), "https://userdata.example.com");
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn packaged_builds_ignore_user_data_and_env_overrides() {
+        let tmp = unique_tmp("rc-packaged");
+        let res = tmp.join("res");
+        let ud = tmp.join("ud");
+        std::fs::create_dir_all(&res).unwrap();
+        std::fs::create_dir_all(&ud).unwrap();
+        std::fs::write(
+            res.join("desktop-runtime-config.json"),
+            "{\"publicWebBaseUrl\":\"http://127.0.0.1:8080\"}",
+        )
+        .unwrap();
+        std::fs::write(
+            ud.join("desktop-runtime-config.json"),
+            "{\"publicWebBaseUrl\":\"http://localhost:8080\"}",
+        )
+        .unwrap();
+        let cfg = load_runtime_config_with(&res, &ud, false);
+        assert_eq!(resolve_web_url(&cfg), DEFAULT_WEB_URL);
         std::fs::remove_dir_all(&tmp).ok();
     }
 

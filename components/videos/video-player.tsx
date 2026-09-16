@@ -111,6 +111,16 @@ function exitFullscreen(documentRef: Document): Promise<void> {
   return Promise.reject(new Error('Fullscreen API is unavailable.'));
 }
 
+/**
+ * macOS desktop shell: WebKit element fullscreen is disabled in the app's
+ * WKWebView, and enabling it would move the web view into a NEW NSWindow that
+ * the window's capture protection does not cover. So on macOS the player fills
+ * its OWN window instead and asks the shell for native window fullscreen.
+ */
+function usesWindowFullscreen(): boolean {
+  return typeof window !== 'undefined' && window.desktopBridge?.platform === 'darwin';
+}
+
 export interface VideoPlayerHandle {
   seekTo(seconds: number): void;
 }
@@ -203,6 +213,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const [captionsOn, setCaptionsOn] = useState(false);
   const [hasCaptionTracks, setHasCaptionTracks] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [windowFill, setWindowFill] = useState(false);
   const [watermarkKey, setWatermarkKey] = useState(0);
   const [captureWarning, setCaptureWarning] = useState<'screenshot' | 'recording' | null>(null);
 
@@ -443,15 +454,15 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
     }
   }, [scheduleRenewal, teardownEngine, userId, videoId]);
 
-  // Boot: attest + attach. Also engage OS screen-capture protection for the
-  // lifetime of the player on every native shell — desktop (Tauri window
-  // capture-exclusion) AND mobile (Android FLAG_SECURE) — so screenshots and
-  // screen recorders capture only black. This is a hard playback gate.
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const runtimeKind = getAppRuntimeKind();
-      if (runtimeKind === 'web') {
+  // The ONE way playback starts — first boot and every "Try again". Web is
+  // refused, and OS screen-capture protection must engage on every native shell
+  // — desktop (Tauri window capture-exclusion) AND mobile (Android FLAG_SECURE) —
+  // before a session is requested. Hard gate: "Try again" used to call
+  // startPlayback() directly and skip it.
+  const engageProtectionAndStart = useCallback(
+    async (isCancelled: () => boolean = () => false) => {
+      setPhase({ kind: 'attesting' });
+      if (getAppRuntimeKind() === 'web') {
         setPhase({
           kind: 'error',
           code: 'WEB_NOT_ALLOWED',
@@ -460,7 +471,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         return;
       }
       const protectionEngaged = await setVideoScreenProtection(true);
-      if (cancelled) return;
+      if (isCancelled()) return;
       if (!protectionEngaged) {
         setPhase({
           kind: 'error',
@@ -470,7 +481,13 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         return;
       }
       await startPlayback();
-    })();
+    },
+    [startPlayback],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void engageProtectionAndStart(() => cancelled);
     return () => {
       cancelled = true;
       teardownEngine();
@@ -513,6 +530,54 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
       for (const eventName of events) document.removeEventListener(eventName, onFullscreenChange);
     };
   }, []);
+
+  // A playback error swaps the player for the error panel, so drop fullscreen.
+  useEffect(() => {
+    if (phase.kind === 'error') setWindowFill(false);
+  }, [phase.kind]);
+
+  // macOS same-window fullscreen (see usesWindowFullscreen). The container turns
+  // position:fixed over the whole window — no DOM move, which would reload the
+  // iframe — and <html data-video-fill> hides the app header, whose stacking
+  // context would otherwise paint over it. The window itself goes native
+  // fullscreen (shell >= 0.7.10; older shells just fill the window) unless the
+  // learner already had it fullscreen, which is then left as they set it. The exit
+  // button, Escape (only while focus is outside the Bunny iframe), leaving native
+  // fullscreen via the green button / View menu, or unmounting all end it.
+  useEffect(() => {
+    if (!windowFill) return;
+    const bridge = window.desktopBridge;
+    const root = document.documentElement;
+    root.dataset.videoFill = '';
+    let disposed = false;
+    let sawNativeFullscreen = false;
+    let ownsNativeFullscreen = false;
+    void (async () => {
+      const info = await bridge?.runtime.info().catch(() => null);
+      if (disposed) return;
+      if (info?.windowState?.isFullScreen) {
+        sawNativeFullscreen = true;
+        return;
+      }
+      ownsNativeFullscreen = true;
+      await bridge?.window?.setFullscreen(true);
+    })().catch(() => undefined);
+    const removeStateListener = bridge?.runtime.onWindowStateChange?.((state) => {
+      if (state.isFullScreen) sawNativeFullscreen = true;
+      else if (sawNativeFullscreen) setWindowFill(false);
+    });
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setWindowFill(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      disposed = true;
+      delete root.dataset.videoFill;
+      window.removeEventListener('keydown', onKeyDown);
+      removeStateListener?.();
+      if (ownsNativeFullscreen) void bridge?.window?.setFullscreen(false).catch(() => undefined);
+    };
+  }, [windowFill]);
 
   // Security spec §3.1: "the previous device must lose playback access even
   // if the video page was already open" — the SignalR session_revoked push
@@ -667,6 +732,10 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
   const toggleFullscreen = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
+    if (usesWindowFullscreen()) {
+      setWindowFill((active) => !active);
+      return;
+    }
     if (getFullscreenElement(document)) {
       void exitFullscreen(document)
         .then(() => setIsFullscreen(false))
@@ -747,7 +816,7 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         <p className="max-w-md text-sm leading-6 text-white/75">{phase.message}</p>
         <button
           type="button"
-          onClick={() => void startPlayback()}
+          onClick={() => void engageProtectionAndStart()}
           className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:bg-primary-dark"
         >
           <RotateCcw className="h-4 w-4" aria-hidden="true" />
@@ -759,12 +828,17 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
 
   const isSecureEmbedPlayback =
     phase.kind === 'playing' && phase.session.deliveryMode === 'secure_embed';
+  const fullscreenActive = isFullscreen || windowFill;
   const progressPercent = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
 
   return (
     <div
       ref={containerRef}
-      className="oet-video-player group relative h-full w-full overflow-hidden bg-black outline-none"
+      className={`oet-video-player group overflow-hidden bg-black outline-none ${
+        windowFill
+          ? 'fixed inset-0 z-[2147483647]'
+          : 'relative h-full w-full'
+      }`}
       tabIndex={0}
       role="application"
       aria-label="Video player"
@@ -881,10 +955,10 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
         <button
           type="button"
           onClick={toggleFullscreen}
-          aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          aria-label={fullscreenActive ? 'Exit fullscreen' : 'Fullscreen'}
           className="absolute right-3 top-3 z-50 rounded-lg bg-black/65 p-2 text-white shadow-lg hover:bg-black/80"
         >
-          {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+          {fullscreenActive ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
         </button>
       )}
 
@@ -988,8 +1062,8 @@ export const VideoPlayer = forwardRef<VideoPlayerHandle, VideoPlayerProps>(funct
                 <Captions className="h-5 w-5" />
               </button>
             )}
-            <button type="button" onClick={toggleFullscreen} aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'} className="rounded p-1.5 hover:bg-white/15">
-              {isFullscreen ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
+            <button type="button" onClick={toggleFullscreen} aria-label={fullscreenActive ? 'Exit fullscreen' : 'Fullscreen'} className="rounded p-1.5 hover:bg-white/15">
+              {fullscreenActive ? <Minimize className="h-5 w-5" /> : <Maximize className="h-5 w-5" />}
             </button>
           </div>
         </div>

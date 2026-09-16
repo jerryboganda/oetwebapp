@@ -219,69 +219,25 @@ pub fn hard_reload(app: AppHandle, state: State<'_, RuntimeState>) -> Result<(),
 
 // ── screen-capture protection ────────────────────────────────────────
 
-/// Toggle OS-level screen-capture exclusion on the main window. When enabled the
-/// window is EXCLUDED from screenshots, screen recorders, screen shares and
-/// mirroring — capture tools see solid black — matching the Capacitor Android
-/// FLAG_SECURE behaviour so the same forensic protection covers video playback on
-/// every native shell. Implemented per-OS (Windows: SetWindowDisplayAffinity with
-/// WDA_EXCLUDEFROMCAPTURE; macOS: NSWindow.sharingType = None). Best-effort
-/// hardening, NEVER a gate: returns `{ "ok": bool }` where ok=false means the
-/// current OS/build could not apply it (the caller treats that as non-fatal).
+/// Toggle OS-level screen-capture exclusion on the main window (Windows
+/// WDA_EXCLUDEFROMCAPTURE / macOS NSWindow.sharingType = None, via Tauri's
+/// set_content_protected). The video player requires `ok: true` on enable as a
+/// hard playback gate; other OSes have no such control and return `ok: false`.
+/// macOS builds the window protected (lib.rs) and REFUSES `enabled: false`, so
+/// neither the page nor an injected script can lift it there; Windows keeps
+/// per-playback protection (see lib.rs for why). `ok` means the OS call was
+/// dispatched, NOT that capture is proven blocked: macOS documents sharingType as a
+/// legacy hint that ScreenCaptureKit recorders (QuickTime, ⇧⌘5) do not honour.
 #[tauri::command]
 pub fn set_capture_protection(app: AppHandle, enabled: bool) -> Value {
-    serde_json::json!({ "ok": apply_capture_protection(&app, enabled) })
-}
-
-#[cfg(windows)]
-fn apply_capture_protection(app: &AppHandle, enabled: bool) -> bool {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
-    };
-    let Some(win) = app.get_webview_window("main") else {
-        return false;
-    };
-    let hwnd = match win.hwnd() {
-        Ok(handle) => handle,
-        Err(_) => return false,
-    };
-    let affinity = if enabled {
-        WDA_EXCLUDEFROMCAPTURE
-    } else {
-        WDA_NONE
-    };
-    // SAFETY: hwnd is the live top-level window handle for this process's main
-    // window, which we just resolved; SetWindowDisplayAffinity only reads it.
-    unsafe { SetWindowDisplayAffinity(hwnd, affinity).is_ok() }
-}
-
-#[cfg(target_os = "macos")]
-fn apply_capture_protection(app: &AppHandle, enabled: bool) -> bool {
-    use objc2::msg_send;
-    use objc2::runtime::AnyObject;
-    let Some(win) = app.get_webview_window("main") else {
-        return false;
-    };
-    let ns_window = match win.ns_window() {
-        Ok(ptr) => ptr as *mut AnyObject,
-        Err(_) => return false,
-    };
-    if ns_window.is_null() {
-        return false;
-    }
-    // NSWindowSharingType: None = 0 (excluded from capture / screen sharing),
-    // ReadOnly = 1 (the default, visible to capture).
-    let sharing_type: usize = if enabled { 0 } else { 1 };
-    // SAFETY: ns_window is the live NSWindow* for the main window; -setSharingType:
-    // takes an NSUInteger and returns void.
-    unsafe {
-        let _: () = msg_send![ns_window, setSharingType: sharing_type];
-    }
-    true
-}
-
-#[cfg(not(any(windows, target_os = "macos")))]
-fn apply_capture_protection(_app: &AppHandle, _enabled: bool) -> bool {
-    false
+    let supported = cfg!(any(windows, target_os = "macos"));
+    let lift_refused = !enabled && cfg!(target_os = "macos");
+    let ok = supported
+        && !lift_refused
+        && app
+            .get_webview_window("main")
+            .is_some_and(|win| win.set_content_protected(enabled).is_ok());
+    json!({ "ok": ok })
 }
 
 // ── open external ───────────────────────────────────────────────────
