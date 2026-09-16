@@ -558,6 +558,96 @@ describe('ListeningPaperPlayerPage', () => {
     await waitFor(() => expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-manual-1', 1));
   });
 
+  it('auto-advances when the countdown reaches 00:00, with no confirmation popup', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const session = makeMockSession({
+        attempt: {
+          attemptId: 'attempt-timer-1',
+          paperId: 'paper-1',
+          mode: 'exam',
+          sectionCursor: 0,
+          answers: {},
+          serverNow: new Date().toISOString(),
+        },
+      });
+      (session.paper.extracts[0] as { timeLimitSeconds?: number }).timeLimitSeconds = 3;
+      mockGetListeningSession.mockResolvedValue(session);
+      mockSaveListeningAnswer.mockResolvedValue({ success: true });
+      mockAdvanceListeningSection.mockResolvedValue({ sectionCursor: 1 });
+
+      await act(async () => {
+        render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+      });
+      await waitFor(() => expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument());
+      // The countdown is paused while the audio is "buffering" (isBuffering
+      // starts true); canPlay is what a real load would fire to release it.
+      await act(async () => {
+        fireEvent.canPlay(document.querySelector('audio') as HTMLAudioElement);
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(3_100);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-timer-1', 1));
+      expect(screen.queryByRole('button', { name: /keep working/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/move to the next sub-section\?/i)).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('timer expiry wins over an already-open manual confirm popup: closes it and auto-advances', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const session = makeMockSession({
+        attempt: {
+          attemptId: 'attempt-race-1',
+          paperId: 'paper-1',
+          mode: 'exam',
+          sectionCursor: 0,
+          answers: {},
+          serverNow: new Date().toISOString(),
+        },
+      });
+      (session.paper.extracts[0] as { timeLimitSeconds?: number }).timeLimitSeconds = 5;
+      mockGetListeningSession.mockResolvedValue(session);
+      mockSaveListeningAnswer.mockResolvedValue({ success: true });
+      mockAdvanceListeningSection.mockResolvedValue({ sectionCursor: 1 });
+
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      await act(async () => {
+        render(<ListeningPaperPlayerPage params={Promise.resolve({ paperId: 'paper-1' })} />);
+      });
+      await waitFor(() => expect(screen.getByTestId('listening-audio-transport')).toBeInTheDocument());
+      await act(async () => {
+        fireEvent.canPlay(document.querySelector('audio') as HTMLAudioElement);
+      });
+
+      // Learner opens the manual confirm before the timer would have expired.
+      await user.click(screen.getByRole('button', { name: /advance to next sub-section/i }));
+      expect(await screen.findByText(/move to the next sub-section\?/i)).toBeInTheDocument();
+      expect(mockAdvanceListeningSection).not.toHaveBeenCalled();
+
+      // The countdown then hits 00:00 while that popup is still open — timer
+      // expiry must win: close it and advance, granting no extra time.
+      await act(async () => {
+        vi.advanceTimersByTime(5_100);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      await waitFor(() => expect(mockAdvanceListeningSection).toHaveBeenCalledWith('attempt-race-1', 1));
+      expect(screen.queryByText(/move to the next sub-section\?/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /keep working/i })).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('no longer carries the timer-expired confirmation copy', async () => {
     const session = makeMockSession({
       attempt: {

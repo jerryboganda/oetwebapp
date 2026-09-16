@@ -35,6 +35,19 @@ export function useTimer(
   const isExpired = direction === 'down' && elapsed >= initialSeconds;
   const remaining = Math.max(0, initialSeconds - elapsed);
 
+  // A countdown restored already-expired from sessionStorage (reload right at
+  // or after 00:00) never starts the interval below, so its onExpire would
+  // otherwise never fire and the sub-section would be stranded. Fire once;
+  // the live-countdown path below still handles the in-session expiry.
+  const expireFiredRef = useRef(false);
+  useEffect(() => {
+    if (isExpired && !expireFiredRef.current) {
+      expireFiredRef.current = true;
+      onExpire?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isExpired]);
+
   const clearTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -54,7 +67,6 @@ export function useTimer(
         }
         if (direction === 'down' && next >= initialSeconds) {
           clearTimer();
-          onExpire?.();
         }
         return next;
       });

@@ -812,7 +812,7 @@ function IntroCard({
       ) : null}
       <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted">
         Each sub-section plays its own audio once and runs its own countdown. When the timer reaches zero,
-        a confirmation is required before the sub-section locks — you can never return to a previous
+        the sub-section locks automatically and the next one opens — you can never return to a previous
         sub-section. Use headphones.
       </p>
       <div className="mx-auto mt-5 max-w-2xl text-left">

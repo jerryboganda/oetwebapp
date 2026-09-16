@@ -1527,6 +1527,11 @@ function PlayerContent() {
 
   const advanceFromReview = async () => {
     if (audioValidityHeld) return;
+    // A manual "Next" tap during review can leave the confirm modal open; if
+    // the review window then hits 0 before it's answered, the system-driven
+    // advance below must win rather than wait on it (same rule as the timer
+    // race on the exam-paper Listening route).
+    setShowNextConfirm(false);
     if (isLastSection) {
       void handleSubmit();
       return;
@@ -1766,6 +1771,10 @@ function PlayerContent() {
     if (audioValidityHeld) return;
     if (!currentSection) return;
     if (autoAdvanceInFlightRef.current) return;
+    // Audio ending is system-initiated: it must win over an already-open
+    // manual "Next question" confirm (Part B slicing) rather than leave a
+    // stale popup referencing a section the player is about to leave.
+    setShowNextConfirm(false);
     if (shouldSlicePartB) {
       const missingCueBoundary = currentExtracts.length === 0 || currentExtracts.some((extract) => (
         extract.audioStartMs == null
@@ -2128,8 +2137,8 @@ function PlayerContent() {
             // §17.11 — close the audio run and arm the next section's start.
             logAttemptEvent('audio_ended', currentSection ? { section: currentSection } : undefined);
             audioStartedLoggedRef.current = false;
-            // Audio completion opens the explicit finish confirmation/review
-            // state; it must not silently lock and cross the boundary.
+            // Audio completion is system-initiated: it must silently lock and
+            // cross the boundary, never wait on a confirmation.
             void autoAdvanceAfterAudio();
           }}
           onError={() => {
