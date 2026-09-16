@@ -55,6 +55,50 @@ public class CheckoutFlowHardeningTests : IClassFixture<TestWebApplicationFactor
         LearnerService.EnsureQuoteIsFulfillable(quote, DateTimeOffset.UtcNow);
     }
 
+    // ── 15 Sep 2026 P0 ────────────────────────────────────────────────────────
+    // Whop delivered a verified payment.succeeded for a real GBP 100 charge and
+    // fulfilment refused it 0.6s later with "This billing quote has expired" —
+    // the learner had taken longer than the ~15 minute quote window to finish on
+    // Whop's hosted checkout page. The charge stood; the course did not. The
+    // expiry window guards a stale PRICE before payment; after the money has
+    // moved it is the wrong question.
+    [Fact]
+    public void EnsureQuoteIsFulfillable_ExpiredQuote_IsStillFulfillable_OnceThePaymentHasSettled()
+    {
+        var quote = NewQuote(status: BillingQuoteStatus.Applied, expiresAt: DateTimeOffset.UtcNow.AddMinutes(-20));
+
+        LearnerService.EnsureQuoteIsFulfillable(quote, DateTimeOffset.UtcNow, paymentAlreadySettled: true);
+    }
+
+    [Fact]
+    public void EnsureQuoteIsFulfillable_SettledPayment_StillRefusesAConsumedQuote()
+    {
+        // Double-spend protection must NOT be relaxed along with the expiry.
+        var quote = NewQuote(status: BillingQuoteStatus.Completed, expiresAt: DateTimeOffset.UtcNow.AddMinutes(-20));
+        var ex = Assert.Throws<ApiException>(() =>
+            LearnerService.EnsureQuoteIsFulfillable(quote, DateTimeOffset.UtcNow, paymentAlreadySettled: true));
+        Assert.Equal("billing_quote_already_consumed", ex.ErrorCode);
+    }
+
+    [Fact]
+    public void EnsureQuoteIsFulfillable_SettledPayment_StillRefusesACancelledQuote()
+    {
+        var quote = NewQuote(status: BillingQuoteStatus.Cancelled, expiresAt: DateTimeOffset.UtcNow.AddMinutes(10));
+        var ex = Assert.Throws<ApiException>(() =>
+            LearnerService.EnsureQuoteIsFulfillable(quote, DateTimeOffset.UtcNow, paymentAlreadySettled: true));
+        Assert.Equal("billing_quote_cancelled", ex.ErrorCode);
+    }
+
+    [Fact]
+    public void EnsureQuoteIsFulfillable_ExpiredQuote_IsStillRefusedBeforePayment()
+    {
+        // The pre-payment checkout path must keep rejecting a stale price.
+        var quote = NewQuote(status: BillingQuoteStatus.Applied, expiresAt: DateTimeOffset.UtcNow.AddMinutes(-20));
+        var ex = Assert.Throws<ApiException>(() =>
+            LearnerService.EnsureQuoteIsFulfillable(quote, DateTimeOffset.UtcNow));
+        Assert.Equal("billing_quote_expired", ex.ErrorCode);
+    }
+
     [Fact]
     public void EnsureSnapshotMatchesCatalog_PlanVersionChanged_ThrowsDrift()
     {

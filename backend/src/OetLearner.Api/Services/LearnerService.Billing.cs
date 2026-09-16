@@ -26,12 +26,33 @@ public partial class LearnerService
     public static readonly TimeSpan BillingQuoteMaxLifetime = TimeSpan.FromHours(24);
 
     /// <summary>
-    /// Verify a stored quote is still safe to fulfil. Rejects expired or
-    /// already-completed quotes with a structured <see cref="ApiException"/>
-    /// using the <c>billing_quote_expired</c> / <c>billing_quote_already_consumed</c>
-    /// error codes the frontend expects.
+    /// Verify a stored quote is still safe to fulfil. Rejects already-completed or
+    /// cancelled quotes with a structured <see cref="ApiException"/> using the
+    /// <c>billing_quote_already_consumed</c> / <c>billing_quote_cancelled</c> /
+    /// <c>billing_quote_expired</c> error codes the frontend expects.
     /// </summary>
-    public static void EnsureQuoteIsFulfillable(BillingQuote quote, DateTimeOffset now)
+    /// <param name="paymentAlreadySettled">
+    /// True when this is called AFTER the gateway confirmed payment.
+    ///
+    /// The expiry window exists to stop a stale PRICE being used to start a new
+    /// payment. Once the money has moved it is the wrong question entirely, and
+    /// enforcing it is how the 15 Sep 2026 P0 happened: Whop delivered a verified
+    /// payment.succeeded for a real GBP 100 charge, fulfilment ran 0.6s later and
+    /// refused it with "This billing quote has expired. Refresh your cart and try
+    /// again." The learner had simply taken longer than the ~15 minute quote window
+    /// to finish on Whop's hosted checkout page. The charge stood; the course did not.
+    ///
+    /// A settled payment is therefore fulfilled against the price the learner
+    /// actually agreed to. Everything that protects the ORDER still applies:
+    /// already-consumed and cancelled quotes are still refused here, the amount /
+    /// currency / owner binding still runs, and
+    /// <see cref="EnsureQuoteSnapshotMatchesCatalog"/> still refuses a quote whose
+    /// plan or add-on has been re-versioned since.
+    /// </param>
+    public static void EnsureQuoteIsFulfillable(
+        BillingQuote quote,
+        DateTimeOffset now,
+        bool paymentAlreadySettled = false)
     {
         ArgumentNullException.ThrowIfNull(quote);
 
@@ -49,7 +70,7 @@ public partial class LearnerService
                 "This billing quote was cancelled and cannot be fulfilled.");
         }
 
-        if (quote.ExpiresAt < now)
+        if (!paymentAlreadySettled && quote.ExpiresAt < now)
         {
             throw ApiException.Validation(
                 "billing_quote_expired",

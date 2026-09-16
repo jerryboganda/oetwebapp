@@ -12116,7 +12116,10 @@ public partial class LearnerService(
         var addOnVersionIds = DeserializeAddOnVersionIds(quote);
         var now = DateTimeOffset.UtcNow;
         var planPendingVerification = false;
-        EnsureQuoteIsFulfillable(quote, now);
+        // Post-payment: both callers of this method are gated on a verified
+        // "completed" gateway status, so the charge already stands. The quote's
+        // expiry window must not void it — see EnsureQuoteIsFulfillable.
+        EnsureQuoteIsFulfillable(quote, now, paymentAlreadySettled: true);
         await EnsureQuoteSnapshotMatchesCurrentCatalogAsync(quote, ct);
 
         if (!string.IsNullOrWhiteSpace(quote.PlanCode) && string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
