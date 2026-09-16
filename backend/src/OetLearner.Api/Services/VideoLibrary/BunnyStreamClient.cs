@@ -432,8 +432,20 @@ public sealed class BunnyStreamClient(
 
     /// <summary>
     /// Bunny embed-view token authentication:
-    /// SHA256_HEX(libraryApiKey + videoId + expires). MediaCage DRM only works
-    /// through this player surface; the API key never leaves the server.
+    /// SHA256_HEX(tokenAuthenticationKey + videoId + expires), where the key is the
+    /// library's <b>Token Authentication Key</b> (Stream → library → Security), NOT
+    /// the library API key — that is what <see cref="SignPlaybackUrlAsync"/> passes
+    /// and it is correct. An earlier version of this comment said "libraryApiKey",
+    /// which reads like a bug in working code; do not "fix" the call site to match
+    /// it. MediaCage DRM only works through this player surface, and the key never
+    /// leaves the server.
+    ///
+    /// A 403 from iframe.mediadelivery.net is therefore usually NOT this token. Check
+    /// the library's embed-view referrer settings first — see the note on
+    /// <see cref="ComputeCdnToken"/> about native WebViews and Referer headers — and
+    /// remember that opening a signed embed URL directly in a browser sends no
+    /// Referer at all, so a 403 there proves nothing about the in-app player.
+    /// Reproduce with scripts/videos/diagnose-embed-playback.mjs.
     /// </summary>
     public static string ComputeEmbedToken(string libraryApiKey, string bunnyVideoId, long expiresUnix)
     {
