@@ -44,6 +44,86 @@ public class UserAccessAllocationServiceTests
         await db.SaveChangesAsync();
     }
 
+    // ── Owner P0, 15 Sep 2026 — Incident B ────────────────────────────────────
+    // Three abandoned Whop checkouts showed up in admin User Management as
+    // "Full Condensed Recorded OET Course - Medicine · Status: Draft · Starts
+    // 15/09/2026 · No expiry" — reading exactly like three owned courses. Draft is
+    // an internal checkout-lifecycle scaffold; it is created before payment and
+    // confers nothing. This listing was the ONLY subscription query in the codebase
+    // that did not exclude it.
+
+    private static Subscription DraftCheckout(string userId, string id, string planCode)
+        => new()
+        {
+            Id = id,
+            UserId = userId,
+            PlanId = planCode,
+            Status = SubscriptionStatus.Draft,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
+            PriceAmount = 100m,
+            Currency = "GBP",
+            Interval = "one_time",
+        };
+
+    [Fact]
+    public async Task GetAccess_NeverShowsDraftCheckoutScaffolds()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-draft");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        // Three abandoned checkout attempts, exactly as reported.
+        db.Subscriptions.AddRange(
+            DraftCheckout("learner-draft", "sub-draft-1", "med"),
+            DraftCheckout("learner-draft", "sub-draft-2", "med"),
+            DraftCheckout("learner-draft", "sub-draft-3", "med"));
+        await db.SaveChangesAsync();
+
+        var access = await CreateService(db).GetAccessAsync("learner-draft", default);
+
+        Assert.Empty(access.Subscriptions);
+    }
+
+    [Fact]
+    public async Task GetAccess_ShowsOnlyTheRealAllocation_WhenDraftsSurroundIt()
+    {
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-mixed");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        db.Subscriptions.AddRange(
+            DraftCheckout("learner-mixed", "sub-draft-a", "med"),
+            DraftCheckout("learner-mixed", "sub-draft-b", "med"));
+        await db.SaveChangesAsync();
+
+        // The payment that actually succeeded.
+        var access = await CreateService(db).GrantPackageAsync("admin", "Admin", "learner-mixed",
+            new AdminUserAccessPackageRequest("med", StartsAt: null, ExpiresAt: null,
+                MakePrimary: true, GrantIncludedCredits: false, OverrideProfessionMismatch: false), default);
+
+        // Exactly ONE valid course allocation, no Draft duplicates.
+        Assert.Single(access.Subscriptions);
+        Assert.DoesNotContain(access.Subscriptions, s => string.Equals(s.Status, "Draft", StringComparison.OrdinalIgnoreCase));
+        // The Draft rows are hidden, not destroyed — they remain checkout history.
+        Assert.Equal(2, await db.Subscriptions.CountAsync(s => s.UserId == "learner-mixed" && s.Status == SubscriptionStatus.Draft));
+    }
+
+    [Fact]
+    public async Task GetAccess_StillShowsPendingFulfilmentRows()
+    {
+        // Hiding Draft must not hide a row an admin needs to act on.
+        await using var db = CreateDb();
+        await SeedLearnerAsync(db, "learner-pending");
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-med", Code = "med", Name = "Medicine", DurationMonths = 6, AccessDurationDays = 180 });
+        var pending = DraftCheckout("learner-pending", "sub-pending", "med");
+        pending.Status = SubscriptionStatus.Pending;
+        db.Subscriptions.Add(pending);
+        await db.SaveChangesAsync();
+
+        var access = await CreateService(db).GetAccessAsync("learner-pending", default);
+
+        Assert.Single(access.Subscriptions);
+    }
+
     [Fact]
     public async Task GrantPackage_CreatesSubscription_WithCustomExpiry_AndSetsPrimary()
     {
