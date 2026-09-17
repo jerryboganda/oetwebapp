@@ -1811,7 +1811,7 @@ public sealed partial class WritingRuleEngine
         // "Dear Director of Nursing," was rejected while "Dear Director," was accepted.
         return Regex.IsMatch(
             salutation,
-            @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife|Officer|Manager|Registrar|Director|Leader|Head)"
+            @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife|Officer|Manager|Registrar|Director|Leader|Head|Supervisor|Warden|Matron|Sister|Worker|Counsellor|Counselor|Educator)"
             + @"(?:\s+of\s+(?:[A-Za-z\-]+\s*){1,3})?"
             // Hyphens count as separators: "Dear Nurse-in-Charge," is the same role as
             // "Dear Nurse in Charge," and was still being read as a personal name.

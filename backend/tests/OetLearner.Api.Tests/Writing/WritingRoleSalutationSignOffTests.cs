@@ -34,6 +34,11 @@ public sealed class WritingRoleSalutationSignOffTests
     // Hyphenated roles were still read as personal names.
     [InlineData("Dear Nurse-in-Charge,")]
     [InlineData("Dear Registrar-on-Call,")]
+    // More bare roles the OET tasks actually address.
+    [InlineData("Dear Supervisor,")]
+    [InlineData("Dear Resident Warden,")]
+    [InlineData("Dear Social Worker,")]
+    [InlineData("Dear Community Social Worker,")]
     public void A_role_or_duty_salutation_names_no_person(string salutation)
     {
         Assert.True(WritingRuleEngine.SalutationIsUnnamedRecipient(salutation));
