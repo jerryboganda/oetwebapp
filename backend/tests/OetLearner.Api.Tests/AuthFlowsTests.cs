@@ -1507,6 +1507,7 @@ public class AuthFlowsTests
                 "utmContent",
                 "referrerUrl",
                 "landingPath",
+                "registrationPurpose",
             }
         };
 
@@ -2459,6 +2460,84 @@ public class AuthFlowsTests
         string UserId,
         string Email,
         string DisplayName);
+
+    [Fact]
+    public async Task Register_WithPlacementPurpose_SkipsEnrollmentFields()
+    {
+        await using var harness = CreateAuthApiHarness();
+
+        var request = new RegisterRequest(
+            "placement@example.com",
+            "Password123!",
+            ApplicationUserRoles.Learner,
+            "Placement One",
+            "Placement", "One",
+            "+923007654321",
+            ExamTypeId: null,
+            ProfessionId: null,
+            CountryTarget: null,
+            TargetExamDate: null,
+            AgreeToTerms: true,
+            AgreeToPrivacy: true,
+            MarketingOptIn: false,
+            ExternalRegistrationToken: null,
+            RegistrationPurpose: "placement");
+        var response = await harness.Client.PostAsJsonAsync("/v1/auth/register", request);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var scope = harness.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var profile = await db.LearnerRegistrationProfiles
+            .SingleAsync(p => p.RegistrationPurpose == "placement");
+        Assert.Null(profile.ExamTypeId);
+        Assert.Null(profile.ProfessionId);
+        Assert.Null(profile.CountryTarget);
+        Assert.Null(profile.TargetExamDate);
+    }
+
+    [Fact]
+    public async Task Register_WithoutPurpose_StillRequiresEnrollmentFields()
+    {
+        await using var harness = CreateAuthApiHarness();
+
+        var request = new RegisterRequest(
+            "noenrollment@example.com",
+            "Password123!",
+            ApplicationUserRoles.Learner,
+            "No Enrollment",
+            "No", "Enrollment",
+            "+923007654321",
+            ExamTypeId: null,
+            ProfessionId: null,
+            CountryTarget: null,
+            TargetExamDate: null,
+            AgreeToTerms: true,
+            AgreeToPrivacy: true,
+            MarketingOptIn: false,
+            ExternalRegistrationToken: null,
+            RegistrationPurpose: null);
+        var response = await harness.Client.PostAsJsonAsync("/v1/auth/register", request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("exam_type_required", await ReadErrorCodeAsync(response));
+    }
+
+    [Fact]
+    public async Task Register_WithUnknownPurpose_IsRejected()
+    {
+        await using var harness = CreateAuthApiHarness();
+
+        var request = new RegisterRequest(
+            "badpurpose@example.com",
+            "Password123!",
+            ApplicationUserRoles.Learner,
+            "Bad Purpose",
+            "Bad", "Purpose",
+            "+923007654321",
+            RegistrationPurpose: "sneaky");
+        var response = await harness.Client.PostAsJsonAsync("/v1/auth/register", request);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_registration_purpose", await ReadErrorCodeAsync(response));
+    }
 
     private static async Task RegisterLearnerAsync(HttpClient client)
     {

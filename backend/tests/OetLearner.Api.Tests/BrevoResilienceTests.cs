@@ -156,6 +156,7 @@ public class BrevoResilienceTests
             SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
             SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
             SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
+            Placement: new PlacementSettings(PlacementEnabled: false),
             CheckoutCom: TestRuntimeSettingsProvider.DefaultCheckoutCom(),
             Paymob: TestRuntimeSettingsProvider.DefaultPaymob(),
             PayTabs: TestRuntimeSettingsProvider.DefaultPayTabs(),

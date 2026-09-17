@@ -107,6 +107,18 @@ public sealed class AuthService(
                 "The social sign-in email must match the registration email.");
         }
 
+        // Registration purpose: the standard OET enrollment signup requires
+        // the full healthcare-enrollment block; the free General-English
+        // placement test ("placement") defers it — the learner supplies it
+        // later via goals/onboarding the first time they enroll for OET.
+        var isPlacementSignup = string.Equals(request.RegistrationPurpose, "placement", StringComparison.OrdinalIgnoreCase);
+        if (request.RegistrationPurpose is not null && !isPlacementSignup)
+        {
+            throw ApiException.Validation(
+                "invalid_registration_purpose",
+                "Registration purpose must be omitted or 'placement'.");
+        }
+
         var firstName = !string.IsNullOrWhiteSpace(request.FirstName)
             ? request.FirstName.Trim()
             : externalRegistration?.FirstName?.Trim();
@@ -114,20 +126,37 @@ public sealed class AuthService(
             ? request.LastName.Trim()
             : externalRegistration?.LastName?.Trim();
         var mobileNumber = RequireTrimmed(request.MobileNumber, "mobile_number_required", "Mobile number is required.");
-        var examTypeId = RequireTrimmed(request.ExamTypeId, "exam_type_required", "Exam type is required.");
-        var professionId = RequireTrimmed(request.ProfessionId, "profession_required", "Profession is required.");
-        var countryTarget = TargetCountryOptions.Canonicalize(request.CountryTarget);
 
-        if (request.TargetExamDate is null)
+        // Enrollment block: required for the standard signup, deferred (null)
+        // for placement signups.
+        string? examTypeId;
+        string? professionId;
+        string? countryTarget;
+        DateOnly? targetExamDate;
+        if (isPlacementSignup)
         {
-            throw ApiException.Validation("target_exam_date_required", "Your target OET exam date is required.");
+            examTypeId = null;
+            professionId = null;
+            countryTarget = null;
+            targetExamDate = null;
         }
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
-        if (request.TargetExamDate.Value < today)
+        else
         {
-            throw ApiException.Validation("target_exam_date_in_past", "Your target OET exam date must be today or later.");
+            examTypeId = RequireTrimmed(request.ExamTypeId, "exam_type_required", "Exam type is required.");
+            professionId = RequireTrimmed(request.ProfessionId, "profession_required", "Profession is required.");
+            countryTarget = TargetCountryOptions.Canonicalize(request.CountryTarget);
+
+            if (request.TargetExamDate is null)
+            {
+                throw ApiException.Validation("target_exam_date_required", "Your target OET exam date is required.");
+            }
+            var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+            if (request.TargetExamDate.Value < today)
+            {
+                throw ApiException.Validation("target_exam_date_in_past", "Your target OET exam date must be today or later.");
+            }
+            targetExamDate = request.TargetExamDate.Value;
         }
-        var targetExamDate = request.TargetExamDate.Value;
 
         if (string.IsNullOrWhiteSpace(firstName))
         {
@@ -149,11 +178,15 @@ public sealed class AuthService(
             throw ApiException.Validation("privacy_required", "Accept the privacy policy to continue.");
         }
 
-        var signupSelection = await ValidateSignupSelectionAsync(
-            examTypeId,
-            professionId,
-            countryTarget,
-            cancellationToken);
+        // Catalog validation only applies to the standard (enrollment)
+        // signup — placement signups defer the enrollment block entirely.
+        (SignupExamTypeCatalog ExamType, SignupProfessionCatalog Profession)? signupSelection = isPlacementSignup
+            ? null
+            : await ValidateSignupSelectionAsync(
+                examTypeId!,
+                professionId!,
+                countryTarget!,
+                cancellationToken);
         // Enforce password policy now that we have the resolved email. Placed here (not
         // at the top of the method) so the policy can reject passwords that equal or
         // contain the local-part of the user's email address.
@@ -191,7 +224,7 @@ public sealed class AuthService(
             Role = ApplicationUserRoles.Learner,
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? BuildDefaultDisplayName(account.Email) : displayName,
             Email = account.Email,
-            ActiveProfessionId = signupSelection.Profession.Id,
+            ActiveProfessionId = signupSelection?.Profession.Id,
             CreatedAt = now,
             LastActiveAt = now
         };
@@ -203,11 +236,12 @@ public sealed class AuthService(
             LearnerUserId = learner.Id,
             FirstName = firstName,
             LastName = lastName,
-            ExamTypeId = signupSelection.ExamType.Id,
-            ProfessionId = signupSelection.Profession.Id,
+            ExamTypeId = signupSelection?.ExamType.Id,
+            ProfessionId = signupSelection?.Profession.Id,
             SessionId = string.Empty,
             CountryTarget = countryTarget,
             TargetExamDate = targetExamDate,
+            RegistrationPurpose = isPlacementSignup ? "placement" : null,
             MobileNumber = mobileNumber,
             AgreeToTerms = request.AgreeToTerms ?? false,
             AgreeToPrivacy = request.AgreeToPrivacy ?? false,

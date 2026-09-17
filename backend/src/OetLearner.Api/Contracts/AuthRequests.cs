@@ -24,7 +24,13 @@ public record RegisterRequest(
     string? UtmTerm = null,
     string? UtmContent = null,
     string? ReferrerUrl = null,
-    string? LandingPath = null);
+    string? LandingPath = null,
+    /// <summary>Why this account is being created. <c>null</c> = the standard
+    /// OET enrollment signup (all enrollment fields required);
+    /// <c>"placement"</c> = the free General-English placement test — minimal
+    /// identity fields only, healthcare-enrollment fields deferred until the
+    /// learner actually enrolls.</summary>
+    string? RegistrationPurpose = null);
 
 public record PasswordSignInRequest(
     string Email,

@@ -446,6 +446,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
         var speakingStorage = ResolveSpeakingStorage(r);
         var speakingCompliance = ResolveSpeakingCompliance(r);
         var speakingFeatures = ResolveSpeakingFeatures(r);
+        var placement = ResolvePlacement(r);
         var checkoutCom = ResolveCheckoutCom(r, billing.CheckoutCom);
         var paymob = ResolvePaymob(r, billing.Paymob);
         var payTabs = ResolvePayTabs(r, billing.PayTabs);
@@ -487,6 +488,7 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
             SpeakingStorage: speakingStorage,
             SpeakingCompliance: speakingCompliance,
             SpeakingFeatures: speakingFeatures,
+            Placement: placement,
             CheckoutCom: checkoutCom,
             Paymob: paymob,
             PayTabs: payTabs,
@@ -1070,6 +1072,15 @@ public sealed class RuntimeSettingsProvider : IRuntimeSettingsProvider
     {
         var v2 = r.SpeakingV2Enabled ?? ParseBool(_config["Features:SpeakingV2"]) ?? false;
         return new SpeakingFeatureSettings(SpeakingV2Enabled: v2);
+    }
+
+    /// <summary>Placement test rollout flag: DB override, then env
+    /// (Features:PlacementEnabled), default OFF — the assessment only
+    /// becomes reachable when the owner turns it on.</summary>
+    private PlacementSettings ResolvePlacement(RuntimeSettingsRow r)
+    {
+        var enabled = r.PlacementEnabled ?? ParseBool(_config["Features:PlacementEnabled"]) ?? false;
+        return new PlacementSettings(PlacementEnabled: enabled);
     }
 
     private static int? ParseInt(string? s)

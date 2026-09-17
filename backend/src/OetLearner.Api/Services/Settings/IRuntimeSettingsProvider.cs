@@ -90,6 +90,7 @@ public sealed record EffectiveSettings(
     SpeakingStorageSettings SpeakingStorage,
     SpeakingComplianceSettings SpeakingCompliance,
     SpeakingFeatureSettings SpeakingFeatures,
+    PlacementSettings Placement,
     CheckoutComSettings CheckoutCom,
     PaymobSettings Paymob,
     PayTabsSettings PayTabs,
@@ -471,6 +472,14 @@ public sealed record SpeakingComplianceSettings(
 /// </summary>
 public sealed record SpeakingFeatureSettings(
     bool SpeakingV2Enabled);
+
+/// <summary>
+/// Placement-test (free General-English assessment on the private GEPA
+/// engine) rollout flags. <see cref="PlacementEnabled"/> gates every
+/// placement endpoint; the engine's own readiness gate runs underneath it.
+/// </summary>
+public sealed record PlacementSettings(
+    bool PlacementEnabled);
 
 /// <summary>Checkout.com payment gateway settings (DB-over-env merged).
 /// Secrets decrypted; <see cref="IsConfigured"/> gates live calls.</summary>

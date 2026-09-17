@@ -314,6 +314,7 @@ internal static class TestEffectiveSettingsFactory
             SpeakingStorage: new SpeakingStorageSettings(null, null, "eu-west-2", null, false),
             SpeakingCompliance: new SpeakingComplianceSettings("recording.v1", "live_video_with_tutor.v1", 90, 365, 2555),
             SpeakingFeatures: new SpeakingFeatureSettings(false),
+            Placement: new PlacementSettings(PlacementEnabled: false),
             CheckoutCom: new CheckoutComSettings("https://api.checkout.com", null, null, null, null, null, null),
             Paymob: new PaymobSettings("https://accept.paymob.com", null, null, null, new Dictionary<string, int>(), 0, null, null),
             PayTabs: new PayTabsSettings("https://secure.paytabs.com", null, null, null, null, null),
