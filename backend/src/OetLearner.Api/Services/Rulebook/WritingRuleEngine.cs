@@ -1233,7 +1233,12 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         if (!headerMatch.Success) yield break;
         var headerDateText = headerMatch.Value.Trim();
 
-        var m = Regex.Match(s.Body, Regex.Escape(headerDateText), RegexOptions.IgnoreCase);
+        // Cross-profession repair (18 Sep 2026): the header date was matched as a bare substring,
+        // so a letter dated "5 May 2017" was flagged for the body's "his discharge on 15 May 2017"
+        // — the header date sits inside "1|5 May 2017". Mr Joe Black's letter could only pass by
+        // dropping the year off a different, legitimate date. A digit may not precede the day.
+        var m = Regex.Match(s.Body, @"(?<![\d/.\-])" + Regex.Escape(headerDateText) + @"(?![\d/.\-])",
+            RegexOptions.IgnoreCase);
         if (m.Success)
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Never repeat today's date (the letter's own header date) in the body. Replace the WHOLE date phrase with 'today' ('presented on 13 June 2020' -> 'presented today'), never leave a preposition before it ('on today', 'at review on today'), and keep an EARLIER visit's own source date.",
