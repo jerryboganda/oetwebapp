@@ -93,7 +93,46 @@ export function AddonPurchaseModal({
             </div>
           )}
 
-          {status === 'ineligible' && quote && (
+          {status === 'ineligible' && quote && isTutorBook && quote.reason === 'addon_already_owned' && (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 rounded-lg border border-success/30 bg-success/10 p-4 text-sm text-success">
+                <Check className="mt-0.5 h-4 w-4 flex-none" />
+                <p className="font-medium text-navy">You already have The Tutor Book.</p>
+              </div>
+              <a
+                href="/learner/tutor-book"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 dark:text-slate-900"
+              >
+                Open The Tutor Book
+              </a>
+            </div>
+          )}
+
+          {status === 'ineligible' && quote && isTutorBook && quote.reason !== 'addon_already_owned' && (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-border bg-background-light p-4 text-sm text-navy">
+                You&apos;ll pay £45 — the standard price. A £32 discount applies automatically once you&apos;re
+                enrolled on an eligible course.
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const query = new URLSearchParams({
+                    productType: 'plan_purchase',
+                    priceId: 'tutor-book',
+                    quantity: '1',
+                  });
+                  router.push(`${checkoutPath}?${query.toString()}`);
+                  onClose();
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-navy/90 dark:text-slate-900"
+              >
+                <ShoppingBag className="h-4 w-4" /> Continue to checkout — £45
+              </button>
+            </div>
+          )}
+
+          {status === 'ineligible' && quote && !isTutorBook && (
             <div className="space-y-4">
               <div className="flex items-start gap-3 rounded-lg border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
                 <AlertCircle className="mt-0.5 h-4 w-4 flex-none" />

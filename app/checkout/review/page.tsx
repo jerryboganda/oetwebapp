@@ -127,7 +127,7 @@ function CheckoutReviewContent() {
   const [selectedGateway, setSelectedGateway] = useState<string>(initialGateway);
   const [payRegion, setPayRegion] = useState<PayRegion>('global');
   const regionTouchedRef = useRef(false);
-  const quoteStartedRef = useRef(false);
+  const quoteKeyRef = useRef<string | null>(null);
   const quoteRefreshingRef = useRef(false);
 
   const selectedMethod = useMemo(
@@ -211,16 +211,22 @@ function CheckoutReviewContent() {
     }
   }, [addOnCodes, couponCode, parentSubscriptionId, priceId, productType, quantity]);
 
+  // Reloads the quote whenever the cart's shape actually changes — not just on
+  // first mount — so a cart edit or browser back/forward that changes the URL
+  // params without remounting this page never leaves a stale quoteId behind
+  // (the cause of "supplied add-on codes do not match the saved quote").
+  // couponCode is deliberately excluded: it has its own explicit "Apply" flow.
   useEffect(() => {
     if (authLoading) return;
     if (!isAuthenticated) {
       router.replace(`/sign-in?next=${encodeURIComponent(nextHref)}`);
       return;
     }
-    if (quoteStartedRef.current) return;
-    quoteStartedRef.current = true;
+    const key = JSON.stringify({ productType, priceId, quantity, addOnCodes, parentSubscriptionId });
+    if (quoteKeyRef.current === key) return;
+    quoteKeyRef.current = key;
     void loadQuote();
-  }, [authLoading, isAuthenticated, loadQuote, nextHref, router]);
+  }, [addOnCodes, authLoading, isAuthenticated, loadQuote, nextHref, parentSubscriptionId, priceId, productType, quantity, router]);
 
   // Load the payment methods the backend can actually process in this environment so
   // the learner never picks an option that would fail. Falls back gracefully when the
@@ -382,11 +388,16 @@ function CheckoutReviewContent() {
         });
       } catch (err) {
         // billing_quote_expired: the 15-minute quote window closed in the narrow race
-        // between the countdown's own auto-refresh and this click. Recover the same way
-        // as an already-applied quote — fetch a fresh one and retry — so the learner is
-        // never told to manually refresh the page.
+        // between the countdown's own auto-refresh and this click. quote_mismatch: the
+        // cart's params changed in the same narrow window the re-key effect above
+        // otherwise closes. Recover all three the same way — fetch a fresh quote (from
+        // the current params) and retry — so the learner is never shown a raw mismatch
+        // error or told to manually refresh the page.
         const isRecoverableQuoteError =
-          err instanceof ApiError && (err.code === 'billing_quote_already_applied' || err.code === 'billing_quote_expired');
+          err instanceof ApiError &&
+          (err.code === 'billing_quote_already_applied' ||
+            err.code === 'billing_quote_expired' ||
+            err.code === 'quote_mismatch');
         if (!isRecoverableQuoteError) {
           throw err;
         }

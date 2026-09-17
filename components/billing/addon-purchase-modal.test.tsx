@@ -102,4 +102,60 @@ describe('AddonPurchaseModal', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
   });
+
+  it('sends an ineligible Tutor Book buyer straight to the £45 checkout, not a course upsell', async () => {
+    const onClose = vi.fn();
+    mockQuoteAddonEligibility.mockResolvedValue({
+      eligible: false,
+      addOnCode: 'tutor-book-addon',
+      addOnName: 'The Tutor Book',
+      addonKind: 'tutor_book',
+      requiredFlag: 'tutor_book_discount',
+      eligibleParents: [],
+      reason: 'no_eligible_parent',
+      redirectSku: 'crash-3letters',
+    });
+
+    render(
+      <AddonPurchaseModal
+        open
+        addOnCode="tutor-book-addon"
+        addOnLabel="The Tutor Book"
+        addOnPriceGbp={32}
+        onClose={onClose}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: /Continue to checkout — £45/ }));
+
+    expect(push).toHaveBeenCalledWith('/checkout/review?productType=plan_purchase&priceId=tutor-book&quantity=1');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText('You need an eligible course first.')).not.toBeInTheDocument();
+  });
+
+  it('tells a Tutor Book buyer who already owns it instead of charging again', async () => {
+    mockQuoteAddonEligibility.mockResolvedValue({
+      eligible: false,
+      addOnCode: 'tutor-book-addon',
+      addOnName: 'The Tutor Book',
+      addonKind: 'tutor_book',
+      requiredFlag: 'tutor_book_discount',
+      eligibleParents: [],
+      reason: 'addon_already_owned',
+      redirectSku: null,
+    });
+
+    render(
+      <AddonPurchaseModal
+        open
+        addOnCode="tutor-book-addon"
+        addOnLabel="The Tutor Book"
+        addOnPriceGbp={32}
+        onClose={() => {}}
+      />,
+    );
+
+    await screen.findByText('You already have The Tutor Book.');
+    expect(screen.queryByRole('button', { name: /Continue to checkout/ })).not.toBeInTheDocument();
+  });
 });

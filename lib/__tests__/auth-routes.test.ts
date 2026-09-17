@@ -1,4 +1,5 @@
 import { defaultRouteForRole, resolveAuthenticatedDestination, resolvePostAuthDestination, roleSatisfiesRequired } from '../auth-routes';
+import { appendAuthNextParam } from '../auth/routes';
 
 describe('auth routes', () => {
   beforeEach(() => {
@@ -17,6 +18,39 @@ describe('auth routes', () => {
     expect(resolveAuthenticatedDestination({ role: 'learner', requiresMfa: false, isAuthenticatorEnabled: false } as never, '/reading')).toBe('/reading');
     expect(defaultRouteForRole('admin')).toBe('/admin');
     expect(defaultRouteForRole('sponsor')).toBe('/support');
+  });
+
+  it.each([
+    '/placement-test?utm_source=search&utm_campaign=general%20english',
+    '/placement-test/attempts/session-123?intent=opaque-entry#resume',
+  ])('preserves the complete placement destination %s', (destination) => {
+    expect(resolveAuthenticatedDestination({ role: 'learner' } as never, destination)).toBe(destination);
+    const signIn = new URL(appendAuthNextParam('/sign-in', destination), 'https://app.example.test');
+    expect(signIn.searchParams.get('next')).toBe(destination);
+  });
+
+  it.each([
+    '/\\evil.example.test',
+    '/%2f%2fevil.example.test',
+    '/%5cevil.example.test',
+    '/%252f%252fevil.example.test',
+    '/%2e%2e%2f%2fevil.example.test',
+    '/\tevil.example.test',
+    '/placement-test%0a',
+    '/placement-test%ZZ',
+  ])('rejects unsafe or malformed next paths in every auth link: %s', (destination) => {
+    expect(resolveAuthenticatedDestination({ role: 'learner' } as never, destination)).toBe('/');
+    expect(appendAuthNextParam('/sign-in', destination)).toBe('/sign-in');
+  });
+
+  it.each([
+    '/placement-test/../admin/users',
+    '/placement-test/%2e%2e/admin/users',
+    '/%61dmin/users',
+    '/%65xpert/queue',
+    '/%73ponsor/learners',
+  ])('applies role restrictions to the resolved path: %s', (destination) => {
+    expect(resolveAuthenticatedDestination({ role: 'learner' } as never, destination)).toBe('/');
   });
 
   it('routes privileged users away from the learner root after sign-in', () => {

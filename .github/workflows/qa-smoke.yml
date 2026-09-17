@@ -13,6 +13,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  placement-entry:
+    name: Placement entry contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify placement return destinations
+        run: pnpm exec vitest run lib/__tests__/auth-routes.test.ts --reporter=verbose
+
   backend-tests:
     name: Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
