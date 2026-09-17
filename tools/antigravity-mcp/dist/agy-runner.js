@@ -122,10 +122,17 @@ export async function spawnAgy(args, opts) {
 }
 
 function writeLog(name, body) {
-    const file = path.join(logsDir(), `${Date.now()}-${name}.json`);
-    fs.writeFileSync(file, `${JSON.stringify(body, null, 2)}\n`, "utf8");
-    return file;
+    try {
+        const file = path.join(logsDir(), Date.now() + '-' + name + '.json');
+        fs.writeFileSync(file, JSON.stringify(body, null, 2) + String.fromCharCode(10), 'utf8');
+        return file;
+    } catch (err) {
+        console.warn('[agy-runner] log write skipped (non-fatal): ' + (err && err.message));
+        return null;
+    }
 }
+
+
 
 export function resolveRoleModelAndEffort(role, options = {}) {
     let routingMap = null;

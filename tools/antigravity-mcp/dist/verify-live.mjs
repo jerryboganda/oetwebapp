@@ -13,7 +13,7 @@ let problems = 0;
 
 console.log('--- 1. syntax gate ---');
 for (const f of fs.readdirSync(here).filter((x) => x.endsWith('.js') || x.endsWith('.mjs'))) {
-    try { execFileSync(process.execPath, ['--check', path.join(here, f)]); }
+    try { execFileSync(process.execPath, ['--check', path.join(here, f)], { cwd: toolRoot, stdio: 'ignore' }); }
     catch { problems++; console.log('FAIL  syntax  ' + f); }
 }
 console.log(problems === 0 ? 'all files parse' : problems + ' syntax failure(s)');
@@ -21,7 +21,7 @@ console.log(problems === 0 ? 'all files parse' : problems + ' syntax failure(s)'
 console.log('--- 2. self-test gate ---');
 for (const t of fs.readdirSync(here).filter((x) => x.startsWith('selftest') && x.endsWith('.mjs')).sort()) {
     try {
-        execFileSync(process.execPath, [path.join(here, t)], { encoding: 'utf8', timeout: 240000 });
+        execFileSync(process.execPath, [path.join(here, t)], { encoding: 'utf8', timeout: 240000, cwd: toolRoot });
         console.log('PASS  ' + t);
     } catch { problems++; console.log('FAIL  ' + t); }
 }

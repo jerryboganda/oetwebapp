@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 export const PINNED_MODEL = "gemini-3.8-flash-high";
 export const PINNED_EFFORT = "high";
 const ALLOWED_BINS = new Set([
@@ -77,12 +78,25 @@ export function highAutonomyAllowed(workspace) {
     const marker = path.join(workspace, ".agy-disposable");
     return fs.existsSync(marker);
 }
+const TOOL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+// Logs must NEVER depend on the caller's working directory: a long-running worker must not
+// die because it happened to be launched from an unwritable cwd (e.g. C:/WINDOWS/system32).
+// Order: explicit override, then the tool root, then the OS temp dir.
 export function logsDir() {
-    const dir = process.env.AGY_LOG_DIR?.trim() ||
-        path.join(defaultWorkspaceRoot(), ".tools-state", "antigravity-mcp");
-    fs.mkdirSync(dir, { recursive: true });
-    return dir;
+    const candidates = [];
+    const explicit = process.env.AGY_LOG_DIR && process.env.AGY_LOG_DIR.trim();
+    if (explicit) candidates.push(explicit);
+    candidates.push(path.join(TOOL_ROOT, '.tools-state', 'antigravity-mcp'));
+    candidates.push(path.join(os.tmpdir(), 'agy-bridge-logs'));
+    let lastErr = null;
+    for (const dir of candidates) {
+        try { fs.mkdirSync(dir, { recursive: true }); return dir; }
+        catch (err) { lastErr = err; }
+    }
+    throw lastErr || new Error('no writable log directory available');
 }
+
 export function antigravitySettingsPath() {
     return path.join(os.homedir(), ".gemini", "antigravity-cli", "settings.json");
 }
