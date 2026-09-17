@@ -29,8 +29,16 @@ public sealed class WritingConsentAndEnclosureMarkerTests
 
     // ---- consent ----
 
+    // Kevin Brown's notes as they actually read: note 22 records consent in the bare form that sets
+    // the marker, note 34 records the parents'. My first version of this fixture used note 34
+    // alone, which sets nothing — consent does not match "consented", so the rule never fired
+    // and the "still fires" case failed. That under-firing is real but separate: it affects two
+    // tasks in the whole catalogue (Dentistry Mr Hunter, Pharmacy Ms King), and widening the marker
+    // would newly DEMAND a consent sentence in letters already written, so it is reported, not
+    // changed here.
     private const string ParentConsentNotes =
-        "Parents consented to referral to the family doctor for investigation and treatment.";
+        "20 September 2020: bullying continued; a home visit was organised with Kevin's consent. | "
+        + "Parents consented to referral to the family doctor for investigation and treatment.";
 
     [Theory]
     [InlineData("His parents have consented to this referral.")]
