@@ -403,6 +403,62 @@ public sealed class WritingSeniorAuditG7RegressionTests
     }
 
     // ─────────────────────────────────────────────────────────────────
+    // Recipient source fidelity — one missing or extra letter (owner, 17 Sep 2026)
+    // The source PDFs spell "Wooloongabba" (OET test 14 p2) and "Dr Malcom
+    // Still" (Writing Recalls 2020 p9); the letter copies them exactly. A
+    // drift that is still a substring of the task ("Leysho", "Stil") slips
+    // past recipient_name_mismatch, so address_content_unsupported owns it.
+    // ─────────────────────────────────────────────────────────────────
+
+    private const string MorganAddress = "Dr S Leyshon\nEmergency Department Medical Officer\nPA Hospital\nWooloongabba";
+
+    private static List<string?> RecipientDriftQuotes(List<LintFinding> findings)
+        => findings.Where(f => f.RuleId.EndsWith("recipient_name_mismatch", StringComparison.Ordinal)
+                            || f.RuleId.EndsWith(AddressCheck, StringComparison.Ordinal))
+            .Select(f => f.Quote).ToList();
+
+    [Theory]
+    [InlineData("Dr S Leyshon", "Dr S Leyshonn")]
+    [InlineData("Dr S Leyshon", "Dr S Leysho")]
+    [InlineData("Dr S Leyshon", "Dr S Lyshon")]
+    [InlineData("Wooloongabba", "Woolloongabba")]
+    [InlineData("Wooloongabba", "Wooloongaba")]
+    [InlineData("Wooloongabba", "Woloongabba")]
+    public void SA_G7_Recipient_One_Letter_Drift_Fires_Against_The_Morgan_Task(string exact, string drift)
+    {
+        var letter = Inject(Weir, WeirAddress, MorganAddress.Replace(exact, drift));
+        Assert.Contains(drift, RecipientDriftQuotes(Lint(letter, "LT-RR", taskText: MorganTaskText)));
+    }
+
+    [Theory]
+    [InlineData("Dr Malcolm Still")]
+    [InlineData("Dr Malom Still")]
+    [InlineData("Dr Malcom Stil")]
+    [InlineData("Dr Malcom Stilll")]
+    public void SA_G7_Recipient_One_Letter_Drift_Fires_Against_The_Taylor_Task(string drift)
+    {
+        var letter = Inject(Taylor, "Dr Malcom Still\n", drift + "\n");
+        Assert.Contains(drift, RecipientDriftQuotes(Lint(letter, "LT-UR", taskText: TaylorTaskText)));
+    }
+
+    [Fact]
+    public void SA_G7_Recipient_Drift_Fires_When_The_Task_Carries_The_Longer_Spelling()
+    {
+        var morganLetter = Inject(Weir, WeirAddress, MorganAddress);
+        Assert.Contains("Wooloongabba",
+            RecipientDriftQuotes(Lint(morganLetter, "LT-RR", taskText: MorganTaskText.Replace("Wooloongabba", "Woolloongabba"))));
+        Assert.Contains("Dr Malcom Still",
+            RecipientDriftQuotes(Lint(Taylor, "LT-UR", taskText: TaylorTaskText.Replace("Malcom", "Malcolm"))));
+    }
+
+    [Fact]
+    public void SA_G7_Recipient_Exact_Canonical_Spellings_Pass()
+    {
+        Assert.Empty(RecipientDriftQuotes(Lint(Inject(Weir, WeirAddress, MorganAddress), "LT-RR", taskText: MorganTaskText)));
+        Assert.Empty(RecipientDriftQuotes(Lint(Taylor, "LT-UR", taskText: TaylorTaskText)));
+    }
+
+    // ─────────────────────────────────────────────────────────────────
     // role_salutation_matches_task — bare role recipient (Model Answer)
     // ─────────────────────────────────────────────────────────────────
 
