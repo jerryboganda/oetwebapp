@@ -196,8 +196,14 @@ try {
 
     // 6. Verify default LEDGER_CONFIG path format
     console.log("\n[Assertion 6] Default LEDGER_CONFIG path");
-    assert.ok(LEDGER_CONFIG.path.endsWith(path.join(".agy-state", "ledger.jsonl")), `Default path must end with .agy-state/ledger.jsonl (got ${LEDGER_CONFIG.path})`);
-    console.log(`PASS: Default ledger path verified: ${LEDGER_CONFIG.path}`);
+    const overridePath = process.env.AGY_LEDGER_PATH && process.env.AGY_LEDGER_PATH.trim();
+    if (overridePath) {
+        assert.strictEqual(LEDGER_CONFIG.path, overridePath, "AGY_LEDGER_PATH override must win (got " + LEDGER_CONFIG.path + ")");
+        console.log("PASS: AGY_LEDGER_PATH override honoured: " + LEDGER_CONFIG.path);
+    } else {
+        assert.ok(LEDGER_CONFIG.path.endsWith(path.join(".agy-state", "ledger.jsonl")), "Default path must end with .agy-state/ledger.jsonl (got " + LEDGER_CONFIG.path + ")");
+        console.log("PASS: Default ledger path verified: " + LEDGER_CONFIG.path);
+    }
 
     // 7. Verify MCP server tool registration
     console.log("\n[Assertion 7] McpServer registration verification");

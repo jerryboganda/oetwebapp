@@ -1,5 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +10,10 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const toolRoot = path.resolve(here, '..');
+
+// All self-tests write to a throwaway ledger so running this gate never pollutes
+// the production ledger that ag_runs reports on.
+const GATE_LEDGER = path.join(os.tmpdir(), 'agy-gate-selftests-' + Date.now() + '.jsonl');
 let problems = 0;
 
 console.log('--- 1. syntax gate ---');
@@ -21,13 +26,13 @@ console.log(problems === 0 ? 'all files parse' : problems + ' syntax failure(s)'
 console.log('--- 2. self-test gate ---');
 for (const t of fs.readdirSync(here).filter((x) => x.startsWith('selftest') && x.endsWith('.mjs')).sort()) {
     try {
-        execFileSync(process.execPath, [path.join(here, t)], { encoding: 'utf8', timeout: 240000, cwd: toolRoot });
+        execFileSync(process.execPath, [path.join(here, t)], { encoding: 'utf8', timeout: 240000, cwd: toolRoot, env: { ...process.env, AGY_LEDGER_PATH: GATE_LEDGER } });
         console.log('PASS  ' + t);
     } catch { problems++; console.log('FAIL  ' + t); }
 }
 
 let newest = 0;
-for (const f of fs.readdirSync(here)) {
+for (const f of fs.readdirSync(here).filter((x) => !x.startsWith('selftest') && x !== 'verify-live.mjs' && x !== 'docs')) {
     const m = fs.statSync(path.join(here, f)).mtimeMs;
     if (m > newest) newest = m;
 }
