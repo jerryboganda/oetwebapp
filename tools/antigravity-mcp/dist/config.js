@@ -153,6 +153,96 @@ function resolvePolicies(overrides) {
 
 export const RESOLVED_POLICIES = resolvePolicies(CONFIG_OVERRIDES);
 
+/**
+ * DEFAULT ROLE ROUTING CONFIGURATION
+ *
+ * Defaults to EMPTY map meaning 'use the pinned model and effort' from security.js
+ * (PINNED_MODEL = "gemini-3.8-flash-high", PINNED_EFFORT = "high").
+ * An unconfigured bridge behaves exactly as today with zero behavioral drift.
+ */
+export const DEFAULT_ROLE_ROUTING = {};
+export const DEFAULT_ROUTING = DEFAULT_ROLE_ROUTING;
+
+/**
+ * OPT-IN COST-OPTIMIZED ROUTING PRESET (EXAMPLE - NOT ACTIVE BY DEFAULT)
+ *
+ * Activating routing is a deliberate human choice. By default, all roles run on the
+ * pinned model (gemini-3.8-flash-high) and effort (high) to ensure predictable, reproducible quality.
+ *
+ * Cost strategy:
+ * - Read-only roles such as explore and research can use gemini-3.8-flash-low or gemini-3.8-flash-medium
+ *   for cheap scanning, file discovery, and workspace reading.
+ * - Mutating and high-rigor roles such as implement, debug, and review stay on gemini-3.8-flash-high.
+ * - Note: gemini-3.1-pro-high is available for the hardest reasoning at higher cost.
+ *
+ * Activating any routing override or preset is a deliberate human choice.
+ * To activate, configure in agy-bridge.config.json under "routing":
+ *
+ *   "routing": {
+ *     "explore": { "model": "gemini-3.8-flash-low", "effort": "low" },
+ *     "research": { "model": "gemini-3.8-flash-medium", "effort": "medium" }
+ *   }
+ */
+export const EXAMPLE_ROUTING_PRESET = {
+    explore: { model: "gemini-3.8-flash-low", effort: "low" },
+    research: { model: "gemini-3.8-flash-medium", effort: "medium" },
+    review: { model: "gemini-3.8-flash-high", effort: "high" },
+    implement: { model: "gemini-3.8-flash-high", effort: "high" },
+    test: { model: "gemini-3.8-flash-high", effort: "high" },
+    debug: { model: "gemini-3.8-flash-high", effort: "high" },
+};
+// Note: gemini-3.1-pro-high is available for the hardest reasoning at higher cost.
+export const EXAMPLE_ROLE_ROUTING = EXAMPLE_ROUTING_PRESET;
+
+export function resolveRoleRouting(overrides) {
+    const routing = {};
+    if (!overrides || typeof overrides !== "object" || Array.isArray(overrides)) {
+        return routing;
+    }
+    const source = (overrides.routing && typeof overrides.routing === "object" && !Array.isArray(overrides.routing))
+        ? overrides.routing
+        : (overrides.roleRouting && typeof overrides.roleRouting === "object" && !Array.isArray(overrides.roleRouting))
+            ? overrides.roleRouting
+            : (overrides.role_routing && typeof overrides.role_routing === "object" && !Array.isArray(overrides.role_routing))
+                ? overrides.role_routing
+                : (overrides.roles && typeof overrides.roles === "object" && !Array.isArray(overrides.roles))
+                    ? overrides.roles
+                    : overrides;
+
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+        return routing;
+    }
+
+    for (const [role, entry] of Object.entries(source)) {
+        if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+            continue;
+        }
+        const item = {};
+        if (typeof entry.model === "string" && entry.model.trim()) {
+            item.model = entry.model.trim();
+        }
+        if (typeof entry.effort === "string" && entry.effort.trim()) {
+            item.effort = entry.effort.trim();
+        }
+        if (Object.keys(item).length > 0) {
+            routing[role] = item;
+        }
+    }
+    return routing;
+}
+
+export const resolveRouting = resolveRoleRouting;
+export const ROLE_ROUTING = resolveRoleRouting(CONFIG_OVERRIDES);
+export const routing = ROLE_ROUTING;
+export const roleRouting = ROLE_ROUTING;
+
+export function getRoleRouting(role, routingConfig = ROLE_ROUTING) {
+    if (!routingConfig || typeof routingConfig !== "object" || Array.isArray(routingConfig)) {
+        return undefined;
+    }
+    return routingConfig[role];
+}
+
 export const ROLE_SPECS = Object.fromEntries(
     Object.keys(RESOLVED_POLICIES).map((role) => [
         role,
@@ -160,6 +250,8 @@ export const ROLE_SPECS = Object.fromEntries(
             role,
             ...RESOLVED_POLICIES[role],
             timeoutMs: ROLE_BUDGETS[role] ?? DEFAULT_BUDGETS[role],
+            ...(ROLE_ROUTING[role]?.model ? { model: ROLE_ROUTING[role].model } : {}),
+            ...(ROLE_ROUTING[role]?.effort ? { effort: ROLE_ROUTING[role].effort } : {}),
         },
     ])
 );

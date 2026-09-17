@@ -1,12 +1,38 @@
 import { PINNED_EFFORT, PINNED_MODEL } from "./security.js";
-import { ROLE_SPECS, ROLE_POLICIES, ROLE_BUDGETS } from "./config.js";
+import {
+    ROLE_SPECS,
+    ROLE_POLICIES,
+    ROLE_BUDGETS,
+    ROLE_ROUTING,
+    DEFAULT_ROLE_ROUTING,
+    resolveRoleRouting,
+    getRoleRouting,
+} from "./config.js";
 
-export { ROLE_SPECS, ROLE_POLICIES, ROLE_BUDGETS };
+export {
+    ROLE_SPECS,
+    ROLE_POLICIES,
+    ROLE_BUDGETS,
+    ROLE_ROUTING,
+    DEFAULT_ROLE_ROUTING,
+    resolveRoleRouting,
+    getRoleRouting,
+};
 
 export function rolePrompt(input) {
+    const roleOverride = (input.routing && typeof input.routing === "object")
+        ? input.routing[input.role]
+        : getRoleRouting(input.role);
+    const model = (typeof input.model === "string" && input.model.trim())
+        ? input.model.trim()
+        : (roleOverride?.model || PINNED_MODEL);
+    const effort = (typeof input.effort === "string" && input.effort.trim())
+        ? input.effort.trim()
+        : (roleOverride?.effort || PINNED_EFFORT);
+
     const shared = [
         `You are an Antigravity CLI worker. Role: ${input.role}.`,
-        `Pinned model: ${PINNED_MODEL}. Effort: ${PINNED_EFFORT}.`,
+        `Pinned model: ${model}. Effort: ${effort}.`,
         `Workspace: ${input.workspace}`,
         "Billing: use only the signed-in Google / Antigravity account quota. Never request an API key.",
         "Return ONLY one JSON object matching the worker-result schema. No markdown, no preamble.",

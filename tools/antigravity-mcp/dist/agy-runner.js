@@ -7,7 +7,7 @@ import { BridgeError, classifyAgyFailure } from "./errors.js";
 import { emptyResult, extractAgyEnvelope, extractJsonObject, parseWorkerResult } from "./schemas.js";
 import { PINNED_EFFORT, PINNED_MODEL, ensureUseG1CreditsFalse, highAutonomyAllowed, logsDir, } from "./security.js";
 import { ROLE_SPECS, rolePrompt } from "./roles.js";
-import { BUDGET_CEILINGS, computePrintTimeoutSeconds, DEFAULT_BUDGET_CEILINGS, DEFAULT_RETRY_POLICY, RETRY_POLICY } from "./config.js";
+import { BUDGET_CEILINGS, computePrintTimeoutSeconds, DEFAULT_BUDGET_CEILINGS, DEFAULT_RETRY_POLICY, RETRY_POLICY, ROLE_ROUTING, resolveRoleRouting, getRoleRouting } from "./config.js";
 import { defaultGate } from "./concurrency.js";
 import { createWorktree, cleanupStaleWorktrees } from "./worktree.js";
 import { findResumableConversation, getSession, recordSessionFromEnvelope } from "./sessions.js";
@@ -95,23 +95,94 @@ function writeLog(name, body) {
     return file;
 }
 
-export function buildAgyArgs(input, spec) {
+export function resolveRoleModelAndEffort(role, options = {}) {
+    let routingMap = null;
+    let explicitModel = null;
+    let explicitEffort = null;
+
+    if (options && typeof options === "object") {
+        if (options.routingOverride && typeof options.routingOverride === "object" && !Array.isArray(options.routingOverride)) {
+            routingMap = options.routingOverride;
+        } else if (options.routing && typeof options.routing === "object" && !Array.isArray(options.routing)) {
+            routingMap = options.routing;
+        } else if (options.input?.routing && typeof options.input.routing === "object" && !Array.isArray(options.input.routing)) {
+            routingMap = options.input.routing;
+        } else if (options.spec?.routing && typeof options.spec.routing === "object" && !Array.isArray(options.spec.routing)) {
+            routingMap = options.spec.routing;
+        } else if (!options.input && !options.spec && !options.routingOverride && !Array.isArray(options)) {
+            routingMap = options;
+        }
+
+        if (typeof options.model === "string" && options.model.trim()) {
+            explicitModel = options.model.trim();
+        } else if (typeof options.input?.model === "string" && options.input.model.trim()) {
+            explicitModel = options.input.model.trim();
+        } else if (typeof options.spec?.model === "string" && options.spec.model.trim()) {
+            explicitModel = options.spec.model.trim();
+        }
+
+        if (typeof options.effort === "string" && options.effort.trim()) {
+            explicitEffort = options.effort.trim();
+        } else if (typeof options.input?.effort === "string" && options.input.effort.trim()) {
+            explicitEffort = options.input.effort.trim();
+        } else if (typeof options.spec?.effort === "string" && options.spec.effort.trim()) {
+            explicitEffort = options.spec.effort.trim();
+        }
+    }
+
+    let roleEntry = null;
+    if (routingMap && typeof routingMap === "object" && !Array.isArray(routingMap)) {
+        const candidate = routingMap[role];
+        if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
+            roleEntry = candidate;
+        }
+    }
+
+    if (!roleEntry && ROLE_ROUTING && typeof ROLE_ROUTING === "object" && !Array.isArray(ROLE_ROUTING)) {
+        const globalCandidate = ROLE_ROUTING[role];
+        if (globalCandidate && typeof globalCandidate === "object" && !Array.isArray(globalCandidate)) {
+            roleEntry = globalCandidate;
+        }
+    }
+
+    const resolvedModel = (roleEntry && typeof roleEntry.model === "string" && roleEntry.model.trim())
+        ? roleEntry.model.trim()
+        : (explicitModel || PINNED_MODEL);
+
+    const resolvedEffort = (roleEntry && typeof roleEntry.effort === "string" && roleEntry.effort.trim())
+        ? roleEntry.effort.trim()
+        : (explicitEffort || PINNED_EFFORT);
+
+    const model = (typeof resolvedModel === "string" && resolvedModel.trim()) ? resolvedModel.trim() : PINNED_MODEL;
+    const effort = (typeof resolvedEffort === "string" && resolvedEffort.trim()) ? resolvedEffort.trim() : PINNED_EFFORT;
+
+    return { model, effort };
+}
+
+export function buildAgyArgs(input, spec, routingOverride) {
+    const { model, effort } = resolveRoleModelAndEffort(input.role, {
+        input,
+        spec,
+        routingOverride,
+    });
     const prompt = rolePrompt({
         role: input.role,
         goal: input.goal,
         context: input.context,
         workspace: input.workspace,
         extraConstraints: input.extraConstraints,
+        model,
+        effort,
     });
-    const timeout = input.timeoutMs ?? spec.timeoutMs;
+    const timeout = input.timeoutMs ?? spec?.timeoutMs;
     const schemaFile = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../schemas/worker-result.schema.json");
     const args = [
         "-p",
         prompt,
         "--model",
-        PINNED_MODEL,
+        model,
         "--effort",
-        PINNED_EFFORT,
+        effort,
         "--output-format",
         "json",
         "--json-schema",
@@ -119,9 +190,9 @@ export function buildAgyArgs(input, spec) {
         "--print-timeout",
         `${computePrintTimeoutSeconds(timeout)}s`,
         "--mode",
-        spec.mode,
+        spec?.mode ?? "plan",
     ];
-    if (spec.sandbox)
+    if (spec?.sandbox)
         args.push("--sandbox");
     if (input.sessionKey) {
         const conversationId = findResumableConversation({
