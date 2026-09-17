@@ -1798,7 +1798,9 @@ public sealed partial class WritingRuleEngine
             salutation,
             @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife|Officer|Manager|Registrar|Director|Leader|Head)"
             + @"(?:\s+of\s+(?:[A-Za-z\-]+\s*){1,3})?"
-            + @"(?:\s+(?:on\s+(?:duty|call)|on-call|in\s+charge))?\s*,?\s*$",
+            // Hyphens count as separators: "Dear Nurse-in-Charge," is the same role as
+            // "Dear Nurse in Charge," and was still being read as a personal name.
+            + @"(?:[\s-]+(?:on[\s-](?:duty|call)|in[\s-]charge))?\s*,?\s*$",
             RegexOptions.IgnoreCase);
     }
 
