@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +7,8 @@ import { BridgeError, classifyAgyFailure } from "./errors.js";
 import { emptyResult, parseWorkerResult } from "./schemas.js";
 import { PINNED_EFFORT, PINNED_MODEL, ensureUseG1CreditsFalse, highAutonomyAllowed, logsDir, } from "./security.js";
 import { ROLE_SPECS, rolePrompt } from "./roles.js";
-import { computePrintTimeoutSeconds } from "./config.js";
+import { computePrintTimeoutSeconds, DEFAULT_RETRY_POLICY, RETRY_POLICY } from "./config.js";
+
 function resolveAgyBin() {
     if (process.env.AGY_BIN?.trim())
         return process.env.AGY_BIN.trim();
@@ -25,6 +26,7 @@ function resolveAgyBin() {
     }
     return "agy";
 }
+
 function resolveAgySpawn() {
     const bin = resolveAgyBin();
     if (/\.(mjs|cjs|js)$/i.test(bin)) {
@@ -32,18 +34,21 @@ function resolveAgySpawn() {
     }
     return { bin, prefixArgs: [] };
 }
+
 export function agyMissing() {
     const bin = resolveAgyBin();
     if (bin === "agy")
         return false;
     return !fs.existsSync(bin);
 }
+
 function faultInject() {
     const raw = process.env.AGY_FAULT_INJECT?.trim();
     if (!raw)
         return null;
     return raw;
 }
+
 export async function spawnAgy(args, opts) {
     ensureUseG1CreditsFalse();
     const { bin, prefixArgs } = resolveAgySpawn();
@@ -80,11 +85,13 @@ export async function spawnAgy(args, opts) {
         });
     });
 }
+
 function writeLog(name, body) {
     const file = path.join(logsDir(), `${Date.now()}-${name}.json`);
     fs.writeFileSync(file, `${JSON.stringify(body, null, 2)}\n`, "utf8");
     return file;
 }
+
 export function buildAgyArgs(input, spec) {
     const prompt = rolePrompt({
         role: input.role,
@@ -122,6 +129,136 @@ export function buildAgyArgs(input, spec) {
     }
     return args;
 }
+
+function sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function calculateBackoffMs(attempt, policy = RETRY_POLICY || DEFAULT_RETRY_POLICY) {
+    const base = policy.baseBackoffMs ?? 2000;
+    const factor = policy.backoffFactor ?? 2;
+    const maxJitter = policy.maxJitterMs ?? 1000;
+    const exp = Math.max(0, attempt - 1);
+    const exponential = base * Math.pow(factor, exp);
+    const jitter = Math.floor(Math.random() * (maxJitter + 1));
+    return exponential + jitter;
+}
+
+export function isTransientFailure(input) {
+    const code = input.code || (input.err instanceof BridgeError ? input.err.code : "");
+    const details = input.err instanceof BridgeError ? input.err.details || "" : "";
+    const message = input.err instanceof Error ? input.err.message : String(input.err || "");
+    const stdout = input.stdout || "";
+    const stderr = input.stderr || "";
+    const blob = `${stdout}\n${stderr}\n${message}\n${details}`.toLowerCase();
+
+    // Deterministic exclusions: NEVER retry these
+    if (code === "AUTH_REQUIRED" || /not logged in|login required|auth(entication)? required|unauthenticated|sign[- ]?in|oauth/.test(blob)) {
+        return false;
+    }
+    if (code === "AGY_NOT_INSTALLED" || /agy executable not found|\benoent\b/.test(blob)) {
+        return false;
+    }
+    if (code === "PERMISSION_DENIED" || /permission denied|access denied|not allowed|sandbox violation/.test(blob)) {
+        return false;
+    }
+    if (code === "CANCELED") {
+        return false;
+    }
+    if (/invalid[- ]?argument|bad request|\b400\b/.test(blob)) {
+        return false;
+    }
+
+    // Transient failure matches:
+    // 1. Quota & Rate limits (HTTP 429, RESOURCE_EXHAUSTED, quota, rate-limit)
+    if (code === "RATE_LIMITED" || code === "QUOTA_EXHAUSTED") {
+        return true;
+    }
+    if (/\b429\b|resource_exhausted|\bquota\b|rate[- ]?limit|too many requests|usage limit|exceeded.*quota/.test(blob)) {
+        return true;
+    }
+
+    // 2. Network socket errors (ECONNRESET, ETIMEDOUT, EAI_AGAIN, socket hang up)
+    if (/econnreset|etimedout|eai_again|socket hang up|connection reset|connection refused|network error|socket closed/.test(blob)) {
+        return true;
+    }
+
+    // 3. 5xx Server errors (500, 502, 503, 504, bad gateway, service unavailable)
+    if (code === "SERVICE_UNAVAILABLE") {
+        return true;
+    }
+    if (/\b5\d{2}\b|bad gateway|service unavailable|gateway timeout|temporarily unavailable|internal server error/.test(blob)) {
+        return true;
+    }
+
+    // 4. Timeout
+    if (code === "TIMEOUT" || input.timedOut || /timed? ?out/.test(blob)) {
+        return true;
+    }
+
+    // 5. Empty output with no parsable result
+    const trimmedStdout = stdout.trim();
+    if (!trimmedStdout) {
+        return true;
+    }
+
+    return false;
+}
+
+export function getWorkspaceFingerprint(workspace) {
+    try {
+        const out = execFileSync("git", ["status", "--porcelain", "."], {
+            cwd: workspace,
+            timeout: 5000,
+            stdio: ["ignore", "pipe", "ignore"],
+            windowsHide: true,
+        });
+        return { type: "git", state: out.toString("utf8") };
+    }
+    catch {
+        // Not a git repository or git binary failed
+    }
+
+    try {
+        const entries = [];
+        function scan(dir, depth) {
+            if (depth > 4 || entries.length > 500)
+                return;
+            const items = fs.readdirSync(dir, { withFileTypes: true });
+            for (const item of items) {
+                if (item.name === "node_modules" || item.name === ".git" || item.name === ".tools-state")
+                    continue;
+                const full = path.join(dir, item.name);
+                try {
+                    const stat = fs.statSync(full);
+                    entries.push(`${path.relative(workspace, full)}:${stat.size}:${stat.mtimeMs}`);
+                    if (item.isDirectory()) {
+                        scan(full, depth + 1);
+                    }
+                }
+                catch {
+                    /* ignore read errors */
+                }
+            }
+        }
+        scan(workspace, 0);
+        return { type: "fs", state: entries.sort().join("\n") };
+    }
+    catch {
+        return null;
+    }
+}
+
+export function wasWorkspaceModified(before, after) {
+    if (!before || !after) {
+        return true;
+    }
+    if (before.type !== after.type) {
+        return true;
+    }
+    return before.state !== after.state;
+}
+
 export async function runWorker(input) {
     const injected = faultInject();
     if (injected) {
@@ -130,40 +267,118 @@ export async function runWorker(input) {
     const spec = ROLE_SPECS[input.role];
     const args = buildAgyArgs(input, spec);
     const timeoutMs = input.timeoutMs ?? spec.timeoutMs;
-    let spawned;
-    try {
-        spawned = await spawnAgy(args, { cwd: input.workspace, timeoutMs });
-    }
-    catch (err) {
-        if (err instanceof BridgeError)
-            throw err;
-        throw new BridgeError("INTERNAL_BRIDGE_ERROR", err instanceof Error ? err.message : String(err));
-    }
-    writeLog(input.role, {
-        argv: spawned.argv.map((a, i) => (i === 1 ? "[prompt]" : a)),
-        exitCode: spawned.exitCode,
-        timedOut: spawned.timedOut,
-        stderrTail: spawned.stderr.slice(-4000),
-        stdoutTail: spawned.stdout.slice(-4000),
-    });
-    if (spawned.timedOut || spawned.exitCode !== 0) {
-        const code = classifyAgyFailure({
-            exitCode: spawned.exitCode,
-            stdout: spawned.stdout,
-            stderr: spawned.stderr,
-            timedOut: spawned.timedOut,
-            signal: spawned.signal,
-            agyMissing: agyMissing(),
+    const policy = RETRY_POLICY || DEFAULT_RETRY_POLICY;
+    const maxAttempts = policy.maxAttempts ?? 3;
+    const hardCapTotalRetryMs = policy.hardCapTotalRetryMs ?? 600_000;
+    const retryStartTime = Date.now();
+
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const workspaceBefore = spec.kind === "write"
+            ? getWorkspaceFingerprint(input.workspace)
+            : null;
+
+        let spawned = null;
+        let runError = null;
+
+        try {
+            spawned = await spawnAgy(args, { cwd: input.workspace, timeoutMs });
+        }
+        catch (err) {
+            runError = err instanceof BridgeError
+                ? err
+                : new BridgeError("INTERNAL_BRIDGE_ERROR", err instanceof Error ? err.message : String(err));
+        }
+
+        if (spawned) {
+            writeLog(input.role, {
+                attempt,
+                argv: spawned.argv.map((a, i) => (i === 1 ? "[prompt]" : a)),
+                exitCode: spawned.exitCode,
+                timedOut: spawned.timedOut,
+                stderrTail: spawned.stderr.slice(-4000),
+                stdoutTail: spawned.stdout.slice(-4000),
+            });
+
+            if (spawned.timedOut || spawned.exitCode !== 0) {
+                const code = classifyAgyFailure({
+                    exitCode: spawned.exitCode,
+                    stdout: spawned.stdout,
+                    stderr: spawned.stderr,
+                    timedOut: spawned.timedOut,
+                    signal: spawned.signal,
+                    agyMissing: agyMissing(),
+                });
+                runError = new BridgeError(code, `agy exited ${spawned.exitCode}`, spawned.stderr.slice(-2000));
+            }
+            else {
+                try {
+                    return parseWorkerResult(input.role, spawned.stdout);
+                }
+                catch (err) {
+                    runError = new BridgeError("INVALID_OUTPUT", err instanceof Error ? err.message : "Invalid worker JSON", spawned.stdout.slice(0, 2000));
+                }
+            }
+        }
+
+        lastError = runError;
+
+        if (!runError) {
+            break;
+        }
+
+        const isTransient = isTransientFailure({
+            err: runError,
+            code: runError.code,
+            stdout: spawned?.stdout ?? "",
+            stderr: spawned?.stderr ?? "",
+            exitCode: spawned?.exitCode ?? null,
+            timedOut: spawned?.timedOut ?? false,
         });
-        throw new BridgeError(code, `agy exited ${spawned.exitCode}`, spawned.stderr.slice(-2000));
+
+        if (!isTransient) {
+            // Do NOT retry genuinely deterministic failures (e.g. 400 invalid-argument, auth, missing agy)
+            throw runError;
+        }
+
+        /*
+         * CRITICAL SAFETY NUANCE:
+         * Retrying a WRITE-role worker is only safe when the previous attempt provably produced no
+         * side effects. For kind === 'write' roles (implement, test, debug), we only retry when the
+         * failure occurred before any output was received AND the workspace was not modified.
+         * Otherwise, we surface the error rather than blindly re-running a worker that may have
+         * partially edited files, left syntax errors, or corrupted workspace state.
+         */
+        if (spec.kind === "write") {
+            const outputReceived = Boolean(spawned?.stdout && spawned.stdout.trim().length > 0);
+            const workspaceAfter = getWorkspaceFingerprint(input.workspace);
+            const workspaceModified = wasWorkspaceModified(workspaceBefore, workspaceAfter);
+
+            if (outputReceived || workspaceModified) {
+                // Side effects occurred or cannot be proven absent: surface error immediately
+                throw runError;
+            }
+        }
+
+        if (attempt >= maxAttempts) {
+            break;
+        }
+
+        const delayMs = calculateBackoffMs(attempt, policy);
+        const totalElapsed = Date.now() - retryStartTime;
+        if (totalElapsed + delayMs > hardCapTotalRetryMs) {
+            // Exceeded total retry time cap: surface error
+            break;
+        }
+
+        console.warn(`[agy-runner] Transient failure (${runError.code}) on attempt ${attempt}/${maxAttempts} for role '${input.role}'. Retrying in ${delayMs}ms...`);
+        await sleep(delayMs);
     }
-    try {
-        return parseWorkerResult(input.role, spawned.stdout);
-    }
-    catch (err) {
-        throw new BridgeError("INVALID_OUTPUT", err instanceof Error ? err.message : "Invalid worker JSON", spawned.stdout.slice(0, 2000));
-    }
+
+    throw lastError ?? new BridgeError("INTERNAL_BRIDGE_ERROR", "Worker run failed without error");
 }
+
 export function errorResult(role, err) {
     if (err instanceof BridgeError) {
         return emptyResult(role, {

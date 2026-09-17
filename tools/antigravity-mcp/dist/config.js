@@ -176,3 +176,20 @@ export const computePrintTimeout = computePrintTimeoutSeconds;
 export function getRoleBudget(role) {
     return ROLE_BUDGETS[role] ?? DEFAULT_BUDGETS[role] ?? 300_000;
 }
+
+function resolveRetryPolicy(overrides) {
+    const policy = { ...DEFAULT_RETRY_POLICY };
+    if (!overrides?.retry || typeof overrides.retry !== "object") {
+        return policy;
+    }
+    const r = overrides.retry;
+    if (typeof r.maxAttempts === "number" && r.maxAttempts > 0) policy.maxAttempts = r.maxAttempts;
+    if (typeof r.baseBackoffMs === "number" && r.baseBackoffMs > 0) policy.baseBackoffMs = r.baseBackoffMs;
+    if (typeof r.backoffFactor === "number" && r.backoffFactor > 0) policy.backoffFactor = r.backoffFactor;
+    if (typeof r.maxJitterMs === "number" && r.maxJitterMs >= 0) policy.maxJitterMs = r.maxJitterMs;
+    if (typeof r.hardCapTotalRetryMs === "number" && r.hardCapTotalRetryMs > 0) policy.hardCapTotalRetryMs = r.hardCapTotalRetryMs;
+    return policy;
+}
+
+export const RETRY_POLICY = resolveRetryPolicy(CONFIG_OVERRIDES);
+

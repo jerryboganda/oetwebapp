@@ -1,5 +1,7 @@
 import { type WorkerResult } from "./schemas.js";
 import { type RoleSpec } from "./roles.js";
+import { type DEFAULT_RETRY_POLICY } from "./config.js";
+
 export type AgyRunOptions = {
     role: Exclude<RoleSpec["role"], "health">;
     goal: string;
@@ -25,5 +27,16 @@ export declare function spawnAgy(args: string[], opts: {
     env?: NodeJS.ProcessEnv;
 }): Promise<SpawnResult>;
 export declare function buildAgyArgs(input: AgyRunOptions, spec: RoleSpec): string[];
+export declare function calculateBackoffMs(attempt: number, policy?: Partial<typeof DEFAULT_RETRY_POLICY>): number;
+export declare function isTransientFailure(input: {
+    err?: unknown;
+    code?: string;
+    stdout?: string;
+    stderr?: string;
+    exitCode?: number | null;
+    timedOut?: boolean;
+}): boolean;
+export declare function getWorkspaceFingerprint(workspace: string): { type: string; state: string } | null;
+export declare function wasWorkspaceModified(before: { type: string; state: string } | null, after: { type: string; state: string } | null): boolean;
 export declare function runWorker(input: AgyRunOptions): Promise<WorkerResult>;
 export declare function errorResult(role: WorkerResult["role"], err: unknown): WorkerResult;

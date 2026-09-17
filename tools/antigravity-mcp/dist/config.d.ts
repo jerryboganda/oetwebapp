@@ -18,6 +18,7 @@ export declare const DEFAULT_RETRY_POLICY: {
     maxJitterMs: number;
     hardCapTotalRetryMs: number;
 };
+export declare const RETRY_POLICY: typeof DEFAULT_RETRY_POLICY;
 export declare const TOOL_ROOT: string;
 export declare const CONFIG_FILE_PATH: string;
 export declare const CONFIG_OVERRIDES: Record<string, any> | null;
