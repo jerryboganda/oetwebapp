@@ -2366,6 +2366,16 @@ private static string? ReLineSurname(string reLine)
             if (first.Length > 0 && patientFirst.Length > 0
                 && !string.Equals(first, patientFirst, StringComparison.OrdinalIgnoreCase))
                 continue; // a relative with the same surname, named in the body
+            // The relative is often named with no first name at all: Mrs Jane Brown's task says
+            // "help Mr Brown care for his wife at home", so the body's "Mr Brown" is the source's
+            // own wording for her husband, not the patient under the wrong title. When the task or
+            // the notes use that exact title and surname, the letter is quoting them.
+            var quoted = $"{used} {surname}";
+            if ((input.TaskText is { Length: > 0 } task
+                    && task.Contains(quoted, StringComparison.OrdinalIgnoreCase))
+                || (input.CaseNotesText is { Length: > 0 } notes
+                    && notes.Contains(quoted, StringComparison.OrdinalIgnoreCase)))
+                continue;
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
                 "Title mismatch: the Re: line uses \"" + canonical + "\" but this reference uses \"" + used + "\". The patient's title is fixed by the source — use \"" + canonical + " " + surname + "\" consistently.",
                 Quote: m.Value);
