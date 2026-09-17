@@ -1,0 +1,7 @@
+{
+  "name": "antigravity-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Antigravity (agy) worker bridge for long-horizon agentic workflows"
+}
