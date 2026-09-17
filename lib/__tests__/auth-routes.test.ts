@@ -34,6 +34,7 @@ describe('auth routes', () => {
     '/%2f%2fevil.example.test',
     '/%5cevil.example.test',
     '/%252f%252fevil.example.test',
+    '/%2e%2e%2f%2fevil.example.test',
     '/\tevil.example.test',
     '/placement-test%0a',
     '/placement-test%ZZ',
