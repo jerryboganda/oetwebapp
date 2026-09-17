@@ -29,7 +29,7 @@ assert.strictEqual(DEFAULT_BUDGET_CEILINGS.maxAttempts, 3);
 assert.strictEqual(typeof DEFAULT_BUDGET_CEILINGS.maxWallClockMs, "number");
 assert.strictEqual(DEFAULT_BUDGET_CEILINGS.maxWallClockMs, 1_800_000);
 assert.strictEqual(typeof DEFAULT_BUDGET_CEILINGS.maxTotalTokens, "number");
-assert.strictEqual(DEFAULT_BUDGET_CEILINGS.maxTotalTokens, 1_000_000);
+assert.strictEqual(DEFAULT_BUDGET_CEILINGS.maxTotalTokens, 5_000_000);  // raised from 1M: measured live runs cost 92k-305k tokens per trivial task
 assert.strictEqual(typeof DEFAULT_BUDGET_CEILINGS.maxRunsPerSession, "number");
 assert.strictEqual(DEFAULT_BUDGET_CEILINGS.maxRunsPerSession, 50);
 

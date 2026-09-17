@@ -357,7 +357,10 @@ export const SESSION_CONFIG = resolveSessionConfig(CONFIG_OVERRIDES);
 export const DEFAULT_BUDGET_CEILINGS = {
     maxAttempts: 3,
     maxWallClockMs: 1_800_000,
-    maxTotalTokens: 1_000_000,
+    // Measured live: a trivial read-only worker cost 92,227 tokens and a slightly
+    // larger one cost 305,214 tokens (per RUN, summed across attempts). 1M left only
+    // ~3x headroom on ordinary work, so the default is raised to keep heavy runs alive.
+    maxTotalTokens: 5_000_000,
     maxRunsPerSession: 50,
 };
 
