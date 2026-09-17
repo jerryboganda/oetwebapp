@@ -181,11 +181,14 @@ if (platform === 'android' || platform === 'both') {
 
 if (platform === 'ios' || platform === 'both') {
   assertIosEntitlements();
+  // 17 Sep 2026 handover: signing uses ASC API-key cloud signing
+  // (xcodebuild -allowProvisioningUpdates + -authenticationKey*), so the
+  // legacy manual .p12/.mobileprovision secrets are no longer required.
   assertRequiredEnv([
     'APPLE_TEAM_ID',
-    'IOS_DISTRIBUTION_CERT_BASE64',
-    'IOS_DISTRIBUTION_CERT_PASSWORD',
-    'IOS_PROVISIONING_PROFILE_BASE64',
+    'ASC_ISSUER_ID',
+    'ASC_KEY_ID_IOS',
+    'ASC_PRIVATE_KEY_IOS',
   ], 'iOS');
   assertAppleAssociation();
 }

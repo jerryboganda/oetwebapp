@@ -80,6 +80,22 @@ if (dmg) {
   };
 }
 
+// Safety rails (17 Sep 2026 handover):
+// - OET_STRIP_MAC_UPDATER=1 drops the darwin updater entries. The publish leg
+//   sets this when the macOS build was NOT signed+notarized (no
+//   APPLE_CERTIFICATE), because Gatekeeper would break a self-updated
+//   unsigned app — the updater artifact must never ship ahead of signing.
+// - OET_STRIP_MAC_DOWNLOAD=1 drops downloads.mac while the web app's
+//   NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED kill-switch is armed, so the feed
+//   never advertises a DMG the download resolver refuses to serve.
+if (process.env.OET_STRIP_MAC_UPDATER === '1') {
+  delete platforms['darwin-aarch64'];
+  delete platforms['darwin-x86_64'];
+}
+if (process.env.OET_STRIP_MAC_DOWNLOAD === '1') {
+  delete downloads.mac;
+}
+
 const feed = {
   version,
   notes: `OET with Dr. Hesham desktop ${version}`,

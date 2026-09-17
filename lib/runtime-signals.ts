@@ -68,6 +68,19 @@ export function getAppRuntimeKind(): AppRuntimeKind {
   return 'web';
 }
 
+/**
+ * Underlying Capacitor OS platform ('ios' | 'android' | 'electron' | …), or
+ * `null` when not running inside a Capacitor shell. Used by the App Store
+ * compliance gate so iOS never renders in-app purchase surfaces
+ * (docs/IOS-PURCHASE-COMPLIANCE.md).
+ */
+export function getCapacitorPlatform(): string | null {
+  if (typeof window === 'undefined') return null;
+  if (getAppRuntimeKind() !== 'capacitor-native') return null;
+  const runtimeWindow = window as RuntimeWindow;
+  return runtimeWindow.Capacitor?.getPlatform?.() ?? null;
+}
+
 export function getRuntimeBootstrapScript() {
   return `(() => {
   const root = document.documentElement;

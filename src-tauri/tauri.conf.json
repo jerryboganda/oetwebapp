@@ -30,7 +30,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["nsis", "dmg"],
+    "targets": ["nsis", "dmg", "app"],
     "resources": {
       "desktop-runtime-config.json": "desktop-runtime-config.json"
     },

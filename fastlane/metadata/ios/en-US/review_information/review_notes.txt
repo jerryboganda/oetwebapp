@@ -1,0 +1,20 @@
+DEMO ACCOUNT FOR REVIEW
+
+App Store review team: please use the demo credentials below to sign in (sign-in is required because all content is login-gated).
+
+  Email: [TO BE SUPPLIED BY OWNER BEFORE SUBMISSION]
+  Password: [TO BE SUPPLIED BY OWNER BEFORE SUBMISSION]
+
+WHAT TO REVIEW
+- After sign-in you land on the Dashboard. Navigation groups: Course Materials; Listening Practice; Reading Practice; Writing Practice; Speaking Practice.
+- Course Materials may include protected video lessons streamed inside the app only.
+- Listening/Reading open timed practice and full exams; submit to see review screens with transcripts and answer tabs.
+- Writing accepts a letter/case-note submission and returns AI feedback (consumes AI credits visible in the app).
+- Speaking requires microphone permission; recording, playback and submission are exercised there.
+- Settings includes Account Deletion, which fully initiates deletion of the account and its data.
+
+PURCHASE MODEL (App Store compliance)
+There are no in-app purchases and no checkout inside this app. Enrolments and purchases happen on our website (Stripe); reviewers do not need to buy anything - the demo account has full entitlements. See docs/IOS-PURCHASE-COMPLIANCE.md in our repository.
+
+ACCOUNT DELETION
+Account deletion is initiated from Settings > Account Deletion and confirmed by OTP, fulfilling App Store guideline 5.1.1(v).

@@ -79,6 +79,12 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_BASE_URL=https://api.oetwithdrhesham.co.uk
             APP_URL=https://app.oetwithdrhesham.co.uk
+            # 17 Sep 2026 handover: the public Mac DMG has not passed protected
+            # playback QA on a real Mac, so the Mac download stays disabled and
+            # candidates are pointed at the Web App. Remove this arg to
+            # re-enable once the signed 0.7.10 build passes (see
+            # docs/APPLE-RELEASE-EVIDENCE-PACK.md).
+            NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED=1
           cache-from: type=gha,scope=web
           cache-to: type=gha,mode=max,scope=web
 
