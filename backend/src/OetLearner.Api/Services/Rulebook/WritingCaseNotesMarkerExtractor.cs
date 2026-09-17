@@ -55,8 +55,13 @@ public static class WritingCaseNotesMarkerExtractor
         // never fabricate violations for correct wording).
         foreach (var pattern in new[]
         {
-            @"\bfollow[- ]?up\b\s*(?::|in|on|at|after|with|scheduled|booked|arranged)\s*([^\n.]+)",
-            @"\breview\b\s*(?::|in|on|at|after|scheduled|booked|arranged)\s*([^\n.]+)",
+            // The prepositions need a trailing word boundary: without it the
+            // "in" of "follow-up INvestigations (bronchoscopy, biopsy)" read as
+            // "follow-up in ...", so a planned investigation became a review
+            // appointment and closure_mentions_review_if_required held a
+            // correct letter (Mrs Mary Clarke, Senior Assessor audit 16 Sep 2026).
+            @"\bfollow[- ]?up\b\s*(?::|(?:in|on|at|after|with|scheduled|booked|arranged)\b)\s*([^\n.]+)",
+            @"\breview\b\s*(?::|(?:in|on|at|after|scheduled|booked|arranged)\b)\s*([^\n.]+)",
             // A bare "appointment on <date>" is usually the PAST consultation
             // the letter is about, not a future follow-up instruction. The
             // Weston notes record "Outpatient clinic appointment on 10.06.2018"
@@ -65,8 +70,8 @@ public static class WritingCaseNotesMarkerExtractor
             // whose task asks for no review at all (Addendum Two, Weston E). A
             // planning word must introduce it, or the clause must itself be
             // forward-looking ("appointment at 6 weeks", "made for 7/9/18").
-            @"\b(?:follow[- ]?up|review|next|further|planned|booked|scheduled|arranged|specialist)\s+(?:appointment|clinic visit)\b\s*(?::|on|in|at|for)\s*([^\n.]+)",
-            @"\b(?:appointment|clinic visit)\b\s*(?::|in|at|scheduled|booked|arranged|made for)\s*([^\n.]+)",
+            @"\b(?:follow[- ]?up|review|next|further|planned|booked|scheduled|arranged|specialist)\s+(?:appointment|clinic visit)\b\s*(?::|(?:on|in|at|for)\b)\s*([^\n.]+)",
+            @"\b(?:appointment|clinic visit)\b\s*(?::|(?:in|at|scheduled|booked|arranged|made for)\b)\s*([^\n.]+)",
         })
         {
             var match = Regex.Match(caseNotes, pattern, RegexOptions.IgnoreCase);

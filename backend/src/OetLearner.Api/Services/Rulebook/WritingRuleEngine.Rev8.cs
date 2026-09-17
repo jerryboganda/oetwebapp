@@ -1410,6 +1410,16 @@ public sealed partial class WritingRuleEngine
     // canonical semicolon grammar (OA2-16), so a sentence whose semicolons all
     // sit BETWEEN parsed medication-dose pairs is exempt; a sentence that
     // merely happens to mention one drug is not.
+    // A source that records only tablet counts or "as required" gives the
+    // Model Answer no numeric dose, yet the OA2-16 list grammar still applies:
+    // "ramipril, two tablets; Ventolin, as required; amlodipine, two tablets
+    // and ..." (Sylvia Meadows, Senior Assessor audit 16 Sep 2026) was read as
+    // narrative semicolons. The drug-comma is required, so ordinary prose
+    // ("she takes two tablets") never forms an item.
+    private static readonly Regex WordDoseMedicationItemRe = new(
+        @"\b(?<drug>[A-Za-z][A-Za-z\-]{2,}\d*),\s+(?:(?:one|two|three|four|half(?:\s+a)?)\s+(?:tablets?|capsules?|puffs?|drops?|sachets?)|as\s+(?:required|needed))\b",
+        RegexOptions.None);
+
     private static bool SemicolonsAreMedicationListSeparators(string sentence)
     {
         // Senior Assessor Release Audit (16 Sep 2026): SaG5MedicationItemRe is
@@ -1417,7 +1427,10 @@ public sealed partial class WritingRuleEngine
         // ("isoniazid, 5 mg/kg daily") and alphanumeric brands, so the
         // owner-form list is recognised as a list (Model Answer-only rule).
         var items = SaG5MedicationItemRe.Matches(sentence).Cast<Match>()
+            .Concat(WordDoseMedicationItemRe.Matches(sentence).Cast<Match>())
             .Where(m => !MedicationStopWords.Contains(m.Groups["drug"].Value))
+            .GroupBy(m => m.Index)
+            .Select(g => g.First())
             .OrderBy(m => m.Index)
             .ToList();
         if (items.Count < 3) return false;

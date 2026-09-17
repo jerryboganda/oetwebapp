@@ -102,8 +102,17 @@ public static class WritingModelAnswerGroundingValidator
         // Morphology and frequency shorthand: the source writes the noun or the
         // slash form, the letter writes the verb or the adverb.
         (@"\bsmoker\b", "smokes smoking"),
-        (@"\bnon-smoker\b", "smokes smoking"),
+        (@"\bnon-smoker\b", "smokes smoking does not smoke"),
         (@"\bdrinker\b", "drinks drinking"),
+        // Senior Assessor Release Audit (16 Sep 2026): the owner requires the
+        // neutral behaviour forms, so the source's label nouns must ground them.
+        // "She does not smoke and drinks alcohol socially." shared one word with
+        // each of the separate "Non-smoker." / "Social drinker." lines, and
+        // "She did not attend her follow-up appointment." shared only
+        // "appointment" with "defaulted her appointment" (judgmental
+        // "defaulted" is banned for Model Answers).
+        (@"\bsocial drinker\b", "drinks alcohol socially"),
+        (@"\bdefault(?:ed|s)?\b", "did not attend follow-up"),
         (@"\/\s*day\b|\bper day\b|\ba day\b", "daily"),
         (@"\/\s*week\b|\bper week\b", "weekly"),
         (@"\bnocte\b", "at night nightly"),

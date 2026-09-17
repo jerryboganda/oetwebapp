@@ -380,10 +380,14 @@ public sealed partial class WritingRuleEngine
     // ---------------------------------------------------------------------
     // G1b — incomplete_clinical_construction extension: gapped passive
     // auxiliary ("..., and family immunisation discussed.").
+    // The noun phrase may not start with an adverb ("-ly") or a past form
+    // ("-ed"), but nouns that merely end in "ly" ("family", "supply") are
+    // noun-phrase heads: the first CI run showed the audited Garcia sentence
+    // never matched because "family" was read as an adverb.
     // ---------------------------------------------------------------------
 
     private static readonly Regex SaG1ElidedPassiveRe = new(
-        @"(?<coord>,\s*and\s+|\band\s+|,\s+)(?<np>(?!(?:he|she|they|it|we|you|i|who|which|that|this|these|those|there|his|her|their|its|both|all|each|either|neither|no|not|with|without|as|by|to|for|in|on|at|of|from|after|before|following|then|also|first|later|since|once|twice|so|but|or|and)\b)(?![a-z]+(?:ed|ly)\b)(?:(?!(?:was|were|is|are|has|have|had|been|be)\b)[a-z][a-z'’\-]*\s+){0,3}?(?!(?:was|were|is|are|has|have|had|been|be)\b)(?<head>[a-z][a-z'’\-]*))(?<dose>,\s*\d(?:(?!\b(?:was|were|is|are|has|have|had|been|be)\b)(?:[^,.;\n]|\.(?=\d))){0,30}?,?)?\s+(?<pp>added|discussed|arranged|prescribed|given|advised|ordered|requested|performed|organised|organized|booked|scheduled|notified|informed|recommended|administered|sent|explained|offered|provided|obtained|withheld|trialled|trialed|inserted|applied|counselled|counseled|initiated|instituted|discontinued|commenced|started|ceased|stopped|continued|increased|reduced|decreased|changed|switched)\b(?=(?<follow>\s*[.;,]|\s*$|\s+(?:to|for|at|on|in|with|by|from|after|before|until|twice|once|daily|weekly|nightly|each|every|as)\b))",
+        @"(?<coord>,\s*and\s+|\band\s+|,\s+)(?<np>(?!(?:he|she|they|it|we|you|i|who|which|that|this|these|those|there|his|her|their|its|both|all|each|either|neither|no|not|with|without|as|by|to|for|in|on|at|of|from|after|before|following|then|also|first|later|since|once|twice|so|but|or|and)\b)(?!(?:[a-z]+ed|(?!(?:family|supply|assembly|belly|anomaly|rally|reply|ally|jelly|lily|italy)\b)[a-z]+ly)\b)(?:(?!(?:was|were|is|are|has|have|had|been|be)\b)[a-z][a-z'’\-]*\s+){0,3}?(?!(?:was|were|is|are|has|have|had|been|be)\b)(?<head>[a-z][a-z'’\-]*))(?<dose>,\s*\d(?:(?!\b(?:was|were|is|are|has|have|had|been|be)\b)(?:[^,.;\n]|\.(?=\d))){0,30}?,?)?\s+(?<pp>added|discussed|arranged|prescribed|given|advised|ordered|requested|performed|organised|organized|booked|scheduled|notified|informed|recommended|administered|sent|explained|offered|provided|obtained|withheld|trialled|trialed|inserted|applied|counselled|counseled|initiated|instituted|discontinued|commenced|started|ceased|stopped|continued|increased|reduced|decreased|changed|switched)\b(?=(?<follow>\s*[.;,]|\s*$|\s+(?:to|for|at|on|in|with|by|from|after|before|until|twice|once|daily|weekly|nightly|each|every|as)\b))",
         RegexOptions.IgnoreCase);
 
     // Gapping needs an earlier passive to gap FROM ("was notified, and ...").

@@ -1974,7 +1974,12 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             foreach (Match m in re.Matches(input.LetterText))
             {
                 var snippet = m.Value;
-                if (!Regex.IsMatch(snippet, @"\d") || unitRe.IsMatch(snippet))
+                // A digit inside a word is not a value: "blood pressure and
+                // HbA1c level were normal" has no number, but the "1" of HbA1c
+                // made it look like an unitless result (Sylvia Meadows, Senior
+                // Assessor audit 16 Sep 2026). Only a digit that does not
+                // follow a letter starts a value.
+                if (!Regex.IsMatch(snippet, @"(?<![A-Za-z])\d") || unitRe.IsMatch(snippet))
                 {
                     continue;
                 }

@@ -1,9 +1,9 @@
 {
-  "version": "2.3.1-owner-clarifications-3",
+  "version": "2.4.0-senior-assessor-audit",
   "kind": "writing",
   "profession": "physiotherapy",
-  "publishedAt": "2026-09-14T00:00:00Z",
-  "authoritySource": "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner clarifications OA-01..OA-15 and OA2-01..OA2-20), sha256:07c95437a6365a2d69f4ec9360c7edc4fa8bfe56e101621d3533a7942ac97123",
+  "publishedAt": "2026-09-16T00:00:00Z",
+  "authoritySource": "OET AI Rules Master — Canonical Registry v1.3-senior-assessor-audit (2026-09-16: v1.1-rev8 + owner clarifications OA-01..OA-15, OA2-01..OA2-20, OA3-01..OA3-05, OA4-01..OA4-03 and the Senior Assessor Release Audit OA5-01..OA5-38), sha256:f83d893b3facdf31adb1c2b804cb4e05ebcba7aabdc1ec13b3e9b36d9fdb6747",
   "sections": [
     {
       "id": "official-assessment",
@@ -6975,6 +6975,956 @@
         "notes": "Final Medicine layout/punctuation patch. Consumers: generation prompt, deterministic validator, candidate grader, render QA. Regression: R3 battery.",
         "checkIds": [
           "patient_title_mismatch"
+        ]
+      }
+    },
+    {
+      "id": "OA5-01",
+      "section": "Grammar",
+      "severity": "critical",
+      "title": "Complete sentences, no verbless or subjectless fragments",
+      "body": "Every sentence in a canonical Model Answer has its own subject and finite verb. A linker, coordinator, prepositional opener, noun phrase or medication item is never left standing as a sentence: attach it to the neighbouring sentence or give it a subject and a finite verb. The request phrase \"at your earliest convenience\" belongs inside the request sentence, never as a separate sentence.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Mathis has poorly controlled diabetes, mild-to-moderate hypertension and ischaemic heart disease. / Examination revealed tenderness on the medial aspect, with no effusion. / I would be grateful if you could assess Miss Jones at your earliest convenience."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026, section 2 and section 3.1 (Allen Mathis, Dr Peter Perfect, Erika Stone, Dolores Hoffmann, Louise Geller, Cathy Jones, Betty Johnson, Ross McIntyre); live converge-run regressions (Sarah Day).",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication; deterministic detector sentence_fragment, Model Answer only). CANDIDATE: never scored by this deterministic detector; the AI grader assesses sentence completeness under Language/Grammar descriptors with professional alternatives accepted. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG1SentenceFragment (WritingRuleEngine.SeniorAuditG1.cs). Regression: WritingSeniorAuditG1RegressionTests.",
+        "checkIds": [
+          "sentence_fragment"
+        ]
+      }
+    },
+    {
+      "id": "OA5-02",
+      "section": "Grammar",
+      "severity": "critical",
+      "title": "No malformed word forms from mechanical substitution",
+      "body": "A canonical Model Answer never contains a malformed word form produced by find-and-replace: an agent noun replaced by a verb (\"an ex-smokes\", \"a former smokes\"), a passive perfect before a gerund (\"has been continued smoking\") or an adjective before the verb \"drinks\" (\"social drinks alcohol\"). Write the behaviour form instead; the \"ex-smoker\" label remains banned for Model Answers. Doubled words are reported by typographic_corruption.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Mathis smoked for thirty-five years and quit seven years ago. / He has continued smoking ten to twenty cigarettes daily. / Mrs Clarke does not smoke and drinks alcohol socially."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026, NOTE on the converge run (\"ex-smokes of 35 years\"); live letters Allen Mathis, Zach Foster, Lucy Clarke.",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication; deterministic detector malformed_word_form, Model Answer only). CANDIDATE: never scored by this deterministic detector; the AI grader assesses word form under Language/Grammar descriptors. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG1MalformedWordForm (WritingRuleEngine.SeniorAuditG1.cs). Regression: WritingSeniorAuditG1RegressionTests.",
+        "checkIds": [
+          "malformed_word_form"
+        ]
+      }
+    },
+    {
+      "id": "OA5-03",
+      "section": "Grammar",
+      "severity": "critical",
+      "title": "Every coordinated passive clause carries its own auxiliary",
+      "body": "In a canonical Model Answer a coordinated passive clause never gaps its auxiliary: \"The Department of Human Services was notified, and family immunisation was discussed.\", \"Metformin was increased to 750 mg twice daily, and atorvastatin, 20 mg daily, was added.\" Forms such as \"..., and family immunisation discussed.\" or \"... and atorvastatin, 20 mg daily added.\" fail. Absolute \"with ...\" constructions (\"with repeat testing planned\") and reduced relatives followed by a finite verb (\"a core biopsy performed today confirmed ...\") are correct and never flagged.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "The Department of Human Services was notified, and family immunisation was discussed. / Metformin was increased to 750 mg twice daily, and atorvastatin, 20 mg daily, was added."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026, section 2 (Isabel Garcia, Priya Sharma), section 3.1 and 3.7 (Garcia missing auxiliary returned); same shape in live Jane MacIntyre and Sarah Miller letters.",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication; incomplete_clinical_construction gapped-auxiliary branch, Model Answer only). CANDIDATE: gapping an identical auxiliary is grammatical general English, so this branch never runs for candidates (OA2-20 firewall). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG1ElidedPassiveAuxiliary composed under incomplete_clinical_construction (WritingRuleEngine.SeniorAuditG1.cs). Regression: WritingSeniorAuditG1RegressionTests.",
+        "checkIds": [
+          "incomplete_clinical_construction"
+        ]
+      }
+    },
+    {
+      "id": "OA5-04",
+      "section": "Grammar",
+      "severity": "critical",
+      "title": "Parallel \"with\" lists",
+      "body": "A \"with ...\" list in a canonical Model Answer joins only noun phrases. An adjective predicate (unable, afebrile, drowsy, confused ...) is never coordinated into the list as its last item: write \"with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch her chin to her chest when supine\" or \"..., and was unable to touch her chin to her chest when supine\".",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "On examination, she was afebrile, with a petechial rash on the abdomen and legs, bruising on the left arm and inability to touch her chin to her chest when supine."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026, section 2 and section 4 item 41 (Isabel Garcia parallel grammar).",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication; incomplete_clinical_construction with-list parallelism branch, Model Answer only). CANDIDATE: never scored by this deterministic branch; the AI grader assesses parallelism under Language/Grammar descriptors. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG1FaultyWithListParallelism composed under incomplete_clinical_construction (WritingRuleEngine.SeniorAuditG1.cs). Regression: WritingSeniorAuditG1RegressionTests.",
+        "checkIds": [
+          "incomplete_clinical_construction"
+        ]
+      }
+    },
+    {
+      "id": "OA5-05",
+      "section": "Grammar",
+      "severity": "critical",
+      "title": "Malformed today phrases",
+      "body": "\"today\" is an adverb and never takes a preposition or an \"of\" phrase in a canonical Model Answer: write \"presented today\", \"Today, ...\" or \"At today's review, ...\"; never \"presented on today\", \"At review on today\", \"since today\", \"by her last period of today\" or a sentence that opens \"By today\". An event from an EARLIER visit keeps its own source date: replacing a body date with \"today\" must never change the chronology.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mrs Clarke presented today with a one-week history of central crushing chest pain on exertion."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 §3.2 (Perfect, Khaze and Greenbaum \"At review on today\"; Cathy Jones and Mary Clarke \"presented on today\"; Karen Jackson \"confirmed on today\"; Betty Johnson; Sally Webster \"When reviewed alone on today\"; Priya Sharma \"Pathology on today\"; MacIntyre \"by her last period of today\"; Sarah Day \"By today, attacks had become\") + implementation decision C.20",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication; deterministic detector malformed_today_phrase). CANDIDATE: not machine-checked (the detector is Model Answer only); the AI grader treats a genuinely ungrammatical \"on today\" as an ordinary grammar error under Language, never as a house-form deviation.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG2MalformedTodayPhrase (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "malformed_today_phrase"
+        ]
+      }
+    },
+    {
+      "id": "OA5-06",
+      "section": "Grammar",
+      "severity": "critical",
+      "title": "Possessive after a patient name",
+      "body": "A patient name that owns the following noun phrase takes the possessive: \"Mrs Clarke's temperature\", \"Mrs MacIntyre's history\", \"Ms Hoffmann's depression and anxiety\", \"Mrs Sharma's poorly controlled type two diabetes mellitus\", \"Ms Johnson's right total knee replacement\". A bare name before a possessed noun (\"Mrs Clarke temperature\") is a grammar error; write the possessive or a possessive pronoun. Never replace \"her\"/\"his\" with a bare name.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "On examination, Mrs Clarke's temperature was 36.7 °C and her pulse was 80 bpm."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 §3.3 and letter bullets 10 (Erika Stone), 29 (MacIntyre), 33 (Mary Clarke), 37 (Betty Johnson), 39 (Hoffmann), 42 (Geller), 52 (Sharma)",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication; deterministic detector missing_possessive_name, closed possessed-noun lexicon). CANDIDATE: not machine-checked (Model Answer only); the AI grader scores a genuine missing possessive as an ordinary grammar error.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG2MissingPossessiveName (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "missing_possessive_name"
+        ]
+      }
+    },
+    {
+      "id": "OA5-07",
+      "section": "Language",
+      "severity": "critical",
+      "title": "No typographic corruption",
+      "body": "A canonical Model Answer contains no typographic corruption: no space before a full stop, comma, semicolon, question mark or exclamation mark; no doubled word (\"diabetes mellitus mellitus\", \"and and\"; \"had had\" and \"that that\" are valid English); and every sentence starts with a capital letter (\"Today, Ms Day presented ...\", never \"... symptoms. today, Ms Day presented ...\"). Blind find-and-replace repairs must never be applied to letter prose.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Examination revealed a limp and a mildly swollen knee with tenderness on the medial aspect."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 converge-regression note (\"aspect .\", \"hypertensive .\", \"diabetes mellitus mellitus\", \"today, Ms Day presented\") + §7.7 independent language pass",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication; deterministic detector typographic_corruption). CANDIDATE: not machine-checked (Model Answer only); the AI grader scores genuine punctuation/capitalisation errors under Language.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG2TypographicCorruption (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "typographic_corruption"
+        ]
+      }
+    },
+    {
+      "id": "OA5-08",
+      "section": "Language",
+      "severity": "critical",
+      "title": "Introductory adverbial punctuation: every phrase and date form",
+      "body": "Extends OA4-02. In a canonical Model Answer every introductory time, date or examination phrase takes a comma whatever word follows it (a pronoun, an article or a name): \"On examination, she ...\", \"On admission, Ms Pristiely's ...\", \"On discharge, ...\", \"The following morning, ...\", \"That afternoon, ...\", \"Overnight, ...\", \"Over the past three weeks, ...\", \"On 23 November 2019, ...\" (day-first dates), \"In August 2019, ...\", \"By 21 September, ...\", \"At review on 25 August, ...\". A phrase that continues (\"On review in July 2019, ...\", \"On examination today, ...\") takes the comma after the whole phrase.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "On examination, she appeared healthy, though restless."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 letter bullets 12 (Pristiely \"On admission\"), 22 (Seymour \"On examination\"), 35 (Peterson \"On discharge\"), 45 (Alison Martin \"On examination she\"), 47 (Brian Morgan \"The following morning\"), 50 (Jack Mills \"In August 2019\", \"On 23 November\") + implementation decision C.11",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: accept alternative (unchanged; short introductory phrases without a comma are acceptable general English and are never penalised).",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG2IntroAdverbialComma composed under intro_adverbial_comma (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "intro_adverbial_comma"
+        ]
+      }
+    },
+    {
+      "id": "OA5-09",
+      "section": "Language",
+      "severity": "critical",
+      "title": "Descriptive numbers: ranges, alcohol, habit durations and past-event ages",
+      "body": "Extends OA2-15. Descriptive quantities in a canonical Model Answer are words, never digits and never a mixed digit/word form: \"thirty to thirty-five cigarettes daily\" (never \"30 to thirty-five\" or \"5-six\"), \"twenty to thirty minutes\", \"four to five times daily\", \"forty units of alcohol weekly\", \"smoked for thirty-five years\", \"less than fifteen minutes\", \"thirty days off work\". An age at a PAST EVENT is descriptive (\"had an appendectomy at age fifteen\", \"her father died at age fifty-three\"); identification ages stay digits (\"aged 61\", \"a 20-year-old university student\"). Doses, dates, vital signs, investigation values, gestation and clinical measurements stay numeric.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mrs Clarke has smoked thirty to thirty-five cigarettes daily for over thirty years."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 letter bullets 33 (Mary Clarke \"30 to thirty-five cigarettes\"), 40 (Bennet \"40 units of alcohol weekly\"), 44 (Marcus \"at 15\" -> \"at age fifteen\") + converge regressions \"5-six\", \"10-twenty\", \"ex-smokes of 35 years\" + implementation decisions C.8 and C.9",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: coaching only (unchanged; a descriptive digit is never a fixed penalty, firewall item 8).",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG2NumberStyle composed under number_style_words_vs_digits (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "number_style_words_vs_digits"
+        ]
+      }
+    },
+    {
+      "id": "OA5-10",
+      "section": "Language",
+      "severity": "critical",
+      "title": "Time notation and superscript units",
+      "body": "Extends OA-15. In a canonical Model Answer a clock time has a space before am/pm (\"8 am\", \"3 pm\", \"1.30 pm\"; never \"8am\") and squared or cubed units use superscript exponents (\"29.2 kg/m²\", \"18,000 cells per mm³\"; never \"kg/m2\" or \"mm3\").",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "An appointment has been arranged with your receptionist for 8 am on 14 August 2019."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 letter bullets 42 (Geller \"kg/m2\" -> \"kg/m²\") and 48 (Dulcie Woods \"8am\" -> \"8 am\") + implementation decision C.10",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the time and exponent branches are Model Answer only (ASCII \"kg/m2\" and \"8am\" are never penalised for candidates); the existing value-unit spacing branch is unchanged.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG2ValueUnitSpacing composed under value_unit_spacing (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "value_unit_spacing"
+        ]
+      }
+    },
+    {
+      "id": "OA5-11",
+      "section": "Language",
+      "severity": "critical",
+      "title": "Every vital sign carries its unit",
+      "body": "Extends OA-15. In a canonical Model Answer every vital-sign value carries its unit directly after the value: blood pressure \"148/98 mmHg\", pulse or heart rate \"96 bpm\", respiratory rate \"16 breaths/min\", temperature \"37.8 °C\". A bare ratio (\"blood pressure 110/70\") or a bare number (\"Pulse 96\", \"respiratory rate 16\") is incomplete, and a unit that belongs to a neighbouring vital never counts.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Pulse was 96 bpm and blood pressure was 110/70 mmHg."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 §3.13 and letter bullets 1 (Mathis \"blood pressure 148/98\"), 8 (Cathy Jones \"Pulse 96, blood pressure 110/70\"), 13 (Karen Smith \"127/83\", \"respiratory rate 16\"), 29 (MacIntyre \"120/80\") + implementation decision C.10",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the adjacency branch is Model Answer only; the existing candidate behaviour (a bare blood-pressure ratio accepted since 6 Sep 2026, other missing units score-bearing) is unchanged pending owner confirmation.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG2VitalSignUnits composed under numerical_values_have_units (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "numerical_values_have_units"
+        ]
+      }
+    },
+    {
+      "id": "OA5-12",
+      "section": "Language",
+      "severity": "critical",
+      "title": "Generic medicine names lowercase",
+      "body": "Extends house rule 19. In a canonical Model Answer generic medicine names are lowercase in running text (\"indomethacin\", \"colchicine\", \"frusemide\", \"digoxin\", \"tramadol\"); only trade names are capitalised (\"Voltaren\", \"Paracetamol Osteo\"). A generic name opening a sentence keeps its sentence capital.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "He has taken only sub-therapeutic doses, and indomethacin, 25 mg twice daily, is taken erratically."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026 letter bullet 22 (James Seymour \"Indomethacin\" capitalised mid-sentence) + corpus hits Cochrane \"Frusemide\"/\"Digoxin\", OET test 11 \"Tramadol\"",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the generic-drug branch is Model Answer only; the existing condition-name branch is unchanged.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG2GenericDrugCapitalised composed under conditions_lowercase (WritingRuleEngine.SeniorAuditG2.cs). Regression: WritingSeniorAuditG2RegressionTests.",
+        "checkIds": [
+          "conditions_lowercase"
+        ]
+      }
+    },
+    {
+      "id": "OA5-13",
+      "section": "Identification",
+      "severity": "critical",
+      "title": "Age agrees with the date of birth at the letter date",
+      "body": "Any age the letter ties to the patient (\"aged 44\", \"a 23-year-old lawyer\", \"is 45 years old\", in the Re: line or the body) must equal the age derived from the patient's date of birth at the letter date. When the source states an age that contradicts its own DOB, the DOB wins: omit the age or state the DOB-derived age; never copy the contradictory age. Without a DOB, a letter age must match the age recorded in the case notes. Ages of relatives and ages at past events are not patient ages.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Re: Mr James Greenbaum, DOB: 5 October 1994 ... I am writing to refer Mr Greenbaum, a 25-year-old lawyer, for orthopaedic assessment ..."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 §3.4 and §4.21 (James Greenbaum: DOB 5 October 1994, letter 25 September 2020, \"23-year-old\"); same class found in Barry Jones (DOB 1 April 1972, letter 21 March 2015, \"aged 44\"); DECISIONS §C.6",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication); deterministic detector age_dob_inconsistent compares each patient-tied age with the DOB-derived age at the letter date (Re: line DOB first, then the notes DOB, including \"was born on\"), else with the notes-stated age. CANDIDATE: never fires deterministically; a candidate who copies the task's own inconsistent age is not penalised. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG3AgeDobInconsistent (WritingRuleEngine.SeniorAuditG3.cs). Regression: WritingSeniorAuditG3RegressionTests.",
+        "checkIds": [
+          "age_dob_inconsistent"
+        ]
+      }
+    },
+    {
+      "id": "OA5-14",
+      "section": "Patient reference",
+      "severity": "critical",
+      "title": "Minors: DOB-derived child status; no title in the Re: line or the body",
+      "body": "A patient aged 0-17 at the letter date is a child (R06.10). Minor status is derived from the DOB at the letter date whenever a DOB exists (it overrides any text-extracted age in both directions); otherwise an age the letter ties to the patient under 18 marks a minor. A child's Re: line carries the full name with no title (\"Re: Sally Webster, DOB: 10 November 2003\"), and the body uses the first name (\"Sally\"), never title + surname (\"Ms Webster\") or a titled full name. At 18 the patient is an adult and takes a title.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Re: Sally Webster, DOB: 10 November 2003 ... I am writing to request your assessment of Sally, a 16-year-old high school student, ..."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 §3.5, §4.4 (Amina Ahmed, DOB 12 August 2011, letter 14 October 2019, \"Re: Miss Amina Ahmed\"), §4.49 and §6 (Sally Webster, DOB 10 November 2003, letter 21 February 2020, \"Ms Webster\" throughout); DECISIONS §C.7",
+        "aiGradingLogic": "MODEL ANSWER: hard. The validator derives minor status from the DOB at the letter date before every naming check (minor_naming_convention Re: line title check, re_line_full_name, per-paragraph naming), and the body branch flags a titled reference to the child (same title as the Re: line on the surname, or any titled full name when the Re: line is untitled). CANDIDATE: unchanged (candidate minor status still comes from the notes-stated age only). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG3MinorBodyTitledName composed under minor_naming_convention, plus SaG3WithDerivedMinorStatus called once from Lint (WritingRuleEngine.SeniorAuditG3.cs). Regression: WritingSeniorAuditG3RegressionTests.",
+        "checkIds": [
+          "minor_naming_convention"
+        ]
+      }
+    },
+    {
+      "id": "OA5-15",
+      "section": "Patient reference",
+      "severity": "critical",
+      "title": "An adult is never called by the first name alone",
+      "body": "For a patient known to be an adult (DOB-derived age at the letter date, notes-stated age, or an age the letter ties to the patient, 18 or over), the body never uses the bare first name (\"Erika\", \"Erika's\"). Use title + surname at the first mention in each paragraph, then pronouns; the introduction may use title + surname or the full titled name (OA3-01). A first name alone is only for a child. When no age can be derived the check stays silent.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Miss Stone's fasting sugar levels remain often above 16 ..."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 §2, §3.3 and §4.10 (Erika Stone, audited pack: \"I am writing to refer Erika for ...\", \"Erika fasting sugars remain ...\"; DOB 6 April 1980, aged 37); R06.7; OWN-W-010",
+        "aiGradingLogic": "MODEL ANSWER: hard; the body_uses_last_name_only battery adds a bare-first-name branch for known adults (skips titled full names, following capitalised name tokens, relatives sharing the first name, and calendar-word first names such as June). CANDIDATE: branch never runs; body_uses_last_name_only stays coaching-only. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG3AdultBareFirstName composed under body_uses_last_name_only (WritingRuleEngine.SeniorAuditG3.cs). Regression: WritingSeniorAuditG3RegressionTests.",
+        "checkIds": [
+          "body_uses_last_name_only"
+        ]
+      }
+    },
+    {
+      "id": "OA5-16",
+      "section": "Identity",
+      "severity": "critical",
+      "title": "The Re: line title agrees with the letter's pronouns",
+      "body": "The patient's title and the pronouns used for the patient must describe the same sex. A male title (Mr, Master) with a body that uses three or more female pronouns and no male pronoun, or a female title (Mrs, Ms, Miss) with three or more male pronouns and no female pronoun, is a hard identity error: check the source and correct whichever is wrong. The scenario title is catalogue metadata and is never an authority for the title.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Re: Mrs Betty Weston ... Mrs Weston presented ... Her sleep was disturbed by pain ... She reported difficulty ..."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 §3.4 and §4.11 (\"Re: Mr Jane Browne\" title/sex check), §7.4 (reconcile patient name/title against the source); OA4-03",
+        "aiGradingLogic": "MODEL ANSWER: hard; patient_title_mismatch adds a title-versus-pronoun branch that fires only with >= 3 opposite-sex pronouns and zero pronouns of the title's sex (relatives' pronouns can never trigger it; Dr is not sexed). CANDIDATE: branch never runs; the existing in-letter title-switch check is unchanged. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG3TitlePronounSex composed under patient_title_mismatch (WritingRuleEngine.SeniorAuditG3.cs). Regression: WritingSeniorAuditG3RegressionTests.",
+        "checkIds": [
+          "patient_title_mismatch"
+        ]
+      }
+    },
+    {
+      "id": "OA5-17",
+      "section": "Identification",
+      "severity": "critical",
+      "title": "\"was born on <date>\" in the notes is a date of birth",
+      "body": "OA3-03 DOB priority also applies when the canonical notes write the date of birth as a sentence whose subject is the patient: \"Mrs Mary Clarke was born on 17 September 1960 ...\" or \"Patient was born on 6 July 1989.\" The Re: line must then carry \"DOB: <date>\". A relative's birth (\"her daughter was born after a long labour\", \"His daughter was born on ...\"), another named person, or a bare year (\"children born 2002 and 2004\") is never the patient's DOB.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Re: Mrs Mary Clarke, DOB: 17 September 1960"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 §3.4 (DOB / identity fidelity); Mary Clarke production notes \"Mrs Mary Clarke was born on 17 September 1960 and is a patient in your General Practice.\" with live \"Re: Mrs Mary Clarke\"; OA3-03",
+        "aiGradingLogic": "MODEL ANSWER: hard; re_line_dob_priority adds a \"was born on\" reading used only when the notes carry no DOB / date of birth label, with the existing message. CANDIDATE: branch never runs (candidate lanes never pass case notes). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG3ReLineDobBornOn composed under re_line_dob_priority (WritingRuleEngine.SeniorAuditG3.cs). Regression: WritingSeniorAuditG3RegressionTests.",
+        "checkIds": [
+          "re_line_dob_priority"
+        ]
+      }
+    },
+    {
+      "id": "OA5-18",
+      "section": "Layout",
+      "severity": "critical",
+      "title": "Closing phrase alone, then ONE designation line",
+      "body": "The sign-off is \"Yours sincerely,\" or \"Yours faithfully,\" alone on its line, one blank line, then a single designation line (e.g. \"Doctor\"), and the letter ends there. Text after the closing phrase on the same line (\"Yours sincerely, Doctor\"), a repeated designation, or any further line after the designation line fails.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Yours sincerely,\n\nDoctor"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 §3.14, §4.9 (Somarni Khaze) and §4.42 (Louise Geller): \"Yours sincerely, Doctor\" followed by a second \"Doctor\"; §7.8 render verification; DECISIONS §C.15; OWN-W-026",
+        "aiGradingLogic": "MODEL ANSWER: hard; signoff_designation_present adds a sign-off block shape branch (text after the closing phrase, duplicated designation, more than one line after the closing phrase). CANDIDATE: branch never runs; the existing designation-presence check is unchanged. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG3SignoffBlockShape composed under signoff_designation_present (WritingRuleEngine.SeniorAuditG3.cs). Regression: WritingSeniorAuditG3RegressionTests.",
+        "checkIds": [
+          "signoff_designation_present"
+        ]
+      }
+    },
+    {
+      "id": "OA5-19",
+      "section": "Purpose",
+      "severity": "critical",
+      "title": "Letter type follows the task function",
+      "body": "The functional letter type is derived from the case notes and the exact Writing Task, never from the catalogue code alone. A task whose case notes carry a present urgent plan (urgent referral, assessment, admission, review, treatment or surgical opinion; needs or requires admission; admission for stabilisation; send to hospital; for acute management) or whose letter is addressed to an emergency role (Emergency Registrar, Emergency Department, ED Medical Officer, A&E, Admitting Officer, Duty Registrar) is an URGENT referral (LT-UR), and its Model Answer follows the urgent contract: urgency in the introduction, \"at your earliest convenience\" in the closure request, the contact offer as the separate final paragraph. Negated or past events (\"No urgent systemic signs\", \"required ICU admission\", \"stabilised by day 3\", a past ED attendance) are not urgent plans, and suspected cancer alone never makes a referral urgent.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Task to the Emergency Registrar, catalogued LT-UR: \"I am writing to request the urgent admission of Mr Cochrane, who presented today with severe shortness of breath, chest pain and sweating.\" ... \"I would be grateful if you could admit Mr Cochrane to the Cardiology Unit for stabilisation at your earliest convenience.\""
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.8; #19 Dave Cochrane (Emergency Registrar, \"He needs admission to the Cardiology Unit for stabilisation.\") and #47 Brian Morgan / OET test 14 (Emergency Department Medical Officer, \"Plan: obtain urgent surgical opinion; send to hospital ...\") both catalogued LT-RR; source PDFs confirm both are urgent (DECISIONS C.17)",
+        "aiGradingLogic": "MODEL ANSWER: hard (blocks publication until the task is re-catalogued and the answer rebuilt to the urgent contract). CANDIDATE: not applicable; a candidate never sees or is scored on a catalogue code, and urgency wording is judged semantically by the AI grader. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG4LetterTypeFunctionMismatch (WritingRuleEngine.SeniorAuditG4.cs). Regression: WritingSeniorAuditG4RegressionTests. Data fix: re-catalogue Cochrane and OET test 14 as LT-UR.",
+        "checkIds": [
+          "letter_type_function_mismatch"
+        ]
+      }
+    },
+    {
+      "id": "OA5-20",
+      "section": "Organisation",
+      "severity": "critical",
+      "title": "No paraphrased duplicate request",
+      "body": "The closure request must carry an action DISTINCT from the introduction's request. A reworded repeat is a duplicate, not only a verbatim one: the same assessment + management/advice/treatment/opinion request, the same admission or biopsy request, the same request object (\"neurological assessment\", \"reconstructive surgery\", \"management of her anxiety\"), or a bare \"assess and advise/manage\" closure after an introduction that already asks for assessment or management. A distinct source-supported next step (\"consider MRI if clinically indicated\", \"confirm Mr McDonald's admission\" after a transfer introduction, \"arrange tophus removal should this prove necessary\") is correct. A compound noun such as \"medication review\" is not a repeated assessment request.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Intro: \"I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.\" Closure: \"I would be grateful if you could consider MRI if clinically indicated.\""
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.9; #1 Mathis, #4 Irving/Amina, #9 Khaze, #13 Karen Smith, #16 Barry Jones, #18 Collister, #19 Cochrane, #21 Greenbaum, #22 Seymour, #24 McDonald, #25 Weir, #26 Newton, #27 Evans, #28 Foster, #30 Karen Jackson, #31 Walter, #48 Woods, #51 Sullivne, #55 Sarah Miller; DECISIONS C.13; OA-07, OA2-05",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the paraphrase branch does not run; duplication is judged semantically by the AI grader, never by phrase matching (firewall item 19). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG4DuplicatedRequestParaphrase composed under no_duplicated_request (WritingRuleEngine.SeniorAuditG4.cs). Regression: WritingSeniorAuditG4RegressionTests.",
+        "checkIds": [
+          "no_duplicated_request"
+        ]
+      }
+    },
+    {
+      "id": "OA5-21",
+      "section": "Organisation",
+      "severity": "critical",
+      "title": "Canonical request paragraph before the contact offer",
+      "body": "In every referral, urgent referral, discharge, transfer and non-medical referral Model Answer, the paragraph immediately before the separate contact-offer paragraph is a standalone request paragraph that STARTS with the canonical \"I would be grateful if you could ...\" family (\"I would be grateful for ...\", \"I would appreciate ...\"), optionally after one introductory adverbial (\"Given ...,\", \"On discharge,\"). A \"Please monitor/review/see/assess ...\" instruction, a request merged into a clinical sentence (\"I counselled ... and would be grateful ...\"), or no request at all fails. Exception (OA2-03): a task that explicitly requests no action (\"for information only\", \"no further action is required\"). Other letters (LT-OT) are out of scope.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I would be grateful if you could monitor Ms Wu for signs of post-traumatic stress disorder and arrange trauma-focused cognitive behavioural therapy if required."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.9; #7 Yanlin Ma, #12 Janet Pristiely, #35 Sandra Peterson (no request paragraph), #46 Ling Wu (\"Please monitor ...\"); same defect in live Betty Johnson (\"Please review ...\"), Peter Sullivne (\"..., please see him ...\") and Lucy Clarke (\"I counselled ... and would be grateful ...\"); DECISIONS C.13; OA-06, OA2-03, OA2-06",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; any clear professional request wording and paragraphing is accepted (firewall item 19). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only, all professions. Detector branch: DetectSaG4CanonicalRequestParagraphMissing composed under closure_request_paragraph (WritingRuleEngine.SeniorAuditG4.cs). Regression: WritingSeniorAuditG4RegressionTests.",
+        "checkIds": [
+          "closure_request_paragraph"
+        ]
+      }
+    },
+    {
+      "id": "OA5-22",
+      "section": "Purpose",
+      "severity": "critical",
+      "title": "Discharge introduction states the ongoing-care request",
+      "body": "A discharge Model Answer introduction, and any introduction that opens \"I am writing to introduce ...\", states the ongoing-care action required of the reader, not only the admission and discharge facts: \"... and to request your ongoing monitoring/management of ...\". The history noun \"admission\" is not a reader action. Any explicit reader action (request, ask you to, advise you of, follow-up, monitoring, review, continued/ongoing care or management, handing over care) satisfies the rule. Exception (OA2-03): a task that explicitly requests no action.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to update you regarding Ms Garcia, who was discharged home today after treatment for bacterial meningitis, and to request your ongoing monitoring during her recovery."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: #12 Janet Pristiely (\"I am writing to introduce Ms Pristiely, admitted on 2 August 2019 ... and discharged today.\"), #35 Sandra Peterson, #37 Betty Johnson (\"... discharged today after a right total knee replacement and rehabilitation admission.\"); DECISIONS C.13; OA-01, OA2-03",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; purpose is assessed semantically by the AI grader (firewall items 1 and 17). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG4DischargeIntroWithoutCareRequest composed under intro_purpose_vague (WritingRuleEngine.SeniorAuditG4.cs). Regression: WritingSeniorAuditG4RegressionTests.",
+        "checkIds": [
+          "intro_purpose_vague"
+        ]
+      }
+    },
+    {
+      "id": "OA5-23",
+      "section": "Organisation",
+      "severity": "critical",
+      "title": "Background never opens or mixes into current-episode paragraphs",
+      "body": "Medical history, social details, habits, family history and allergies form ONE dedicated background paragraph immediately before the closure. In ANY body paragraph before that point, background must not open a paragraph that precedes current-episode content (today's presentation, examination, working/provisional diagnosis, management given), and must not be mixed into a paragraph that carries current-episode content. Urgent letters keep today's symptoms, examination and immediate assessment together before the background. A condition named in the introduction is the referred problem, not background; a precipitating event and a presenting allergic reaction are current-episode facts.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Weir has depression and has taken sertraline hydrochloride since September 2012. He continues to smoke. He has been overweight for many years. [dedicated paragraph immediately before the closure request]"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.10; remote history first: #15 Sorocco, #27 Trevor Evans, #28 Zach Foster, #11 Jane Browne, #32 Lucy Clarke (examination delayed behind background, audited pack); background mixed into current paragraphs: #17 Macalaque, #33 Mary Clarke, #40 Bennet, #36 Anne Hall, #26 Newton, #20 Poulos; DECISIONS C.14; OA2-12",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; organisation is assessed on logical order and relevance, never the house paragraph position (firewall item 20). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG4BackgroundPlacementInBody composed under background_paragraph_placement (WritingRuleEngine.SeniorAuditG4.cs). Regression: WritingSeniorAuditG4RegressionTests.",
+        "checkIds": [
+          "background_paragraph_placement"
+        ]
+      }
+    },
+    {
+      "id": "OA5-24",
+      "section": "Register",
+      "severity": "critical",
+      "title": "No unidiomatic request wording",
+      "body": "A Model Answer never refers to itself as \"per this referral\" or \"per this letter\" (the letter IS the referral), and never uses a personal specialist noun as a modifier: \"dermatologist review\", \"endocrinologist review\", \"neurologist assessment\", \"psychiatrist opinion\" become \"dermatological review\", \"endocrinological review\", \"neurological assessment\", \"psychiatric opinion\". Not affected: adjective forms, discipline nouns (\"occupational therapy assessment\"), \"dietitian review\", \"as per the protocol\", \"exercise physiologist\", and the verb use \"asked that a neurologist review him\".",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to urgently refer Mr Sullivne for dermatological assessment and biopsy of two suspicious skin lesions found today."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: #8 Cathy Jones \"per this referral\"; #51 Peter Sullivne \"please see him for dermatologist review\"; same shape in live Sylvia Meadows \"an outpatient endocrinologist review\" (the task says \"endocrinological review\"); DECISIONS C.12",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; register is judged semantically by the AI grader. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG4UnidiomaticRequestWording composed under register_colloquial (WritingRuleEngine.SeniorAuditG4.cs). Regression: WritingSeniorAuditG4RegressionTests.",
+        "checkIds": [
+          "register_colloquial"
+        ]
+      }
+    },
+    {
+      "id": "OA5-25",
+      "section": "Content",
+      "severity": "critical",
+      "title": "One coherent medication frequency",
+      "body": "A medication regimen states ONE coherent frequency. A multiple daily count (twice/three times/four times daily, bd, tds, qds) is never followed by a single time-of-day slot (each morning, at night, in the evening): \"glipizide, 5 mg twice daily each morning\" cannot be followed. Write the single source-supported regimen (\"5 mg twice daily\" or \"two 5 mg tablets each morning\"); two slots (\"twice daily, in the morning and at night\") are coherent.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Miss Stone is currently taking metformin, 500 mg twice daily; glipizide, 5 mg twice daily and candesartan, 4 mg each morning."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: #10 Erika Stone \"glipizide, 5 mg twice daily each morning\"; DECISIONS C.19",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the deterministic check does not run (Model Answer only); the AI grader scores a regimen only when the contradiction genuinely harms clarity or safety. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG5MedicationFrequencyConflict (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "medication_frequency_conflict"
+        ]
+      }
+    },
+    {
+      "id": "OA5-26",
+      "section": "Register",
+      "severity": "critical",
+      "title": "No emotional or affective observations",
+      "body": "Model Answers do not describe the patient's emotions: no \"is/was anxious\", \"anxious and worried\", \"quite worried\", \"in distress\", \"no obvious anxiety\", \"bored\", \"feels discouraged\", \"embarrassed/embarrassing\". State the source fact neutrally (the symptom or concern reported) or omit it. Exemptions: a documented anxiety/depression diagnosis or symptom noun (\"anxiety disorder\", \"symptoms of anxiety\"); anxiety or worry tied to a stated concern (\"is anxious about coping with the baby\") unless intensified or doubled; and mental-state findings in a letter whose introduction or recipient is psychiatric/psychological/mental-health (the referred condition itself). Supersedes the 10 Sep governance for Model Answers only.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Cochrane presented today with severe shortness of breath, chest pain and sweating for the past two hours, with bilateral ankle oedema."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.12; #9 Khaze \"anxious and worried\"; #15 Sorocco \"was anxious\"; #19 Cochrane \"He is anxious\"; #32 Lucy Clarke \"She is anxious\"; #34 Welshman \"quite worried\"; #36 Hall \"no obvious anxiety\"; #55 Miller \"presented today in distress\"; #16 Barry Jones \"bored, discouraged\"; #11 Jane Browne \"embarrassing\"; DECISIONS C.12",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; candidate register is assessed by the AI grader against the official criteria, and a factual anxiety diagnosis is never penalised (firewall item 15). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG5EmotionalObservation composed under register_colloquial (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "register_colloquial"
+        ]
+      }
+    },
+    {
+      "id": "OA5-27",
+      "section": "Register",
+      "severity": "critical",
+      "title": "No note-style query or question-mark diagnoses",
+      "body": "Model Answers never copy note-form \"query X\" or \"?X\". Write \"suspected X\" or \"possible X\", keeping the source's level of certainty. The plural \"queries\" of the contact sentence and the noun/verb uses (\"any query regarding\", \"query whether\") are not affected.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I am writing to refer Mr Newton, an accountant, for assessment of suspected inflammatory bowel disease."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.12; #26 Newton \"query inflammatory bowel disease\"; #31 Walter \"query bipolar disorder\"; #34 Welshman \"query early-stage Alzheimer's disease\"; #43 McConville \"query pneumonia\"; #48 Woods \"query arrhythmia\"; DECISIONS C.12",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; familiar clinical shorthand is judged by the AI grader (firewall item 12). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG5NoteStyleQuery composed under register_colloquial (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "register_colloquial"
+        ]
+      }
+    },
+    {
+      "id": "OA5-28",
+      "section": "Register",
+      "severity": "critical",
+      "title": "Fatigue, not tiredness",
+      "body": "Model Answers render the source's tiredness in the canonical clinical term \"fatigue\"; \"tiredness\" is not used even when the case notes say \"tired\".",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Collister has experienced fatigue, sore eyes and intermittent dizziness for the past month."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: #18 Collister \"tiredness\" weaker than canonical \"fatigue\"; OWN-W-033; WRITING-MODEL-ANSWER-RULES.md section 4 row 1; DECISIONS C.12",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; \"tiredness\" is correct general English for candidates (G-W-114). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG5Tiredness composed under register_colloquial (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "register_colloquial"
+        ]
+      }
+    },
+    {
+      "id": "OA5-29",
+      "section": "Register",
+      "severity": "critical",
+      "title": "No illogical diagnostic wording",
+      "body": "A request never asks the reader to \"confirm the working/provisional diagnosis of possible/probable/suspected X\" (a hedged diagnosis cannot be confirmed as such): request the action directly (assess, clarify or exclude the possible diagnosis). A condition is never the passive subject of \"assessed\" (\"A viral infection was assessed\"): the patient is assessed; a condition is diagnosed or suspected (\"The assessment was a viral infection.\").",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I would be grateful if you could assess Ms Topp, clarify the possible diagnosis of fibromyalgia and commence treatment."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: #14 Topp \"confirm the working diagnosis of possible fibromyalgia\"; #4 Amina Ahmed \"A viral infection was assessed\"; same misuse in Moustafawy \"A prodromal stage of liver disease was assessed\"",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; logic and idiom are judged semantically by the AI grader. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG5LexicalMisuse composed under register_colloquial (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "register_colloquial"
+        ]
+      }
+    },
+    {
+      "id": "OA5-30",
+      "section": "Register",
+      "severity": "critical",
+      "title": "Neutral behaviour wording",
+      "body": "Model Answers describe behaviour neutrally: \"adherence\"/\"adherent\" (never \"compliance\", \"compliant\" or \"non-compliance\"); \"did not attend\" (never \"defaulted\"); the objective observations (never \"bizarre behaviour\"); the exact alcohol quantity and frequency (never \"drinks heavily\"). Physiological compliance (lung, chest wall, bladder) is a clinical term and is not affected. No mental-health exemption.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Mr Poulos smokes twenty-five cigarettes daily and drinks ten to fifteen standard drinks daily."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.12; #50 Jack Mills \"medication non-compliance\" and closure \"compliance\"; #44 Marcus \"defaulted on her follow-up appointment\"; #45 Alison Martin \"bizarre behaviour\"; #20 Poulos \"drinks heavily\"; DECISIONS C.12; OWN-W-008",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run (the existing both-mode person-label check is unchanged); judgmental wording is otherwise judged by the AI grader. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG5JudgmentalBehaviour composed under judgmental_labels (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "judgmental_labels"
+        ]
+      }
+    },
+    {
+      "id": "OA5-31",
+      "section": "Medication-list punctuation, latest owner override",
+      "severity": "critical",
+      "title": "Weight-based doses and alphanumeric brands are list items",
+      "body": "Weight-based doses (\"5 mg/kg daily\", \"15-30 mg/kg daily\") and alphanumeric brand names (\"NovoMix30, 25 units\") are medication-dose pairs and follow the OA2-16 list syntax: \"isoniazid, 5 mg/kg daily; rifampin, 10 mg/kg daily; pyrazinamide, 15-30 mg/kg daily and ethambutol, 2.8 g twice weekly\". A comma separates every medicine from its dose. Concentrations (g/L, mg/dL) and fluid rates (mL/kg/h) are not doses.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "The four-drug regimen continues for two months: isoniazid, 5 mg/kg daily; rifampin, 10 mg/kg daily; pyrazinamide, 15-30 mg/kg daily and ethambutol, 2.8 g twice weekly."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 3.11; #23 Aloisius comma chain \"isoniazid, 5 mg/kg daily, rifampin, ...\"; post-audit converge regression Lucy Clarke \"insulin NovoMix30 25 units ...\"; DECISIONS C.19; OA2-16",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the extended parse does not run; the existing candidate behaviour (coaching-only) is unchanged. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG5MedicationListExtendedDoses composed under medication_list_punctuation; semicolon_overuse exemption reads SaG5MedicationItemRe (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "medication_list_punctuation"
+        ]
+      }
+    },
+    {
+      "id": "OA5-32",
+      "section": "Medication-list punctuation, latest owner override",
+      "severity": "critical",
+      "title": "Formulation stays with the medicine",
+      "body": "A formulation (nebules, tablets, capsules, patch, inhaler, cream ...) belongs with the medicine name before the dose: \"salbutamol nebules, 5 mg\", never \"Salbutamol, 5 mg, nebules\".",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Salbutamol nebules, 5 mg, were given without improvement."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: #43 McConville \"Salbutamol, 5 mg, nebules\" awkward; DECISIONS C.19",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the new branch does not run; existing candidate behaviour (coaching-only) is unchanged. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG5StrandedFormulation composed under medication_list_punctuation (WritingRuleEngine.SeniorAuditG5.cs). Regression: WritingSeniorAuditG5RegressionTests.",
+        "checkIds": [
+          "medication_list_punctuation"
+        ]
+      }
+    },
+    {
+      "id": "OA5-33",
+      "section": "Source fidelity",
+      "severity": "critical",
+      "title": "Narrated chronology must be possible on the letter date",
+      "body": "A Model Answer never contradicts its own letter date. (1) A past event (\"was/were + participle\" or a simple past verb such as presented, admitted, discharged, transferred, recommenced) bound to \"on/by <day> <Month> [year]\" may not be later than the letter date; a year-less date more than a month ahead is read as the previous year. (2) An event anchored on \"today\" may not be coordinated with a second event \"N days/weeks later\" (\"on today and presented four days later\"). (3) In a pregnancy dated in weeks the last menstrual period is never \"today\". Future, planned or conditional sentences (will, due, scheduled, appointment, planned, to be, advised to return) never count.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "He hurt his back lifting a heavy box at work on 17 March and presented today, four days later, with worsening pain."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 2 Barry Jones \"on today and presented four days later\"; #16 Barry Jones; #29 Jane MacIntyre \"estimated at eight weeks by her last period of today\"; #37 Betty Johnson letter dated 25 February 2015 narrating 26 February and 6 March events",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the deterministic check does not run (Model Answer only); the AI grader treats an impossible chronology as a Content accuracy issue only when it genuinely misinforms the reader. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG6NarratedChronologyContradiction (WritingRuleEngine.SeniorAuditG6.cs). Regression: WritingSeniorAuditG6RegressionTests.",
+        "checkIds": [
+          "narrated_chronology_contradiction"
+        ]
+      }
+    },
+    {
+      "id": "OA5-34",
+      "section": "Source fidelity",
+      "severity": "critical",
+      "title": "Owner-required facts must be present",
+      "body": "Facts the owner has confirmed as material for a specific task are mandatory in that task's Model Answer and are never removed by regeneration or repair. The list is owner-maintained and never inferred; it currently holds OA2-14: when the case notes for Mr Michael Weir record the blood pressure 88/70, the letter body states it with its unit (\"88/70 mmHg\").",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "His blood pressure was 88/70 mmHg."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: section 2 and #25 Michael Weir \"required BP 88/70 mmHg omitted\"; section 3.7 known regression loss; OA2-14; DECISIONS C.18",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: not applicable; candidates are never assessed against an owner-required Model Answer fact list. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG6OwnerRequiredFactMissing with the owner list SaG6OwnerFacts (WritingRuleEngine.SeniorAuditG6.cs). Regression: WritingSeniorAuditG6RegressionTests.",
+        "checkIds": [
+          "owner_required_fact_missing"
+        ]
+      }
+    },
+    {
+      "id": "OA5-35",
+      "section": "Source fidelity",
+      "severity": "critical",
+      "title": "Letter date follows the source's today and documented encounters",
+      "body": "The letter date is proven against the source, reading numeric note dates (21/03/15, 17.06.2018, 7/9/18) exactly like written ones. (A) When the case notes, the task or the scenario state today's date (\"Today's Date: 24/08/19\", \"Assume that today's date is 7 January 2023\"), the letter carries exactly that date. (D) Otherwise the letter may not be dated before the latest documented encounter; appointments, bookings, planned or due dates, labelled discharge/transfer/admission dates, the LMP/EDD and out-of-sequence source typos never count as encounters. (C) The letter may not be later than every documented date (numeric dates included; the LMP is no ceiling), except within 31 days of a documented forward review window. A date of birth is never a treatment date.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "21 March 2015 (Betty Johnson: last documented encounter 21/03/15)"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner Senior Assessor Release Audit 16 Sep 2026: #29 and section 6 Jane MacIntyre (Today's Date 24 August 2019, letter dated on the LMP 26 June 2019); #37 and section 6 Betty Johnson (letter 25 February 2015, notes through 21/03/15); post-audit converge changes Betty Weston 10 June 2018 and Sarah Day 4 January 2018; DECISIONS C.4-C.5",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: unchanged; the new branches run for Model Answers only and candidate lanes never supply the source. Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG6LetterDateUnsupported composed under letter_date_unsupported; the Model Answer gate passes WritingScenario.TodayDate (WritingRuleEngine.SeniorAuditG6.cs). Regression: WritingSeniorAuditG6RegressionTests.",
+        "checkIds": [
+          "letter_date_unsupported"
+        ]
+      }
+    },
+    {
+      "id": "OA5-36",
+      "section": "Identity",
+      "severity": "critical",
+      "title": "Re: line carries the source age when the source has no DOB",
+      "body": "When the canonical case notes state the patient's age and record no date of birth, the Model Answer Re: line identifies the patient as \"Re: <title> <full name>, aged N\" with the source age. Leaving the age out (\"Re: Mr Allen Mathis\") fails. DOB still has priority (OA3-03): any DOB, date-of-birth or \"born on\" entry hands the Re: line to the DOB rule. Only the patient's own age counts: relatives' ages, age lists, past-event ages and ages in months or weeks never supply N.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Re: Mr Allen Mathis, aged 61"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 render audit §2-§3: live Medicine letters Allen Mathis (61), David Taylor/Dr Peter Perfect (38), Cathy Jones (25), Zach Foster (22), Karen Jackson (36), Betty Johnson (81) and Louise Geller (25) omit the age the DOB-less notes state; DECISIONS §C6.",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication); deterministic, source-gated on the canonical case notes. CANDIDATE: not scored (coaching only; the detector never runs in the candidate lane). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG7ReLineAgeWhenNoDob (WritingRuleEngine.SeniorAuditG7.cs). Regression: WritingSeniorAuditG7RegressionTests.",
+        "checkIds": [
+          "re_line_age_when_no_dob"
+        ]
+      }
+    },
+    {
+      "id": "OA5-37",
+      "section": "Layout",
+      "severity": "critical",
+      "title": "Recipient block is exactly the task's recipient content",
+      "body": "Every line of the Model Answer recipient block is supported by the Writing Task or the case notes (case- and punctuation-insensitive; standard abbreviations such as St/Street and GP/General Practitioner are the same component). An invented recipient name, department, clinic or street fails, as does a spelling that differs from the task. A recipient name, post-nominal or postcode that the task gives must not be dropped. A task that names only a role supports that role line alone.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Dr Anne Childers MBBS FRANZCOG\nConsultant Obstetrician\nSpirit Mother's Hospital\nStanley Street\nSouth Brisbane"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 render audit §3: Brendan Macalaque (invented \"Dr Helena Rao / City Eye Centre / 45 Bridge Street / Newtown\" for \"a neuro-ophthalmologist\"), Jane MacIntyre (\"MBBS FRANZCOG\" dropped), Erika Stone (\"NW1 2TG\" dropped), Brian Morgan (\"Wooloongabba\" respelled); DECISIONS §C16.",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication); deterministic, source-gated on an exact Writing Task that addresses the letter to a recipient. CANDIDATE: not scored (coaching only; the detector never runs in the candidate lane). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector: DetectSaG7AddressContentUnsupported (WritingRuleEngine.SeniorAuditG7.cs). Regression: WritingSeniorAuditG7RegressionTests.",
+        "checkIds": [
+          "address_content_unsupported"
+        ]
+      }
+    },
+    {
+      "id": "OA5-38",
+      "section": "Layout",
+      "severity": "critical",
+      "title": "A bare role recipient still takes the role salutation",
+      "body": "OA2-17 applies whether or not the recipient block writes \"The\": when the first recipient line is a role (\"Gynaecology Registrar\", \"Duty Registrar\") that the task gives with no person name, the Model Answer salutation is that exact role (\"Dear Gynaecology Registrar,\"), never \"Dear Doctor,\" or \"Dear Sir/Madam,\". When the task names the person holding the role, the salutation addresses the person.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Gynaecology Registrar ... Dear Gynaecology Registrar,"
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Senior Assessor Release Audit 16 Sep 2026 render audit §3: Cathy Jones/Dr Sally Brown letter addressed \"Gynaecology Registrar\" with \"Dear Doctor,\"; WritingRev8HouseStyle rule 4a (OA2-17).",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication); the bare-role branch is Model Answer only and source-gated on the exact task. CANDIDATE: unchanged (the existing \"The <Role>\" branch keeps its current behaviour). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner Senior Assessor Release Audit 16 Sep 2026"
+        ],
+        "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG7RoleSalutationBareRole composed under role_salutation_matches_task (WritingRuleEngine.SeniorAuditG7.cs). Regression: WritingSeniorAuditG7RegressionTests.",
+        "checkIds": [
+          "role_salutation_matches_task"
         ]
       }
     }
