@@ -1,54 +1,8 @@
 import { PINNED_EFFORT, PINNED_MODEL } from "./security.js";
-export const ROLE_SPECS = {
-    explore: {
-        role: "explore",
-        kind: "read",
-        timeoutMs: 120_000,
-        mode: "plan",
-        sandbox: false,
-        highAutonomyOptIn: false,
-    },
-    research: {
-        role: "research",
-        kind: "read",
-        timeoutMs: 180_000,
-        mode: "plan",
-        sandbox: false,
-        highAutonomyOptIn: false,
-    },
-    review: {
-        role: "review",
-        kind: "read",
-        timeoutMs: 300_000,
-        mode: "plan",
-        sandbox: false,
-        highAutonomyOptIn: false,
-    },
-    implement: {
-        role: "implement",
-        kind: "write",
-        timeoutMs: 300_000,
-        mode: "accept-edits",
-        sandbox: false,
-        highAutonomyOptIn: true,
-    },
-    test: {
-        role: "test",
-        kind: "write",
-        timeoutMs: 240_000,
-        mode: "accept-edits",
-        sandbox: false,
-        highAutonomyOptIn: false,
-    },
-    debug: {
-        role: "debug",
-        kind: "write",
-        timeoutMs: 240_000,
-        mode: "accept-edits",
-        sandbox: false,
-        highAutonomyOptIn: false,
-    },
-};
+import { ROLE_SPECS, ROLE_POLICIES, ROLE_BUDGETS } from "./config.js";
+
+export { ROLE_SPECS, ROLE_POLICIES, ROLE_BUDGETS };
+
 export function rolePrompt(input) {
     const shared = [
         `You are an Antigravity CLI worker. Role: ${input.role}.`,

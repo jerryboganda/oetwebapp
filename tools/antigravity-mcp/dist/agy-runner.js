@@ -7,6 +7,7 @@ import { BridgeError, classifyAgyFailure } from "./errors.js";
 import { emptyResult, parseWorkerResult } from "./schemas.js";
 import { PINNED_EFFORT, PINNED_MODEL, ensureUseG1CreditsFalse, highAutonomyAllowed, logsDir, } from "./security.js";
 import { ROLE_SPECS, rolePrompt } from "./roles.js";
+import { computePrintTimeoutSeconds } from "./config.js";
 function resolveAgyBin() {
     if (process.env.AGY_BIN?.trim())
         return process.env.AGY_BIN.trim();
@@ -106,7 +107,7 @@ export function buildAgyArgs(input, spec) {
         "--json-schema",
         schemaFile,
         "--print-timeout",
-        `${Math.max(30, Math.round(timeout / 1000))}s`,
+        `${computePrintTimeoutSeconds(timeout)}s`,
         "--mode",
         spec.mode,
     ];
