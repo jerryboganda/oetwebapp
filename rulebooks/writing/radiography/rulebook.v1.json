@@ -1,9 +1,9 @@
 {
-  "version": "2.4.0-senior-assessor-audit",
+  "version": "2.5.0-cross-model-audit",
   "kind": "writing",
   "profession": "radiography",
-  "publishedAt": "2026-09-16T00:00:00Z",
-  "authoritySource": "OET AI Rules Master — Canonical Registry v1.3-senior-assessor-audit (2026-09-16: v1.1-rev8 + owner clarifications OA-01..OA-15, OA2-01..OA2-20, OA3-01..OA3-05, OA4-01..OA4-03 and the Senior Assessor Release Audit OA5-01..OA5-38), sha256:f83d893b3facdf31adb1c2b804cb4e05ebcba7aabdc1ec13b3e9b36d9fdb6747",
+  "publishedAt": "2026-09-17T00:00:00Z",
+  "authoritySource": "OET AI Rules Master — Canonical Registry v1.4-cross-model-audit (2026-09-17: v1.1-rev8 + owner clarifications OA-01..OA-15, OA2-01..OA2-20, OA3-01..OA3-05, OA4-01..OA4-03 and the Senior Assessor Release Audit OA5-01..OA5-38 and the cross-model audit OA6-01..OA6-02), sha256:49ccef510da49da4b76edfd201c9e617b597e5cebbd9fe53d3fabb2cfc2a3f72",
   "sections": [
     {
       "id": "official-assessment",
@@ -7853,6 +7853,58 @@
         "notes": "Senior Assessor Release Audit remediation (OA5), Model Answer only. Detector branch: DetectSaG7RoleSalutationBareRole composed under role_salutation_matches_task (WritingRuleEngine.SeniorAuditG7.cs). Regression: WritingSeniorAuditG7RegressionTests.",
         "checkIds": [
           "role_salutation_matches_task"
+        ]
+      }
+    },
+    {
+      "id": "OA6-01",
+      "section": "Organisation",
+      "severity": "critical",
+      "title": "The same functional request never appears in both the introduction and the closure",
+      "body": "HARD GLOBAL RULE. The introduction carries the primary request; the closure request paragraph carries one DISTINCT, source-supported next step. Duplication is judged by REQUEST CONCEPT, not by wording: following up the patient's contacts (\"request follow-up of close contacts\" / \"contact close family and friends\"), interim care of the patient until the same review (\"request your ongoing care pending outpatient endocrinological review\" / \"monitor her until her endocrinologist's appointment\"), the same dressing request (\"for regular wound dressing\" / \"for dressing changes\"), and confirming a diagnosis after an assessment request (\"request your psychiatric assessment\" / \"confirm the diagnosis\") are all duplicates. Distinct next steps stay correct: advising contacts to seek medical attention and considering chemoprophylaxis, \"clarify the possible diagnosis\", \"arrange bronchoscopy and biopsy to establish the diagnosis\", monitoring a specific parameter the notes plan.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "Intro: \"I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.\" Closure: \"I would be grateful if you could advise Ms Garcia's close contacts on prompt medical attention and observation, and consider chemoprophylaxis.\""
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner FINAL Medicine remediation decision 17 Sep 2026 after the cross-model audit (Claude Opus 5 + Gemini 3.5 Flash, adjudicated): HARD FAIL #41 Isabel Garcia (both auditors) and #54 Sylvia Meadows passed validator writing-rules.senior-assessor-audit.2026-09-16.2; MINOR #15 Maria Sorocco; MATERIAL #45 OET test 10 (Ms Martin). Extends OA-07, OA2-05, OA5-20.",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication). CANDIDATE: the request-concept branch does not run; duplication is judged semantically by the AI grader against the official criteria (firewall item 27). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner FINAL Medicine remediation decision 17 Sep 2026",
+          "Cross-model audit report 17 Sep 2026"
+        ],
+        "notes": "Cross-model audit remediation (OA6), Model Answer only. Detector branch: DetectCmaDuplicatedRequestConcept composed under no_duplicated_request (WritingRuleEngine.CrossModelAudit.cs). Regression: WritingCrossModelAuditRegressionTests.",
+        "checkIds": [
+          "no_duplicated_request"
+        ]
+      }
+    },
+    {
+      "id": "OA6-02",
+      "section": "Source fidelity",
+      "severity": "critical",
+      "title": "The closure requests only what the case notes plan",
+      "body": "A Model Answer never invents a clinical request because it sounds reasonable. When the closure request asks the reader to monitor, check, repeat, measure or test a clinical parameter (electrolytes, blood pressure, renal function, INR, haemoglobin, glucose, weight, symptoms, medications, liver function, lipids, thyroid function, full blood count, oxygen saturation), a case-note line must plan that monitoring for that parameter (\"Haemoglobin should be checked\", \"Refer to Queensland Medical Laboratory for INR monitoring\"). A result that is merely recorded (\"Electrolytes: low sodium, high potassium\") does not plan monitoring.",
+      "appliesTo": "all",
+      "enforcement": "ai-grounded",
+      "exemplarPhrases": [
+        "I would be grateful if you could encourage Mrs Meadows to attend her endocrinologist's appointment."
+      ],
+      "params": {
+        "classification": "Owner Override",
+        "authority": "DR_HESHAM_DIRECT",
+        "evidence": "Owner FINAL Medicine remediation decision 17 Sep 2026: #54 Sylvia Meadows closure \"monitor Mrs Meadows's symptoms and electrolytes until her endocrinologist's appointment\" passed validator writing-rules.senior-assessor-audit.2026-09-16.2; the source plan (Writing Recalls 2020 p3) holds no monitoring instruction. DECISIONS C.18 (requested services come from the source).",
+        "aiGradingLogic": "MODEL ANSWER: hard (every violation blocks publication); deterministic, source-gated on the canonical case notes. CANDIDATE: not scored by this detector (coaching only; it never runs in the candidate lane). Model Answer similarity contributes ZERO to the candidate score.",
+        "sourceRefs": [
+          "Owner FINAL Medicine remediation decision 17 Sep 2026",
+          "Cross-model audit report 17 Sep 2026"
+        ],
+        "notes": "Cross-model audit remediation (OA6), Model Answer only. Detector: DetectCmaRequestActionUnsupported (WritingRuleEngine.CrossModelAudit.cs). Regression: WritingCrossModelAuditRegressionTests.",
+        "checkIds": [
+          "request_action_unsupported"
         ]
       }
     }
