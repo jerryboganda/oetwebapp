@@ -46,3 +46,41 @@ export const signupPayloadSchema = z
   });
 
 export type SignupPayloadFormValues = z.input<typeof signupPayloadSchema>;
+
+/**
+ * Minimal signup for the free General-English placement test: identity and
+ * consent only. Healthcare-enrollment fields (exam type, profession, target
+ * country, exam date) are deliberately deferred — they are collected by the
+ * normal goals/onboarding flow the first time the learner actually enrolls
+ * for OET. The backend mirrors this via `RegistrationPurpose: "placement"`.
+ */
+export const placementSignupPayloadSchema = z
+  .object({
+    agreeToPrivacy: z.boolean(),
+    agreeToTerms: z.boolean(),
+    confirmPassword: z.string().min(8, "Confirm your password"),
+    email: z.email("Enter a valid email address"),
+    firstName: z.string().min(2, "First name is required"),
+    lastName: z.string().min(2, "Last name is required"),
+    marketingOptIn: z.boolean(),
+    mobileNumber: z
+      .string()
+      .min(7, "Mobile number is required")
+      .max(20, "Enter a valid mobile number"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+  })
+  .refine((value) => value.password === value.confirmPassword, {
+    message: "Passwords must match",
+    path: ["confirmPassword"],
+  })
+  .refine((value) => value.agreeToTerms, {
+    message: "Accept the terms to continue",
+    path: ["agreeToTerms"],
+  })
+  .refine((value) => value.agreeToPrivacy, {
+    message: "Accept the privacy policy to continue",
+    path: ["agreeToPrivacy"],
+  });
+
+export type PlacementSignupPayloadFormValues = z.input<typeof placementSignupPayloadSchema>;
+

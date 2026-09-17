@@ -603,6 +603,7 @@ export async function registerLearner(
     utmContent: input.utmContent ?? null,
     referrerUrl: input.referrerUrl ?? null,
     landingPath: input.landingPath ?? null,
+    registrationPurpose: input.registrationPurpose ?? null,
   });
   if (options?.persistSession !== false) {
     saveStoredSession(session, 'local');
