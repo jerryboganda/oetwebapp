@@ -4,13 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { BridgeError, classifyAgyFailure } from "./errors.js";
-import { emptyResult, parseWorkerResult } from "./schemas.js";
+import { emptyResult, extractAgyEnvelope, extractJsonObject, parseWorkerResult } from "./schemas.js";
 import { PINNED_EFFORT, PINNED_MODEL, ensureUseG1CreditsFalse, highAutonomyAllowed, logsDir, } from "./security.js";
 import { ROLE_SPECS, rolePrompt } from "./roles.js";
-import { computePrintTimeoutSeconds, DEFAULT_RETRY_POLICY, RETRY_POLICY } from "./config.js";
+import { BUDGET_CEILINGS, computePrintTimeoutSeconds, DEFAULT_BUDGET_CEILINGS, DEFAULT_RETRY_POLICY, RETRY_POLICY } from "./config.js";
 import { defaultGate } from "./concurrency.js";
 import { createWorktree, cleanupStaleWorktrees } from "./worktree.js";
-import { findResumableConversation, recordSessionFromEnvelope } from "./sessions.js";
+import { findResumableConversation, getSession, recordSessionFromEnvelope } from "./sessions.js";
 
 function resolveAgyBin() {
     if (process.env.AGY_BIN?.trim())
@@ -272,12 +272,76 @@ export function wasWorkspaceModified(before, after) {
     return before.state !== after.state;
 }
 
-async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePath, timeoutMs, policy, maxAttempts, hardCapTotalRetryMs, retryStartTime) {
+export function extractTokensFromStdout(stdout) {
+    if (!stdout || typeof stdout !== "string") {
+        return 0;
+    }
+    try {
+        const env = extractAgyEnvelope(stdout) || extractJsonObject(stdout);
+        if (env && typeof env === "object") {
+            if (env.usage && typeof env.usage.total_tokens === "number" && Number.isFinite(env.usage.total_tokens)) {
+                return env.usage.total_tokens;
+            }
+        }
+    } catch {
+        /* ignore parse error */
+    }
+    return 0;
+}
+
+export function budgetExceededResult(role, message, details = {}) {
+    return {
+        ...emptyResult(role, {
+            status: "ERROR",
+            summary: message,
+            blockers: ["budget-exceeded"],
+            recommendedNextStep: "Increase the configured budget ceiling or reduce task scope.",
+        }),
+        errorCode: "budget-exceeded",
+        message,
+        details,
+    };
+}
+
+export function resolveEffectiveCeilings(input = {}) {
+    const source = (input.budgetCeilings && typeof input.budgetCeilings === "object")
+        ? input.budgetCeilings
+        : (input.ceilings && typeof input.ceilings === "object")
+            ? input.ceilings
+            : {};
+    return {
+        maxAttempts: typeof input.maxAttempts === "number" && input.maxAttempts > 0
+            ? Math.round(input.maxAttempts)
+            : typeof source.maxAttempts === "number" && source.maxAttempts > 0
+                ? Math.round(source.maxAttempts)
+                : BUDGET_CEILINGS.maxAttempts,
+        maxWallClockMs: typeof input.maxWallClockMs === "number" && input.maxWallClockMs > 0
+            ? Math.round(input.maxWallClockMs)
+            : typeof source.maxWallClockMs === "number" && source.maxWallClockMs > 0
+                ? Math.round(source.maxWallClockMs)
+                : BUDGET_CEILINGS.maxWallClockMs,
+        maxTotalTokens: typeof input.maxTotalTokens === "number" && input.maxTotalTokens > 0
+            ? Math.round(input.maxTotalTokens)
+            : typeof source.maxTotalTokens === "number" && source.maxTotalTokens > 0
+                ? Math.round(source.maxTotalTokens)
+                : BUDGET_CEILINGS.maxTotalTokens,
+        maxRunsPerSession: typeof input.maxRunsPerSession === "number" && input.maxRunsPerSession > 0
+            ? Math.round(input.maxRunsPerSession)
+            : typeof source.maxRunsPerSession === "number" && source.maxRunsPerSession > 0
+                ? Math.round(source.maxRunsPerSession)
+                : BUDGET_CEILINGS.maxRunsPerSession,
+    };
+}
+
+async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePath, timeoutMs, policy, ceilings, retryStartTime) {
     let lastError = null;
+    let accumulatedTotalTokens = 0;
     const workerInput = worktreePath
         ? { ...input, workspace: worktreePath, logicalWorkspace: input.workspace }
         : input;
     const args = buildAgyArgs(workerInput, spec);
+    const maxAttempts = ceilings.maxAttempts ?? policy.maxAttempts ?? 3;
+    const hardCapTotalRetryMs = policy.hardCapTotalRetryMs ?? 600_000;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const workspaceBefore = spec.kind === "write"
@@ -305,6 +369,9 @@ async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePa
                 stderrTail: spawned.stderr.slice(-4000),
                 stdoutTail: spawned.stdout.slice(-4000),
             });
+
+            const attemptTokens = extractTokensFromStdout(spawned.stdout);
+            accumulatedTotalTokens += attemptTokens;
 
             if (spawned.timedOut || spawned.exitCode !== 0) {
                 const code = classifyAgyFailure({
@@ -390,15 +457,59 @@ async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePa
             }
         }
 
+        /*
+         * BUDGET CEILING LIMITATION:
+         * Token usage is only knowable after an attempt completes (from the agy envelope output),
+         * so the token ceiling is enforced strictly between attempts at attempt boundaries.
+         * A running agy child process is not interrupted for token consumption during an attempt.
+         * However, per-attempt wall-clock time is already bounded by the existing per-attempt
+         * timeout (timeoutMs / computePrintTimeoutSeconds), and total run wall-clock is checked
+         * across attempts.
+         */
+
+        // 1. Evaluate accumulated total tokens against maxTotalTokens ceiling
+        if (typeof ceilings.maxTotalTokens === "number" && accumulatedTotalTokens >= ceilings.maxTotalTokens) {
+            console.warn(`[agy-runner] Budget ceiling tripped for maxTotalTokens: observed ${accumulatedTotalTokens} tokens, configured limit is ${ceilings.maxTotalTokens} tokens. Stopping retries.`);
+            return budgetExceededResult(
+                input.role,
+                `Budget ceiling exceeded for maxTotalTokens: observed ${accumulatedTotalTokens} tokens, configured limit is ${ceilings.maxTotalTokens} tokens`,
+                { ceiling: "maxTotalTokens", observed: accumulatedTotalTokens, limit: ceilings.maxTotalTokens }
+            );
+        }
+
+        // 2. Evaluate accumulated wall-clock elapsed against maxWallClockMs ceiling
+        const totalElapsed = Date.now() - retryStartTime;
+        if (typeof ceilings.maxWallClockMs === "number" && totalElapsed >= ceilings.maxWallClockMs) {
+            console.warn(`[agy-runner] Budget ceiling tripped for maxWallClockMs: observed ${totalElapsed}ms, configured limit is ${ceilings.maxWallClockMs}ms. Stopping retries.`);
+            return budgetExceededResult(
+                input.role,
+                `Budget ceiling exceeded for maxWallClockMs: observed ${totalElapsed}ms, configured limit is ${ceilings.maxWallClockMs}ms`,
+                { ceiling: "maxWallClockMs", observed: totalElapsed, limit: ceilings.maxWallClockMs }
+            );
+        }
+
+        // 3. Evaluate maxAttempts ceiling
         if (attempt >= maxAttempts) {
-            break;
+            console.warn(`[agy-runner] Maximum attempts (${maxAttempts}) reached for role '${input.role}'. Stopping retries.`);
+            return budgetExceededResult(
+                input.role,
+                `Budget ceiling exceeded for maxAttempts: observed ${attempt} attempts, configured limit is ${maxAttempts}`,
+                { ceiling: "maxAttempts", observed: attempt, limit: maxAttempts }
+            );
         }
 
         const delayMs = calculateBackoffMs(attempt, policy);
-        const totalElapsed = Date.now() - retryStartTime;
         if (totalElapsed + delayMs > hardCapTotalRetryMs) {
             // Exceeded total retry time cap: surface error
             break;
+        }
+        if (typeof ceilings.maxWallClockMs === "number" && totalElapsed + delayMs >= ceilings.maxWallClockMs) {
+            console.warn(`[agy-runner] Budget ceiling will be exceeded during backoff for maxWallClockMs (${totalElapsed + delayMs}ms >= ${ceilings.maxWallClockMs}ms). Stopping retries.`);
+            return budgetExceededResult(
+                input.role,
+                `Budget ceiling exceeded for maxWallClockMs: observed ${totalElapsed}ms (with backoff: ${totalElapsed + delayMs}ms), configured limit is ${ceilings.maxWallClockMs}ms`,
+                { ceiling: "maxWallClockMs", observed: totalElapsed + delayMs, limit: ceilings.maxWallClockMs }
+            );
         }
 
         console.warn(`[agy-runner] Transient failure (${runError.code}) on attempt ${attempt}/${maxAttempts} for role '${input.role}'. Retrying in ${delayMs}ms...`);
@@ -415,10 +526,22 @@ export async function runWorker(input) {
     }
     const spec = ROLE_SPECS[input.role];
     const timeoutMs = input.timeoutMs ?? spec.timeoutMs;
-    const policy = RETRY_POLICY || DEFAULT_RETRY_POLICY;
-    const maxAttempts = policy.maxAttempts ?? 3;
-    const hardCapTotalRetryMs = policy.hardCapTotalRetryMs ?? 600_000;
+    const policy = input.retryPolicy ?? input.policy ?? RETRY_POLICY ?? DEFAULT_RETRY_POLICY;
+    const ceilings = resolveEffectiveCeilings(input);
     const retryStartTime = Date.now();
+
+    // Enforce maxRunsPerSession ceiling before starting worker run
+    if (input.sessionKey && typeof ceilings.maxRunsPerSession === "number") {
+        const session = getSession(input.sessionKey, input.sessionsPath);
+        if (session && typeof session.turns === "number" && session.turns >= ceilings.maxRunsPerSession) {
+            console.warn(`[agy-runner] Budget ceiling tripped for maxRunsPerSession: observed ${session.turns} runs, configured limit is ${ceilings.maxRunsPerSession}.`);
+            return budgetExceededResult(
+                input.role,
+                `Budget ceiling exceeded for maxRunsPerSession: observed ${session.turns} runs, configured limit is ${ceilings.maxRunsPerSession}`,
+                { ceiling: "maxRunsPerSession", observed: session.turns, limit: ceilings.maxRunsPerSession }
+            );
+        }
+    }
 
     const isWriteRole = spec.kind === "write";
     const permitsAutonomy = Boolean(spec.highAutonomyOptIn) && (input.highAutonomy !== false);
@@ -432,8 +555,7 @@ export async function runWorker(input) {
             null,
             timeoutMs,
             policy,
-            maxAttempts,
-            hardCapTotalRetryMs,
+            ceilings,
             retryStartTime
         );
     }
@@ -470,8 +592,7 @@ export async function runWorker(input) {
             worktreePath,
             timeoutMs,
             policy,
-            maxAttempts,
-            hardCapTotalRetryMs,
+            ceilings,
             retryStartTime
         );
     } finally {
@@ -486,12 +607,18 @@ export function errorResult(role, err) {
             summary: `${err.code}: ${err.message}`,
             blockers: [err.code],
             risks: err.details ? [err.details] : [],
-            recommendedNextStep: "Follow COST_ROUTING.md: fall back to MAI-Code-1.1-Flash if this is a quota/rate/service error.",
+            recommendedNextStep: err.code === "budget-exceeded"
+                ? "Increase the configured budget ceiling or reduce task scope."
+                : "Follow COST_ROUTING.md: fall back to MAI-Code-1.1-Flash if this is a quota/rate/service error.",
+            errorCode: err.code,
+            message: err.message,
         });
     }
     return emptyResult(role, {
         status: "ERROR",
         summary: err instanceof Error ? err.message : String(err),
         blockers: ["INTERNAL_BRIDGE_ERROR"],
+        errorCode: "INTERNAL_BRIDGE_ERROR",
+        message: err instanceof Error ? err.message : String(err),
     });
 }

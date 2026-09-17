@@ -262,3 +262,61 @@ function resolveSessionConfig(overrides) {
 
 export const SESSION_CONFIG = resolveSessionConfig(CONFIG_OVERRIDES);
 
+export const DEFAULT_BUDGET_CEILINGS = {
+    maxAttempts: 3,
+    maxWallClockMs: 1_800_000,
+    maxTotalTokens: 1_000_000,
+    maxRunsPerSession: 50,
+};
+
+export function resolveBudgetCeilings(overrides) {
+    const ceilings = { ...DEFAULT_BUDGET_CEILINGS };
+    if (process.env.AGY_MAX_ATTEMPTS) {
+        const parsed = Number(process.env.AGY_MAX_ATTEMPTS);
+        if (Number.isFinite(parsed) && parsed > 0) ceilings.maxAttempts = Math.round(parsed);
+    }
+    if (process.env.AGY_MAX_WALL_CLOCK_MS) {
+        const parsed = Number(process.env.AGY_MAX_WALL_CLOCK_MS);
+        if (Number.isFinite(parsed) && parsed > 0) ceilings.maxWallClockMs = Math.round(parsed);
+    }
+    if (process.env.AGY_MAX_TOTAL_TOKENS) {
+        const parsed = Number(process.env.AGY_MAX_TOTAL_TOKENS);
+        if (Number.isFinite(parsed) && parsed > 0) ceilings.maxTotalTokens = Math.round(parsed);
+    }
+    if (process.env.AGY_MAX_RUNS_PER_SESSION) {
+        const parsed = Number(process.env.AGY_MAX_RUNS_PER_SESSION);
+        if (Number.isFinite(parsed) && parsed > 0) ceilings.maxRunsPerSession = Math.round(parsed);
+    }
+    const source = (overrides?.budgetCeilings && typeof overrides.budgetCeilings === "object")
+        ? overrides.budgetCeilings
+        : (overrides?.ceilings && typeof overrides.ceilings === "object")
+            ? overrides.ceilings
+            : (overrides?.budget_ceilings && typeof overrides.budget_ceilings === "object")
+                ? overrides.budget_ceilings
+                : (overrides?.budget && typeof overrides.budget === "object" && !overrides.budget.explore)
+                    ? overrides.budget
+                    : null;
+    if (source) {
+        if (typeof source.maxAttempts === "number" && source.maxAttempts > 0 && !process.env.AGY_MAX_ATTEMPTS) {
+            ceilings.maxAttempts = Math.round(source.maxAttempts);
+        }
+        if (typeof source.maxWallClockMs === "number" && source.maxWallClockMs > 0 && !process.env.AGY_MAX_WALL_CLOCK_MS) {
+            ceilings.maxWallClockMs = Math.round(source.maxWallClockMs);
+        }
+        if (typeof source.maxTotalTokens === "number" && source.maxTotalTokens > 0 && !process.env.AGY_MAX_TOTAL_TOKENS) {
+            ceilings.maxTotalTokens = Math.round(source.maxTotalTokens);
+        }
+        if (typeof source.maxRunsPerSession === "number" && source.maxRunsPerSession > 0 && !process.env.AGY_MAX_RUNS_PER_SESSION) {
+            ceilings.maxRunsPerSession = Math.round(source.maxRunsPerSession);
+        }
+    }
+    return ceilings;
+}
+
+export const BUDGET_CEILINGS = resolveBudgetCeilings(CONFIG_OVERRIDES);
+export const budgetCeilings = BUDGET_CEILINGS;
+
+export function getBudgetCeilings() {
+    return BUDGET_CEILINGS;
+}
+
