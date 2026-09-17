@@ -55,12 +55,25 @@ internal static class WritingPatientAgeExtractor
         new($@"^[\s-]+(?:her|his|their|the|my)?\s*(?:[a-z]+\s+)?(?:{RelativeNouns})\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Cross-profession repair (18 Sep 2026): case notes routinely state the age in apposition —
+    // "Mr Martin Wilson, 62, was admitted ..." — which neither pattern above reads. The Re: line
+    // then could not carry the age the notes DO record: "Re: Mr Martin Wilson, aged 62" was
+    // rejected as unsupported by re_line_identity_unsupported. A title or a two-part capitalised
+    // name must introduce it, and the number must close the apposition, so a house number or a
+    // measurement cannot be read as an age.
+    private static readonly Regex AppositionAgeRegex =
+        new(@"\b(?:(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof)\.?\s+[A-Z][A-Za-z'’\-]+(?:\s+[A-Z][A-Za-z'’\-]+){0,2}"
+            + @"|[A-Z][A-Za-z'’\-]+\s+[A-Z][A-Za-z'’\-]+)\s*,\s*(\d{1,3})\s*(?=[,;)]|\s+(?:years?|yrs?)\b)",
+            RegexOptions.Compiled);
+
     public static int? Extract(string caseNotes)
     {
         var text = caseNotes ?? string.Empty;
         foreach (var match in YearsOldRegex.Matches(text).Cast<Match>())
             if (TryPatientAge(text, match, out var age)) return age;
         foreach (var match in AgeLabelRegex.Matches(text).Cast<Match>())
+            if (TryPatientAge(text, match, out var age)) return age;
+        foreach (var match in AppositionAgeRegex.Matches(text).Cast<Match>())
             if (TryPatientAge(text, match, out var age)) return age;
         return null;
     }

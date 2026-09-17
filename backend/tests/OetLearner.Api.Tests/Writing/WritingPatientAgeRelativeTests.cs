@@ -46,4 +46,31 @@ public sealed class WritingPatientAgeRelativeTests
         Assert.Null(WritingPatientAgeExtractor.Extract("He is married with 3 children aged 13, 10 and 8."));
         Assert.Null(WritingPatientAgeExtractor.Extract("His daughter, aged 8, attends with him."));
     }
+
+    // ---- apposition: the form the case notes actually use ----
+
+    [Theory]
+    [InlineData("Mr Martin Wilson, 62, was admitted to Lyell McEwin Hospital 10 days ago.", 62)]
+    [InlineData("Mrs Beryl Casey, 84, fell at home.", 84)]
+    [InlineData("Patient: Sophia Joe Patrick, 15, presented with abdominal pain.", 15)]
+    [InlineData("Alexander Jones, 65, had a basal cell carcinoma removed.", 65)]
+    public void An_age_in_apposition_after_the_name_is_the_patients(string notes, int expected)
+    {
+        Assert.Equal(expected, WritingPatientAgeExtractor.Extract(notes));
+    }
+
+    [Theory]
+    // A house number, a dose and a room number are not ages.
+    [InlineData("Lives at Oakfield Drive, 19, Birmingham.")]
+    [InlineData("Discharged to Primrose Retirement Home, 81 Lavender Lane.")]
+    public void A_number_after_a_place_is_not_an_age(string notes)
+    {
+        Assert.Null(WritingPatientAgeExtractor.Extract(notes));
+    }
+
+    [Fact]
+    public void A_relative_named_in_apposition_does_not_donate_their_age()
+    {
+        Assert.Null(WritingPatientAgeExtractor.Extract("Lives with her husband, Joe, 80, who is her carer."));
+    }
 }
