@@ -1405,11 +1405,17 @@ public sealed partial class WritingRuleEngine
         // numeric dates are treatment dates too; G6 already knows how to read them day-first and
         // which ones to exclude, so reuse that rather than re-deriving it here. This can only move
         // the ceiling later, never earlier, so it only ever withdraws a finding.
-        foreach (Match m in SaG6NumericDateRe.Matches(notes))
+        // Model Answers only: reading numeric dates can also CREATE a ceiling where the written-date
+        // scan found none, and a candidate's letter date must keep behaving exactly as before
+        // (SA_G6_PostAuditDates_Candidate_Letter_Is_Not_Flagged).
+        if (input.IsModelAnswer)
         {
-            if (!SaG6IsTreatmentDateCandidate(notes, m)) continue;
-            if (!SaG6TryParseNumericDate(m, out var numericNoteDate)) continue;
-            if (latestNoteDate is null || numericNoteDate > latestNoteDate) latestNoteDate = numericNoteDate;
+            foreach (Match m in SaG6NumericDateRe.Matches(notes))
+            {
+                if (!SaG6IsTreatmentDateCandidate(notes, m)) continue;
+                if (!SaG6TryParseNumericDate(m, out var numericNoteDate)) continue;
+                if (latestNoteDate is null || numericNoteDate > latestNoteDate) latestNoteDate = numericNoteDate;
+            }
         }
         if (latestNoteDate is null || letterDate <= latestNoteDate.Value) yield break;
         // A forward relative reference ("review in 2 days", "review in two
@@ -1790,7 +1796,7 @@ public sealed partial class WritingRuleEngine
         // "Dear Director of Nursing," was rejected while "Dear Director," was accepted.
         return Regex.IsMatch(
             salutation,
-            @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife|Officer|Manager|Registrar|Director|Leader)"
+            @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife|Officer|Manager|Registrar|Director|Leader|Head)"
             + @"(?:\s+of\s+(?:[A-Za-z\-]+\s*){1,3})?"
             + @"(?:\s+(?:on\s+(?:duty|call)|on-call|in\s+charge))?\s*,?\s*$",
             RegexOptions.IgnoreCase);

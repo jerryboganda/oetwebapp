@@ -48,8 +48,11 @@ internal static class WritingPatientAgeExtractor
     // was taken as the patient's age and age_dob_inconsistent fired Critical on her Re: line
     // stating the age her own note and the source PDF give (71). The letter's only passing options
     // were to state a false age or omit it. A relative noun straight after the age owns it.
+    // Only the age's own noun phrase counts, so no comma may be crossed and at most one adjective
+    // may intervene: "80-year-old husband" and "78 year old wife" are the relative's, while
+    // "Mr X, aged 45, has two sons aged 4 and 7" keeps 45 for the patient.
     private static readonly Regex RelativeFollowsRegex =
-        new($@"^[\s-]*(?:year|yr)?s?[\s-]*(?:old)?[\s,-]*(?:her|his|their|the|my)?\s*(?:[a-z]+\s+){{0,2}}(?:{RelativeNouns})\b",
+        new($@"^[\s-]+(?:her|his|their|the|my)?\s*(?:[a-z]+\s+)?(?:{RelativeNouns})\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static int? Extract(string caseNotes)
