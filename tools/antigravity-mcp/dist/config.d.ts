@@ -35,3 +35,9 @@ export declare const DEFAULT_WORKTREE_CONFIG: {
     gitTimeoutMs: number;
 };
 export declare const WORKTREE_CONFIG: typeof DEFAULT_WORKTREE_CONFIG;
+export declare const DEFAULT_SESSION_CONFIG: {
+    path: string;
+    maxSessions: number;
+    ttlMs: number;
+};
+export declare const SESSION_CONFIG: typeof DEFAULT_SESSION_CONFIG;

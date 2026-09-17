@@ -5,12 +5,14 @@ import { defaultGate } from "./concurrency.js";
 import { errorResult, runWorker, spawnAgy } from "./agy-runner.js";
 import { PINNED_EFFORT, PINNED_MODEL, assertAllowlistedCommand, ensureUseG1CreditsFalse, resolveWorkspace } from "./security.js";
 import { ROLE_SPECS } from "./roles.js";
+import { clearSessions, listSessions } from "./sessions.js";
 const taskShape = {
     goal: z.string().min(1),
     context: z.string().optional(),
     workspace: z.string().optional(),
     extraConstraints: z.string().optional(),
     highAutonomy: z.boolean().optional(),
+    sessionKey: z.string().optional(),
 };
 function text(obj) {
     return {
@@ -39,6 +41,7 @@ async function runRole(role, args) {
             workspace,
             extraConstraints: args.extraConstraints,
             highAutonomy: args.highAutonomy,
+            sessionKey: args.sessionKey,
         });
 
         const result = permitsAutonomy ? await execute() : await withGate(spec.kind, execute);
@@ -172,6 +175,42 @@ export function createAntigravityServer() {
             exitCode: result.exitCode,
             stdout: result.stdout.slice(-4000),
             stderr: result.stderr.slice(-4000),
+        });
+    });
+    server.registerTool("ag_sessions", {
+        description: "Manage persistent conversation sessions (list or clear).",
+        inputSchema: z.object({
+            operation: z.enum(["list", "clear"]).optional(),
+            action: z.enum(["list", "clear"]).optional(),
+            sessionKey: z.string().optional(),
+        }),
+    }, async (args) => {
+        const op = args.operation || args.action || "list";
+        if (op === "list") {
+            const sessions = listSessions();
+            return text({
+                status: "SUCCESS",
+                operation: "list",
+                count: sessions.length,
+                sessions,
+            });
+        }
+        if (op === "clear") {
+            const result = clearSessions(args.sessionKey);
+            return text({
+                status: "SUCCESS",
+                operation: "clear",
+                clearedSessionKey: args.sessionKey ?? null,
+                clearedCount: result.clearedCount,
+                remainingCount: result.remainingCount,
+                summary: args.sessionKey
+                    ? `Cleared session '${args.sessionKey}'`
+                    : `Cleared all sessions (${result.clearedCount} removed)`,
+            });
+        }
+        return text({
+            status: "ERROR",
+            summary: `Unknown operation: ${op}`,
         });
     });
     return server;

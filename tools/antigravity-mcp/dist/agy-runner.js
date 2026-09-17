@@ -10,6 +10,7 @@ import { ROLE_SPECS, rolePrompt } from "./roles.js";
 import { computePrintTimeoutSeconds, DEFAULT_RETRY_POLICY, RETRY_POLICY } from "./config.js";
 import { defaultGate } from "./concurrency.js";
 import { createWorktree, cleanupStaleWorktrees } from "./worktree.js";
+import { findResumableConversation, recordSessionFromEnvelope } from "./sessions.js";
 
 function resolveAgyBin() {
     if (process.env.AGY_BIN?.trim())
@@ -122,6 +123,16 @@ export function buildAgyArgs(input, spec) {
     ];
     if (spec.sandbox)
         args.push("--sandbox");
+    if (input.sessionKey) {
+        const conversationId = findResumableConversation({
+            sessionKey: input.sessionKey,
+            role: input.role,
+            workspace: input.logicalWorkspace ?? input.workspace,
+        }, input.sessionsPath);
+        if (conversationId) {
+            args.push("--conversation", conversationId);
+        }
+    }
     args.push("--add-dir", input.workspace);
     for (const dir of input.addDirs ?? [])
         args.push("--add-dir", dir);
@@ -263,7 +274,9 @@ export function wasWorkspaceModified(before, after) {
 
 async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePath, timeoutMs, policy, maxAttempts, hardCapTotalRetryMs, retryStartTime) {
     let lastError = null;
-    const workerInput = worktreePath ? { ...input, workspace: worktreePath } : input;
+    const workerInput = worktreePath
+        ? { ...input, workspace: worktreePath, logicalWorkspace: input.workspace }
+        : input;
     const args = buildAgyArgs(workerInput, spec);
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -314,6 +327,20 @@ async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePa
                                 path: worktreePath,
                                 finding: `Git worktree isolation path: ${worktreePath}`,
                             });
+                        }
+                    }
+                    if (input.sessionKey) {
+                        try {
+                            recordSessionFromEnvelope({
+                                sessionKey: input.sessionKey,
+                                envelope: spawned.stdout,
+                                role: input.role,
+                                workspace: input.logicalWorkspace ?? input.workspace,
+                                lastStatus: parsed.status,
+                            }, input.sessionsPath);
+                        }
+                        catch (persistErr) {
+                            console.warn(`[agy-runner] Failed to persist session '${input.sessionKey}': ${persistErr instanceof Error ? persistErr.message : String(persistErr)}`);
                         }
                     }
                     return parsed;

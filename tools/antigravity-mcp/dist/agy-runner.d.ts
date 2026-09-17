@@ -13,6 +13,9 @@ export type AgyRunOptions = {
     addDirs?: string[];
     gate?: import("./concurrency.js").ConcurrencyGate;
     runId?: string;
+    sessionKey?: string;
+    sessionsPath?: string;
+    logicalWorkspace?: string;
 };
 export type SpawnResult = {
     exitCode: number | null;

@@ -226,3 +226,39 @@ function resolveWorktreeConfig(overrides) {
 
 export const WORKTREE_CONFIG = resolveWorktreeConfig(CONFIG_OVERRIDES);
 
+export const DEFAULT_SESSION_CONFIG = {
+    path: path.join(TOOL_ROOT, ".agy-state", "sessions.json"),
+    maxSessions: 100,
+    ttlMs: 7 * 24 * 60 * 60 * 1000,
+};
+
+function resolveSessionConfig(overrides) {
+    const config = { ...DEFAULT_SESSION_CONFIG };
+    if (process.env.AGY_SESSIONS_PATH?.trim()) {
+        config.path = path.resolve(process.env.AGY_SESSIONS_PATH.trim());
+    }
+    if (process.env.AGY_SESSIONS_MAX) {
+        const parsed = Number(process.env.AGY_SESSIONS_MAX);
+        if (Number.isFinite(parsed) && parsed > 0) config.maxSessions = Math.round(parsed);
+    }
+    if (process.env.AGY_SESSIONS_TTL_MS) {
+        const parsed = Number(process.env.AGY_SESSIONS_TTL_MS);
+        if (Number.isFinite(parsed) && parsed > 0) config.ttlMs = Math.round(parsed);
+    }
+    const source = (overrides?.sessions && typeof overrides.sessions === "object") ? overrides.sessions : null;
+    if (source) {
+        if (typeof source.path === "string" && source.path.trim() && !process.env.AGY_SESSIONS_PATH) {
+            config.path = path.resolve(source.path.trim());
+        }
+        if (typeof source.maxSessions === "number" && source.maxSessions > 0 && !process.env.AGY_SESSIONS_MAX) {
+            config.maxSessions = Math.round(source.maxSessions);
+        }
+        if (typeof source.ttlMs === "number" && source.ttlMs > 0 && !process.env.AGY_SESSIONS_TTL_MS) {
+            config.ttlMs = Math.round(source.ttlMs);
+        }
+    }
+    return config;
+}
+
+export const SESSION_CONFIG = resolveSessionConfig(CONFIG_OVERRIDES);
+

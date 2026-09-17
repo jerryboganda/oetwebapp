@@ -68,6 +68,29 @@ export function unwrapAgyPayload(text) {
     }
     return raw;
 }
+export function extractAgyEnvelope(text) {
+    if (!text)
+        return null;
+    if (typeof text === "object" && !Array.isArray(text)) {
+        if ("conversation_id" in text && typeof text.conversation_id === "string") {
+            return text;
+        }
+        return null;
+    }
+    if (typeof text !== "string")
+        return null;
+    const raw = extractJsonObject(text);
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        return null;
+    if ("conversation_id" in raw && typeof raw.conversation_id === "string") {
+        return raw;
+    }
+    return null;
+}
+export function extractConversationId(text) {
+    const env = extractAgyEnvelope(text);
+    return env?.conversation_id ?? null;
+}
 export function extractJsonObject(text) {
     const trimmed = text.trim();
     if (!trimmed)

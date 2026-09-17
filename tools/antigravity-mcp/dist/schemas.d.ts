@@ -52,5 +52,7 @@ export declare const workerResultSchema: z.ZodObject<{
 export type WorkerResult = z.infer<typeof workerResultSchema>;
 export declare function emptyResult(role: WorkerRole, patch: Partial<WorkerResult> & Pick<WorkerResult, "status" | "summary">): WorkerResult;
 export declare function unwrapAgyPayload(text: string): unknown | null;
+export declare function extractAgyEnvelope(text: unknown): Record<string, any> | null;
+export declare function extractConversationId(text: unknown): string | null;
 export declare function extractJsonObject(text: string): unknown | null;
 export declare function parseWorkerResult(role: WorkerRole, stdout: string): WorkerResult;
