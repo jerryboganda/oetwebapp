@@ -412,3 +412,26 @@ export function getBudgetCeilings() {
     return BUDGET_CEILINGS;
 }
 
+
+
+// ---- Adversarial review gate (OPT-IN, default OFF) ----
+export const DEFAULT_REVIEW_GATE = {
+    enabled: false,
+    reviewerRole: "review",
+    failClosed: true,
+    maxReviewBudgetMs: 420000,
+};
+export function resolveReviewGate(overrides) {
+    const base = Object.assign({}, DEFAULT_REVIEW_GATE);
+    let src = overrides;
+    if (src && typeof src === "object" && !Array.isArray(src) && src.reviewGate && typeof src.reviewGate === "object") src = src.reviewGate;
+    if (!src || typeof src !== "object" || Array.isArray(src)) return base;
+    if (typeof src.enabled === "boolean") base.enabled = src.enabled;
+    if (typeof src.reviewerRole === "string" && src.reviewerRole.trim()) base.reviewerRole = src.reviewerRole.trim();
+    if (typeof src.failClosed === "boolean") base.failClosed = src.failClosed;
+    if (typeof src.maxReviewBudgetMs === "number" && isFinite(src.maxReviewBudgetMs) && src.maxReviewBudgetMs > 0) base.maxReviewBudgetMs = src.maxReviewBudgetMs;
+    return base;
+}
+export const REVIEW_GATE = resolveReviewGate(CONFIG_OVERRIDES);
+export function getReviewGate() { return REVIEW_GATE; }
+

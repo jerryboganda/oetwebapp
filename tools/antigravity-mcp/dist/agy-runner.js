@@ -11,6 +11,7 @@ import { BUDGET_CEILINGS, computePrintTimeoutSeconds, DEFAULT_BUDGET_CEILINGS, D
 import { defaultGate } from "./concurrency.js";
 import { createWorktree, cleanupStaleWorktrees } from "./worktree.js";
 import { findResumableConversation, getSession, recordSessionFromEnvelope } from "./sessions.js";
+import { applyReviewGate } from "./reviewgate.js";
 
 function resolveAgyBin() {
     if (process.env.AGY_BIN?.trim())
@@ -656,16 +657,8 @@ export async function runWorker(input) {
         }
 
         const effectiveWorkspace = worktreePath ?? input.workspace;
-        return await executeWorkerAttempts(
-            input,
-            spec,
-            effectiveWorkspace,
-            worktreePath,
-            timeoutMs,
-            policy,
-            ceilings,
-            retryStartTime
-        );
+        const writeResult = await executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePath, timeoutMs, policy, ceilings, retryStartTime);
+        return await applyReviewGate(writeResult, input, spec, worktreePath, runWorker);
     } finally {
         worktreeSlot.release();
     }
