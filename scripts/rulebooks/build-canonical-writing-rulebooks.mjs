@@ -24,7 +24,7 @@ const CHECK_ONLY = process.argv.includes("--check");
 // hash went stale silently after the 10 Sep 2026 G-W-116 amendment). After
 // editing the registry: update this constant, the version fields in
 // buildRulebook() and docs/canonical-rules/README.md, then rebuild.
-const REGISTRY_SHA256 = "07c95437a6365a2d69f4ec9360c7edc4fa8bfe56e101621d3533a7942ac97123";
+const REGISTRY_SHA256 = "f83d893b3facdf31adb1c2b804cb4e05ebcba7aabdc1ec13b3e9b36d9fdb6747";
 
 // Registry `profession` value -> repo folder name. Only these six have live
 // Writing tasks today; every other registry profession is intentionally
@@ -148,13 +148,14 @@ function buildRulebook(profession, folder, rules, existing) {
   });
 
   return {
-    version: "2.3.1-owner-clarifications-3",
+    version: "2.4.0-senior-assessor-audit",
     kind: "writing",
     profession: folder,
-    publishedAt: "2026-09-14T00:00:00Z",
+    publishedAt: "2026-09-16T00:00:00Z",
     authoritySource:
-      "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner " +
-      "clarifications OA-01..OA-15 and OA2-01..OA2-20), " +
+      "OET AI Rules Master — Canonical Registry v1.3-senior-assessor-audit (2026-09-16: v1.1-rev8 + owner " +
+      "clarifications OA-01..OA-15, OA2-01..OA2-20, OA3-01..OA3-05, OA4-01..OA4-03 and the Senior " +
+      "Assessor Release Audit OA5-01..OA5-38), " +
       `sha256:${REGISTRY_SHA256}`,
     sections,
     rules: mappedRules,

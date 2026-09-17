@@ -228,7 +228,7 @@ Occupational Therapist
 Northwood Community Health Centre
 Northwood
 
-20 June 2018
+17 June 2018
 
 Dear Ms Goody,
 Re: Mrs Betty Weston, DOB: 12 February 1964
@@ -276,6 +276,12 @@ Doctor
 
     // ─── C. Mr Michael Weir — routine referral (LT-RR) ────
 
+    // Senior Assessor Release Audit (16 Sep 2026, DECISIONS §C.1): the source
+    // PDF records "Mr Michael Weir (DOB: 20 Sep 1970)"; the production notes
+    // lost the DOB in extraction (data fix). The canonical letter therefore
+    // carries the DOB in the Re: line.
+    internal const string WeirReLine = "Re: Mr Michael Weir, DOB: 20 September 1970";
+
     internal const string WeirRoutineReferralLetter = """
 Dr M McLaren
 Neurologist
@@ -286,7 +292,7 @@ Newtown
 9 August 2014
 
 Dear Dr McLaren,
-Re: Mr Michael Weir
+Re: Mr Michael Weir, DOB: 20 September 1970
 
 I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.
 
@@ -305,8 +311,23 @@ Yours sincerely,
 Doctor
 """;
 
+    /// <summary>
+    /// SYNTHETIC identity-reduced variant for tests that model a source with
+    /// NO date of birth (the real Weir source has one). Never a canonical
+    /// letter: use it only with notes that deliberately omit the DOB.
+    /// </summary>
+    internal static readonly string WeirRoutineReferralLetterWithoutDob =
+        WeirRoutineReferralLetter.Replace(WeirReLine, "Re: Mr Michael Weir", StringComparison.Ordinal);
+
     private const string WeirTaskText =
         "Using the information given in the case notes, write a letter of referral to Dr M McLaren, Neurologist, Suite 3, 67 The Crescent, Newtown.";
+
+    [Fact]
+    public void Weir_Fixture_Carries_The_Source_Dob_And_The_Synthetic_Variant_Does_Not()
+    {
+        Assert.Contains(WeirReLine, WeirRoutineReferralLetter, StringComparison.Ordinal);
+        Assert.DoesNotContain("DOB", WeirRoutineReferralLetterWithoutDob, StringComparison.Ordinal);
+    }
 
     [Fact]
     public void Weir_Routine_Referral_Fixture_Lints_Clean_Against_Task()

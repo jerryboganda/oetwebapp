@@ -202,6 +202,8 @@ Doctor
         Assert.DoesNotContain(findings, f => f.RuleId == "BUILTIN.body_uses_last_name_only");
     }
 
+    // Senior Assessor Release Audit (16 Sep 2026, DECISIONS §C.1): the source
+    // PDF records DOB 20 Sep 1970, so the owner-compliant correction carries it.
     private const string WeirCorrected = """
 Dr M McLaren
 Neurologist
@@ -212,7 +214,7 @@ Newtown
 9 August 2014
 
 Dear Dr McLaren,
-Re: Mr Michael Weir
+Re: Mr Michael Weir, DOB: 20 September 1970
 
 I am writing to request your neurological assessment and management of Mr Michael Weir, who has presented with features suggestive of multiple sclerosis.
 
@@ -428,7 +430,7 @@ Physiotherapist
     [Fact]
     public void Validator_Version_Is_Stamped_And_RulePack_Fingerprint_Is_Stable()
     {
-        Assert.Equal("writing-rules.owner-clarifications-3.2026-09-15.1", WritingRuleEngine.ValidatorVersion);
+        Assert.Equal("writing-rules.senior-assessor-audit.2026-09-16.1", WritingRuleEngine.ValidatorVersion);
         var a = _engine.RulePackFingerprint(ExamProfession.Medicine);
         var b = _engine.RulePackFingerprint(ExamProfession.Medicine);
         Assert.StartsWith("rp-", a);

@@ -69,8 +69,12 @@ public sealed class WritingModelAnswerBatchTests
     /// to ..." opening, name-first body paragraphs, clinical values with
     /// spaced units, background before the closure, contact-offer final
     /// sentence, designation-only sign-off; 180-200 BODY words; zero findings
-    /// of any severity in Model Answer mode (the same letter is the
-    /// WritingRev8LiveFixtureTests Weir correction).
+    /// of any severity in Model Answer mode (the WritingRev8LiveFixtureTests
+    /// Weir correction body). Its import-path case notes are its OWN body
+    /// sentences (CaseNoteSentencesFor), which record no date of birth, so this
+    /// SYNTHETIC exemplar's Re: line carries none; the real Weir source records
+    /// DOB 20 Sep 1970 and the canonical Weir letter carries it (Senior Assessor
+    /// Release Audit, 16 Sep 2026).
     /// </summary>
     internal static string ExemplarText() => """
 Dr M McLaren

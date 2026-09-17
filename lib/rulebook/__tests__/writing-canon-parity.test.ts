@@ -36,7 +36,9 @@ describe('Writing canon parity — rulebook IDs vs legacy SC-* namespace', () =>
         // OA-01..OA-15, OA2-01..OA2-20 and OA3-01..OA3-05 are the owner-
         // clarification namespaces; they reach the built packs from the
         // canonical registry (every such row is profession: "Medicine").
-        if (!/^(R\d|OW-|DH-W-|G-W-|OA-|OA2-|OA3-|PRD-|[A-Z]+-W-)/.test(rule.id)) {
+        // OA4-* (16 Sep 2026) and OA5-* (Senior Assessor Release Audit) are
+        // the same global owner namespace.
+        if (!/^(R\d|OW-|DH-W-|G-W-|OA-|OA2-|OA3-|OA4-|OA5-|PRD-|[A-Z]+-W-)/.test(rule.id)) {
           offenders.push({ profession, id: rule.id });
         }
       }

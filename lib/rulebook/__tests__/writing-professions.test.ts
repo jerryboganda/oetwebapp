@@ -29,12 +29,14 @@ const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
   // in the registry under profession "Medicine"). Every other canonical pack
   // gains the same 40 globally scoped rows, because Addendum Two §14 requires
   // them "active globally — not sample-only edits".
-  medicine: 308,
-  nursing: 315,
-  dentistry: 315,
-  pharmacy: 318,
-  physiotherapy: 318,
-  radiography: 315,
+  // + the 3 OA4 rows and the 38 Senior Assessor Release Audit rows
+  // (OA5-01..OA5-38, 16 Sep 2026), also globally scoped.
+  medicine: 349,
+  nursing: 356,
+  dentistry: 356,
+  pharmacy: 359,
+  physiotherapy: 359,
+  radiography: 356,
 };
 // 172 base + 38 owner Rev8 rules, PLUS the derived operational modules the
 // ULTIMATE FINAL round appended to the legacy packs (PRD-*) — which is why they

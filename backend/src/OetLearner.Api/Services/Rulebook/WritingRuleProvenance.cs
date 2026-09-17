@@ -51,7 +51,7 @@ public static class WritingCandidateBehaviors
 /// </summary>
 public static class WritingRuleProvenance
 {
-    public const string Version = "owner-clarifications-3-2026-09-16";
+    public const string Version = "senior-assessor-audit-2026-09-16";
 
     public sealed record Provenance(string Tag, string CandidateBehavior);
 
@@ -137,6 +137,22 @@ public static class WritingRuleProvenance
             ["salutation_re_same_line"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.ScoreBearing),
             ["intro_adverbial_comma"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.AcceptAlternative),
             ["patient_title_mismatch"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
+
+            // --- Senior Assessor Release Audit (16 Sep 2026, OA5) ---
+            // Every detector for these ids is Model Answer only (DECISIONS §B),
+            // so none is ever score-bearing for a candidate.
+            ["sentence_fragment"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.CoachingOnly),
+            ["malformed_word_form"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.CoachingOnly),
+            ["malformed_today_phrase"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.CoachingOnly),
+            ["missing_possessive_name"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.CoachingOnly),
+            ["typographic_corruption"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.CoachingOnly),
+            ["age_dob_inconsistent"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.CoachingOnly),
+            ["letter_type_function_mismatch"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.NotApplicable),
+            ["medication_frequency_conflict"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
+            ["narrated_chronology_contradiction"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
+            ["owner_required_fact_missing"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.NotApplicable),
+            ["re_line_age_when_no_dob"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
+            ["address_content_unsupported"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
 
             // --- Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20 ---
             // OA2-20 is the firewall: the strict canonical requirements in this

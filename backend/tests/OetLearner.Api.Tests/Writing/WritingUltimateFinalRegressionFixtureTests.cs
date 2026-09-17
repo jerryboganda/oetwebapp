@@ -86,7 +86,7 @@ public sealed class WritingUltimateFinalRegressionFixtureTests
     [Fact]
     public void House_Style_And_Descriptor_Engine_Are_Stamped_Ultimate_Final()
     {
-        Assert.Equal("owner-clarifications-3-2026-09-15", WritingRev8HouseStyle.Version);
+        Assert.Equal("senior-assessor-audit-2026-09-16", WritingRev8HouseStyle.Version);
         Assert.Contains("CANDIDATE FALSE-POSITIVE FIREWALL", WritingRev8HouseStyle.CandidateGradingRules);
         Assert.Contains("never manufacture a finding", WritingRev8HouseStyle.CandidateGradingRules);
         Assert.Contains("450-500", WritingOetDescriptors.DescriptorEngine);
@@ -223,13 +223,13 @@ Re: Ms Isabel Garcia, DOB: 3 March 1950
 
 I am writing to update you regarding Ms Garcia, who was discharged home today after treatment for bacterial meningitis, and to request your ongoing monitoring during her recovery.
 
-Ms Garcia presented on 24 February with headache, fever, photophobia and neck stiffness. On examination she was febrile at 38.2 degrees C, with positive Kernig's sign and no focal neurological deficit. Blood cultures grew Neisseria meningitidis, confirming bacterial meningitis.
+Ms Garcia presented on 24 February with headache, fever, photophobia and neck stiffness. On examination, she was febrile at 38.2 degrees C, with positive Kernig's sign and no focal neurological deficit. Blood cultures grew Neisseria meningitidis, confirming bacterial meningitis.
 
 Ms Garcia was admitted to the acute medical unit on the day of presentation. She received ceftriaxone, 2 g four times daily and dexamethasone, 10 mg four times daily, for seven days. Her fever and headache settled within two days, and repeat blood cultures on day five were negative. A hearing assessment before discharge showed no deficit. She has returned to her baseline neurological state, mobilises independently and was advised to rest for a further week.
 
 Ms Garcia has been discharged home today with ciprofloxacin, 500 mg twice daily for three further days.
 
-Please monitor Ms Garcia's temperature, headache and rash, arrange a hearing review, and review her in one week.
+I would be grateful if you could monitor Ms Garcia's temperature, headache and rash, arrange a hearing review, and review her in one week.
 
 Should there be any queries, kindly do not hesitate to contact me.
 
@@ -283,8 +283,9 @@ Doctor
         // §11.5: "grammatically incomplete constructions such as
         // 'Examination showed afebrile...' must fail Language".
         var letter = GarciaDischargeLetter.Replace(
-            "On examination she was febrile at 38.2 degrees C, with positive Kernig's sign",
+            "On examination, she was febrile at 38.2 degrees C, with positive Kernig's sign",
             "Examination showed afebrile despite a temperature of 38.2 degrees C, with positive Kernig's sign");
+        Assert.NotEqual(GarciaDischargeLetter, letter);
         AssertRuleFires(LintModel(letter, "LT-DG"), "incomplete_clinical_construction");
     }
 
@@ -479,7 +480,7 @@ Mrs Wright felt a popping sensation in her left knee during a sudden change of d
 
 An X-ray today showed no fracture. Mrs Wright has been using crutches, ice and elevation at home, with paracetamol, 1 g four times daily, for pain, and the swelling has gradually decreased since the injury. She is eager to return to competitive netball within the season and understands the need for supervised rehabilitation first.
 
-Please assess Mrs Wright at your earliest availability, establish a graduated quadriceps strengthening programme with clear progression milestones, and advise on bracing together with a safe return-to-sport timeline.
+I would be grateful if you could assess Mrs Wright, establish a quadriceps strengthening programme with progression milestones and advise on bracing together with a safe return-to-sport timeline.
 
 Should there be any queries, kindly do not hesitate to contact me.
 

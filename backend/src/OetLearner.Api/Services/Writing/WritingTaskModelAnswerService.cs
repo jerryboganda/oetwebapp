@@ -1255,6 +1255,10 @@ public sealed class WritingTaskModelAnswerService(
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(caseNotesAll),
             CaseNotesText: caseNotesAll,
             TaskText: scenario.TaskPromptMarkdown,
+            // Senior Assessor Release Audit (16 Sep 2026): the generator is
+            // told to date the letter on scenario.TodayDate, so the gate
+            // enforces the same date (letter_date_unsupported, G6a).
+            TodayDate: scenario.TodayDate,
             Profession: profession,
             IsModelAnswer: true)));
         var findings = lint.Select(f => new WritingModelAnswerFindingDto(

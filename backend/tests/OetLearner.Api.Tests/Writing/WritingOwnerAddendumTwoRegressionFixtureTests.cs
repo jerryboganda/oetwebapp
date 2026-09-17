@@ -69,16 +69,32 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
         "White cell count 14.0x10^9/L. C-reactive protein 150. " +
         "Culture identified Neisseria meningitidis. Diagnosis: bacterial meningitis.";
 
-    // The canonical Weir notes record NEITHER a date of birth NOR an age for
-    // the patient — only the CHILDREN's ages — and they carry the 9 August
-    // 2014 blood pressure that OA2-14 requires the letter to preserve.
+    // The canonical Weir notes, reconciled against the SOURCE PDF (Senior
+    // Assessor Release Audit, 16 Sep 2026, DECISIONS §C.1): the source records
+    // "Mr Michael Weir (DOB: 20 Sep 1970)" — the production notes lost the DOB
+    // in extraction — and no age for the patient, only the CHILDREN's ages.
+    // They carry the 9 August 2014 blood pressure that OA2-14 requires the
+    // letter to preserve.
     private const string WeirCaseNotes =
+        "Mr Michael Weir (DOB: 20 Sep 1970) is a patient in your general practice, height 183cm. " +
+        "He is married with 3 children aged 13, 10 and 8. " +
+        "He has depression, treated with sertraline hydrochloride (Zoloft) since September 2012. " +
+        "On 09.08.14 he complained of dizziness and two recent blackouts lasting a few minutes each. " +
+        "Examination on 09.08.14: BP 88/70, HR 76bpm, BMI 28 (93.7kg), chest clear. " +
+        "Cholesterol was 6.37mmol/L. He is a smoker. He has been overweight long term.";
+
+    // SYNTHETIC notes that deliberately record NO date of birth (the real Weir
+    // source has one). They exist only to prove the rule "never invent a DOB
+    // the notes lack" and are paired with the synthetic DOB-less letter.
+    private const string WeirSyntheticNotesWithoutDob =
         "Mr Michael Weir is a patient in your general practice, height 183cm. " +
         "He is married with 3 children aged 13, 10 and 8. " +
         "He has depression, treated with sertraline hydrochloride (Zoloft) since September 2012. " +
         "On 09.08.14 he complained of dizziness and two recent blackouts lasting a few minutes each. " +
         "Examination on 09.08.14: BP 88/70, HR 76bpm, BMI 28 (93.7kg), chest clear. " +
         "Cholesterol was 6.37mmol/L. He is a smoker. He has been overweight long term.";
+
+    private static readonly string WeirWithoutDob = WritingRev8RegressionFixtureTests.WeirRoutineReferralLetterWithoutDob;
 
     private const string TaylorTaskText =
         "Using the information given in the case notes, write a letter of referral to Dr Still, a Rheumatologist at City Hospital, " +
@@ -798,12 +814,17 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [Fact]
     public void Injected_Unsupported_Re_Line_Dob_Is_Flagged()
     {
-        // The stored Weir letter carried "DOB: 20 September 1970" while the
-        // canonical notes record no date of birth at all — a source-fidelity
-        // defect the validator reported as zero findings (OA2-01).
-        var letter = Inject(Weir, "Re: Mr Michael Weir", "Re: Mr Michael Weir, DOB: 20 September 1970");
-        AssertRuleFires(Lint(letter, "LT-RR", caseNotes: WeirCaseNotes), "re_line_identity_unsupported");
+        // A Re: line DOB that the notes do not record is a source-fidelity
+        // defect (OA2-01): proved with SYNTHETIC DOB-less notes. (The real Weir
+        // source records DOB 20 Sep 1970, so the canonical Weir letter's DOB
+        // is supported — see Weir_Re_Line_Dob_Is_Supported_By_The_Source_Notes.)
+        AssertRuleFires(Lint(Weir, "LT-RR", caseNotes: WeirSyntheticNotesWithoutDob), "re_line_identity_unsupported");
     }
+
+    [Fact]
+    public void Weir_Re_Line_Dob_Is_Supported_By_The_Source_Notes()
+        => AssertRuleDoesNotFire(Lint(Weir, "LT-RR", caseNotes: WeirCaseNotes),
+            "re_line_identity_unsupported");
 
     [Fact]
     public void Source_Supported_Re_Line_Dob_Passes()
@@ -814,15 +835,13 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
 
     [Fact]
     public void Re_Line_Without_A_Date_Of_Birth_Passes()
-        => AssertRuleDoesNotFire(Lint(Weir, "LT-RR", caseNotes: WeirCaseNotes),
+        // Synthetic DOB-less source + DOB-less Re: line: nothing is invented.
+        => AssertRuleDoesNotFire(Lint(WeirWithoutDob, "LT-RR", caseNotes: WeirSyntheticNotesWithoutDob),
             "re_line_identity_unsupported");
 
     [Fact]
     public void Re_Line_Identity_Is_Silent_Without_The_Canonical_Notes()
-    {
-        var letter = Inject(Weir, "Re: Mr Michael Weir", "Re: Mr Michael Weir, DOB: 20 September 1970");
-        AssertRuleDoesNotFire(Lint(letter, "LT-RR"), "re_line_identity_unsupported");
-    }
+        => AssertRuleDoesNotFire(Lint(Weir, "LT-RR"), "re_line_identity_unsupported");
 
     // ─────────────────────────────────────────────────────────────────
     // Supplementary: "also" is banned as a LINKER, never as an adverb.
@@ -864,6 +883,19 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [InlineData("brand_generic_duplication")]
     [InlineData("number_style_words_vs_digits")]
     [InlineData("medication_list_punctuation")]
+    // Senior Assessor Release Audit (16 Sep 2026, OA5): Model-Answer-only ids.
+    [InlineData("sentence_fragment")]
+    [InlineData("malformed_word_form")]
+    [InlineData("malformed_today_phrase")]
+    [InlineData("missing_possessive_name")]
+    [InlineData("typographic_corruption")]
+    [InlineData("age_dob_inconsistent")]
+    [InlineData("letter_type_function_mismatch")]
+    [InlineData("medication_frequency_conflict")]
+    [InlineData("narrated_chronology_contradiction")]
+    [InlineData("owner_required_fact_missing")]
+    [InlineData("re_line_age_when_no_dob")]
+    [InlineData("address_content_unsupported")]
     public void House_Style_Rules_Are_Never_Score_Bearing_For_Candidates(string checkId)
     {
         var behavior = WritingRuleProvenance.For(checkId).CandidateBehavior;

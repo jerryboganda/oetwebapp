@@ -194,16 +194,23 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
     [Fact]
     public void R3_03_Age_Form_Passes_When_The_Notes_Have_No_Dob()
     {
-        // The canonical Weir notes record NO date of birth (verified against
-        // production 15 Sep 2026), so an age-based Re: line is correct there.
+        // SYNTHETIC notes with NO date of birth (the real Weir source records
+        // DOB 20 Sep 1970 — Senior Assessor Release Audit, DECISIONS §C.1; the
+        // 15 Sep production notes had lost it). Without a DOB in the source, an
+        // age-based Re: line is not a DOB-priority failure.
         const string notes = "Mr Michael Weir is a patient in your general practice, height 183cm. " +
             "He is married with 3 children aged 13, 10 and 8. " +
             "On 09.08.14 he complained of dizziness and two recent blackouts. " +
             "Cholesterol was 6.37mmol/L.";
-        var letter = Inject(Weir, "Re: Mr Michael Weir", "Re: Mr Michael Weir, aged 55");
+        var withoutDob = WritingRev8RegressionFixtureTests.WeirRoutineReferralLetterWithoutDob;
+        var letter = Inject(withoutDob, "Re: Mr Michael Weir", "Re: Mr Michael Weir, aged 55");
         AssertRuleDoesNotFire(Lint(letter, "LT-RR", caseNotes: notes), "re_line_dob_priority");
-        // And the DOB-less Re: line stays correct for the real fixture.
-        AssertRuleDoesNotFire(Lint(Weir, "LT-RR", caseNotes: notes), "re_line_dob_priority");
+        // And a DOB-less Re: line stays clear of the DOB-priority rule too.
+        AssertRuleDoesNotFire(Lint(withoutDob, "LT-RR", caseNotes: notes), "re_line_dob_priority");
+        // With the real source DOB in the notes, the canonical Weir Re: line
+        // (which carries that DOB) passes the rule.
+        AssertRuleDoesNotFire(Lint(Weir, "LT-RR", caseNotes: "Mr Michael Weir (DOB: 20 Sep 1970) is a patient in your general practice."),
+            "re_line_dob_priority");
     }
 
     [Fact]

@@ -11,8 +11,10 @@ namespace OetLearner.Api.Services.Rulebook;
 /// (<see cref="WritingLintInput.IsModelAnswer"/> = true, stricter canonical
 /// house style) and the candidate grader (IsModelAnswer = false, professional
 /// alternatives accepted). Owner Revision 7-8 detectors live in
-/// WritingRuleEngine.Rev8.cs. Regression coverage: RulebookEngineTests.cs
-/// (WritingRuleEngineTests) and Rulebook/WritingRev8*Tests.cs.
+/// WritingRuleEngine.Rev8.cs; the Senior Assessor Release Audit (16 Sep 2026)
+/// Model-Answer-only detectors live in WritingRuleEngine.SeniorAuditG1..G7.cs.
+/// Regression coverage: RulebookEngineTests.cs (WritingRuleEngineTests),
+/// Rulebook/WritingRev8*Tests.cs and Writing/WritingSeniorAuditG*RegressionTests.cs.
 /// </summary>
 public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 {
@@ -133,6 +135,20 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "year_not_abbreviated",
         "yours_sincerely_capitalisation",
         "yours_sincerely_vs_faithfully",
+        // Senior Assessor Release Audit (16 Sep 2026, OA5) — every detector
+        // below is Model Answer only (WritingRuleEngine.SeniorAuditG1..G7.cs).
+        "sentence_fragment",
+        "malformed_word_form",
+        "malformed_today_phrase",
+        "missing_possessive_name",
+        "typographic_corruption",
+        "age_dob_inconsistent",
+        "letter_type_function_mismatch",
+        "medication_frequency_conflict",
+        "narrated_chronology_contradiction",
+        "owner_required_fact_missing",
+        "re_line_age_when_no_dob",
+        "address_content_unsupported",
     };
 
     // Severity defaults for the always-on builtin battery below. Values are
@@ -265,6 +281,20 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         ["canonical_contact_template"] = RuleSeverity.Major,
         ["re_line_identity_unsupported"] = RuleSeverity.Critical,
         ["brand_generic_duplication"] = RuleSeverity.Major,
+        // Senior Assessor Release Audit (16 Sep 2026, OA5). Model Answer only;
+        // ModeSeverity reports every finding as Critical in that lane.
+        ["sentence_fragment"] = RuleSeverity.Major,
+        ["malformed_word_form"] = RuleSeverity.Major,
+        ["malformed_today_phrase"] = RuleSeverity.Major,
+        ["missing_possessive_name"] = RuleSeverity.Major,
+        ["typographic_corruption"] = RuleSeverity.Major,
+        ["age_dob_inconsistent"] = RuleSeverity.Critical,
+        ["letter_type_function_mismatch"] = RuleSeverity.Critical,
+        ["medication_frequency_conflict"] = RuleSeverity.Major,
+        ["narrated_chronology_contradiction"] = RuleSeverity.Major,
+        ["owner_required_fact_missing"] = RuleSeverity.Critical,
+        ["re_line_age_when_no_dob"] = RuleSeverity.Major,
+        ["address_content_unsupported"] = RuleSeverity.Major,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -301,6 +331,18 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 
         var book = loader.Load(RuleKind.Writing, input.Profession);
         var structure = ParseLetter(input.LetterText);
+        // Senior Assessor Release Audit G3a (16 Sep 2026): Model Answers derive
+        // minor status from the DOB at the letter date before any detector
+        // reads it (no-op for candidates). Guarded like RunDetectorSafely: a
+        // failure keeps the caller's minor status instead of failing Lint().
+        try
+        {
+            input = SaG3WithDerivedMinorStatus(input, structure);
+        }
+        catch (Exception)
+        {
+            // Keep the caller-supplied minor status; the naming detectors still run.
+        }
         var applicable = RulesApplicableTo(book, input.LetterType);
 
         var findings = new List<LintFinding>();
@@ -510,6 +552,11 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 
     private delegate IEnumerable<LintFinding> Detector(OetRule rule, WritingLintInput input, LetterStructure structure);
 
+    // Runs several detectors under ONE check id (the existing detector plus
+    // the Model-Answer-only Senior Assessor Audit branches that extend it).
+    private static Detector Compose(params Detector[] parts)
+        => (rule, input, structure) => parts.SelectMany(part => part(rule, input, structure));
+
     private Detector? DetectorFor(string checkId) => checkId switch
     {
         "content_requires_smoking_drinking" => DetectSmokingDrinking,
@@ -522,31 +569,32 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "blank_line_after_re_line" => DetectBlankLineAfterReLine,
         "age_not_duplicated_in_intro" => DetectAgeNotDuplicatedInIntro,
         "emotional_wording" => DetectEmotionalWording,
-        "judgmental_labels" => DetectJudgmentalLabels,
+        "judgmental_labels" => Compose(DetectJudgmentalLabels, DetectSaG5JudgmentalBehaviour),
         "linker_avoid_words" => DetectLinkerAvoidWords,
-        "no_duplicated_request" => DetectNoDuplicatedRequest,
-        "number_style_words_vs_digits" => DetectNumberStyleRev8,
+        "no_duplicated_request" => Compose(DetectNoDuplicatedRequest, DetectSaG4DuplicatedRequestParaphrase),
+        "number_style_words_vs_digits" => Compose(DetectNumberStyleRev8, DetectSaG2NumberStyle),
         "blank_line_between_paragraphs" => DetectBlankBetweenParagraphs,
         "no_date_prefix" => DetectNoDatePrefix,
         "date_blank_line_sandwich" => DetectDateBlankSandwich,
         "salutation_last_name_only" => DetectSalutationLastName,
         "body_forbidden_phrase_the_patient" => DetectThePatientRev8,
-        "body_uses_last_name_only" => DetectFullNameRepeated,
+        "body_uses_last_name_only" => Compose(DetectFullNameRepeated, DetectSaG3AdultBareFirstName),
         "paragraph_start_patient_name" => DetectParagraphStartPatientName,
         "relationship_label_patient_reference" => DetectRelationshipLabel,
         "intro_opens_i_am_writing_to" => DetectCanonicalOpening,
         "closure_contact_offer" => DetectContactOfferClosure,
         "closure_contains_management" => DetectClosureContainsManagement,
-        "medication_list_punctuation" => DetectMedicationListPunctuation,
+        "medication_list_punctuation" => Compose(DetectMedicationListPunctuation, DetectSaG5MedicationListExtendedDoses, DetectSaG5StrandedFormulation),
         "medication_passive_grammar" => DetectMedicationPassiveGrammar,
         "lifestyle_frequency_precision" => DetectLifestyleFrequencyPrecision,
-        "value_unit_spacing" => DetectValueUnitSpacing,
+        "value_unit_spacing" => Compose(DetectValueUnitSpacing, DetectSaG2ValueUnitSpacing),
         "dob_colon_format" => DetectDobColonFormat,
-        "register_colloquial" => DetectColloquialRegister,
-        "signoff_designation_present" => DetectSignoffDesignationPresent,
+        "register_colloquial" => Compose(DetectColloquialRegister, DetectSaG4UnidiomaticRequestWording,
+            DetectSaG5EmotionalObservation, DetectSaG5NoteStyleQuery, DetectSaG5Tiredness, DetectSaG5LexicalMisuse),
+        "signoff_designation_present" => Compose(DetectSignoffDesignationPresent, DetectSaG3SignoffBlockShape),
         "model_answer_layout" => DetectModelAnswerLayout,
         "linker_comma_and_case" => DetectLinkerCommaAndCase,
-        "minor_naming_convention" => DetectMinorNaming,
+        "minor_naming_convention" => Compose(DetectMinorNaming, DetectSaG3MinorBodyTitledName),
         "yours_sincerely_vs_faithfully" => DetectSincerelyVsFaithfully,
         "intro_contains_purpose" => DetectIntroPurpose,
         "urgent_intro_contains_urgent" => DetectUrgentIntro,
@@ -561,17 +609,17 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "enclosure_results_phrase" => DetectEnclosureResults,
         "latin_abbreviations_translated" => DetectLatinAbbreviations,
         "no_contractions" => DetectContractions,
-        "conditions_lowercase" => DetectConditionsLowercase,
+        "conditions_lowercase" => Compose(DetectConditionsLowercase, DetectSaG2GenericDrugCapitalised),
         "linker_however_punctuation" => (r, i, s) => DetectLinkerRunOn(r, i, s, "however", "however"),
         "no_asap_in_letter" => DetectForbidden(@"\bASAP\b", "Never write 'ASAP'. Use 'at your earliest convenience'."),
         "address_punctuation" => DetectAddressPunctuation,
         "address_slash_separator" => DetectAddressSlashSeparator,
         "salutation_re_same_line" => DetectSalutationReSameLine,
-        "intro_adverbial_comma" => DetectIntroAdverbialComma,
-        "patient_title_mismatch" => DetectPatientTitleMismatch,
+        "intro_adverbial_comma" => Compose(DetectIntroAdverbialComma, DetectSaG2IntroAdverbialComma),
+        "patient_title_mismatch" => Compose(DetectPatientTitleMismatch, DetectSaG3TitlePronounSex),
         "re_line_age_dob" => DetectReLineAgeDob,
         "re_line_full_name" => DetectReLineFullName,
-        "incomplete_clinical_construction" => DetectIncompleteClinicalConstruction,
+        "incomplete_clinical_construction" => Compose(DetectIncompleteClinicalConstruction, DetectSaG1ElidedPassiveAuxiliary, DetectSaG1FaultyWithListParallelism),
         "yours_sincerely_capitalisation" => DetectYoursSincerelyCapitalisation,
         "intro_sentence_count" => DetectIntroSentenceCount,
         "closure_mentions_patient_request_if_flagged" => DetectClosurePatientRequest,
@@ -590,18 +638,18 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "discharge_admitted_with_past_simple" => DetectDischargeAdmittedWith,
         "discharge_language_unsupported" => DetectDischargeLanguageUnsupported,
         "discharge_plan_present" => DetectDischargePlanPresent,
-        "intro_purpose_vague" => DetectIntroPurposeVague,
-        "closure_request_paragraph" => DetectClosureRequestParagraph,
+        "intro_purpose_vague" => Compose(DetectIntroPurposeVague, DetectSaG4DischargeIntroWithoutCareRequest),
+        "closure_request_paragraph" => Compose(DetectClosureRequestParagraph, DetectSaG4CanonicalRequestParagraphMissing),
         "treatment_change_grammar" => DetectTreatmentChangeGrammar,
         "results_comma_splice" => DetectResultsCommaSplice,
         "diabetes_type_words" => DetectDiabetesTypeWords,
         "respiratory_rate_unit_style" => DetectRespiratoryRateUnitStyle,
         "illogical_quantity_range" => DetectIllogicalQuantityRange,
         "vague_clinical_object" => DetectVagueClinicalObject,
-        "letter_date_unsupported" => DetectLetterDateUnsupported,
+        "letter_date_unsupported" => Compose(DetectLetterDateUnsupported, DetectSaG6LetterDateUnsupported),
         "recipient_name_mismatch" => DetectRecipientNameMismatch,
         "patient_name_spelling" => DetectPatientNameSpelling,
-        "re_line_dob_priority" => DetectReLineDobPriority,
+        "re_line_dob_priority" => Compose(DetectReLineDobPriority, DetectSaG3ReLineDobBornOn),
         "result_at_wording" => DetectResultAtWording,
         "dangling_treatment_modifier" => DetectDanglingTreatmentModifier,
         "semicolon_overuse" => DetectSemicolonOveruse,
@@ -610,9 +658,9 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "result_noun_fragment" => DetectResultNounFragment,
         "supine_position_wording" => DetectSupinePositionWording,
         "result_head_noun" => DetectResultHeadNoun,
-        "background_paragraph_placement" => DetectBackgroundParagraphPlacement,
+        "background_paragraph_placement" => Compose(DetectBackgroundParagraphPlacement, DetectSaG4BackgroundPlacementInBody),
         "vital_sign_interpretation_unsupported" => DetectVitalSignInterpretationUnsupported,
-        "role_salutation_matches_task" => DetectRoleSalutationMatchesTask,
+        "role_salutation_matches_task" => Compose(DetectRoleSalutationMatchesTask, DetectSaG7RoleSalutationBareRole),
         "canonical_contact_template" => DetectCanonicalContactTemplate,
         "re_line_identity_unsupported" => DetectReLineIdentityUnsupported,
         "brand_generic_duplication" => DetectBrandGenericDuplication,
@@ -623,11 +671,24 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "cancer_suspected_flagged_urgent" => DetectCancerSuspectedUrgent,
         "visit_paragraphization_check" => DetectMarkerDependentNoop,
         "visit_content_tense_basic_check" => DetectVisitContentTense,
-        "numerical_values_have_units" => DetectNumericalValuesHaveUnits,
+        "numerical_values_have_units" => Compose(DetectNumericalValuesHaveUnits, DetectSaG2VitalSignUnits),
         "discharge_all_investigations_listed" => DetectMarkerDependentNoop,
         "no_brackets_in_letter" => DetectNoBrackets,
         "dob_age_forbidden_phrase" => DetectDobAgeForbiddenPhrase,
         "signoff_no_invented_name" => DetectSignoffNoInventedName,
+        // Senior Assessor Release Audit (16 Sep 2026, OA5) — new check ids.
+        "sentence_fragment" => DetectSaG1SentenceFragment,
+        "malformed_word_form" => DetectSaG1MalformedWordForm,
+        "malformed_today_phrase" => DetectSaG2MalformedTodayPhrase,
+        "missing_possessive_name" => DetectSaG2MissingPossessiveName,
+        "typographic_corruption" => DetectSaG2TypographicCorruption,
+        "age_dob_inconsistent" => DetectSaG3AgeDobInconsistent,
+        "letter_type_function_mismatch" => DetectSaG4LetterTypeFunctionMismatch,
+        "medication_frequency_conflict" => DetectSaG5MedicationFrequencyConflict,
+        "narrated_chronology_contradiction" => DetectSaG6NarratedChronologyContradiction,
+        "owner_required_fact_missing" => DetectSaG6OwnerRequiredFactMissing,
+        "re_line_age_when_no_dob" => DetectSaG7ReLineAgeWhenNoDob,
+        "address_content_unsupported" => DetectSaG7AddressContentUnsupported,
         _ => null,
     };
 
@@ -830,22 +891,25 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 
     private static IEnumerable<LintFinding> DetectEmotionalWording(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        // Senior Assessor Release Audit (16 Sep 2026): s.Body offsets are
+        // body-relative; add the body offset so highlights land on the quote.
+        var bodyOffset = BodyOffset(s);
         foreach (Match m in EmotionalWordingRe.Matches(s.Body))
             yield return new LintFinding(rule.Id, rule.Severity,
                 $"Avoid emotional/editorial wording (\"{m.Value}\"). Keep the letter factual and neutral.",
-                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
         if (input.IsModelAnswer)
         {
             foreach (Match m in SufferAnyRe.Matches(s.Body))
                 yield return new LintFinding(rule.Id, RuleSeverity.Critical,
                     $"Model Answers use neutral factual wording, not \"{m.Value}\" (e.g. \"had\", \"experienced\", \"was diagnosed with\").",
-                    Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+                    Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
             yield break;
         }
         foreach (Match m in SufferingEmotionalRe.Matches(s.Body))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Avoid dramatising suffering/suffered with an emotional intensifier - state the clinical event factually.",
-                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
     }
 
     // Owner clarification (same addendum, §2 "Judgmental labels"): "Do not
@@ -880,12 +944,13 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectJudgmentalLabels(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         var reported = new HashSet<int>();
+        var bodyOffset = BodyOffset(s);
         foreach (Match m in JudgmentalLabelRe.Matches(s.Body))
         {
             reported.Add(m.Index);
             yield return new LintFinding(rule.Id, input.IsModelAnswer ? RuleSeverity.Critical : rule.Severity,
                 $"Do not label the person by disease/behaviour (\"{m.Value}\"). Use a factual form instead (e.g. 'has asthma', 'smokes ...', 'reported difficulty adhering ...').",
-                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
         }
         if (!input.IsModelAnswer) yield break;
         foreach (Match m in SmokerDrinkerAnyRe.Matches(s.Body))
@@ -893,7 +958,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             if (reported.Any(i => m.Index >= i && m.Index <= i + 30)) continue;
             yield return new LintFinding(rule.Id, RuleSeverity.Critical,
                 $"Model Answers describe the behaviour, not the person (\"{m.Value}\"): e.g. 'smokes ten cigarettes a day', 'does not smoke', 'drinks alcohol socially'.",
-                Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
+                Quote: m.Value, Start: bodyOffset + m.Index, End: bodyOffset + m.Index + m.Length);
         }
     }
 
@@ -1164,7 +1229,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         var m = Regex.Match(s.Body, Regex.Escape(headerDateText), RegexOptions.IgnoreCase);
         if (m.Success)
             yield return new LintFinding(rule.Id, rule.Severity,
-                "Never repeat today's date (the letter's own header date) in the body. Use 'today' or 'on today's visit/presentation' instead.",
+                "Never repeat today's date (the letter's own header date) in the body. Replace the WHOLE date phrase with 'today' ('presented on 13 June 2020' -> 'presented today'), never leave a preposition before it ('on today', 'at review on today'), and keep an EARLIER visit's own source date.",
                 Quote: m.Value, Start: m.Index, End: m.Index + m.Length);
     }
 

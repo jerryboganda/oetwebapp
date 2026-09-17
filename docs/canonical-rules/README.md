@@ -38,11 +38,11 @@ addendum's precedence rule (§7) the latest owner rule wins over older conflicti
 
 | Item | Value |
 |---|---|
-| Registry release | `v1.2-addendum-two` = v1.1-rev8 + OA-01..OA-15 + OA2-01..OA2-20 |
-| `OET_AI_Rules_Master.jsonl` SHA-256 | `8fd520248c407b5ad202f00708cdb70b8d6d0f92f934614413e3a77a22d41c16` (2535 lines, LF) |
-| Canonical rulebook version (6 built packs) | `2.2.1-canonical-addendum-two`, `publishedAt` `2026-09-14T00:00:00Z` |
+| Registry release | `v1.3-senior-assessor-audit` = v1.1-rev8 + OA-01..OA-15 + OA2-01..OA2-20 + OA3-01..OA3-05 + OA4-01..OA4-03 + OA5-01..OA5-38 (Senior Assessor Release Audit, 16 Sep 2026) |
+| `OET_AI_Rules_Master.jsonl` SHA-256 | `f83d893b3facdf31adb1c2b804cb4e05ebcba7aabdc1ec13b3e9b36d9fdb6747` (2581 lines, LF), pinned as `REGISTRY_SHA256` in the build script |
+| Canonical rulebook version (6 built packs) | `2.4.0-senior-assessor-audit`, `publishedAt` `2026-09-16T00:00:00Z`; active Writing rows per pack: Medicine 349, Nursing 356, Dentistry 356, Pharmacy 359, Physiotherapy 359, Radiography 356 (Medicine: 84 sections, 154 critical) |
 | Legacy rulebook version (7 hand-maintained packs) | `1.1.0-rev8` |
-| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.owner-addendum-two.2026-09-14.2` (107 check-ids) |
+| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.senior-assessor-audit.2026-09-16.1` (127 check-ids) |
 
 The v1.0 hashes in the table at the top of this file stay as original-release provenance only.
 `HANDOFF_SHA256SUMS.txt`, `OET_AI_DEPLOYMENT_CONTRACT.json` and `OET_AI_Source_Manifest.json` are

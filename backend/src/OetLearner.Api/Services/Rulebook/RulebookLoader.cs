@@ -359,11 +359,16 @@ public sealed record WritingLintInput(
     // When the canonical case notes are supplied, letter_date_unsupported
     // proves the letter date against the latest documented note date; when
     // the exact Writing Task is supplied, recipient_name_mismatch proves the
-    // recipient's spelling ("Dr Malcolm Still", never "Malcom"). Both
+    // recipient's spelling ("Dr Malcom Still", as the task spells it). Both
     // detectors no-op when the corresponding text is absent, so every
     // existing caller keeps its behaviour.
     string? CaseNotesText = null,
-    string? TaskText = null);
+    string? TaskText = null,
+    // Senior Assessor Release Audit (16 Sep 2026, G6a): the scenario's
+    // explicit today's date (WritingScenario.TodayDate). When supplied, a
+    // Model Answer's letter date must equal it (letter_date_unsupported).
+    // Candidate lanes never pass it.
+    string? TodayDate = null);
 
 public sealed record WritingCaseNotesMarkers(
     bool SmokingMentioned = false,

@@ -110,7 +110,9 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["intro_contains_purpose"] = Purpose,
             ["intro_opens_i_am_writing_to"] = Purpose,
             ["intro_purpose_vague"] = Purpose,
-            ["intro_adverbial_comma"] = Purpose,
+            // A missing comma after an introductory phrase is punctuation, not
+            // purpose (Senior Assessor Release Audit, 16 Sep 2026).
+            ["intro_adverbial_comma"] = Punctuation,
             ["intro_sentence_count"] = Excess,
             ["judgmental_labels"] = Register,
             ["latin_abbreviations_translated"] = Language,
@@ -186,6 +188,19 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["canonical_contact_template"] = Layout,
             ["re_line_identity_unsupported"] = Content,
             ["brand_generic_duplication"] = Excess,
+            // Senior Assessor Release Audit (16 Sep 2026, OA5) — Model Answer only.
+            ["sentence_fragment"] = Grammar,
+            ["malformed_word_form"] = Grammar,
+            ["malformed_today_phrase"] = Grammar,
+            ["missing_possessive_name"] = Grammar,
+            ["typographic_corruption"] = Punctuation,
+            ["age_dob_inconsistent"] = Content,
+            ["letter_type_function_mismatch"] = Purpose,
+            ["medication_frequency_conflict"] = Content,
+            ["narrated_chronology_contradiction"] = Content,
+            ["owner_required_fact_missing"] = Content,
+            ["re_line_age_when_no_dob"] = Layout,
+            ["address_content_unsupported"] = Layout,
         };
 
     /// <summary>

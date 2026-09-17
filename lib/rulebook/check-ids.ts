@@ -154,6 +154,19 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'year_not_abbreviated',
   'yours_sincerely_capitalisation',
   'yours_sincerely_vs_faithfully',
+  // Senior Assessor Release Audit (2026-09-16, OA5) — Model Answer only.
+  'sentence_fragment',
+  'malformed_word_form',
+  'malformed_today_phrase',
+  'missing_possessive_name',
+  'typographic_corruption',
+  'age_dob_inconsistent',
+  'letter_type_function_mismatch',
+  'medication_frequency_conflict',
+  'narrated_chronology_contradiction',
+  'owner_required_fact_missing',
+  're_line_age_when_no_dob',
+  'address_content_unsupported',
 ]);
 
 /** Writing rules with a deterministic detector (frozen, see above). */

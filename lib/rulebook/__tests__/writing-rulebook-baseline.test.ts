@@ -47,15 +47,17 @@ const LEGACY_PROFESSIONS: ExamProfession[] = [
  * sample-only edits" (see isGlobalOwnerRule in the rulebook build script).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 311,
-  nursing: 318,
-  dentistry: 318,
-  pharmacy: 321,
-  physiotherapy: 321,
-  radiography: 318,
+  // + the 3 OA4 rows (16 Sep 2026) and the 38 Senior Assessor Release Audit
+  // rows OA5-01..OA5-38 (16 Sep 2026), also globally scoped.
+  medicine: 349,
+  nursing: 356,
+  dentistry: 356,
+  pharmacy: 359,
+  physiotherapy: 359,
+  radiography: 356,
 };
 
-const CANONICAL_VERSION = '2.3.1-owner-clarifications-3';
+const CANONICAL_VERSION = '2.4.0-senior-assessor-audit';
 const LEGACY_VERSION = '1.1.0-rev8';
 
 /**

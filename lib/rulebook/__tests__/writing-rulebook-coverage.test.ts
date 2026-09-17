@@ -29,12 +29,14 @@ const ALL_WRITING_PROFESSIONS: ExamProfession[] = [
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
   // + the 5 OA3 rows (OA3-01..OA3-05, 15 Sep 2026); keep in lockstep with
   // writing-rulebook-baseline.test.ts and the registry rule counts.
-  medicine: 308,
-  nursing: 315,
-  dentistry: 315,
-  pharmacy: 318,
-  physiotherapy: 318,
-  radiography: 315,
+  // + the 3 OA4 rows and the 38 Senior Assessor Release Audit rows
+  // (OA5-01..OA5-38, 16 Sep 2026), also globally scoped.
+  medicine: 349,
+  nursing: 356,
+  dentistry: 356,
+  pharmacy: 359,
+  physiotherapy: 359,
+  radiography: 356,
 };
 // The legacy packs each carry 172 base + 38 owner Rev8 rules, PLUS the
 // derived operational modules the ULTIMATE FINAL round added (PRD-*), which is

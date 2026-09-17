@@ -333,11 +333,12 @@ public class AiGatewayRecorderIntegrationTests
         Assert.Equal(AiCallOutcome.Success, row.Outcome);
         Assert.Equal(AiKeySource.Platform, row.KeySource);
         Assert.Equal("mock", row.ProviderId);
-        // The Medicine Writing rulebook is canonically versioned 2.3.1-owner-clarifications-3
-        // (rulebooks/writing/medicine/rulebook.v1.json, owner Rev8 11 Sep 2026). This asserts on the
+        // The Medicine Writing rulebook is canonically versioned 2.4.0-senior-assessor-audit
+        // (rulebooks/writing/medicine/rulebook.v1.json, Senior Assessor Release Audit 16 Sep 2026;
+        // 27 characters, within the 32-character RulebookVersion column). This asserts on the
         // real value threaded through RulebookPromptBuilder -> AiGatewayService
         // -> AiUsageRecorder, not a fixed test double.
-        Assert.Equal("2.3.1-owner-clarifications-3", row.RulebookVersion);
+        Assert.Equal("2.4.0-senior-assessor-audit", row.RulebookVersion);
         Assert.Equal("writing.grade.v3", row.PromptTemplateId);
         Assert.True(row.LatencyMs >= 0);
         await db.DisposeAsync();

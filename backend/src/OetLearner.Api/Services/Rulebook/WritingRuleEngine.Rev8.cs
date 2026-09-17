@@ -43,10 +43,27 @@ public sealed partial class WritingRuleEngine
     /// number_style_words_vs_digits and lifestyle_frequency_precision to
     /// number-words (OA2-15); role-aware yours_sincerely_vs_faithfully
     /// (OA2-17); connective-position-only "also" in linker_avoid_words.
+    /// Senior Assessor Release Audit (16 Sep 2026, OA5, all Model Answer
+    /// only — WritingRuleEngine.SeniorAuditG1..G7.cs): new detectors
+    /// sentence_fragment, malformed_word_form, malformed_today_phrase,
+    /// missing_possessive_name, typographic_corruption, age_dob_inconsistent,
+    /// letter_type_function_mismatch, medication_frequency_conflict,
+    /// narrated_chronology_contradiction, owner_required_fact_missing,
+    /// re_line_age_when_no_dob, address_content_unsupported; stricter
+    /// branches under incomplete_clinical_construction, intro_adverbial_comma,
+    /// number_style_words_vs_digits, value_unit_spacing,
+    /// numerical_values_have_units, conditions_lowercase,
+    /// minor_naming_convention (DOB-derived minor status),
+    /// body_uses_last_name_only, patient_title_mismatch, re_line_dob_priority,
+    /// signoff_designation_present, no_duplicated_request,
+    /// closure_request_paragraph, intro_purpose_vague,
+    /// background_paragraph_placement, register_colloquial, judgmental_labels,
+    /// medication_list_punctuation, letter_date_unsupported (scenario
+    /// TodayDate, numeric note dates) and role_salutation_matches_task.
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.owner-clarifications-3.2026-09-16.1";
+    public const string ValidatorVersion = "writing-rules.senior-assessor-audit.2026-09-16.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -1350,7 +1367,7 @@ public sealed partial class WritingRuleEngine
     }
 
     // OA source-fidelity (Taylor) — the recipient's name is spelled exactly
-    // as the Writing Task spells it ("Dr Malcolm Still", never "Malcom").
+    // as the Writing Task spells it (the Taylor task and source: "Dr Malcom Still").
     // Runs whenever the exact task text is supplied WITH the task's own
     // address instruction ("Address the letter to Dr ..., ...") — a task
     // that names no recipient block cannot prove a mismatch, so it never
@@ -1395,7 +1412,11 @@ public sealed partial class WritingRuleEngine
     // merely happens to mention one drug is not.
     private static bool SemicolonsAreMedicationListSeparators(string sentence)
     {
-        var items = MedicationItemRe.Matches(sentence).Cast<Match>()
+        // Senior Assessor Release Audit (16 Sep 2026): SaG5MedicationItemRe is
+        // a superset of MedicationItemRe that also parses weight-based doses
+        // ("isoniazid, 5 mg/kg daily") and alphanumeric brands, so the
+        // owner-form list is recognised as a list (Model Answer-only rule).
+        var items = SaG5MedicationItemRe.Matches(sentence).Cast<Match>()
             .Where(m => !MedicationStopWords.Contains(m.Groups["drug"].Value))
             .OrderBy(m => m.Index)
             .ToList();
@@ -1737,11 +1758,13 @@ public sealed partial class WritingRuleEngine
     }
 
     // Addendum Two section 2, SOURCE FACTS CONTROL — the Re: line's date of
-    // birth or age is a source fact like any other. The Weir owner-review
-    // letter carried "DOB: 20 September 1970" while the canonical notes record
-    // no date of birth and no age at all, and the validator still reported
-    // zero findings: exactly the OA2-01 failure mode. Source-gated, so without
-    // the canonical notes nothing can be proven and the detector no-ops.
+    // birth or age is a source fact like any other: a Re: line DOB or age the
+    // canonical notes do not record fails (OA2-01). Senior Assessor Release
+    // Audit correction (16 Sep 2026): the Weir SOURCE PDF does record "DOB: 20
+    // Sep 1970"; the production notes lost it in extraction, so the Weir
+    // letter's DOB was source-supported and the production notes need the DOB
+    // row (data fix). Source-gated, so without the canonical notes nothing can
+    // be proven and the detector no-ops.
     private static readonly Regex ReLineDobRe = new(
         @"\bDOB\s*:\s*(?<dob>[^,;]+)", RegexOptions.IgnoreCase);
 

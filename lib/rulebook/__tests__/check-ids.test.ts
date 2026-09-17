@@ -33,10 +33,13 @@ describe('rulebook check-id registry', () => {
     // + brand_generic_duplication (OA2 Taylor defect / R2-18) = 107, + 4 from
     // the OWNER CLARIFICATIONS ROUND 3 (2026-09-15, OA3-01..OA3-05:
     // patient_name_spelling, re_line_dob_priority, result_at_wording,
-    // dangling_treatment_modifier) = 111.
+    // dangling_treatment_modifier) = 111, + 4 from the OA4 layout/punctuation
+    // patch (2026-09-16: address_slash_separator, salutation_re_same_line,
+    // intro_adverbial_comma, patient_title_mismatch) = 115, + 12 from the
+    // SENIOR ASSESSOR RELEASE AUDIT (2026-09-16, OA5) = 127.
     // Keep this in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) —
     // see that file's own header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(115);
+    expect(WRITING_CHECK_IDS.size).toBe(127);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
@@ -98,6 +101,24 @@ describe('rulebook check-id registry', () => {
   it('includes every OWNER CLARIFICATIONS ROUND 3 (2026-09-15, OA3) detector check-id', () => {
     const oa3 = ['patient_name_spelling', 're_line_dob_priority', 'result_at_wording', 'dangling_treatment_modifier'];
     expect(oa3.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
+  });
+
+  it('includes every SENIOR ASSESSOR RELEASE AUDIT (2026-09-16, OA5) detector check-id', () => {
+    const oa5 = [
+      'sentence_fragment',
+      'malformed_word_form',
+      'malformed_today_phrase',
+      'missing_possessive_name',
+      'typographic_corruption',
+      'age_dob_inconsistent',
+      'letter_type_function_mismatch',
+      'medication_frequency_conflict',
+      'narrated_chronology_contradiction',
+      'owner_required_fact_missing',
+      're_line_age_when_no_dob',
+      'address_content_unsupported',
+    ];
+    expect(oa5.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
   });
 
   it('includes every ULTIMATE FINAL (2026-09-13) detector check-id', () => {

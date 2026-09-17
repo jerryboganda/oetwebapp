@@ -1,8 +1,8 @@
 # OET Writing Model Answer Rules — PERMANENT OWNER DIRECTIVES
 
-**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026) the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15) ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20) and OWNER CLARIFICATIONS ROUND 3 (15 Sep 2026, rules OA3-01..OA3-05; active validator `writing-rules.owner-clarifications-3.2026-09-15.1`). Latest owner clarification supersedes conflicting older internal wording.
+**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026) the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15) ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20), OWNER CLARIFICATIONS ROUND 3 (15 Sep 2026, rules OA3-01..OA3-05), the final Medicine layout/punctuation patch (16 Sep 2026, rules OA4-01..OA4-03) and the SENIOR ASSESSOR RELEASE AUDIT (16 Sep 2026, rules OA5-01..OA5-38; active validator `writing-rules.senior-assessor-audit.2026-09-16.1`, rule pack `2.4.0-senior-assessor-audit`). Latest owner clarification supersedes conflicting older internal wording — but every factual/source claim is settled by the ORIGINAL SOURCE PDF, never by an audit sentence alone (e.g. the Weir source records DOB 20 Sep 1970; the Taylor task spells "Dr Malcom Still").
 **Applies to:** every person or AI agent who generates, repairs, validates, imports, or assesses OET Writing Model Answers in this repository — regardless of which tool or agent is used.
-**Enforcement:** every language rule below is enforced by a named deterministic detector in the deployed validator (`WritingRuleEngine` / `WritingRuleEngine.Rev8`), registry rows `OA-01..OA-15` and `OA2-01..OA2-20` in `docs/canonical-rules/OET_AI_Rules_Master.jsonl`, provenance rows in `WritingRuleProvenance`, and pinned by regression tests (`WritingRev8RegressionFixtureTests.cs` — five clean-letter positives plus every injected defect — and `WritingOwnerAddendumTwoRegressionFixtureTests.cs` — regression classes R2-01..R2-18, each proving BOTH that the injected defect is caught and that the valid alternative passes). If a rule here and the validator ever disagree, BOTH are wrong — fix the validator and update this doc together. A stored Ready flag is valid only for the exact validator version it was verified under: any rule-pack change (bump of `WritingRuleEngine.ValidatorVersion`) invalidates affected answers until revalidated.
+**Enforcement:** every language rule below is enforced by a named deterministic detector in the deployed validator (`WritingRuleEngine` / `WritingRuleEngine.Rev8`), registry rows `OA-01..OA-15`, `OA2-01..OA2-20`, `OA3-01..OA3-05`, `OA4-01..OA4-03` and `OA5-01..OA5-38` in `docs/canonical-rules/OET_AI_Rules_Master.jsonl`, provenance rows in `WritingRuleProvenance`, and pinned by regression tests (`WritingRev8RegressionFixtureTests.cs` — five clean-letter positives plus every injected defect — `WritingOwnerAddendumTwoRegressionFixtureTests.cs` — regression classes R2-01..R2-18, each proving BOTH that the injected defect is caught and that the valid alternative passes — and `WritingSeniorAuditG1RegressionTests.cs` .. `WritingSeniorAuditG7RegressionTests.cs` for the Senior Assessor Release Audit classes, each proving the audited defect fires for a Model Answer, valid alternatives pass, the candidate lane stays silent and the clean fixtures stay clean). The Senior Assessor Release Audit detectors live in `WritingRuleEngine.SeniorAuditG1.cs` .. `G7.cs` and run for **Model Answers only**. If a rule here and the validator ever disagree, BOTH are wrong — fix the validator and update this doc together. A stored Ready flag is valid only for the exact validator version it was verified under: any rule-pack change (bump of `WritingRuleEngine.ValidatorVersion`) invalidates affected answers until revalidated.
 
 ---
 
@@ -58,7 +58,7 @@ The 180–200-word body cap means selection is a tested skill: **do NOT copy eve
 | Contact offer (OA2-19) | "Please do not hesitate to contact me with any queries." | "Should there be any queries, kindly do not hesitate to contact me." |
 | One medication identity (OA2-18/R2-18) | "colchicine, also known as Lengout" repeated in two paragraphs | name it once, then use one consistent identity |
 | Vital signs carry no invented diagnosis (OA2-14) | "He was hypotensive." | "His blood pressure was 88/70 mmHg." |
-| Re: line identity is a source fact (OA2 §2) | "Re: Mr Michael Weir, DOB: 20 September 1970" when the notes record no DOB | "Re: Mr Michael Weir" |
+| Re: line identity is a source fact (OA2 §2) | "Re: Mr John Smith, DOB: 1 January 1980" when the source records no DOB (an invented DOB) | "Re: Mr John Smith" (or ", aged N" when the source gives an age). Source check: the Weir source PDF DOES record DOB 20 Sep 1970, so the Weir Re: line is "Re: Mr Michael Weir, DOB: 20 September 1970" — the production notes lost that DOB (data fix) |
 | English frequencies — no Latin | "Lipitor, 20 mg nocte" | "Lipitor, 20 mg at night" |
 | Medication list punctuation (OA2-16 latest override) | "Zyloric 300 mg" / comma-only lists / "; and" before the final drug | comma after drug: "Zyloric, 300 mg daily"; 2 drugs: "Drug, dose and Drug, dose"; 3+: "Drug, dose; Drug, dose and Drug, dose" — semicolons BETWEEN pairs, NO semicolon before the final "and" |
 | Legitimate dose formats are first-class | (parser used to miss these) | ranges "5-10 mg four-hourly", combination strengths "Targin, 20/10 twice daily", unitless dose + frequency |
@@ -72,17 +72,55 @@ The 180–200-word body cap means selection is a tested skill: **do NOT copy eve
 | No duplicated request | closure repeating the intro's request wording verbatim | reword one side (keep the closure wording that grounds); phrase matching never applies to candidates |
 | Sentence length | >30 tokens | split (hyphenated words count as one; no minimum) |
 | Anonymous recipient | "Dear Sir/Madam" + "Yours sincerely" | "Dear Sir/Madam" + "Yours **faithfully**" |
-| Recipient spelling (source fidelity) | letter "Dr Malcom Still" when the task says "Dr Malcolm Still" (or vice versa) | copy the task's spelling exactly (checked when the task carries "Address the letter to ...") |
+| Recipient spelling (source fidelity) | letter "Dr Malcolm Still" when the Taylor task spells "Dr Malcom Still" (or vice versa) | copy the task's spelling exactly — the Taylor source says "Dr Malcom Still" (checked when the task carries "Address the letter to ...") |
 | Invented letter date (source fidelity) | letter dated 30 May 2015 when the notes' latest date is 23 May 2015 | use the source-supported treatment date (checked whenever the canonical notes are supplied) |
 | Full name is free in the introduction (OA3-01, supersedes OA-03) | full name flagged merely because it also sits in the Re: line | the intro may use title + surname OR the full patient name; a full name recurring in any LATER body paragraph still fails |
 | Patient-name spelling is hard source fidelity (OA3-02) | "Mr David Taylr" / "Mr Davod Taylor" / Re: surname altered when the notes spell it exactly | copy the canonical notes' spelling everywhere (inert when the notes never name the patient; another person's name is never a spelling error) |
 | DOB has priority over age (OA3-03) | "Re: Mr David Taylor, aged 55", or no DOB, when the notes record "DOB 01/08/1965" | "Re: Mr David Taylor, DOB: 1 August 1965"; "aged X" is correct only when the source supplies no DOB |
 | Canonical "at" result wording (OA3-04, supersedes OA-10) | "a reduced glucose of 10 mg/dL" / headless "white cell count 14.0x10^9/L" | "a reduced glucose level at 10 mg/dL" / "the white cell count was 14.0x10^9/L" (Model Answer only; candidates keep every grammatical alternative) |
 | No dangling treatment modifier (OA3-05) | "A catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex." | "... grew Staphylococcus saprophyticus, and Mr McDonald was treated with Keflex for five days." |
+| Complete sentences, no fragments (OA5, audit §3.1) | "With poorly controlled diabetes, ... after a myocardial infarction." / "However, no effusion." / "Lives with her long-term boyfriend, ..." / "And prescribed eflornithine cream ..." / "... if clinically indicated. At your earliest convenience." | "Mr Mathis has poorly controlled diabetes, ..." / "... on the medial aspect, with no effusion." / "Ms Hoffmann lives with ..." / "Eflornithine cream was also prescribed ..." / "... if clinically indicated, at your earliest convenience." |
+| Coordinated passive clauses keep their auxiliary (OA5, OA2-09) | "The Department of Human Services was notified, and family immunisation discussed." / "... and atorvastatin, 20 mg daily added." | "..., and family immunisation was discussed." / "..., and atorvastatin, 20 mg daily, was added." |
+| Parallel "with" lists (OA5) | "with a petechial rash on the abdomen and legs, bruising on the left arm and unable to touch her chin to her chest" | "... bruising on the left arm and inability to touch her chin to her chest" / "..., and was unable to touch her chin to her chest" |
+| No malformed word forms (OA5) | "is an ex-smokes of 35 years" / "has been continued smoking" / "social drinks alcohol" | "smoked for thirty-five years and quit seven years ago" / "has continued smoking" / "drinks alcohol socially" |
+| No preposition before "today" (OA5) | "presented on today" / "At review on today, ..." / "Pathology on today showed ..." / "By today, attacks had become ..." | "presented today" / "At today's review, ..." / the real earlier source date ("On 4 January 2018, ...") |
+| Possessive after a patient name (OA5) | "Mrs Clarke temperature was ..." / "in view of Mrs MacIntyre history" / "Erika fasting sugars" | "Mrs Clarke's temperature was ..." / "in view of Mrs MacIntyre's history" / "Her fasting sugars" |
+| No typographic corruption (OA5) | "on the medial aspect . However" / "type two diabetes mellitus mellitus" / "... symptoms. today, Ms Day presented" | "on the medial aspect. However" / "type two diabetes mellitus" / "... symptoms. Today, Ms Day presented" |
+| Introductory adverbial comma, every form (OA4-02 + OA5) | "On examination she appeared healthy" / "On admission Ms Pristiely's blood pressure" / "In August 2019 Mr Mills" | "On examination, she appeared healthy" / "On admission, Ms Pristiely's blood pressure" / "In August 2019, Mr Mills" |
+| Descriptive numbers, no mixed forms, past-event ages in words (OA2-15 + OA5) | "30 to thirty-five cigarettes" / "5-six cigarettes" / "40 units of alcohol weekly" / "had an appendectomy at 15" | "thirty to thirty-five cigarettes" / "five to six cigarettes" / "forty units of alcohol weekly" / "had an appendectomy at age fifteen" (identification ages such as "aged 61" stay digits) |
+| Time notation and superscript units (OA5) | "8am" / "BMI 29.2 kg/m2" / "18,000 cells per mm3" | "8 am" / "BMI 29.2 kg/m²" / "18,000 cells per mm³" |
+| Vital signs always carry units (OA-15 + OA5) | "blood pressure 148/98" / "Pulse 96, blood pressure 110/70" | "blood pressure 148/98 mmHg" / "pulse 96 bpm, blood pressure 110/70 mmHg" |
+| Generic medicine names lowercase (OA5) | "and Indomethacin, 25 mg twice daily" / "Frusemide, 40 mg daily" | "and indomethacin, 25 mg twice daily" / "frusemide, 40 mg daily" |
+| Age agrees with the DOB at the letter date (OA5) | "Mr Greenbaum, a 23-year-old lawyer" with DOB 5 October 1994 in a letter dated 25 September 2020 | "Mr Greenbaum, a 25-year-old lawyer", or no age at all |
+| Minors: DOB-derived child status (OA5) | "Re: Ms Sally Webster, DOB: 10 November 2003" and "Ms Webster" in a letter dated 21 February 2020 | "Re: Sally Webster, DOB: 10 November 2003" and "Sally" in the body |
+| An adult is never called by the first name alone (OA5) | "I am writing to refer Erika for ..." / "Erika fasting sugars remain ..." | "I am writing to refer Miss Stone for ..." / "Miss Stone's fasting sugar levels remain ..." |
+| Re: line title agrees with the pronouns (OA5) | "Re: Mr Betty Weston" with "Her sleep ...", "She reported ..." | the title and the pronouns both follow the source |
+| "was born on" in the notes is a DOB (OA3-03 + OA5) | "Re: Mrs Mary Clarke" when the notes say "Mrs Mary Clarke was born on 17 September 1960" | "Re: Mrs Mary Clarke, DOB: 17 September 1960" |
+| Re: line age when the source has no DOB (OA5) | "Re: Mr Allen Mathis" when the notes say "61 years old" and record no DOB | "Re: Mr Allen Mathis, aged 61" |
+| Recipient block is exactly the task's content (OA5) | "Dr Helena Rao / City Eye Centre / 45 Bridge Street" for "a neuro-ophthalmologist"; "Dr Anne Childers" for "Dr Anne Childers MBBS FRANZCOG"; "London" without "NW1 2TG" | "Neuro-Ophthalmologist"; "Dr Anne Childers MBBS FRANZCOG"; "London" then "NW1 2TG" |
+| Bare role recipient keeps the role salutation (OA2-17 + OA5) | "Gynaecology Registrar" recipient with "Dear Doctor," | "Dear Gynaecology Registrar," (still "Yours faithfully,") |
+| Sign-off shape (OA5) | "Yours sincerely, Doctor" followed by "Doctor" again | "Yours sincerely,", one blank line, "Doctor" |
+| Letter type follows the task function (OA-05 + OA5) | an Emergency Registrar task whose notes say "needs admission ... for stabilisation" catalogued and written as LT-RR | re-catalogue as LT-UR and write the urgent contract |
+| No paraphrased duplicate request (OA-07, OA2-05 + OA5) | intro "request your neurological assessment and management" + closure "assess Mr Weir and advise on further management" | the closure carries one DISTINCT next step ("consider MRI if clinically indicated") |
+| Canonical request paragraph before the contact offer (OA-06 + OA5) | "Please monitor for signs of post-traumatic stress disorder ..." / no request paragraph | "I would be grateful if you could monitor Ms Wu for ..." as its own paragraph immediately before the contact offer |
+| Discharge introduction states the ongoing-care request (OA-01 + OA5) | "I am writing to introduce Ms Pristiely, admitted on 2 August 2019 ... and discharged today." | "... and to request your ongoing monitoring during her recovery." |
+| Background never opens or mixes into current paragraphs (OA2-12 + OA5) | remote history as the first body paragraph; smoking/allergies beside today's working diagnosis | current presentation first; background in one dedicated paragraph before the closure |
+| No unidiomatic request wording (OA5) | "per this referral" / "for dermatologist review" | delete "per this referral" / "for dermatological review" |
+| No emotional or affective observations (OA5; mental-health letters exempt) | "He is anxious and dyspnoeic" / "quite worried" / "in distress" / "no obvious anxiety" | state the symptom or reported concern neutrally, or omit it |
+| No note-style query (OA5) | "acute asthma with query pneumonia" / "?pneumonia" | "acute asthma with suspected pneumonia" |
+| Fatigue, not tiredness (OA5) | "has experienced tiredness, sore eyes ..." | "has experienced fatigue, sore eyes ..." |
+| No illogical diagnostic wording (OA5) | "confirm the working diagnosis of possible fibromyalgia" / "A viral infection was assessed" | "assess Ms Topp and clarify the possible diagnosis of fibromyalgia" / "The assessment was a viral infection." |
+| Neutral behaviour wording (OA5) | "medication non-compliance" / "defaulted on her follow-up" / "bizarre behaviour" / "drinks heavily" | "difficulty adhering to his medication" / "did not attend her follow-up appointment" / the observed behaviour / the exact quantity and frequency |
+| Weight-based doses and alphanumeric brands are list items (OA5) | "isoniazid, 5 mg/kg daily, rifampin, 10 mg/kg daily, ..." / "insulin NovoMix30 25 units" | "isoniazid, 5 mg/kg daily; rifampin, 10 mg/kg daily; ... and ethambutol, 2.8 g twice weekly" / "NovoMix30, 25 units" |
+| Formulation stays with the medicine (OA5) | "Salbutamol, 5 mg, nebules were given" | "Salbutamol nebules, 5 mg, were given" |
+| One coherent medication frequency (OA5) | "glipizide, 5 mg twice daily each morning" | "glipizide, 5 mg twice daily" or "glipizide, two 5 mg tablets each morning" (whichever the source supports) |
+| Chronology must be possible on the letter date (OA5) | "hurt his back at work on today and presented four days later" / "her last period of today" / "warfarin was recommenced on 26 February" in a letter dated 25 February 2015 | "hurt his back on 17 March and presented today, four days later" / "her last menstrual period was on 26 June 2019" / date the letter on the source's today |
+| Letter date = the source's today / latest documented encounter (OA5) | MacIntyre dated 26 June 2019 (the LMP) when the source says Today's Date 24/08/19; Betty Johnson dated 25 February 2015 when the notes run to 21/03/15 | 24 August 2019; 21 March 2015 (numeric note dates count; appointments, planned dates and the LMP never do) |
+| Owner-required material fact (OA2-14 + OA5) | Weir letter with dizziness and blackouts but no blood pressure | "His blood pressure was 88/70 mmHg." |
 
 Grounding note: premium wording still grounds — "fatigue, stress and lethargy" maps to case notes saying "tired, stressed and sluggish" (proven in production). Grounding is sentence-level traceability, not verbatim copying.
 
-## 5. DETECTOR ↔ RULE MAP (as deployed 15 Sep 2026, Owner Clarifications Round 3)
+## 5. DETECTOR ↔ RULE MAP (as of 16 Sep 2026, Senior Assessor Release Audit — validator `writing-rules.senior-assessor-audit.2026-09-16.1`)
 
 | Owner rule | Detector |
 |---|---|
@@ -94,12 +132,12 @@ Grounding note: premium wording still grounds — "fatigue, stress and lethargy"
 | OA2-06 closure paragraphing is structural | `closure_request_paragraph` (Model Answer only) |
 | OA2-07 no narrative semicolon | `semicolon_overuse` (ANY prose semicolon in a Model Answer; medication lists exempt) + `results_comma_splice` |
 | OA2-08 result/vital grammar, no forced preposition | `result_noun_fragment` + `numerical_values_have_units`; no detector forces "at" or "of" |
-| OA2-09 complete auxiliaries | `incomplete_clinical_construction` + `medication_passive_grammar` + `treatment_change_grammar` |
+| OA2-09 complete auxiliaries | `incomplete_clinical_construction` (incl. OA5 gapped passive auxiliary "..., and family immunisation discussed" and "with"-list parallelism "... and unable to touch ...", both Model Answer only) + `medication_passive_grammar` + `treatment_change_grammar` |
 | OA2-10 supine wording | `supine_position_wording` |
 | OA2-11 result head nouns | `result_head_noun` |
 | OA2-12 dedicated late background paragraph | `background_paragraph_placement` (Model Answer only) |
 | OA2-13 task- and reader-aware relevance | semantic validator checklist item 9 (not machine-checkable) |
-| OA2-14 material vital sign, no invented interpretation | `vital_sign_interpretation_unsupported` + the Weir 88/70 mmHg fixture assertion |
+| OA2-14 material vital sign, no invented interpretation | `vital_sign_interpretation_unsupported` + `owner_required_fact_missing` (Model Answer only; owner list in WritingRuleEngine.SeniorAuditG6.cs: Weir notes carrying 88/70 require "88/70 mmHg" in the body) |
 | OA2-15 descriptive numbers as words | `number_style_words_vs_digits` + `lifestyle_frequency_precision` (both accept number-words) |
 | OA2-16 medication separator override | `medication_list_punctuation` (no semicolon before the final "and") |
 | OA2-17 role-based salutation | `role_salutation_matches_task` + role-aware `yours_sincerely_vs_faithfully` |
@@ -120,25 +158,49 @@ Grounding note: premium wording still grounds — "fatigue, stress and lethargy"
 | OA-13 abbreviations | `register_colloquial` ("MRI imaging") |
 | OA-14 per-paragraph naming | `paragraph_start_patient_name` |
 | OA-15 units + spacing | `value_unit_spacing` + `numerical_values_have_units` + `respiratory_rate_unit_style` (bare "22 /min") |
-| Source fidelity: letter date | `letter_date_unsupported` (needs canonical notes; fires when the letter date exceeds every documented note date) |
+| Source fidelity: letter date | `letter_date_unsupported` (needs canonical notes, the task or the scenario TodayDate; Model Answer: equals an explicit today's date, never earlier than the latest documented encounter, never later than every documented date; written and numeric note dates both read) |
 | Source fidelity: recipient spelling | `recipient_name_mismatch` (needs the task's "Address the letter to ..." block) |
 | Note-form medication voice | `medication_passive_grammar` |
 | Smoking/drinks daily frequency | `lifestyle_frequency_precision` |
 | Colloquial/vague/judgmental wording (incl. "for a long time", "appeared anxious") | `register_colloquial` — **no case-notes exemption by design** |
 | Latin abbreviations (incl. nocte, mane) | `latin_abbreviations_translated` |
 | Dose/list syntax (ranges, ratios, semicolons) | `medication_list_punctuation` + `MedicationItemRe` |
-| Minor/adult naming (age attribution) | `WritingPatientAgeExtractor` (relatives' ages never classify the patient) |
+| Minor/adult naming (age attribution) | `WritingPatientAgeExtractor` (relatives' ages never classify the patient); for Model Answers the DOB-derived age at the letter date decides (0-17 child, 18 adult) before any naming detector runs, and `minor_naming_convention` also flags a titled child reference in the body |
 | OA3-01 introduction full-name freedom | `body_uses_last_name_only` (intro free; post-introduction recurrence fires) |
 | OA3-02 patient-name spelling fidelity | `patient_name_spelling` (needs canonical notes that name the patient) |
 | OA3-03 DOB priority over age | `re_line_dob_priority` (needs canonical notes carrying a DOB) |
 | OA3-04 canonical "at" result wording | `result_at_wording` (Model Answer only) + `result_noun_fragment` (of -> at repair) |
 | OA3-05 no dangling treatment modifier | `dangling_treatment_modifier` (both modes) |
+| OA4-01 address and render layout | `address_slash_separator` (slash-joined address components) + `salutation_re_same_line` (salutation and Re: on one physical line) + `address_punctuation` |
+| OA4-02 introductory adverbial comma | `intro_adverbial_comma` (Model Answer only; OA5 extends it to every phrase and date form whatever word follows) |
+| OA4-03 patient title fidelity | `patient_title_mismatch` (title switch inside the letter; OA5 adds the Re: line title vs the letter's pronouns, Model Answer only) |
+| OA5 complete sentences / no fragments (audit §3.1) | `sentence_fragment` (Model Answer only: linker + verb with no subject, coordinator start, bare-verb start, subjectless ", and was" clause, and verbless sentences) |
+| OA5 malformed word forms (converge-run damage) | `malformed_word_form` (Model Answer only: "a/an ex-/former smokes/drinks", "has been continued smoking", "social drinks alcohol"; doubled words belong to `typographic_corruption`) |
+| OA5 malformed "today" phrases | `malformed_today_phrase` (Model Answer only; "on/at/since today", "<visit noun> of today", "by today" + past narration, sentence-initial "By today") |
+| OA5 possessive after a patient name | `missing_possessive_name` (Model Answer only; title + surname or the Re: line first name directly followed by a possessed noun phrase from a closed lexicon) |
+| OA5 typographic corruption | `typographic_corruption` (Model Answer only; space before punctuation, doubled words except had/that and capitalised place names, lowercase sentence start) |
+| OA5 descriptive numbers, time notation, vital units, generic names | `number_style_words_vs_digits` + `value_unit_spacing` + `numerical_values_have_units` + `conditions_lowercase` (each extended with a Model-Answer-only branch: mixed ranges / alcohol / past-event ages; "8am" and "kg/m2"; a unit directly after every vital value; capitalised generic medicines mid-sentence) |
+| OA5 age / DOB consistency | `age_dob_inconsistent` (Model Answer only; DOB-derived age at the letter date, else the notes-stated age; relatives' and past-event ages ignored) |
+| OA5 adult first-name use | `body_uses_last_name_only` (Model Answer branch: a bare first name for a known adult) |
+| OA5 "was born on" DOB | `re_line_dob_priority` (Model Answer branch: "<patient> was born on <date>" in the notes when no DOB label exists) |
+| OA5 Re: line age when the source has no DOB | `re_line_age_when_no_dob` (Model Answer only; needs canonical notes that state the patient's age and carry no DOB/"born on" entry; patient age via `WritingPatientAgeExtractor`) |
+| OA5 recipient block copied exactly from the task | `address_content_unsupported` (Model Answer only; needs the exact Writing Task with a "letter ... to"/"write to" recipient instruction; token containment against task + notes, dropped name/post-nominal/postcode check; defers misspelled recipient names to `recipient_name_mismatch`) |
+| OA5 bare role salutation | `role_salutation_matches_task` (Model Answer branch: a role recipient line written without "The") |
+| OA5 sign-off shape | `signoff_designation_present` (Model Answer branch: text after the closing phrase, repeated designation, extra lines) |
+| OA5 letter type follows the task function (OA-05, DECISIONS C.17) | `letter_type_function_mismatch` (Model Answer only; source-gated: a routine-referral task whose case notes carry a present urgent plan or whose Writing Task addresses the letter to an emergency role; negated/past lines and suspected cancer alone never fire) |
+| OA5 request function and closure | `no_duplicated_request` (paraphrased duplicate) + `closure_request_paragraph` (canonical "I would be grateful ..." paragraph before the contact offer, all professions except LT-OT) + `intro_purpose_vague` (discharge/"introduce" intro without an ongoing-care request) — each branch Model Answer only |
+| OA5 background placement in any body paragraph | `background_paragraph_placement` (Model Answer branch: background opening a paragraph before current content, or mixed into a current paragraph) |
+| OA5 register and neutral behaviour wording | `register_colloquial` (Model Answer branches: emotional observations with a mental-health exemption, "query X"/"?X", "tiredness", "confirm the working diagnosis of possible X", "<condition> was assessed", "per this referral", "dermatologist review") + `judgmental_labels` (compliance, defaulted, bizarre behaviour, drinks heavily) |
+| OA5 medication syntax extensions | `medication_list_punctuation` (Model Answer branches: weight-based doses and alphanumeric brands, stranded formulation; `semicolon_overuse` exempts the extended list) + `medication_frequency_conflict` (Model Answer only; a multiple daily count followed directly by one time-of-day slot) |
+| OA5 narrated chronology | `narrated_chronology_contradiction` (Model Answer only; no notes needed: a past event dated after the letter date, "today ... and ... N days later", "last period of today" in a pregnancy; future/planned sentences exempt) |
 
 Every check id carries provenance (authority tag + score-bearing/coaching-only/accept-alternative) in `WritingRuleProvenance.cs` and an OET criterion mapping in `WritingAssessmentV11RuleEngine.CheckIdCriteria`; the completeness contract is test-enforced.
 
 ## 6. SCOPE GATE
 
 Medicine (5 live types: DG Garcia, NM Weston, RR Weir, TR McDonald, UR Taylor — Medicine has no OT unless the production catalogue gains one; never invent a fake task) → repaired, revalidated and stored under the current rule-pack hash → **STOP: full owner-review pack** → owner approval → Nursing → owner review → remaining professions → Track B → 224 catalogue. Each gate requires explicit owner approval. All five Medicine letters are permanent regression fixtures; treat them as the reference standard.
+
+**Senior Assessor Release Audit scope note (16 Sep 2026):** every OA5 detector and every OA5 branch added to an existing detector runs for **Model Answers only** — candidate scoring, the parity snapshots and the candidate false-positive firewall are unchanged (firewall item 26 in `WritingRev8HouseStyle.CandidateGradingRules`). The rule rows are global (all six canonical packs), and `closure_request_paragraph`'s canonical-request branch applies to every profession except Other Letters, so non-Medicine Model Answers that open the pre-contact paragraph with "Please ..." will also be held. Source-data fixes the validator cannot make: add the Weir DOB row (20 Sep 1970) and the Priya Sharma 10/02/19 and MacIntyre "Today's Date: 24/08/19" entries to production notes; re-catalogue Cochrane and OET test 14 as LT-UR. Bumping the validator hides every stored Model Answer (all professions) until each is re-imported with `includeSemantic=false` and re-approved.
 
 ---
 
