@@ -74,8 +74,18 @@ public sealed partial class WritingRuleEngine
     /// medication parser accepts a tablet count before the strength
     /// ("glipizide, two 5 mg tablets each morning"). Every stored Model
     /// Answer must be revalidated and re-approved under this version.
+    /// Cross-profession repair (18 Sep 2026), found while repairing the 173
+    /// non-Medicine answers: letter_date_unsupported gains a third branch —
+    /// when a task carries NO today's date and its canonical notes document no
+    /// date at all, the letter's date has nothing to prove it and the scenario
+    /// data must be fixed (Satchell's stored answer was dated "6 September
+    /// 2026" and passed silently); and the patient-initiated-referral marker
+    /// no longer fires on a request about any other subject, which had forced
+    /// "upon his request" into a referral the patient never asked for
+    /// (Shepherd's notes record a request for low-fat recipes). Every stored
+    /// Model Answer must be revalidated and re-approved under this version.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.cross-model-audit.2026-09-17.1";
+    public const string ValidatorVersion = "writing-rules.cross-profession.2026-09-18.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:

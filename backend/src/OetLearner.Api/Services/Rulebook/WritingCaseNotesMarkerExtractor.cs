@@ -17,7 +17,21 @@ public static class WritingCaseNotesMarkerExtractor
             AtopicCondition: Regex.IsMatch(text, @"\b(asthma|eczema|hay fever|allergic rhinitis|atopic)\b"),
             // "at .* request" matched any "at" followed anywhere later on the
             // line by "request"; only a genuine patient-initiated request counts.
-            PatientInitiatedReferral: Regex.IsMatch(text, @"\b(patient requested|(?:he|she) requested (?:a )?referral|upon (his|her) request|at (?:his|her|the patient'?s|patient'?s|[a-z]+'s) (?:own )?request)\b"),
+            //
+            // False-positive fix (2026-09-18, nursing cross-profession repair): a bare
+            // "patient requested" fired on ANY topic, so a note reading "patient requested
+            // information on simple low-fat recipes for home" marked the whole letter as a
+            // patient-INITIATED REFERRAL. DetectClosurePatientRequest then demanded "upon his
+            // request" in the closure, which forced an unsupported claim — the patient had asked
+            // about recipes, not about the referral being written. The request now only counts
+            // when what was requested is the referral/appointment/opinion itself. This marker has
+            // exactly one consumer (DetectClosurePatientRequest), so narrowing it can only remove
+            // a demand, never raise a new finding on an already-passing letter.
+            PatientInitiatedReferral: Regex.IsMatch(text,
+                @"\b(?:(?:the )?patient|he|she) (?:requested|asked for) (?:a |an |this )?(?:referral|second opinion|opinion|specialist (?:review|opinion|assessment|appointment)|review|assessment|appointment|consultation|transfer)\b"
+                + @"|\b(?:(?:the )?patient|he|she) (?:requested|asked) to (?:be (?:referred|seen|assessed|reviewed)|see)\b"
+                + @"|\bupon (?:his|her) request\b"
+                + @"|\bat (?:his|her|the patient'?s|patient'?s|[a-z]+'s) (?:own )?request\b"),
             ConsentDocumented: Regex.IsMatch(text, @"\b(consent|fully informed|discussed with patient|safety plan completed)\b"),
             FollowUpDate: followUpDate,
             ResultsEnclosed: Regex.IsMatch(text, @"\b(enclosed|attached|please find enclosed|copy of results|copy of imaging)\b"),
