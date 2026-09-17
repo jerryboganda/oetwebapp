@@ -690,6 +690,14 @@ public sealed partial class WritingRuleEngine
         "ward", "school", "dr", "mr", "mrs", "ms", "miss", "mx",
     };
 
+    // A bare auxiliary is never a medication name: "she had ceased reporting hallucinations"
+    // was flagged on "had ceased".
+    private static readonly HashSet<string> BareAuxiliarySubjects = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "had", "has", "have", "having", "was", "were", "is", "are", "am", "been", "being",
+        "will", "would", "shall", "should", "may", "might", "must", "can", "could", "did", "does", "do",
+    };
+
     private static readonly HashSet<string> IntransitiveParticipleSubjects = new(StringComparer.OrdinalIgnoreCase)
     {
         "pain", "pains", "seizure", "seizures", "fit", "fits", "bleeding", "symptom", "symptoms",
@@ -729,6 +737,13 @@ public sealed partial class WritingRuleEngine
             // "the hospital commenced the infusion" are correct clinical
             // English; only a medication-name subject is note-form.
             if (PersonSubjects.Contains(drug)) continue;
+            // Cross-profession repair (18 Sep 2026): a verb can never be the medication either.
+            // "Alison is also becoming withdrawn at home" was reported as note-form English with
+            // the suggested repair "becoming was discontinued", and "she had ceased reporting
+            // hallucinations" was flagged on "had ceased" — neither sentence mentions a drug.
+            // A gerund/participle ("becoming", "feeling") and a bare auxiliary are never drug names.
+            if (drug.Length > 4 && drug.EndsWith("ing", StringComparison.OrdinalIgnoreCase)) continue;
+            if (BareAuxiliarySubjects.Contains(drug)) continue;
             var participle = m.Groups["participle"].Value;
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
                 $"\"{drug} {participle}\" is note-form English. Use the passive voice, e.g. \"{drug} was discontinued\" or \"{drug} was commenced\".",
