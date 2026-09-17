@@ -63,8 +63,18 @@ internal static class WritingPatientAgeExtractor
     // measurement cannot be read as an age.
     private static readonly Regex AppositionAgeRegex =
         new(@"\b(?:(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof)\.?\s+[A-Z][A-Za-z'’\-]+(?:\s+[A-Z][A-Za-z'’\-]+){0,2}"
-            + @"|[A-Z][A-Za-z'’\-]+\s+[A-Z][A-Za-z'’\-]+)\s*,\s*(\d{1,3})\s*(?=[,;)]|\s+(?:years?|yrs?)\b)",
+            + @"|[A-Z][A-Za-z'’\-]+\s+(?<last>[A-Z][A-Za-z'’\-]+))\s*,\s*(\d{1,3})\s*(?=[,;)]|\s+(?:years?|yrs?)\b)",
             RegexOptions.Compiled);
+
+    // An address reads exactly like a name in apposition — "Lives at Oakfield Drive, 19,
+    // Birmingham." — so a place word may not end the name that owns the number.
+    private static readonly HashSet<string> PlaceWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Drive", "Street", "St", "Road", "Rd", "Lane", "Avenue", "Ave", "Court", "Crescent", "Close",
+        "Parade", "Terrace", "Place", "Way", "Boulevard", "Highway", "Esplanade", "Square", "Park",
+        "Home", "Hospital", "Clinic", "Centre", "Center", "Practice", "Ward", "Unit", "Suite", "Floor",
+        "House", "Village", "Estate", "Gardens", "Grove", "Rise", "View", "Hill",
+    };
 
     public static int? Extract(string caseNotes)
     {
@@ -74,7 +84,10 @@ internal static class WritingPatientAgeExtractor
         foreach (var match in AgeLabelRegex.Matches(text).Cast<Match>())
             if (TryPatientAge(text, match, out var age)) return age;
         foreach (var match in AppositionAgeRegex.Matches(text).Cast<Match>())
+        {
+            if (PlaceWords.Contains(match.Groups["last"].Value)) continue;
             if (TryPatientAge(text, match, out var age)) return age;
+        }
         return null;
     }
 
