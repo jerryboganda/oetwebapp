@@ -77,7 +77,7 @@ Ms Garcia received dexamethasone, 10 mg IV, before ceftriaxone, 2 g IV twice dai
 
 The Department of Human Services was notified, and family immunisation was discussed.
 
-I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.
+I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.
 
 Should there be any queries, kindly do not hesitate to contact me.
 
@@ -197,8 +197,8 @@ Doctor
     public void Injected_Contact_Offer_Merged_Into_Request_Paragraph_Is_Flagged()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
+            "I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
+            "I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
         AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
     }
 
@@ -606,8 +606,8 @@ Doctor
     public void Candidate_Merged_Closure_Paragraphs_Are_Not_Penalised()
     {
         var letter = GarciaUpdateLetter.Replace(
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
+            "I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.\n\nShould there be any queries, kindly do not hesitate to contact me.",
+            "I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis. Should there be any queries, kindly do not hesitate to contact me.");
         Assert.DoesNotContain(Lint(letter, "LT-DG", isModelAnswer: false),
             f => f.RuleId.EndsWith("closure_request_paragraph", StringComparison.Ordinal));
     }

@@ -152,10 +152,13 @@ public sealed class WritingSeniorAuditG4RegressionTests
     public void SA_G4_DuplicateRequest_Compound_Medication_Review_And_Counselling_Does_Not_Fire()
     {
         // Alison Martin shape: "medication review" is a compound noun and
-        // counselling is a distinct action.
+        // counselling is a distinct action. Cross-model audit (owner, 17 Sep
+        // 2026): "confirm the diagnosis" after an assessment request IS a
+        // duplicate (WritingCrossModelAuditRegressionTests), so the distinct
+        // diagnostic objective here is "clarify the possible diagnosis".
         var letter = Inject(Weir,
             "I would be grateful if you could consider MRI if clinically indicated.",
-            "I would be grateful if you could confirm the diagnosis and advise on ongoing management, including counselling and medication review.");
+            "I would be grateful if you could clarify the possible diagnosis and advise on ongoing management, including counselling and medication review.");
         AssertRuleDoesNotFire(Lint(letter, "LT-RR"), DuplicateRequest);
     }
 
@@ -208,7 +211,7 @@ public sealed class WritingSeniorAuditG4RegressionTests
         // Audit #46 Ling Wu (live): "Please monitor for signs of ..." before
         // the contact sentence.
         var letter = Inject(Garcia,
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.",
+            "I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.",
             "Please monitor Ms Garcia's close contacts for signs of meningitis and arrange chemoprophylaxis if required.");
         AssertRuleFires(Lint(letter, "LT-DG"), ClosureRequest);
     }
@@ -250,7 +253,7 @@ public sealed class WritingSeniorAuditG4RegressionTests
         // Audit #12 Janet Pristiely / #35 Sandra Peterson (live): the paragraph
         // before the contact sentence is clinical content, no request anywhere.
         var letter = Inject(Garcia,
-            "\n\nI would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.",
+            "\n\nI would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.",
             string.Empty);
         AssertRuleFires(Lint(letter, "LT-DG"), ClosureRequest);
     }
@@ -289,7 +292,7 @@ public sealed class WritingSeniorAuditG4RegressionTests
     {
         // OA2-03: a pure information task never needs an invented request.
         var letter = Inject(Garcia,
-            "\n\nI would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.",
+            "\n\nI would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.",
             string.Empty);
         const string task = "Using the information in the case notes, write a letter to Dr Bradbury for her information only; no further action is required.";
         AssertRuleDoesNotFire(Lint(letter, "LT-DG", taskText: task), ClosureRequest);
@@ -366,7 +369,7 @@ public sealed class WritingSeniorAuditG4RegressionTests
             "I am writing to update you regarding Ms Isabel Garcia's treatment for bacterial meningitis and request follow-up of close contacts.",
             "I am writing to introduce Ms Garcia, admitted on 20 May 2015 with bacterial meningitis and discharged today.");
         letter = Inject(letter,
-            "\n\nI would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.",
+            "\n\nI would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.",
             string.Empty);
         AssertRuleFires(Lint(letter, "LT-DG"), IntroPurpose);
     }

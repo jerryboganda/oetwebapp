@@ -23,7 +23,7 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     const book = loadRulebook('writing', 'medicine');
     expect(book.kind).toBe('writing');
     expect(book.profession).toBe('medicine');
-    expect(book.version).toBe('2.4.0-senior-assessor-audit');
+    expect(book.version).toBe('2.5.0-cross-model-audit');
     // 43 + one section per OA-01..OA-15, OA2-01..OA2-20 and OA3-01..OA3-05
     // registry row (rows that share a section title collapse) = 82, + the
     // OA4 "Layout" and "Identity" sections = 84. The Senior Assessor Release
@@ -103,8 +103,9 @@ describe('rulebook — critical rule coverage (canonical writing book)', () => {
     // 73 + the 35 owner-clarification rows (OA-01..OA-15, OA2-01..OA2-20)
     // + the 5 OA3 rows (OA3-01..OA3-05), all of which the registry marks
     // critical = 113, + the 3 critical OA4 rows = 116, + the 38 critical
-    // Senior Assessor Release Audit rows (OA5-01..OA5-38) = 154.
-    expect(criticalRules(book)).toHaveLength(154);
+    // Senior Assessor Release Audit rows (OA5-01..OA5-38) = 154, + the 2
+    // critical cross-model audit rows (OA6-01..OA6-02, 17 Sep 2026) = 156.
+    expect(criticalRules(book)).toHaveLength(156);
   });
 
   it.each(['OW-001', 'DH-W-001'])('%s exists and is severity=critical', (id) => {

@@ -12,9 +12,12 @@ namespace OetLearner.Api.Services.Rulebook;
 /// house style) and the candidate grader (IsModelAnswer = false, professional
 /// alternatives accepted). Owner Revision 7-8 detectors live in
 /// WritingRuleEngine.Rev8.cs; the Senior Assessor Release Audit (16 Sep 2026)
-/// Model-Answer-only detectors live in WritingRuleEngine.SeniorAuditG1..G7.cs.
+/// Model-Answer-only detectors live in WritingRuleEngine.SeniorAuditG1..G7.cs;
+/// the cross-model audit (17 Sep 2026, OA6) detectors live in
+/// WritingRuleEngine.CrossModelAudit.cs.
 /// Regression coverage: RulebookEngineTests.cs (WritingRuleEngineTests),
-/// Rulebook/WritingRev8*Tests.cs and Writing/WritingSeniorAuditG*RegressionTests.cs.
+/// Rulebook/WritingRev8*Tests.cs, Writing/WritingSeniorAuditG*RegressionTests.cs and
+/// Writing/WritingCrossModelAuditRegressionTests.cs.
 /// </summary>
 public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 {
@@ -149,6 +152,8 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "owner_required_fact_missing",
         "re_line_age_when_no_dob",
         "address_content_unsupported",
+        // Cross-model audit (17 Sep 2026, OA6-02): Model-Answer-only id.
+        "request_action_unsupported",
     };
 
     // Severity defaults for the always-on builtin battery below. Values are
@@ -295,6 +300,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         ["owner_required_fact_missing"] = RuleSeverity.Critical,
         ["re_line_age_when_no_dob"] = RuleSeverity.Major,
         ["address_content_unsupported"] = RuleSeverity.Major,
+        ["request_action_unsupported"] = RuleSeverity.Critical,
     };
 
     public static IReadOnlySet<string> SupportedCheckIds => SupportedCheckIdSet;
@@ -571,7 +577,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "emotional_wording" => DetectEmotionalWording,
         "judgmental_labels" => Compose(DetectJudgmentalLabels, DetectSaG5JudgmentalBehaviour),
         "linker_avoid_words" => DetectLinkerAvoidWords,
-        "no_duplicated_request" => Compose(DetectNoDuplicatedRequest, DetectSaG4DuplicatedRequestParaphrase),
+        "no_duplicated_request" => Compose(DetectNoDuplicatedRequest, DetectSaG4DuplicatedRequestParaphrase, DetectCmaDuplicatedRequestConcept),
         "number_style_words_vs_digits" => Compose(DetectNumberStyleRev8, DetectSaG2NumberStyle),
         "blank_line_between_paragraphs" => DetectBlankBetweenParagraphs,
         "no_date_prefix" => DetectNoDatePrefix,
@@ -689,6 +695,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "owner_required_fact_missing" => DetectSaG6OwnerRequiredFactMissing,
         "re_line_age_when_no_dob" => DetectSaG7ReLineAgeWhenNoDob,
         "address_content_unsupported" => DetectSaG7AddressContentUnsupported,
+        "request_action_unsupported" => DetectCmaRequestActionUnsupported,
         _ => null,
     };
 

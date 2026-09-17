@@ -227,7 +227,7 @@ public sealed partial class WritingRuleEngine
     private const string SaG5DoseUnitPattern = @"(?:mg|mcg|µg|micrograms?|IU|units?)\/kg|" + DoseUnitPattern;
 
     private static readonly Regex SaG5MedicationItemRe = new(
-        @"\b(?<drug>[A-Za-z][A-Za-z\-]{2,}\d*)(?<comma>,)?\s+(?<dose>" + MedicationDosePattern + @")\s*(?<unit>" + SaG5DoseUnitPattern + @")\b(?!\s*\/)"
+        @"\b(?<drug>[A-Za-z][A-Za-z\-]{2,}\d*)(?<comma>,)?\s+" + MedicationCountWordPattern + @"(?<dose>" + MedicationDosePattern + @")\s*(?<unit>" + SaG5DoseUnitPattern + @")\b(?!\s*\/)"
         + @"|\b(?<drug>[A-Za-z][A-Za-z\-]{2,}\d*)(?<comma>,)?\s+(?<dose>" + MedicationDosePattern + @")" + MedicationFrequencyLookahead,
         RegexOptions.None);
 

@@ -201,6 +201,8 @@ public sealed class WritingAssessmentV11RuleEngine(WritingRuleEngine ruleEngine)
             ["owner_required_fact_missing"] = Content,
             ["re_line_age_when_no_dob"] = Layout,
             ["address_content_unsupported"] = Layout,
+            // Cross-model audit (17 Sep 2026, OA6) — Model Answer only.
+            ["request_action_unsupported"] = Content,
         };
 
     /// <summary>

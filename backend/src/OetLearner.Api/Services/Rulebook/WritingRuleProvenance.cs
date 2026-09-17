@@ -51,7 +51,7 @@ public static class WritingCandidateBehaviors
 /// </summary>
 public static class WritingRuleProvenance
 {
-    public const string Version = "senior-assessor-audit-2026-09-16";
+    public const string Version = "cross-model-audit-2026-09-17";
 
     public sealed record Provenance(string Tag, string CandidateBehavior);
 
@@ -153,6 +153,10 @@ public static class WritingRuleProvenance
             ["owner_required_fact_missing"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.NotApplicable),
             ["re_line_age_when_no_dob"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
             ["address_content_unsupported"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.CoachingOnly),
+
+            // --- Cross-model audit (17 Sep 2026, OA6) ---
+            // Model Answer only, so never score-bearing for a candidate.
+            ["request_action_unsupported"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.CoachingOnly),
 
             // --- Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20 ---
             // OA2-20 is the firewall: the strict canonical requirements in this

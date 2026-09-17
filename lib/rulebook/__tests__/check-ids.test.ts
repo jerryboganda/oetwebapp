@@ -36,10 +36,11 @@ describe('rulebook check-id registry', () => {
     // dangling_treatment_modifier) = 111, + 4 from the OA4 layout/punctuation
     // patch (2026-09-16: address_slash_separator, salutation_re_same_line,
     // intro_adverbial_comma, patient_title_mismatch) = 115, + 12 from the
-    // SENIOR ASSESSOR RELEASE AUDIT (2026-09-16, OA5) = 127.
+    // SENIOR ASSESSOR RELEASE AUDIT (2026-09-16, OA5) = 127, + 1 from the
+    // CROSS-MODEL AUDIT (2026-09-17, OA6-02: request_action_unsupported) = 128.
     // Keep this in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) —
     // see that file's own header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(127);
+    expect(WRITING_CHECK_IDS.size).toBe(128);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
@@ -119,6 +120,11 @@ describe('rulebook check-id registry', () => {
       'address_content_unsupported',
     ];
     expect(oa5.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
+  });
+
+  it('includes every CROSS-MODEL AUDIT (2026-09-17, OA6) detector check-id', () => {
+    const oa6 = ['request_action_unsupported'];
+    expect(oa6.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
   });
 
   it('includes every ULTIMATE FINAL (2026-09-13) detector check-id', () => {

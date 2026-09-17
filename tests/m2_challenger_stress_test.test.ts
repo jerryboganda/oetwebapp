@@ -175,12 +175,13 @@ describe('CHALLENGER 1 M2 EMPIRICAL AUDIT: WRITING RUBRIC & 12 PROFESSIONS & COU
   // __tests__ CANONICAL_PROFESSION_COUNTS constants.
   const CANONICAL_PROFESSION_COUNTS: Partial<Record<(typeof ALL_12_PROFESSIONS)[number], number>> = {
     // + OA4-01..OA4-03 and OA5-01..OA5-38 (16 Sep 2026), also globally scoped.
-    medicine: 349,
-    nursing: 356,
-    dentistry: 356,
-    pharmacy: 359,
-    physiotherapy: 359,
-    radiography: 356,
+    // + OA6-01..OA6-02 (cross-model audit, 17 Sep 2026), also globally scoped.
+    medicine: 351,
+    nursing: 358,
+    dentistry: 358,
+    pharmacy: 361,
+    physiotherapy: 361,
+    radiography: 358,
     // Legacy (pre-canonical-registry) packs: 172 base + 38 owner Rev8 rules
     // plus the ULTIMATE FINAL derived PRD-* modules, per profession.
     veterinary: 211,

@@ -403,8 +403,8 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     {
         var letter = Inject(Garcia,
             "The Department of Human Services was notified, and family immunisation was discussed.\n\n"
-            + "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.",
-            "I would be grateful if you could contact Ms Garcia's close contacts, advise them to seek prompt care if unwell and consider chemoprophylaxis.\n\n"
+            + "I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.",
+            "I would be grateful if you could advise Ms Garcia's close contacts to seek prompt care if unwell and consider chemoprophylaxis.\n\n"
             + "The Department of Human Services was notified, and family immunisation was discussed.");
         AssertRuleFires(Lint(letter, "LT-DG"), "closure_request_paragraph");
     }
@@ -896,6 +896,8 @@ public sealed class WritingOwnerAddendumTwoRegressionFixtureTests
     [InlineData("owner_required_fact_missing")]
     [InlineData("re_line_age_when_no_dob")]
     [InlineData("address_content_unsupported")]
+    // Cross-model audit (17 Sep 2026, OA6): Model-Answer-only id.
+    [InlineData("request_action_unsupported")]
     public void House_Style_Rules_Are_Never_Score_Bearing_For_Candidates(string checkId)
     {
         var behavior = WritingRuleProvenance.For(checkId).CandidateBehavior;

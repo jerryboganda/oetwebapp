@@ -66,8 +66,16 @@ public sealed partial class WritingRuleEngine
     /// Neuro-Ophthalmologist,") is an unnamed recipient and closes "Yours
     /// faithfully," (OA2-17); a coordinated gestation ("at 9 and 10 weeks") is
     /// not a past-event age. No answer had been stored under .1.
+    /// Cross-model audit (owner FINAL decision, 17 Sep 2026, OA6-01..OA6-02):
+    /// no_duplicated_request gains the request-concept branch (the same
+    /// functional request never in both introduction and closure — HARD
+    /// GLOBAL RULE), new check id request_action_unsupported (a closure
+    /// monitoring request must be planned by the case notes), and the
+    /// medication parser accepts a tablet count before the strength
+    /// ("glipizide, two 5 mg tablets each morning"). Every stored Model
+    /// Answer must be revalidated and re-approved under this version.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.senior-assessor-audit.2026-09-16.2";
+    public const string ValidatorVersion = "writing-rules.cross-model-audit.2026-09-17.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -402,14 +410,20 @@ public sealed partial class WritingRuleEngine
     private const string MedicationFrequencyLookahead =
         @"(?=\s+(?:(?:once|twice|three|four|five|six|eight|twelve)\s+)?(?:times\s+)?(?:a\s+day|per\s+day|daily|hourly|nightly|weekly|at\s+night|in\s+the\s+morning|as\s+needed|when\s+required|nocte|mane|prn|om|od|bd|bid|tds|tid|qds|qid)\b|\s+(?:four|six|eight|twelve)-hourly\b)";
 
+    // A tablet count may stand between the comma and the strength (cross-model
+    // audit, 17 Sep 2026): "glipizide, two 5 mg tablets each morning" is the
+    // owner's own right form (rules doc OA5 row), so "two" is never a drug.
+    private const string MedicationCountWordPattern = @"(?:(?:one|two|three|four|half(?:\s+a)?)\s+)?";
+
     private static readonly Regex MedicationItemRe = new(
-        @"\b(?<drug>[A-Za-z][A-Za-z\-]{2,})(?<comma>,)?\s+(?<dose>" + MedicationDosePattern + @")\s*(?<unit>" + DoseUnitPattern + @")\b(?!\s*\/)"
+        @"\b(?<drug>[A-Za-z][A-Za-z\-]{2,})(?<comma>,)?\s+" + MedicationCountWordPattern + @"(?<dose>" + MedicationDosePattern + @")\s*(?<unit>" + DoseUnitPattern + @")\b(?!\s*\/)"
         + @"|\b(?<drug>[A-Za-z][A-Za-z\-]{2,})(?<comma>,)?\s+(?<dose>" + MedicationDosePattern + @")" + MedicationFrequencyLookahead,
         RegexOptions.None);
 
     private static readonly HashSet<string> MedicationStopWords = new(StringComparer.OrdinalIgnoreCase)
     {
         "of", "to", "with", "and", "or", "at", "on", "by", "from", "was", "were", "is", "are", "be", "been",
+        "one", "two", "three", "four", "five", "six", "half",
         "taking", "takes", "take", "took", "receiving", "received", "given", "increased", "reduced", "decreased",
         "dose", "doses", "dosage", "total", "maximum", "max", "up", "approximately", "about", "daily", "plus",
         "weighing", "weighs", "weight", "gained", "lost", "than", "every", "each", "per", "over", "under", "only",

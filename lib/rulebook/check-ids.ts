@@ -167,6 +167,8 @@ const SUPPORTED_WRITING_CHECK_IDS: ReadonlyArray<string> = Object.freeze([
   'owner_required_fact_missing',
   're_line_age_when_no_dob',
   'address_content_unsupported',
+  // Cross-model audit (2026-09-17, OA6-02): Model Answer only.
+  'request_action_unsupported',
 ]);
 
 /** Writing rules with a deterministic detector (frozen, see above). */

@@ -86,7 +86,7 @@ public sealed class WritingUltimateFinalRegressionFixtureTests
     [Fact]
     public void House_Style_And_Descriptor_Engine_Are_Stamped_Ultimate_Final()
     {
-        Assert.Equal("senior-assessor-audit-2026-09-16", WritingRev8HouseStyle.Version);
+        Assert.Equal("cross-model-audit-2026-09-17", WritingRev8HouseStyle.Version);
         Assert.Contains("CANDIDATE FALSE-POSITIVE FIREWALL", WritingRev8HouseStyle.CandidateGradingRules);
         Assert.Contains("never manufacture a finding", WritingRev8HouseStyle.CandidateGradingRules);
         Assert.Contains("450-500", WritingOetDescriptors.DescriptorEngine);

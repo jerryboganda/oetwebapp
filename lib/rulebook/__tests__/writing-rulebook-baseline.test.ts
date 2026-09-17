@@ -49,15 +49,16 @@ const LEGACY_PROFESSIONS: ExamProfession[] = [
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
   // + the 3 OA4 rows (16 Sep 2026) and the 38 Senior Assessor Release Audit
   // rows OA5-01..OA5-38 (16 Sep 2026), also globally scoped.
-  medicine: 349,
-  nursing: 356,
-  dentistry: 356,
-  pharmacy: 359,
-  physiotherapy: 359,
-  radiography: 356,
+  // + OA6-01..OA6-02 (cross-model audit, 17 Sep 2026), also globally scoped.
+  medicine: 351,
+  nursing: 358,
+  dentistry: 358,
+  pharmacy: 361,
+  physiotherapy: 361,
+  radiography: 358,
 };
 
-const CANONICAL_VERSION = '2.4.0-senior-assessor-audit';
+const CANONICAL_VERSION = '2.5.0-cross-model-audit';
 const LEGACY_VERSION = '1.1.0-rev8';
 
 /**
