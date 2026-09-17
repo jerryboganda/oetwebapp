@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AntigravityWorkerResult",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "status",
+    "role",
+    "summary",
+    "evidence",
+    "filesRead",
+    "filesChanged",
+    "commandsRun",
+    "tests",
+    "risks",
+    "blockers",
+    "recommendedNextStep",
+    "confidence"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "SUCCESS",
+        "PARTIAL",
+        "BLOCKED",
+        "ERROR"
+      ]
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "explore",
+        "research",
+        "implement",
+        "test",
+        "debug",
+        "review",
+        "health"
+      ]
+    },
+    "summary": {
+      "type": "string"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "path",
+          "finding"
+        ],
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "lineOrSymbol": {
+            "type": "string"
+          },
+          "finding": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "filesRead": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "filesChanged": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "commandsRun": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "command",
+          "exitCode",
+          "result"
+        ],
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "exitCode": {
+            "type": "integer"
+          },
+          "result": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "status",
+          "evidence"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PASS",
+              "FAIL",
+              "NOT_RUN"
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "risks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "recommendedNextStep": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "string",
+      "enum": [
+        "high",
+        "medium",
+        "low"
+      ]
+    }
+  }
+}
