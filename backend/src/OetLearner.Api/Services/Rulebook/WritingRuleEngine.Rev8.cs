@@ -62,8 +62,12 @@ public sealed partial class WritingRuleEngine
     /// TodayDate, numeric note dates) and role_salutation_matches_task.
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
+    /// .2 (17 Sep 2026): a specialty-only role salutation ("Dear
+    /// Neuro-Ophthalmologist,") is an unnamed recipient and closes "Yours
+    /// faithfully," (OA2-17); a coordinated gestation ("at 9 and 10 weeks") is
+    /// not a past-event age. No answer had been stored under .1.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.senior-assessor-audit.2026-09-16.1";
+    public const string ValidatorVersion = "writing-rules.senior-assessor-audit.2026-09-16.2";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -1704,9 +1708,21 @@ public sealed partial class WritingRuleEngine
             return true;
         // A role salutation carries no personal name: "Dear Admissions
         // Officer,", "Dear Emergency Registrar,", "Dear Practice Manager,".
-        return Regex.IsMatch(
+        if (Regex.IsMatch(
             salutation,
             @"^Dear\s+(?:[A-Z][A-Za-z]+(?:\s+[A-Za-z]+){0,3}\s+)?(?:Officer|Manager|Coordinator|Co-ordinator|Registrar|Director|Secretary|Lead|Practitioner)\s*,?\s*$",
+            RegexOptions.IgnoreCase))
+            return true;
+        // Senior Assessor Release Audit (16 Sep 2026): a task that names only a
+        // specialty ("a neuro-ophthalmologist", "Cardiologist") is also a role
+        // (OA2-17), so "Dear Neuro-Ophthalmologist," closes "Yours faithfully,".
+        // The hyphenated noun was read as a personal name and demanded
+        // "Yours sincerely". A title ("Dear Dr Kist,") is always a named person.
+        if (Regex.IsMatch(salutation, @"^Dear\s+(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor)\.?\s", RegexOptions.IgnoreCase))
+            return false;
+        return Regex.IsMatch(
+            salutation,
+            @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife)\s*,?\s*$",
             RegexOptions.IgnoreCase);
     }
 

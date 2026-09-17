@@ -104,6 +104,43 @@ public sealed class WritingSeniorAuditRound2RegressionTests
         Assert.True(result.IsGrounded, string.Join(" | ", result.UnmappedSentences));
     }
 
+    // Round 3 (final letter round): a specialty-only recipient is a role.
+    [Theory]
+    [InlineData("Dear Neuro-Ophthalmologist,", true)]
+    [InlineData("Dear Cardiologist,", true)]
+    [InlineData("Dear Consultant Paediatrician,", true)]
+    [InlineData("Dear Gynaecology Registrar,", true)]
+    [InlineData("Dear Doctor,", true)]
+    [InlineData("Dear Dr Still,", false)]
+    [InlineData("Dear Mr Kist,", false)]
+    [InlineData("Dear Ms Goody,", false)]
+    public void SA_R3_Specialty_Role_Salutations_Are_Unnamed_Recipients(string salutation, bool unnamed)
+        => Assert.Equal(unnamed, WritingRuleEngine.SalutationIsUnnamedRecipient(salutation));
+
+    [Fact]
+    public void SA_R3_Specialty_Role_Salutation_Closes_Yours_Faithfully()
+    {
+        var letter = Inject(
+            Inject(WritingRev8RegressionFixtureTests.WestonReferralLetter, "Dear Ms Goody,", "Dear Occupational Therapist,"),
+            "Yours sincerely,", "Yours faithfully,");
+        Assert.False(Fires(Lint(letter), "yours_sincerely_vs_faithfully"));
+    }
+
+    // Round 3: "at 9 and 10 weeks" is gestation; a real past-event age still fires.
+    [Fact]
+    public void SA_R3_Coordinated_Gestation_Is_Not_A_Past_Event_Age()
+    {
+        var letter = Inject(Weir, WeirBp, "His wife had two miscarriages in 2008, at 9 and 10 weeks.");
+        Assert.False(Fires(Lint(letter), "number_style_words_vs_digits"));
+    }
+
+    [Fact]
+    public void SA_R3_A_Past_Event_Age_In_Digits_Still_Fires()
+    {
+        var letter = Inject(Weir, WeirBp, "He had an appendectomy at 15 and recovered well.");
+        Assert.True(Fires(Lint(letter), "number_style_words_vs_digits"));
+    }
+
     [Fact]
     public void SA_R2_An_Invented_Heavy_Drinking_Claim_Still_Does_Not_Ground()
     {

@@ -218,6 +218,9 @@ public sealed partial class WritingRuleEngine
             + @"(?:(?!\b(?:level|count|pressure|rate|HbA1c|glucose|INR|CRP|ESR|score|reading|result|weight|BMI|temperature|pulse|saturation|dose)\b)[^.;!?\n]){0,60}?"
             + @"(?<q>\bat\s+(?:the\s+age\s+of\s+|age\s+)?\d{1,3})\b(?![\d/:%]|[.,]\d)"
             + @"(?!\s*(?:am|pm|units?|mg|mcg|g|kg|mL|L|mmHg|bpm|degrees|°C|cm|mm|weeks?|days?|months?|years?|hours?|minutes?|times)\b)"
+            // A coordinated measurement shares its unit: "miscarriages in 2008,
+            // at 9 and 10 weeks" is gestation, not an age (Karen Jackson).
+            + @"(?!\s*(?:and|or|to|-|–)\s*\d{1,3}(?:\.\d+)?\s*(?:am|pm|units?|mg|mcg|g|kg|mL|L|mmHg|bpm|degrees|°C|cm|mm|weeks?|days?|months?|years?|hours?|minutes?|times)\b)"
             + @"(?=\s*[.,;]|\s+(?:and|in|after|following|when|while|with|from|but)\b)", RegexOptions.IgnoreCase),
             "An age at a past event is descriptive: write it in words (\"at age fifteen\"); identification ages (\"aged 61\", \"a 20-year-old\") stay digits."),
     };
