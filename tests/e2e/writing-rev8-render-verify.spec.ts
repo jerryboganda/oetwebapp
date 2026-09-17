@@ -38,21 +38,38 @@ test('Rev8 Track A: rendered Grounded Model Answer keeps the owner spacing', asy
   for (const c of cells) {
     const row: Record<string, unknown> = { ...c };
     try {
+      // Senior Assessor Release Audit (16 Sep 2026) §7.8: prove the text the
+      // API serves for this submission is exactly what the page renders, and
+      // that it honours the owner's full layout contract — not just the
+      // Dear/Re adjacency (which let a duplicated "Doctor" sign-off pass).
+      const apiResponse = page.waitForResponse(
+        (r) => r.url().includes(`/v1/writing/submissions/${c.submissionId}/assessment-v11`) && r.request().method() === 'GET',
+        { timeout: 60_000 },
+      );
       await page.goto(`/writing/submissions/${c.submissionId}/results`);
+      const served = (await (await apiResponse).json()) as { modelAnswer?: { modelAnswerText?: string } };
       const answer = page.getByTestId('grounded-model-answer');
       await expect(answer).toBeVisible({ timeout: 45_000 });
       const rendered = await answer.innerText();
       const whiteSpace = await answer.evaluate((el) => getComputedStyle(el).whiteSpace);
       await answer.screenshot({ path: path.join(OUT, `cell-${c.cell}.png`) });
-      const lines = rendered.replace(/\r/g, '').split('\n');
+      const text = rendered.replace(/\r/g, '').trimEnd();
+      const storedText = (served.modelAnswer?.modelAnswerText ?? '').replace(/\r/g, '').trimEnd();
+      const lines = text.split('\n');
       const reIdx = lines.findIndex((l) => /^\s*Re\s*:/i.test(l));
       row.found = true;
       row.whiteSpace = whiteSpace;
       row.renderedText = rendered;
+      row.renderedEqualsServed = storedText.length > 0 && text === storedText;
       row.salutationReConsecutive = reIdx > 0 && /^\s*Dear\b/i.test(lines[reIdx - 1]);
       row.blankAfterRe = reIdx >= 0 && lines[reIdx + 1]?.trim() === '' && (lines[reIdx + 2] ?? '').trim() !== '';
-      row.paragraphBlocks = rendered.replace(/\r/g, '').split(/\n\s*\n/).filter((p) => p.trim()).length;
-      row.pass = Boolean(row.salutationReConsecutive && row.blankAfterRe && (whiteSpace === 'pre-wrap' || whiteSpace === 'pre-line'));
+      // Address lines (no commas/slashes, no trailing full stop) / blank /
+      // date / blank / salutation / Re on the next line / blank / single-line
+      // paragraphs separated by one blank line / contact paragraph / blank /
+      // closing phrase / blank / one designation line, then nothing.
+      row.layoutContract = /^(?:[^,/\n]*[^,/.\n]\n)+\n\d{1,2} [A-Z][a-z]+ \d{4}\n\nDear [^\n]+,\nRe: [^\n]+\n\n(?:[^\n]+\n\n)+Should there be any queries, (?:kindly|please) do not hesitate to contact me\.\n\nYours (?:sincerely|faithfully),\n\n[A-Z][A-Za-z ]+$/.test(text);
+      row.paragraphBlocks = text.split(/\n\s*\n/).filter((p) => p.trim()).length;
+      row.pass = Boolean(row.renderedEqualsServed && row.layoutContract && row.salutationReConsecutive && row.blankAfterRe && whiteSpace === 'pre-wrap');
     } catch (e) {
       row.found = false;
       row.pass = false;
