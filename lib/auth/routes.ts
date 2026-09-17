@@ -70,7 +70,10 @@ export function normalizeAuthNextPath(nextPath?: string | null): string | null {
     }
 
     const resolved = new URL(decodedPath, origin);
-    return resolved.origin === origin ? `${resolved.pathname}${parsed.search}${parsed.hash}` : null;
+    if (resolved.origin !== origin || resolved.pathname.startsWith('//')) {
+      return null;
+    }
+    return `${resolved.pathname}${parsed.search}${parsed.hash}`;
   } catch {
     return null;
   }
