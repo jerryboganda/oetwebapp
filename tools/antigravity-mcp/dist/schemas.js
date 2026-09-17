@@ -120,8 +120,84 @@ export function extractJsonObject(text) {
             return null;
         }
     }
+    const candidates = scanTopLevelObjects(trimmed);
+    for (let i = candidates.length - 1; i >= 0; i--) {
+        try {
+            const parsed = JSON.parse(candidates[i]);
+            if (parsed && typeof parsed === "object" && "status" in parsed)
+                return parsed;
+        }
+        catch {
+            /* try the next candidate */
+        }
+    }
+    for (let i = candidates.length - 1; i >= 0; i--) {
+        try {
+            const parsed = JSON.parse(candidates[i]);
+            if (parsed && typeof parsed === "object")
+                return parsed;
+        }
+        catch {
+            /* try the next candidate */
+        }
+    }
     return null;
 }
+
+
+/**
+ * Scans for balanced TOP-LEVEL JSON objects in a string.
+ *
+ * Needed because agy sometimes emits its result more than once in one response. The naive
+ * first-brace-to-last-brace slice spans both objects, yields invalid JSON, and silently
+ * downgraded valid worker results to PARTIAL with empty evidence arrays.
+ * Brace matching is string- and escape-aware, so braces inside string literals are ignored.
+ */
+export function scanTopLevelObjects(text) {
+    const out = [];
+    if (typeof text !== "string" || !text)
+        return out;
+    const BACKSLASH = String.fromCharCode(92);
+    const DQUOTE = String.fromCharCode(34);
+    let depth = 0;
+    let start = -1;
+    let inString = false;
+    let escaped = false;
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inString) {
+            if (escaped)
+                escaped = false;
+            else if (c === BACKSLASH)
+                escaped = true;
+            else if (c === DQUOTE)
+                inString = false;
+            continue;
+        }
+        if (c === DQUOTE) {
+            inString = true;
+            continue;
+        }
+        if (c === "{") {
+            if (depth === 0)
+                start = i;
+            depth++;
+            continue;
+        }
+        if (c === "}") {
+            if (depth > 0) {
+                depth--;
+                if (depth === 0 && start >= 0) {
+                    out.push(text.slice(start, i + 1));
+                    start = -1;
+                }
+            }
+        }
+    }
+    return out;
+}
+
+
 export function parseWorkerResult(role, stdout) {
     const raw = unwrapAgyPayload(stdout);
     if (raw == null) {
