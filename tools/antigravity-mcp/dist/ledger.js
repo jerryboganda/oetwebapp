@@ -30,7 +30,8 @@ export function resolveLedgerConfig(overrides = CONFIG_OVERRIDES) {
     return config;
 }
 
-export const LEDGER_CONFIG = resolveLedgerConfig(CONFIG_OVERRIDES);
+// AGY_LEDGER_PATH lets tests and operators redirect the ledger away from production state.
+export const LEDGER_CONFIG = (() => { const cfg = resolveLedgerConfig(CONFIG_OVERRIDES); const override = process.env.AGY_LEDGER_PATH && process.env.AGY_LEDGER_PATH.trim(); if (override) cfg.path = override; return cfg; })();
 
 /**
  * Generates a collision-resistant run ID.

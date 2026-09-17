@@ -1,5 +1,14 @@
-import { createRunningRecord, appendLedgerRecord, readAllRecords, createTerminalRecord } from './ledger.js';
-import { spawnAgy } from './agy-runner.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+// Redirect the ledger to a temp file BEFORE importing the modules that resolve its path,
+// so running this test never pollutes the production ledger.
+const tmpLedger = path.join(os.tmpdir(), 'agy-resume-selftest-' + Date.now() + '.jsonl');
+process.env.AGY_LEDGER_PATH = tmpLedger;
+
+const { createRunningRecord, readAllRecords, createTerminalRecord } = await import('./ledger.js');
+const { spawnAgy } = await import('./agy-runner.js');
 
 let f = 0;
 const ok = (n, c, x) => { if (c) console.log('PASS: ' + n); else { f++; console.log('FAIL: ' + n + (x ? ' :: ' + x : '')); } };
@@ -24,6 +33,7 @@ ok('terminal record carries exit code 0', done[0] && done[0].exitCode === 0, don
 ok('terminal record carries a duration', done[0] && typeof done[0].durationMs === 'number', done[0] && String(done[0].durationMs));
 ok('running record captured the role', running[0] && running[0].role === 'explore');
 ok('both records retain the goal so the run is resumable', running[0] && running[0].goal === marker && done[0] && done[0].goal === marker);
+ok('ledger redirected to temp so production stays clean', tmpLedger.length > 0 && readAllRecords().every((r) => r.goal !== null), 'temp=' + tmpLedger);
 
 console.log(f === 0 ? '=== ALL RESUMABLE-LEDGER SELF-TESTS PASSED ===' : '=== ' + f + ' ASSERTION(S) FAILED ===');
 process.exit(f ? 1 : 0);
