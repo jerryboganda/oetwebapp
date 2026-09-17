@@ -11,6 +11,7 @@ import { BUDGET_CEILINGS, computePrintTimeoutSeconds, DEFAULT_BUDGET_CEILINGS, D
 import { defaultGate } from "./concurrency.js";
 import { createWorktree, cleanupStaleWorktrees } from "./worktree.js";
 import { findResumableConversation, getSession, recordSessionFromEnvelope } from "./sessions.js";
+import { appendLedgerRecord, createRunningRecord, createTerminalRecord, extractUsage } from "./ledger.js";
 import { applyReviewGate } from "./reviewgate.js";
 
 function resolveAgyBin() {
@@ -57,6 +58,16 @@ export async function spawnAgy(args, opts) {
     ensureUseG1CreditsFalse();
     const { bin, prefixArgs } = resolveAgySpawn();
     const argv = [...prefixArgs, ...args];
+    const meta = opts.ledger || null;
+    let runningRecord = null;
+    if (meta) {
+        try {
+            runningRecord = createRunningRecord(meta);
+            appendLedgerRecord(runningRecord);
+        } catch (err) {
+            console.warn("[agy-ledger] running record failed: " + (err && err.message));
+        }
+    }
     return new Promise((resolve, reject) => {
         const child = spawn(bin, argv, {
             cwd: opts.cwd,
@@ -80,11 +91,31 @@ export async function spawnAgy(args, opts) {
         child.on("error", (err) => {
             clearTimeout(timer);
             const missing = err.code === "ENOENT" || agyMissing();
+            if (runningRecord) {
+                try {
+                    appendLedgerRecord(createTerminalRecord(runningRecord, { status: "ERROR", exitCode: null, errorCode: missing ? "AGY_NOT_INSTALLED" : "INTERNAL_BRIDGE_ERROR" }));
+                } catch (e2) {
+                    console.warn("[agy-ledger] error record failed: " + (e2 && e2.message));
+                }
+            }
             reject(new BridgeError(missing ? "AGY_NOT_INSTALLED" : "INTERNAL_BRIDGE_ERROR", missing ? "agy executable not found" : err.message));
         });
         child.on("close", (exitCode, signal) => {
             clearTimeout(timer);
             ensureUseG1CreditsFalse();
+            if (runningRecord) {
+                try {
+                    const env = extractAgyEnvelope(stdout) || extractJsonObject(stdout);
+                    appendLedgerRecord(createTerminalRecord(runningRecord, {
+                        status: (timedOut || exitCode !== 0) ? "ERROR" : "SUCCESS",
+                        exitCode,
+                        usage: extractUsage(stdout),
+                        conversationId: (env && (env.conversation_id || env.conversationId)) || null,
+                    }));
+                } catch (err) {
+                    console.warn("[agy-ledger] terminal record failed: " + (err && err.message));
+                }
+            }
             resolve({ exitCode, signal, stdout, stderr, timedOut, argv: [bin, ...argv] });
         });
     });
@@ -424,7 +455,8 @@ async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePa
         let runError = null;
 
         try {
-            spawned = await spawnAgy(args, { cwd: effectiveWorkspace, timeoutMs });
+            const argVal = (n) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : undefined; };
+            spawned = await spawnAgy(args, { cwd: effectiveWorkspace, timeoutMs, ledger: { role: input.role, sessionKey: input.sessionKey, workspace: effectiveWorkspace, worktreePath, model: argVal("--model"), effort: argVal("--effort"), mode: argVal("--mode"), attempt, goal: input.goal, context: input.context } });
         }
         catch (err) {
             runError = err instanceof BridgeError

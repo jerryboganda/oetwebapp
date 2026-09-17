@@ -6,7 +6,7 @@ import { errorResult, runWorker, spawnAgy } from "./agy-runner.js";
 import { PINNED_EFFORT, PINNED_MODEL, assertAllowlistedCommand, ensureUseG1CreditsFalse, resolveWorkspace } from "./security.js";
 import { ROLE_SPECS } from "./roles.js";
 import { clearSessions, listSessions } from "./sessions.js";
-import { findStaleRuns, getLedgerStats, readRecentRecords } from "./ledger.js";
+import { readAllRecords, findStaleRuns, getLedgerStats, readRecentRecords } from "./ledger.js";
 const taskShape = {
     goal: z.string().min(1),
     context: z.string().optional(),
@@ -217,8 +217,8 @@ export function createAntigravityServer() {
     server.registerTool("ag_runs", {
         description: "Inspect the append-only run ledger (list recent runs, detect stale runs, or view stats).",
         inputSchema: z.object({
-            operation: z.enum(["list", "stale", "stats"]).optional(),
-            action: z.enum(["list", "stale", "stats"]).optional(),
+            operation: z.enum(["list", "stale", "stats", "resumable"]).optional(),
+            action: z.enum(["list", "stale", "stats", "resumable"]).optional(),
             status: z.string().optional(),
             limit: z.number().optional(),
             thresholdMs: z.number().optional(),
@@ -276,6 +276,40 @@ export function createAntigravityServer() {
                 summary: summaries.length > 0
                     ? `Found ${summaries.length} stale running run(s)`
                     : "No stale runs detected",
+            });
+        }
+        if (op === "resumable") {
+            const threshold = args.thresholdMs ?? args.staleThresholdMs;
+            const stale = findStaleRuns({ thresholdMs: threshold }, args.filePath);
+            const all = readAllRecords(args.filePath);
+            const byId = new Map();
+            for (const rec of all) byId.set(rec.runId, rec);
+            const plans = stale.map((s) => {
+                const full = byId.get(s.runId) || {};
+                const goal = full.goal ?? null;
+                return {
+                    runId: s.runId,
+                    role: full.role ?? s.role,
+                    workspace: full.workspace ?? s.workspace,
+                    worktreePath: full.worktreePath ?? null,
+                    sessionKey: full.sessionKey ?? null,
+                    attempt: full.attempt ?? null,
+                    ageMs: s.ageMs,
+                    goal,
+                    resumable: Boolean(goal),
+                    resumeHint: goal
+                        ? "Re-issue the same role with this goal. Pass sessionKey to continue the same agy conversation instead of starting cold."
+                        : "No goal was recorded for this run (pre-upgrade record); restate the task manually.",
+                };
+            });
+            const resumableCount = plans.filter((p) => p.resumable).length;
+            return text({
+                status: "SUCCESS",
+                operation: "resumable",
+                count: plans.length,
+                resumableCount,
+                plans,
+                summary: plans.length + " interrupted run(s); " + resumableCount + " carry a recorded goal and can be re-issued directly",
             });
         }
         if (op === "stats") {

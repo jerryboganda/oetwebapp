@@ -64,6 +64,8 @@ export function createRunningRecord(opts = {}) {
         exitCode: null,
         errorCode: null,
         conversationId: opts.conversationId ?? opts.conversation_id ?? null,
+        goal: opts.goal ? String(opts.goal).slice(0, 2000) : null,
+        context: opts.context ? String(opts.context).slice(0, 1000) : null,
         usage: null,
     };
 }
