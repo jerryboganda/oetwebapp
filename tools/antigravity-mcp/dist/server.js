@@ -6,6 +6,7 @@ import { errorResult, runWorker, spawnAgy } from "./agy-runner.js";
 import { PINNED_EFFORT, PINNED_MODEL, assertAllowlistedCommand, ensureUseG1CreditsFalse, resolveWorkspace } from "./security.js";
 import { ROLE_SPECS } from "./roles.js";
 import { clearSessions, listSessions } from "./sessions.js";
+import { findStaleRuns, getLedgerStats, readRecentRecords } from "./ledger.js";
 const taskShape = {
     goal: z.string().min(1),
     context: z.string().optional(),
@@ -206,6 +207,86 @@ export function createAntigravityServer() {
                 summary: args.sessionKey
                     ? `Cleared session '${args.sessionKey}'`
                     : `Cleared all sessions (${result.clearedCount} removed)`,
+            });
+        }
+        return text({
+            status: "ERROR",
+            summary: `Unknown operation: ${op}`,
+        });
+    });
+    server.registerTool("ag_runs", {
+        description: "Inspect the append-only run ledger (list recent runs, detect stale runs, or view stats).",
+        inputSchema: z.object({
+            operation: z.enum(["list", "stale", "stats"]).optional(),
+            action: z.enum(["list", "stale", "stats"]).optional(),
+            status: z.string().optional(),
+            limit: z.number().optional(),
+            thresholdMs: z.number().optional(),
+            staleThresholdMs: z.number().optional(),
+            filePath: z.string().optional(),
+        }),
+    }, async (args) => {
+        const op = args.operation || args.action || "list";
+        if (op === "list") {
+            const runs = readRecentRecords({
+                status: args.status,
+                limit: args.limit,
+            }, args.filePath);
+            const summaries = runs.map((r) => ({
+                runId: r.runId,
+                sessionKey: r.sessionKey ?? null,
+                role: r.role,
+                workspace: r.workspace,
+                status: r.status,
+                startedAt: r.startedAt,
+                endedAt: r.endedAt ?? null,
+                durationMs: r.durationMs ?? null,
+                exitCode: r.exitCode ?? null,
+                errorCode: r.errorCode ?? null,
+                conversationId: r.conversationId ?? r.conversation_id ?? null,
+                totalTokens: r.usage?.total_tokens ?? r.total_tokens ?? r.totalTokens ?? 0,
+                model: r.model ?? null,
+            }));
+            return text({
+                status: "SUCCESS",
+                operation: "list",
+                count: summaries.length,
+                filter: args.status ? { status: args.status } : null,
+                runs: summaries,
+            });
+        }
+        if (op === "stale") {
+            const threshold = args.thresholdMs ?? args.staleThresholdMs;
+            const stale = findStaleRuns({ thresholdMs: threshold }, args.filePath);
+            const summaries = stale.map((r) => ({
+                runId: r.runId,
+                sessionKey: r.sessionKey ?? null,
+                role: r.role,
+                workspace: r.workspace,
+                status: r.status,
+                startedAt: r.startedAt,
+                ageMs: r.ageMs,
+                attempt: r.attempt,
+            }));
+            return text({
+                status: "SUCCESS",
+                operation: "stale",
+                count: summaries.length,
+                staleRuns: summaries,
+                summary: summaries.length > 0
+                    ? `Found ${summaries.length} stale running run(s)`
+                    : "No stale runs detected",
+            });
+        }
+        if (op === "stats") {
+            const stats = getLedgerStats({ limit: args.limit }, args.filePath);
+            return text({
+                status: "SUCCESS",
+                operation: "stats",
+                totalRuns: stats.totalRecords,
+                countsByStatus: stats.countsByStatus,
+                totalTokens: stats.totalTokens,
+                summary: `Runs stats: ${Object.entries(stats.countsByStatus).map(([s, c]) => `${s}=${c}`).join(", ") || "no runs"}; totalTokens=${stats.totalTokens}`,
             });
         }
         return text({
