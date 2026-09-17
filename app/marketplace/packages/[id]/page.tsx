@@ -7,6 +7,7 @@ import { ArrowLeft, ArrowRight, CheckCircle2, Clock, Sparkles, Tag as TagIcon } 
 import { fetchPublicCatalog } from '@/lib/api';
 import type { PublicCatalogPlanRow, PublicCatalogAddOnRow } from '@/lib/types/admin';
 import { AddonPurchaseModal } from '@/components/billing/addon-purchase-modal';
+import { BuyTutorBookButton } from '@/components/billing/buy-tutor-book-button';
 import {
   resolveWebsitePackageByCode,
   resolveWebsitePackageBySlug,
@@ -141,25 +142,28 @@ export default function PackageDetailPage() {
               {plan.originalPrice !== null && plan.originalPrice !== undefined && plan.originalPrice > plan.price && (
                 <div className="mt-1 text-sm text-white/70 line-through">was £{plan.originalPrice.toFixed(0)}</div>
               )}
-              <button
-                type="button"
-                onClick={() =>
-                  router.push(
-                    websitePackage
-                      ? websitePackageCheckoutHref(websitePackage, plan.code)
-                      : `/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`,
-                  )
-                }
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-bold text-oet-navy shadow-sm transition-colors hover:bg-gold-dark"
-              >
-                {websitePackage?.code === 'tutor-book'
-                  ? 'Contact admin to enable'
-                  : `Buy for £${plan.price.toFixed(0)}`}{' '}
-                <ArrowRight className="h-4 w-4" />
-              </button>
+              {plan.code === 'tutor-book' ? (
+                <BuyTutorBookButton className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-bold text-oet-navy shadow-sm transition-colors hover:bg-gold-dark">
+                  Buy The Tutor Book <ArrowRight className="h-4 w-4" />
+                </BuyTutorBookButton>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() =>
+                    router.push(
+                      websitePackage
+                        ? websitePackageCheckoutHref(websitePackage, plan.code)
+                        : `/checkout/review?productType=plan_purchase&priceId=${encodeURIComponent(plan.code)}&quantity=1`,
+                    )
+                  }
+                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gold px-5 py-2.5 text-sm font-bold text-oet-navy shadow-sm transition-colors hover:bg-gold-dark"
+                >
+                  Buy for £{plan.price.toFixed(0)} <ArrowRight className="h-4 w-4" />
+                </button>
+              )}
               <p className="mt-2 text-[10px] text-white/60">
-                {websitePackage?.code === 'tutor-book' || plan.code === 'tutor-book'
-                  ? 'TutorBook is enabled manually by an administrator and is not sold through self-checkout.'
+                {plan.code === 'tutor-book'
+                  ? 'We check your eligibility automatically — £32 if you have an eligible course, £45 otherwise.'
                   : 'Charged in GBP. No auto-renewal.'}
               </p>
             </div>

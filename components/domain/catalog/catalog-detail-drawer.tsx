@@ -1,7 +1,8 @@
 'use client';
 
-import { CheckCircle2, Clock, Layers, MessageCircleQuestion, ShoppingCart, Tag } from 'lucide-react';
+import { CheckCircle2, Clock, Layers, ShoppingCart, Tag } from 'lucide-react';
 import { Drawer } from '@/components/ui';
+import { BuyTutorBookButton } from '@/components/billing/buy-tutor-book-button';
 import { cn } from '@/lib/utils';
 import type { PublicCatalogPlanRow } from '@/lib/types/admin';
 import {
@@ -145,12 +146,9 @@ export function CatalogPlanDetailDrawer({ plan, presentation, config, owned, var
                 <CheckCircle2 className="h-4 w-4" /> This package is active on your account
               </div>
             ) : plan.code === 'tutor-book' ? (
-              <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed border-border bg-background-light px-4 py-3 text-center">
-                <span className="inline-flex items-center gap-2 text-sm font-semibold text-muted">
-                  <MessageCircleQuestion className="h-4 w-4" /> Contact admin to enable
-                </span>
-                <span className="text-xs text-muted">TutorBook access is manual, per user — it isn&apos;t sold through self-checkout.</span>
-              </div>
+              <BuyTutorBookButton className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-5 py-3 text-sm font-semibold text-white transition-[background-color,transform] duration-200 hover:bg-primary/90 active:scale-[0.98] motion-reduce:active:scale-100">
+                <ShoppingCart className="h-4 w-4" /> Buy The Tutor Book
+              </BuyTutorBookButton>
             ) : (
               <button
                 type="button"

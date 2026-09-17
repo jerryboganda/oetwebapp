@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const { mockFetchBillingQuote, mockCreateBillingCheckoutSession, mockOpenCheckoutUrl } = vi.hoisted(() => ({
@@ -52,7 +52,7 @@ vi.mock('@/lib/api/billing-region', () => ({
 
 import { ApiError } from '@/lib/api';
 import CheckoutReviewPage from './page';
-import { renderWithRouter } from '@/tests/test-utils';
+import { renderWithRouter, NextRouterProvider } from '@/tests/test-utils';
 
 function quoteFixture(expiresInMs = 15 * 60_000) {
   return {
@@ -228,6 +228,70 @@ describe('Checkout review page', () => {
     expect(mockFetchBillingQuote).toHaveBeenCalledTimes(2);
     expect(mockCreateBillingCheckoutSession).toHaveBeenCalledTimes(2);
     expect(mockCreateBillingCheckoutSession.mock.calls[1][0].quoteId).toBe('quote-2');
+  });
+
+  it('re-fetches the quote when the cart changes without unmounting the page', async () => {
+    const paramsA = new URLSearchParams('productType=plan_purchase&priceId=nursing-complete&quantity=1');
+    const paramsB = new URLSearchParams(
+      'productType=plan_purchase&priceId=nursing-complete&quantity=1&addOnCodes=addon-3-letters',
+    );
+    mockFetchBillingQuote
+      .mockResolvedValueOnce(quoteFixture())
+      .mockResolvedValueOnce({ ...quoteFixture(), quoteId: 'quote-2', addOnCodes: ['addon-3-letters'] });
+
+    const { rerender } = render(
+      <NextRouterProvider searchParams={paramsA}>
+        <CheckoutReviewPage />
+      </NextRouterProvider>,
+    );
+    await screen.findByText('Nursing Complete');
+    expect(mockFetchBillingQuote).toHaveBeenCalledTimes(1);
+
+    // Same mounted page, cart param changed underneath it — this is exactly what a
+    // cart edit, coupon change, or browser back/forward does under Next's App
+    // Router, which does not remount a page purely because its search params change.
+    rerender(
+      <NextRouterProvider searchParams={paramsB}>
+        <CheckoutReviewPage />
+      </NextRouterProvider>,
+    );
+
+    await waitFor(() => expect(mockFetchBillingQuote).toHaveBeenCalledTimes(2));
+    expect(mockFetchBillingQuote.mock.calls[1][0].addOnCodes).toEqual(['addon-3-letters']);
+
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+
+    // Checkout must use the fresh quote's id, not the stale one from the first fetch —
+    // sending the stale id here is exactly what previously produced quote_mismatch.
+    expect(mockCreateBillingCheckoutSession.mock.calls[0][0].quoteId).toBe('quote-2');
+  });
+
+  it('recovers transparently when checkout still returns quote_mismatch', async () => {
+    mockCreateBillingCheckoutSession
+      .mockRejectedValueOnce(
+        new ApiError(400, 'quote_mismatch', 'The supplied add-on codes do not match the saved quote.', false),
+      )
+      .mockResolvedValueOnce({
+        checkoutUrl: 'https://pay.example.test/cs_test_456',
+        checkoutSessionId: 'cs_test_456',
+        quoteId: 'quote-2',
+      });
+    mockFetchBillingQuote
+      .mockResolvedValueOnce(quoteFixture())
+      .mockResolvedValueOnce({ ...quoteFixture(), quoteId: 'quote-2' });
+    mockOpenCheckoutUrl.mockResolvedValue('window-open');
+    const replace = vi.fn();
+    const user = userEvent.setup();
+    renderWithRouter(<CheckoutReviewPage />, { searchParams, router: { replace } });
+
+    await user.click(await screen.findByRole('button', { name: /continue to secure payment/i }));
+
+    expect(replace).toHaveBeenCalledWith('/billing/payment-return?quote=quote-2&session=cs_test_456');
+    expect(mockFetchBillingQuote).toHaveBeenCalledTimes(2);
+    expect(mockCreateBillingCheckoutSession).toHaveBeenCalledTimes(2);
+    expect(mockCreateBillingCheckoutSession.mock.calls[1][0].quoteId).toBe('quote-2');
+    expect(screen.queryByText(/does not match the saved quote/i)).not.toBeInTheDocument();
   });
 
   it('excludes EasyCash from customer checkout while supporting other enabled payment methods', async () => {
