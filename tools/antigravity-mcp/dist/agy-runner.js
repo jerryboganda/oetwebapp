@@ -8,6 +8,8 @@ import { emptyResult, parseWorkerResult } from "./schemas.js";
 import { PINNED_EFFORT, PINNED_MODEL, ensureUseG1CreditsFalse, highAutonomyAllowed, logsDir, } from "./security.js";
 import { ROLE_SPECS, rolePrompt } from "./roles.js";
 import { computePrintTimeoutSeconds, DEFAULT_RETRY_POLICY, RETRY_POLICY } from "./config.js";
+import { defaultGate } from "./concurrency.js";
+import { createWorktree, cleanupStaleWorktrees } from "./worktree.js";
 
 function resolveAgyBin() {
     if (process.env.AGY_BIN?.trim())
@@ -259,31 +261,21 @@ export function wasWorkspaceModified(before, after) {
     return before.state !== after.state;
 }
 
-export async function runWorker(input) {
-    const injected = faultInject();
-    if (injected) {
-        throw new BridgeError(injected, `Fault injection: ${injected}`, "AGY_FAULT_INJECT");
-    }
-    const spec = ROLE_SPECS[input.role];
-    const args = buildAgyArgs(input, spec);
-    const timeoutMs = input.timeoutMs ?? spec.timeoutMs;
-    const policy = RETRY_POLICY || DEFAULT_RETRY_POLICY;
-    const maxAttempts = policy.maxAttempts ?? 3;
-    const hardCapTotalRetryMs = policy.hardCapTotalRetryMs ?? 600_000;
-    const retryStartTime = Date.now();
-
+async function executeWorkerAttempts(input, spec, effectiveWorkspace, worktreePath, timeoutMs, policy, maxAttempts, hardCapTotalRetryMs, retryStartTime) {
     let lastError = null;
+    const workerInput = worktreePath ? { ...input, workspace: worktreePath } : input;
+    const args = buildAgyArgs(workerInput, spec);
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         const workspaceBefore = spec.kind === "write"
-            ? getWorkspaceFingerprint(input.workspace)
+            ? getWorkspaceFingerprint(effectiveWorkspace)
             : null;
 
         let spawned = null;
         let runError = null;
 
         try {
-            spawned = await spawnAgy(args, { cwd: input.workspace, timeoutMs });
+            spawned = await spawnAgy(args, { cwd: effectiveWorkspace, timeoutMs });
         }
         catch (err) {
             runError = err instanceof BridgeError
@@ -314,7 +306,17 @@ export async function runWorker(input) {
             }
             else {
                 try {
-                    return parseWorkerResult(input.role, spawned.stdout);
+                    const parsed = parseWorkerResult(input.role, spawned.stdout);
+                    if (worktreePath) {
+                        parsed.worktreePath = worktreePath;
+                        if (Array.isArray(parsed.evidence)) {
+                            parsed.evidence.push({
+                                path: worktreePath,
+                                finding: `Git worktree isolation path: ${worktreePath}`,
+                            });
+                        }
+                    }
+                    return parsed;
                 }
                 catch (err) {
                     runError = new BridgeError("INVALID_OUTPUT", err instanceof Error ? err.message : "Invalid worker JSON", spawned.stdout.slice(0, 2000));
@@ -352,7 +354,7 @@ export async function runWorker(input) {
          */
         if (spec.kind === "write") {
             const outputReceived = Boolean(spawned?.stdout && spawned.stdout.trim().length > 0);
-            const workspaceAfter = getWorkspaceFingerprint(input.workspace);
+            const workspaceAfter = getWorkspaceFingerprint(effectiveWorkspace);
             const workspaceModified = wasWorkspaceModified(workspaceBefore, workspaceAfter);
 
             if (outputReceived || workspaceModified) {
@@ -377,6 +379,77 @@ export async function runWorker(input) {
     }
 
     throw lastError ?? new BridgeError("INTERNAL_BRIDGE_ERROR", "Worker run failed without error");
+}
+
+export async function runWorker(input) {
+    const injected = faultInject();
+    if (injected) {
+        throw new BridgeError(injected, `Fault injection: ${injected}`, "AGY_FAULT_INJECT");
+    }
+    const spec = ROLE_SPECS[input.role];
+    const timeoutMs = input.timeoutMs ?? spec.timeoutMs;
+    const policy = RETRY_POLICY || DEFAULT_RETRY_POLICY;
+    const maxAttempts = policy.maxAttempts ?? 3;
+    const hardCapTotalRetryMs = policy.hardCapTotalRetryMs ?? 600_000;
+    const retryStartTime = Date.now();
+
+    const isWriteRole = spec.kind === "write";
+    const permitsAutonomy = Boolean(spec.highAutonomyOptIn) && (input.highAutonomy !== false);
+    const useWorktree = isWriteRole && permitsAutonomy;
+
+    if (!useWorktree) {
+        return await executeWorkerAttempts(
+            input,
+            spec,
+            input.workspace,
+            null,
+            timeoutMs,
+            policy,
+            maxAttempts,
+            hardCapTotalRetryMs,
+            retryStartTime
+        );
+    }
+
+    const gate = input.gate ?? defaultGate;
+    const worktreeSlot = await gate.acquire("worktree");
+    let worktreePath = null;
+
+    try {
+        try {
+            cleanupStaleWorktrees({ workspace: input.workspace });
+        } catch {
+            /* ignore stale cleanup error */
+        }
+
+        const runId = input.runId ?? `${input.role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const wtResult = createWorktree(input.workspace, runId);
+        if (wtResult === "not-a-git-repo") {
+            console.warn(`[agy-runner] Workspace '${input.workspace}' is not inside a git repository; falling back to in-place execution.`);
+        } else {
+            worktreePath = wtResult;
+            try {
+                fs.writeFileSync(path.join(worktreePath, ".agy-disposable"), "disposable worktree\n", "utf8");
+            } catch {
+                /* ignore marker write error */
+            }
+        }
+
+        const effectiveWorkspace = worktreePath ?? input.workspace;
+        return await executeWorkerAttempts(
+            input,
+            spec,
+            effectiveWorkspace,
+            worktreePath,
+            timeoutMs,
+            policy,
+            maxAttempts,
+            hardCapTotalRetryMs,
+            retryStartTime
+        );
+    } finally {
+        worktreeSlot.release();
+    }
 }
 
 export function errorResult(role, err) {

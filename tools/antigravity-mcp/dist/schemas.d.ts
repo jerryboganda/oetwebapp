@@ -47,6 +47,7 @@ export declare const workerResultSchema: z.ZodObject<{
         medium: "medium";
         low: "low";
     }>;
+    worktreePath: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export type WorkerResult = z.infer<typeof workerResultSchema>;
 export declare function emptyResult(role: WorkerRole, patch: Partial<WorkerResult> & Pick<WorkerResult, "status" | "summary">): WorkerResult;

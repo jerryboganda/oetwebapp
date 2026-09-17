@@ -30,14 +30,18 @@ async function runRole(role, args) {
     try {
         const workspace = resolveWorkspace(args.workspace);
         const spec = ROLE_SPECS[role];
-        const result = await withGate(spec.kind, () => runWorker({
+        const permitsAutonomy = spec.kind === "write" && spec.highAutonomyOptIn && args.highAutonomy !== false;
+
+        const execute = () => runWorker({
             role,
             goal: args.goal,
             context: args.context,
             workspace,
             extraConstraints: args.extraConstraints,
             highAutonomy: args.highAutonomy,
-        }));
+        });
+
+        const result = permitsAutonomy ? await execute() : await withGate(spec.kind, execute);
         return text(result);
     }
     catch (err) {

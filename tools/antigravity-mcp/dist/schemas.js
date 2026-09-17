@@ -33,6 +33,7 @@ export const workerResultSchema = z.object({
     blockers: z.array(z.string()),
     recommendedNextStep: z.string(),
     confidence: z.enum(["high", "medium", "low"]),
+    worktreePath: z.string().optional(),
 });
 export function emptyResult(role, patch) {
     return {

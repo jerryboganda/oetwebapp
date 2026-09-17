@@ -11,6 +11,8 @@ export type AgyRunOptions = {
     timeoutMs?: number;
     highAutonomy?: boolean;
     addDirs?: string[];
+    gate?: import("./concurrency.js").ConcurrencyGate;
+    runId?: string;
 };
 export type SpawnResult = {
     exitCode: number | null;

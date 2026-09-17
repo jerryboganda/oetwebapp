@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -192,4 +193,36 @@ function resolveRetryPolicy(overrides) {
 }
 
 export const RETRY_POLICY = resolveRetryPolicy(CONFIG_OVERRIDES);
+
+export const DEFAULT_WORKTREE_CONFIG = {
+    root: path.join(os.tmpdir(), "agy-worktrees"),
+    maxAgeMs: 24 * 60 * 60 * 1000,
+    gitTimeoutMs: 15_000,
+};
+
+function resolveWorktreeConfig(overrides) {
+    const config = { ...DEFAULT_WORKTREE_CONFIG };
+    if (process.env.AGY_WORKTREE_ROOT?.trim()) {
+        config.root = path.resolve(process.env.AGY_WORKTREE_ROOT.trim());
+    }
+    if (process.env.AGY_WORKTREE_MAX_AGE_MS) {
+        const parsed = Number(process.env.AGY_WORKTREE_MAX_AGE_MS);
+        if (Number.isFinite(parsed) && parsed > 0) config.maxAgeMs = parsed;
+    }
+    const source = (overrides?.worktree && typeof overrides.worktree === "object") ? overrides.worktree : null;
+    if (source) {
+        if (typeof source.root === "string" && source.root.trim() && !process.env.AGY_WORKTREE_ROOT) {
+            config.root = path.resolve(source.root.trim());
+        }
+        if (typeof source.maxAgeMs === "number" && source.maxAgeMs > 0 && !process.env.AGY_WORKTREE_MAX_AGE_MS) {
+            config.maxAgeMs = source.maxAgeMs;
+        }
+        if (typeof source.gitTimeoutMs === "number" && source.gitTimeoutMs > 0) {
+            config.gitTimeoutMs = source.gitTimeoutMs;
+        }
+    }
+    return config;
+}
+
+export const WORKTREE_CONFIG = resolveWorktreeConfig(CONFIG_OVERRIDES);
 

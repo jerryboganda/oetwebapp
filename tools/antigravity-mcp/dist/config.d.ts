@@ -29,3 +29,9 @@ export declare const ROLE_SPECS: Record<Exclude<WorkerRole, "health">, RoleSpec>
 export declare function computePrintTimeoutSeconds(budgetOrRole: number | Exclude<WorkerRole, "health">): number;
 export declare const computePrintTimeout: typeof computePrintTimeoutSeconds;
 export declare function getRoleBudget(role: Exclude<WorkerRole, "health">): number;
+export declare const DEFAULT_WORKTREE_CONFIG: {
+    root: string;
+    maxAgeMs: number;
+    gitTimeoutMs: number;
+};
+export declare const WORKTREE_CONFIG: typeof DEFAULT_WORKTREE_CONFIG;
