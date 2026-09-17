@@ -1633,8 +1633,14 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectClosureConsent(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesMarkers?.ConsentDocumented != true) yield break;
+        // Cross-profession repair (18 Sep 2026): only the SINGULAR "has consented" counted, so
+        // Kevin Brown's notes — "Parents consented to referral to the family doctor" — could be
+        // stated faithfully only as "his parents have consented", which failed. The passing text
+        // the stored answer had used instead was an invented sentence ("Kevin has been informed of
+        // the diagnosis and management plan"). Plural consent, and consent recorded as obtained,
+        // now count.
         if (!Regex.IsMatch(input.LetterText,
-            @"\b(fully informed|has consented|has been informed|aware of (his|her) (diagnosis|management))\b",
+            @"\b(fully informed|ha(?:s|ve) consented|consent was obtained|ha(?:s|ve) been informed|aware of (his|her|their) (diagnosis|management))\b",
             RegexOptions.IgnoreCase))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Consent was documented in case notes — include the consent statement in closure.");

@@ -36,7 +36,17 @@ public static class WritingCaseNotesMarkerExtractor
                 + @"|\bat (?:his|her|the patient'?s|(?:[a-z]+\.?\s+){0,2}[a-z]+'?s) (?:own )?request\b"),
             ConsentDocumented: Regex.IsMatch(text, @"\b(consent|fully informed|discussed with patient|safety plan completed)\b"),
             FollowUpDate: followUpDate,
-            ResultsEnclosed: Regex.IsMatch(text, @"\b(enclosed|attached|please find enclosed|copy of results|copy of imaging)\b"),
+            // False-positive fix (2026-09-18, cross-profession repair): a bare "attached" or
+            // "enclosed" counted whatever was attached, so Mr Adam White's note — "an alert
+            // sticker has been attached to his paperwork" — made enclosure_results_phrase demand
+            // the sentence "Please find enclosed a copy of the pathology results." His notes say
+            // the results are still expected, so the only passing letter claimed an enclosure that
+            // does not exist. What is enclosed or attached must be the results themselves.
+            ResultsEnclosed: Regex.IsMatch(text,
+                @"\bplease find enclosed\b"
+                + @"|\bcopy of (?:the )?(?:results?|report|imaging|investigations?|films?)\b"
+                + @"|\b(?:results?|reports?|imaging|investigations?|films?|pathology|radiology)\b[^.;\n]{0,40}\b(?:enclosed|attached)\b"
+                + @"|\b(?:enclosed|attached)\b[^.;\n]{0,40}\b(?:results?|reports?|imaging|investigations?|films?|pathology|radiology)\b"),
             // Ultimate Final §3.3 / OA2-02 — discharge language is only
             // supported when the canonical notes document a genuine
             // admission EPISODE and a genuine discharge EVENT, not a bare
