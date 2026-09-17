@@ -75,15 +75,26 @@ public sealed partial class WritingRuleEngine
     /// ("glipizide, two 5 mg tablets each morning"). Every stored Model
     /// Answer must be revalidated and re-approved under this version.
     /// Cross-profession repair (18 Sep 2026), found while repairing the 173
-    /// non-Medicine answers: letter_date_unsupported gains a third branch —
-    /// when a task carries NO today's date and its canonical notes document no
-    /// date at all, the letter's date has nothing to prove it and the scenario
-    /// data must be fixed (Satchell's stored answer was dated "6 September
-    /// 2026" and passed silently); and the patient-initiated-referral marker
-    /// no longer fires on a request about any other subject, which had forced
-    /// "upon his request" into a referral the patient never asked for
-    /// (Shepherd's notes record a request for low-fat recipes). Every stored
-    /// Model Answer must be revalidated and re-approved under this version.
+    /// non-Medicine answers. Three false demands, each of which forced a
+    /// letter to state something its source does not support:
+    /// (a) the patient-initiated-referral marker fired on a request about any
+    /// subject, so a note recording a request for low-fat recipes made
+    /// closure_mentions_patient_request_if_flagged demand "upon his request"
+    /// in Mr Shepherd's physiotherapy referral;
+    /// (b) letter_date_unsupported applied the latest-note ceiling even when
+    /// the task states today's date, so Mr Randhawa's scenario (task says 31
+    /// January, last note 29 January) had no passable date at all — rule 39
+    /// ranks a stated today's date above the ceiling, and the G6 branch
+    /// already enforces equality with it;
+    /// (c) SalutationIsUnnamedRecipient required the role noun to be the last
+    /// word, so "Dear Emergency Department Consultant on Duty," was read as a
+    /// named person and "Yours faithfully," — the sign-off owner decision 15
+    /// and the official OET sample both use — was rejected.
+    /// A task whose data carries no date at all (Satchell) is a DATA defect,
+    /// caught by the release gate, not by a detector: owner fixture R2-19
+    /// settles that a DOB-only note set raises no date finding.
+    /// Every stored Model Answer must be revalidated and re-approved under
+    /// this version.
     /// </summary>
     public const string ValidatorVersion = "writing-rules.cross-profession.2026-09-18.1";
 
@@ -1386,6 +1397,20 @@ public sealed partial class WritingRuleEngine
             if (line.Length > 0 && !Regex.IsMatch(line, @"[A-Za-z]")) continue;
             if (latestNoteDate is null || noteDate > latestNoteDate) latestNoteDate = noteDate;
         }
+        // Cross-profession repair (18 Sep 2026): DateTokenRe reads only WRITTEN dates, so a note set
+        // that mixes one written date with numeric ones produced a ceiling far too early. Mr
+        // Shepherd's nursing notes say "20 December 2017" once and then 23/12, 24/12, 26/12 and
+        // 27/12/2017 numerically, so his letter — correctly dated on the 27 December discharge the
+        // notes and the task both state — was reported as "later than every date documented". The
+        // numeric dates are treatment dates too; G6 already knows how to read them day-first and
+        // which ones to exclude, so reuse that rather than re-deriving it here. This can only move
+        // the ceiling later, never earlier, so it only ever withdraws a finding.
+        foreach (Match m in SaG6NumericDateRe.Matches(notes))
+        {
+            if (!SaG6IsTreatmentDateCandidate(notes, m)) continue;
+            if (!SaG6TryParseNumericDate(m, out var numericNoteDate)) continue;
+            if (latestNoteDate is null || numericNoteDate > latestNoteDate) latestNoteDate = numericNoteDate;
+        }
         if (latestNoteDate is null || letterDate <= latestNoteDate.Value) yield break;
         // A forward relative reference ("review in 2 days", "review in two
         // weeks") extends the documented timeline beyond the last absolute
@@ -1742,9 +1767,11 @@ public sealed partial class WritingRuleEngine
             return true;
         // A role salutation carries no personal name: "Dear Admissions
         // Officer,", "Dear Emergency Registrar,", "Dear Practice Manager,".
+        // "Leader" joined the list on 18 Sep 2026 ("Dear Team Leader,", the
+        // community mental health team): \bLead\b never matched it.
         if (Regex.IsMatch(
             salutation,
-            @"^Dear\s+(?:[A-Z][A-Za-z]+(?:\s+[A-Za-z]+){0,3}\s+)?(?:Officer|Manager|Coordinator|Co-ordinator|Registrar|Director|Secretary|Lead|Practitioner)\s*,?\s*$",
+            @"^Dear\s+(?:[A-Z][A-Za-z]+(?:\s+[A-Za-z]+){0,3}\s+)?(?:Officer|Manager|Coordinator|Co-ordinator|Registrar|Director|Secretary|Lead|Leader|Practitioner)\s*,?\s*$",
             RegexOptions.IgnoreCase))
             return true;
         // Senior Assessor Release Audit (16 Sep 2026): a task that names only a
@@ -1754,9 +1781,18 @@ public sealed partial class WritingRuleEngine
         // "Yours sincerely". A title ("Dear Dr Kist,") is always a named person.
         if (Regex.IsMatch(salutation, @"^Dear\s+(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor)\.?\s", RegexOptions.IgnoreCase))
             return false;
+        // Cross-profession repair (18 Sep 2026): the role noun had to be the LAST word, so the
+        // duty qualifier in "Dear Emergency Department Consultant on Duty," (Ms Patricia Styles's
+        // urgent referral, and the official OET sample response for it signs "Yours faithfully")
+        // pushed the salutation out of this pattern, it was read as a personal name, and the rule
+        // demanded "Yours sincerely" — the opposite of owner decision 15 / OA2-17. A trailing
+        // duty/charge qualifier names no person either, and neither does a service suffix:
+        // "Dear Director of Nursing," was rejected while "Dear Director," was accepted.
         return Regex.IsMatch(
             salutation,
-            @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife)\s*,?\s*$",
+            @"^Dear\s+(?:[A-Z][A-Za-z\-]+\s+){0,3}(?:[A-Za-z\-]*(?:ologist|iatrist|ician)|Surgeon|Consultant|Specialist|Physiotherapist|Therapist|Pharmacist|Dietitian|Podiatrist|Optometrist|Nurse|Midwife|Officer|Manager|Registrar|Director|Leader)"
+            + @"(?:\s+of\s+(?:[A-Za-z\-]+\s*){1,3})?"
+            + @"(?:\s+(?:on\s+(?:duty|call)|on-call|in\s+charge))?\s*,?\s*$",
             RegexOptions.IgnoreCase);
     }
 
@@ -2288,10 +2324,25 @@ private static string? ReLineSurname(string reLine)
         if (string.Equals(canonical, "Dr", StringComparison.OrdinalIgnoreCase)) yield break;
         var surname = ReLineSurname(s.Lines[s.ReLineIndex.Value]);
         if (string.IsNullOrEmpty(surname)) yield break;
-        foreach (Match m in Regex.Matches(input.LetterText, @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?:(?<first>[A-Z][a-zA-Z'’\-]+)\s+)?(?<surname>" + Regex.Escape(surname) + @")\b"))
+        // Cross-profession repair (18 Sep 2026): the scan covered the WHOLE letter, so a recipient
+        // who shares the patient's surname was read as the patient with the wrong title. Mrs Anita
+        // Ramamurthy's task addresses her husband, "Mr. Krishnan Ramamurthy", so every correct
+        // letter must contain both titles, and the only texts that passed were ones that stripped
+        // the husband's title or surname — defective letters. The patient's title is a BODY
+        // concern; the recipient block and salutation address the reader, not the patient. A
+        // different first name also marks a different person.
+        var reLine = s.Lines[s.ReLineIndex.Value];
+        var patientFirst = Regex.Match(reLine,
+            @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?<first>[A-Z][a-zA-Z'’\-]+)\s+" + Regex.Escape(surname) + @"\b")
+            .Groups["first"].Value;
+        foreach (Match m in Regex.Matches(s.Body, @"\b(?:Mr|Mrs|Ms|Miss)\.?\s+(?:(?<first>[A-Z][a-zA-Z'’\-]+)\s+)?(?<surname>" + Regex.Escape(surname) + @")\b"))
         {
             var used = m.Value.TrimEnd(':').Split()[0].TrimEnd('.');
             if (string.Equals(used, canonical, StringComparison.OrdinalIgnoreCase)) continue;
+            var first = m.Groups["first"].Value;
+            if (first.Length > 0 && patientFirst.Length > 0
+                && !string.Equals(first, patientFirst, StringComparison.OrdinalIgnoreCase))
+                continue; // a relative with the same surname, named in the body
             yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
                 "Title mismatch: the Re: line uses \"" + canonical + "\" but this reference uses \"" + used + "\". The patient's title is fixed by the source — use \"" + canonical + " " + surname + "\" consistently.",
                 Quote: m.Value);

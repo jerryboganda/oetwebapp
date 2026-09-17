@@ -36,8 +36,20 @@ internal static class WritingPatientAgeExtractor
     // relatives are included: "Mother died aged 72" is the mother's age at
     // death, never the patient's (family-history notes are common in the
     // held-letter corpus).
+    private const string RelativeNouns =
+        @"children|child|sons?|daughters?|wife|husband|partner|brothers?|sisters?|twins?|grandsons?|granddaughters?|grandchildren|grandchild|baby|infant|nephews?|nieces?|mother|father|mum|mom|dad|parents?|aunt|uncle|cousins?|grandmother|grandfather|grandparents?";
+
     private static readonly Regex RelativeLedRegex =
-        new(@"\b(?:children|child|sons?|daughters?|wife|husband|partner|brothers?|sisters?|twins?|grandsons?|granddaughters?|grandchildren|grandchild|baby|infant|nephews?|nieces?|mother|father|mum|mom|dad|parents?|aunt|uncle|cousins?|grandmother|grandfather|grandparents?)\b[^.!?\n]*$",
+        new($@"\b(?:{RelativeNouns})\b[^.!?\n]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Cross-profession repair (18 Sep 2026): the look-back only caught a relative BEFORE the age
+    // ("His daughter, aged 8"). In the adjectival form the relative comes AFTER it — Mrs Jane
+    // LaPaglia's notes read "Lives with her 80-year-old husband/carer, Joe", so the husband's 80
+    // was taken as the patient's age and age_dob_inconsistent fired Critical on her Re: line
+    // stating the age her own note and the source PDF give (71). The letter's only passing options
+    // were to state a false age or omit it. A relative noun straight after the age owns it.
+    private static readonly Regex RelativeFollowsRegex =
+        new($@"^[\s-]*(?:year|yr)?s?[\s-]*(?:old)?[\s,-]*(?:her|his|their|the|my)?\s*(?:[a-z]+\s+){{0,2}}(?:{RelativeNouns})\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     public static int? Extract(string caseNotes)
@@ -57,6 +69,11 @@ internal static class WritingPatientAgeExtractor
         var boundary = text.LastIndexOfAny(['.', '!', '?', '\n'], Math.Max(0, match.Index - 1));
         var segment = text[(boundary + 1)..match.Index];
         if (RelativeLedRegex.IsMatch(segment)) return false;
+        // The digits alone are captured, so look forward from the end of the whole matched age
+        // expression: "80-year-old husband" and "80 years old wife" both hand the age to them.
+        var after = match.Index + match.Length;
+        var tail = text[after..Math.Min(text.Length, after + 60)];
+        if (RelativeFollowsRegex.IsMatch(tail)) return false;
         age = value;
         return true;
     }

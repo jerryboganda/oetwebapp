@@ -652,7 +652,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "respiratory_rate_unit_style" => DetectRespiratoryRateUnitStyle,
         "illogical_quantity_range" => DetectIllogicalQuantityRange,
         "vague_clinical_object" => DetectVagueClinicalObject,
-        "letter_date_unsupported" => Compose(DetectLetterDateUnsupported, DetectSaG6LetterDateUnsupported, DetectCpLetterDateUnanchored),
+        "letter_date_unsupported" => Compose(DetectLetterDateUnsupported, DetectSaG6LetterDateUnsupported),
         "recipient_name_mismatch" => DetectRecipientNameMismatch,
         "patient_name_spelling" => DetectPatientNameSpelling,
         "re_line_dob_priority" => Compose(DetectReLineDobPriority, DetectSaG3ReLineDobBornOn),

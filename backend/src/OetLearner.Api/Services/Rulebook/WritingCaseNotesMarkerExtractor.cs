@@ -31,7 +31,9 @@ public static class WritingCaseNotesMarkerExtractor
                 @"\b(?:(?:the )?patient|he|she) (?:requested|asked for) (?:a |an |this )?(?:referral|second opinion|opinion|specialist (?:review|opinion|assessment|appointment)|review|assessment|appointment|consultation|transfer)\b"
                 + @"|\b(?:(?:the )?patient|he|she) (?:requested|asked) to (?:be (?:referred|seen|assessed|reviewed)|see)\b"
                 + @"|\bupon (?:his|her) request\b"
-                + @"|\bat (?:his|her|the patient'?s|patient'?s|[a-z]+'s) (?:own )?request\b"),
+                // "at Mr Shepherd's request" / "at Mrs Anita Ramamurthy's request": a title and
+                // given name may sit before the possessive, which the bare [a-z]+'s missed.
+                + @"|\bat (?:his|her|the patient'?s|(?:[a-z]+\.?\s+){0,2}[a-z]+'?s) (?:own )?request\b"),
             ConsentDocumented: Regex.IsMatch(text, @"\b(consent|fully informed|discussed with patient|safety plan completed)\b"),
             FollowUpDate: followUpDate,
             ResultsEnclosed: Regex.IsMatch(text, @"\b(enclosed|attached|please find enclosed|copy of results|copy of imaging)\b"),
