@@ -228,11 +228,24 @@ export function createAntigravityServer() {
     }, async (args) => {
         const op = args.operation || args.action || "list";
         if (op === "list") {
+            const limit = args.limit ?? 20;
             const runs = readRecentRecords({
                 status: args.status,
-                limit: args.limit,
+                limit: limit * 4 + 20,
             }, args.filePath);
-            const summaries = runs.map((r) => ({
+            // The ledger is append-only: one run appears first as "running" and later as its
+            // terminal state. Report the LATEST state per runId so a finished run never looks stuck.
+            const seenRunIds = new Set();
+            const latestRuns = [];
+            for (const rr of runs) {
+                if (seenRunIds.has(rr.runId))
+                    continue;
+                seenRunIds.add(rr.runId);
+                latestRuns.push(rr);
+                if (latestRuns.length >= limit)
+                    break;
+            }
+            const summaries = latestRuns.map((r) => ({
                 runId: r.runId,
                 sessionKey: r.sessionKey ?? null,
                 role: r.role,
