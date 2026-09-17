@@ -1343,6 +1343,16 @@ public sealed partial class WritingRuleEngine
     private static IEnumerable<LintFinding> DetectLetterDateUnsupported(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesText is not { Length: > 0 } notes || s.DateIndex is null) yield break;
+        // Cross-profession repair (18 Sep 2026): house-style rule 39 ranks the anchors — "when the
+        // case notes, the task or the scenario state today's date the letter carries exactly that
+        // date; OTHERWISE it is never earlier than the latest documented encounter and never later
+        // than every documented date". This ceiling is the "otherwise" half, so an explicit today's
+        // date outranks it. Mr Randhawa's nursing task states 31 January 2017 while his last
+        // documented note is 29 January, and with both branches live NO date could pass: 31 Jan
+        // tripped this ceiling, 29 Jan tripped the G6 equality branch, 30 Jan tripped both.
+        // DetectSaG6LetterDateUnsupported already requires the letter date to EQUAL TodayDate,
+        // which is the stricter test, so standing down here loses no coverage.
+        if (!string.IsNullOrWhiteSpace(input.TodayDate)) yield break;
         if (!TryParseDateToken(DateTokenRe.Match(s.Lines[s.DateIndex.Value]), out var letterDate)) yield break;
         var latestNoteDate = (DateTime?)null;
         foreach (Match m in DateTokenRe.Matches(notes))

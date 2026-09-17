@@ -91,4 +91,47 @@ public sealed class WritingCrossProfessionDateAnchorTests
         var findings = Engine.Lint(new WritingLintInput(LetterText: Letter, IsModelAnswer: true));
         Assert.DoesNotContain(findings, f => f.RuleId.Contains(Check));
     }
+
+    // ---- Randhawa: a stated today's date outranks the latest-note ceiling ----
+    //
+    // His task states 31 January 2017; his newest note is 29 January. With both branches live no
+    // date could pass at all, so the scenario was unpassable by writing.
+
+    private const string RandhawaNotes =
+        "Patient: Tej Singh Randhawa | DOB: 9 September 1976 | 10/01/2017 first presentation "
+        + "| 24/01/2017 review | 29/01/2017 referral encounter, for orthopaedic assessment";
+
+    private static string DatedLetter(string date) => Letter.Replace("6 September 2026", date);
+
+    [Fact]
+    public void The_tasks_stated_today_date_is_accepted_even_when_it_post_dates_every_note()
+    {
+        var findings = Engine.Lint(new WritingLintInput(
+            LetterText: DatedLetter("31 January 2017"),
+            CaseNotesText: RandhawaNotes,
+            TodayDate: "31 January 2017",
+            IsModelAnswer: true));
+        Assert.DoesNotContain(findings, f => f.RuleId.Contains(Check));
+    }
+
+    [Fact]
+    public void A_date_that_is_not_the_stated_today_date_still_fails()
+    {
+        var findings = Engine.Lint(new WritingLintInput(
+            LetterText: DatedLetter("29 January 2017"),
+            CaseNotesText: RandhawaNotes,
+            TodayDate: "31 January 2017",
+            IsModelAnswer: true));
+        Assert.Contains(findings, f => f.RuleId.Contains(Check));
+    }
+
+    [Fact]
+    public void Without_a_stated_today_date_the_note_ceiling_still_catches_an_invented_date()
+    {
+        var findings = Engine.Lint(new WritingLintInput(
+            LetterText: DatedLetter("6 September 2026"),
+            CaseNotesText: RandhawaNotes,
+            IsModelAnswer: true));
+        Assert.Contains(findings, f => f.RuleId.Contains(Check));
+    }
 }
