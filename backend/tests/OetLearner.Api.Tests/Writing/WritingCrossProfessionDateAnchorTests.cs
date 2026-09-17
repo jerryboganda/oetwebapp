@@ -41,6 +41,7 @@ public sealed class WritingCrossProfessionDateAnchorTests
     private static IReadOnlyList<LintFinding> Lint(string notes, string? todayDate, bool modelAnswer = true) =>
         Engine.Lint(new WritingLintInput(
             LetterText: Letter,
+            LetterType: "transfer",
             CaseNotesText: notes,
             TodayDate: todayDate,
             IsModelAnswer: modelAnswer));
@@ -88,7 +89,8 @@ public sealed class WritingCrossProfessionDateAnchorTests
     [Fact]
     public void Without_canonical_case_notes_it_stays_silent()
     {
-        var findings = Engine.Lint(new WritingLintInput(LetterText: Letter, IsModelAnswer: true));
+        var findings = Engine.Lint(new WritingLintInput(LetterText: Letter,
+            LetterType: "transfer", IsModelAnswer: true));
         Assert.DoesNotContain(findings, f => f.RuleId.Contains(Check));
     }
 
@@ -107,6 +109,7 @@ public sealed class WritingCrossProfessionDateAnchorTests
     public void The_tasks_stated_today_date_is_accepted_even_when_it_post_dates_every_note()
     {
         var findings = Engine.Lint(new WritingLintInput(
+            LetterType: "transfer",
             LetterText: DatedLetter("31 January 2017"),
             CaseNotesText: RandhawaNotes,
             TodayDate: "31 January 2017",
@@ -118,6 +121,7 @@ public sealed class WritingCrossProfessionDateAnchorTests
     public void A_date_that_is_not_the_stated_today_date_still_fails()
     {
         var findings = Engine.Lint(new WritingLintInput(
+            LetterType: "transfer",
             LetterText: DatedLetter("29 January 2017"),
             CaseNotesText: RandhawaNotes,
             TodayDate: "31 January 2017",
@@ -129,6 +133,7 @@ public sealed class WritingCrossProfessionDateAnchorTests
     public void Without_a_stated_today_date_the_note_ceiling_still_catches_an_invented_date()
     {
         var findings = Engine.Lint(new WritingLintInput(
+            LetterType: "transfer",
             LetterText: DatedLetter("6 September 2026"),
             CaseNotesText: RandhawaNotes,
             IsModelAnswer: true));

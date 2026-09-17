@@ -52,6 +52,7 @@ public sealed class WritingPatientRequestMarkerRegressionTests
         // No "upon his request" anywhere in the letter, and none is owed.
         var findings = engine.Lint(new WritingLintInput(
             LetterText: "I would be grateful if you could supervise his home-based exercise programme.",
+            LetterType: "routine_referral",
             CaseNotesText: notes,
             IsModelAnswer: true,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(notes)));
@@ -67,6 +68,7 @@ public sealed class WritingPatientRequestMarkerRegressionTests
 
         var findings = engine.Lint(new WritingLintInput(
             LetterText: "I would be grateful if you could assess and manage his ongoing pain.",
+            LetterType: "routine_referral",
             CaseNotesText: notes,
             IsModelAnswer: true,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(notes)));
