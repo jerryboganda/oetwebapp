@@ -53,9 +53,32 @@ export function getAuthFlowLinks(screen: AuthScreenKey): {
   }
 }
 
-export function appendAuthNextParam(href: string, nextPath?: string | null): string {
+export function normalizeAuthNextPath(nextPath?: string | null): string | null {
   const normalizedNext = nextPath?.trim();
-  if (!normalizedNext || !normalizedNext.startsWith('/') || normalizedNext.startsWith('//')) {
+  if (!normalizedNext || !normalizedNext.startsWith('/') || normalizedNext.startsWith('//')
+    || /[\\\u0000-\u001f\u007f]/.test(normalizedNext)) {
+    return null;
+  }
+
+  try {
+    const origin = 'https://auth.invalid';
+    const parsed = new URL(normalizedNext, origin);
+    const decodedPath = decodeURIComponent(parsed.pathname);
+    if (parsed.origin !== origin || decodedPath.startsWith('//')
+      || /[\\?#\u0000-\u001f\u007f]|%[0-9a-f]{2}/i.test(decodedPath)) {
+      return null;
+    }
+
+    const resolved = new URL(decodedPath, origin);
+    return resolved.origin === origin ? `${resolved.pathname}${parsed.search}${parsed.hash}` : null;
+  } catch {
+    return null;
+  }
+}
+
+export function appendAuthNextParam(href: string, nextPath?: string | null): string {
+  const normalizedNext = normalizeAuthNextPath(nextPath);
+  if (!normalizedNext) {
     return href;
   }
 

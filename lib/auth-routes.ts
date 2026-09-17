@@ -1,4 +1,5 @@
 import type { CurrentUser, UserRole } from '@/lib/types/auth';
+import { normalizeAuthNextPath } from '@/lib/auth/routes';
 
 function isSponsorPortalEnabled(): boolean {
   return process.env.NEXT_PUBLIC_SPONSOR_PORTAL_ENABLED === 'true';
@@ -30,19 +31,20 @@ export function roleSatisfiesRequired(userRole: UserRole | null, requiredRole: U
 }
 
 export function roleCanAccessPath(role: UserRole, path: string): boolean {
-  if (!isSafeRelativePath(path)) {
+  const normalizedPath = normalizeAuthNextPath(path);
+  if (!normalizedPath) {
     return false;
   }
 
-  if (path.startsWith('/admin')) {
+  if (normalizedPath.startsWith('/admin')) {
     return role === 'admin';
   }
 
-  if (path.startsWith('/expert')) {
+  if (normalizedPath.startsWith('/expert')) {
     return role === 'expert';
   }
 
-  if (path.startsWith('/sponsor')) {
+  if (normalizedPath.startsWith('/sponsor')) {
     return role === 'sponsor' && isSponsorPortalEnabled();
   }
 
@@ -50,14 +52,10 @@ export function roleCanAccessPath(role: UserRole, path: string): boolean {
   return role === 'learner' || role === 'admin';
 }
 
-function isSafeRelativePath(path: string): boolean {
-  return path.startsWith('/') && !path.startsWith('//');
-}
-
 export function resolvePostAuthDestination(user: CurrentUser, nextPath?: string | null): string {
-  const normalizedNext = nextPath?.trim();
+  const normalizedNext = normalizeAuthNextPath(nextPath);
 
-  if (!normalizedNext || !normalizedNext.startsWith('/')) {
+  if (!normalizedNext) {
     return defaultRouteForRole(user.role);
   }
 
