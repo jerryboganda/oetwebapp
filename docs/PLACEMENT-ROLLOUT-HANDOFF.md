@@ -6,10 +6,29 @@ below refers to the three shipped pieces:
 
 | Piece | Repo / branch | Commit |
 |---|---|---|
-| Engine fixes + readiness gate + service role | GEPA `main` | `edfef0e` |
+| Engine fixes + readiness gate + service role | GEPA `main` | `edfef0e`, `9d5fb9f` |
 | API proxy + minimal signup + result history | oetwebapp `feat/placement-test` | `bc1016a7` |
 | Web app placement journey | oetwebapp `feat/placement-test` | `5eb6aab0` |
+| Live end-to-end fixes | oetwebapp `feat/placement-test` | `2ec29648` |
 | Website discovery (homepage/nav/landing page) | oetwebsite `feat/placement-test` | `9c0acac` |
+
+## 0. Live end-to-end verification (2026-09-18)
+
+The full stack was driven live before handoff: GEPA engine + real
+Postgres (readiness gate green, checksums verified), OET API wired to it
+(schema cloned from prod + this migration), production Next.js build in
+a real browser. Verified: minimal registration (+ control that standard
+signup still requires enrollment), proxy session create with service
+token, full LS/RD/LSN adaptive run to measured bands, receptive profile,
+real WAV upload with server-measured metrics (4.00s pcm_analysis),
+speaking/writing honest `pending_review` without a provider key, full
+result honesty (SPK/WRT insufficient_evidence, headline none), OET-owned
+PlacementResults row with ruleset 2.0.0-beta + history endpoints, audio
+streaming, cross-account denial, retention sweep keeping results, and
+the browser-verified placement-entry redirect to the minimal signup.
+Four defects found and fixed in `2ec29648`/`9d5fb9f` (details in those
+commits) — notably the migration is now idempotent, which unblocks the
+production deploy itself.
 
 PRs: oetwebapp#230, oetwebsite#2.
 
