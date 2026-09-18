@@ -476,10 +476,29 @@ public sealed record SpeakingFeatureSettings(
 /// <summary>
 /// Placement-test (free General-English assessment on the private GEPA
 /// engine) rollout flags. <see cref="PlacementEnabled"/> gates every
-/// placement endpoint; the engine's own readiness gate runs underneath it.
+/// placement endpoint; <see cref="PlacementBetaOnly"/> narrows it further to
+/// the <see cref="PlacementBetaEmails"/> allowlist (controlled beta);
+/// the engine's own readiness gate runs underneath it all.
 /// </summary>
 public sealed record PlacementSettings(
-    bool PlacementEnabled);
+    bool PlacementEnabled,
+    bool BetaOnly,
+    string? BetaEmails)
+{
+    /// <summary>Case-insensitive allowlist check (comma/semicolon-separated
+    /// setting value; null/empty list denies everyone in beta mode).</summary>
+    public bool IsBetaEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(BetaEmails))
+        {
+            return false;
+        }
+        var separators = new[] { ',', ';' };
+        return BetaEmails
+            .Split(separators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Contains(email.Trim(), StringComparer.OrdinalIgnoreCase);
+    }
+}
 
 /// <summary>Checkout.com payment gateway settings (DB-over-env merged).
 /// Secrets decrypted; <see cref="IsConfigured"/> gates live calls.</summary>

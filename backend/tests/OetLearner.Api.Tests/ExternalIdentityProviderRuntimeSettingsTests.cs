@@ -53,7 +53,7 @@ public sealed class ExternalIdentityProviderRuntimeSettingsTests
                 SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
                 SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
                 SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
-            Placement: new PlacementSettings(PlacementEnabled: false),
+            Placement: new PlacementSettings(PlacementEnabled: false, BetaOnly: false, BetaEmails: null),
                 CheckoutCom: TestRuntimeSettingsProvider.DefaultCheckoutCom(),
                 Paymob: TestRuntimeSettingsProvider.DefaultPaymob(),
                 PayTabs: TestRuntimeSettingsProvider.DefaultPayTabs(),

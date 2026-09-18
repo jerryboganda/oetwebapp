@@ -29,10 +29,16 @@ public static class PlacementEndpoints
 
         // ── Availability (used by the web app to reveal the entry) ──────
         placement.MapGet("/status", async (
-            IRuntimeSettingsProvider settings, PlacementGateway gateway, CancellationToken ct) =>
+            HttpContext http, IRuntimeSettingsProvider settings, PlacementGateway gateway, CancellationToken ct) =>
         {
-            var enabled = (await settings.GetAsync()).Placement.PlacementEnabled;
-            return Results.Ok(new { enabled });
+            var placement = (await settings.GetAsync()).Placement;
+            var access = placement.BetaOnly
+                ? (placement.IsBetaEmail(http.User.FindFirstValue(ClaimTypes.Email)
+                    ?? http.User.FindFirst("email")?.Value)
+                    ? "granted"
+                    : "not_in_beta")
+                : "granted";
+            return Results.Ok(new { enabled = placement.PlacementEnabled, betaOnly = placement.BetaOnly, access });
         });
 
         // ── Session lifecycle ────────────────────────────────────────────
@@ -278,6 +284,21 @@ public sealed class PlacementEnabledFilter : IEndpointFilter
             return Results.Json(new { error = "placement_disabled", message = "The placement test is not available yet." },
                 statusCode: StatusCodes.Status404NotFound);
         }
+
+        // Controlled beta: enabled, but narrowed to the allowlist. Everyone
+        // outside it still sees the route as absent (404) — no feature
+        // enumeration, no half-available UX.
+        if (snapshot.Placement.BetaOnly)
+        {
+            var email = context.HttpContext.User.FindFirstValue(ClaimTypes.Email)
+                ?? context.HttpContext.User.FindFirst("email")?.Value;
+            if (!snapshot.Placement.IsBetaEmail(email))
+            {
+                return Results.Json(new { error = "placement_disabled", message = "The placement test is not available yet." },
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+        }
+
         return await next(context);
     }
 }

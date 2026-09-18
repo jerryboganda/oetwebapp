@@ -201,6 +201,58 @@ public class PlacementEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task BetaOnly_NarrowsAccessToTheAllowlist()
+    {
+        var betaEmail = $"placement.beta.{Guid.NewGuid():N}@example.com";
+        using var factory = new StubPlacementApiWebApplicationFactory(
+            placementEnabled: true,
+            extraSettings: new Dictionary<string, string?>
+            {
+                ["Features:PlacementBetaOnly"] = "true",
+                ["Features:PlacementBetaEmails"] = $"other.listed@example.com;{betaEmail}",
+            });
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost"),
+        });
+        client.DefaultRequestHeaders.Add("X-OET-Device-Id", "placement-beta-tests-device");
+        SeedInertEmailVerificationGate(factory);
+
+        // Allowlisted account: granted, and the status response says so.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", await RegisterForTokenAsync(client, betaEmail));
+        var status = await client.GetAsync("/v1/placement/status");
+        Assert.Equal(HttpStatusCode.OK, status.StatusCode);
+        var statusJson = await status.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(statusJson.GetProperty("enabled").GetBoolean());
+        Assert.True(statusJson.GetProperty("betaOnly").GetBoolean());
+        Assert.Equal("granted", statusJson.GetProperty("access").GetString());
+
+        // Non-allowlisted account: the route looks absent (404) — the flag
+        // gates without leaking that the feature exists.
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            "Bearer", await RegisterForTokenAsync(client, $"placement.outsider.{Guid.NewGuid():N}@example.com"));
+        var denied = await client.GetAsync("/v1/placement/status");
+        Assert.Equal(HttpStatusCode.NotFound, denied.StatusCode);
+    }
+
+    private static async Task<string> RegisterForTokenAsync(HttpClient client, string email)
+    {
+        var response = await client.PostAsJsonAsync("/v1/auth/register", new RegisterRequest(
+            email, "Password123!", ApplicationUserRoles.Learner, "Placement Beta",
+            "Placement", "Beta", "+15550001555",
+            AgreeToTerms: true, AgreeToPrivacy: true, MarketingOptIn: false,
+            RegistrationPurpose: "placement"));
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync();
+            Assert.True(response.IsSuccessStatusCode, $"register {(int)response.StatusCode}: {body}");
+        }
+        var session = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return session.GetProperty("accessToken").GetString()!;
+    }
+
+    [Fact]
     public async Task ReviewerSurface_RequiresAdmin()
     {
         await RegisterLearnerAsync();
@@ -344,11 +396,16 @@ public class PlacementEndpointsTests : IDisposable
     /// placement flag and an optional service-collection hook for the gateway.</summary>
     private sealed class StubPlacementApiWebApplicationFactory : WebApplicationFactory<Program>
     {
-        private readonly Dictionary<string, string?> _previousValues;
+        /// <summary>Applied via builder.UseSetting (per-host configuration) in
+        /// ConfigureWebHost — NOT via process env vars: xunit constructs every
+        /// test-class instance up front, so ctor-time env mutation interleaves
+        /// across instances and the flag leaks between tests.</summary>
+        private readonly Dictionary<string, string?> _settings;
 
         public StubPlacementApiWebApplicationFactory(
             bool placementEnabled,
-            Action<IServiceCollection>? configureServices = null)
+            Action<IServiceCollection>? configureServices = null,
+            Dictionary<string, string?>? extraSettings = null)
         {
             ConfigureServicesHook = configureServices;
 
@@ -405,14 +462,15 @@ public class PlacementEndpointsTests : IDisposable
                 ["PasswordPolicy:BreachCheckEnabled"] = "false"
             };
 
-            _previousValues = settings.ToDictionary(
-                entry => ToEnvironmentVariableName(entry.Key),
-                entry => Environment.GetEnvironmentVariable(ToEnvironmentVariableName(entry.Key)));
-
-            foreach (var (key, value) in settings)
+            if (extraSettings is not null)
             {
-                Environment.SetEnvironmentVariable(ToEnvironmentVariableName(key), value);
+                foreach (var (key, value) in extraSettings)
+                {
+                    settings[key] = value;
+                }
             }
+
+            _settings = settings;
         }
 
         private Action<IServiceCollection>? ConfigureServicesHook { get; }
@@ -420,6 +478,10 @@ public class PlacementEndpointsTests : IDisposable
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Production");
+            foreach (var (key, value) in _settings)
+            {
+                builder.UseSetting(key, value);
+            }
             builder.ConfigureServices(services =>
             {
                 var sender = new RecordingEmailSender();
@@ -433,20 +495,6 @@ public class PlacementEndpointsTests : IDisposable
             });
         }
 
-        protected override void Dispose(bool disposing)
-        {
-            base.Dispose(disposing);
-            if (!disposing)
-            {
-                return;
-            }
-            foreach (var (key, value) in _previousValues)
-            {
-                Environment.SetEnvironmentVariable(key, value);
-            }
-        }
 
-        private static string ToEnvironmentVariableName(string configurationKey)
-            => configurationKey.Replace(":", "__", StringComparison.Ordinal);
     }
 }

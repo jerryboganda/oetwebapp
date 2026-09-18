@@ -215,6 +215,8 @@ public class RuntimeSettingsRow
 
     // ── Placement Test (private GEPA engine) ───────────────────────
     public bool? PlacementEnabled { get; set; }
+    public bool? PlacementBetaOnly { get; set; }
+    [MaxLength(2048)] public string? PlacementBetaEmails { get; set; }
 
     // ── Checkout.com (premium MENA + global cards) ─────────────────
     [MaxLength(512)] public string? CheckoutComApiBaseUrl { get; set; }

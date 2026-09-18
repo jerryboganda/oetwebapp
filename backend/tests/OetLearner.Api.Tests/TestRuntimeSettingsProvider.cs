@@ -49,7 +49,7 @@ internal sealed class TestRuntimeSettingsProvider(EffectiveSettings settings, Ru
             SpeakingStorage: SpeakingSettingsTestDefaults.Storage(),
             SpeakingCompliance: SpeakingSettingsTestDefaults.Compliance(),
             SpeakingFeatures: SpeakingSettingsTestDefaults.Features(),
-            Placement: new PlacementSettings(PlacementEnabled: false),
+            Placement: new PlacementSettings(PlacementEnabled: false, BetaOnly: false, BetaEmails: null),
             CheckoutCom: DefaultCheckoutCom(),
             Paymob: DefaultPaymob(),
             PayTabs: DefaultPayTabs(),

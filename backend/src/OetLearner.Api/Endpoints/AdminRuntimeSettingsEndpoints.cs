@@ -376,6 +376,8 @@ public static class AdminRuntimeSettingsEndpoints
             placement = new
             {
                 placementEnabled = settings.Placement.PlacementEnabled,
+                betaOnly = settings.Placement.BetaOnly,
+                betaEmails = settings.Placement.BetaEmails,
             },
             checkoutCom = new
             {
@@ -834,6 +836,8 @@ public static class AdminRuntimeSettingsEndpoints
             placement = new
             {
                 placementEnabled = r.PlacementEnabled,
+                betaOnly = r.PlacementBetaOnly,
+                betaEmails = r.PlacementBetaEmails,
             },
             updatedBy = r.UpdatedByUserName,
             updatedByUserId = r.UpdatedByUserId,
@@ -1126,6 +1130,8 @@ public static class AdminRuntimeSettingsEndpoints
     {
         if (d is null) return;
         if (TrySetNullableBool(d.PlacementEnabled, v => row.PlacementEnabled = v, "placement.placementEnabled", changed)) { }
+        if (TrySetNullableBool(d.BetaOnly, v => row.PlacementBetaOnly = v, "placement.betaOnly", changed)) { }
+        if (TrySetPlain(d.BetaEmails, v => row.PlacementBetaEmails = v, "placement.betaEmails", changed)) { }
     }
 
     private static void ApplyCheckoutCom(RuntimeSettingsRow row, RuntimeSettingsCheckoutComUpdate? d,
@@ -1918,7 +1924,10 @@ public static class AdminRuntimeSettingsEndpoints
                 : Failed(sectionId, "Configure AWS access key, secret, and bucket for speaking recording storage.", testedAt),
             "speakingcompliance" => Ok(sectionId, "Speaking compliance settings are configured via defaults or admin overrides.", testedAt),
             "speakingfeatures" => Ok(sectionId, $"Speaking V2 feature flag is {(settings.SpeakingFeatures.SpeakingV2Enabled ? "enabled" : "disabled")}.", testedAt),
-            "placement" => Ok(sectionId, $"Placement test is {(settings.Placement.PlacementEnabled ? "enabled" : "disabled")}.", testedAt),
+            "placement" => Ok(sectionId, settings.Placement.PlacementEnabled
+                ? $"Placement test is enabled{(settings.Placement.BetaOnly ? $" (beta allowlist, {settings.Placement.BetaEmails?.Split(',', ';').Count(e => !string.IsNullOrWhiteSpace(e))} account(s))" : " for everyone")}."
+                : "Placement test is disabled.",
+                testedAt),
             "checkoutcom" => await TestCheckoutComAsync(settings.CheckoutCom, httpClientFactory, sectionId, testedAt, ct),
             "bunnystream" => await TestBunnyStreamAsync(settings.BunnyStream, settings.VideoAttestation, httpClientFactory, sectionId, testedAt, ct),
             "paymob" => await TestPaymobAsync(settings.Paymob, httpClientFactory, sectionId, testedAt, ct),
@@ -2830,6 +2839,10 @@ public sealed class RuntimeSettingsSpeakingFeaturesUpdate
 public sealed class RuntimeSettingsPlacementUpdate
 {
     public JsonElement? PlacementEnabled { get; set; }
+    public JsonElement? BetaOnly { get; set; }
+    /// <summary>Full-replace comma/semicolon-separated allowlist; empty
+    /// string clears it.</summary>
+    public string? BetaEmails { get; set; }
 }
 
 // ── Wave 4 wire contracts ─────────────────────────────────────────

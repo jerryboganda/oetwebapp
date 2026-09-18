@@ -17,6 +17,19 @@ namespace OetLearner.Api.Data.Migrations
                 type: "boolean",
                 nullable: true);
 
+            migrationBuilder.AddColumn<bool>(
+                name: "PlacementBetaOnly",
+                table: "RuntimeSettings",
+                type: "boolean",
+                nullable: true);
+
+            migrationBuilder.AddColumn<string>(
+                name: "PlacementBetaEmails",
+                table: "RuntimeSettings",
+                type: "character varying(2048)",
+                maxLength: 2048,
+                nullable: true);
+
             migrationBuilder.AlterColumn<string>(
                 name: "ProfessionId",
                 table: "LearnerRegistrationProfiles",
@@ -102,6 +115,14 @@ ALTER TABLE ""CompanionSources"" ADD COLUMN IF NOT EXISTS ""VerifiedByUserId"" c
 
             migrationBuilder.DropColumn(
                 name: "PlacementEnabled",
+                table: "RuntimeSettings");
+
+            migrationBuilder.DropColumn(
+                name: "PlacementBetaOnly",
+                table: "RuntimeSettings");
+
+            migrationBuilder.DropColumn(
+                name: "PlacementBetaEmails",
                 table: "RuntimeSettings");
 
             migrationBuilder.DropColumn(
