@@ -73,17 +73,27 @@ export interface PlacementSkillResult {
   growth_areas: string[];
 }
 
+/**
+ * The engine serializes report-level fields in camelCase (with snake_case
+ * aliases on deserialize only) while some nested fields stay snake_case —
+ * every report reader must tolerate both (verified against live output).
+ */
 export interface PlacementResultReport {
   session_id: string;
-  profile_type: string;
+  profile_type?: string;
+  profileType?: string;
   skills: PlacementSkillResult[];
   headline: { kind: string; band: string | null; range: [string, string] | null };
   confidence: string;
-  confidence_reasons: string[];
+  confidence_reasons?: string[];
+  confidenceReasons?: string[];
   readiness: { target: string; text: string; disclaimer: string; currency_note: string | null } | null;
-  retest_advice: string;
-  wording_version: string;
-  generated_at: string;
+  retest_advice?: string;
+  retestAdvice?: string;
+  wording_version?: string;
+  wordingVersion?: string;
+  generated_at?: string;
+  generatedAt?: string;
 }
 
 export interface PlacementHistoryItem {
