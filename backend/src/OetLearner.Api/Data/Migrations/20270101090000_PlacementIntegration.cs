@@ -54,32 +54,15 @@ namespace OetLearner.Api.Data.Migrations
                 maxLength: 32,
                 nullable: true);
 
-            migrationBuilder.AddColumn<string>(
-                name: "PackageScope",
-                table: "CompanionSources",
-                type: "character varying(32)",
-                maxLength: 32,
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "SourceUrl",
-                table: "CompanionSources",
-                type: "character varying(1024)",
-                maxLength: 1024,
-                nullable: true);
-
-            migrationBuilder.AddColumn<DateTimeOffset>(
-                name: "VerifiedAt",
-                table: "CompanionSources",
-                type: "timestamp with time zone",
-                nullable: true);
-
-            migrationBuilder.AddColumn<string>(
-                name: "VerifiedByUserId",
-                table: "CompanionSources",
-                type: "character varying(64)",
-                maxLength: 64,
-                nullable: true);
+            // The four CompanionSources columns exist on environments where
+            // the companion feature was already deployed (prod got them
+            // before any migration carried them) — add each only when
+            // missing so this migration is idempotent against both shapes.
+            migrationBuilder.Sql(@"
+ALTER TABLE ""CompanionSources"" ADD COLUMN IF NOT EXISTS ""PackageScope"" character varying(32);
+ALTER TABLE ""CompanionSources"" ADD COLUMN IF NOT EXISTS ""SourceUrl"" character varying(1024);
+ALTER TABLE ""CompanionSources"" ADD COLUMN IF NOT EXISTS ""VerifiedAt"" timestamp with time zone;
+ALTER TABLE ""CompanionSources"" ADD COLUMN IF NOT EXISTS ""VerifiedByUserId"" character varying(64);");
 
             migrationBuilder.CreateTable(
                 name: "PlacementResults",
@@ -125,21 +108,10 @@ namespace OetLearner.Api.Data.Migrations
                 name: "RegistrationPurpose",
                 table: "LearnerRegistrationProfiles");
 
-            migrationBuilder.DropColumn(
-                name: "PackageScope",
-                table: "CompanionSources");
-
-            migrationBuilder.DropColumn(
-                name: "SourceUrl",
-                table: "CompanionSources");
-
-            migrationBuilder.DropColumn(
-                name: "VerifiedAt",
-                table: "CompanionSources");
-
-            migrationBuilder.DropColumn(
-                name: "VerifiedByUserId",
-                table: "CompanionSources");
+            // CompanionSources columns are NOT dropped on downgrade: on
+            // environments that already had them (pre-dating this migration)
+            // dropping would destroy live data. The columns are nullable and
+            // harmless when the feature is absent.
 
             migrationBuilder.AlterColumn<string>(
                 name: "ProfessionId",

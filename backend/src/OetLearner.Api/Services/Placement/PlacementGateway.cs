@@ -70,9 +70,11 @@ public sealed class PlacementGateway
         };
     }
 
-    private async Task<JsonDocument> SendForJsonAsync(HttpRequestMessage request, CancellationToken ct)
+    private async Task<JsonDocument> SendForJsonAsync(HttpRequestMessage request, string path, CancellationToken ct)
     {
-        var path = request.RequestUri?.PathAndQuery ?? "?";
+        // NB: do NOT touch request.RequestUri for logging — it stays
+        // relative until the HttpClient combines it with BaseAddress at
+        // send time (PathAndQuery throws for relative URIs).
         try
         {
             using var response = await _http.SendAsync(request, ct);
@@ -224,6 +226,6 @@ public sealed class PlacementGateway
     private async Task<JsonDocument> SendAsync(HttpMethod method, string path, string candidateUid, HttpContent? content, CancellationToken ct)
     {
         using var request = await AuthenticatedAsync(method, path, candidateUid, content);
-        return await SendForJsonAsync(request, ct);
+        return await SendForJsonAsync(request, path, ct);
     }
 }

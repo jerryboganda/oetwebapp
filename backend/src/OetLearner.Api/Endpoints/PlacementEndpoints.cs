@@ -219,12 +219,16 @@ public static class PlacementEndpoints
                 }
             }
         }
-        var rulesetVersion = report.TryGetProperty("wording_version", out var wv)
+        // The report's wording/writing-policy version is the closest
+        // report-level provenance marker. The engine serializes report
+        // fields in camelCase (verified live), with snake_case fallbacks
+        // for safety; the routing-ruleset version itself rides on the
+        // session create/state responses.
+        var rulesetVersion = report.TryGetProperty("wordingVersion", out var wv) && wv.ValueKind == JsonValueKind.String
             ? (wv.GetString() ?? "unknown")
-            : "unknown";
-        // The engine's ruleset version rides on the session; the report's
-        // wording_version is the closest report-level provenance marker.
-        // (Session-level ruleset_version is captured on the create response.)
+            : report.TryGetProperty("wording_version", out var wv2) && wv2.ValueKind == JsonValueKind.String
+                ? (wv2.GetString() ?? "unknown")
+                : "unknown";
 
         var now = DateTime.UtcNow;
         var existing = await db.PlacementResults

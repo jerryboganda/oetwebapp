@@ -278,8 +278,18 @@ export function proxy(request: NextRequest) {
   const authCookie = request.cookies.get(AUTH_COOKIE);
 
   if (!authCookie) {
-    const signInUrl = new URL('/sign-in', request.url);
     const nextPath = `${pathname}${request.nextUrl.search}`;
+    // Placement entry: unauthenticated visitors get the MINIMAL placement
+    // signup (identity + consent only) instead of the standard sign-in wall;
+    // existing accounts follow the sign-in link on that screen. Mirrors the
+    // client-side AuthGuard so the redirect is already correct on first paint.
+    if (pathname === '/placement-test' || pathname.startsWith('/placement-test/')) {
+      const registerUrl = new URL('/register', request.url);
+      registerUrl.searchParams.set('purpose', 'placement');
+      registerUrl.searchParams.set('next', nextPath);
+      return withCsp(NextResponse.redirect(registerUrl));
+    }
+    const signInUrl = new URL('/sign-in', request.url);
     signInUrl.searchParams.set('next', nextPath);
     return withCsp(NextResponse.redirect(signInUrl));
   }
