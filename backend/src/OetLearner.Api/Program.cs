@@ -190,6 +190,25 @@ builder.Services.AddSignalR(options =>
 });
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
 builder.Services.AddHttpClient<IMobilePushDispatcher, MobilePushDispatcher>();
+
+// ── Placement test: private GEPA assessment engine connection ──
+// The engine stays private (no public route): this API is the only caller.
+// GEPA_SERVICE_TOKEN is the admin-minted service credential (see the
+// placement handoff); Placement:EngineBaseUrl is the INTERNAL engine URL.
+builder.Services.AddHttpClient<OetLearner.Api.Services.Placement.PlacementGateway>(client =>
+{
+    var baseUrl = builder.Configuration["Placement:EngineBaseUrl"]
+        ?? Environment.GetEnvironmentVariable("GEPA_ENGINE_BASE_URL")
+        ?? "http://127.0.0.1:8080";
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(180); // inline productive rating can be slow
+    var token = Environment.GetEnvironmentVariable("GEPA_SERVICE_TOKEN");
+    if (!string.IsNullOrEmpty(token))
+    {
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+    }
+});
     // IAM-01 / OWASP Password Storage Cheat Sheet: PBKDF2-HMAC-SHA512 at >= 220,000
     // iterations, via Pbkdf2Sha512PasswordHasher (Identity v3 blob format, PRF-tagged —
     // existing stock-hasher hashes keep verifying and migrate to the SHA-512 profile on
@@ -2938,6 +2957,7 @@ app.MapPredictionEndpoints();
 // ── Phase 3 new endpoints ──
 app.MapLearningContentEndpoints();
 app.MapCommunityEndpoints();
+app.MapPlacementEndpoints();
 app.MapPeerReviewEndpoints();
 app.MapNotificationRuleEndpoints();
 app.MapSocialEndpoints();

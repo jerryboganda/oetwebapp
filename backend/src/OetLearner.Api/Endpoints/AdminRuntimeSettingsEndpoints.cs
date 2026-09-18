@@ -92,6 +92,7 @@ public static class AdminRuntimeSettingsEndpoints
                     ApplySpeakingStorage(row, request.SpeakingStorage, provider, changedKeys);
                     ApplySpeakingCompliance(row, request.SpeakingCompliance, changedKeys);
                     ApplySpeakingFeatures(row, request.SpeakingFeatures, changedKeys);
+                    ApplyPlacement(row, request.Placement, changedKeys);
                     ApplyCheckoutCom(row, request.CheckoutCom, provider, changedKeys);
                     ApplyBunnyStream(row, request.BunnyStream, provider, changedKeys);
                     ApplyVideoProtection(row, request.VideoProtection, changedKeys);
@@ -371,6 +372,12 @@ public static class AdminRuntimeSettingsEndpoints
             speakingFeatures = new
             {
                 speakingV2Enabled = settings.SpeakingFeatures.SpeakingV2Enabled,
+            },
+            placement = new
+            {
+                placementEnabled = settings.Placement.PlacementEnabled,
+                betaOnly = settings.Placement.BetaOnly,
+                betaEmails = settings.Placement.BetaEmails,
             },
             checkoutCom = new
             {
@@ -826,6 +833,12 @@ public static class AdminRuntimeSettingsEndpoints
             {
                 speakingV2Enabled = r.SpeakingV2Enabled,
             },
+            placement = new
+            {
+                placementEnabled = r.PlacementEnabled,
+                betaOnly = r.PlacementBetaOnly,
+                betaEmails = r.PlacementBetaEmails,
+            },
             updatedBy = r.UpdatedByUserName,
             updatedByUserId = r.UpdatedByUserId,
             updatedAt = r.UpdatedAt == default ? (DateTimeOffset?)null : r.UpdatedAt,
@@ -1110,6 +1123,15 @@ public static class AdminRuntimeSettingsEndpoints
     {
         if (d is null) return;
         if (TrySetNullableBool(d.SpeakingV2Enabled, v => row.SpeakingV2Enabled = v, "speakingFeatures.speakingV2Enabled", changed)) { }
+    }
+
+    private static void ApplyPlacement(RuntimeSettingsRow row, RuntimeSettingsPlacementUpdate? d,
+        List<string> changed)
+    {
+        if (d is null) return;
+        if (TrySetNullableBool(d.PlacementEnabled, v => row.PlacementEnabled = v, "placement.placementEnabled", changed)) { }
+        if (TrySetNullableBool(d.BetaOnly, v => row.PlacementBetaOnly = v, "placement.betaOnly", changed)) { }
+        if (TrySetPlain(d.BetaEmails, v => row.PlacementBetaEmails = v, "placement.betaEmails", changed)) { }
     }
 
     private static void ApplyCheckoutCom(RuntimeSettingsRow row, RuntimeSettingsCheckoutComUpdate? d,
@@ -1902,6 +1924,10 @@ public static class AdminRuntimeSettingsEndpoints
                 : Failed(sectionId, "Configure AWS access key, secret, and bucket for speaking recording storage.", testedAt),
             "speakingcompliance" => Ok(sectionId, "Speaking compliance settings are configured via defaults or admin overrides.", testedAt),
             "speakingfeatures" => Ok(sectionId, $"Speaking V2 feature flag is {(settings.SpeakingFeatures.SpeakingV2Enabled ? "enabled" : "disabled")}.", testedAt),
+            "placement" => Ok(sectionId, settings.Placement.PlacementEnabled
+                ? $"Placement test is enabled{(settings.Placement.BetaOnly ? $" (beta allowlist, {settings.Placement.BetaEmails?.Split(',', ';').Count(e => !string.IsNullOrWhiteSpace(e))} account(s))" : " for everyone")}."
+                : "Placement test is disabled.",
+                testedAt),
             "checkoutcom" => await TestCheckoutComAsync(settings.CheckoutCom, httpClientFactory, sectionId, testedAt, ct),
             "bunnystream" => await TestBunnyStreamAsync(settings.BunnyStream, settings.VideoAttestation, httpClientFactory, sectionId, testedAt, ct),
             "paymob" => await TestPaymobAsync(settings.Paymob, httpClientFactory, sectionId, testedAt, ct),
@@ -2331,6 +2357,7 @@ public sealed class RuntimeSettingsUpdateRequest
     public RuntimeSettingsSpeakingStorageUpdate? SpeakingStorage { get; set; }
     public RuntimeSettingsSpeakingComplianceUpdate? SpeakingCompliance { get; set; }
     public RuntimeSettingsSpeakingFeaturesUpdate? SpeakingFeatures { get; set; }
+    public RuntimeSettingsPlacementUpdate? Placement { get; set; }
     public RuntimeSettingsCheckoutComUpdate? CheckoutCom { get; set; }
     public RuntimeSettingsBunnyStreamUpdate? BunnyStream { get; set; }
     public RuntimeSettingsVideoProtectionUpdate? VideoProtection { get; set; }
@@ -2806,6 +2833,16 @@ public sealed class RuntimeSettingsSpeakingComplianceUpdate
 public sealed class RuntimeSettingsSpeakingFeaturesUpdate
 {
     public JsonElement? SpeakingV2Enabled { get; set; }
+}
+
+/// <summary>Placement test rollout flags.</summary>
+public sealed class RuntimeSettingsPlacementUpdate
+{
+    public JsonElement? PlacementEnabled { get; set; }
+    public JsonElement? BetaOnly { get; set; }
+    /// <summary>Full-replace comma/semicolon-separated allowlist; empty
+    /// string clears it.</summary>
+    public string? BetaEmails { get; set; }
 }
 
 // ── Wave 4 wire contracts ─────────────────────────────────────────

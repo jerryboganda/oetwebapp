@@ -82,6 +82,9 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
     public DbSet<AiPackageCreditLot> AiPackageCreditLots => Set<AiPackageCreditLot>();
     public DbSet<LearnerExamOutcome> LearnerExamOutcomes => Set<LearnerExamOutcome>();
 
+    // Placement test (private GEPA engine): OET-owned result history.
+    public DbSet<PlacementResult> PlacementResults => Set<PlacementResult>();
+
     // Multi-exam reference entities
     public DbSet<ExamType> ExamTypes => Set<ExamType>();
     public DbSet<TaskType> TaskTypes => Set<TaskType>();
@@ -544,6 +547,11 @@ public partial class LearnerDbContext(DbContextOptions<LearnerDbContext> options
         modelBuilder.Entity<ExternalIdentityLink>().HasIndex(x => new { x.ApplicationUserAccountId, x.Provider });
         modelBuilder.Entity<LearnerRegistrationProfile>().HasIndex(x => x.ApplicationUserAccountId).IsUnique();
         modelBuilder.Entity<LearnerRegistrationProfile>().HasIndex(x => x.LearnerUserId).IsUnique();
+
+        // Placement test: one durable history row per engine session.
+        modelBuilder.Entity<PlacementResult>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });
+        modelBuilder.Entity<PlacementResult>().HasIndex(x => x.SessionId).IsUnique();
+
         modelBuilder.Entity<SignupExamTypeCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
         modelBuilder.Entity<SignupProfessionCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
         modelBuilder.Entity<SignupSessionCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });

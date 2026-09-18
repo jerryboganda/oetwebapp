@@ -23,17 +23,27 @@ public class LearnerRegistrationProfile
     [MaxLength(128)]
     public string LastName { get; set; } = default!;
 
+    /// <summary>Null for placement-purpose signups, which defer the
+    /// healthcare-enrollment block until the learner enrolls for OET.</summary>
     [MaxLength(32)]
-    public string ExamTypeId { get; set; } = default!;
+    public string? ExamTypeId { get; set; }
 
+    /// <summary>Null for placement-purpose signups (see <see cref="ExamTypeId"/>).</summary>
     [MaxLength(32)]
-    public string ProfessionId { get; set; } = default!;
+    public string? ProfessionId { get; set; }
 
     [MaxLength(64)]
     public string SessionId { get; set; } = default!;
 
+    /// <summary>Null for placement-purpose signups (see <see cref="ExamTypeId"/>).</summary>
     [MaxLength(64)]
-    public string CountryTarget { get; set; } = default!;
+    public string? CountryTarget { get; set; }
+
+    /// <summary>Why this account exists: <c>null</c> = standard OET
+    /// enrollment signup; <c>"placement"</c> = free General-English
+    /// placement test (minimal signup, enrollment deferred).</summary>
+    [MaxLength(32)]
+    public string? RegistrationPurpose { get; set; }
 
     /// <summary>Candidate's target OET exam date, collected at registration
     /// (or backfilled by an admin's Add-User form). Read once by

@@ -112,14 +112,20 @@ export interface RegisterLearnerInput {
   firstName: string;
   lastName: string;
   mobileNumber: string;
-  examTypeId: string;
-  professionId: string;
-  countryTarget: string;
-  targetExamDate: string;
+  /** Required for the standard signup; omitted for placement signups. */
+  examTypeId?: string | null;
+  /** Required for the standard signup; omitted for placement signups. */
+  professionId?: string | null;
+  /** Required for the standard signup; omitted for placement signups. */
+  countryTarget?: string | null;
+  /** Required for the standard signup; omitted for placement signups. */
+  targetExamDate?: string | null;
   agreeToTerms: boolean;
   agreeToPrivacy: boolean;
   marketingOptIn: boolean;
   externalRegistrationToken?: string | null;
+  /** "placement" = minimal signup for the free General-English placement test. */
+  registrationPurpose?: 'placement' | null;
   utmSource?: string | null;
   utmMedium?: string | null;
   utmCampaign?: string | null;

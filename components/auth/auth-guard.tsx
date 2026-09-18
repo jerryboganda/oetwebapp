@@ -18,7 +18,12 @@ interface AuthGuardProps {
   requiredRole?: UserRole;
 }
 
-const EXAM_DATE_EXEMPT_PATHS = ['/goals', '/onboarding', '/onboarding-tour'];
+const EXAM_DATE_EXEMPT_PATHS = ['/goals', '/onboarding', '/onboarding-tour', '/placement-test'];
+
+/// Unauthenticated visitors of these paths get the minimal placement
+/// signup instead of the standard sign-in wall (existing accounts can
+/// follow the sign-in link on that screen).
+const PLACEMENT_SIGNUP_PATHS = ['/placement-test'];
 
 function LearnerMobileNavigationLoadingState() {
   return (
@@ -155,7 +160,13 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     }
 
     if (!isAuthenticated) {
-      router.replace(`/sign-in?next=${encodeURIComponent(nextPath)}`);
+      const isPlacementEntry = PLACEMENT_SIGNUP_PATHS.some(
+        (path) => nextPath === path || nextPath.startsWith(`${path}/`),
+      );
+      const registerHref = isPlacementEntry
+        ? `/register?purpose=placement&next=${encodeURIComponent(nextPath)}`
+        : `/sign-in?next=${encodeURIComponent(nextPath)}`;
+      router.replace(registerHref);
       return;
     }
 
