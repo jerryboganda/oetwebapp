@@ -108,6 +108,28 @@ Still owner-gated before public launch:
 - Recording expiry never deletes result history (engine retention clears
   audio + references; OET-side `PlacementResults` is permanent).
 
+## 0b. Remaining-engineering round completed (2026-09-18, later commits)
+
+The six follow-up items from the plan's final review are now ALSO shipped
+on `feat/placement-test` (oetwebapp PR #230):
+
+- `a8e91612` — proxy endpoint tests against a stub engine (flag gate,
+  service-token + candidate-uid forwarding, results persistence, admin
+  boundary). 6/6 green.
+- `f9b8ddf8` — hermetic Playwright journey (unauth redirect + mocked
+  full objective run → foundation profile) + the runner resume-advance
+  fix it caught + opt-in `allowMockedBackendNoise` diagnostics option.
+- `92cec945` — controlled-beta allowlist: `Placement.BetaOnly` +
+  `Placement.BetaEmails` (admin-editable runtime settings), 404 for
+  outsiders, `access: granted | not_in_beta` on /status.
+- `fc783c2f` — `/placement-test/history` + `/placement-test/results/[id]`
+  standalone pages; ResultReportCard extracted + made casing-tolerant
+  (engine emits retestAdvice/confidenceReasons in camelCase); admin
+  review console at `/admin/placement` (queue, detail, audio playback,
+  re-rate, append-only human score).
+
+Owner-gated list below is unchanged.
+
 ## 5. Known follow-ups (non-blocking)
 
 - GEPA repo CI is currently red for an **account billing** reason ("job
