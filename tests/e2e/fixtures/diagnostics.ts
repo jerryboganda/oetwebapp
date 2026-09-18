@@ -14,6 +14,14 @@ type DiagnosticExpectationOptions = {
   allowNotificationReconnectNoise?: boolean;
   allowNextDevNoise?: boolean;
   allowMobileWebKitReloadNoise?: boolean;
+  /**
+   * Hermetic route-mocked suites (page.route fulfills only the surface under
+   * test and 404s the rest of the app shell's boot calls) opt in here: 4xx
+   * responses under the API proxy path and the console errors they trigger
+   * (e.g. the AI-assistant SignalR negotiation failure) are expected noise,
+   * not correctness defects.
+   */
+  allowMockedBackendNoise?: boolean;
 };
 
 function isIgnorableFailure(url: string) {
@@ -151,6 +159,9 @@ export async function attachDiagnostics(testInfo: TestInfo, diagnostics: PageDia
 }
 
 function shouldIgnoreClientErrorResponseText(text: string, options: DiagnosticExpectationOptions) {
+  if (options.allowMockedBackendNoise && text.startsWith('4') && text.includes('/api/backend/')) {
+    return true;
+  }
   if (
     options.allowNotificationReconnectNoise
     && text.startsWith('404 :: ')
@@ -194,6 +205,13 @@ function shouldIgnoreConsoleError(
   options: DiagnosticExpectationOptions,
   diagnostics: PageDiagnostics,
 ) {
+  // Hermetic route-mocked suites: the shell's un-stubbed boot calls (AI
+  // assistant SignalR negotiation, notifications, gamification, ...) fail
+  // against the 404 catch-all and log — expected noise there, see the
+  // option's doc on DiagnosticExpectationOptions.
+  if (options.allowMockedBackendNoise && (text.includes('/api/backend/') || text.includes('[AI Assistant]'))) {
+    return true;
+  }
   if (
     options.allowAuthRedirectNoise
     && (text.startsWith('[API] No auth token available for production request to ')

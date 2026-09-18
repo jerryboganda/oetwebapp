@@ -295,6 +295,17 @@ function ObjectiveStage({
 
   const moduleName = OBJECTIVE_MODULES[moduleIndex];
 
+  // Advance past a finished module (or hand the stage change to the parent
+  // for the last one). Reached from BOTH submit completion and a start call
+  // that reports module_complete directly (e.g. resuming an already-finished
+  // module) — the first cut only handled the submit path and hung on resume.
+  const completeModule = useCallback(() => {
+    if (moduleIndex + 1 < OBJECTIVE_MODULES.length) {
+      setModuleIndex(moduleIndex + 1);
+    }
+    onModuleComplete(moduleName);
+  }, [moduleIndex, moduleName, onModuleComplete]);
+
   const loadUnit = useCallback(async () => {
     setError(null);
     setSelected({});
@@ -303,12 +314,15 @@ function ObjectiveStage({
       if (!nextUnit.module_complete) {
         shownAtRef.current = Date.now();
         setSecondsLeft(deadlineSecondsFrom(nextUnit.deadline_at));
+        setUnit(nextUnit);
+        return;
       }
       setUnit(nextUnit);
+      completeModule();
     } catch (err) {
       setError(readErrorMessage(err, 'Could not load the next questions.'));
     }
-  }, [moduleName, sessionId]);
+  }, [completeModule, moduleName, sessionId]);
 
   useEffect(() => {
     setUnit(null);
@@ -346,22 +360,16 @@ function ObjectiveStage({
         setSelected({});
         setUnit(result.next);
       } else {
-        // Module finished (final confirmation outcome). The runner's parent
-        // stage-advance (result → speaking) is driven by onModuleComplete;
-        // within the objective stage we advance to the next module unless
-        // this was the last one.
+        // Module finished (final confirmation outcome).
         setUnit(result.next && result.next.module_complete ? result.next : unit);
-        if (moduleIndex + 1 < OBJECTIVE_MODULES.length) {
-          setModuleIndex(moduleIndex + 1);
-        }
-        onModuleComplete(moduleName);
+        completeModule();
       }
     } catch (err) {
       setError(readErrorMessage(err, 'Could not save your answers — check your connection and retry.'));
     } finally {
       setSubmitting(false);
     }
-  }, [moduleName, moduleIndex, onModuleComplete, selected, sessionId, submitting, unit]);
+  }, [completeModule, moduleName, selected, sessionId, submitting, unit]);
 
   useEffect(() => {
     if (secondsLeft === 0 && unit && !unit.module_complete && !submitting) {
