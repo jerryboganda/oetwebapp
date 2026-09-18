@@ -36,9 +36,45 @@ internal static class WritingPatientAgeExtractor
     // relatives are included: "Mother died aged 72" is the mother's age at
     // death, never the patient's (family-history notes are common in the
     // held-letter corpus).
+    private const string RelativeNouns =
+        @"children|child|sons?|daughters?|wife|husband|partner|brothers?|sisters?|twins?|grandsons?|granddaughters?|grandchildren|grandchild|baby|infant|nephews?|nieces?|mother|father|mum|mom|dad|parents?|aunt|uncle|cousins?|grandmother|grandfather|grandparents?";
+
     private static readonly Regex RelativeLedRegex =
-        new(@"\b(?:children|child|sons?|daughters?|wife|husband|partner|brothers?|sisters?|twins?|grandsons?|granddaughters?|grandchildren|grandchild|baby|infant|nephews?|nieces?|mother|father|mum|mom|dad|parents?|aunt|uncle|cousins?|grandmother|grandfather|grandparents?)\b[^.!?\n]*$",
+        new($@"\b(?:{RelativeNouns})\b[^.!?\n]*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Cross-profession repair (18 Sep 2026): the look-back only caught a relative BEFORE the age
+    // ("His daughter, aged 8"). In the adjectival form the relative comes AFTER it — Mrs Jane
+    // LaPaglia's notes read "Lives with her 80-year-old husband/carer, Joe", so the husband's 80
+    // was taken as the patient's age and age_dob_inconsistent fired Critical on her Re: line
+    // stating the age her own note and the source PDF give (71). The letter's only passing options
+    // were to state a false age or omit it. A relative noun straight after the age owns it.
+    // Only the age's own noun phrase counts, so no comma may be crossed and at most one adjective
+    // may intervene: "80-year-old husband" and "78 year old wife" are the relative's, while
+    // "Mr X, aged 45, has two sons aged 4 and 7" keeps 45 for the patient.
+    private static readonly Regex RelativeFollowsRegex =
+        new($@"^[\s-]+(?:her|his|their|the|my)?\s*(?:[a-z]+\s+)?(?:{RelativeNouns})\b",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Cross-profession repair (18 Sep 2026): case notes routinely state the age in apposition —
+    // "Mr Martin Wilson, 62, was admitted ..." — which neither pattern above reads. The Re: line
+    // then could not carry the age the notes DO record: "Re: Mr Martin Wilson, aged 62" was
+    // rejected as unsupported by re_line_identity_unsupported. A title or a two-part capitalised
+    // name must introduce it, and the number must close the apposition, so a house number or a
+    // measurement cannot be read as an age.
+    private static readonly Regex AppositionAgeRegex =
+        new(@"\b(?:(?:Mr|Mrs|Ms|Miss|Mx|Dr|Prof)\.?\s+[A-Z][A-Za-z'’\-]+(?:\s+[A-Z][A-Za-z'’\-]+){0,2}"
+            + @"|[A-Z][A-Za-z'’\-]+\s+(?<last>[A-Z][A-Za-z'’\-]+))\s*,\s*(\d{1,3})\s*(?=[,;)]|\s+(?:years?|yrs?)\b)",
+            RegexOptions.Compiled);
+
+    // An address reads exactly like a name in apposition — "Lives at Oakfield Drive, 19,
+    // Birmingham." — so a place word may not end the name that owns the number.
+    private static readonly HashSet<string> PlaceWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Drive", "Street", "St", "Road", "Rd", "Lane", "Avenue", "Ave", "Court", "Crescent", "Close",
+        "Parade", "Terrace", "Place", "Way", "Boulevard", "Highway", "Esplanade", "Square", "Park",
+        "Home", "Hospital", "Clinic", "Centre", "Center", "Practice", "Ward", "Unit", "Suite", "Floor",
+        "House", "Village", "Estate", "Gardens", "Grove", "Rise", "View", "Hill",
+    };
 
     public static int? Extract(string caseNotes)
     {
@@ -47,6 +83,11 @@ internal static class WritingPatientAgeExtractor
             if (TryPatientAge(text, match, out var age)) return age;
         foreach (var match in AgeLabelRegex.Matches(text).Cast<Match>())
             if (TryPatientAge(text, match, out var age)) return age;
+        foreach (var match in AppositionAgeRegex.Matches(text).Cast<Match>())
+        {
+            if (PlaceWords.Contains(match.Groups["last"].Value)) continue;
+            if (TryPatientAge(text, match, out var age)) return age;
+        }
         return null;
     }
 
@@ -57,6 +98,11 @@ internal static class WritingPatientAgeExtractor
         var boundary = text.LastIndexOfAny(['.', '!', '?', '\n'], Math.Max(0, match.Index - 1));
         var segment = text[(boundary + 1)..match.Index];
         if (RelativeLedRegex.IsMatch(segment)) return false;
+        // The digits alone are captured, so look forward from the end of the whole matched age
+        // expression: "80-year-old husband" and "80 years old wife" both hand the age to them.
+        var after = match.Index + match.Length;
+        var tail = text[after..Math.Min(text.Length, after + 60)];
+        if (RelativeFollowsRegex.IsMatch(tail)) return false;
         age = value;
         return true;
     }

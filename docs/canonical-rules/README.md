@@ -42,7 +42,7 @@ addendum's precedence rule (§7) the latest owner rule wins over older conflicti
 | `OET_AI_Rules_Master.jsonl` SHA-256 | `49ccef510da49da4b76edfd201c9e617b597e5cebbd9fe53d3fabb2cfc2a3f72` (2583 lines, LF), pinned as `REGISTRY_SHA256` in the build script |
 | Canonical rulebook version (6 built packs) | `2.5.0-cross-model-audit`, `publishedAt` `2026-09-17T00:00:00Z`; active Writing rows per pack: Medicine 351, Nursing 358, Dentistry 358, Pharmacy 361, Physiotherapy 361, Radiography 358 (Medicine: 84 sections, 156 critical) |
 | Legacy rulebook version (7 hand-maintained packs) | `1.1.0-rev8` |
-| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.cross-model-audit.2026-09-17.1` (128 check-ids) |
+| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.cross-profession.2026-09-18.1` (128 check-ids) |
 
 The v1.0 hashes in the table at the top of this file stay as original-release provenance only.
 `HANDOFF_SHA256SUMS.txt`, `OET_AI_DEPLOYMENT_CONTRACT.json` and `OET_AI_Source_Manifest.json` are

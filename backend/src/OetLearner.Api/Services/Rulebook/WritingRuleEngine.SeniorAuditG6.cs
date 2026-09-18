@@ -52,7 +52,14 @@ public sealed partial class WritingRuleEngine
     // doses, labelled discharge/transfer/admission dates, pregnancy anchors
     // (LMP/EDD) and the end of a range ("... to 06/03/15").
     private static readonly Regex SaG6NonEncounterPrefixRe = new(
-        @"\b(?:appointments?|appt|scheduled|booked|planned|plans?|due|next|arranged|made\s+for|expected|until|till|tomorrow|to\s+be|will|shall|pending|awaiting|upcoming|intended|proposed|return|follow[- ]?up|LMP|LNMP|last\s+(?:normal\s+)?menstrual\s+period|EDD|estimated\s+date|(?:discharge|transfer|admission|surgery|operation|review)\s+date|within|in\s+(?:\d+|one|two|three|four|five|six|seven|eight|a|a\s+few)\s+(?:days?|weeks?|months?))\b|\b(?:to|discharge|transfer)\s*[:\-–]?\s*$",
+        // Cross-profession repair (18 Sep 2026): a date introduced by "from"/"commencing" starts an
+        // arrangement rather than recording an event, so it is a planned date under rule 39 ("
+        // appointments, planned or due dates and the LMP never count"). Mrs Mellors's note
+        // "Physiotherapy outpatients three times weekly from 15 May 2018" was read as a documented
+        // encounter and set the floor, which rejected her letter dated on the 14 May transfer that
+        // both her notes and her task describe — and forced the physiotherapy start to be written
+        // as "from today".
+        @"\b(?:appointments?|appt|scheduled|booked|planned|plans?|due|next|arranged|made\s+for|expected|until|till|tomorrow|to\s+be|will|shall|pending|awaiting|upcoming|intended|proposed|return|follow[- ]?up|from|commencing|commences?|starting|starts?|beginning|begins?|effective|LMP|LNMP|last\s+(?:normal\s+)?menstrual\s+period|EDD|estimated\s+date|(?:discharge|transfer|admission|surgery|operation|review)\s+date|within|in\s+(?:\d+|one|two|three|four|five|six|seven|eight|a|a\s+few)\s+(?:days?|weeks?|months?))\b|\b(?:to|discharge|transfer)\s*[:\-–]?\s*$",
         RegexOptions.IgnoreCase);
 
     // Words straight after the date that make it a booking, not an encounter

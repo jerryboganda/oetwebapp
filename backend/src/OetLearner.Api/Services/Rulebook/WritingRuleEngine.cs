@@ -1233,7 +1233,12 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         if (!headerMatch.Success) yield break;
         var headerDateText = headerMatch.Value.Trim();
 
-        var m = Regex.Match(s.Body, Regex.Escape(headerDateText), RegexOptions.IgnoreCase);
+        // Cross-profession repair (18 Sep 2026): the header date was matched as a bare substring,
+        // so a letter dated "5 May 2017" was flagged for the body's "his discharge on 15 May 2017"
+        // — the header date sits inside "1|5 May 2017". Mr Joe Black's letter could only pass by
+        // dropping the year off a different, legitimate date. A digit may not precede the day.
+        var m = Regex.Match(s.Body, @"(?<![\d/.\-])" + Regex.Escape(headerDateText) + @"(?![\d/.\-])",
+            RegexOptions.IgnoreCase);
         if (m.Success)
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Never repeat today's date (the letter's own header date) in the body. Replace the WHOLE date phrase with 'today' ('presented on 13 June 2020' -> 'presented today'), never leave a preposition before it ('on today', 'at review on today'), and keep an EARLIER visit's own source date.",
@@ -1633,8 +1638,14 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectClosureConsent(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesMarkers?.ConsentDocumented != true) yield break;
+        // Cross-profession repair (18 Sep 2026): only the SINGULAR "has consented" counted, so
+        // Kevin Brown's notes — "Parents consented to referral to the family doctor" — could be
+        // stated faithfully only as "his parents have consented", which failed. The passing text
+        // the stored answer had used instead was an invented sentence ("Kevin has been informed of
+        // the diagnosis and management plan"). Plural consent, and consent recorded as obtained,
+        // now count.
         if (!Regex.IsMatch(input.LetterText,
-            @"\b(fully informed|has consented|has been informed|aware of (his|her) (diagnosis|management))\b",
+            @"\b(fully informed|ha(?:s|ve) consented|consent was obtained|ha(?:s|ve) been informed|aware of (his|her|their) (diagnosis|management))\b",
             RegexOptions.IgnoreCase))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Consent was documented in case notes — include the consent statement in closure.");
