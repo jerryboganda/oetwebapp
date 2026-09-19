@@ -157,6 +157,19 @@ Listening Part A Claude call are direct) but each writes exactly one
 | `stt.speaking.transcribe` | `whisper-asr` | Speaking attempt transcription |
 | `stt.pronunciation.transcribe` | `whisper-asr` | Pronunciation ASR transcription |
 | `stt.conversation.transcribe` | `whisper-asr` | Conversation ASR transcription |
+| `jev.writing.guard` | `typesafe-jev` | TypeSafe SystemOne (Jev) pre-gateway Writing guard: parallel Nouls for injection / rule-evasion / abuse / gibberish. Negative gate only — may block or flag to tutor, never auto-pass. Non-scoring, platform-only; master switch `TypeSafe:Enabled`. |
+| `jev.writing.route` | `typesafe-jev` | Jev Writing request routing (Choice + confidence gate); low confidence falls back to the default path. Non-scoring, platform-only. |
+| `jev.writing.verify` | `typesafe-jev` | Jev post-gateway citation verification of AI findings (supported / contradicted / not-in-evidence); low-confidence or contradicted findings go to the tutor review queue. Non-scoring, platform-only; never overrides the gateway verdict. |
+| `jev.writing.criteria` | `typesafe-jev` | Jev advisory per-criterion Writing signals (parallel Scores in one call), combined with code-owned weights. Display-only radar — never a grade input. Non-scoring, platform-only. |
+
+**TypeSafe SystemOne (Jev):** judgments only — the model returns typed
+Choice/Noul/Score answers, never text. Provider code `typesafe-jev` resolves
+its key from `TypeSafe:ApiKey` (server-side only, never a client bundle);
+calls flow through `TypeSafeJudgmentService` → `IDirectAiCallRecorder` like
+the other direct calls above and are budget-metered in the InteractiveLearning
+class. Jev output never overrides the rulebook-grounded gateway verdicts, the
+deterministic WritingRuleEngine, or the GEPA placement engine, and its
+thresholds are tuned on our own recorded judgments before any flag flips.
 
 **Unified Whisper:** all STT resolves the `whisper-asr` AI-provider row first
 (one key covers Speaking, Pronunciation, and Conversation), then legacy

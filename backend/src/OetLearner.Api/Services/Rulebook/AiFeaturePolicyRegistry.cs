@@ -195,8 +195,10 @@ public static class AiFeaturePolicyDefaults
 
     /// <summary>Direct (non-gateway) call prefixes that never carry a
     /// <c>RulebookPromptBuilder</c> grounded system prompt — see
-    /// <c>docs/AI-USAGE-POLICY.md</c> §5 "Direct (non-gateway) AI calls".</summary>
-    private static readonly string[] UngroundedPrefixes = { "ocr.", "stt.", "listening.parta.", "listening.partbc." };
+    /// <c>docs/AI-USAGE-POLICY.md</c> §5 "Direct (non-gateway) AI calls".
+    /// "jev." judgments carry only the caller-built state + questions; there
+    /// is no system prompt to ground.</summary>
+    private static readonly string[] UngroundedPrefixes = { "ocr.", "stt.", "listening.parta.", "listening.partbc.", "jev." };
 
     public static IReadOnlyDictionary<string, AiFeaturePolicyStaticDefault> All { get; } = Build();
 

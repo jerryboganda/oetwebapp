@@ -442,6 +442,39 @@ public static class AiFeatureCodes
     /// <summary>OpenAI-compatible embeddings generation (non-Claude).</summary>
     public const string EmbeddingsGenerate = "embeddings.generate";
 
+    // ── TypeSafe SystemOne (model "Jev") — direct judgment calls ────────────
+    // Typed Choice/Noul/Score judgments (NO text generation) served by
+    // Services/Ai/TypeSafe/TypeSafeJudgmentService through IDirectAiCallRecorder.
+    // Jev is a judgment layer, never a grader: guard/route/verify/advisory only.
+    // It must never override the rulebook-grounded gateway verdicts, the
+    // deterministic WritingRuleEngine, or the GEPA placement engine. Codes
+    // deliberately avoid "grade"/"score" substrings so the budget-class
+    // heuristics (AiFeaturePolicyDefaults / AiBudgetClasses) both land on
+    // InteractiveLearning — advisory signals must not eat the scoring budget.
+    // Not in AiFeatureRouteResolver.KnownFeatureCodes (no chat route).
+
+    /// <summary>Pre-gateway Writing submission guard: parallel Nouls for
+    /// prompt-injection / rule-evasion / abusive or gibberish content.
+    /// Negative gate only — it may block or flag, never auto-pass.</summary>
+    public const string JevWritingGuard = "jev.writing.guard";
+
+    /// <summary>Pre-gateway Writing request routing: Choice over
+    /// grade / coach suggest / coach explain / sample-score (+ "unclear").
+    /// Confidence-gated: low confidence falls back to the default path.</summary>
+    public const string JevWritingRoute = "jev.writing.route";
+
+    /// <summary>Post-gateway Writing citation verification: per finding,
+    /// Choice supported / contradicted / not-in-evidence against the letter
+    /// and the cited rule. Low-confidence or contradicted findings go to the
+    /// tutor review queue instead of the learner.</summary>
+    public const string JevWritingVerify = "jev.writing.verify";
+
+    /// <summary>Post-gateway Writing advisory per-criterion signals (purpose,
+    /// content, conciseness, genre, organisation, language) as parallel Score
+    /// questions in one call. Combined with code-owned weights; display-only
+    /// radar — never a grade input.</summary>
+    public const string JevWritingCriteria = "jev.writing.criteria";
+
     // ── AI Learning Companion (persona "Sami") — Stage 1 ───────────────────
     // Learner-facing grounded OET mentor. See docs/ai-learning-companion/.
     // All three are NON-SCORING but PLATFORM-ONLY: the companion reads learner

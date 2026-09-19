@@ -163,6 +163,10 @@ builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
+// TypeSafe SystemOne (Jev) judgment calls — direct, non-gateway; see
+// Services/Ai/TypeSafe/. Enabled=false by default; the key exists only in
+// the VPS env (TypeSafe__ApiKey), never in a tracked file or client bundle.
+builder.Services.Configure<OetLearner.Api.Configuration.TypeSafeOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.TypeSafeOptions.SectionName));
 builder.Services.Configure<StepUpOptions>(builder.Configuration.GetSection(StepUpOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
 // No backplane (AddStackExchangeRedis/AddAzureSignalR) is configured — every
@@ -1037,6 +1041,12 @@ builder.Services.AddScoped<OetLearner.Api.Services.Mocks.MockPassPredictionServi
 // now resolved via IRuntimeSettingsProvider so admins can rotate it from the
 // admin panel without an app restart.
 builder.Services.AddHttpClient("SpeakingWhisperClient");
+// TypeSafe SystemOne (Jev) judgment transport. Per-call timeout is applied
+// inside TypeSafeJudgmentClient from TypeSafe:TimeoutSeconds (a slow judgment
+// is worthless — guard/route calls are latency-sensitive).
+builder.Services.AddHttpClient(OetLearner.Api.Services.Ai.TypeSafe.TypeSafeJudgmentClient.HttpClientName);
+builder.Services.AddSingleton<OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgmentClient, OetLearner.Api.Services.Ai.TypeSafe.TypeSafeJudgmentClient>();
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgmentService, OetLearner.Api.Services.Ai.TypeSafe.TypeSafeJudgmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider>(sp =>
