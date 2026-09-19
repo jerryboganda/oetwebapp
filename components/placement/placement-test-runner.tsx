@@ -785,7 +785,9 @@ function useSecondsLeft(deadlineAt: string | null): number | null {
     };
   }, [deadlineAt]);
   if (!deadlineAt) return null;
-  const parsed = Date.parse(deadlineAt);
+  // The engine emits nanosecond precision ("…00.123456789+00:00"); only
+  // three fractional digits are guaranteed to parse (Safari rejects more).
+  const parsed = Date.parse(deadlineAt.replace(/(\.\d{3})\d+/, '$1'));
   if (Number.isNaN(parsed)) return null;
   return Math.max(0, Math.round((parsed - now) / 1000));
 }
