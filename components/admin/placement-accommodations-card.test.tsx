@@ -1,11 +1,19 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { PlacementAccommodation } from '@/lib/api/admin-placement';
+import { ApiError } from '@/lib/api/client';
 
-const { mockFetch, mockGrant, mockRevoke } = vi.hoisted(() => ({
+const FULL_ACCESS = ['learner:read', 'learner:write'];
+
+const { mockFetch, mockGrant, mockRevoke, authState } = vi.hoisted(() => ({
   mockFetch: vi.fn(),
   mockGrant: vi.fn(),
   mockRevoke: vi.fn(),
+  authState: { adminPermissions: [] as string[] },
+}));
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({ user: { adminPermissions: authState.adminPermissions } }),
 }));
 
 vi.mock('@/lib/api/admin-placement', () => ({
@@ -61,6 +69,7 @@ describe('PlacementAccommodationsCard', () => {
     mockGrant.mockReset();
     mockRevoke.mockReset();
     mockFetch.mockResolvedValue([]);
+    authState.adminPermissions = FULL_ACCESS;
   });
 
   describe('listing', () => {
@@ -348,6 +357,72 @@ describe('PlacementAccommodationsCard', () => {
       expect(mockRevoke).toHaveBeenCalledWith('acc-1', undefined);
       expect(screen.getByRole('form', { name: /confirm revoking/i })).toBeInTheDocument();
       expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('permissions', () => {
+    const grantForm = () => screen.queryByRole('form', { name: /grant extra time/i });
+
+    it('without learner:read explains the missing permission instead of loading or showing controls', () => {
+      // The page is gated by review_ops alone, which does not carry learner:*.
+      authState.adminPermissions = ['review_ops'];
+
+      render(<PlacementAccommodationsCard />);
+
+      expect(screen.getByText(/need the learner:read permission/i)).toBeInTheDocument();
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(grantForm()).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /retry|refresh|revoke/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('table')).not.toBeInTheDocument();
+    });
+
+    it('with learner:read only shows a read-only audit view with no grant form and no revoke action', async () => {
+      authState.adminPermissions = ['learner:read'];
+      mockFetch.mockResolvedValue([
+        grant({ uses: [{ sessionId: 'sess-aaa', appliedAt: '2026-06-20T08:00:00.000Z', extraTimePercent: 50 }] }),
+      ]);
+
+      render(<PlacementAccommodationsCard />);
+
+      const table = await screen.findByRole('table');
+      expect(within(table).getByText('Ali Hassan')).toBeInTheDocument();
+      expect(screen.getByText(/needs the learner:write permission/i)).toBeInTheDocument();
+      expect(grantForm()).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /revoke extra time/i })).not.toBeInTheDocument();
+      expect(within(table).queryByRole('columnheader', { name: /action/i })).not.toBeInTheDocument();
+      expect(within(table).getAllByRole('columnheader')).toHaveLength(6);
+    });
+
+    it('with learner:read and learner:write shows the grant form and revoke action', async () => {
+      authState.adminPermissions = ['learner:read', 'learner:write'];
+      mockFetch.mockResolvedValue([grant()]);
+
+      render(<PlacementAccommodationsCard />);
+
+      await screen.findByRole('table');
+      expect(grantForm()).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /revoke extra time for ali@example.com/i })).toBeInTheDocument();
+      expect(screen.queryByText(/needs the learner:write permission/i)).not.toBeInTheDocument();
+    });
+
+    it('treats system_admin as satisfying both permissions', async () => {
+      authState.adminPermissions = ['system_admin'];
+      mockFetch.mockResolvedValue([grant()]);
+
+      render(<PlacementAccommodationsCard />);
+
+      await screen.findByRole('table');
+      expect(grantForm()).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /revoke extra time for ali@example.com/i })).toBeInTheDocument();
+    });
+
+    it('does not offer Retry when the list load is refused with a 403', async () => {
+      mockFetch.mockRejectedValue(new ApiError(403, 'forbidden', 'Forbidden', false));
+
+      render(<PlacementAccommodationsCard />);
+
+      expect(await screen.findByText(/do not have permission/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /retry/i })).not.toBeInTheDocument();
     });
   });
 });

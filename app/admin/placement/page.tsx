@@ -34,6 +34,12 @@ const OBJECTIVE_MODULES = [
 ] as const;
 /** Below this, a band cannot supply one 5-item confirmation block. */
 const CONFIRMATION_BLOCK = 5;
+/**
+ * The named traits the engine scores (evidence_rules.rs). A human score must
+ * fill every one: any other key is ignored and the trait evaluates as 0.
+ */
+const SPEAKING_TRAITS = ['intelligibility', 'fluency', 'grammar', 'vocabulary', 'communication'] as const;
+const WRITING_TRAITS = ['task_fulfilment', 'organisation', 'grammar', 'vocabulary', 'mechanics_register'] as const;
 
 function csvCell(value: string | number): string {
   const text = String(value);
@@ -278,7 +284,8 @@ export default function AdminPlacementReviewPage() {
     setNotice(null);
     setError(null);
     try {
-      const traits = Object.keys(selected.atLower.length ? selected.atLower : { overall: 0 });
+      // Not derived from selected.atLower: a pending_review rating has empty maps.
+      const traits: readonly string[] = selected.taskId.startsWith('WRT-') ? WRITING_TRAITS : SPEAKING_TRAITS;
       const atLower = Object.fromEntries(traits.map((t) => [t, value]));
       const atUpper = Object.fromEntries(traits.map((t) => [t, value]));
       await humanScorePlacementSession(selected.sessionId, selected.taskId, atLower, atUpper, rationale.trim());

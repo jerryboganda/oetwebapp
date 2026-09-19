@@ -9,6 +9,9 @@ import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Input } from '@/components/admin/ui/input';
 import { NativeSelect } from '@/components/admin/ui/native-select';
 import { InlineAlert } from '@/components/ui/alert';
+import { useAuth } from '@/contexts/auth-context';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
+import { isApiError } from '@/lib/api/client';
 import { readErrorMessage } from '@/lib/read-error-message';
 import {
   fetchPlacementAccommodations,
@@ -89,8 +92,13 @@ function formatWhen(iso: string | null): string {
 }
 
 export function PlacementAccommodationsCard() {
+  // The page is gated by review_ops, but these endpoints need learner:read / learner:write.
+  const { user } = useAuth();
+  const canRead = hasPermission(user?.adminPermissions, AdminPermission.LearnerRead);
+  const canWrite = hasPermission(user?.adminPermissions, AdminPermission.LearnerWrite);
   const [grants, setGrants] = useState<PlacementAccommodation[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadForbidden, setLoadForbidden] = useState(false);
   const [filter, setFilter] = useState('');
   const [showRevoked, setShowRevoked] = useState(false);
   const [expanded, setExpanded] = useState<string[]>([]);
@@ -113,17 +121,21 @@ export function PlacementAccommodationsCard() {
   // ponytail: the learner filter runs client-side over the loaded page (the API
   // returns the newest grants only); wire the `learner` query if that page is outgrown.
   const load = useCallback(async () => {
+    if (!canRead) return;
     const seq = ++loadSeq.current;
     try {
       const rows = await fetchPlacementAccommodations({ includeRevoked: showRevoked });
       if (seq !== loadSeq.current) return;
       setGrants(rows);
       setLoadError(null);
+      setLoadForbidden(false);
     } catch (err) {
       if (seq !== loadSeq.current) return;
       setLoadError(readErrorMessage(err, 'Could not load extra-time accommodations.'));
+      // A 403 means the permission claim was stale; retrying cannot help.
+      setLoadForbidden(isApiError(err) && err.status === 403);
     }
-  }, [showRevoked]);
+  }, [canRead, showRevoked]);
 
   useEffect(() => {
     void load();
@@ -203,6 +215,22 @@ export function PlacementAccommodationsCard() {
   );
   const activeCount = (grants ?? []).filter((grant) => grant.status === 'active').length;
   const revokedCount = (grants?.length ?? 0) - activeCount;
+  const columnCount = canWrite ? TABLE_COLUMNS : TABLE_COLUMNS - 1;
+
+  if (!canRead) {
+    return (
+      <Card role="region" aria-labelledby="placement-accommodations-title">
+        <CardHeader>
+          <CardTitle id="placement-accommodations-title">Extra-time accommodations</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <InlineAlert variant="info" role="note">
+            Extra-time accommodations need the learner:read permission.
+          </InlineAlert>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card role="region" aria-labelledby="placement-accommodations-title">
@@ -231,75 +259,83 @@ export function PlacementAccommodationsCard() {
           </InlineAlert>
         ) : null}
 
-        <form
-          noValidate
-          aria-label="Grant extra time"
-          onSubmit={(event) => void handleGrant(event)}
-          className="space-y-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-3"
-        >
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <Input
-              label="Learner email or user ID"
-              size="sm"
-              value={learner}
-              onChange={(event) => setLearner(event.target.value)}
-              error={errors.learner}
-              disabled={granting}
-              autoComplete="off"
-              aria-required="true"
-              placeholder="name@example.com"
-            />
-            <NativeSelect
-              label="Extra time percentage"
-              value={percent}
-              onChange={(event) => setPercent(event.target.value)}
-              error={errors.percent}
-              disabled={granting}
-              aria-required="true"
-              placeholder="Select percentage"
-              options={PERCENT_PRESETS.map((preset) => ({ value: String(preset), label: `+${preset}%` }))}
-              className="h-8 px-2.5 text-xs"
-            />
-            <div className="space-y-1.5">
+        {canWrite ? (
+          <form
+            noValidate
+            aria-label="Grant extra time"
+            onSubmit={(event) => void handleGrant(event)}
+            className="space-y-3 rounded-admin border border-admin-border bg-admin-bg-subtle p-3"
+          >
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Input
-                label="Administrative reference (optional)"
+                label="Learner email or user ID"
                 size="sm"
-                value={reference}
-                onChange={(event) => setReference(event.target.value)}
-                error={errors.reference}
+                value={learner}
+                onChange={(event) => setLearner(event.target.value)}
+                error={errors.learner}
                 disabled={granting}
-                maxLength={REFERENCE_MAX}
                 autoComplete="off"
-                aria-describedby={REFERENCE_WARNING_ID}
+                aria-required="true"
+                placeholder="name@example.com"
               />
-              <div
-                id={REFERENCE_WARNING_ID}
-                role="note"
-                className="flex items-start gap-1.5 text-xs font-medium text-admin-fg-default"
-              >
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-admin-warning" aria-hidden="true" />
-                <span>Administrative reference only - do not enter medical or personal health details</span>
+              <NativeSelect
+                label="Extra time percentage"
+                value={percent}
+                onChange={(event) => setPercent(event.target.value)}
+                error={errors.percent}
+                disabled={granting}
+                aria-required="true"
+                placeholder="Select percentage"
+                options={PERCENT_PRESETS.map((preset) => ({ value: String(preset), label: `+${preset}%` }))}
+                className="h-8 px-2.5 text-xs"
+              />
+              <div className="space-y-1.5">
+                <Input
+                  label="Administrative reference (optional)"
+                  size="sm"
+                  value={reference}
+                  onChange={(event) => setReference(event.target.value)}
+                  error={errors.reference}
+                  disabled={granting}
+                  maxLength={REFERENCE_MAX}
+                  autoComplete="off"
+                  aria-describedby={REFERENCE_WARNING_ID}
+                />
+                <div
+                  id={REFERENCE_WARNING_ID}
+                  role="note"
+                  className="flex items-start gap-1.5 text-xs font-medium text-admin-fg-default"
+                >
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-admin-warning" aria-hidden="true" />
+                  <span>Administrative reference only - do not enter medical or personal health details</span>
+                </div>
               </div>
             </div>
-          </div>
-          {formError ? <InlineAlert variant="error">{formError}</InlineAlert> : null}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-admin-fg-muted">
-              A new grant replaces the learner&apos;s current active one, which stays on record as revoked.
-            </p>
-            <Button type="submit" size="sm" loading={granting} loadingText="Granting…">
-              Grant extra time
-            </Button>
-          </div>
-        </form>
+            {formError ? <InlineAlert variant="error">{formError}</InlineAlert> : null}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs text-admin-fg-muted">
+                A new grant replaces the learner&apos;s current active one, which stays on record as revoked.
+              </p>
+              <Button type="submit" size="sm" loading={granting} loadingText="Granting…">
+                Grant extra time
+              </Button>
+            </div>
+          </form>
+        ) : (
+          <InlineAlert variant="info" role="note">
+            Granting or revoking extra time needs the learner:write permission.
+          </InlineAlert>
+        )}
 
         {loadError ? (
           <InlineAlert
             variant="error"
             action={
-              <Button variant="secondary" size="sm" onClick={() => void load()}>
-                Retry
-              </Button>
+              loadForbidden ? undefined : (
+                <Button variant="secondary" size="sm" onClick={() => void load()}>
+                  Retry
+                </Button>
+              )
             }
           >
             {loadError}
@@ -370,7 +406,7 @@ export function PlacementAccommodationsCard() {
                       <th scope="col" className="py-2 pr-3 font-medium">Approved by</th>
                       <th scope="col" className="py-2 pr-3 font-medium">Reference</th>
                       <th scope="col" className="py-2 pr-3 font-medium">Attempts used</th>
-                      <th scope="col" className="py-2 font-medium">Action</th>
+                      {canWrite ? <th scope="col" className="py-2 font-medium">Action</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -435,24 +471,26 @@ export function PlacementAccommodationsCard() {
                                 </button>
                               )}
                             </td>
-                            <td className="py-2">
-                              {isActive ? (
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  aria-label={`Revoke extra time for ${grant.learnerEmail}`}
-                                  disabled={revokeBusy}
-                                  onClick={(event) => openRevoke(grant, event.currentTarget)}
-                                >
-                                  Revoke
-                                </Button>
-                              ) : null}
-                            </td>
+                            {canWrite ? (
+                              <td className="py-2">
+                                {isActive ? (
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    aria-label={`Revoke extra time for ${grant.learnerEmail}`}
+                                    disabled={revokeBusy}
+                                    onClick={(event) => openRevoke(grant, event.currentTarget)}
+                                  >
+                                    Revoke
+                                  </Button>
+                                ) : null}
+                              </td>
+                            ) : null}
                           </tr>
 
                           {isExpanded ? (
                             <tr id={usesId} className="border-b border-admin-border bg-admin-bg-subtle">
-                              <td colSpan={TABLE_COLUMNS} className="px-3 py-2">
+                              <td colSpan={columnCount} className="px-3 py-2">
                                 <p className="text-xs font-medium text-admin-fg-muted">Attempts that used this accommodation</p>
                                 <ul className="mt-1 space-y-0.5 text-xs">
                                   {grant.uses.map((use, index) => (
@@ -468,7 +506,7 @@ export function PlacementAccommodationsCard() {
 
                           {confirming ? (
                             <tr className="border-b border-admin-border bg-admin-bg-subtle">
-                              <td colSpan={TABLE_COLUMNS} className="px-3 py-3">
+                              <td colSpan={columnCount} className="px-3 py-3">
                                 <form
                                   aria-label={`Confirm revoking extra time for ${grant.learnerEmail}`}
                                   className="space-y-2"
