@@ -21707,6 +21707,13 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("PlacementBetaEmails")
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<bool?>("PlacementBetaOnly")
+                        .HasColumnType("boolean");
+
                     b.Property<bool?>("PlacementEnabled")
                         .HasColumnType("boolean");
 

@@ -103,6 +103,11 @@ jobs:
             echo "OK: no pending model changes."
           else
             echo "FAIL: pending model changes detected or EF check failed - create a migration or fix the EF command." >&2
+            # has-pending-model-changes never says WHAT drifted. Scaffold a
+            # throwaway migration on this ephemeral runner and print its Up()
+            # so the log names the exact entity/property.
+            "$HOME/.dotnet/tools/dotnet-ef" migrations add CiDriftProbe --configuration Release --no-build > /dev/null 2>&1 \
+              && find . -name '*_CiDriftProbe.cs' ! -name '*.Designer.cs' -exec cat {} + || true
             exit 1
           fi
 
