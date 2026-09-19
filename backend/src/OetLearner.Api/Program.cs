@@ -1052,6 +1052,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgment
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.IJevWritingPilot, OetLearner.Api.Services.Ai.TypeSafe.JevWritingPilot>();
 // Phase-2 companion retrieval rerank (TypeSafe:CompanionRerankEnabled, OFF).
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.IJevCompanionReranker, OetLearner.Api.Services.Ai.TypeSafe.JevCompanionReranker>();
+// Phase-2 conversation advisory (TypeSafe:ConversationAdvisoryEnabled, OFF).
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.IJevConversationAdvisor, OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor>();
 // Phase-2 hardening: on startup (only when TypeSafe:Enabled) probe GET
 // /v1/models and warn if the pinned model id is not served to this account.
 builder.Services.AddHostedService<OetLearner.Api.Services.Ai.TypeSafe.TypeSafeModelPinProbe>();

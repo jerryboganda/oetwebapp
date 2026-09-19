@@ -481,6 +481,12 @@ public static class AiFeatureCodes
     /// filter of record, never a grading path.</summary>
     public const string JevCompanionRerank = "jev.companion.rerank";
 
+    /// <summary>Advisory judgment of the LEARNER's latest AI-patient
+    /// role-play turn (stays-in-role / clinically-appropriate / unsafe
+    /// Nouls, one parallel call). Informational only — never gates, scores,
+    /// or ends a session.</summary>
+    public const string JevConversationTurn = "jev.conversation.turn";
+
     // ── AI Learning Companion (persona "Sami") — Stage 1 ───────────────────
     // Learner-facing grounded OET mentor. See docs/ai-learning-companion/.
     // All three are NON-SCORING but PLATFORM-ONLY: the companion reads learner

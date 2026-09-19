@@ -93,6 +93,12 @@ public sealed class TypeSafeOptions
     /// the original hybrid ordering.</summary>
     public bool CompanionRerankEnabled { get; set; } = false;
 
+    /// <summary>Advisory conversation-turn judgment (stays-in-role /
+    /// clinically-appropriate / unsafe Nouls) run alongside AI-patient reply
+    /// generation. Informational only — never gates, scores, or ends a
+    /// session.</summary>
+    public bool ConversationAdvisoryEnabled { get; set; } = false;
+
     /// <summary>Guard: any single guard Noul at or above this blocks the
     /// submission from reaching the paid AI grade (flagged to a human).</summary>
     public double GuardBlockThreshold { get; set; } = 0.80;

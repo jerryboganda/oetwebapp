@@ -192,6 +192,43 @@ async function evaluateLetterCase(caseName, state, expect) {
   }
 }
 
+
+const CONVERSATION_NOULS = [
+  ['jev_stays_in_role',
+    'In `state.transcript`, does the learner turn with the highest index stay inside the clinical role-play scenario? Answer yes only when the learner speaks as a clinician in the scenario.',
+    "The learner's latest turn is spoken in-clinica-role, addressing the patient within the scenario.",
+    "The learner's latest turn breaks role, addresses the system/examiner, or is unrelated to the scenario."],
+  ['jev_clinically_appropriate',
+    'In `state.transcript`, is the learner turn with the highest index a clinically sensible utterance for the scenario so far (gathering information, explaining, reassuring, or advancing the consultation)?',
+    'The turn moves the consultation forward sensibly for the clinical context.',
+    'The turn is incoherent, clinically nonsensical, or does not advance the consultation.'],
+  ['jev_unsafe_content',
+    'Does the learner turn with the highest index in `state.transcript` contain abusive, hateful, threatening, or sexually explicit content?',
+    'The turn contains abusive, hateful, threatening, or explicit content.',
+    'The turn contains no such content.'],
+];
+
+async function evaluateConversationTurn(caseName, spec) {
+  const questions = Object.fromEntries(CONVERSATION_NOULS.map(([id, instr, yes, no]) => [id, {
+    type: 'noul', instructions: instr, criteria: { true: yes, false: no },
+  }]));
+  const response = await ask(
+    { transcript: spec.transcript, turnIndex: spec.turnIndex },
+    questions,
+    `${caseName}/conversation`);
+  totalInputTokens += response.usage?.input_tokens ?? 0;
+
+  const expect = spec.expect ?? {};
+  for (const [id] of CONVERSATION_NOULS) {
+    const key = id.replace('jev_', '');
+    const p = response.answers?.[id]?.noul;
+    const gte = expect[`${key}_gte`];
+    const lte = expect[`${key}_lte`];
+    if (gte !== undefined) record(`${caseName}·${id}`, `>= ${gte}`, p?.toFixed(3), p >= gte);
+    if (lte !== undefined) record(`${caseName}·${id}`, `<= ${lte}`, p?.toFixed(3), p <= lte);
+  }
+}
+
 async function main() {
   const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
   for (const file of readdirSync(fixturesDir).filter((f) => f.endsWith('.json'))) {
@@ -206,6 +243,11 @@ async function main() {
 
     // Companion retrieval rerank (mirrors JevCompanionReranker.cs)
     if (fixture.rerank) await evaluateRerank(fixture.name, fixture.rerank);
+
+    // Conversation turn advisory (mirrors JevConversationAdvisor.cs)
+    for (const section of ['in_role', 'role_break']) {
+      if (fixture[section]) await evaluateConversationTurn(`${fixture.name}/${section}`, fixture[section]);
+    }
   }
 
   console.log(`\n${results.length} checks, ${failures} failed, ~${totalInputTokens} input tokens (~$${(totalInputTokens * 4.2e-8).toFixed(5)})`);

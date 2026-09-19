@@ -188,6 +188,57 @@ public sealed class JevCompanionRerankerTests
         }
     }
 
+    [Fact]
+    public async Task ConversationAdvisor_FlagOff_ReturnsNull_NoCalls()
+    {
+        var fake = new FakeJudgments(OkScores());
+        var advisor = new OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor(
+            fake, Microsoft.Extensions.Options.Options.Create(Options(o => o.ConversationAdvisoryEnabled = false)),
+            NullLogger<OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor>.Instance);
+
+        var result = await advisor.AssessLatestTurnAsync("[{\"role\":\"learner\"}]", 3, "u1", CancellationToken.None);
+
+        Assert.Null(result);
+        Assert.Equal(0, fake.Calls);
+    }
+
+    [Fact]
+    public async Task ConversationAdvisor_OkPath_ReturnsThreeSignals()
+    {
+        var result = new JevJudgmentResult(JevCallStatus.Ok, "jev-1.13.0",
+            new Dictionary<string, JevAnswer>
+            {
+                ["jev_stays_in_role"] = new(JevQuestionKind.Noul, new JevNoulAnswer(0.93), null, null),
+                ["jev_clinically_appropriate"] = new(JevQuestionKind.Noul, new JevNoulAnswer(0.81), null, null),
+                ["jev_unsafe_content"] = new(JevQuestionKind.Noul, new JevNoulAnswer(0.01), null, null),
+            }, 400, 20, null);
+        var fake = new FakeJudgments(result);
+        var advisor = new OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor(
+            fake, Microsoft.Extensions.Options.Options.Create(Options()),
+            NullLogger<OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor>.Instance);
+
+        var signal = await advisor.AssessLatestTurnAsync("[{\"role\":\"learner\"}]", 3, "u1", CancellationToken.None);
+
+        Assert.NotNull(signal);
+        Assert.Equal(0.93, signal!.StaysInRole);
+        Assert.Equal(0.81, signal.ClinicallyAppropriate);
+        Assert.Equal(0.01, signal.UnsafeContent);
+        Assert.Equal(1, fake.Calls);
+    }
+
+    [Fact]
+    public async Task ConversationAdvisor_Crash_ReturnsNull_NeverThrows()
+    {
+        var fake = new FakeJudgments(OkScores()) { Throw = true };
+        var advisor = new OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor(
+            fake, Microsoft.Extensions.Options.Options.Create(Options()),
+            NullLogger<OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor>.Instance);
+
+        var result = await advisor.AssessLatestTurnAsync("transcript", 1, null, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
 private sealed class StubHandler(Func<System.Net.Http.HttpRequestMessage, System.Threading.CancellationToken, Task<System.Net.Http.HttpResponseMessage>> responder)
     : System.Net.Http.HttpMessageHandler
 {

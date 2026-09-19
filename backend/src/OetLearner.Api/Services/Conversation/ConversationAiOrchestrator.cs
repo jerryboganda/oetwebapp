@@ -24,7 +24,8 @@ public sealed record ConversationAiReply(
     string? ProviderName = null, string? ModelName = null,
     string? UsageRecordId = null, int LatencyMs = 0,
     decimal EstimatedCostUsd = 0m, int RetryCount = 0,
-    int PromptTokens = 0, int CompletionTokens = 0);
+    int PromptTokens = 0, int CompletionTokens = 0,
+    OetLearner.Api.Services.Ai.TypeSafe.ConversationTurnSignal? JevSignal = null);
 
 public sealed record ConversationAiCriterion(
     string Id, double Score06, string Evidence, IReadOnlyList<string> Quotes);
@@ -42,7 +43,8 @@ public sealed record ConversationAiEvaluation(
 public sealed class ConversationAiOrchestrator(
     IAiGatewayService gateway,
     IConversationOptionsProvider optionsProvider,
-    ILogger<ConversationAiOrchestrator> logger) : IConversationAiOrchestrator
+    ILogger<ConversationAiOrchestrator> logger,
+    OetLearner.Api.Services.Ai.TypeSafe.IJevConversationAdvisor? jevAdvisor = null) : IConversationAiOrchestrator
 {
     private Task<ConversationOptions> OptionsAsync(CancellationToken ct) => optionsProvider.GetAsync(ct);
 
@@ -69,6 +71,22 @@ public sealed class ConversationAiOrchestrator(
             ConversationRemainingSeconds = ctx.RemainingSeconds,
         });
         var options = await OptionsAsync(ct);
+
+        // Jev conversation advisory (Phase-2; TypeSafe:ConversationAdvisoryEnabled,
+        // default OFF). Judges the LEARNER's latest turn — advisory only; a
+        // null signal (flag off / unavailable / crash) changes nothing.
+        OetLearner.Api.Services.Ai.TypeSafe.ConversationTurnSignal? jevSignal = null;
+        if (jevAdvisor is not null && task == AiTaskMode.GenerateConversationReply && !string.IsNullOrWhiteSpace(ctx.TranscriptJson))
+        {
+            jevSignal = await jevAdvisor.AssessLatestTurnAsync(ctx.TranscriptJson, ctx.TurnIndex, ctx.UserId, ct);
+            if (jevSignal is { } s)
+            {
+                logger.LogInformation(
+                    "Jev conversation advisory turn {Turn} user {UserId}: inRole={InRole:F2} appropriate={Appropriate:F2} unsafe={Unsafe:F2}.",
+                    ctx.TurnIndex, ctx.UserId, s.StaysInRole, s.ClinicallyAppropriate, s.UnsafeContent);
+            }
+        }
+
         var result = await gateway.CompleteAsync(new AiGatewayRequest
         {
             Prompt = prompt,
@@ -103,7 +121,8 @@ public sealed class ConversationAiOrchestrator(
             result.EstimatedCostUsd,
             result.RetryCount,
             result.Usage?.PromptTokens ?? 0,
-            result.Usage?.CompletionTokens ?? 0);
+            result.Usage?.CompletionTokens ?? 0,
+            jevSignal);
     }
 
     public async Task<ConversationAiEvaluation> EvaluateAsync(ConversationAiContext ctx, CancellationToken ct)
