@@ -58,13 +58,24 @@ public sealed class PlacementGateway
 
     private ApiException MapUpstreamFailure(string path, HttpResponseMessage response, string body)
     {
+        // The engine's body stays in the log only: it can carry internal
+        // detail and must never be echoed into a user-facing message.
         _logger.LogWarning("Placement engine {Status} on {Path}: {Body}", (int)response.StatusCode, path, body);
+        // Reviewer/admin routes call the engine with the service token on
+        // behalf of staff, so "your session" / "another account" wording is
+        // wrong there (it belongs to the learner session routes only).
+        var staffRoute = path.StartsWith("/api/review/", StringComparison.Ordinal)
+            || path.StartsWith("/api/admin/", StringComparison.Ordinal);
         return (int)response.StatusCode switch
         {
-            404 => ApiException.NotFound("placement_session_not_found", "That placement session does not exist."),
-            403 => ApiException.Forbidden("placement_not_your_session", "That placement session belongs to another account."),
-            409 => ApiException.Conflict("placement_stale_submission", body.Length > 300 ? "Your submission arrived after the session moved on — refresh and continue." : body),
-            400 => ApiException.Validation("placement_engine_rejected", body.Length > 300 ? "The placement engine rejected the request." : body),
+            404 => ApiException.NotFound("placement_session_not_found",
+                staffRoute ? "That placement session or task does not exist." : "That placement session does not exist."),
+            403 => staffRoute
+                ? ApiException.Forbidden("placement_engine_forbidden",
+                    "The placement engine did not accept this request. Ask a platform administrator to check the engine connection.")
+                : ApiException.Forbidden("placement_not_your_session", "That placement session belongs to another account."),
+            409 => ApiException.Conflict("placement_stale_submission", "Your submission arrived after the session moved on — refresh and continue."),
+            400 => ApiException.Validation("placement_engine_rejected", "The placement engine rejected the request."),
             _ => ApiException.ServiceUnavailable("placement_engine_unavailable",
                 "The placement engine is not responding — please try again shortly."),
         };
@@ -202,8 +213,19 @@ public sealed class PlacementGateway
     public Task<JsonDocument> GetReviewQueueAsync(CancellationToken ct)
         => SendAsync(HttpMethod.Get, "/api/review/queue", string.Empty, null, ct);
 
-    public Task<JsonDocument> GetReviewSessionAsync(string sessionId, CancellationToken ct)
-        => SendAsync(HttpMethod.Get, $"/api/review/sessions/{Uri.EscapeDataString(sessionId)}", string.Empty, null, ct);
+    /// <summary>Review detail for one session. A non-null <paramref name="taskId"/>
+    /// selects that submitted task (forwarded as <c>?task_id=</c>); null sends no
+    /// query and the engine picks the first task needing human attention. The
+    /// caller validates the id's shape; it is escaped here regardless.</summary>
+    public Task<JsonDocument> GetReviewSessionAsync(string sessionId, string? taskId, CancellationToken ct)
+    {
+        var path = $"/api/review/sessions/{Uri.EscapeDataString(sessionId)}";
+        if (taskId is not null)
+        {
+            path += $"?task_id={Uri.EscapeDataString(taskId)}";
+        }
+        return SendAsync(HttpMethod.Get, path, string.Empty, null, ct);
+    }
 
     public async Task<(string ContentType, byte[] Bytes)> GetReviewAudioAsync(string sessionId, string taskId, CancellationToken ct)
     {

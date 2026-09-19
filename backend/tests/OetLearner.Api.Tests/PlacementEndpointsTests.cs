@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -9,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
@@ -40,6 +42,7 @@ public class PlacementEndpointsTests : IDisposable
     private readonly HttpClient _client;
     private readonly StubPlacementEngineHandler _engine;
     private readonly FailAccommodationUseSaveInterceptor _failUseSave = new();
+    private readonly CapturingLoggerProvider _logs = new();
 
     public PlacementEndpointsTests()
     {
@@ -49,6 +52,8 @@ public class PlacementEndpointsTests : IDisposable
             // Lets a test simulate the accommodation-use insert failing AFTER
             // the engine created the session. Inert until Armed.
             services.ConfigureDbContext<LearnerDbContext>(options => options.AddInterceptors(_failUseSave));
+            // Lets a test assert an operational alarm string was logged.
+            services.AddSingleton<ILoggerProvider>(_logs);
             services.RemoveAll<PlacementGateway>();
             var http = new HttpClient(_engine)
             {
@@ -129,6 +134,9 @@ public class PlacementEndpointsTests : IDisposable
         var created = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("ses_stub0000000001", created.GetProperty("session_id").GetString());
         Assert.Equal("2.0.0-beta", created.GetProperty("ruleset_version").GetString());
+        // The engine-issued candidate bearer never reaches the browser.
+        Assert.False(created.TryGetProperty("token", out _));
+        Assert.Equal("worked_example", created.GetProperty("next_step").GetString());
 
         var request = _engine.LastRequest!;
         Assert.Equal(HttpMethod.Post, request.Request.Method);
@@ -550,12 +558,22 @@ public class PlacementEndpointsTests : IDisposable
         var grant = await AdminGrantAsync(admin, learner, 25);
         Authenticate(learner.AccessToken);
 
-        const string engineSession = """
-            {"session_id":"ses_stubacc0000001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
-            """;
+        var grantId = grant.GetProperty("id").GetString()!;
+        var engineSession = CreatedSessionJson("ses_stubacc0000001", 25, grantId);
         _engine.Enqueue(engineSession);
         var response = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        // The echo matched, so the create succeeds; the learner still gets no
+        // engine bearer and no approval id, only THAT (and how much) extra time applies.
+        var createdRaw = await response.Content.ReadAsStringAsync();
+        using (var created = JsonDocument.Parse(createdRaw))
+        {
+            Assert.False(created.RootElement.TryGetProperty("token", out _));
+            Assert.Equal(25, created.RootElement.GetProperty("accommodations_applied").GetProperty("extra_time_percent").GetInt32());
+        }
+        Assert.DoesNotContain("engine-token-ignored", createdRaw);
+        Assert.DoesNotContain(grantId, createdRaw);
 
         using (var sent = JsonDocument.Parse(_engine.LastRequest!.Body!))
         {
@@ -640,11 +658,9 @@ public class PlacementEndpointsTests : IDisposable
 
         // With a 25% grant the engine sees the ADMIN'S 25, never the client's 100.
         var admin = await IssueAdminAsync("Dr Placement Admin");
-        await AdminGrantAsync(admin, learner, 25);
+        var grant = await AdminGrantAsync(admin, learner, 25);
         Authenticate(learner.AccessToken);
-        _engine.Enqueue("""
-            {"session_id":"ses_stubspoof00002","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
-            """);
+        _engine.Enqueue(CreatedSessionJson("ses_stubspoof00002", 25, grant.GetProperty("id").GetString()!));
         var withGrant = await _client.PostAsJsonAsync("/v1/placement/session", spoof);
         Assert.Equal(HttpStatusCode.OK, withGrant.StatusCode);
         using var sent = JsonDocument.Parse(_engine.LastRequest!.Body!);
@@ -741,12 +757,10 @@ public class PlacementEndpointsTests : IDisposable
     {
         var learner = await RegisterLearnerAsync();
         var admin = await IssueAdminAsync("Dr Placement Admin");
-        await AdminGrantAsync(admin, learner, 25);
+        var grant = await AdminGrantAsync(admin, learner, 25);
         Authenticate(learner.AccessToken);
 
-        _engine.Enqueue("""
-            {"session_id":"ses_stubnorecord001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
-            """);
+        _engine.Enqueue(CreatedSessionJson("ses_stubnorecord001", 25, grant.GetProperty("id").GetString()!));
         _failUseSave.Armed = true;
 
         // The engine already created the session with extra time applied, so
@@ -762,6 +776,78 @@ public class PlacementEndpointsTests : IDisposable
         Assert.Equal(0, await db.PlacementAccommodationUses.CountAsync());
     }
 
+    [Theory]
+    [InlineData("missing")]        // older engine: no accommodations_applied at all
+    [InlineData("null")]           // engine applied no extra time
+    [InlineData("wrong_percent")]  // engine applied a different percentage
+    [InlineData("wrong_approval")] // engine echoed a different approval
+    public async Task SessionCreate_WithActiveGrant_FailsClosed_WhenTheEngineDoesNotEchoTheGrant(string echo)
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+        var grant = await AdminGrantAsync(admin, learner, 25);
+        var grantId = grant.GetProperty("id").GetString()!;
+        Authenticate(learner.AccessToken);
+
+        _engine.Enqueue(echo switch
+        {
+            "missing" => """{"session_id":"ses_stubfail0000001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}""",
+            "null" => CreatedSessionJson("ses_stubfail0000001"),
+            "wrong_percent" => CreatedSessionJson("ses_stubfail0000001", 50, grantId),
+            "wrong_approval" => CreatedSessionJson("ses_stubfail0000001", 25, "pacc_someoneelse"),
+            _ => throw new ArgumentOutOfRangeException(nameof(echo), echo, null),
+        });
+
+        var response = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
+
+        // Never a silent standard-clock attempt for a learner with approved extra time.
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+        var raw = await response.Content.ReadAsStringAsync();
+        using (var problem = JsonDocument.Parse(raw))
+        {
+            Assert.Equal("placement_accommodation_not_applied", problem.RootElement.GetProperty("code").GetString());
+            Assert.Contains("extra time", problem.RootElement.GetProperty("message").GetString()!, StringComparison.OrdinalIgnoreCase);
+        }
+        // Neither the engine session nor its bearer is handed to the learner.
+        Assert.DoesNotContain("ses_stubfail0000001", raw);
+        Assert.DoesNotContain("engine-token-ignored", raw);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            Assert.Equal(0, await db.PlacementAccommodationUses.CountAsync());
+        }
+
+        // A greppable ERROR carries the session, the grant and what was expected.
+        var logged = Assert.Single(
+            _logs.Entries,
+            e => e.Level == LogLevel.Error && e.Message.Contains("PLACEMENT_ACCOMMODATION_NOT_APPLIED", StringComparison.Ordinal));
+        Assert.Contains("ses_stubfail0000001", logged.Message);
+        Assert.Contains(grantId, logged.Message);
+        Assert.Contains("25", logged.Message);
+    }
+
+    [Fact]
+    public async Task SessionCreate_WithoutGrant_IgnoresTheEngineEcho()
+    {
+        await RegisterLearnerAsync();
+        // No grant exists, so a stray echo must neither fail the create nor
+        // produce a use record.
+        _engine.Enqueue(CreatedSessionJson("ses_stubbogus000001", 50, "pacc_bogus"));
+
+        var response = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("ses_stubbogus000001", created.GetProperty("session_id").GetString());
+        Assert.False(created.TryGetProperty("token", out _));
+        Assert.DoesNotContain("accommodations", _engine.LastRequest!.Body!);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(0, await db.PlacementAccommodationUses.CountAsync());
+        Assert.DoesNotContain(_logs.Entries, e => e.Message.Contains("PLACEMENT_ACCOMMODATION_NOT_APPLIED", StringComparison.Ordinal));
+    }
+
     [Fact]
     public async Task ReviewerSurface_RequiresAReviewPermission_NotJustAnyAdmin()
     {
@@ -773,6 +859,8 @@ public class PlacementEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/inventory")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/review/queue")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/review/ses_x")).StatusCode);
+        // Authorization runs before taskId validation: no 400 detail for an unauthorised caller.
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/review/ses_x?taskId=bad%20id")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/review/ses_x/audio/task_x")).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden,
             (await _client.PostAsJsonAsync("/v1/admin/placement/review/ses_x/rescore", new { })).StatusCode);
@@ -787,7 +875,144 @@ public class PlacementEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, queue.StatusCode);
     }
 
+    // ── Per-task review proxy ────────────────────────────────────────
+
+    private const string ReviewSessionRoute = "/v1/admin/placement/review/ses_stubreview01";
+
+    private const string ReviewSessionJson =
+        """{"session_id":"ses_stubreview01","task_id":"SPK-2","module":"SPK","task_type":"role_play","traits":["fluency","intelligibility"],"tasks":[{"task_id":"SPK-1","module":"SPK","task_type":"listen_repeat","status":"rated","has_recording":true},{"task_id":"SPK-2","module":"SPK","task_type":"role_play","status":"pending_review","has_recording":true}]}""";
+
+    [Theory]
+    [InlineData("SPK-2")]
+    [InlineData("task_1.a-B")]
+    [InlineData("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")] // 64 chars, the maximum
+    public async Task AdminReviewSession_ForwardsTheTaskIdQuery_AndPassesTheResponseThrough(string taskId)
+    {
+        var reviewer = await IssueAdminAsync("Dr Reviewer", AdminPermissions.ReviewOps);
+        _engine.Enqueue(ReviewSessionJson);
+        Authenticate(reviewer.AccessToken);
+
+        var response = await _client.GetAsync($"{ReviewSessionRoute}?taskId={Uri.EscapeDataString(taskId)}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var sent = _engine.LastRequest!.Request.RequestUri!;
+        Assert.Equal("/api/review/sessions/ses_stubreview01", sent.AbsolutePath);
+        Assert.Equal($"?task_id={taskId}", sent.Query);
+
+        // The engine payload, including the per-task fields, reaches the console as sent.
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("SPK-2", body.GetProperty("task_id").GetString());
+        Assert.Equal(2, body.GetProperty("traits").GetArrayLength());
+        var tasks = body.GetProperty("tasks");
+        Assert.Equal(2, tasks.GetArrayLength());
+        Assert.Equal("pending_review", tasks[1].GetProperty("status").GetString());
+        Assert.True(tasks[1].GetProperty("has_recording").GetBoolean());
+    }
+
+    [Fact]
+    public async Task AdminReviewSession_WithoutTaskId_SendsNoQueryToTheEngine()
+    {
+        var reviewer = await IssueAdminAsync("Dr Reviewer", AdminPermissions.ReviewOps);
+        _engine.Enqueue(ReviewSessionJson);
+        Authenticate(reviewer.AccessToken);
+
+        var response = await _client.GetAsync(ReviewSessionRoute);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var sent = _engine.LastRequest!.Request.RequestUri!;
+        Assert.Equal("/api/review/sessions/ses_stubreview01", sent.AbsolutePath);
+        Assert.Equal(string.Empty, sent.Query);
+    }
+
+    public static TheoryData<string> InvalidReviewTaskIds() => new()
+    {
+        "bad id",
+        "../secret",
+        "task?x=1",
+        "a,b",
+        "über",
+        "trailing\n", // a "$" anchor would let this through
+        new string('a', 65),
+    };
+
+    [Theory]
+    [MemberData(nameof(InvalidReviewTaskIds))]
+    public async Task AdminReviewSession_RejectsAMalformedTaskId_WithoutCallingTheEngine(string taskId)
+    {
+        var reviewer = await IssueAdminAsync("Dr Reviewer", AdminPermissions.ReviewOps);
+        Authenticate(reviewer.AccessToken);
+
+        var response = await _client.GetAsync($"{ReviewSessionRoute}?taskId={Uri.EscapeDataString(taskId)}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("placement_review_task_invalid", problem.GetProperty("code").GetString());
+        Assert.Null(_engine.LastRequest);
+    }
+
+    // ── Engine failure mapping ───────────────────────────────────────
+
+    [Theory]
+    [InlineData(HttpStatusCode.BadRequest, "placement_engine_rejected")]
+    [InlineData(HttpStatusCode.Conflict, "placement_stale_submission")]
+    public async Task EngineRejections_AreMappedToGenericMessages_NeverTheEngineBody(HttpStatusCode engineStatus, string expectedCode)
+    {
+        await RegisterLearnerAsync();
+        const string internalDetail = "internal detail /srv/engine/handlers.rs line 42";
+        _engine.Enqueue("{\"error\":\"" + internalDetail + "\"}", engineStatus);
+
+        var response = await _client.GetAsync("/v1/placement/session/ses_stubmapping01");
+
+        Assert.Equal(engineStatus, response.StatusCode);
+        var raw = await response.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("internal detail", raw);
+        Assert.DoesNotContain("handlers.rs", raw);
+        using var problem = JsonDocument.Parse(raw);
+        Assert.Equal(expectedCode, problem.RootElement.GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task EngineForbidden_OnTheReviewerSurface_DoesNotClaimTheSessionBelongsToAnotherAccount()
+    {
+        await RegisterLearnerAsync();
+
+        // Learner session route: ownership wording is accurate there.
+        _engine.Enqueue("{}", HttpStatusCode.Forbidden);
+        var learnerCall = await _client.GetAsync("/v1/placement/session/ses_stubmapping02");
+        Assert.Equal(HttpStatusCode.Forbidden, learnerCall.StatusCode);
+        var learnerProblem = await learnerCall.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("placement_not_your_session", learnerProblem.GetProperty("code").GetString());
+        Assert.Contains("another account", learnerProblem.GetProperty("message").GetString()!);
+
+        // Reviewer/admin route: the service token was refused, not a session ownership check.
+        var reviewer = await IssueAdminAsync("Dr Reviewer", AdminPermissions.ReviewOps);
+        Authenticate(reviewer.AccessToken);
+        _engine.Enqueue("{}", HttpStatusCode.Forbidden);
+        var reviewCall = await _client.GetAsync("/v1/admin/placement/review/queue");
+        Assert.Equal(HttpStatusCode.Forbidden, reviewCall.StatusCode);
+        var reviewProblem = await reviewCall.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("placement_engine_forbidden", reviewProblem.GetProperty("code").GetString());
+        var message = reviewProblem.GetProperty("message").GetString()!;
+        Assert.DoesNotContain("another account", message);
+        Assert.DoesNotContain("belongs", message);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────
+
+    /// <summary>A create-session body as the engine now emits it: the
+    /// <c>accommodations_applied</c> echo is null unless a percent and approval
+    /// id are given. Includes the engine bearer <c>token</c> the proxy must strip.</summary>
+    private static string CreatedSessionJson(string sessionId, int? extraTimePercent = null, string? approvalId = null)
+        => JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["session_id"] = sessionId,
+            ["token"] = "engine-token-ignored",
+            ["next_step"] = "worked_example",
+            ["ruleset_version"] = "2.0.0-beta",
+            ["accommodations_applied"] = extraTimePercent is null
+                ? null
+                : new { extra_time_percent = extraTimePercent, approval_id = approvalId },
+        });
 
     private sealed record LearnerIdentity(string LearnerId, string AccessToken, string Email);
 
@@ -949,13 +1174,13 @@ public class PlacementEndpointsTests : IDisposable
 
     private sealed class StubPlacementEngineHandler : HttpMessageHandler
     {
-        private readonly Queue<string> _responses = new();
+        private readonly Queue<(HttpStatusCode Status, string Body)> _responses = new();
 
         /// <summary>The body string is captured INSIDE the handler: HttpClient
         /// disposes request content after send, so the test cannot read it later.</summary>
         public CapturedRequest? LastRequest { get; private set; }
 
-        public void Enqueue(string json) => _responses.Enqueue(json);
+        public void Enqueue(string json, HttpStatusCode status = HttpStatusCode.OK) => _responses.Enqueue((status, json));
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
@@ -971,9 +1196,10 @@ public class PlacementEndpointsTests : IDisposable
                     Content = new StringContent("{\"error\":\"stub queue empty\"}", Encoding.UTF8, "application/json"),
                 };
             }
-            return new HttpResponseMessage(HttpStatusCode.OK)
+            var (status, json) = _responses.Dequeue();
+            return new HttpResponseMessage(status)
             {
-                Content = new StringContent(_responses.Dequeue(), Encoding.UTF8, "application/json"),
+                Content = new StringContent(json, Encoding.UTF8, "application/json"),
             };
         }
     }
@@ -998,6 +1224,31 @@ public class PlacementEndpointsTests : IDisposable
                 throw new InvalidOperationException("Simulated accommodation-use persistence failure.");
             }
             return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    /// <summary>Keeps every formatted log entry so a test can assert an
+    /// operational alarm string (e.g. PLACEMENT_ACCOMMODATION_NOT_APPLIED) fired.</summary>
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentQueue<(LogLevel Level, string Message)> Entries { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(Entries);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CapturingLogger(ConcurrentQueue<(LogLevel Level, string Message)> entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(
+                LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+                => entries.Enqueue((logLevel, formatter(state, exception)));
         }
     }
 

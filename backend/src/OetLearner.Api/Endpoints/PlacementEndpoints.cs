@@ -90,14 +90,39 @@ public static class PlacementEndpoints
                 };
             }
 
-            var created = await gateway.CreateSessionAsync(learnerId, body, ct);
+            using var created = await gateway.CreateSessionAsync(learnerId, body, ct);
+            var createdRoot = created.RootElement;
+            var sessionId = createdRoot.ValueKind == JsonValueKind.Object
+                && createdRoot.TryGetProperty("session_id", out var sessionIdElement)
+                && sessionIdElement.ValueKind == JsonValueKind.String
+                    ? sessionIdElement.GetString()
+                    : null;
+            var logger = loggerFactory.CreateLogger("Placement.Session");
+
+            // Fail closed: an approved grant must be confirmed by the engine's
+            // accommodations_applied echo (same percent AND approval id). A
+            // missing echo (older engine), a null echo or a different value
+            // means the attempt would run WITHOUT the approved extra time, so
+            // it is refused rather than silently handed a standard clock. With
+            // no grant the echo is ignored. The engine session that was just
+            // created is never returned to the learner, so it can never be
+            // started; no use record is written for it.
+            if (grant is not null && !AccommodationEchoMatches(createdRoot, grant, out var echoed))
+            {
+                logger.LogError(
+                    "PLACEMENT_ACCOMMODATION_NOT_APPLIED session={SessionId} accommodation={AccommodationId} expectedPercent={ExpectedPercent} expectedApprovalId={ExpectedApprovalId} echoed={Echoed}",
+                    sessionId ?? "unknown", grant.Id, grant.ExtraTimePercent, grant.Id, echoed);
+                // retryable: false — the browser client auto-retries retryable 5xx
+                // responses, and every retry would create another engine session
+                // (each carrying the approved extra time, with no use record).
+                throw ApiException.ServiceUnavailable(
+                    "placement_accommodation_not_applied",
+                    "Your approved extra time could not be applied to this attempt, so it was not started. Please try again, or contact support if this keeps happening.",
+                    retryable: false);
+            }
 
             // Record which attempt used the grant (idempotent on session id).
-            if (grant is not null
-                && created.RootElement.ValueKind == JsonValueKind.Object
-                && created.RootElement.TryGetProperty("session_id", out var sessionIdElement)
-                && sessionIdElement.ValueKind == JsonValueKind.String
-                && sessionIdElement.GetString() is { Length: > 0 } sessionId)
+            if (grant is not null && sessionId is { Length: > 0 })
             {
                 try
                 {
@@ -122,13 +147,28 @@ public static class PlacementEndpoints
                     // create a SECOND extra-time session with no use record, so
                     // swallow, shout, and return the created session. The engine
                     // session carries approval_id for reconciliation.
-                    loggerFactory.CreateLogger("Placement.Session").LogError(
+                    logger.LogError(
                         ex,
                         "PLACEMENT_ACCOMMODATION_USE_NOT_RECORDED session={SessionId} accommodation={AccommodationId}",
                         sessionId, grant.Id);
                 }
             }
-            return Results.Ok(created.RootElement);
+
+            // The engine-issued candidate bearer is never handed to the browser:
+            // every later call goes through this proxy, which authenticates with
+            // the service token and the OET learner id.
+            var node = JsonNode.Parse(createdRoot.GetRawText());
+            if (node is JsonObject createdObject)
+            {
+                createdObject.Remove("token");
+                // Same stance as the session-state route: the learner sees THAT
+                // (and how much) extra time applies, never the approval record.
+                if (createdObject["accommodations_applied"] is JsonObject appliedObject)
+                {
+                    appliedObject.Remove("approval_id");
+                }
+            }
+            return Results.Ok(node);
         });
 
         // The engine echoes the stored accommodations block on session state,
@@ -322,9 +362,19 @@ public static class PlacementEndpoints
             Results.Ok((await gateway.GetReviewQueueAsync(ct)).RootElement))
             .WithAdminRead("AdminReviewOps");
 
-        adminPlacement.MapGet("/review/{sessionId}", async (PlacementGateway gateway, string sessionId, CancellationToken ct) =>
-            Results.Ok((await gateway.GetReviewSessionAsync(sessionId, ct)).RootElement))
-            .WithAdminRead("AdminReviewOps");
+        // Per-task review: an optional ?taskId= selects one submitted task and is
+        // forwarded to the engine as ?task_id=. Engine-issued task ids are short
+        // slugs, so anything else is refused here and never reaches the engine.
+        adminPlacement.MapGet("/review/{sessionId}", async (
+            PlacementGateway gateway, string sessionId, string? taskId, CancellationToken ct) =>
+        {
+            if (taskId is not null && !IsValidReviewTaskId(taskId))
+            {
+                throw ApiException.Validation("placement_review_task_invalid",
+                    "taskId must be 1 to 64 characters: letters, digits, underscore, dot or hyphen.");
+            }
+            return Results.Ok((await gateway.GetReviewSessionAsync(sessionId, taskId, ct)).RootElement);
+        }).WithAdminRead("AdminReviewOps");
 
         adminPlacement.MapGet("/review/{sessionId}/audio/{taskId}", async (
             PlacementGateway gateway, string sessionId, string taskId, CancellationToken ct) =>
@@ -475,6 +525,34 @@ public static class PlacementEndpoints
     }
 
     // ── Accommodation helpers ────────────────────────────────────────
+
+    /// <summary>True when the engine's create-session <c>accommodations_applied</c>
+    /// echo carries the grant's percent and approval id. <paramref name="echoed"/>
+    /// is the raw echo (or "missing") for the failure log.</summary>
+    private static bool AccommodationEchoMatches(JsonElement created, PlacementAccommodation grant, out string echoed)
+    {
+        echoed = "missing";
+        if (created.ValueKind != JsonValueKind.Object
+            || !created.TryGetProperty("accommodations_applied", out var applied))
+        {
+            return false;
+        }
+        echoed = applied.GetRawText();
+        return applied.ValueKind == JsonValueKind.Object
+            && applied.TryGetProperty("extra_time_percent", out var percent)
+            && percent.ValueKind == JsonValueKind.Number
+            && percent.TryGetDouble(out var percentValue)
+            && percentValue == grant.ExtraTimePercent
+            && applied.TryGetProperty("approval_id", out var approval)
+            && approval.ValueKind == JsonValueKind.String
+            && string.Equals(approval.GetString(), grant.Id, StringComparison.Ordinal);
+    }
+
+    /// <summary>Engine task ids match <c>^[A-Za-z0-9_.-]{1,64}$</c> (spelled out
+    /// without a regex so a trailing newline can never slip past <c>$</c>).</summary>
+    private static bool IsValidReviewTaskId(string taskId)
+        => taskId.Length is >= 1 and <= 64
+           && taskId.All(c => char.IsAsciiLetterOrDigit(c) || c is '_' or '.' or '-');
 
     /// <summary>The learner's active (unrevoked) extra-time grant, if any.</summary>
     private static Task<PlacementAccommodation?> ActiveAccommodationAsync(
