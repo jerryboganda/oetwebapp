@@ -8129,7 +8129,10 @@
     ],
     "primaryLetterTypes": [
       "referral",
-      "advice"
+      "advice",
+      "urgent_referral",
+      "discharge",
+      "non_medical_referral"
     ],
     "notes": "Pharmacist letters are usually advice or medication-review referrals to the prescriber. Always cite drug, dose, frequency, indication, and the suspected issue."
   }

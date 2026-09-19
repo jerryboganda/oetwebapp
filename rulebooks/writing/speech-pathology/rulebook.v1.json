@@ -2935,7 +2935,10 @@
     ],
     "primaryLetterTypes": [
       "referral",
-      "discharge"
+      "discharge",
+      "urgent_referral",
+      "transfer",
+      "other"
     ],
     "notes": "Communication and swallowing assessment results, communication aids, and family/caregiver involvement are central."
   }

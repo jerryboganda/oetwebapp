@@ -2934,7 +2934,10 @@
     ],
     "primaryLetterTypes": [
       "referral",
-      "urgent_referral"
+      "urgent_referral",
+      "discharge",
+      "transfer",
+      "other"
     ],
     "notes": "Diabetic foot status, vascular assessment, and ulcer staging drive content selection."
   }

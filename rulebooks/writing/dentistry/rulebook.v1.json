@@ -8059,7 +8059,8 @@
     ],
     "primaryLetterTypes": [
       "referral",
-      "urgent_referral"
+      "urgent_referral",
+      "non_medical_referral"
     ],
     "notes": "Most common: referral to a specialist for treatment that exceeds general-practice scope. Include relevant medical history when sedation or surgery is planned."
   }

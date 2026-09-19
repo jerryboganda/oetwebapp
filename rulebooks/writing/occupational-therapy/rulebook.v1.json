@@ -2935,9 +2935,10 @@
     "primaryLetterTypes": [
       "referral",
       "discharge",
-      "advice"
+      "advice",
+      "urgent_referral",
+      "transfer"
     ],
-    "notes": "Functional capacity, activities of daily living (ADLs), home environment and equipment needs drive content.",
-    "smokingDrinkingRequired": true
+    "notes": "Functional capacity, activities of daily living (ADLs), home environment and equipment needs drive content."
   }
 }
