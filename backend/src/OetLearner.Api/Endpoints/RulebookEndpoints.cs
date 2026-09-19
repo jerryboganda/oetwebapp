@@ -200,10 +200,21 @@ public static class RulebookEndpoints
                 {
                     var routedCode = RouteTargetToFeatureCode(redirectTarget);
                     var routedTask = OetLearner.Api.Services.Ai.TypeSafe.JevWritingPilot.RouteToTask(redirectTarget, task);
-                    if (routedCode is not null && routedTask != task)
+                    if (routedCode is not null && routedTask is { } realignedTask && realignedTask != task)
                     {
-                        task = routedTask;
-                        ctx.Task = routedTask;
+                        task = realignedTask;
+                        // AiGroundingContext properties are init-only — realign
+                        // by rebuilding the context so prompt, policy, quota,
+                        // and audit all describe the SAME routed request.
+                        ctx = new AiGroundingContext
+                        {
+                            Kind = kind,
+                            Profession = prof,
+                            Task = realignedTask,
+                            LetterType = body.LetterType,
+                            CardType = body.CardType,
+                            CandidateCountry = body.CandidateCountry,
+                        };
                         featureCode = routedCode;
                     }
                 }
