@@ -326,6 +326,372 @@ public class PlacementEndpointsTests : IDisposable
         Assert.Equal(HttpStatusCode.Forbidden, health.StatusCode);
     }
 
+    // ── Admin-approved extra time (accommodations) ───────────────────
+
+    private const string AccommodationsRoute = "/v1/admin/placement/accommodations";
+
+    [Fact]
+    public async Task AdminGrant_RecordsApproverAndTime_AndReturns201()
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+
+        var response = await AdminPostAsync(admin, AccommodationsRoute, new
+        {
+            learnerEmail = learner.Email.ToUpperInvariant(), // normalized-email lookup
+            extraTimePercent = 25,
+            reference = "  TICKET-42  ",
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var dto = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var id = dto.GetProperty("id").GetString()!;
+        Assert.StartsWith("pacc_", id);
+        Assert.Equal(learner.LearnerId, dto.GetProperty("learnerUserId").GetString());
+        Assert.Equal(learner.Email, dto.GetProperty("learnerEmail").GetString());
+        Assert.Equal(JsonValueKind.String, dto.GetProperty("learnerName").ValueKind);
+        Assert.Equal(25, dto.GetProperty("extraTimePercent").GetInt32());
+        Assert.Equal("TICKET-42", dto.GetProperty("reference").GetString());
+        Assert.Equal("active", dto.GetProperty("status").GetString());
+        Assert.Equal(admin.UserId, dto.GetProperty("approvedByUserId").GetString());
+        Assert.Equal("Dr Placement Admin", dto.GetProperty("approvedByName").GetString());
+        var approvedAt = ParseIso(dto.GetProperty("approvedAt").GetString()!);
+        Assert.True(Math.Abs((approvedAt - DateTimeOffset.UtcNow).TotalMinutes) < 5);
+        Assert.Equal(JsonValueKind.Null, dto.GetProperty("revokedByUserId").ValueKind);
+        Assert.Equal(JsonValueKind.Null, dto.GetProperty("revokedByName").ValueKind);
+        Assert.Equal(JsonValueKind.Null, dto.GetProperty("revokedAt").ValueKind);
+        Assert.Equal(JsonValueKind.Null, dto.GetProperty("revokedReason").ValueKind);
+        Assert.Equal(0, dto.GetProperty("uses").GetArrayLength());
+
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var row = await db.PlacementAccommodations.SingleAsync(a => a.Id == id);
+        Assert.Equal(learner.LearnerId, row.LearnerUserId);
+        Assert.Equal(25, row.ExtraTimePercent);
+        Assert.Equal("TICKET-42", row.Reference);
+        Assert.Equal(admin.UserId, row.ApprovedByUserId);
+        Assert.Equal("Dr Placement Admin", row.ApprovedByName);
+        Assert.Equal(approvedAt, row.ApprovedAt);
+        Assert.Null(row.RevokedAt);
+
+        var audit = await db.AuditEvents.SingleAsync(e => e.ResourceId == id);
+        Assert.Equal("PlacementAccommodationGranted", audit.Action);
+        Assert.Equal("PlacementAccommodation", audit.ResourceType);
+        Assert.Equal(admin.UserId, audit.ActorId);
+        Assert.Equal("Dr Placement Admin", audit.ActorName);
+    }
+
+    [Fact]
+    public async Task AdminGrant_SupersedesTheLearnersActiveGrant()
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+
+        var first = await AdminGrantAsync(admin, learner, 25);
+        await AdvanceClockAsync();
+        var second = await AdminGrantAsync(admin, learner, 50);
+
+        var all = await AdminGetAsync(admin,
+            $"{AccommodationsRoute}?learner={Uri.EscapeDataString(learner.Email)}&includeRevoked=true");
+        Assert.Equal(2, all.GetArrayLength());
+        // Newest first: the replacement is active, the old grant is revoked
+        // by the same admin with the "superseded" reason.
+        Assert.Equal(second.GetProperty("id").GetString(), all[0].GetProperty("id").GetString());
+        Assert.Equal("active", all[0].GetProperty("status").GetString());
+        Assert.Equal(50, all[0].GetProperty("extraTimePercent").GetInt32());
+        Assert.Equal(first.GetProperty("id").GetString(), all[1].GetProperty("id").GetString());
+        Assert.Equal("revoked", all[1].GetProperty("status").GetString());
+        Assert.Equal("superseded", all[1].GetProperty("revokedReason").GetString());
+        Assert.Equal(admin.UserId, all[1].GetProperty("revokedByUserId").GetString());
+        Assert.Equal("Dr Placement Admin", all[1].GetProperty("revokedByName").GetString());
+        Assert.Equal(JsonValueKind.String, all[1].GetProperty("revokedAt").ValueKind);
+
+        // Default listing hides revoked grants.
+        var activeOnly = await AdminGetAsync(admin, $"{AccommodationsRoute}?learner={Uri.EscapeDataString(learner.LearnerId)}");
+        Assert.Equal(1, activeOnly.GetArrayLength());
+        Assert.Equal(second.GetProperty("id").GetString(), activeOnly[0].GetProperty("id").GetString());
+
+        // Exactly one active grant per learner in the store.
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(1, await db.PlacementAccommodations.CountAsync(a => a.LearnerUserId == learner.LearnerId && a.RevokedAt == null));
+    }
+
+    [Fact]
+    public async Task AdminRevoke_RevokesTheGrant_AndIsIdempotent()
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+        var grant = await AdminGrantAsync(admin, learner, 30);
+        var id = grant.GetProperty("id").GetString()!;
+        var revokeRoute = $"{AccommodationsRoute}/{id}/revoke";
+
+        var revoked = await AdminPostAsync(admin, revokeRoute, new { reason = "No longer required" });
+        Assert.Equal(HttpStatusCode.OK, revoked.StatusCode);
+        var dto = await revoked.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("revoked", dto.GetProperty("status").GetString());
+        Assert.Equal("No longer required", dto.GetProperty("revokedReason").GetString());
+        Assert.Equal(admin.UserId, dto.GetProperty("revokedByUserId").GetString());
+        Assert.Equal("Dr Placement Admin", dto.GetProperty("revokedByName").GetString());
+        var revokedAt = dto.GetProperty("revokedAt").GetString();
+        Assert.NotNull(revokedAt);
+
+        // A second revoke changes nothing (the original reason/time stand).
+        var again = await AdminPostAsync(admin, revokeRoute, new { reason = "A different reason" });
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        var againDto = await again.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("revoked", againDto.GetProperty("status").GetString());
+        Assert.Equal("No longer required", againDto.GetProperty("revokedReason").GetString());
+        Assert.Equal(revokedAt, againDto.GetProperty("revokedAt").GetString());
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            // One grant audit + exactly one revoke audit (the repeat wrote none).
+            Assert.Equal(1, await db.AuditEvents.CountAsync(e => e.ResourceId == id && e.Action == "PlacementAccommodationRevoked"));
+        }
+
+        var missing = await AdminPostAsync(admin, $"{AccommodationsRoute}/pacc_doesnotexist/revoke", new { reason = "x" });
+        Assert.Equal(HttpStatusCode.NotFound, missing.StatusCode);
+    }
+
+    [Fact]
+    public async Task AccommodationRoutes_RequireAdmin()
+    {
+        var learner = await RegisterLearnerAsync();
+
+        var grant = await _client.PostAsJsonAsync(AccommodationsRoute, new
+        {
+            learnerUserId = learner.LearnerId,
+            extraTimePercent = 50,
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, grant.StatusCode);
+
+        var list = await _client.GetAsync(AccommodationsRoute);
+        Assert.Equal(HttpStatusCode.Forbidden, list.StatusCode);
+
+        var revoke = await _client.PostAsJsonAsync($"{AccommodationsRoute}/pacc_anything/revoke", new { reason = "x" });
+        Assert.Equal(HttpStatusCode.Forbidden, revoke.StatusCode);
+
+        // The candidate cannot self-grant: nothing was written.
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(0, await db.PlacementAccommodations.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(101)]
+    public async Task AdminGrant_RejectsPercentOutsideOneToHundred(int percent)
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+
+        var response = await AdminPostAsync(admin, AccommodationsRoute, new
+        {
+            learnerUserId = learner.LearnerId,
+            extraTimePercent = percent,
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(0, await db.PlacementAccommodations.CountAsync());
+    }
+
+    [Fact]
+    public async Task AdminGrant_RejectsMissingLearnerIdentifier_AndOverlongReference()
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+
+        var noLearner = await AdminPostAsync(admin, AccommodationsRoute, new { extraTimePercent = 25 });
+        Assert.Equal(HttpStatusCode.BadRequest, noLearner.StatusCode);
+
+        var longReference = await AdminPostAsync(admin, AccommodationsRoute, new
+        {
+            learnerUserId = learner.LearnerId,
+            extraTimePercent = 25,
+            reference = new string('r', 201),
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, longReference.StatusCode);
+    }
+
+    [Fact]
+    public async Task AdminGrant_UnknownLearner_Returns404()
+    {
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+
+        var byEmail = await AdminPostAsync(admin, AccommodationsRoute, new
+        {
+            learnerEmail = $"nobody.{Guid.NewGuid():N}@example.com",
+            extraTimePercent = 25,
+        });
+        Assert.Equal(HttpStatusCode.NotFound, byEmail.StatusCode);
+
+        var byId = await AdminPostAsync(admin, AccommodationsRoute, new
+        {
+            learnerUserId = "learner_doesnotexist",
+            extraTimePercent = 25,
+        });
+        Assert.Equal(HttpStatusCode.NotFound, byId.StatusCode);
+    }
+
+    [Fact]
+    public async Task SessionCreate_WithActiveGrant_ForwardsAccommodations_AndRecordsOneUse()
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+        var grant = await AdminGrantAsync(admin, learner, 25);
+        Authenticate(learner.AccessToken);
+
+        const string engineSession = """
+            {"session_id":"ses_stubacc0000001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
+            """;
+        _engine.Enqueue(engineSession);
+        var response = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using (var sent = JsonDocument.Parse(_engine.LastRequest!.Body!))
+        {
+            var accommodations = sent.RootElement.GetProperty("accommodations");
+            Assert.Equal(25, accommodations.GetProperty("extra_time_percent").GetInt32());
+            Assert.True(accommodations.GetProperty("extended_time").GetBoolean());
+            var approval = accommodations.GetProperty("extra_time_approval");
+            Assert.Equal(grant.GetProperty("id").GetString(), approval.GetProperty("approval_id").GetString());
+            Assert.Equal(admin.UserId, approval.GetProperty("approved_by").GetString());
+            Assert.Equal("Dr Placement Admin", approval.GetProperty("approved_by_name").GetString());
+            var approvedAt = approval.GetProperty("approved_at").GetString()!;
+            Assert.EndsWith("Z", approvedAt);
+            Assert.Equal(ParseIso(grant.GetProperty("approvedAt").GetString()!), ParseIso(approvedAt));
+        }
+
+        // The engine returning the SAME session id again (a retried create)
+        // must not write a second use row.
+        _engine.Enqueue(engineSession);
+        var retried = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
+        Assert.Equal(HttpStatusCode.OK, retried.StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var use = Assert.Single(await db.PlacementAccommodationUses.ToListAsync());
+            Assert.Equal("ses_stubacc0000001", use.SessionId);
+            Assert.Equal(grant.GetProperty("id").GetString(), use.AccommodationId);
+            Assert.Equal(learner.LearnerId, use.LearnerUserId);
+            Assert.Equal(25, use.ExtraTimePercent);
+        }
+
+        // The admin listing shows which attempt used the grant.
+        var list = await AdminGetAsync(admin, $"{AccommodationsRoute}?learner={Uri.EscapeDataString(learner.LearnerId)}");
+        var uses = list[0].GetProperty("uses");
+        Assert.Equal(1, uses.GetArrayLength());
+        Assert.Equal("ses_stubacc0000001", uses[0].GetProperty("sessionId").GetString());
+        Assert.Equal(25, uses[0].GetProperty("extraTimePercent").GetInt32());
+        Assert.Equal(JsonValueKind.String, uses[0].GetProperty("appliedAt").ValueKind);
+    }
+
+    [Fact]
+    public async Task SessionCreate_WithoutGrant_SendsNoAccommodations()
+    {
+        await RegisterLearnerAsync();
+        _engine.Enqueue("""
+            {"session_id":"ses_stubnone000001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
+            """);
+
+        var response = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = _engine.LastRequest!.Body!;
+        Assert.DoesNotContain("accommodations", body);
+        Assert.DoesNotContain("extra_time", body);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(0, await db.PlacementAccommodationUses.CountAsync());
+    }
+
+    [Fact]
+    public async Task SessionCreate_IgnoresClientSuppliedAccommodations()
+    {
+        var learner = await RegisterLearnerAsync();
+        var spoof = new
+        {
+            targetGoal = "OET",
+            accommodations = new { extra_time_percent = 100, extended_time = true },
+            extraTimePercent = 100,
+            extended_time = true,
+        };
+
+        // No grant: nothing the client sends reaches the engine.
+        _engine.Enqueue("""
+            {"session_id":"ses_stubspoof00001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
+            """);
+        var withoutGrant = await _client.PostAsJsonAsync("/v1/placement/session", spoof);
+        Assert.Equal(HttpStatusCode.OK, withoutGrant.StatusCode);
+        var body = _engine.LastRequest!.Body!;
+        Assert.DoesNotContain("accommodations", body);
+        Assert.DoesNotContain("extra_time", body);
+        Assert.DoesNotContain("extended_time", body);
+
+        // With a 25% grant the engine sees the ADMIN'S 25, never the client's 100.
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+        await AdminGrantAsync(admin, learner, 25);
+        Authenticate(learner.AccessToken);
+        _engine.Enqueue("""
+            {"session_id":"ses_stubspoof00002","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
+            """);
+        var withGrant = await _client.PostAsJsonAsync("/v1/placement/session", spoof);
+        Assert.Equal(HttpStatusCode.OK, withGrant.StatusCode);
+        using var sent = JsonDocument.Parse(_engine.LastRequest!.Body!);
+        Assert.Equal(25, sent.RootElement.GetProperty("accommodations").GetProperty("extra_time_percent").GetInt32());
+        Assert.False(sent.RootElement.TryGetProperty("extraTimePercent", out _));
+    }
+
+    [Fact]
+    public async Task SessionCreate_DoesNotForwardRevokedGrants()
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+        var grant = await AdminGrantAsync(admin, learner, 25);
+        var revoke = await AdminPostAsync(admin,
+            $"{AccommodationsRoute}/{grant.GetProperty("id").GetString()}/revoke", new { reason = "withdrawn" });
+        Assert.Equal(HttpStatusCode.OK, revoke.StatusCode);
+        Authenticate(learner.AccessToken);
+
+        _engine.Enqueue("""
+            {"session_id":"ses_stubrevoked001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
+            """);
+        var response = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("accommodations", _engine.LastRequest!.Body!);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(0, await db.PlacementAccommodationUses.CountAsync());
+
+        var status = await _client.GetFromJsonAsync<JsonElement>("/v1/placement/status");
+        Assert.Equal(JsonValueKind.Null, status.GetProperty("extraTimePercent").ValueKind);
+    }
+
+    [Fact]
+    public async Task Status_ShowsApprovedExtraTime_ButNeverTheApprover()
+    {
+        var learner = await RegisterLearnerAsync();
+        var before = await _client.GetFromJsonAsync<JsonElement>("/v1/placement/status");
+        Assert.Equal(JsonValueKind.Null, before.GetProperty("extraTimePercent").ValueKind);
+
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+        await AdminGrantAsync(admin, learner, 40);
+        Authenticate(learner.AccessToken);
+
+        var raw = await _client.GetStringAsync("/v1/placement/status");
+        using var status = JsonDocument.Parse(raw);
+        Assert.Equal(40, status.RootElement.GetProperty("extraTimePercent").GetInt32());
+        Assert.DoesNotContain(admin.UserId, raw);
+        Assert.DoesNotContain("Dr Placement Admin", raw);
+        Assert.DoesNotContain("approv", raw, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────
 
     private sealed record LearnerIdentity(string LearnerId, string AccessToken, string Email);
@@ -362,6 +728,95 @@ public class PlacementEndpointsTests : IDisposable
             .Select(u => u.Id)
             .SingleAsync();
         return new LearnerIdentity(learnerId, accessToken, email);
+    }
+
+    private sealed record AdminIdentity(string UserId, string AccessToken, string DisplayName);
+
+    private void Authenticate(string accessToken)
+        => _client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", accessToken);
+
+    /// <summary>Seeds a verified admin account and issues a real access token
+    /// for it (same route the production JWT pipeline validates), carrying the
+    /// learner-admin permissions the accommodation routes require.</summary>
+    private async Task<AdminIdentity> IssueAdminAsync(string displayName)
+    {
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var now = DateTimeOffset.UtcNow;
+        var authAccountId = $"auth_admin_{Guid.NewGuid():N}";
+        var email = $"placement.admin.{Guid.NewGuid():N}@example.com";
+        db.ApplicationUserAccounts.Add(new ApplicationUserAccount
+        {
+            Id = authAccountId,
+            Email = email,
+            NormalizedEmail = email.ToUpperInvariant(),
+            PasswordHash = "not-used",
+            Role = ApplicationUserRoles.Admin,
+            EmailVerifiedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var accessToken = scope.ServiceProvider.GetRequiredService<AuthTokenService>().IssueSession(
+            new AuthenticatedSessionSubject(
+                authAccountId,
+                authAccountId,
+                email,
+                ApplicationUserRoles.Admin,
+                displayName,
+                IsEmailVerified: true,
+                IsAuthenticatorEnabled: false,
+                RequiresEmailVerification: false,
+                RequiresMfa: false,
+                EmailVerifiedAt: now,
+                AuthenticatorEnabledAt: null,
+                AdminPermissions: [AdminPermissions.LearnerRead, AdminPermissions.LearnerWrite])).AccessToken;
+        return new AdminIdentity(authAccountId, accessToken, displayName);
+    }
+
+    private async Task<HttpResponseMessage> AdminPostAsync(AdminIdentity admin, string url, object? body)
+    {
+        Authenticate(admin.AccessToken);
+        return body is null
+            ? await _client.PostAsync(url, null)
+            : await _client.PostAsJsonAsync(url, body);
+    }
+
+    private async Task<JsonElement> AdminGetAsync(AdminIdentity admin, string url)
+    {
+        Authenticate(admin.AccessToken);
+        var response = await _client.GetAsync(url);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    /// <summary>Admin grants extra time to <paramref name="learner"/>; returns
+    /// the 201 DTO. Leaves the client authenticated as the admin.</summary>
+    private async Task<JsonElement> AdminGrantAsync(AdminIdentity admin, LearnerIdentity learner, int percent)
+    {
+        var response = await AdminPostAsync(admin, AccommodationsRoute, new
+        {
+            learnerUserId = learner.LearnerId,
+            extraTimePercent = percent,
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    private static DateTimeOffset ParseIso(string value)
+        => DateTimeOffset.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>Moves the test clock forward so two grants never share a
+    /// timestamp (the stub time provider is frozen at factory start).</summary>
+    private async Task AdvanceClockAsync()
+    {
+        if (_factory.Services.GetRequiredService<TimeProvider>() is MutableTimeProvider clock)
+        {
+            clock.Advance(TimeSpan.FromSeconds(5));
+        }
+        await Task.Delay(20);
     }
 
     private void SeedInertEmailVerificationGate()

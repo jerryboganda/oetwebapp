@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
@@ -29,7 +30,8 @@ public static class PlacementEndpoints
 
         // ── Availability (used by the web app to reveal the entry) ──────
         placement.MapGet("/status", async (
-            HttpContext http, IRuntimeSettingsProvider settings, PlacementGateway gateway, CancellationToken ct) =>
+            HttpContext http, IRuntimeSettingsProvider settings, PlacementGateway gateway,
+            LearnerDbContext db, CancellationToken ct) =>
         {
             var placement = (await settings.GetAsync()).Placement;
             var access = placement.BetaOnly
@@ -38,20 +40,74 @@ public static class PlacementEndpoints
                     ? "granted"
                     : "not_in_beta")
                 : "granted";
-            return Results.Ok(new { enabled = placement.PlacementEnabled, betaOnly = placement.BetaOnly, access });
+            // Extra time is admin-approved only; the candidate UI just needs to
+            // know THAT (and how much) it was approved. The approver is never
+            // exposed on a learner route.
+            var grant = await ActiveAccommodationAsync(db, http.UserId(), ct);
+            return Results.Ok(new
+            {
+                enabled = placement.PlacementEnabled,
+                betaOnly = placement.BetaOnly,
+                access,
+                extraTimePercent = grant?.ExtraTimePercent,
+            });
         });
 
         // ── Session lifecycle ────────────────────────────────────────────
         placement.MapPost("/session", async (
-            HttpContext http, PlacementGateway gateway,
+            HttpContext http, PlacementGateway gateway, LearnerDbContext db, TimeProvider clock,
             [FromBody] PlacementCreateSessionRequest request, CancellationToken ct) =>
         {
-            var created = await gateway.CreateSessionAsync(http.UserId(), new
+            var learnerId = http.UserId();
+            var body = new Dictionary<string, object?>
             {
-                target_goal = string.IsNullOrWhiteSpace(request.TargetGoal) ? "General" : request.TargetGoal,
-                device_class = request.DeviceClass,
-                candidate_uid = http.UserId(),
-            }, ct);
+                ["target_goal"] = string.IsNullOrWhiteSpace(request.TargetGoal) ? "General" : request.TargetGoal,
+                ["device_class"] = request.DeviceClass,
+                ["candidate_uid"] = learnerId,
+            };
+
+            // Extra time comes ONLY from an admin-approved grant looked up
+            // here by the authenticated learner id. The request DTO has no
+            // accommodations member, so nothing the client sends can reach
+            // the engine's accommodations block.
+            var grant = await ActiveAccommodationAsync(db, learnerId, ct);
+            if (grant is not null)
+            {
+                body["accommodations"] = new
+                {
+                    extra_time_percent = grant.ExtraTimePercent,
+                    extended_time = true,
+                    extra_time_approval = new
+                    {
+                        approval_id = grant.Id,
+                        approved_by = grant.ApprovedByUserId,
+                        approved_by_name = grant.ApprovedByName,
+                        approved_at = Iso(grant.ApprovedAt),
+                    },
+                };
+            }
+
+            var created = await gateway.CreateSessionAsync(learnerId, body, ct);
+
+            // Record which attempt used the grant (idempotent on session id).
+            if (grant is not null
+                && created.RootElement.ValueKind == JsonValueKind.Object
+                && created.RootElement.TryGetProperty("session_id", out var sessionIdElement)
+                && sessionIdElement.ValueKind == JsonValueKind.String
+                && sessionIdElement.GetString() is { Length: > 0 } sessionId
+                && !await db.PlacementAccommodationUses.AnyAsync(u => u.SessionId == sessionId, ct))
+            {
+                db.PlacementAccommodationUses.Add(new PlacementAccommodationUse
+                {
+                    Id = $"pacu_{Guid.NewGuid():N}",
+                    AccommodationId = grant.Id,
+                    LearnerUserId = learnerId,
+                    SessionId = sessionId,
+                    ExtraTimePercent = grant.ExtraTimePercent,
+                    AppliedAt = clock.GetUtcNow(),
+                });
+                await db.SaveChangesAsync(ct);
+            }
             return Results.Ok(created.RootElement);
         });
 
@@ -242,8 +298,235 @@ public static class PlacementEndpoints
             PlacementGateway gateway, string sessionId, [FromBody] JsonElement body, CancellationToken ct) =>
             Results.Ok((await gateway.HumanScoreAsync(sessionId, body, ct)).RootElement));
 
+        // ── Extra-time accommodations (admin-approved only) ─────────────
+        // Candidates cannot enable extra time themselves; an admin grants it
+        // to a learner account and every grant/revoke is audited. The grant
+        // is applied server-side when the learner starts a session.
+        adminPlacement.MapPost("/accommodations", async Task<IResult> (
+            HttpContext http, LearnerDbContext db, TimeProvider clock,
+            [FromBody] PlacementAccommodationGrantRequest request, CancellationToken ct) =>
+        {
+            if (request.ExtraTimePercent is < 1 or > 100)
+            {
+                throw ApiException.Validation("placement_extra_time_invalid",
+                    "Extra time must be a whole percentage from 1 to 100.");
+            }
+            var reference = string.IsNullOrWhiteSpace(request.Reference) ? null : request.Reference.Trim();
+            if (reference is { Length: > 200 })
+            {
+                throw ApiException.Validation("placement_accommodation_reference_too_long",
+                    "The reference must be 200 characters or fewer.");
+            }
+            var learner = await FindLearnerAsync(db, request.LearnerUserId, request.LearnerEmail, ct)
+                ?? throw ApiException.NotFound("placement_learner_not_found", "No learner matches that email or id.");
+
+            var adminId = http.UserId();
+            var adminName = http.AdminName();
+            var now = clock.GetUtcNow();
+
+            // One active grant per learner: the new grant supersedes any
+            // existing one (kept, revoked, for the audit trail).
+            var superseded = await db.PlacementAccommodations
+                .Where(a => a.LearnerUserId == learner.Id && a.RevokedAt == null)
+                .ToListAsync(ct);
+            foreach (var previous in superseded)
+            {
+                previous.RevokedByUserId = adminId;
+                previous.RevokedByName = adminName;
+                previous.RevokedAt = now;
+                previous.RevokedReason = "superseded";
+            }
+
+            var grant = new PlacementAccommodation
+            {
+                Id = $"pacc_{Guid.NewGuid():N}",
+                LearnerUserId = learner.Id,
+                ExtraTimePercent = request.ExtraTimePercent,
+                Reference = reference,
+                ApprovedByUserId = adminId,
+                ApprovedByName = adminName,
+                ApprovedAt = now,
+            };
+            db.PlacementAccommodations.Add(grant);
+            AddAccommodationAudit(db, http, "PlacementAccommodationGranted", grant.Id, now, new
+            {
+                learnerUserId = learner.Id,
+                extraTimePercent = grant.ExtraTimePercent,
+                reference = grant.Reference,
+                supersededIds = superseded.Select(a => a.Id).ToArray(),
+            });
+            await db.SaveChangesAsync(ct);
+
+            var dto = (await BuildAccommodationDtosAsync(db, [grant], ct))[0];
+            return Results.Created($"/v1/admin/placement/accommodations?learner={Uri.EscapeDataString(learner.Id)}", dto);
+        }).WithAdminWrite("AdminLearnerWrite");
+
+        adminPlacement.MapGet("/accommodations", async Task<IResult> (
+            LearnerDbContext db, string? learner, bool? includeRevoked, CancellationToken ct) =>
+        {
+            IQueryable<PlacementAccommodation> query = db.PlacementAccommodations.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(learner))
+            {
+                var needle = learner.Trim();
+                var learnerId = needle.Contains('@')
+                    ? (await FindLearnerAsync(db, null, needle, ct))?.Id
+                    : needle;
+                if (learnerId is null)
+                {
+                    return Results.Ok(Array.Empty<PlacementAccommodationDto>());
+                }
+                query = query.Where(a => a.LearnerUserId == learnerId);
+            }
+            if (includeRevoked != true)
+            {
+                query = query.Where(a => a.RevokedAt == null);
+            }
+            // ponytail: hard cap instead of paging; add paging if grants ever outgrow it.
+            var grants = await query
+                .OrderByDescending(a => a.ApprovedAt)
+                .ThenByDescending(a => a.Id)
+                .Take(200)
+                .ToListAsync(ct);
+            return Results.Ok(await BuildAccommodationDtosAsync(db, grants, ct));
+        }).WithAdminRead("AdminLearnerRead");
+
+        adminPlacement.MapPost("/accommodations/{id}/revoke", async Task<IResult> (
+            HttpContext http, LearnerDbContext db, TimeProvider clock, string id,
+            [FromBody] PlacementAccommodationRevokeRequest? request, CancellationToken ct) =>
+        {
+            var reason = request?.Reason?.Trim();
+            if (string.IsNullOrEmpty(reason))
+            {
+                reason = null;
+            }
+            if (reason is { Length: > 200 })
+            {
+                throw ApiException.Validation("placement_accommodation_reason_too_long",
+                    "The reason must be 200 characters or fewer.");
+            }
+            var grant = await db.PlacementAccommodations.SingleOrDefaultAsync(a => a.Id == id, ct)
+                ?? throw ApiException.NotFound("placement_accommodation_not_found", "That accommodation does not exist.");
+
+            // Idempotent: revoking an already-revoked grant changes nothing.
+            if (grant.RevokedAt is null)
+            {
+                var now = clock.GetUtcNow();
+                grant.RevokedByUserId = http.UserId();
+                grant.RevokedByName = http.AdminName();
+                grant.RevokedAt = now;
+                grant.RevokedReason = reason;
+                AddAccommodationAudit(db, http, "PlacementAccommodationRevoked", grant.Id, now, new
+                {
+                    learnerUserId = grant.LearnerUserId,
+                    extraTimePercent = grant.ExtraTimePercent,
+                    reason,
+                });
+                await db.SaveChangesAsync(ct);
+            }
+            return Results.Ok((await BuildAccommodationDtosAsync(db, [grant], ct))[0]);
+        }).WithAdminWrite("AdminLearnerWrite");
+
         return app;
     }
+
+    // ── Accommodation helpers ────────────────────────────────────────
+
+    /// <summary>The learner's active (unrevoked) extra-time grant, if any.</summary>
+    private static Task<PlacementAccommodation?> ActiveAccommodationAsync(
+        LearnerDbContext db, string learnerId, CancellationToken ct)
+        => db.PlacementAccommodations
+            .AsNoTracking()
+            .Where(a => a.LearnerUserId == learnerId && a.RevokedAt == null)
+            .OrderByDescending(a => a.ApprovedAt)
+            .FirstOrDefaultAsync(ct);
+
+    /// <summary>Resolve a learner by id and/or email (normalized-email lookup
+    /// through the auth account, like the other admin user lookups). When both
+    /// are supplied they must agree.</summary>
+    private static async Task<LearnerUser?> FindLearnerAsync(
+        LearnerDbContext db, string? userId, string? email, CancellationToken ct)
+    {
+        var id = string.IsNullOrWhiteSpace(userId) ? null : userId.Trim();
+        var normalizedEmail = string.IsNullOrWhiteSpace(email) ? null : AuthEmailAddress.NormalizeOrThrow(email);
+        if (id is null && normalizedEmail is null)
+        {
+            throw ApiException.Validation("placement_learner_required", "Provide learnerEmail or learnerUserId.");
+        }
+
+        var query = db.Users.AsNoTracking().Where(u => u.Role == ApplicationUserRoles.Learner);
+        if (id is not null)
+        {
+            query = query.Where(u => u.Id == id);
+        }
+        if (normalizedEmail is not null)
+        {
+            query = query.Where(u => db.ApplicationUserAccounts.Any(a =>
+                a.Id == u.AuthAccountId && a.NormalizedEmail == normalizedEmail && a.DeletedAt == null));
+        }
+        return await query.FirstOrDefaultAsync(ct);
+    }
+
+    private static void AddAccommodationAudit(
+        LearnerDbContext db, HttpContext http, string action, string resourceId, DateTimeOffset at, object details)
+        => db.AuditEvents.Add(new AuditEvent
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            ActorId = http.UserId(),
+            ActorName = http.AdminName(),
+            Action = action,
+            ResourceType = "PlacementAccommodation",
+            ResourceId = resourceId,
+            Details = JsonSupport.Serialize(details),
+            OccurredAt = at,
+        });
+
+    private static async Task<List<PlacementAccommodationDto>> BuildAccommodationDtosAsync(
+        LearnerDbContext db, IReadOnlyList<PlacementAccommodation> grants, CancellationToken ct)
+    {
+        if (grants.Count == 0)
+        {
+            return [];
+        }
+        var learnerIds = grants.Select(g => g.LearnerUserId).Distinct().ToList();
+        var grantIds = grants.Select(g => g.Id).ToList();
+        var learners = await db.Users
+            .AsNoTracking()
+            .Where(u => learnerIds.Contains(u.Id))
+            .Select(u => new { u.Id, u.Email, u.DisplayName })
+            .ToDictionaryAsync(u => u.Id, ct);
+        var uses = (await db.PlacementAccommodationUses
+            .AsNoTracking()
+            .Where(u => grantIds.Contains(u.AccommodationId))
+            .OrderBy(u => u.AppliedAt)
+            .ToListAsync(ct))
+            .ToLookup(u => u.AccommodationId);
+
+        return grants.Select(g =>
+        {
+            learners.TryGetValue(g.LearnerUserId, out var learner);
+            return new PlacementAccommodationDto(
+                g.Id,
+                g.LearnerUserId,
+                learner?.Email ?? string.Empty,
+                learner?.DisplayName,
+                g.ExtraTimePercent,
+                g.Reference,
+                g.RevokedAt is null ? "active" : "revoked",
+                g.ApprovedByUserId,
+                g.ApprovedByName,
+                Iso(g.ApprovedAt),
+                g.RevokedByUserId,
+                g.RevokedByName,
+                g.RevokedAt is { } revokedAt ? Iso(revokedAt) : null,
+                g.RevokedReason,
+                uses[g.Id]
+                    .Select(u => new PlacementAccommodationUseDto(u.SessionId, Iso(u.AppliedAt), u.ExtraTimePercent))
+                    .ToList());
+        }).ToList();
+    }
+
+    private static string Iso(DateTimeOffset value)
+        => value.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
 
     /// <summary>Persist (or refresh) the OET-owned result history row for a
     /// completed placement session.</summary>
@@ -304,6 +587,9 @@ public static class PlacementEndpoints
     private static string UserId(this HttpContext http)
         => http.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
+
+    private static string AdminName(this HttpContext http)
+        => http.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
 }
 
 /// <summary>Endpoint filter: every placement route 404s (as if absent) while
@@ -358,3 +644,26 @@ public sealed record PlacementUnitTechnicalRequest(string? Reason)
 }
 public sealed record PlacementHistoryItem(
     string Id, string SessionId, string RulesetVersion, string Status, DateTime CreatedAt);
+
+/// <summary>Admin request to grant extra time. Identify the learner by
+/// <c>learnerEmail</c> and/or <c>learnerUserId</c>.</summary>
+public sealed record PlacementAccommodationGrantRequest(
+    string? LearnerEmail, string? LearnerUserId, int ExtraTimePercent, string? Reference);
+public sealed record PlacementAccommodationRevokeRequest(string? Reason);
+public sealed record PlacementAccommodationUseDto(string SessionId, string AppliedAt, int ExtraTimePercent);
+public sealed record PlacementAccommodationDto(
+    string Id,
+    string LearnerUserId,
+    string LearnerEmail,
+    string? LearnerName,
+    int ExtraTimePercent,
+    string? Reference,
+    string Status,
+    string ApprovedByUserId,
+    string ApprovedByName,
+    string ApprovedAt,
+    string? RevokedByUserId,
+    string? RevokedByName,
+    string? RevokedAt,
+    string? RevokedReason,
+    IReadOnlyList<PlacementAccommodationUseDto> Uses);
