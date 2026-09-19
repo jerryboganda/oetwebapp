@@ -159,6 +159,9 @@ export function PlacementTestRunner() {
   const [fullReport, setFullReport] = useState<PlacementResultReport | null>(null);
   const [answeredInPart, setAnsweredInPart] = useState(0);
   const [busy, setBusy] = useState(false);
+  // Admin-approved extra time, as reported by the server. Display only — the
+  // candidate has no control over it.
+  const [extraTimePercent, setExtraTimePercent] = useState<number | null>(null);
   const topRef = useRef<HTMLDivElement | null>(null);
 
   const refreshHistory = useCallback(async () => {
@@ -187,6 +190,7 @@ export function PlacementTestRunner() {
           setScreen({ kind: 'disabled' });
           return;
         }
+        setExtraTimePercent(status.extraTimePercent ?? null);
         await refreshHistory();
 
         // Resume an in-flight session if one exists and still loads.
@@ -316,7 +320,13 @@ export function PlacementTestRunner() {
       {header ? <ProgressHeader part={header.part} completed={header.completed} fraction={partFraction} /> : null}
 
       {screen.kind === 'overview' ? (
-        <OverviewCard errorMessage={errorMessage} history={history} busy={busy} onStart={startSession} />
+        <OverviewCard
+          errorMessage={errorMessage}
+          history={history}
+          busy={busy}
+          extraTimePercent={extraTimePercent}
+          onStart={startSession}
+        />
       ) : null}
 
       {screen.kind === 'part-intro' ? (
@@ -520,11 +530,13 @@ function OverviewCard({
   errorMessage,
   history,
   busy,
+  extraTimePercent,
   onStart,
 }: {
   errorMessage: string | null;
   history: PlacementHistoryItem[];
   busy: boolean;
+  extraTimePercent: number | null;
   onStart: () => void;
 }) {
   return (
@@ -557,6 +569,12 @@ function OverviewCard({
         Approximate full-profile time: 60–85 minutes. The test is adaptive, so the exact number of objective questions can
         vary. You may take a short break between parts, but not during an active timed question, recording or audio item.
       </p>
+
+      {extraTimePercent != null && extraTimePercent > 0 ? (
+        <p className="rounded-xl border border-border bg-background-light px-4 py-3 text-sm text-navy">
+          Extra time has been approved for your account (+{extraTimePercent}% on timed sections).
+        </p>
+      ) : null}
 
       <ul className="grid gap-2 text-sm text-muted sm:grid-cols-2">
         <li className="flex items-start gap-2">

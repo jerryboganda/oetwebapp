@@ -14,6 +14,9 @@ export interface PlacementStatus {
   betaOnly?: boolean;
   /** 'not_in_beta' while the controlled beta excludes this account. */
   access?: 'granted' | 'not_in_beta';
+  /** Admin-approved extra time (% on timed sections) for this account, else
+   *  null. Read-only for the candidate — it is never a client-side setting. */
+  extraTimePercent?: number | null;
 }
 
 /** True when this learner can actually open the test (flag on, and inside
@@ -171,6 +174,14 @@ function asString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+/** First argument that is a finite number — lets a reader accept both wire spellings. */
+function firstNumber(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+  }
+  return undefined;
+}
+
 export async function fetchPlacementStatus(): Promise<PlacementStatus> {
   return apiRequest<PlacementStatus>('/v1/placement/status');
 }
@@ -291,13 +302,16 @@ export async function fetchPlacementSpeakingTasks(sessionId: string): Promise<Pl
   const payload = await apiRequest<ApiRecord[]>(
     `/v1/placement/session/${encodeURIComponent(sessionId)}/speaking/tasks`,
   );
+  // The engine serializes SpeakingTask directly: identity fields stay
+  // snake_case (task_id, task_type) but the timing fields are renamed
+  // camelCase (prepSeconds, maxSpeakSeconds). Read both spellings.
   return (Array.isArray(payload) ? payload : []).map((task) => ({
-    taskId: String(task.task_id ?? ''),
-    taskType: String(task.task_type ?? ''),
+    taskId: String(task.task_id ?? task.taskId ?? ''),
+    taskType: String(task.task_type ?? task.taskType ?? ''),
     route: String(task.route ?? ''),
     prompt: String(task.prompt ?? ''),
-    prepSeconds: typeof task.prep_seconds === 'number' ? task.prep_seconds : undefined,
-    speakingSeconds: typeof task.speaking_seconds === 'number' ? task.speaking_seconds : undefined,
+    prepSeconds: firstNumber(task.prepSeconds, task.prep_seconds),
+    speakingSeconds: firstNumber(task.maxSpeakSeconds, task.max_speak_seconds, task.speaking_seconds),
   }));
 }
 
@@ -346,14 +360,21 @@ export async function fetchPlacementWritingTasks(sessionId: string): Promise<Pla
   const payload = await apiRequest<ApiRecord[]>(
     `/v1/placement/session/${encodeURIComponent(sessionId)}/writing/tasks`,
   );
-  return (Array.isArray(payload) ? payload : []).map((task) => ({
-    taskId: String(task.task_id ?? ''),
-    taskType: String(task.task_type ?? ''),
-    route: String(task.route ?? ''),
-    prompt: String(task.prompt ?? ''),
-    minWords: typeof task.min_words === 'number' ? task.min_words : undefined,
-    minutes: typeof task.minutes === 'number' ? task.minutes : undefined,
-  }));
+  // WritingTask is serialized directly too: the time limit is camelCase
+  // (timeLimitSeconds, extra time already applied) and the word guidance is a
+  // nested { min, max } object.
+  return (Array.isArray(payload) ? payload : []).map((task) => {
+    const guidance = (task.word_guidance ?? task.wordGuidance ?? null) as ApiRecord | null;
+    const limitSeconds = firstNumber(task.timeLimitSeconds, task.time_limit_seconds);
+    return {
+      taskId: String(task.task_id ?? task.taskId ?? ''),
+      taskType: String(task.task_type ?? task.taskType ?? ''),
+      route: String(task.route ?? ''),
+      prompt: String(task.prompt ?? ''),
+      minWords: firstNumber(guidance?.min, task.min_words),
+      minutes: limitSeconds !== undefined ? Math.max(1, Math.round(limitSeconds / 60)) : firstNumber(task.minutes),
+    };
+  });
 }
 
 export async function savePlacementWritingDraft(sessionId: string, taskId: string, text: string): Promise<void> {

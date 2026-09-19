@@ -1,4 +1,4 @@
-import { apiRequest, type ApiRecord } from './client';
+import { apiRequest, toNullableString, type ApiRecord } from './client';
 
 /**
  * Admin surface for the placement test's pending-review queue (the private
@@ -161,4 +161,102 @@ export async function fetchPlacementInventory(): Promise<PlacementInventory> {
     writing: toTasks(payload.writing),
     totals: Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, toCount(value)])),
   };
+}
+
+// ── Extra-time accommodations ────────────────────────────────────────
+
+/**
+ * Extra time on the placement test is granted by an administrator and never
+ * self-selected by a candidate. Each grant records who approved it, when, the
+ * percentage, and which attempts used it. Served by the OET API itself
+ * (camelCase JSON), not proxied from the engine.
+ */
+
+export interface PlacementAccommodationUse {
+  sessionId: string;
+  appliedAt: string;
+  extraTimePercent: number;
+}
+
+export interface PlacementAccommodation {
+  id: string;
+  learnerUserId: string;
+  learnerEmail: string;
+  learnerName: string | null;
+  extraTimePercent: number;
+  reference: string | null;
+  status: 'active' | 'revoked';
+  approvedByUserId: string;
+  approvedByName: string;
+  approvedAt: string;
+  revokedByUserId: string | null;
+  revokedByName: string | null;
+  revokedAt: string | null;
+  revokedReason: string | null;
+  uses: PlacementAccommodationUse[];
+}
+
+export interface GrantPlacementAccommodationInput {
+  /** Exactly one of the two learner identifiers is expected. */
+  learnerEmail?: string;
+  learnerUserId?: string;
+  /** 1..100. */
+  extraTimePercent: number;
+  /** Administrative reference only (<= 200 chars) — never health details. */
+  reference?: string;
+}
+
+function toAccommodation(row: ApiRecord): PlacementAccommodation {
+  return {
+    id: String(row.id ?? ''),
+    learnerUserId: String(row.learnerUserId ?? ''),
+    learnerEmail: String(row.learnerEmail ?? ''),
+    learnerName: toNullableString(row.learnerName),
+    extraTimePercent: toCount(row.extraTimePercent),
+    reference: toNullableString(row.reference),
+    status: String(row.status ?? '').toLowerCase() === 'revoked' ? 'revoked' : 'active',
+    approvedByUserId: String(row.approvedByUserId ?? ''),
+    approvedByName: String(row.approvedByName ?? ''),
+    approvedAt: String(row.approvedAt ?? ''),
+    revokedByUserId: toNullableString(row.revokedByUserId),
+    revokedByName: toNullableString(row.revokedByName),
+    revokedAt: toNullableString(row.revokedAt),
+    revokedReason: toNullableString(row.revokedReason),
+    uses: (Array.isArray(row.uses) ? (row.uses as ApiRecord[]) : []).map((use) => ({
+      sessionId: String(use.sessionId ?? ''),
+      appliedAt: String(use.appliedAt ?? ''),
+      extraTimePercent: toCount(use.extraTimePercent),
+    })),
+  };
+}
+
+/** Grants, newest first. `learner` is an email or user id; revoked grants are
+ *  omitted unless `includeRevoked` is set. */
+export async function fetchPlacementAccommodations(
+  opts: { learner?: string; includeRevoked?: boolean } = {},
+): Promise<PlacementAccommodation[]> {
+  const params = new URLSearchParams();
+  const learner = opts.learner?.trim();
+  if (learner) params.set('learner', learner);
+  params.set('includeRevoked', String(Boolean(opts.includeRevoked)));
+  const rows = await apiRequest<ApiRecord[]>(`/v1/admin/placement/accommodations?${params.toString()}`);
+  return (Array.isArray(rows) ? rows : []).map(toAccommodation);
+}
+
+export async function grantPlacementAccommodation(
+  input: GrantPlacementAccommodationInput,
+): Promise<PlacementAccommodation> {
+  const row = await apiRequest<ApiRecord>('/v1/admin/placement/accommodations', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  return toAccommodation(row ?? {});
+}
+
+export async function revokePlacementAccommodation(id: string, reason?: string): Promise<PlacementAccommodation> {
+  const row = await apiRequest<ApiRecord>(`/v1/admin/placement/accommodations/${encodeURIComponent(id)}/revoke`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  });
+  return toAccommodation(row ?? {});
 }

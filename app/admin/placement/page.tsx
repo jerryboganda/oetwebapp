@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
+import { PlacementAccommodationsCard } from '@/components/admin/placement-accommodations-card';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { fetchAuthorizedObjectUrl } from '@/lib/api/binary';
@@ -400,6 +401,8 @@ export default function AdminPlacementReviewPage() {
           </CardContent>
         </Card>
       ) : null}
+
+      <PlacementAccommodationsCard />
     </div>
   );
 }
