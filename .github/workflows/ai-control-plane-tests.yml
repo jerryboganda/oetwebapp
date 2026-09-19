@@ -73,7 +73,7 @@ concurrency:
 jobs:
   ai-control-plane-schema:
     name: AI control-plane schema + shared PostgreSQL harness
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 20
     env:
       OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_ai_control_plane_tests;Username=postgres;Password=postgres
