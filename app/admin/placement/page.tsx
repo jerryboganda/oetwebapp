@@ -36,10 +36,31 @@ const OBJECTIVE_MODULES = [
 const CONFIRMATION_BLOCK = 5;
 /**
  * The named traits the engine scores (evidence_rules.rs). A human score must
- * fill every one: any other key is ignored and the trait evaluates as 0.
+ * fill every one: any other key is ignored and the trait evaluates as 0. The
+ * engine now sends the exact list with each review session; these only serve an
+ * older engine that does not.
  */
 const SPEAKING_TRAITS = ['intelligibility', 'fluency', 'grammar', 'vocabulary', 'communication'] as const;
 const WRITING_TRAITS = ['task_fulfilment', 'organisation', 'grammar', 'vocabulary', 'mechanics_register'] as const;
+const DEFAULT_TRAIT_SCORE = '3';
+
+/** The trait keys a human score for this task must carry. */
+function traitsFor(session: PlacementReviewSession): readonly string[] {
+  if (session.traits.length > 0) return session.traits;
+  const isWriting = session.module ? session.module === 'WRT' : session.taskId.startsWith('WRT-');
+  return isWriting ? WRITING_TRAITS : SPEAKING_TRAITS;
+}
+
+function traitLabel(trait: string): string {
+  return trait.charAt(0).toUpperCase() + trait.slice(1).replace(/_/g, ' ');
+}
+
+const TASK_STATUS: Record<string, { label: string; variant: 'warning' | 'danger' | 'info' | 'success' | 'slate' }> = {
+  pending_review: { label: 'Pending review', variant: 'warning' },
+  unusable: { label: 'Unusable', variant: 'danger' },
+  rated: { label: 'AI rated', variant: 'info' },
+  human_scored: { label: 'Human scored', variant: 'success' },
+};
 
 function csvCell(value: string | number): string {
   const text = String(value);
@@ -208,7 +229,8 @@ export default function AdminPlacementReviewPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rationale, setRationale] = useState('');
-  const [score, setScore] = useState('3');
+  // One 0-5 score per rubric trait, keyed by trait; an untouched trait reads as the default.
+  const [scores, setScores] = useState<Record<string, string>>({});
   const [inventory, setInventory] = useState<PlacementInventory | null>(null);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
 
@@ -238,13 +260,14 @@ export default function AdminPlacementReviewPage() {
     if (isReady) void refresh();
   }, [isReady, refresh]);
 
-  const openSession = useCallback(async (sessionId: string) => {
+  // Without a taskId the engine opens the first task needing human attention.
+  const openSession = useCallback(async (sessionId: string, taskId?: string) => {
     setNotice(null);
     setError(null);
     try {
-      setSelected(await fetchPlacementReviewSession(sessionId));
+      setSelected(await fetchPlacementReviewSession(sessionId, taskId));
       setRationale('');
-      setScore('3');
+      setScores({});
     } catch (err) {
       setError(readErrorMessage(err, 'Could not load the review session.'));
     }
@@ -261,7 +284,7 @@ export default function AdminPlacementReviewPage() {
         reason: 'Rescored from the placement review console',
       });
       setNotice('Rescore requested — the session re-enters the rating pipeline.');
-      await openSession(selected.sessionId);
+      await openSession(selected.sessionId, selected.taskId);
     } catch (err) {
       setError(readErrorMessage(err, 'Could not rescore the session.'));
     } finally {
@@ -271,10 +294,15 @@ export default function AdminPlacementReviewPage() {
 
   const humanScore = useCallback(async () => {
     if (!selected || busy) return;
-    const value = Number.parseInt(score, 10);
-    if (Number.isNaN(value) || value < 0 || value > 5) {
-      setError('Human score must be a rubric value from 0 to 5.');
-      return;
+    // Not derived from selected.atLower: a pending_review rating has empty maps.
+    const values: Record<string, number> = {};
+    for (const trait of traitsFor(selected)) {
+      const raw = (scores[trait] ?? DEFAULT_TRAIT_SCORE).trim();
+      if (!/^[0-5]$/.test(raw)) {
+        setError(`${traitLabel(trait)} needs a whole-number rubric score from 0 to 5.`);
+        return;
+      }
+      values[trait] = Number(raw);
     }
     if (rationale.trim().length < 10) {
       setError('A rationale of at least 10 characters is required for a human score.');
@@ -284,19 +312,18 @@ export default function AdminPlacementReviewPage() {
     setNotice(null);
     setError(null);
     try {
-      // Not derived from selected.atLower: a pending_review rating has empty maps.
-      const traits: readonly string[] = selected.taskId.startsWith('WRT-') ? WRITING_TRAITS : SPEAKING_TRAITS;
-      const atLower = Object.fromEntries(traits.map((t) => [t, value]));
-      const atUpper = Object.fromEntries(traits.map((t) => [t, value]));
-      await humanScorePlacementSession(selected.sessionId, selected.taskId, atLower, atUpper, rationale.trim());
+      // Lower and upper are the same judgement: a human scores one value per trait.
+      await humanScorePlacementSession(selected.sessionId, selected.taskId, { ...values }, { ...values }, rationale.trim());
       setNotice('Human score recorded (append-only) — the session result recomputes on next view.');
-      await openSession(selected.sessionId);
+      await openSession(selected.sessionId, selected.taskId);
     } catch (err) {
       setError(readErrorMessage(err, 'Could not record the human score.'));
     } finally {
       setBusy(false);
     }
-  }, [busy, openSession, rationale, score, selected]);
+  }, [busy, openSession, rationale, scores, selected]);
+
+  const traits = selected ? traitsFor(selected) : [];
 
   if (!isReady) return null;
 
@@ -336,7 +363,7 @@ export default function AdminPlacementReviewPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="slate">{entry.flagType}</Badge>
-                    <Button size="sm" variant="outline" onClick={() => void openSession(entry.sessionId)}>
+                    <Button size="sm" variant="outline" onClick={() => void openSession(entry.sessionId, entry.taskId ?? undefined)}>
                       Review
                     </Button>
                   </div>
@@ -355,6 +382,46 @@ export default function AdminPlacementReviewPage() {
             <CardTitle>Session {selected.sessionId} — task {selected.taskId}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {selected.taskType || selected.ratingId || selected.rater ? (
+              <p className="text-xs text-muted">
+                {[
+                  selected.taskType,
+                  selected.ratingId ? `rating ${selected.ratingId}` : '',
+                  selected.rater ? `rater ${selected.rater}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+            ) : null}
+            {selected.tasks.length > 1 ? (
+              <div role="group" aria-label="Tasks in this session" className="space-y-2">
+                <p className="text-xs font-medium text-muted">Tasks in this session</p>
+                <div className="flex flex-wrap gap-2">
+                  {selected.tasks.map((task) => {
+                    const current = task.taskId === selected.taskId;
+                    const status = TASK_STATUS[task.status] ?? { label: task.status || 'Unknown', variant: 'slate' as const };
+                    return (
+                      <Button
+                        key={task.taskId}
+                        size="sm"
+                        variant={current ? 'primary' : 'outline'}
+                        aria-current={current ? 'true' : undefined}
+                        disabled={busy}
+                        onClick={() => {
+                          if (!current) void openSession(selected.sessionId, task.taskId);
+                        }}
+                      >
+                        <span className="mr-2">{task.taskId}</span>
+                        <Badge variant={status.variant}>{status.label}</Badge>
+                        {task.module === 'SPK' && !task.hasRecording ? (
+                          <span className="ml-2 text-danger">no recording</span>
+                        ) : null}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
             {selected.taskPrompt ? <p className="text-sm text-navy">{selected.taskPrompt}</p> : null}
             {selected.candidateAudioUrl ? (
               <ReviewAudio key={`${selected.sessionId}:${selected.taskId}`} sessionId={selected.sessionId} taskId={selected.taskId} />
@@ -377,32 +444,43 @@ export default function AdminPlacementReviewPage() {
               </div>
             ) : null}
 
-            <div className="flex flex-wrap items-end gap-3 border-t border-border pt-4">
-              <div className="w-24">
-                <label htmlFor="placement-human-score" className="mb-1 block text-xs font-medium text-muted">
-                  Score (0–5)
-                </label>
-                <Input id="placement-human-score" value={score} onChange={(event) => setScore(event.target.value)} inputMode="numeric" />
+            <div className="space-y-3 border-t border-border pt-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {traits.map((trait) => (
+                  <div key={trait}>
+                    <label htmlFor={`placement-score-${trait}`} className="mb-1 block text-xs font-medium text-muted">
+                      {traitLabel(trait)} (0–5)
+                    </label>
+                    <Input
+                      id={`placement-score-${trait}`}
+                      value={scores[trait] ?? DEFAULT_TRAIT_SCORE}
+                      onChange={(event) => setScores((current) => ({ ...current, [trait]: event.target.value }))}
+                      inputMode="numeric"
+                    />
+                  </div>
+                ))}
               </div>
-              <div className="min-w-0 flex-1">
-                <label htmlFor="placement-human-rationale" className="mb-1 block text-xs font-medium text-muted">
-                  Human score rationale (append-only)
-                </label>
-                <Textarea
-                  id="placement-human-rationale"
-                  rows={2}
-                  value={rationale}
-                  onChange={(event) => setRationale(event.target.value)}
-                  placeholder="Why the human judgement differs from (or replaces) the automated rating…"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => void rescore()} disabled={busy}>
-                  Re-run rating
-                </Button>
-                <Button onClick={() => void humanScore()} disabled={busy}>
-                  Record human score
-                </Button>
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="placement-human-rationale" className="mb-1 block text-xs font-medium text-muted">
+                    Human score rationale (append-only)
+                  </label>
+                  <Textarea
+                    id="placement-human-rationale"
+                    rows={2}
+                    value={rationale}
+                    onChange={(event) => setRationale(event.target.value)}
+                    placeholder="Why the human judgement differs from (or replaces) the automated rating…"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => void rescore()} disabled={busy}>
+                    Re-run rating
+                  </Button>
+                  <Button onClick={() => void humanScore()} disabled={busy}>
+                    Record human score
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>

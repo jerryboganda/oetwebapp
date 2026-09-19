@@ -134,13 +134,18 @@ function Headline({ report }: { report: PlacementResultReport }) {
   return <span className="text-sm text-muted">Overall profile shown once all four skills are measured</span>;
 }
 
-/** Writing/Speaking awaiting a human rater report insufficient evidence
- *  with a "queued for human review" note — that is a wait, not a gap. */
+/** The exact note the engine leads a non-measured Speaking/Writing skill with
+ *  while its submission awaits a human rater. Matched exactly — any other
+ *  insufficient-evidence note (even one that mentions "review") is a real
+ *  evidence gap and is shown as-is. */
+export const QUEUED_FOR_REVIEW_NOTE = 'Queued for human review - not yet scored.';
+
+/** Writing/Speaking awaiting a human rater — a wait, not a gap. */
 function isUnderReview(skill: PlacementSkillResult): boolean {
   return (
     (skill.skill === 'SPK' || skill.skill === 'WRT') &&
     skill.status !== 'measured' &&
-    skill.notes.some((note) => /review/i.test(note))
+    skill.notes.includes(QUEUED_FOR_REVIEW_NOTE)
   );
 }
 

@@ -1,4 +1,4 @@
-import { apiRequest, type ApiRecord } from './client';
+import { apiRequest, asRecord, type ApiRecord } from './client';
 
 /**
  * Placement test (free General-English assessment on the private engine).
@@ -82,13 +82,30 @@ export interface PlacementDiagnosticArea {
   weaknesses: string[];
 }
 
+/** Prompt audio the candidate hears for a Speaking task (engine TaskAudio). */
+export interface PlacementSpeakingTaskAudio {
+  /** Engine-relative, e.g. "/api/media/audio/<task_id>.mp3" — resolve with
+   *  resolvePlacementAudioUrl and fetch through fetchAuthorizedObjectUrl. */
+  storagePath: string;
+  durationSec: number;
+}
+
 export interface PlacementSpeakingTask {
   taskId: string;
   taskType: string;
   route: string;
+  /** Candidate-safe instruction (the engine strips scripts). */
   prompt: string;
   prepSeconds?: number;
   speakingSeconds?: number;
+  /** False when the candidate must hear, not read, the task. Undefined on an
+   *  engine that predates the field. */
+  candidateSeesText?: boolean;
+  /** 'text_read_aloud' | 'audio_only_repeat' | 'text_prompt' |
+   *  'audio_then_speak' | 'interlocutor_audio_then_speak'; '' when absent. */
+  delivery: string;
+  /** Null when the task has no prompt audio (yet). */
+  audio: PlacementSpeakingTaskAudio | null;
 }
 
 export interface PlacementWritingTask {
@@ -129,7 +146,14 @@ export interface PlacementResultReport {
   confidence: string;
   confidence_reasons?: string[];
   confidenceReasons?: string[];
-  readiness: { target: string; text: string; disclaimer: string; currency_note: string | null } | null;
+  readiness: {
+    target: string;
+    text: string;
+    disclaimer: string;
+    /** The engine serializes camelCase; snake_case kept for older rows. */
+    currency_note?: string | null;
+    currencyNote?: string | null;
+  } | null;
   retest_advice?: string;
   retestAdvice?: string;
   wording_version?: string;
@@ -186,10 +210,30 @@ export async function fetchPlacementStatus(): Promise<PlacementStatus> {
   return apiRequest<PlacementStatus>('/v1/placement/status');
 }
 
+export type PlacementDeviceClass = 'mobile' | 'tablet' | 'desktop';
+
+/** Pure rule: a narrow viewport is mobile; a mid-width viewport is a tablet
+ *  only when its primary pointer is touch (a small desktop window is not). */
+export function derivePlacementDeviceClass(viewportWidth: number, coarsePointer: boolean): PlacementDeviceClass {
+  if (viewportWidth < 768) return 'mobile';
+  if (viewportWidth < 1024 && coarsePointer) return 'tablet';
+  return 'desktop';
+}
+
+/** Reads the live viewport; guards window/matchMedia for SSR and tests. */
+export function detectPlacementDeviceClass(): PlacementDeviceClass {
+  if (typeof window === 'undefined' || !Number.isFinite(window.innerWidth)) return 'desktop';
+  const coarse =
+    typeof window.matchMedia === 'function'
+      ? window.matchMedia('(pointer: coarse)').matches
+      : typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
+  return derivePlacementDeviceClass(window.innerWidth, coarse);
+}
+
 export async function createPlacementSession(targetGoal?: string): Promise<{ sessionId: string; rulesetVersion: string }> {
   const created = await apiRequest<ApiRecord>('/v1/placement/session', {
     method: 'POST',
-    body: JSON.stringify({ targetGoal: targetGoal ?? 'General' }),
+    body: JSON.stringify({ targetGoal: targetGoal ?? 'General', deviceClass: detectPlacementDeviceClass() }),
   });
   return {
     sessionId: String(created.session_id ?? ''),
@@ -304,15 +348,41 @@ export async function fetchPlacementSpeakingTasks(sessionId: string): Promise<Pl
   );
   // The engine serializes SpeakingTask directly: identity fields stay
   // snake_case (task_id, task_type) but the timing fields are renamed
-  // camelCase (prepSeconds, maxSpeakSeconds). Read both spellings.
-  return (Array.isArray(payload) ? payload : []).map((task) => ({
-    taskId: String(task.task_id ?? task.taskId ?? ''),
-    taskType: String(task.task_type ?? task.taskType ?? ''),
-    route: String(task.route ?? ''),
-    prompt: String(task.prompt ?? ''),
-    prepSeconds: firstNumber(task.prepSeconds, task.prep_seconds),
-    speakingSeconds: firstNumber(task.maxSpeakSeconds, task.max_speak_seconds, task.speaking_seconds),
-  }));
+  // camelCase (prepSeconds, maxSpeakSeconds) and the prompt audio is a nested
+  // { storagePath, durationSec }. Read both spellings.
+  return (Array.isArray(payload) ? payload : []).map((task) => {
+    const audio = asRecord(task.audio);
+    const storagePath = asString(audio.storagePath) ?? asString(audio.storage_path);
+    const seesText = task.candidate_sees_text ?? task.candidateSeesText;
+    return {
+      taskId: String(task.task_id ?? task.taskId ?? ''),
+      taskType: String(task.task_type ?? task.taskType ?? ''),
+      route: String(task.route ?? ''),
+      prompt: String(task.prompt ?? ''),
+      prepSeconds: firstNumber(task.prepSeconds, task.prep_seconds),
+      speakingSeconds: firstNumber(task.maxSpeakSeconds, task.max_speak_seconds, task.speaking_seconds),
+      candidateSeesText: typeof seesText === 'boolean' ? seesText : undefined,
+      delivery: String(task.delivery ?? ''),
+      audio: storagePath
+        ? { storagePath, durationSec: firstNumber(audio.durationSec, audio.duration_sec) ?? 0 }
+        : null,
+    };
+  });
+}
+
+/** Prompt-audio plays a Speaking task allows: sentence reconstruction is a
+ *  one-shot memory task, every other audio task may be heard twice (matches
+ *  the engine's standalone client). */
+export function speakingPromptMaxPlays(taskType: string): number {
+  return taskType === 'sentence_reconstruction' ? 1 : 2;
+}
+
+/** True when the candidate must hear the task (not read it) — its prompt audio
+ *  is required, so missing audio is a fault, never a silent screen. */
+export function speakingTaskExpectsAudio(task: Pick<PlacementSpeakingTask, 'candidateSeesText' | 'delivery'>): boolean {
+  // `includes`, not `startsWith`: the 12 simulated-interaction tasks are
+  // delivered as 'interlocutor_audio_then_speak' (and the candidate sees text).
+  return task.candidateSeesText === false || task.delivery.includes('audio');
 }
 
 export async function uploadPlacementRecording(

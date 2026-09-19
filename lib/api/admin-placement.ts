@@ -12,11 +12,26 @@ export interface PlacementReviewEntry {
   module: string;
   details: string;
   timestamp: string;
+  /** The task the flag is about; null on an engine that predates the field. */
+  taskId: string | null;
+}
+
+/** One submitted Speaking/Writing task of a review session. */
+export interface PlacementReviewTask {
+  taskId: string;
+  module: string;
+  taskType: string;
+  /** 'pending_review' | 'rated' | 'human_scored' | 'unusable' (kept as sent). */
+  status: string;
+  hasRecording: boolean;
 }
 
 export interface PlacementReviewSession {
   sessionId: string;
   taskId: string;
+  /** 'SPK' | 'WRT'; '' on an engine that predates the field. */
+  module: string;
+  taskType: string;
   taskPrompt: string | null;
   candidateAudioUrl: string | null;
   candidateDraft: string | null;
@@ -24,7 +39,14 @@ export interface PlacementReviewSession {
   atLower: Record<string, number>;
   atUpper: Record<string, number>;
   aiRationale: string | null;
+  ratingId: string;
+  rater: string;
   flags: string[];
+  /** The exact rubric trait keys for this task's module - the only valid keys
+   *  of a human score. Empty when the engine predates the field. */
+  traits: string[];
+  /** Every submitted task of the session; empty when the engine predates the field. */
+  tasks: PlacementReviewTask[];
 }
 
 export interface PlacementEngineHealth {
@@ -40,14 +62,23 @@ export async function fetchPlacementReviewQueue(): Promise<PlacementReviewEntry[
     module: String(row.module ?? ''),
     details: String(row.details ?? ''),
     timestamp: String(row.timestamp ?? ''),
+    taskId: toNullableString(row.task_id),
   }));
 }
 
-export async function fetchPlacementReviewSession(sessionId: string): Promise<PlacementReviewSession> {
-  const row = await apiRequest<ApiRecord>(`/v1/admin/placement/review/${encodeURIComponent(sessionId)}`);
+/** One review session. `taskId` picks the task to open; without it the engine
+ *  opens the first task needing human attention. */
+export async function fetchPlacementReviewSession(
+  sessionId: string,
+  taskId?: string,
+): Promise<PlacementReviewSession> {
+  const query = taskId ? `?taskId=${encodeURIComponent(taskId)}` : '';
+  const row = await apiRequest<ApiRecord>(`/v1/admin/placement/review/${encodeURIComponent(sessionId)}${query}`);
   return {
     sessionId,
-    taskId: String(row.task_id ?? ''),
+    taskId: String(row.task_id ?? taskId ?? ''),
+    module: String(row.module ?? ''),
+    taskType: String(row.task_type ?? ''),
     taskPrompt: typeof row.task_prompt === 'string' ? row.task_prompt : null,
     candidateAudioUrl: typeof row.candidate_audio_url === 'string' ? row.candidate_audio_url : null,
     candidateDraft: typeof row.candidate_draft === 'string' ? row.candidate_draft : null,
@@ -55,7 +86,17 @@ export async function fetchPlacementReviewSession(sessionId: string): Promise<Pl
     atLower: (row.at_lower ?? {}) as Record<string, number>,
     atUpper: (row.at_upper ?? {}) as Record<string, number>,
     aiRationale: typeof row.ai_rationale === 'string' ? row.ai_rationale : null,
+    ratingId: String(row.rating_id ?? ''),
+    rater: String(row.rater ?? ''),
     flags: Array.isArray(row.flags) ? row.flags.map(String) : [],
+    traits: Array.isArray(row.traits) ? row.traits.map(String) : [],
+    tasks: (Array.isArray(row.tasks) ? (row.tasks as ApiRecord[]) : []).map((task) => ({
+      taskId: String(task.task_id ?? ''),
+      module: String(task.module ?? ''),
+      taskType: String(task.task_type ?? ''),
+      status: String(task.status ?? ''),
+      hasRecording: task.has_recording === true,
+    })),
   };
 }
 

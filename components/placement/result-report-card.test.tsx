@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import type { PlacementResultReport } from '@/lib/api/placement';
-import { ResultReportCard } from './result-report-card';
+import { QUEUED_FOR_REVIEW_NOTE, ResultReportCard } from './result-report-card';
 
 function report(overrides: Partial<PlacementResultReport> = {}): PlacementResultReport {
   return {
@@ -24,7 +24,8 @@ function report(overrides: Partial<PlacementResultReport> = {}): PlacementResult
         status: 'insufficient_evidence',
         band: null,
         range: null,
-        notes: ['No automated rater is configured for this deployment — this recording is queued for human review and has not been scored.'],
+        // The exact note the engine leads a pending Speaking/Writing skill with.
+        notes: ['Queued for human review - not yet scored.'],
       },
       { skill: 'WRT', status: 'not_measured', band: null, range: null, notes: [] },
     ],
@@ -69,6 +70,30 @@ describe('ResultReportCard', () => {
     expect(screen.queryByText('not_measured')).toBeNull();
     expect(screen.queryByText('insufficient_evidence')).toBeNull();
     expect(screen.getByText(/partial profile/i)).toBeInTheDocument();
+  });
+
+  it('pins the under-review signal to the exact engine note', () => {
+    expect(QUEUED_FOR_REVIEW_NOTE).toBe('Queued for human review - not yet scored.');
+  });
+
+  it('shows any other insufficient-evidence note as-is — mentioning "review" is not the pending signal', () => {
+    const note = 'The recording was too short to assess. Please review your microphone settings and retry.';
+    render(
+      <ResultReportCard
+        title="Profile"
+        report={report({
+          skills: [
+            { skill: 'RD', status: 'measured', band: 'B1', range: null, notes: [] },
+            { skill: 'LSN', status: 'measured', band: 'A2', range: null, notes: [] },
+            { skill: 'SPK', status: 'insufficient_evidence', band: null, range: null, notes: [note] },
+            { skill: 'WRT', status: 'measured', band: 'B1', range: null, notes: [] },
+          ],
+        })}
+      />,
+    );
+    expect(screen.queryByText(/being reviewed by dr hesham's team/i)).toBeNull();
+    expect(screen.getByText(/not enough evidence yet/i)).toBeInTheDocument();
+    expect(screen.getByText(note)).toBeInTheDocument();
   });
 
   it('never shows High confidence and labels an uneven profile as a range', () => {
