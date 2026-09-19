@@ -76,10 +76,45 @@ internal static class WritingPatientAgeExtractor
         "House", "Village", "Estate", "Gardens", "Grove", "Rise", "View", "Hill",
     };
 
+    // Owner decision (19 Sep 2026): an age written out - "Jonathon Apple is a ten-year-old boy" - was
+    // not read at all (the digits-only pattern above), so a child was classed as an adult and the
+    // validator demanded "Mr" for him in the same run that told the writer to use his first name.
+    // Only one to nineteen are read: those are the ages the minor rule turns on, and an adult's
+    // spelled-out age changes no verdict. The relative guards below still apply, so "her
+    // eighty-year-old husband" is never the patient's.
+    private static readonly Dictionary<string, int> AgeWords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["one"] = 1, ["two"] = 2, ["three"] = 3, ["four"] = 4, ["five"] = 5, ["six"] = 6, ["seven"] = 7,
+        ["eight"] = 8, ["nine"] = 9, ["ten"] = 10, ["eleven"] = 11, ["twelve"] = 12, ["thirteen"] = 13,
+        ["fourteen"] = 14, ["fifteen"] = 15, ["sixteen"] = 16, ["seventeen"] = 17, ["eighteen"] = 18,
+        ["nineteen"] = 19,
+    };
+
+    private static readonly Regex WordYearsOldRegex =
+        new(@"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)[\s-]*(?:years?|yrs?)[\s-]*old\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Owner decision (19 Sep 2026): an OBJECT has an age too. Optometry's Mr Arthur Reed (DOB 12
+    // January 1949) was read as a 4-year-old from "Wears bifocal spectacles; current pair approximately
+    // 4 years old", which raised age_dob_inconsistent and two minor-naming findings against a
+    // 77-year-old. Same class as the relative and place guards: the age belongs to the noun it
+    // describes. Only the noun phrase counts - no comma may be crossed - so "Wears glasses, aged 45"
+    // keeps 45 for the patient.
+    private const string ObjectNouns =
+        @"spectacles?|glasses|lenses|contact lenses|pair|frames?|dentures?|prosthesis|prostheses|implants?|devices?|hearing aids?|appliances?|orthos[ie]s|wheelchairs?|catheters?|stomas?|grafts?|scars?|pacemakers?";
+
+    // The second alternative admits the relative-clause form ("a wheelchair, which is 6 years old"),
+    // where a comma separates the object from its age but "which/that" still ties them together.
+    private static readonly Regex ObjectLedRegex =
+        new($@"\b(?:{ObjectNouns})\b(?:[^,;.!?\n]{{0,30}}|,\s*(?:which|that)\b[^,;.!?\n]{{0,30}})$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     public static int? Extract(string caseNotes)
     {
         var text = caseNotes ?? string.Empty;
         foreach (var match in YearsOldRegex.Matches(text).Cast<Match>())
+            if (TryPatientAge(text, match, out var age)) return age;
+        foreach (var match in WordYearsOldRegex.Matches(text).Cast<Match>())
             if (TryPatientAge(text, match, out var age)) return age;
         foreach (var match in AgeLabelRegex.Matches(text).Cast<Match>())
             if (TryPatientAge(text, match, out var age)) return age;
@@ -94,10 +129,15 @@ internal static class WritingPatientAgeExtractor
     private static bool TryPatientAge(string text, Match match, out int age)
     {
         age = 0;
-        if (!int.TryParse(match.Groups[1].Value, out var value) || value is not (> 0 and < 120)) return false;
-        var boundary = text.LastIndexOfAny(['.', '!', '?', '\n'], Math.Max(0, match.Index - 1));
+        var raw = match.Groups[1].Value;
+        if (!int.TryParse(raw, out var value) && !AgeWords.TryGetValue(raw, out value)) return false;
+        if (value is not (> 0 and < 120)) return false;
+        // ';' ends the clause too: "Wears bifocal spectacles; current pair ... 4 years old" is two
+        // statements, and the second one is about the spectacles.
+        var boundary = text.LastIndexOfAny(['.', '!', '?', '\n', ';'], Math.Max(0, match.Index - 1));
         var segment = text[(boundary + 1)..match.Index];
         if (RelativeLedRegex.IsMatch(segment)) return false;
+        if (ObjectLedRegex.IsMatch(segment)) return false;
         // The digits alone are captured, so look forward from the end of the whole matched age
         // expression: "80-year-old husband" and "80 years old wife" both hand the age to them.
         var after = match.Index + match.Length;

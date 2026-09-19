@@ -1260,7 +1260,10 @@ public sealed class WritingTaskModelAnswerService(
             // enforces the same date (letter_date_unsupported, G6a).
             TodayDate: scenario.TodayDate,
             Profession: profession,
-            IsModelAnswer: true)));
+            IsModelAnswer: true,
+            // Owner decision (19 Sep 2026): with no day-level date in the source the letter date is
+            // omitted (or "Month YYYY" when only a month is given), never invented.
+            DateAnchor: WritingRuleEngine.ClassifyDateAnchor(scenario.TodayDate, caseNotesAll, scenario.TaskPromptMarkdown))));
         var findings = lint.Select(f => new WritingModelAnswerFindingDto(
             f.RuleId, f.Severity.ToString().ToLowerInvariant(), f.Message, f.Quote, f.FixSuggestion)).ToList();
 

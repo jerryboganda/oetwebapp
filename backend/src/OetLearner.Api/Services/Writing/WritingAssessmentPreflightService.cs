@@ -15,7 +15,11 @@ public sealed record WritingAssessmentPreflightResult(
     string RulePackVersion,
     string TaskSnapshot,
     string CaseNotesSnapshot,
-    WritingTaskUnderstandingResult? TaskUnderstanding = null);
+    WritingTaskUnderstandingResult? TaskUnderstanding = null,
+    // The scenario's stated today's date, carried so the candidate lane can classify how much date the
+    // source gives (WritingRuleEngine.ClassifyDateAnchor). Optional, so every existing construction
+    // keeps compiling and means "not supplied".
+    string? TodayDate = null);
 
 public interface IWritingAssessmentPreflightService
 {
@@ -176,7 +180,8 @@ public sealed class WritingAssessmentPreflightService(
                 pack?.VersionKey ?? string.Empty,
                 taskSnapshot,
                 caseNotesSnapshot,
-                understanding);
+                understanding,
+                scenario.TodayDate);
         }
 
         return new WritingAssessmentPreflightResult(
@@ -190,7 +195,8 @@ public sealed class WritingAssessmentPreflightService(
             pack.VersionKey,
             taskSnapshot,
             caseNotesSnapshot,
-            understanding);
+            understanding,
+            scenario.TodayDate);
     }
 
     /// <summary>

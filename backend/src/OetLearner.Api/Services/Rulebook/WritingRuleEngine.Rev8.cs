@@ -95,8 +95,28 @@ public sealed partial class WritingRuleEngine
     /// settles that a DOB-only note set raises no date finding.
     /// Every stored Model Answer must be revalidated and re-approved under
     /// this version.
+    /// .2 (19 Sep 2026, owner decisions on the rule-gap PR):
+    /// (a) latin_abbreviations_translated now BLOCKS a Model Answer — PRN, mane,
+    /// nocte, BD/BID, TDS/TID, QDS/QID, stat and q4h/q6h/q8h/q12h must be plain
+    /// English (a candidate keeps the advisory severity; optometry's OD is the
+    /// right eye, not "once a day");
+    /// (b) a scenario whose source gives no day-level date now says so:
+    /// WritingLintInput.DateAnchor (Day / MonthOnly / None / Unknown). With
+    /// MonthOnly or None the letter date is optional — for a candidate too — and a
+    /// Model Answer that states a date the source cannot support raises
+    /// letter_date_unsupported ("unverifiable"): no date at all when the source has
+    /// none, no invented DAY when it has only a month and year. Previously any date
+    /// passed silently and a date line was mandatory;
+    /// (c) a group salutation ("Dear Parent,", "Dear Parents and Guardians,",
+    /// "Dear Families with young children,") is an unnamed recipient and closes
+    /// "Yours faithfully," (owner decision 15);
+    /// (d) the patient-age extractor reads ages spelled out from one to nineteen
+    /// ("a ten-year-old boy" is a child) and no longer reads the age of an object
+    /// ("current pair ... 4 years old", spectacles) as the patient's.
+    /// Every stored Model Answer must be revalidated and re-approved under this
+    /// version, and the frozen Medicine set must be byte-matched against production.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.cross-profession.2026-09-18.1";
+    public const string ValidatorVersion = "writing-rules.cross-profession.2026-09-19.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -853,7 +873,18 @@ public sealed partial class WritingRuleEngine
         var recipientBeforeDate = s.DateIndex is int d && s.Lines.Take(d).Any(l => l.Trim().Length > 0);
         var recipientAfterDate = s.DateIndex is int d2 && s.SalutationIndex is int si && si > d2
             && s.Lines.Skip(d2 + 1).Take(si - d2 - 1).Any(l => l.Trim().Length > 0);
-        if (s.DateIndex is null || !(recipientBeforeDate || recipientAfterDate))
+        if (s.DateIndex is null && DateLineOptional(input.DateAnchor))
+        {
+            // Owner decision (19 Sep 2026): the source gives no day-level date, so the date is
+            // legitimately omitted (or written as "Month YYYY"). The recipient block is still required;
+            // a bare "Month YYYY" line is the date, not part of the address.
+            var recipientBlockPresent = s.SalutationIndex is int sal
+                && s.Lines.Take(sal).Any(l => l.Trim().Length > 0 && !IsMonthYearDateLine(l));
+            if (!recipientBlockPresent)
+                yield return new LintFinding(rule.Id, RuleSeverity.Critical,
+                    "A Model Answer needs the recipient's name/address block. The date is omitted on purpose here, because the source gives no day-level date.");
+        }
+        else if (s.DateIndex is null || !(recipientBeforeDate || recipientAfterDate))
             yield return new LintFinding(rule.Id, RuleSeverity.Critical,
                 "A Model Answer needs the recipient's name/address block and the date (in either order), separated by one blank line.");
         if (s.ReLineIndex is null || s.YoursIndex is null) yield break;
@@ -1802,6 +1833,19 @@ public sealed partial class WritingRuleEngine
         // "Yours sincerely". A title ("Dear Dr Kist,") is always a named person.
         if (Regex.IsMatch(salutation, @"^Dear\s+(?:Dr|Mr|Mrs|Ms|Miss|Mx|Prof|Professor)\.?\s", RegexOptions.IgnoreCase))
             return false;
+        // Owner decision 15 (19 Sep 2026): a salutation to a GROUP names no individual, so it closes
+        // "Yours faithfully," exactly like a role. "Dear Parent," (the headlice advisory, whose own
+        // official sample answer signs "Yours faithfully,"), "Dear Parents and Guardians," and "Dear
+        // Families with young children," were read as personal names and "Yours faithfully," was
+        // rejected at Critical severity. This is a CLOSED list of audience nouns on purpose: an open
+        // "any plural noun" test would misread a bare surname ("Dear Williams,") as a group.
+        if (Regex.IsMatch(
+            salutation,
+            @"^Dear\s+(?:Parents?|Guardians?|Carers?|Families|Family|Residents?|Colleagues|Staff|Customers?|Clients?|Members|Neighbou?rs?)"
+            + @"(?:\s+(?:and|&)\s+(?:Parents?|Guardians?|Carers?|Families|Family))?"
+            + @"(?:\s+(?:with|of|at|in)\s+(?:[A-Za-z\-]+\s*){1,4})?\s*,?\s*$",
+            RegexOptions.IgnoreCase))
+            return true;
         // Cross-profession repair (18 Sep 2026): the role noun had to be the LAST word, so the
         // duty qualifier in "Dear Emergency Department Consultant on Duty," (Ms Patricia Styles's
         // urgent referral, and the official OET sample response for it signs "Yours faithfully")

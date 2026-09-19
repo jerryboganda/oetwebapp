@@ -368,7 +368,34 @@ public sealed record WritingLintInput(
     // explicit today's date (WritingScenario.TodayDate). When supplied, a
     // Model Answer's letter date must equal it (letter_date_unsupported).
     // Candidate lanes never pass it.
-    string? TodayDate = null);
+    string? TodayDate = null,
+    // Owner decision (19 Sep 2026): how much date the SOURCE actually gives. The date rules cannot
+    // work this out inside the engine for a candidate, because the candidate lane never passes the
+    // case notes or TodayDate in; the caller classifies it once (WritingRuleEngine.ClassifyDateAnchor)
+    // and passes the answer. Unknown (the default) keeps every existing behaviour, so a caller that
+    // does not know can never accidentally switch the date requirement off.
+    LetterDateAnchor DateAnchor = LetterDateAnchor.Unknown);
+
+/// <summary>
+/// What date evidence a scenario's source provides. Governs whether a letter date is required,
+/// permitted or forbidden:
+/// <list type="bullet">
+/// <item><c>Unknown</c> — not classified; behave exactly as before (a date line is required).</item>
+/// <item><c>Day</c> — a day-level date exists (todayDate or a dated note); existing rules apply.</item>
+/// <item><c>MonthOnly</c> — the source names a month and year but no day. The letter date is
+/// optional, and a Model Answer must not invent a day.</item>
+/// <item><c>None</c> — the source gives no date at all. The letter date is optional, and a Model
+/// Answer must omit it rather than invent one.</item>
+/// </list>
+/// A candidate is never penalised for omitting the date when the anchor is MonthOnly or None.
+/// </summary>
+public enum LetterDateAnchor
+{
+    Unknown = 0,
+    Day = 1,
+    MonthOnly = 2,
+    None = 3,
+}
 
 public sealed record WritingCaseNotesMarkers(
     bool SmokingMentioned = false,

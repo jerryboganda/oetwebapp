@@ -659,7 +659,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "respiratory_rate_unit_style" => DetectRespiratoryRateUnitStyle,
         "illogical_quantity_range" => DetectIllogicalQuantityRange,
         "vague_clinical_object" => DetectVagueClinicalObject,
-        "letter_date_unsupported" => Compose(DetectLetterDateUnsupported, DetectSaG6LetterDateUnsupported),
+        "letter_date_unsupported" => Compose(DetectLetterDateUnsupported, DetectSaG6LetterDateUnsupported, DetectLetterDateUnverifiable),
         "recipient_name_mismatch" => DetectRecipientNameMismatch,
         "patient_name_spelling" => DetectPatientNameSpelling,
         "re_line_dob_priority" => Compose(DetectReLineDobPriority, DetectSaG3ReLineDobBornOn),
@@ -815,8 +815,13 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 
     private static IEnumerable<LintFinding> DetectStructureOrder(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        // Owner decision (19 Sep 2026): where the SOURCE gives no day-level date the letter date is
+        // optional, for a candidate as much as for a Model Answer — a candidate is never penalised for
+        // omitting a date the task cannot support. Only an explicit MonthOnly/None classification
+        // relaxes this; Unknown (a caller that did not classify) keeps the date required.
+        var dateOptional = DateLineOptional(input.DateAnchor) && s.DateIndex is null;
         var missing = new List<string>();
-        if (s.DateIndex is null) missing.Add("Date");
+        if (s.DateIndex is null && !dateOptional) missing.Add("Date");
         if (s.SalutationIndex is null) missing.Add("Salutation (Dear ...)");
         if (s.ReLineIndex is null) missing.Add("Re: line");
         if (s.YoursIndex is null) missing.Add("Yours sincerely/faithfully");
@@ -825,7 +830,9 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             yield return new LintFinding(rule.Id, rule.Severity, $"Letter structure is missing: {string.Join(", ", missing)}.");
             yield break;
         }
-        int[] ord = { s.DateIndex!.Value, s.SalutationIndex!.Value, s.ReLineIndex!.Value, s.YoursIndex!.Value };
+        int[] ord = dateOptional
+            ? new[] { s.SalutationIndex!.Value, s.ReLineIndex!.Value, s.YoursIndex!.Value }
+            : new[] { s.DateIndex!.Value, s.SalutationIndex!.Value, s.ReLineIndex!.Value, s.YoursIndex!.Value };
         for (int i = 1; i < ord.Length; i++)
             if (ord[i] <= ord[i - 1])
             {
