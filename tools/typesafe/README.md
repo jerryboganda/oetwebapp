@@ -10,8 +10,8 @@ or committed. Only the masked form (head…tail, length) is ever reported.
 | Path | Purpose |
 |---|---|
 | `e2e.mjs` | Live canonical E2E: one Choice + one Noul + one Score over an OET-style referral letter. Asserts `urgent_referral`, urgency ≥ 0.9, detail ≥ 1.5. Exit code 0 = pass. |
-| `calibrate.mjs` | Phase-1 pilot calibration: replays every fixture through the SAME question designs the backend pilot uses (`Services/Ai/TypeSafe/JevWritingPilot.cs` is the source of truth — keep this script in sync on any design change). Run before flipping any `TypeSafe:Writing*Enabled` flag and after every model bump. Last full run 2026-09-19: 21/21 PASS, ~7.6k input tokens (~$0.0003). |
-| `fixtures/*.json` | Calibration anchors: a genuine urgent referral (letter type, route, criteria radar, verify claims), an adversarial injection attempt, a legitimate routine review, and a pure-gibberish submission. `expect` keys with `_gte` / `_lte` suffixes are threshold assertions; `criteria` ranges sit on the pilot's 0–3 level scale. |
+| `calibrate.mjs` | Phase-1 pilot calibration: replays every fixture through the SAME question designs the backend pilot uses (`Services/Ai/TypeSafe/JevWritingPilot.cs` is the source of truth — keep this script in sync on any design change). Run before flipping any `TypeSafe:Writing*Enabled` flag and after every model bump. Last full run 2026-09-19: 24/24 PASS incl. the companion-rerank ordering anchor (organisation=3.00 vs off-topic ~0.25), ~8.4k input tokens (~$0.0004). |
+| `fixtures/*.json` | Calibration anchors: a genuine urgent referral (letter type, route, criteria radar, verify claims), an adversarial injection attempt, a legitimate routine review, a pure-gibberish submission, and a companion-rerank ordering anchor. `expect` keys with `_gte` / `_lte` suffixes are threshold assertions; `criteria` ranges sit on the pilot's 0–3 level scale. |
 
 ## Usage
 

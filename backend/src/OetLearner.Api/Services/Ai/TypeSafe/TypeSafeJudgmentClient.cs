@@ -128,15 +128,91 @@ public sealed class TypeSafeJudgmentClient(
     private static readonly TimeSpan BaseBackoff = TimeSpan.FromMilliseconds(500);
     private const int MaxLoggedErrorBodyChars = 300;
 
+    // ── Consecutive-failure circuit breaker (Phase-2 hardening) ─────────────
+    // The judgment service is fail-soft, so without a breaker a provider
+    // outage would still cost every call its full timeout platform-wide. The
+    // client is a singleton, so these counters are global: after
+    // BreakerFailureThreshold consecutive failed sends, sends short-circuit
+    // for BreakerCooldownSeconds. Any success resets the streak. Callers
+    // already translate failures into Unavailable, so an open breaker is
+    // invisible to learner flows.
+    private readonly object _breakerGate = new();
+    private int _consecutiveFailures;
+    private DateTimeOffset _breakerOpenUntil = DateTimeOffset.MinValue;
+
+    private bool IsBreakerOpen()
+    {
+        lock (_breakerGate)
+        {
+            return DateTimeOffset.UtcNow < _breakerOpenUntil;
+        }
+    }
+
+    private void RecordSendOutcome(bool success)
+    {
+        lock (_breakerGate)
+        {
+            if (success)
+            {
+                _consecutiveFailures = 0;
+                return;
+            }
+
+            _consecutiveFailures++;
+            if (_consecutiveFailures >= Math.Max(1, options.Value.BreakerFailureThreshold))
+            {
+                _breakerOpenUntil = DateTimeOffset.UtcNow.AddSeconds(Math.Max(1, options.Value.BreakerCooldownSeconds));
+                _consecutiveFailures = 0;
+            }
+        }
+    }
+
     public async Task<TypeSafeRawResponse> SendAsync(string payloadJson, CancellationToken ct)
     {
         var opts = options.Value;
         if (string.IsNullOrWhiteSpace(opts.ApiKey))
             throw new InvalidOperationException("TypeSafe is enabled but TypeSafe:ApiKey is empty.");
+        if (IsBreakerOpen())
+            throw new TypeSafeHttpException("TypeSafe judgment breaker open after consecutive failures; cooling down.", statusCode: 0);
 
         var client = httpClientFactory.CreateClient(HttpClientName);
         var baseUri = opts.BaseUrl.TrimEnd('/');
 
+        for (var attempt = 0; ; attempt++)
+        {
+            TypeSafeRawResponse? parsed = null;
+            Exception? failure = null;
+            try
+            {
+                parsed = await SendOnceAsync(client, baseUri, opts, payloadJson, ct);
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failure = ex;
+            }
+
+            if (parsed is null)
+            {
+                RecordSendOutcome(success: false);
+                throw failure!;
+            }
+
+            RecordSendOutcome(success: true);
+            return parsed;
+        }
+    }
+
+    private async Task<TypeSafeRawResponse> SendOnceAsync(
+        HttpClient client,
+        string baseUri,
+        TypeSafeOptions opts,
+        string payloadJson,
+        CancellationToken ct)
+    {
         for (var attempt = 0; ; attempt++)
         {
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, $"{baseUri}/{EndpointPath}");

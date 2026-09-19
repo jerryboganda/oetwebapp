@@ -86,6 +86,13 @@ public sealed class TypeSafeOptions
     /// scoring path reads it.</summary>
     public bool WritingCriteriaEnabled { get; set; } = false;
 
+    /// <summary>Companion retrieval rerank: one jev Score per hybrid-search
+    /// candidate (downstream of the entitlement prefilter) reorders the
+    /// evidence by semantic relevance to the query. Ordering-only — never a
+    /// filter of record, never touches grading, and a rerank outage keeps
+    /// the original hybrid ordering.</summary>
+    public bool CompanionRerankEnabled { get; set; } = false;
+
     /// <summary>Guard: any single guard Noul at or above this blocks the
     /// submission from reaching the paid AI grade (flagged to a human).</summary>
     public double GuardBlockThreshold { get; set; } = 0.80;
@@ -107,4 +114,14 @@ public sealed class TypeSafeOptions
     /// state carries every finding, so this bounds the context; findings
     /// beyond the cap are left unverified rather than verified blind.</summary>
     public int VerifyMaxFindingsPerCall { get; set; } = 12;
+
+    /// <summary>Circuit breaker: consecutive failed sends (after in-call
+    /// retries) before sends short-circuit platform-wide. Any success resets
+    /// the streak. Callers already treat failures as fail-soft Unavailable,
+    /// so an open breaker only saves the timeout wait.</summary>
+    public int BreakerFailureThreshold { get; set; } = 5;
+
+    /// <summary>Circuit breaker: how long sends stay short-circuited after
+    /// the failure threshold trips.</summary>
+    public int BreakerCooldownSeconds { get; set; } = 30;
 }

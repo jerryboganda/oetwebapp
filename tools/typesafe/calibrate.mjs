@@ -203,10 +203,52 @@ async function main() {
     // Composite fixtures (legitimate + gibberish in one file)
     if (fixture.legitimate) await evaluateLetterCase(`${fixture.name}/legitimate`, fixture.legitimate.state, fixture.legitimate.expect ?? {});
     if (fixture.gibberish) await evaluateLetterCase(`${fixture.name}/gibberish`, fixture.gibberish.state, fixture.gibberish.expect ?? {});
+
+    // Companion retrieval rerank (mirrors JevCompanionReranker.cs)
+    if (fixture.rerank) await evaluateRerank(fixture.name, fixture.rerank);
   }
 
   console.log(`\n${results.length} checks, ${failures} failed, ~${totalInputTokens} input tokens (~$${(totalInputTokens * 4.2e-8).toFixed(5)})`);
   process.exit(failures > 0 ? 1 : 0);
+}
+
+const RERANK_LEVELS = [
+  'Unrelated: the candidate does not touch the question\'s topic.',
+  'Tangential: same general topic but does not address the question.',
+  'Relevant: partially addresses the question; useful context.',
+  'Direct: directly answers or substantially addresses the question.',
+];
+
+async function evaluateRerank(caseName, spec) {
+  const questions = Object.fromEntries(spec.candidates.map((c, i) => [`cand_${i}`, {
+    type: 'score',
+    instructions: `How well does candidate \`state.candidates[${i}].text\` answer or bear on \`state.query\`? Judge relevance to the question asked — not general quality or truth.`,
+    criteria: RERANK_LEVELS,
+  }]));
+  const response = await ask({
+    query: spec.query,
+    candidates: spec.candidates.map((c, i) => ({ index: i, text: c.text.slice(0, 600) })),
+  }, questions, `${caseName}/rerank`);
+  totalInputTokens += response.usage?.input_tokens ?? 0;
+
+  const scored = spec.candidates.map((c, i) => ({
+    id: c.id,
+    score: response.answers?.[`cand_${i}`]?.score ?? -1,
+  }));
+  const ordered = [...scored].sort((a, b) => b.score - a.score);
+  console.log(`      rerank order: ${ordered.map((s) => `${s.id}=${s.score}`).join(', ')}`);
+
+  if (spec.expect.ordering_top) {
+    record(`${caseName}·ordering_top`, spec.expect.ordering_top, ordered[0]?.id, ordered[0]?.id === spec.expect.ordering_top);
+  }
+  if (spec.expect.ordering_last) {
+    const last = ordered[ordered.length - 1];
+    record(`${caseName}·ordering_last`, spec.expect.ordering_last, last?.id, last?.id === spec.expect.ordering_last);
+  }
+  if (spec.expect.top_score_gte !== undefined) {
+    const top = ordered[0]?.score;
+    record(`${caseName}·top_score_gte`, `>= ${spec.expect.top_score_gte}`, top?.toFixed(2), top >= spec.expect.top_score_gte);
+  }
 }
 
 main().catch((error) => {

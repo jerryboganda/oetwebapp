@@ -1,0 +1,26 @@
+{
+  "name": "companion-rerank",
+  "note": "Rerank anchor for jev.companion.rerank: a query where embedding word-overlap would mislead, but semantic relevance is clear. Asserts the organisation chunk ranks top and the off-topic speaking chunk ranks last.",
+  "rerank": {
+    "query": "How should an OET referral letter be organised — what does each paragraph do?",
+    "candidates": [
+      {
+        "id": "organisation_rule",
+        "text": "OET referral letters are organised in paragraphs, each covering one aspect: the opening states the purpose of the letter, the middle paragraphs present clinical details in a logical order, and the closing paragraph states the request or plan. Continue each paragraph with a clear topic sentence."
+      },
+      {
+        "id": "speaking_roleplay",
+        "text": "In the speaking sub-test role-play, the candidate converses with a simulated patient for five minutes; the assessor scores clinical communication and rapport, not letter layout."
+      },
+      {
+        "id": "totals_scoring",
+        "text": "The final OET grade comes from the scaled 0-500 score aggregated across all four sub-tests; each sub-test is marked separately before aggregation."
+      }
+    ],
+    "expect": {
+      "ordering_top": "organisation_rule",
+      "ordering_last": "speaking_roleplay",
+      "top_score_gte": 2
+    }
+  }
+}

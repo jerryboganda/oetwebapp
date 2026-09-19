@@ -58,11 +58,12 @@ public interface ICompanionRetriever
 /// if pgvector is unavailable the keyword path alone still answers, rather than
 /// the companion failing.</para>
 /// </summary>
-public sealed class CompanionRetriever(
-    LearnerDbContext db,
-    IEmbeddingService embeddings,
-    ICompanionExtractionBudget extractionBudget,
-    ILogger<CompanionRetriever> logger) : ICompanionRetriever
+    public sealed class CompanionRetriever(
+        LearnerDbContext db,
+        IEmbeddingService embeddings,
+        ICompanionExtractionBudget extractionBudget,
+        ILogger<CompanionRetriever> logger,
+        OetLearner.Api.Services.Ai.TypeSafe.IJevCompanionReranker? reranker = null) : ICompanionRetriever
 {
     private const float VectorWeight = 0.7f;
     private const float KeywordWeight = 0.3f;
@@ -170,6 +171,35 @@ public sealed class CompanionRetriever(
             })
             .OrderByDescending(x => x.Score)
             .ToList();
+
+        // ── Step 3b: jev semantic rerank (TypeSafe:CompanionRerankEnabled,
+        // default OFF). Downstream of the entitlement prefilter: jev only
+        // REORDERS candidates that passed Step 1, by relevance to the actual
+        // query — the hybrid score stays the tiebreak. Rerank off, skipped,
+        // or failed → ordering unchanged (fail-soft; retrieval never degrades
+        // because the judgment layer is down).
+        if (reranker is not null && ranked.Count > 1)
+        {
+            var rerankCandidates = ranked
+                .Take(OetLearner.Api.Services.Ai.TypeSafe.JevCompanionReranker.MaxCandidatesPerCall)
+                .Select(x => (x.Chunk.Id, x.Chunk.Text))
+                .ToList();
+            var rerankScores = await reranker.RerankAsync(query, rerankCandidates, context.UserId, ct);
+            if (rerankScores is { Count: > 0 })
+            {
+                trace.Add($"rerank.applied={rerankScores.Count}");
+                ranked = ranked
+                    .Select(x => rerankScores.TryGetValue(x.Chunk.Id, out var rs)
+                        ? (Chunk: x.Chunk, Source: x.Source, Score: OetLearner.Api.Services.Ai.TypeSafe.JevCompanionReranker.Blend(x.Score, rs))
+                        : x)
+                    .OrderByDescending(x => x.Score)
+                    .ToList();
+            }
+            else
+            {
+                trace.Add("rerank.skipped");
+            }
+        }
 
         // ── Step 4: evidence packing with exfiltration caps ──────────────────
         var evidence = new List<CompanionEvidence>();

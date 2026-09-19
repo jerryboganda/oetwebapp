@@ -475,6 +475,12 @@ public static class AiFeatureCodes
     /// radar — never a grade input.</summary>
     public const string JevWritingCriteria = "jev.writing.criteria";
 
+    /// <summary>Companion retrieval rerank: one Score per hybrid-search
+    /// candidate (downstream of the entitlement prefilter) reorders evidence
+    /// by semantic relevance to the query. Ordering-only, advisory — never a
+    /// filter of record, never a grading path.</summary>
+    public const string JevCompanionRerank = "jev.companion.rerank";
+
     // ── AI Learning Companion (persona "Sami") — Stage 1 ───────────────────
     // Learner-facing grounded OET mentor. See docs/ai-learning-companion/.
     // All three are NON-SCORING but PLATFORM-ONLY: the companion reads learner

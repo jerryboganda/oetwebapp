@@ -161,6 +161,7 @@ Listening Part A Claude call are direct) but each writes exactly one
 | `jev.writing.route` | `typesafe-jev` | Jev Writing request routing (Choice + confidence gate); low confidence falls back to the default path. Non-scoring, platform-only. |
 | `jev.writing.verify` | `typesafe-jev` | Jev post-gateway citation verification of AI findings (supported / contradicted / not-in-evidence); low-confidence or contradicted findings go to the tutor review queue. Non-scoring, platform-only; never overrides the gateway verdict. |
 | `jev.writing.criteria` | `typesafe-jev` | Jev advisory per-criterion Writing signals (parallel Scores in one call), combined with code-owned weights. Display-only radar — never a grade input. Non-scoring, platform-only. |
+| `jev.companion.rerank` | `typesafe-jev` | Jev rerank of companion hybrid-retrieval candidates (one Score per candidate, downstream of the entitlement prefilter). Ordering-only, advisory — never a filter of record, never a grading path; rerank outage keeps the original hybrid ordering. Non-scoring, platform-only. |
 
 **TypeSafe SystemOne (Jev):** judgments only — the model returns typed
 Choice/Noul/Score answers, never text. Provider code `typesafe-jev` resolves

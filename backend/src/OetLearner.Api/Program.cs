@@ -1050,6 +1050,11 @@ builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgment
 // Phase-1 Writing pilot (guard / route / verify / advisory criteria) — every
 // surface behind its own TypeSafe:Writing*Enabled flag, all default OFF.
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.IJevWritingPilot, OetLearner.Api.Services.Ai.TypeSafe.JevWritingPilot>();
+// Phase-2 companion retrieval rerank (TypeSafe:CompanionRerankEnabled, OFF).
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.IJevCompanionReranker, OetLearner.Api.Services.Ai.TypeSafe.JevCompanionReranker>();
+// Phase-2 hardening: on startup (only when TypeSafe:Enabled) probe GET
+// /v1/models and warn if the pinned model id is not served to this account.
+builder.Services.AddHostedService<OetLearner.Api.Services.Ai.TypeSafe.TypeSafeModelPinProbe>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider>(sp =>
