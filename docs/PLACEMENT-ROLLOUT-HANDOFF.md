@@ -30,7 +30,9 @@ not here.
 | Website discovery (homepage / nav / landing page) | oetwebsite `feat/placement-test` | `9c0acac` (PR #2, held — §8) |
 
 The oetwebapp hardening needs the matching GEPA engine release; older engines
-degrade gracefully (build-time deadline, no inventory).
+degrade gracefully (build-time deadline, no inventory), with one deliberate
+exception: an account with an approved extra-time grant cannot start an attempt
+against an engine that does not confirm the grant (fail closed, §6).
 
 ## 0. Live end-to-end verification (2026-09-18) — historical
 
@@ -194,7 +196,44 @@ Still owner-gated before broad student access:
 - Recording expiry never deletes result history (engine retention clears
   audio + references; OET-side `PlacementResults` is permanent).
 - An account with an active extra-time grant sees a line on the test overview
-  saying extra time has been approved (§6).
+  saying extra time has been approved (§6). If the engine cannot apply that
+  grant when the attempt is created, the attempt does not start (§6, "fail
+  closed").
+- The engine-issued candidate bearer (`token`) is removed from the create-session
+  response. Every browser call goes through the OET API, which authenticates to
+  the engine with the service token and the OET learner id.
+
+## 4b. Review console: per-task review and named-trait scores
+
+Speaking and Writing submissions that are not auto-rated wait in the review queue
+at **Admin > Placement** (permission `review_ops`). A session can hold several
+submitted tasks; each one is reviewed on its own.
+
+- **Task picker.** The session detail lists every submitted task of the session
+  (`tasks[]`: task id, module SPK or WRT, task type, status `pending_review`,
+  `rated`, `human_scored` or `unusable`, and whether a recording exists). With no
+  task chosen the engine returns the first task needing human attention
+  (`pending_review` or `unusable`), else the first task; the reviewer can switch
+  to any other task. The API is
+  `GET /v1/admin/placement/review/{sessionId}?taskId=<id>`. `taskId` is optional and
+  must be 1 to 64 characters of letters, digits, `_`, `.` or `-`, otherwise HTTP 400
+  (`placement_review_task_invalid`). The OET API forwards it to the engine as
+  `?task_id=` and returns the engine's answer unchanged; an unknown task id is a
+  404. Queue rows carry the `task_id` as well.
+- **Named traits.** The session detail returns `traits`, the exact rubric trait
+  keys for that task's module. A human score
+  (`POST /v1/admin/placement/review/{sessionId}/human-score`, body
+  `{ task_id, at_lower, at_upper, rationale }`) must use exactly those keys in both
+  `at_lower` and `at_upper`, each an integer from 0 to 5, and a non-empty
+  rationale; the engine answers 400 otherwise. (Scoring under a made-up key was the
+  earlier defect that left the skill at insufficient evidence.) The OET API shows
+  a generic "The placement engine rejected the request." for any engine 400 (the
+  engine's body is logged, never shown), so the console builds the score form from
+  `traits` instead of relying on the error text.
+- **Recording.** The audio route serves each task's recording with the content
+  type of the stored file (webm, m4a or mp4, wav).
+- `traits` and `tasks` come from the matching GEPA engine release (deploy GEPA
+  first, §2).
 
 ## 5. Named reviewer
 
@@ -227,9 +266,15 @@ the GEPA repository as `docs/DECISIONS.md` D-035.
   grant stays on record as revoked (reason "superseded").
 - A grant applies when the learner **starts a new attempt**. An attempt already
   under way keeps the allowance it was started with.
-- Permissions: opening the Placement page needs the review-ops permission; the
-  card's calls need `learner:write` (grant, revoke) or `learner:read` (view).
-  `system_admin` passes the API checks.
+- Permissions are split between the page and the card. The **Admin > Placement
+  page** (`/admin/placement`, with its review, health and inventory routes) needs
+  `review_ops`. The **Extra-time accommodations card** on that page calls the
+  learner-admin routes, which need `learner:read` (list and audit view) and
+  `learner:write` (grant, revoke). So: an admin with only `review_ops` can open
+  the page and review submissions, but the card says they need `learner:read` and
+  loads nothing; with `learner:read` but not `learner:write` the card is a
+  read-only audit view (no grant form, no Revoke); an admin with only `learner:*`
+  permissions cannot open the page at all. `system_admin` passes every check.
 
 **Grant extra time**
 1. Sign in as an admin → **Admin > Placement** (`/admin/placement`) → the
@@ -253,6 +298,29 @@ the GEPA repository as `docs/DECISIONS.md` D-035.
    its usage history stay on record; nothing is deleted. To restore extra time,
    grant it again (a new grant).
 
+**If the engine cannot apply an approved grant (fail closed)**
+
+When a learner with an active grant starts an attempt, the OET API sends the
+grant to the engine and then checks the engine's create-session echo
+(`accommodations_applied`): it must carry the **same percentage and the same
+approval id** as the grant. If the echo is missing (an engine build older than this
+release), null, or different, the attempt is refused rather than started on a
+standard clock:
+
+- The learner gets HTTP 503, code `placement_accommodation_not_applied`, with the
+  message "Your approved extra time could not be applied to this attempt, so it
+  was not started. Please try again, or contact support if this keeps happening."
+- No attempt-used record is written. The engine session that was just created is
+  never handed to the learner, so it can never be started.
+- The API logs an ERROR containing `PLACEMENT_ACCOMMODATION_NOT_APPLIED` with the
+  session id, the grant id, the expected percentage and approval id, and what the
+  engine echoed. Search the API logs for that string.
+- The usual cause is an engine that has not been deployed with the matching
+  release (GEPA first, §2). Retrying will not help until the engine is fixed.
+  Revoking the grant would let the learner start, but on a standard clock, so
+  only do that if the accommodation is genuinely withdrawn.
+- With no active grant the echo is ignored and nothing changes.
+
 **What is recorded**
 
 | What | Where you see it |
@@ -270,10 +338,12 @@ the GEPA repository as `docs/DECISIONS.md` D-035.
   medical or personal health details (the form warns about this).
 - The list shows which learners have an accommodation. Treat it as sensitive; it
   is limited to admins with learner permissions.
-- Learner screens show only that extra time was approved and how much. The
-  engine's session record for the attempt also holds the approval, including the
-  approver's name and user id, and the learner's own session data can include it
-  (GEPA D-034); raise it if that is not acceptable.
+- Learner screens and learner API responses show only that extra time was
+  approved and how much (`extraTimePercent`). The approver is never exposed on a
+  learner route: the OET API strips the approval record (approver id and name,
+  approval time and id) from the learner's session state, and the approval id from
+  the create-session response. The engine still stores the full approval on the
+  session for audit (GEPA D-034); the OET API does not return it to learners.
 - Accommodation status is never a negative signal and never lowers confidence by
   itself (GEPA `docs/01_PRD.md` §10 and `AGENTS.md` §5).
 
