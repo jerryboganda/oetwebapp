@@ -216,10 +216,16 @@ export async function uploadPlacementRecording(
 ): Promise<PlacementUploadedRecording> {
   const body = new FormData();
   body.append('file', file, fileName);
+  // `json: false` is load-bearing: getHeaders defaults to setting
+  // Content-Type: application/json, which overwrites the browser's generated
+  // multipart boundary and makes the .NET IFormFile binder reject the upload
+  // with a bodiless 415. Every other FormData call site opts out the same way.
+  // The longer timeout matches the other recording uploads — the 30s default
+  // aborts a large recording on mobile data mid-flight.
   const uploaded = await apiRequest<ApiRecord>('/v1/placement/upload', {
     method: 'POST',
     body,
-  });
+  }, { json: false, timeoutMs: 90_000 });
   const metrics = (uploaded.metrics ?? {}) as ApiRecord;
   return {
     storagePath: String(uploaded.storage_path ?? ''),
@@ -282,9 +288,15 @@ export async function submitPlacementWriting(
   };
 }
 
+/**
+ * Engine audio URLs are engine-relative ("/api/media/audio/x.mp3"); the proxy
+ * exposes them under /v1/placement/audio/x.mp3.
+ *
+ * NOTE: this returns an **API path**, not a URL a browser can fetch directly.
+ * It still needs the API base prefix and an Authorization header — put it
+ * through `fetchAuthorizedObjectUrl`, never straight into an `<audio src>`.
+ */
 export function resolvePlacementAudioUrl(audioUrl: string | null): string | null {
-  // Engine audio URLs are engine-relative ("/api/media/audio/x.mp3"); the
-  // proxy exposes them under /v1/placement/audio/x.mp3.
   if (!audioUrl) return null;
   const fileName = asString(audioUrl.split('/').pop());
   return fileName ? `/v1/placement/audio/${encodeURIComponent(fileName)}` : null;

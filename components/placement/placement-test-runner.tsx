@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Loader2, Mic, Play, Square } from 'lucide-react';
 import { ResultReportCard } from '@/components/placement/result-report-card';
+import { fetchAuthorizedObjectUrl } from '@/lib/api/binary';
 import {
   createPlacementSession,
   fetchPlacementFullResult,
@@ -456,23 +457,73 @@ function ObjectiveStage({
 }
 
 function UnitAudio({ audioUrl, onReplay }: { audioUrl: string; onReplay: (itemId: string) => void }) {
-  const resolved = useMemo(() => resolvePlacementAudioUrl(audioUrl), [audioUrl]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const apiPath = useMemo(() => resolvePlacementAudioUrl(audioUrl), [audioUrl]);
+  // One state object tagged with the path it belongs to, so a new unit resets
+  // the player by simply not matching — no setState in the effect body.
+  const [loaded, setLoaded] = useState<{ path: string; url: string | null; failed: boolean } | null>(null);
   const [playCount, setPlayCount] = useState(0);
 
-  if (!resolved) {
-    return <p className="text-sm text-danger">Audio for this set is unavailable — the server will treat it as a technical issue.</p>;
+  // The audio endpoint is Bearer-authorised and lives behind the API base, so
+  // it can't go straight into <audio src>: the element can't attach an
+  // Authorization header, and a bare "/v1/..." path resolves against the app
+  // origin, where page middleware answers with HTML. Fetch it as an authorised
+  // blob instead and play the object URL.
+  useEffect(() => {
+    if (!apiPath) return;
+    let cancelled = false;
+    let created: string | null = null;
+
+    fetchAuthorizedObjectUrl(apiPath)
+      .then((url) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        created = url;
+        setLoaded({ path: apiPath, url, failed: false });
+      })
+      .catch(() => {
+        if (!cancelled) setLoaded({ path: apiPath, url: null, failed: true });
+      });
+
+    return () => {
+      cancelled = true;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [apiPath]);
+
+  const current = loaded?.path === apiPath ? loaded : null;
+  const markFailed = useCallback(() => {
+    setLoaded((previous) => (previous && !previous.failed ? { ...previous, failed: true } : previous));
+  }, []);
+
+  if (!apiPath || current?.failed) {
+    return (
+      <p role="alert" className="text-sm text-danger">
+        Technical audio problem — this item will not be scored.
+      </p>
+    );
+  }
+
+  if (!current?.url) {
+    return <p className="text-sm text-muted">Loading audio…</p>;
   }
 
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-4">
       {/* eslint-disable-next-line jsx-a11y/media-has-caption -- stimulus audio has no captions by design */}
       <audio
-        ref={audioRef}
-        src={resolved}
+        src={current.url}
         controls
-        preload="none"
+        preload="metadata"
         className="w-full"
+        onError={markFailed}
+        onLoadedMetadata={(event) => {
+          // A zero/NaN duration means the body wasn't decodable audio. Treat it
+          // as a technical failure rather than rendering a dead 0:00 player.
+          const { duration } = event.currentTarget;
+          if (!Number.isFinite(duration) || duration <= 0) markFailed();
+        }}
         onPlay={() => {
           setPlayCount((count) => count + 1);
           onReplay('');

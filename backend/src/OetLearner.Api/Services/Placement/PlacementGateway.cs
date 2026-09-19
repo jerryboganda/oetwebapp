@@ -138,8 +138,14 @@ public sealed class PlacementGateway
     {
         var multipart = new MultipartFormDataContent();
         var streamContent = new StreamContent(fileStream);
-        streamContent.Headers.ContentType = new MediaTypeHeaderValue(
-            string.IsNullOrWhiteSpace(contentType) ? "application/octet-stream" : contentType);
+        // TryParse, not the ctor: the ctor rejects any media type carrying
+        // parameters, so Chromium's "audio/webm;codecs=opus" would throw a
+        // FormatException (a 500). This value comes straight off a
+        // client-supplied part header, so fall back rather than trust it.
+        streamContent.Headers.ContentType =
+            MediaTypeHeaderValue.TryParse(contentType, out var parsedContentType)
+                ? parsedContentType
+                : new MediaTypeHeaderValue("application/octet-stream");
         multipart.Add(streamContent, "file", fileName);
         return SendAsync(HttpMethod.Post, "/api/media/upload", candidateUid, multipart, ct);
     }
