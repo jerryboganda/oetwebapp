@@ -11,6 +11,15 @@ export type PlacementModule = 'LS' | 'RD' | 'LSN';
 
 export interface PlacementStatus {
   enabled: boolean;
+  betaOnly?: boolean;
+  /** 'not_in_beta' while the controlled beta excludes this account. */
+  access?: 'granted' | 'not_in_beta';
+}
+
+/** True when this learner can actually open the test (flag on, and inside
+ *  the beta allowlist while the beta is active). */
+export function canAccessPlacement(status: PlacementStatus | null | undefined): boolean {
+  return Boolean(status?.enabled) && (status?.access ?? 'granted') === 'granted';
 }
 
 export interface PlacementSessionState {
@@ -43,6 +52,31 @@ export interface PlacementDeliveryUnit {
   }>;
   deadline_at: string;
   module_complete: boolean;
+  /** Full allowance for the unit in seconds (engine-owned). Optional so an
+   *  engine that predates unit timing still parses. */
+  time_budget_sec?: number;
+  /** Null until the client calls startPlacementUnit. */
+  started_at?: string | null;
+  /** Listening only. */
+  audio_duration_sec?: number | null;
+  max_plays?: number | null;
+}
+
+export type PlacementTechnicalReason =
+  | 'audio_unavailable'
+  | 'audio_decode_error'
+  | 'audio_zero_duration'
+  | 'media_timeout';
+
+/** localStorage key holding the in-progress session id (resume + the
+ *  dashboard card's Continue state). */
+export const PLACEMENT_ACTIVE_SESSION_KEY = 'oet_placement_active_session';
+
+export interface PlacementDiagnosticArea {
+  correct: number;
+  total: number;
+  strengths: string[];
+  weaknesses: string[];
 }
 
 export interface PlacementSpeakingTask {
@@ -64,13 +98,18 @@ export interface PlacementWritingTask {
 }
 
 export interface PlacementSkillResult {
+  /** 'RD' | 'LSN' | 'SPK' | 'WRT' — Language Systems is never a skill. */
   skill: string;
+  /** 'measured' | 'insufficient_evidence' | 'not_measured' */
   status: string;
   band: string | null;
   range: [string, string] | null;
   notes: string[];
-  can_do: string[];
-  growth_areas: string[];
+  /** The engine serializes camelCase; snake_case kept for older rows. */
+  canDo?: string[];
+  can_do?: string[];
+  growthAreas?: string[];
+  growth_areas?: string[];
 }
 
 /**
@@ -94,6 +133,23 @@ export interface PlacementResultReport {
   wordingVersion?: string;
   generated_at?: string;
   generatedAt?: string;
+  /** Grammar/Vocabulary diagnostics — never a fifth skill. */
+  diagnostics?: {
+    /** Grammar vs vocabulary breakdown (engine D-032); absent on older reports. */
+    language_systems?: {
+      grammar?: PlacementDiagnosticArea;
+      vocabulary?: PlacementDiagnosticArea;
+    } | null;
+    /** Construct-level Language Systems diagnostic present on every report. */
+    languageSystems?: {
+      band?: string | null;
+      range?: [string, string] | null;
+      constructsStrong?: string[];
+      constructsWeak?: string[];
+    };
+    pronunciationNotes?: string[];
+    fluencyNotes?: string[];
+  };
 }
 
 export interface PlacementHistoryItem {
@@ -159,6 +215,41 @@ export async function submitPlacementResponses(
         replay_count: replayCount,
       }),
     },
+  );
+}
+
+/**
+ * Start the server clock on the module's current unit — call it when the
+ * unit is actually usable (Listening: once audio playback has begun), so
+ * buffering is never charged to the candidate. Idempotent engine-side.
+ * Returns the updated unit, or null if this engine predates unit timing.
+ */
+export async function startPlacementUnit(
+  sessionId: string,
+  module: PlacementModule,
+): Promise<PlacementDeliveryUnit | null> {
+  try {
+    return await apiRequest<PlacementDeliveryUnit>(
+      `/v1/placement/session/${encodeURIComponent(sessionId)}/module/${encodeURIComponent(module)}/unit/start`,
+      { method: 'POST' },
+    );
+  } catch {
+    // Older engine without the start route: the build-time deadline (which
+    // already carries a load allowance) stays authoritative.
+    return null;
+  }
+}
+
+/** Report that the current unit's media could not be delivered. The unit is
+ *  excluded from scoring and the engine serves a replacement. */
+export async function reportPlacementUnitTechnical(
+  sessionId: string,
+  module: PlacementModule,
+  reason: PlacementTechnicalReason,
+): Promise<{ next: PlacementDeliveryUnit | null }> {
+  return apiRequest<{ next: PlacementDeliveryUnit | null }>(
+    `/v1/placement/session/${encodeURIComponent(sessionId)}/module/${encodeURIComponent(module)}/unit/technical`,
+    { method: 'POST', body: JSON.stringify({ reason }) },
   );
 }
 

@@ -136,6 +136,68 @@ public class PlacementEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Upload_AcceptsChromiumCodecParameterizedWebm()
+    {
+        await RegisterLearnerAsync();
+        _engine.Enqueue("""
+            {"storage_path":"rec_stub.webm","metrics":{"duration_sec":4.0,"container":"webm","metrics_provenance":"pcm_analysis"}}
+            """);
+
+        using var content = new MultipartFormDataContent();
+        var audio = new ByteArrayContent(new byte[] { 0x1A, 0x45, 0xDF, 0xA3, 0x00, 0x01 });
+        // Chromium's MediaRecorder reports the codec as a media-type
+        // parameter. The gateway used to rebuild the part header with the
+        // MediaTypeHeaderValue ctor, which rejects parameters — a 500.
+        audio.Headers.ContentType = MediaTypeHeaderValue.Parse("audio/webm;codecs=opus");
+        content.Add(audio, "file", "speaking-SPK-1.webm");
+
+        var response = await _client.PostAsync("/v1/placement/upload", content);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var request = _engine.LastRequest!;
+        Assert.Equal("/api/media/upload", request.Request.RequestUri!.AbsolutePath);
+        Assert.NotNull(request.Body);
+        Assert.Contains("audio/webm", request.Body);
+    }
+
+    [Fact]
+    public async Task UnitStart_ForwardsToTheEngineUnitStartRoute()
+    {
+        var learner = await RegisterLearnerAsync();
+        _engine.Enqueue("""
+            {"items":[],"deadline_at":"2026-09-19T10:02:00Z","started_at":"2026-09-19T10:00:00Z","time_budget_sec":120,"module_complete":false}
+            """);
+
+        var response = await _client.PostAsync("/v1/placement/session/ses_stub0000000001/module/LSN/unit/start", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var request = _engine.LastRequest!;
+        Assert.Equal(HttpMethod.Post, request.Request.Method);
+        Assert.Equal("/api/sessions/ses_stub0000000001/modules/LSN/unit/start", request.Request.RequestUri!.AbsolutePath);
+        Assert.Equal(learner.LearnerId, request.Request.Headers.GetValues("X-GEPA-Candidate-Uid").Single());
+    }
+
+    [Fact]
+    public async Task UnitTechnical_RejectsUnknownReasons_AndForwardsKnownOnes()
+    {
+        await RegisterLearnerAsync();
+        const string path = "/v1/placement/session/ses_stub0000000001/module/LSN/unit/technical";
+
+        var rejected = await _client.PostAsJsonAsync(path, new { reason = "made_up" });
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Null(_engine.LastRequest);
+
+        _engine.Enqueue("""{"next":null}""");
+        var accepted = await _client.PostAsJsonAsync(path, new { reason = "audio_zero_duration" });
+
+        Assert.Equal(HttpStatusCode.OK, accepted.StatusCode);
+        var request = _engine.LastRequest!;
+        Assert.Equal("/api/sessions/ses_stub0000000001/modules/LSN/unit/technical", request.Request.RequestUri!.AbsolutePath);
+        Assert.NotNull(request.Body);
+        Assert.Contains("\"reason\":\"audio_zero_duration\"", request.Body);
+    }
+
+    [Fact]
     public async Task FullResult_PersistsTheOetOwnedHistoryRow()
     {
         var learner = await RegisterLearnerAsync();

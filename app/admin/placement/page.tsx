@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Activity, RefreshCw } from 'lucide-react';
+import { Activity, Download, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/admin/ui/card';
 import { EmptyState } from '@/components/admin/ui/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -10,17 +10,180 @@ import { Input, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { readErrorMessage } from '@/lib/read-error-message';
+import { fetchAuthorizedObjectUrl } from '@/lib/api/binary';
 import {
   fetchPlacementEngineHealth,
+  fetchPlacementInventory,
   fetchPlacementReviewQueue,
   fetchPlacementReviewSession,
   humanScorePlacementSession,
   resolvePlacementReviewAudioUrl,
   rescorePlacementSession,
   type PlacementEngineHealth,
+  type PlacementInventory,
   type PlacementReviewEntry,
   type PlacementReviewSession,
 } from '@/lib/api/admin-placement';
+
+const BANDS = ['Pre-A1', 'A1', 'A2', 'B1', 'B2', 'C1', 'C2'] as const;
+const OBJECTIVE_MODULES = [
+  { key: 'LS', label: 'Language Systems' },
+  { key: 'RD', label: 'Reading' },
+  { key: 'LSN', label: 'Listening' },
+] as const;
+/** Below this, a band cannot supply one 5-item confirmation block. */
+const CONFIRMATION_BLOCK = 5;
+
+function csvCell(value: string | number): string {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function downloadInventoryCsv(inventory: PlacementInventory) {
+  const rows: Array<Array<string | number>> = [['section', 'module_or_route', 'band_or_task_type', 'total', 'active', 'inactive']];
+  for (const cell of inventory.objective) rows.push(['objective', cell.module, cell.band, cell.total, cell.active, cell.inactive]);
+  for (const task of inventory.speaking) rows.push(['speaking', task.route, task.taskType, task.total, task.active, task.total - task.active]);
+  for (const task of inventory.writing) rows.push(['writing', task.route, task.taskType, task.total, task.active, task.total - task.active]);
+  const blob = new Blob([rows.map((row) => row.map(csvCell).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `placement-inventory-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Candidate recording, fetched with the admin's bearer token. */
+function ReviewAudio({ sessionId, taskId }: { sessionId: string; taskId: string }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    let created: string | null = null;
+    fetchAuthorizedObjectUrl(resolvePlacementReviewAudioUrl(sessionId, taskId))
+      .then((objectUrl) => {
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        created = objectUrl;
+        setUrl(objectUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+    return () => {
+      cancelled = true;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [sessionId, taskId]);
+
+  if (failed) return <p className="text-sm text-danger">The recording could not be loaded.</p>;
+  if (!url) return <p className="text-sm text-muted">Loading recording…</p>;
+  // eslint-disable-next-line jsx-a11y/media-has-caption -- candidate recording playback for review
+  return <audio controls preload="metadata" src={url} className="w-full" />;
+}
+
+function InventoryCard({ inventory, error }: { inventory: PlacementInventory | null; error: string | null }) {
+  const cell = (module: string, band: string) =>
+    inventory?.objective.find((row) => row.module === module && row.band === band) ?? null;
+
+  return (
+    <Card>
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
+        <CardTitle>Item bank inventory</CardTitle>
+        {inventory ? (
+          <Button variant="outline" size="sm" onClick={() => downloadInventoryCsv(inventory)}>
+            <Download className="mr-2 h-4 w-4" aria-hidden /> Download CSV
+          </Button>
+        ) : null}
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {error ? (
+          <InlineAlert variant="warning">{error}</InlineAlert>
+        ) : !inventory ? (
+          <p className="text-sm text-muted">Loading…</p>
+        ) : (
+          <>
+            <p className="text-xs text-muted">
+              Active / total items per CEFR band. Generated {inventory.generatedAt ? new Date(inventory.generatedAt).toLocaleString() : 'now'} ·
+              ruleset {inventory.rulesetVersion}. Cells below {CONFIRMATION_BLOCK} active items cannot supply one confirmation
+              block; empty cells cannot be served at all.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse text-sm">
+                <caption className="sr-only">Active and total objective items by module and CEFR band</caption>
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted">
+                    <th scope="col" className="py-2 pr-3 font-medium">Module</th>
+                    {BANDS.map((band) => (
+                      <th key={band} scope="col" className="px-2 py-2 text-center font-medium">{band}</th>
+                    ))}
+                    <th scope="col" className="px-2 py-2 text-center font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {OBJECTIVE_MODULES.map((module) => (
+                    <tr key={module.key} className="border-b border-border last:border-0">
+                      <th scope="row" className="py-2 pr-3 text-left font-medium text-navy">{module.label}</th>
+                      {BANDS.map((band) => {
+                        const row = cell(module.key, band);
+                        const active = row?.active ?? 0;
+                        const variant = active === 0 ? 'danger' : active < CONFIRMATION_BLOCK ? 'warning' : 'slate';
+                        return (
+                          <td key={band} className="px-2 py-2 text-center">
+                            <Badge variant={variant}>
+                              {active}/{row?.total ?? 0}
+                            </Badge>
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-2 text-center font-medium text-navy">{inventory.totals[module.key] ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {([
+                ['Speaking prompts', inventory.speaking, 'SPK'],
+                ['Writing tasks', inventory.writing, 'WRT'],
+              ] as const).map(([title, rows, totalKey]) => (
+                <div key={title}>
+                  <p className="mb-1 text-xs font-medium text-muted">
+                    {title} · total {inventory.totals[totalKey] ?? rows.reduce((sum, row) => sum + row.total, 0)}
+                  </p>
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs text-muted">
+                        <th scope="col" className="py-1.5 pr-3 font-medium">Route</th>
+                        <th scope="col" className="py-1.5 pr-3 font-medium">Task type</th>
+                        <th scope="col" className="py-1.5 text-right font-medium">Active / total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((row) => (
+                        <tr key={`${row.route}-${row.taskType}`} className="border-b border-border last:border-0">
+                          <td className="py-1.5 pr-3 text-navy">{row.route}</td>
+                          <td className="py-1.5 pr-3 text-muted">{row.taskType}</td>
+                          <td className="py-1.5 text-right">
+                            <Badge variant={row.active === 0 ? 'danger' : 'slate'}>
+                              {row.active}/{row.total}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 /**
  * Placement review console: the private GEPA engine's pending-review queue,
@@ -39,9 +202,19 @@ export default function AdminPlacementReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [rationale, setRationale] = useState('');
   const [score, setScore] = useState('3');
+  const [inventory, setInventory] = useState<PlacementInventory | null>(null);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setError(null);
+    // Inventory loads independently: an older engine without the report
+    // must not take the review queue down with it.
+    fetchPlacementInventory()
+      .then((result) => {
+        setInventory(result);
+        setInventoryError(null);
+      })
+      .catch((err) => setInventoryError(readErrorMessage(err, 'Inventory is not available from the placement engine yet.')));
     try {
       const [entries, engineHealth] = await Promise.all([
         fetchPlacementReviewQueue(),
@@ -166,6 +339,8 @@ export default function AdminPlacementReviewPage() {
         </CardContent>
       </Card>
 
+      <InventoryCard inventory={inventory} error={inventoryError} />
+
       {selected ? (
         <Card>
           <CardHeader>
@@ -174,8 +349,7 @@ export default function AdminPlacementReviewPage() {
           <CardContent className="space-y-4">
             {selected.taskPrompt ? <p className="text-sm text-navy">{selected.taskPrompt}</p> : null}
             {selected.candidateAudioUrl ? (
-              // eslint-disable-next-line jsx-a11y/media-has-caption -- candidate recording playback for review
-              <audio controls preload="none" src={resolvePlacementReviewAudioUrl(selected.sessionId, selected.taskId)} className="w-full" />
+              <ReviewAudio key={`${selected.sessionId}:${selected.taskId}`} sessionId={selected.sessionId} taskId={selected.taskId} />
             ) : (
               <p className="text-sm text-muted">No recording stored for this task.</p>
             )}

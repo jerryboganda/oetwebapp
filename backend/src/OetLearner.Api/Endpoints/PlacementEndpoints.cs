@@ -68,6 +68,27 @@ public static class PlacementEndpoints
             [FromBody] JsonElement body, CancellationToken ct) =>
             Results.Ok((await gateway.SubmitResponsesAsync(http.UserId(), sessionId, body, ct)).RootElement));
 
+        // Starts the server clock on the currently delivered unit. The client
+        // calls it once the unit is actually usable (for Listening: once the
+        // audio has loaded and begun), so buffering and permission prompts
+        // are never charged to the candidate. Idempotent engine-side.
+        placement.MapPost("/session/{sessionId}/module/{module}/unit/start", async (
+            HttpContext http, PlacementGateway gateway, string sessionId, string module, CancellationToken ct) =>
+            Results.Ok((await gateway.StartUnitAsync(http.UserId(), sessionId, module, ct)).RootElement));
+
+        // A unit whose media could not be delivered is excluded from scoring
+        // (never counted as wrong) and the engine serves a replacement.
+        placement.MapPost("/session/{sessionId}/module/{module}/unit/technical", async (
+            HttpContext http, PlacementGateway gateway, string sessionId, string module,
+            [FromBody] PlacementUnitTechnicalRequest request, CancellationToken ct) =>
+        {
+            if (request.Reason is null || !PlacementUnitTechnicalRequest.AllowedReasons.Contains(request.Reason))
+            {
+                throw ApiException.Validation("placement_technical_reason_invalid", "Unknown technical failure reason.");
+            }
+            return Results.Ok((await gateway.ReportUnitTechnicalAsync(http.UserId(), sessionId, module, request.Reason, ct)).RootElement);
+        });
+
         // ── Results ──────────────────────────────────────────────────────
         placement.MapGet("/session/{sessionId}/result/receptive", async (
             HttpContext http, PlacementGateway gateway, string sessionId, CancellationToken ct) =>
@@ -123,7 +144,7 @@ public static class PlacementEndpoints
             HttpContext http, PlacementGateway gateway, string fileName, CancellationToken ct) =>
         {
             var (contentType, bytes) = await gateway.GetAudioAsync(http.UserId(), fileName, ct);
-            return Results.File(bytes, contentType);
+            return Results.File(bytes, contentType, enableRangeProcessing: true);
         });
 
         // ── Speaking ─────────────────────────────────────────────────────
@@ -132,19 +153,32 @@ public static class PlacementEndpoints
             Results.Ok((await gateway.GetSpeakingTasksAsync(http.UserId(), sessionId, ct)).RootElement));
 
         placement.MapPost("/upload", async (
-            HttpContext http, PlacementGateway gateway, IFormFile file, CancellationToken ct) =>
+            HttpContext http, PlacementGateway gateway, ILoggerFactory loggerFactory, IFormFile file, CancellationToken ct) =>
         {
+            var logger = loggerFactory.CreateLogger("Placement.Upload");
             if (file is null || file.Length == 0)
             {
                 throw ApiException.Validation("placement_recording_required", "A recording file is required.");
             }
             if (file.Length > 20 * 1024 * 1024)
             {
+                logger.LogWarning("Placement recording rejected: {Bytes} bytes ({ContentType}) exceeds 20 MB", file.Length, file.ContentType);
                 throw ApiException.Validation("placement_recording_too_large", "Recordings are limited to 20 MB.");
             }
             await using var stream = file.OpenReadStream();
             var uploaded = await gateway.UploadRecordingAsync(
                 http.UserId(), stream, file.FileName, file.ContentType, ct);
+
+            // Owner spec §6.2 debugging trail: browser MIME, size and the
+            // engine's server-measured audio metrics (no audio content, no ids).
+            var metrics = uploaded.RootElement.TryGetProperty("metrics", out var m) && m.ValueKind == JsonValueKind.Object ? m : default;
+            logger.LogInformation(
+                "Placement recording stored: {ContentType}, {Bytes} bytes, duration {DurationSec}s, container {Container}, provenance {Provenance}",
+                file.ContentType,
+                file.Length,
+                metrics.ValueKind == JsonValueKind.Object && metrics.TryGetProperty("duration_sec", out var d) ? d.ToString() : "unknown",
+                metrics.ValueKind == JsonValueKind.Object && metrics.TryGetProperty("container", out var c) ? c.ToString() : "unknown",
+                metrics.ValueKind == JsonValueKind.Object && metrics.TryGetProperty("metrics_provenance", out var p) ? p.ToString() : "unknown");
             return Results.Ok(uploaded.RootElement);
         }).DisableAntiforgery();
 
@@ -182,6 +216,11 @@ public static class PlacementEndpoints
         adminPlacement.MapGet("/health", async (PlacementGateway gateway, CancellationToken ct) =>
             Results.Ok((await gateway.GetReadyZAsync(ct)).RootElement));
 
+        // Active item counts by skill × CEFR band / route, so empty route
+        // cells are visible before public launch (owner spec §8.1).
+        adminPlacement.MapGet("/inventory", async (PlacementGateway gateway, CancellationToken ct) =>
+            Results.Ok((await gateway.GetInventoryAsync(ct)).RootElement));
+
         adminPlacement.MapGet("/review/queue", async (PlacementGateway gateway, CancellationToken ct) =>
             Results.Ok((await gateway.GetReviewQueueAsync(ct)).RootElement));
 
@@ -192,7 +231,7 @@ public static class PlacementEndpoints
             PlacementGateway gateway, string sessionId, string taskId, CancellationToken ct) =>
         {
             var (contentType, bytes) = await gateway.GetReviewAudioAsync(sessionId, taskId, ct);
-            return Results.File(bytes, contentType);
+            return Results.File(bytes, contentType, enableRangeProcessing: true);
         });
 
         adminPlacement.MapPost("/review/{sessionId}/rescore", async (
@@ -308,5 +347,14 @@ public sealed class PlacementEnabledFilter : IEndpointFilter
 public sealed record PlacementCreateSessionRequest(string? TargetGoal, string? DeviceClass);
 public sealed record PlacementSpeakingSubmitRequest(string? StoragePath);
 public sealed record PlacementWritingTextRequest(string Text);
+public sealed record PlacementUnitTechnicalRequest(string? Reason)
+{
+    /// <summary>Mirrors the engine's accepted reasons; anything else is
+    /// rejected here rather than forwarded.</summary>
+    public static readonly IReadOnlySet<string> AllowedReasons = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "audio_unavailable", "audio_decode_error", "audio_zero_duration", "media_timeout",
+    };
+}
 public sealed record PlacementHistoryItem(
     string Id, string SessionId, string RulesetVersion, string Status, DateTime CreatedAt);

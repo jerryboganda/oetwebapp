@@ -60,8 +60,13 @@ export async function fetchPlacementReviewSession(sessionId: string): Promise<Pl
 }
 
 /** Staff-only streaming of the candidate's recording through the OET proxy. */
+/**
+ * API path of a candidate recording for the review console. The route is
+ * Bearer-authorised (AdminOnly), which a bare `<audio src>` cannot satisfy —
+ * fetch it with `fetchAuthorizedObjectUrl` and play the object URL.
+ */
 export function resolvePlacementReviewAudioUrl(sessionId: string, taskId: string): string {
-  return `/api/backend/v1/admin/placement/review/${encodeURIComponent(sessionId)}/audio/${encodeURIComponent(taskId)}`;
+  return `/v1/admin/placement/review/${encodeURIComponent(sessionId)}/audio/${encodeURIComponent(taskId)}`;
 }
 
 export async function rescorePlacementSession(
@@ -98,4 +103,62 @@ export async function humanScorePlacementSession(
 
 export async function fetchPlacementEngineHealth(): Promise<PlacementEngineHealth> {
   return apiRequest<PlacementEngineHealth>('/v1/admin/placement/health');
+}
+
+export interface PlacementInventoryCell {
+  module: string;
+  band: string;
+  total: number;
+  active: number;
+  inactive: number;
+}
+
+export interface PlacementInventoryTask {
+  route: string;
+  taskType: string;
+  total: number;
+  active: number;
+}
+
+export interface PlacementInventory {
+  generatedAt: string;
+  rulesetVersion: string;
+  objective: PlacementInventoryCell[];
+  speaking: PlacementInventoryTask[];
+  writing: PlacementInventoryTask[];
+  totals: Record<string, number>;
+}
+
+function toCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function toTasks(rows: unknown): PlacementInventoryTask[] {
+  return (Array.isArray(rows) ? (rows as ApiRecord[]) : []).map((row) => ({
+    route: String(row.route ?? ''),
+    taskType: String(row.task_type ?? ''),
+    total: toCount(row.total),
+    active: toCount(row.active),
+  }));
+}
+
+/** Active item counts by skill × CEFR band (objective) and route (speaking /
+ *  writing) — owner spec §8.1 content-completeness check. */
+export async function fetchPlacementInventory(): Promise<PlacementInventory> {
+  const payload = await apiRequest<ApiRecord>('/v1/admin/placement/inventory');
+  const totals = (payload.totals ?? {}) as ApiRecord;
+  return {
+    generatedAt: String(payload.generated_at ?? ''),
+    rulesetVersion: String(payload.ruleset_version ?? 'unknown'),
+    objective: (Array.isArray(payload.objective) ? (payload.objective as ApiRecord[]) : []).map((row) => ({
+      module: String(row.module ?? ''),
+      band: String(row.band ?? ''),
+      total: toCount(row.total),
+      active: toCount(row.active),
+      inactive: toCount(row.inactive),
+    })),
+    speaking: toTasks(payload.speaking),
+    writing: toTasks(payload.writing),
+    totals: Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, toCount(value)])),
+  };
 }

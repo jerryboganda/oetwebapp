@@ -110,6 +110,16 @@ public sealed class PlacementGateway
     public Task<JsonDocument> SubmitResponsesAsync(string candidateUid, string sessionId, object body, CancellationToken ct)
         => SendAsync(HttpMethod.Post, $"/api/sessions/{Uri.EscapeDataString(sessionId)}/responses", candidateUid, JsonContent.Create(body), ct);
 
+    /// <summary>Start the server clock on the module's current unit.
+    /// Idempotent engine-side: a repeat call never extends the deadline.</summary>
+    public Task<JsonDocument> StartUnitAsync(string candidateUid, string sessionId, string module, CancellationToken ct)
+        => SendAsync(HttpMethod.Post, $"/api/sessions/{Uri.EscapeDataString(sessionId)}/modules/{Uri.EscapeDataString(module)}/unit/start", candidateUid, null, ct);
+
+    /// <summary>Exclude the current unit from scoring after a media failure;
+    /// the engine answers with the same shape as a responses submission.</summary>
+    public Task<JsonDocument> ReportUnitTechnicalAsync(string candidateUid, string sessionId, string module, string reason, CancellationToken ct)
+        => SendAsync(HttpMethod.Post, $"/api/sessions/{Uri.EscapeDataString(sessionId)}/modules/{Uri.EscapeDataString(module)}/unit/technical", candidateUid, JsonContent.Create(new { reason }), ct);
+
     public Task<JsonDocument> GetReceptiveResultAsync(string candidateUid, string sessionId, CancellationToken ct)
         => SendAsync(HttpMethod.Get, $"/api/sessions/{Uri.EscapeDataString(sessionId)}/results/receptive", candidateUid, null, ct);
 
@@ -214,6 +224,9 @@ public sealed class PlacementGateway
         => SendAsync(HttpMethod.Post, $"/api/review/sessions/{Uri.EscapeDataString(sessionId)}/human-score", string.Empty, JsonContent.Create(body), ct);
 
     // ── Ops ──────────────────────────────────────────────────────────
+
+    public Task<JsonDocument> GetInventoryAsync(CancellationToken ct)
+        => SendAsync(HttpMethod.Get, "/api/admin/reports/inventory", string.Empty, null, ct);
 
     public async Task<JsonDocument> GetReadyZAsync(CancellationToken ct)
     {
