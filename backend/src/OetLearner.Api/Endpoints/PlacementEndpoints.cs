@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
@@ -56,7 +57,7 @@ public static class PlacementEndpoints
         // ── Session lifecycle ────────────────────────────────────────────
         placement.MapPost("/session", async (
             HttpContext http, PlacementGateway gateway, LearnerDbContext db, TimeProvider clock,
-            [FromBody] PlacementCreateSessionRequest request, CancellationToken ct) =>
+            ILoggerFactory loggerFactory, [FromBody] PlacementCreateSessionRequest request, CancellationToken ct) =>
         {
             var learnerId = http.UserId();
             var body = new Dictionary<string, object?>
@@ -77,6 +78,8 @@ public static class PlacementEndpoints
                 {
                     extra_time_percent = grant.ExtraTimePercent,
                     extended_time = true,
+                    // Stored engine-side for audit. The engine echoes this block
+                    // on GET session state, which the learner route strips.
                     extra_time_approval = new
                     {
                         approval_id = grant.Id,
@@ -94,26 +97,56 @@ public static class PlacementEndpoints
                 && created.RootElement.ValueKind == JsonValueKind.Object
                 && created.RootElement.TryGetProperty("session_id", out var sessionIdElement)
                 && sessionIdElement.ValueKind == JsonValueKind.String
-                && sessionIdElement.GetString() is { Length: > 0 } sessionId
-                && !await db.PlacementAccommodationUses.AnyAsync(u => u.SessionId == sessionId, ct))
+                && sessionIdElement.GetString() is { Length: > 0 } sessionId)
             {
-                db.PlacementAccommodationUses.Add(new PlacementAccommodationUse
+                try
                 {
-                    Id = $"pacu_{Guid.NewGuid():N}",
-                    AccommodationId = grant.Id,
-                    LearnerUserId = learnerId,
-                    SessionId = sessionId,
-                    ExtraTimePercent = grant.ExtraTimePercent,
-                    AppliedAt = clock.GetUtcNow(),
-                });
-                await db.SaveChangesAsync(ct);
+                    if (!await db.PlacementAccommodationUses.AnyAsync(u => u.SessionId == sessionId, ct))
+                    {
+                        db.PlacementAccommodationUses.Add(new PlacementAccommodationUse
+                        {
+                            Id = $"pacu_{Guid.NewGuid():N}",
+                            AccommodationId = grant.Id,
+                            LearnerUserId = learnerId,
+                            SessionId = sessionId,
+                            ExtraTimePercent = grant.ExtraTimePercent,
+                            AppliedAt = clock.GetUtcNow(),
+                        });
+                        await db.SaveChangesAsync(ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    // The engine session already exists with extra time applied.
+                    // Failing the request here would make the client retry and
+                    // create a SECOND extra-time session with no use record, so
+                    // swallow, shout, and return the created session. The engine
+                    // session carries approval_id for reconciliation.
+                    loggerFactory.CreateLogger("Placement.Session").LogError(
+                        ex,
+                        "PLACEMENT_ACCOMMODATION_USE_NOT_RECORDED session={SessionId} accommodation={AccommodationId}",
+                        sessionId, grant.Id);
+                }
             }
             return Results.Ok(created.RootElement);
         });
 
+        // The engine echoes the stored accommodations block on session state,
+        // including the approving admin's id and name (extraTimeApproval).
+        // That record is staff-only, so it is stripped before the candidate
+        // sees it; extraTimePercent / extendedTime stay for the UI.
         placement.MapGet("/session/{sessionId}", async (
             HttpContext http, PlacementGateway gateway, string sessionId, CancellationToken ct) =>
-            Results.Ok((await gateway.GetSessionStateAsync(http.UserId(), sessionId, ct)).RootElement));
+        {
+            using var state = await gateway.GetSessionStateAsync(http.UserId(), sessionId, ct);
+            var node = JsonNode.Parse(state.RootElement.GetRawText());
+            if (node is JsonObject root && root["accommodations"] is JsonObject accommodations)
+            {
+                accommodations.Remove("extraTimeApproval");
+                accommodations.Remove("extra_time_approval");
+            }
+            return Results.Ok(node);
+        });
 
         placement.MapPost("/session/{sessionId}/module/{module}/start", async (
             HttpContext http, PlacementGateway gateway, string sessionId, string module, CancellationToken ct) =>
@@ -236,7 +269,7 @@ public static class PlacementEndpoints
                 metrics.ValueKind == JsonValueKind.Object && metrics.TryGetProperty("container", out var c) ? c.ToString() : "unknown",
                 metrics.ValueKind == JsonValueKind.Object && metrics.TryGetProperty("metrics_provenance", out var p) ? p.ToString() : "unknown");
             return Results.Ok(uploaded.RootElement);
-        }).DisableAntiforgery();
+        }).RequireRateLimiting("PerUserWrite").DisableAntiforgery();
 
         placement.MapPost("/session/{sessionId}/speaking/{taskId}/submit", async (
             HttpContext http, PlacementGateway gateway, string sessionId, string taskId,
@@ -269,34 +302,46 @@ public static class PlacementEndpoints
         var adminPlacement = v1.MapGroup("/admin/placement")
             .RequireAuthorization("AdminOnly");
 
+        // Granular permissions (the group-level AdminOnly alone is not enough;
+        // AdminEndpointAuthorizationInventoryTests). Every console route maps
+        // to ReviewOps, matching lib/admin-permissions.ts for /admin/placement:
+        // the page loads health + inventory alongside the queue, so a
+        // ReviewOps-only reviewer must be able to read them (system_admin
+        // passes every policy).
         adminPlacement.MapGet("/health", async (PlacementGateway gateway, CancellationToken ct) =>
-            Results.Ok((await gateway.GetReadyZAsync(ct)).RootElement));
+            Results.Ok((await gateway.GetReadyZAsync(ct)).RootElement))
+            .WithAdminRead("AdminReviewOps");
 
         // Active item counts by skill × CEFR band / route, so empty route
         // cells are visible before public launch (owner spec §8.1).
         adminPlacement.MapGet("/inventory", async (PlacementGateway gateway, CancellationToken ct) =>
-            Results.Ok((await gateway.GetInventoryAsync(ct)).RootElement));
+            Results.Ok((await gateway.GetInventoryAsync(ct)).RootElement))
+            .WithAdminRead("AdminReviewOps");
 
         adminPlacement.MapGet("/review/queue", async (PlacementGateway gateway, CancellationToken ct) =>
-            Results.Ok((await gateway.GetReviewQueueAsync(ct)).RootElement));
+            Results.Ok((await gateway.GetReviewQueueAsync(ct)).RootElement))
+            .WithAdminRead("AdminReviewOps");
 
         adminPlacement.MapGet("/review/{sessionId}", async (PlacementGateway gateway, string sessionId, CancellationToken ct) =>
-            Results.Ok((await gateway.GetReviewSessionAsync(sessionId, ct)).RootElement));
+            Results.Ok((await gateway.GetReviewSessionAsync(sessionId, ct)).RootElement))
+            .WithAdminRead("AdminReviewOps");
 
         adminPlacement.MapGet("/review/{sessionId}/audio/{taskId}", async (
             PlacementGateway gateway, string sessionId, string taskId, CancellationToken ct) =>
         {
             var (contentType, bytes) = await gateway.GetReviewAudioAsync(sessionId, taskId, ct);
             return Results.File(bytes, contentType, enableRangeProcessing: true);
-        });
+        }).WithAdminRead("AdminReviewOps");
 
         adminPlacement.MapPost("/review/{sessionId}/rescore", async (
             PlacementGateway gateway, string sessionId, [FromBody] JsonElement body, CancellationToken ct) =>
-            Results.Ok((await gateway.RescoreAsync(sessionId, body, ct)).RootElement));
+            Results.Ok((await gateway.RescoreAsync(sessionId, body, ct)).RootElement))
+            .WithAdminWrite("AdminReviewOps");
 
         adminPlacement.MapPost("/review/{sessionId}/human-score", async (
             PlacementGateway gateway, string sessionId, [FromBody] JsonElement body, CancellationToken ct) =>
-            Results.Ok((await gateway.HumanScoreAsync(sessionId, body, ct)).RootElement));
+            Results.Ok((await gateway.HumanScoreAsync(sessionId, body, ct)).RootElement))
+            .WithAdminWrite("AdminReviewOps");
 
         // ── Extra-time accommodations (admin-approved only) ─────────────
         // Candidates cannot enable extra time themselves; an admin grants it

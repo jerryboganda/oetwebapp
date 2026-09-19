@@ -6,6 +6,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -38,12 +39,16 @@ public class PlacementEndpointsTests : IDisposable
     private readonly StubPlacementApiWebApplicationFactory _factory;
     private readonly HttpClient _client;
     private readonly StubPlacementEngineHandler _engine;
+    private readonly FailAccommodationUseSaveInterceptor _failUseSave = new();
 
     public PlacementEndpointsTests()
     {
         _engine = new StubPlacementEngineHandler();
         _factory = new StubPlacementApiWebApplicationFactory(placementEnabled: true, configureServices: services =>
         {
+            // Lets a test simulate the accommodation-use insert failing AFTER
+            // the engine created the session. Inert until Armed.
+            services.ConfigureDbContext<LearnerDbContext>(options => options.AddInterceptors(_failUseSave));
             services.RemoveAll<PlacementGateway>();
             var http = new HttpClient(_engine)
             {
@@ -692,6 +697,96 @@ public class PlacementEndpointsTests : IDisposable
         Assert.DoesNotContain("approv", raw, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task SessionState_StripsTheApprover_ButKeepsTheExtraTime()
+    {
+        await RegisterLearnerAsync();
+        // The engine echoes the stored accommodations (with the approving
+        // admin's id + name) on GET session state — both key spellings here.
+        _engine.Enqueue("""
+            {"session_id":"ses_stubstate000001","state_version":3,"ls_status":"not_started","accommodations":{"extendedTime":true,"extraTimePercent":40,"extraTimeApproval":{"approvalId":"pacc_stubapproval","approvedBy":"admin-user-123","approvedByName":"Dr Placement Admin","approvedAt":"2026-09-20T00:00:00Z"},"extra_time_approval":{"approval_id":"pacc_stubapproval","approved_by":"admin-user-123","approved_by_name":"Dr Placement Admin"}}}
+            """);
+
+        var raw = await _client.GetStringAsync("/v1/placement/session/ses_stubstate000001");
+
+        using var state = JsonDocument.Parse(raw);
+        Assert.Equal("ses_stubstate000001", state.RootElement.GetProperty("session_id").GetString());
+        Assert.Equal(3, state.RootElement.GetProperty("state_version").GetInt32());
+        var accommodations = state.RootElement.GetProperty("accommodations");
+        Assert.Equal(40, accommodations.GetProperty("extraTimePercent").GetInt32());
+        Assert.True(accommodations.GetProperty("extendedTime").GetBoolean());
+        Assert.False(accommodations.TryGetProperty("extraTimeApproval", out _));
+        Assert.False(accommodations.TryGetProperty("extra_time_approval", out _));
+        Assert.DoesNotContain("admin-user-123", raw);
+        Assert.DoesNotContain("Dr Placement Admin", raw);
+        Assert.DoesNotContain("pacc_stubapproval", raw);
+        Assert.DoesNotContain("approv", raw, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SessionState_WithoutAccommodations_IsReturnedUnchanged()
+    {
+        await RegisterLearnerAsync();
+        _engine.Enqueue("""{"session_id":"ses_stubstate000002","state_version":1,"ls_status":"not_started"}""");
+
+        var raw = await _client.GetStringAsync("/v1/placement/session/ses_stubstate000002");
+
+        using var state = JsonDocument.Parse(raw);
+        Assert.Equal("ses_stubstate000002", state.RootElement.GetProperty("session_id").GetString());
+        Assert.False(state.RootElement.TryGetProperty("accommodations", out _));
+    }
+
+    [Fact]
+    public async Task SessionCreate_WhenTheUseRecordCannotBeSaved_StillReturnsTheCreatedSession()
+    {
+        var learner = await RegisterLearnerAsync();
+        var admin = await IssueAdminAsync("Dr Placement Admin");
+        await AdminGrantAsync(admin, learner, 25);
+        Authenticate(learner.AccessToken);
+
+        _engine.Enqueue("""
+            {"session_id":"ses_stubnorecord001","token":"engine-token-ignored","next_step":"worked_example","ruleset_version":"2.0.0-beta"}
+            """);
+        _failUseSave.Armed = true;
+
+        // The engine already created the session with extra time applied, so
+        // the learner request must succeed (a retry would mint a second one).
+        var response = await _client.PostAsJsonAsync("/v1/placement/session", new { targetGoal = "OET" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var created = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("ses_stubnorecord001", created.GetProperty("session_id").GetString());
+        Assert.True(_failUseSave.Tripped);
+        using var scope = _factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        Assert.Equal(0, await db.PlacementAccommodationUses.CountAsync());
+    }
+
+    [Fact]
+    public async Task ReviewerSurface_RequiresAReviewPermission_NotJustAnyAdmin()
+    {
+        // Learner-admin permissions only (no review_ops, no system_admin).
+        var admin = await IssueAdminAsync("Dr Learner Admin");
+        Authenticate(admin.AccessToken);
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/health")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/inventory")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/review/queue")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/review/ses_x")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await _client.GetAsync("/v1/admin/placement/review/ses_x/audio/task_x")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await _client.PostAsJsonAsync("/v1/admin/placement/review/ses_x/rescore", new { })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden,
+            (await _client.PostAsJsonAsync("/v1/admin/placement/review/ses_x/human-score", new { })).StatusCode);
+
+        // The same route opens for a reviewer holding review_ops.
+        var reviewer = await IssueAdminAsync("Dr Reviewer", AdminPermissions.ReviewOps);
+        Authenticate(reviewer.AccessToken);
+        _engine.Enqueue("[]");
+        var queue = await _client.GetAsync("/v1/admin/placement/review/queue");
+        Assert.Equal(HttpStatusCode.OK, queue.StatusCode);
+    }
+
     // ── helpers ──────────────────────────────────────────────────────
 
     private sealed record LearnerIdentity(string LearnerId, string AccessToken, string Email);
@@ -738,8 +833,9 @@ public class PlacementEndpointsTests : IDisposable
 
     /// <summary>Seeds a verified admin account and issues a real access token
     /// for it (same route the production JWT pipeline validates), carrying the
-    /// learner-admin permissions the accommodation routes require.</summary>
-    private async Task<AdminIdentity> IssueAdminAsync(string displayName)
+    /// learner-admin permissions the accommodation routes require (or exactly
+    /// <paramref name="permissions"/> when given).</summary>
+    private async Task<AdminIdentity> IssueAdminAsync(string displayName, params string[] permissions)
     {
         using var scope = _factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
@@ -772,7 +868,9 @@ public class PlacementEndpointsTests : IDisposable
                 RequiresMfa: false,
                 EmailVerifiedAt: now,
                 AuthenticatorEnabledAt: null,
-                AdminPermissions: [AdminPermissions.LearnerRead, AdminPermissions.LearnerWrite])).AccessToken;
+                AdminPermissions: permissions.Length > 0
+                    ? permissions
+                    : new[] { AdminPermissions.LearnerRead, AdminPermissions.LearnerWrite })).AccessToken;
         return new AdminIdentity(authAccountId, accessToken, displayName);
     }
 
@@ -877,6 +975,29 @@ public class PlacementEndpointsTests : IDisposable
             {
                 Content = new StringContent(_responses.Dequeue(), Encoding.UTF8, "application/json"),
             };
+        }
+    }
+
+    /// <summary>Throws when a save would insert a <see cref="PlacementAccommodationUse"/>,
+    /// once armed — simulates the OET-side use record failing to persist after
+    /// the engine already created the session.</summary>
+    private sealed class FailAccommodationUseSaveInterceptor : SaveChangesInterceptor
+    {
+        public bool Armed { get; set; }
+        public bool Tripped { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (Armed
+                && eventData.Context is { } context
+                && context.ChangeTracker.Entries<PlacementAccommodationUse>().Any(e => e.State == EntityState.Added))
+            {
+                Tripped = true;
+                throw new InvalidOperationException("Simulated accommodation-use persistence failure.");
+            }
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
         }
     }
 
