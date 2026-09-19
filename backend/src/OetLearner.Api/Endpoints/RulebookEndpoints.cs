@@ -84,7 +84,7 @@ public static class RulebookEndpoints
         });
 
         // Writing linter
-        app.MapPost("/v1/writing/lint", async Task<IResult> (WritingLintRequest body, WritingRuleEngine engine, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
+        app.MapPost("/v1/writing/lint", async Task<IResult> (WritingLintRequest body, WritingRuleEngine engine, LearnerDbContext db, HttpContext http, OetLearner.Api.Services.Ai.TypeSafe.IJevWritingPilot? writingPilot, CancellationToken ct) =>
         {
             var serverSource = await ResolveWritingLintSourceAsync(body, db, http, ct);
             if (serverSource.Error is not null) return serverSource.Error;
@@ -107,9 +107,27 @@ public static class RulebookEndpoints
                 caseNotesMarkers,
                 prof);
             var findings = engine.Lint(input);
+
+            // Jev guard preview (Phase-1 pilot; TypeSafe:WritingGuardEnabled,
+            // default OFF). Advisory surface only — the lint verdict and
+            // totals are unchanged; the guard result rides alongside as an
+            // additive response field. Null when the flag is off.
+            OetLearner.Api.Services.Ai.TypeSafe.WritingGuardResult? jevGuard = null;
+            if (writingPilot is not null && !string.IsNullOrWhiteSpace(body.LetterText))
+            {
+                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                jevGuard = await writingPilot.GuardSubmissionAsync(body.LetterText, letterType, userId, ct);
+            }
+
             return Results.Ok(new
             {
                 findings,
+                jevGuard = jevGuard is null ? null : new
+                {
+                    decision = jevGuard.Decision.ToString(),
+                    signals = jevGuard.Signals,
+                    triggeredSignal = jevGuard.TriggeredSignal,
+                },
                 totals = new
                 {
                     critical = findings.Count(f => f.Severity == RuleSeverity.Critical),
@@ -138,6 +156,7 @@ public static class RulebookEndpoints
         app.MapPost("/v1/ai/complete", async (
             AiCompleteRequest body,
             IAiGatewayService gateway,
+            OetLearner.Api.Services.Ai.TypeSafe.IJevWritingPilot? writingPilot,
             HttpContext http,
             CancellationToken ct) =>
         {
@@ -157,14 +176,40 @@ public static class RulebookEndpoints
                 CardType = body.CardType,
                 CandidateCountry = body.CandidateCountry,
             };
-            var prompt = gateway.BuildGroundedPrompt(ctx);
+
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var authAccountId = http.User.FindFirstValue("aid");
 
             // Classify this call into the feature-eligibility matrix so the
             // resolver, quota service, and admin explorer can reason about
-            // it correctly. See docs/AI-USAGE-POLICY.md §5.
-            var featureCode = ClassifyFeature(kind, task);
-            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            var authAccountId = http.User.FindFirstValue("aid");
+            // it correctly. See docs/AI-USAGE-POLICY.md §5. (The jev route
+            // below may realign it for Writing when its flag is on.)
+            string? featureCode = ClassifyFeature(kind, task);
+
+            // Jev confidence-gated routing (Phase-1 pilot;
+            // TypeSafe:WritingRouteEnabled, default OFF). Writing kinds only.
+            // When the router answers at/above the confidence threshold, the
+            // grounded prompt task AND the feature code are realigned together
+            // so prompt, policy, quota, and audit stay coherent. Low
+            // confidence, "unclear", disabled, or unavailable — the caller's
+            // explicit request stands untouched.
+            if (writingPilot is not null && kind == RuleKind.Writing)
+            {
+                var route = await writingPilot.RouteWritingRequestAsync(task.ToString(), body.UserInput, userId, ct);
+                if (route.Redirect is { } redirectTarget)
+                {
+                    var routedCode = RouteTargetToFeatureCode(redirectTarget);
+                    var routedTask = OetLearner.Api.Services.Ai.TypeSafe.JevWritingPilot.RouteToTask(redirectTarget, task);
+                    if (routedCode is not null && routedTask != task)
+                    {
+                        task = routedTask;
+                        ctx.Task = routedTask;
+                        featureCode = routedCode;
+                    }
+                }
+            }
+
+            var prompt = gateway.BuildGroundedPrompt(ctx);
 
             try
             {
@@ -201,6 +246,20 @@ public static class RulebookEndpoints
             }
         }).RequireAuthorization("AiCaller");
     }
+
+    /// <summary>
+    /// Map a jev route target onto its canonical feature code. Only targets
+    /// that map cleanly may redirect; anything else leaves the caller's
+    /// classification standing.
+    /// </summary>
+    private static string? RouteTargetToFeatureCode(OetLearner.Api.Services.Ai.TypeSafe.WritingRouteTarget target) => target switch
+    {
+        OetLearner.Api.Services.Ai.TypeSafe.WritingRouteTarget.Grade => AiFeatureCodes.WritingGrade,
+        OetLearner.Api.Services.Ai.TypeSafe.WritingRouteTarget.SampleScore => AiFeatureCodes.WritingSampleScore,
+        OetLearner.Api.Services.Ai.TypeSafe.WritingRouteTarget.CoachSuggest => AiFeatureCodes.WritingCoachSuggest,
+        OetLearner.Api.Services.Ai.TypeSafe.WritingRouteTarget.CoachExplain => AiFeatureCodes.WritingCoachExplain,
+        _ => null,
+    };
 
     /// <summary>
     /// Map the grounded prompt kind + task to a canonical feature code. Keep

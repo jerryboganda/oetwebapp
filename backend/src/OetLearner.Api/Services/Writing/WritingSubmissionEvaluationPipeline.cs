@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Ai;
+using OetLearner.Api.Services.Ai.TypeSafe;
 using OetLearner.Api.Services.Rulebook;
 using OetLearner.Api.Services.Settings;
 using OetLearner.Api.Services.Writing.Events;
@@ -107,7 +108,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
     IWritingAssessmentPreflightService? assessmentPreflight = null,
     WritingAssessmentV11RuleEngine? assessmentRuleEngine = null,
     WritingCalibrationReleaseService? calibrationReleaseService = null,
-    IAiCreditReservationService? creditReservations = null) : IWritingSubmissionEvaluationPipeline
+    IAiCreditReservationService? creditReservations = null,
+    IJevWritingPilot? writingPilot = null) : IWritingSubmissionEvaluationPipeline
 {
     // NOTE: there is deliberately NO WritingModelAnswerService dependency on
     // this pipeline. The Model Answer is generated once per task in the admin
@@ -411,6 +413,29 @@ public sealed class WritingSubmissionEvaluationPipeline(
             return await GradeBlankSubmissionAsync(submission, scenario, assessmentPreflightResult, ct);
         }
 
+        // Jev writing guard (Phase-1 pilot; TypeSafe:WritingGuardEnabled,
+        // default OFF). Negative gate ONLY: a block skips the paid AI grade
+        // and hands the submission to a human via a pending tutor
+        // assignment; a review proceeds but is logged. Disabled,
+        // unavailable, or crashed — the flow proceeds exactly as before.
+        if (writingPilot is not null)
+        {
+            var guard = await writingPilot.GuardSubmissionAsync(
+                submission.LetterContent, assessmentPreflightResult.LetterType, submission.UserId, ct);
+            if (guard.Decision == WritingGuardDecision.Block)
+            {
+                logger.LogWarning(
+                    "Jev guard blocked submission {SubmissionId} for user {UserId}: signal {Signal}.",
+                    submission.Id, submission.UserId, guard.TriggeredSignal);
+                submission.Status = "failed";
+                await EnqueueJevTutorReviewAsync(submission.Id, ct);
+                await db.SaveChangesAsync(ct);
+                throw ApiException.Conflict(
+                    "writing_submission_flagged",
+                    "This submission was flagged for manual review. No grade has been recorded — our team will follow up.");
+            }
+        }
+
         var (rubric, reservationId) = await GradeWithReservationAsync(submission, scenario, assessmentPreflightResult.CaseNotesSnapshot, ct);
 
         // Canon scoping uses the preflight-resolved profession (already
@@ -466,6 +491,40 @@ public sealed class WritingSubmissionEvaluationPipeline(
             GradedAt = clock.GetUtcNow(),
             CreatedAt = clock.GetUtcNow(),
         };
+
+        // Jev verify + advisory criteria (Phase-1 pilot; flags default OFF).
+        // Verify: contradicted or low-confidence findings flag the grade for
+        // tutor review via ConfidenceFlag + a pending assignment. Criteria:
+        // display-only advisory radar merged as an EXTRA field per criterion
+        // — the V2 mapper reads only known fields inside each object, so
+        // this is inert until a UI chooses to surface it. Neither hook ever
+        // changes a score.
+        if (writingPilot is not null)
+        {
+            var verifyFindings = (rubric.AiFindings ?? [])
+                .Select((f, i) => new WritingFindingInput(
+                    FindingId: f.RuleId ?? $"finding_{i}",
+                    Message: f.Message ?? string.Empty,
+                    Quote: f.Quote,
+                    RuleId: f.RuleId))
+                .ToList();
+            var verify = await writingPilot.VerifyFindingsAsync(
+                submission.LetterContent, verifyFindings, submission.UserId, ct);
+            if (verify.FlagsTutorReview)
+            {
+                grade.ConfidenceFlag = JevWritingPilot.TutorReviewConfidenceFlag;
+                await EnqueueJevTutorReviewAsync(submission.Id, ct);
+            }
+
+            var advisory = await writingPilot.ScoreCriteriaAsync(
+                submission.LetterContent, assessmentPreflightResult.LetterType, submission.UserId, ct);
+            if (advisory.Status == JevCallStatus.Ok && advisory.AdvisoryScores.Count > 0)
+            {
+                grade.PerCriterionFeedbackJson = writingPilot.MergeAdvisoryIntoPerCriterionJson(
+                    grade.PerCriterionFeedbackJson, advisory.AdvisoryScores);
+            }
+        }
+
         db.WritingGrades.Add(grade);
 
         if (assessmentRuleEngine is not null)
@@ -570,6 +629,30 @@ public sealed class WritingSubmissionEvaluationPipeline(
     /// Uses a set-based update (never the tracked instance) so a poisoned
     /// entity that caused the failure cannot break the marking itself.
     /// </summary>
+    /// <summary>
+    /// Idempotently stages a pending tutor-review assignment for a submission
+    /// the jev guard blocked or jev verify flagged (Phase-1 pilot). Stages
+    /// only — the caller's surrounding SaveChanges persists it, mirroring
+    /// the mock-review pattern in WritingTutorReviewService.
+    /// </summary>
+    private async Task EnqueueJevTutorReviewAsync(Guid submissionId, CancellationToken ct)
+    {
+        var existing = await db.WritingTutorReviewAssignments.AsNoTracking()
+            .AnyAsync(a => a.SubmissionId == submissionId, ct);
+        if (existing) return;
+
+        var now = clock.GetUtcNow();
+        db.WritingTutorReviewAssignments.Add(new WritingTutorReviewAssignment
+        {
+            Id = Guid.NewGuid(),
+            SubmissionId = submissionId,
+            TutorId = string.Empty,
+            ClaimedAt = now,
+            DueAt = now.AddHours(24),
+            Status = "pending",
+        });
+    }
+
     private async Task MarkFailedIfGradeMissingAsync(WritingSubmission submission, Exception ex, CancellationToken ct)
     {
         _ = ct;

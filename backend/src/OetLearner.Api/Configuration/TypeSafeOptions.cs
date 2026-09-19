@@ -56,4 +56,55 @@ public sealed class TypeSafeOptions
     /// $42 per billion input tokens; output tokens are free). Used only to
     /// meter the budget hold on AiUsageRecord rows.</summary>
     public decimal CostPerInputTokenUsd { get; set; } = 0.000000042m;
+
+    // ── Writing-pilot per-surface switches (all default OFF) ────────────────
+    // Each Writing-pilot call site checks ITS OWN flag before spending any
+    // jev tokens; flipping <see cref="Enabled"/> alone does nothing. Every
+    // flag only ever turns on an advisory/guard surface — never a grader.
+
+    /// <summary>Pre-gateway submission guard (parallel Nouls: injection /
+    /// rule-evasion / abuse / gibberish). Negative gate only — it may block
+    /// or flag for tutor review, never auto-pass anything.</summary>
+    public bool WritingGuardEnabled { get; set; } = false;
+
+    /// <summary>Confidence-gated request routing on <c>/v1/ai/complete</c>
+    /// for Writing kinds. When on AND the router answers with confidence at
+    /// or above <see cref="RouteConfidenceThreshold"/>, the grounded prompt
+    /// task and feature code are realigned to the routed target; otherwise
+    /// the caller's explicit request stands untouched.</summary>
+    public bool WritingRouteEnabled { get; set; } = false;
+
+    /// <summary>Post-grading citation verification (per AI finding: supported
+    /// / contradicted / not-in-evidence). Contradicted or low-confidence
+    /// findings flag the grade for tutor review via
+    /// <c>WritingGrade.ConfidenceFlag</c> + a pending tutor assignment.</summary>
+    public bool WritingVerifyEnabled { get; set; } = false;
+
+    /// <summary>Advisory per-criterion jev Scores merged into the grade's
+    /// per-criterion feedback JSON as an extra <c>jevAdvisory</c> field per
+    /// criterion. Display-only; the mapper ignores unknown fields, and no
+    /// scoring path reads it.</summary>
+    public bool WritingCriteriaEnabled { get; set; } = false;
+
+    /// <summary>Guard: any single guard Noul at or above this blocks the
+    /// submission from reaching the paid AI grade (flagged to a human).</summary>
+    public double GuardBlockThreshold { get; set; } = 0.80;
+
+    /// <summary>Guard: at or above this (but below the block threshold) the
+    /// submission proceeds but is logged for review calibration.</summary>
+    public double GuardReviewThreshold { get; set; } = 0.50;
+
+    /// <summary>Route: the router's Choice confidence must reach this before
+    /// the routed target may override the caller's explicit request.</summary>
+    public double RouteConfidenceThreshold { get; set; } = 0.70;
+
+    /// <summary>Verify: a "supported" verdict below this confidence counts
+    /// as unproven and flags the grade for tutor review, same as a
+    /// contradicted verdict.</summary>
+    public double VerifyConfidenceThreshold { get; set; } = 0.60;
+
+    /// <summary>Verify: maximum findings verified in one fan-out call. The
+    /// state carries every finding, so this bounds the context; findings
+    /// beyond the cap are left unverified rather than verified blind.</summary>
+    public int VerifyMaxFindingsPerCall { get; set; } = 12;
 }

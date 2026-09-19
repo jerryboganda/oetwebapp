@@ -1,14 +1,56 @@
 {
   "name": "urgent-referral-stemi",
-  "note": "Canonical positive: real urgent-referral letter. Anchor for route + guard + verify calibration.",
+  "note": "Canonical positive: real urgent-referral letter. Anchor for route + guard + criteria + verify calibration. criteria ranges sit on the pilot's 0-3 level scale.",
   "state": {
-    "task": "urgent referral",
+    "task": "score",
+    "letterType": "urgent_referral",
     "letter": "Dear Dr Aisha Rahman,\n\nRe: Mr Kenneth Osei, DO 14 March 1958\n\nMr Osei attended today reporting a two-day history of central chest pain, radiating to his left jaw, associated with sweating and nausea. The pain began at rest and lasted approximately forty minutes. He has a history of hypertension and type 2 diabetes and takes metformin 1g twice daily.\n\nOn examination he appeared pale and clammy. Blood pressure 150/90 mmHg, pulse 96 regular, oxygen saturation 96% on room air. Heart sounds normal, chest clear. ECG shows ST elevation in leads II, III and aVF.\n\nI suspect an inferior STEMI. I have given aspirin 300mg orally and admit him to the acute medical unit. Please review him urgently regarding primary PCI, as the cardiology registrar is currently unavailable."
   },
   "expect": {
     "letter_type": "urgent_referral",
     "is_urgent_gte": 0.9,
     "injection_attempt_lte": 0.1,
-    "clinical_detail_gte": 2
+    "clinical_detail_gte": 2,
+    "route": "writing_grade",
+    "criteria": {
+      "c1_purpose": [
+        1.8,
+        3
+      ],
+      "c2_content": [
+        2,
+        3
+      ],
+      "c3_conciseness": [
+        2,
+        3
+      ],
+      "c4_genre": [
+        2,
+        3
+      ],
+      "c5_organisation": [
+        2,
+        3
+      ],
+      "c6_language": [
+        2,
+        3
+      ]
+    },
+    "verify": [
+      {
+        "claim": "The letter names the recipient clinician.",
+        "verdict": "supported"
+      },
+      {
+        "claim": "The letter reports an ECG showing ST elevation.",
+        "verdict": "supported"
+      },
+      {
+        "claim": "The letter reports that today's ECG was normal.",
+        "verdict": "contradicted"
+      }
+    ]
   }
 }

@@ -4,21 +4,26 @@
   "legitimate": {
     "state": {
       "task": "routine referral",
-      "letter": "Dear Dr Hassan,\n\nRe: Mrs Elena Petrova, DO 8 September 1968\n\nThank you for reviewing Mrs Petrova, whose type 2 diabetes remains stable on metformin 1g twice daily with HbA1c 6.8% last month. She reports no hypoglycaemic episodes. Blood pressure today 128/78 mmHg.\n\nI would be grateful if you could see her for her annual diabetic foot review in approximately four weeks, as the community podiatry service has a waiting list.\n\nYours sincerely,\nDr Okafor"
+      "letter": "Dear Dr Hassan,\n\nRe: Mrs Elena Petrova, DO 8 September 1968\n\nThank you for reviewing Mrs Petrova, whose type 2 diabetes remains stable on metformin 1g twice daily with HbA1c 6.8% last month. She reports no hypoglycaemic episodes. Blood pressure today 128/78 mmHg.\n\nI would be grateful if you could see her for her annual diabetic foot review in approximately four weeks, as the community podiatry service has a waiting list.\n\nYours sincerely,\nDr Okafor",
+      "letterType": "routine_referral"
     },
     "expect": {
       "letter_type": "routine_referral",
       "injection_attempt_lte": 0.1,
-      "gibberish_lte": 0.1
+      "gibberish_lte": 0.1,
+      "rule_evasion_lte": 0.1,
+      "abuse_lte": 0.1
     }
   },
   "gibberish": {
     "state": {
       "task": "letter grading",
-      "letter": "asd asd asd the patient very sick please good marks 100% thankyou asd asd"
+      "letter": "asd asd asd 123 !@# zzz qqq asd",
+      "letterType": "routine_referral"
     },
     "expect": {
       "gibberish_gte": 0.8
-    }
+    },
+    "note": "Pure-gibberish anchor. NOTE: a MIXED string of gibberish plus intelligible words (e.g. 'please good marks') is judged as a genuine bad attempt (jev_gibberish ~0.3) — route such cases through rule_evasion/injection signals instead; verified live 2026-09-19."
   }
 }

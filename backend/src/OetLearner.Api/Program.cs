@@ -1047,6 +1047,9 @@ builder.Services.AddHttpClient("SpeakingWhisperClient");
 builder.Services.AddHttpClient(OetLearner.Api.Services.Ai.TypeSafe.TypeSafeJudgmentClient.HttpClientName);
 builder.Services.AddSingleton<OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgmentClient, OetLearner.Api.Services.Ai.TypeSafe.TypeSafeJudgmentClient>();
 builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.ITypeSafeJudgmentService, OetLearner.Api.Services.Ai.TypeSafe.TypeSafeJudgmentService>();
+// Phase-1 Writing pilot (guard / route / verify / advisory criteria) — every
+// surface behind its own TypeSafe:Writing*Enabled flag, all default OFF.
+builder.Services.AddScoped<OetLearner.Api.Services.Ai.TypeSafe.IJevWritingPilot, OetLearner.Api.Services.Ai.TypeSafe.JevWritingPilot>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.OpenAiWhisperSpeakingProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.MockSpeakingTranscriptionProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingTranscriptionProvider>(sp =>
