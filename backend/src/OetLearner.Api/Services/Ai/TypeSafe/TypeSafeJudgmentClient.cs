@@ -71,7 +71,7 @@ public static class TypeSafeRequestBuilder
         {
             ["type"] = "noul",
             ["instructions"] = q.Instructions,
-            ["criteria"] = new Dictionary<string, object?>(criteria),
+            ["criteria"] = criteria.ToDictionary(p => p.Key, p => (object?)p.Value),
         };
     }
 
@@ -84,7 +84,7 @@ public static class TypeSafeRequestBuilder
         {
             ["type"] = "choice",
             ["instructions"] = q.Instructions,
-            ["criteria"] = new Dictionary<string, object?>(criteria),
+            ["criteria"] = criteria.ToDictionary(p => p.Key, p => (object?)p.Value),
         };
     }
 
