@@ -214,7 +214,7 @@ public sealed class JevCompanionRerankerTests
             }, 400, 20, null);
         var fake = new FakeJudgments(result);
         var advisor = new OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor(
-            fake, Microsoft.Extensions.Options.Options.Create(Options()),
+            fake, Microsoft.Extensions.Options.Options.Create(Options(o => o.ConversationAdvisoryEnabled = true)),
             NullLogger<OetLearner.Api.Services.Ai.TypeSafe.JevConversationAdvisor>.Instance);
 
         var signal = await advisor.AssessLatestTurnAsync("[{\"role\":\"learner\"}]", 3, "u1", CancellationToken.None);
