@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Ai.TypeSafe;
 
