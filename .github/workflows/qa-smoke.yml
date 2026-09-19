@@ -15,7 +15,7 @@ concurrency:
 jobs:
   placement-entry:
     name: Placement entry contracts
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
 
   backend-tests:
     name: Backend tests (.NET) · shard ${{ matrix.shard }}/${{ strategy.job-total }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     services:
       postgres:
         # pgvector/pgvector, not plain postgres: LearnerDbContext declares
@@ -160,7 +160,7 @@ jobs:
 
   frontend-unit:
     name: Frontend unit (vitest + lint + tsc + build)
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -179,7 +179,7 @@ jobs:
 
   e2e-smoke:
     name: E2E smoke (shard ${{ matrix.shard }}/${{ strategy.job-total }} · ${{ matrix.project }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
@@ -277,7 +277,7 @@ jobs:
     name: E2E merged HTML report
     if: always()
     needs: e2e-smoke
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -317,7 +317,7 @@ jobs:
     name: QA gate (all suites green)
     if: always()
     needs: [backend-tests, frontend-unit, e2e-smoke]
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.CI_RUNS_ON || 'ubuntu-latest' }}
     steps:
       - name: Verify all dependencies succeeded
         run: |
