@@ -209,6 +209,9 @@ jobs:
           test -s output/oet-production-migrations.sql
           sha256sum output/oet-production-migrations.sql
       - name: Retain migration artifact for deployment audit
+        # Best-effort: the SQL's sha256 is already in the log above, and an
+        # account-level Actions artifact-storage quota must not block a deploy.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: oet-production-migrations-${{ github.sha }}
