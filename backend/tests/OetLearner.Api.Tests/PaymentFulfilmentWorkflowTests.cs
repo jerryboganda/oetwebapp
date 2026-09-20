@@ -18,6 +18,22 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
         _factory = factory;
     }
 
+    // mark-fulfilled moves money, so production requires a fresh step-up proof
+    // (StepUpOptions.RequireForManualPaymentApproval defaults to true). Step-up
+    // targets a real account row: create the admin the debug headers present,
+    // enrol TOTP on it, and exchange a live code through the public endpoint.
+    private async Task AddMarkPaidStepUpAsync(HttpClient admin, string accountId, string email)
+    {
+        await _factory.EnsureAuthAccountAsync(
+            accountId,
+            ApplicationUserRoles.Admin,
+            email,
+            [AdminPermissions.SystemAdmin]);
+        var secret = await _factory.EnrolAuthenticatorAsync(accountId);
+        var token = await TestWebApplicationFactory.IssueStepUpTokenAsync(admin, secret, "billing.mark_paid");
+        admin.DefaultRequestHeaders.Add("X-OET-Step-Up", token);
+    }
+
     [Fact]
     public async Task VerifiedPayment_QueuesLatestOrder_AndFulfilmentIsAtomicAndIdempotent()
     {
@@ -159,6 +175,7 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
         admin.DefaultRequestHeaders.Add("X-Debug-UserId", $"admin-{suffix}");
         admin.DefaultRequestHeaders.Add("X-Debug-Email", $"admin-{suffix}@example.test");
         admin.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+        await AddMarkPaidStepUpAsync(admin, $"admin-{suffix}", $"admin-{suffix}@example.test");
 
         var queue = await admin.GetFromJsonAsync<List<PendingFulfilmentDto>>("/v1/admin/billing/fulfilment/");
         var order = Assert.Single(queue!, item => item.SubscriptionId == subscriptionId);
@@ -296,6 +313,7 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
         admin.DefaultRequestHeaders.Add("X-Debug-UserId", $"admin-{suffix}");
         admin.DefaultRequestHeaders.Add("X-Debug-Email", $"admin-{suffix}@example.test");
         admin.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+        await AddMarkPaidStepUpAsync(admin, $"admin-{suffix}", $"admin-{suffix}@example.test");
 
         using var response = await admin.PostAsJsonAsync(
             $"/v1/admin/billing/fulfilment/subscriptions/{subscriptionId}/mark-fulfilled",
@@ -367,6 +385,7 @@ public sealed class PaymentFulfilmentWorkflowTests : IClassFixture<TestWebApplic
         admin.DefaultRequestHeaders.Add("X-Debug-UserId", $"admin-{suffix}");
         admin.DefaultRequestHeaders.Add("X-Debug-Email", $"admin-{suffix}@example.test");
         admin.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.SystemAdmin);
+        await AddMarkPaidStepUpAsync(admin, $"admin-{suffix}", $"admin-{suffix}@example.test");
 
         using var response = await admin.PostAsJsonAsync(
             $"/v1/admin/billing/fulfilment/subscriptions/{subscriptionId}/mark-fulfilled",
