@@ -656,7 +656,9 @@ function playSoundCheck(): boolean {
     window.speechSynthesis.speak(utterance);
     return true;
   }
-  const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  // `window` is narrowed to `never` after the `'speechSynthesis' in window` guard.
+  const audioWindow = window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext };
+  const Ctx = audioWindow.AudioContext ?? audioWindow.webkitAudioContext;
   if (!Ctx) return false;
   const context = new Ctx();
   const oscillator = context.createOscillator();
