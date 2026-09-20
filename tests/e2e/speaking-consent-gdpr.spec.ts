@@ -11,9 +11,7 @@ import { recoverBrowserSession } from './fixtures/auth-bootstrap';
 //   4. Confirm the recording is gone from the learner UI.
 //   5. Confirm the audit log surfaced the event (admin view spot-check).
 //
-// Robust to either of the two likely UIs:
-//   * `/speaking/recordings` (Phase 10.1 learner self-management page)
-//   * `/account/recordings` (cross-subtest list)
+// The dedicated learner self-management surface is `/speaking/recordings`.
 
 test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
   test('learner can delete a recording and the action is audited', async ({ page, request }, testInfo) => {
@@ -43,17 +41,10 @@ test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
       });
     });
 
-    // Try the dedicated recordings page first; fall back to the more
-    // generic settings page if not implemented yet.
-    let landed = false;
-    for (const path of ['/speaking/recordings', '/account/recordings', '/account/privacy']) {
-      const resp = await page.goto(path, { waitUntil: 'domcontentloaded' }).catch(() => null);
-      if (resp && resp.ok()) {
-        landed = true;
-        break;
-      }
-    }
-    expect(landed, 'Expected at least one privacy/recordings page to be reachable').toBe(true);
+    // recoverBrowserSession already performs the authenticated navigation to
+    // the dedicated recordings page. Avoid a second cold navigation that can
+    // race the initial session bootstrap and redirect back to sign-in.
+    await expect(page).toHaveURL(/\/speaking\/recordings(?:[/?#]|$)/);
 
     // Find a delete control for a single recording.
     const deleteButton = page
