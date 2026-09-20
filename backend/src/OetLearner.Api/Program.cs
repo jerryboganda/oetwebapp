@@ -1072,6 +1072,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingReviewVoiceN
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSessionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11EvidenceCaptureService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11PersonaService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.InterlocutorTurnPlanner>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11AudioCaptureService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11AudioAssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11ReleaseGate>();

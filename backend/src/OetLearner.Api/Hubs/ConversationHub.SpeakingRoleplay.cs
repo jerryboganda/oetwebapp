@@ -202,11 +202,12 @@ public partial class ConversationHub
 
         var silencePromptThresholdMs = release.SilencePromptThresholdMs;
 
-        var personaPrompt = SpeakingSimulationV11PersonaService.BuildActorPrompt(personaSnapshot);
+        var roleClass = InterlocutorRoleClassifier.Resolve(personaSnapshot.InterlocutorRole);
         logger.LogInformation(
-            "Speaking role-play ready for session {SessionId} (persona length={PersonaLength}, candidate opens).",
+            "Speaking role-play ready for session {SessionId} (persona version={PersonaVersion}, role class={RoleClass}, candidate opens).",
             speakingSessionId,
-            personaPrompt.Length);
+            personaSnapshot.PersonaVersion,
+            InterlocutorRoleClassifier.ToCode(roleClass));
 
         // The candidate opens the consultation (owner rule, 2026-07-03): the
         // patient stays silent until spoken to. The admin-authored
@@ -330,11 +331,15 @@ public partial class ConversationHub
             return;
         }
 
+        if (!HasCandidateRoleplayTurn(segments))
+        {
+            return;
+        }
+
         // The client reports the silence duration only as UX metadata. The
         // server decides whether the quiet window has actually elapsed from
-        // the persisted role-play timeline. This also covers the required
-        // initial wait before the candidate has produced their first turn and
-        // the wait after a patient reply.
+        // the persisted role-play timeline. Silence prompting starts only
+        // after the candidate has produced their first role-play turn.
         var lastActivityMs = lastRoleplaySegment?.EndMs ?? 0;
         if (nowMs - lastActivityMs < silencePromptThresholdMs)
         {
@@ -649,23 +654,34 @@ public partial class ConversationHub
         }
 
         // ── 3. Ask the grounded AI to reply in character ──
-        var personaPrompt = isWarmUp
-            ? BuildWarmUpPersonaPrompt(card)
-            : SpeakingSimulationV11PersonaService.BuildActorPrompt(personaSnapshot!);
-        var scenarioJson = JsonSerializer.Serialize(new
-        {
-            mode = isWarmUp ? "warmup" : "roleplay",
-            persona = personaPrompt,
-            role = card.InterlocutorRole,
-            setting = card.Setting,
-            scenarioTitle = card.ScenarioTitle,
-        });
+        // Warm-up has no hidden case persona and can continue through the generic
+        // conversation orchestrator. Scored role-play is handled by the dedicated
+        // interlocutor planner, which constructs its own server-filtered scenario.
+        var scenarioJson = isWarmUp
+            ? JsonSerializer.Serialize(new
+            {
+                mode = "warmup",
+                persona = BuildWarmUpPersonaPrompt(card),
+                role = card.InterlocutorRole,
+                setting = card.Setting,
+                scenarioTitle = card.ScenarioTitle,
+            })
+            : "{}";
         var transcriptJson = JsonSerializer.Serialize(segments.Select(s => new
         {
             role = string.Equals(s.Speaker, "candidate", StringComparison.Ordinal) ? "learner" : "ai",
             text = s.Text,
             interrupted = s.Interrupted,
         }));
+        var roleplayPlannerTranscriptJson = JsonSerializer.Serialize(
+            segments
+                .Where(s => string.Equals(s.Speaker, "candidate", StringComparison.Ordinal))
+                .Select(s => new
+                {
+                    role = "learner",
+                    text = s.Text,
+                    interrupted = s.Interrupted,
+                }));
 
         var elapsedSeconds = (int)(nowMs / 1000);
         var rolePlaySeconds = card.RolePlayTimeSeconds > 0 ? card.RolePlayTimeSeconds : 300;
@@ -697,21 +713,38 @@ public partial class ConversationHub
             ConversationAiReply reply;
             try
             {
-                var orchestrator = sp.GetRequiredService<IConversationAiOrchestrator>();
-                var aiCtx = new ConversationAiContext(
-                    SessionId: speakingSessionId,
-                    UserId: userId,
-                    AuthAccountId: null,
-                    TenantId: null,
-                    Profession: profession,
-                    TaskTypeCode: isWarmUp ? "speaking_warmup" : "speaking_roleplay",
-                    ScenarioJson: scenarioJson,
-                    TranscriptJson: transcriptJson,
-                    TurnIndex: learnerTurnCount,
-                    ElapsedSeconds: elapsedSeconds,
-                    RemainingSeconds: remainingSeconds,
-                    CandidateCountry: null);
-                reply = await orchestrator.GenerateReplyAsync(aiCtx, ct);
+                if (isWarmUp)
+                {
+                    var orchestrator = sp.GetRequiredService<IConversationAiOrchestrator>();
+                    var aiCtx = new ConversationAiContext(
+                        SessionId: speakingSessionId,
+                        UserId: userId,
+                        AuthAccountId: null,
+                        TenantId: null,
+                        Profession: profession,
+                        TaskTypeCode: "speaking_warmup",
+                        ScenarioJson: scenarioJson,
+                        TranscriptJson: transcriptJson,
+                        TurnIndex: learnerTurnCount,
+                        ElapsedSeconds: elapsedSeconds,
+                        RemainingSeconds: remainingSeconds,
+                        CandidateCountry: null);
+                    reply = await orchestrator.GenerateReplyAsync(aiCtx, ct);
+                }
+                else
+                {
+                    var planner = sp.GetRequiredService<InterlocutorTurnPlanner>();
+                    reply = await planner.PlanAsync(new InterlocutorTurnPlanRequest(
+                        PersonaSnapshot: personaSnapshot!,
+                        Profession: profession,
+                        LearnerText: learnerText,
+                        TranscriptJson: roleplayPlannerTranscriptJson,
+                        TurnIndex: learnerTurnCount,
+                        ElapsedSeconds: elapsedSeconds,
+                        RemainingSeconds: remainingSeconds,
+                        SessionId: speakingSessionId,
+                        UserId: userId), ct);
+                }
             }
             catch (PromptNotGroundedException)
             {
@@ -1328,6 +1361,11 @@ public partial class ConversationHub
         string Speaker, long StartMs, long EndMs, string Text, double Confidence, bool Interrupted = false,
         string Phase = "roleplay", string? SourceRecordingId = null,
         IReadOnlyList<ConversationWordConfidence>? WordConfidences = null);
+
+    internal static bool HasCandidateRoleplayTurn(IEnumerable<SpeakingTurnSegment> segments)
+        => segments.Any(segment =>
+            string.Equals(segment.Phase, "roleplay", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(segment.Speaker, "candidate", StringComparison.OrdinalIgnoreCase));
 
     private sealed record SpeakingTtsTelemetry(
         string? AudioUrl,

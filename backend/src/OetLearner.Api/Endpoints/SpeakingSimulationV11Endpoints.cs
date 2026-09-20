@@ -29,7 +29,8 @@ public static class SpeakingSimulationV11Endpoints
         sessions.MapGet("/{id}/v1.1-assessment", GetSessionAssessmentAsync)
             .WithSummary("Get the latest v1.1 card report, including source-linked evidence.")
             .Produces<SpeakingSimulationV11AssessmentResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         sessions.MapGet("/{id}/v1.1-audio/{recordingId}", GetLearnerAudioAsync)
             .WithSummary("Stream one authenticated original learner-audio turn for report playback.")
@@ -43,12 +44,14 @@ public static class SpeakingSimulationV11Endpoints
         exams.MapPost("/{id}/v1.1-combined-assess", AssessCombinedAsync)
             .WithSummary("Derive the combined v1.1 report only when both card reports are valid.")
             .Produces<SpeakingSimulationV11AssessmentResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         exams.MapGet("/{id}/v1.1-combined-report", GetCombinedAsync)
             .WithSummary("Get the latest combined v1.1 practice report.")
             .Produces<SpeakingSimulationV11AssessmentResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }
