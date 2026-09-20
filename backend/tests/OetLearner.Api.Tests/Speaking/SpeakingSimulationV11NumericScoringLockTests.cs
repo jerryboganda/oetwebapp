@@ -455,6 +455,8 @@ public sealed class SpeakingSimulationV11NumericScoringLockTests
     {
         public string Name => "forbidden-test-provider";
 
+        public bool IsConfigured => true;
+
         public Task<bool> IsConfiguredAsync(CancellationToken ct = default)
             => Task.FromResult(true);
 
