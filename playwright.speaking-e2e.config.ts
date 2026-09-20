@@ -11,7 +11,11 @@ const baseURL = process.env.PLAYWRIGHT_BASE_URL?.trim() || 'http://localhost:300
 export default defineConfig({
   testDir: './tests/e2e',
   testMatch: /tests\/e2e\/speaking-.*\.spec\.ts/,
-  fullyParallel: true,
+  // The seeded learner account is protected by SingleActiveSession and
+  // single-use refresh-token rotation. Keep this focused slice serial so a
+  // fresh per-test browser session cannot revoke a concurrently running test.
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 1,
   reporter: [

@@ -87,7 +87,7 @@ test.describe('Speaking candidate AI live voice route @learner @speaking', () =>
       await route.abort();
     });
 
-    await recoverBrowserSession(page, request, 'learner', `/speaking/exam/${EXAM_ID}`);
+    await recoverBrowserSession(page, request, 'learner', `/speaking/exam/${EXAM_ID}`, { freshSession: true });
 
     await expect(page.getByRole('heading', { name: 'Speaking exam' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Introduction' })).toBeVisible();

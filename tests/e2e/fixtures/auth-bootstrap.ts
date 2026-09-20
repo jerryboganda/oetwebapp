@@ -710,23 +710,37 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
   );
 }
 
+type RecoverBrowserSessionOptions = {
+  freshSession?: boolean;
+};
+
 export async function recoverBrowserSession(
   page: Page,
   request: APIRequestContext,
   role: SeededRole,
   targetPath: string,
+  options: RecoverBrowserSessionOptions = {},
 ) {
-  void request;
-  const persisted = await readJsonFile<StorageStateBlob>(authStatePaths[role]);
-  const origin = persisted?.origins.find((entry) => entry.origin === defaultAppOrigin);
-  const sessionEntry = origin?.localStorage.find((entry) => entry.name === localSessionKey);
-  if (!persisted || !sessionEntry) {
-    throw new Error(`Missing persisted browser auth state for ${role}. Run the Playwright auth setup project first.`);
+  let session: AuthSessionResponse;
+  let cookies: StorageStateCookie[];
+
+  if (options.freshSession) {
+    const fresh = await bootstrapBrowserSessionForRole(request, role);
+    session = fresh.session;
+    cookies = [buildAuthIndicatorCookie(session), ...fresh.cookies];
+  } else {
+    const persisted = await readJsonFile<StorageStateBlob>(authStatePaths[role]);
+    const origin = persisted?.origins.find((entry) => entry.origin === defaultAppOrigin);
+    const sessionEntry = origin?.localStorage.find((entry) => entry.name === localSessionKey);
+    if (!persisted || !sessionEntry) {
+      throw new Error(`Missing persisted browser auth state for ${role}. Run the Playwright auth setup project first.`);
+    }
+
+    session = JSON.parse(sessionEntry.value) as AuthSessionResponse;
+    cookies = persisted.cookies.filter((cookie) =>
+      cookie.name === authIndicatorCookieName || FRONTEND_AUTH_COOKIE_NAMES.has(cookie.name));
   }
 
-  const session = JSON.parse(sessionEntry.value) as AuthSessionResponse;
-  const cookies = persisted.cookies.filter((cookie) =>
-    cookie.name === authIndicatorCookieName || FRONTEND_AUTH_COOKIE_NAMES.has(cookie.name));
   await page.context().clearCookies({ name: /^(oet_auth|oet_rt|oet_csrf)$/ });
   await page.context().addCookies(cookies);
   const currentOrigin = (() => {
