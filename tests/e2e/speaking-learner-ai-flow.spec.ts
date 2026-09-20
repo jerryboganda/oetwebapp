@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from './fixtures/diagnostics';
+import { recoverBrowserSession } from './fixtures/auth-bootstrap';
 
 // Phase 7 (G.7) of the OET Speaking module plan — Playwright smoke for
 // the AI self-practice loop (Phase 2 deliverable). Mocks the AI provider
@@ -39,7 +40,7 @@ const MOCK_AI_ASSESSMENT = {
 };
 
 test.describe('Speaking learner AI self-practice flow @learner @speaking', () => {
-  test('learner completes an AI session and sees the AI assessment column', async ({ page }, testInfo) => {
+  test('learner completes an AI session and sees the AI assessment column', async ({ page, request }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();
     }
@@ -62,7 +63,7 @@ test.describe('Speaking learner AI self-practice flow @learner @speaking', () =>
     //         published card. We tolerate either the new unified route
     //         (`/speaking/sessions/<id>`) or the legacy task route
     //         (`/speaking/task/<id>`) so the spec is forward-compatible.
-    await page.goto('/speaking', { waitUntil: 'domcontentloaded' });
+    await recoverBrowserSession(page, request, 'learner', '/speaking');
     const startSession = page
       .getByRole('link', { name: /(start|new) (ai )?(practice|session)/i })
       .or(page.getByRole('button', { name: /(start|new) (ai )?(practice|session)/i }));

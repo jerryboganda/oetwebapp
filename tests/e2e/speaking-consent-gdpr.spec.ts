@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from './fixtures/diagnostics';
+import { recoverBrowserSession } from './fixtures/auth-bootstrap';
 
 // Phase 7 (G.7) of the OET Speaking module plan — Playwright smoke for
 // GDPR erasure. Mirrors the plan's verification ask:
@@ -15,12 +16,13 @@ import { attachDiagnostics, expectNoSevereClientIssues, observePage } from './fi
 //   * `/account/recordings` (cross-subtest list)
 
 test.describe('Speaking consent + GDPR erasure flow @learner @speaking', () => {
-  test('learner can delete a recording and the action is audited', async ({ page }, testInfo) => {
+  test('learner can delete a recording and the action is audited', async ({ page, request }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
+    await recoverBrowserSession(page, request, 'learner', '/speaking/recordings');
 
     // Intercept the DELETE so the spec stays deterministic without
     // needing a seeded recording row in CI. The mocked response mirrors

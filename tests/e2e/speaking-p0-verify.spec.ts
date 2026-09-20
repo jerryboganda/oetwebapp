@@ -11,6 +11,7 @@ const PASSWORD = 'AcceptTest!2026';
 const ATTEMPTS = 3;
 
 test('P0: real record -> submit -> grade journey x3', async ({ page }) => {
+  test.skip(!EMAIL, 'Live-provider verification requires SPEAKING_VERIFY_EMAIL and its provisioned account.');
   await page.addInitScript((deviceId) => {
     window.localStorage.setItem('oet_device_id', deviceId);
   }, DEVICE_ID);
