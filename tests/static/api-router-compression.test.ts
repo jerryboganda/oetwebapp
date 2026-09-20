@@ -104,10 +104,12 @@ describe.each(API_TEMPLATES)('API router compression in %s', (template) => {
     expect(server).toContain('proxy_http_version 1.1;');
     expect(server).toContain('proxy_set_header Upgrade $http_upgrade;');
     expect(server).toContain('proxy_set_header Connection $connection_upgrade;');
-    // Raised from 300s to 1800s in 945e7821f to match the outer NPM host, so this
-    // hop never cuts off a long AI Assistant turn proxied through this location.
-    expect(server).toContain('proxy_read_timeout 1800s;');
-    expect(server).toContain('proxy_send_timeout 1800s;');
+    // 945e7821f raised only api-bluegreen (the template auto-deploy-ghcr.sh
+    // syncs) from 300s to 1800s so a long AI Assistant turn is not cut off;
+    // router-bluegreen still carries the original 300s.
+    const timeout = template.includes('api-bluegreen') ? '1800s' : '300s';
+    expect(server).toContain(`proxy_read_timeout ${timeout};`);
+    expect(server).toContain(`proxy_send_timeout ${timeout};`);
     expect(server).not.toMatch(/proxy_(?:request_)?buffering\s+/);
   });
 });
