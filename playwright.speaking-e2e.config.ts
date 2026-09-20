@@ -39,9 +39,22 @@ export default defineConfig({
       name: 'speaking-learner',
       dependencies: ['setup'],
       testMatch: /tests\/e2e\/speaking-.*\.spec\.ts/,
+      testIgnore: /tests\/e2e\/speaking-p0-verify\.spec\.ts/,
       use: {
         ...devices['Desktop Chrome'],
         storageState: authStatePathsByProject['chromium-learner'],
+      },
+    },
+    {
+      // Keep the real-provider smoke out of the fully parallel shared learner
+      // session. It performs its own sign-in and therefore must run only after
+      // the deterministic learner project has finished, otherwise the backend's
+      // single-active-session policy can revoke that project's session family.
+      name: 'speaking-provider',
+      dependencies: ['speaking-learner'],
+      testMatch: /tests\/e2e\/speaking-p0-verify\.spec\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
       },
     },
   ],

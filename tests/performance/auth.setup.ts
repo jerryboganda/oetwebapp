@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { expect, test as setup } from '@playwright/test';
 import {
+  bootstrapBrowserSessionForRole,
   bootstrapSessionForRole,
   persistSessionToStorageState,
 } from '../e2e/fixtures/auth-bootstrap';
@@ -61,11 +62,8 @@ setup.describe.configure({ mode: 'serial' });
 
 for (const target of authTargets) {
   setup(`bootstrap ${target.projectName} auth state`, async ({ request }) => {
-    const session = await bootstrapSessionForRole(request, target.role, undefined, {
-      useDiskCache: false,
-      isolateSession: true,
-    });
-    await persistSessionToStorageState(session, target.path, request, target.role);
+    const { session, cookies } = await bootstrapBrowserSessionForRole(request, target.role);
+    await persistSessionToStorageState(session, target.path, cookies);
     await markPerformanceTourComplete(request, session, target.role);
 
     const rawState = JSON.parse(await readFile(target.path, 'utf8')) as {
