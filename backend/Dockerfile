@@ -11,6 +11,7 @@ COPY backend/src/OetLearner.Api/ backend/src/OetLearner.Api/
 COPY rulebooks/ rulebooks/
 # Scripts referenced by .csproj (e.g. StripeProductSeeder/catalog.json)
 COPY backend/scripts/ backend/scripts/
+COPY data/speaking-candidate-resources.json data/speaking-candidate-resources.json
 # Remove restore-created obj/bin so dotnet publish doesn't silently skip due to
 # Docker BuildKit setting COPY timestamps to epoch (1970), which appears older
 # than the just-restored obj/ artifacts and triggers the .NET 10 up-to-date check.
