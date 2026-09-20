@@ -192,7 +192,7 @@ public partial class ConversationHub
             await Clients.Caller.SendAsync(
                 "SpeakingRoleplayError",
                 "V11_RELEASE_BLOCKED",
-                "This AI simulation is not available until the approved v1.1 release gates are complete.");
+                "This AI simulation is temporarily unavailable because candidate access has been disabled by an administrator.");
             return;
         }
 

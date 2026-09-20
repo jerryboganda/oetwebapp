@@ -30,28 +30,28 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
     }
 
     [Fact]
-    public async Task EvaluateAsync_blocks_release_until_all_owner_gates_are_approved()
+    public async Task EvaluateAsync_releases_by_default_without_operational_approvals()
     {
         await using var fixture = await SimulationV11Fixture.CreateAsync();
 
         var result = await fixture.Gate.EvaluateAsync("medicine", CancellationToken.None);
 
-        Assert.False(result.IsReleased);
-        Assert.Contains("calibration_approval_required", result.BlockingReasons);
-        Assert.Contains("concurrency_budget_required", result.BlockingReasons);
-        Assert.Contains("cost_ceiling_required", result.BlockingReasons);
-        Assert.Contains("latency_sla_required", result.BlockingReasons);
-        Assert.Contains("retention_days_required", result.BlockingReasons);
-        Assert.Contains("stt_cost_per_minute_required", result.BlockingReasons);
-        Assert.Contains("tts_cost_per_1000_characters_required", result.BlockingReasons);
-        Assert.Contains("retention_approval_required", result.BlockingReasons);
-        Assert.Contains("silence_prompt_threshold_required", result.BlockingReasons);
-        Assert.Contains("silence_prompt_approval_required", result.BlockingReasons);
-        Assert.Contains("graph_approval_required", result.BlockingReasons);
-        Assert.Contains("profession_pack_approval_required", result.BlockingReasons);
-        Assert.Contains("audio_assessment_approval_required", result.BlockingReasons);
-        Assert.Contains("audio_assessment_provider_required", result.BlockingReasons);
+        Assert.True(result.IsReleased);
+        Assert.Empty(result.BlockingReasons);
+        Assert.Equal(SpeakingSimulationV11Contracts.DefaultSilencePromptThresholdMs,
+            result.SilencePromptThresholdMs);
         Assert.DoesNotContain("rule55", result.EnabledRuleIds);
+    }
+
+    [Fact]
+    public async Task EvaluateAsync_blocks_only_when_explicit_candidate_release_block_is_approved()
+    {
+        await using var fixture = await SimulationV11Fixture.CreateAsync(blockRelease: true);
+
+        var result = await fixture.Gate.EvaluateAsync("medicine", CancellationToken.None);
+
+        Assert.False(result.IsReleased);
+        Assert.Equal(["candidate_release_blocked"], result.BlockingReasons);
     }
 
     [Fact]
@@ -80,7 +80,9 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
         public LearnerDbContext Db { get; } = db;
         public SpeakingSimulationV11ReleaseGate Gate { get; } = new(db);
 
-        public static async Task<SimulationV11Fixture> CreateAsync(bool approveAll = false)
+        public static async Task<SimulationV11Fixture> CreateAsync(
+            bool approveAll = false,
+            bool blockRelease = false)
         {
             var options = new DbContextOptionsBuilder<LearnerDbContext>()
                 .UseInMemoryDatabase($"speaking-simulation-v11-{Guid.NewGuid():N}")
@@ -126,6 +128,12 @@ public sealed class SpeakingSimulationV11ReleaseGateTests
                     BuildApproval("profession_pack_approval", "medicine"),
                     BuildApproval("audio_assessment_approval", "global",
                         evidenceJson: "{\"provider\":\"azure-phoneme\"}"));
+            }
+
+            if (blockRelease)
+            {
+                db.SpeakingSimulationV11OwnerApprovals.Add(
+                    BuildApproval("candidate_release_block", "global"));
             }
 
             await db.SaveChangesAsync();

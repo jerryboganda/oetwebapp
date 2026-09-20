@@ -86,7 +86,7 @@ Therefore no CI result currently validates or invalidates the implementation its
 - No deployment was performed.
 - No merge was performed.
 - Numeric scoring remains locked.
-- Private consented learner replay retention remains targeted at 30 days; this patch does not claim new retention-policy acceptance evidence.
-- Post-session feedback remains a required product behavior and must not be represented as accepted solely from this interlocutor-boundary work.
+- Private consented v1.1 learner replay now defaults to 30 days when no governed `retention_days` approval exists; legacy/tutor retention defaults are unchanged. Current consent-version matching is enforced at the v1.1 capture seam. CI verification is still pending.
+- Post-session v1.1 learner feedback is implemented on candidate exam results and standalone session results. Submission is learner-owned, bounded to a 1–5 rating plus optional comment, and upserts a deterministic record in the existing uniquely constrained IdempotencyRecords store. Only PostgreSQL unique-constraint conflicts enter the concurrent-insert recovery path. Native radio inputs support keyboard rating selection. CI verification is still pending.
 
 Acceptance remains blocked until fresh remote verification actually runs and passes.

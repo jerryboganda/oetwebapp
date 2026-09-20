@@ -154,6 +154,14 @@ export interface SpeakingSimulationV11LearnerTutorOverride {
   createdAt: string;
 }
 
+export interface SpeakingSimulationV11FeedbackResponse {
+  feedbackId: string;
+  speakingSessionId: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+}
+
 export function runSpeakingSimulationV11Assessment(sessionId: string) {
   return apiClient.post<SpeakingSimulationV11AssessmentResponse>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/v1.1-assess`,
@@ -187,5 +195,16 @@ export function speakingSimulationV11AudioPath(sessionId: string, recordingId: s
 export function getSpeakingSimulationV11TutorOverride(sessionId: string) {
   return apiClient.get<SpeakingSimulationV11LearnerTutorOverride>(
     `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/v1.1-tutor-override`,
+  );
+}
+
+export function submitSpeakingSimulationV11Feedback(
+  sessionId: string,
+  rating: number,
+  comment: string | null,
+) {
+  return apiClient.post<SpeakingSimulationV11FeedbackResponse>(
+    `/v1/speaking/sessions/${encodeURIComponent(sessionId)}/v1.1-feedback`,
+    { rating, comment },
   );
 }

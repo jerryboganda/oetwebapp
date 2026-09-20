@@ -21,7 +21,7 @@ public sealed class SpeakingSimulationV11NumericScoringLockTests
     {
         await using var fixture = await Fixture.CreateAsync(approveAll);
         var gate = await fixture.Gate.EvaluateAsync("medicine", default);
-        Assert.Equal(approveAll, gate.IsReleased);
+        Assert.True(gate.IsReleased);
 
         await AssertLockedAsync(() => fixture.Service.RunAssessmentAsync("session-a", default));
 

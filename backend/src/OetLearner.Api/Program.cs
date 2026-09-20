@@ -1078,6 +1078,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV1
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11ReleaseGate>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11AssessmentService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11TurnTelemetryService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Speaking.SpeakingSimulationV11FeedbackService>();
 // WS6 — Speaking result-visibility config (§10).
 builder.Services.AddScoped<OetLearner.Api.Services.Speaking.ISpeakingResultVisibilityService,
     OetLearner.Api.Services.Speaking.SpeakingResultVisibilityService>();

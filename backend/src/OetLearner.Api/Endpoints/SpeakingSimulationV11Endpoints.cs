@@ -37,6 +37,14 @@ public static class SpeakingSimulationV11Endpoints
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
 
+        sessions.MapPost("/{id}/v1.1-feedback", SubmitFeedbackAsync)
+            .WithSummary("Submit or update learner feedback after a completed v1.1 speaking session.")
+            .Produces<SpeakingSimulationV11FeedbackResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
+
         var exams = app.MapGroup("/v1/speaking/exams")
             .RequireAuthorization("LearnerOnly")
             .WithTags("Speaking simulation v1.1");
@@ -157,6 +165,17 @@ public static class SpeakingSimulationV11Endpoints
                 message = "No combined v1.1 report exists for this exam yet.",
             })
             : Results.Ok(report);
+    }
+
+    private static async Task<IResult> SubmitFeedbackAsync(
+        HttpContext http,
+        string id,
+        SpeakingSimulationV11FeedbackRequest request,
+        SpeakingSimulationV11FeedbackService feedback,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        return Results.Ok(await feedback.SubmitAsync(userId, id, request, ct));
     }
 
     private static string ResolveUserId(HttpContext http)
