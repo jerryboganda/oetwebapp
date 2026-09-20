@@ -2,52 +2,91 @@
 
 ## Status
 
-**NEW UNIT BOUNDARY ONLY — NOT HUB-INTEGRATED / NOT TESTED / NOT ACCEPTED.**
+**IMPLEMENTED AND PR-OPEN — REMOTE ACCEPTANCE BLOCKED BEFORE RUNNER START.**
 
-This patch adds only a pure server-side disclosure/projection/rendering boundary plus focused xUnit coverage. It does not wire the boundary into `ConversationHub.SpeakingRoleplay`, does not change provider routing, and does not enable numeric scoring.
+The live OET Speaking role-play path is now wired through a server-side disclosure planner and deterministic renderer. Heavy verification was intentionally delegated to GitHub Actions; on 2026-09-20 every required GitHub-hosted job was refused before any workflow step ran because the account reported failed recent payments or an insufficient Actions spending limit.
 
-Both old Point 5 claims remain unsupported by implementation/acceptance evidence and must not be represented as completed.
+This document records implementation evidence and the exact verification boundary. It does not claim that build, test, lint, typecheck, security, or E2E checks passed.
 
-## Boundary implemented in this patch
+## Implemented factuality boundary
 
-- Seven explicit interlocutor role classes: Patient, RelativeOrCarer, AnimalOwner, Client, Colleague, Examiner, Interviewer.
-- Server facts are explicitly classified as AlwaysEligible, Conditional, or NeverDisclose.
-- Conditional disclosure requires a server-owned satisfied-condition identifier. Learner/provider text is not interpreted as authorization and no regex/topic guessing is used.
-- NeverDisclose facts are never copied into model-safe context, even when a similarly named condition is satisfied.
-- Model-safe context contains only safe policy version, case identity, role class, and eligible facts with approved statement variants. It contains no withheld fact IDs, counts, values, condition IDs, disclosure classes, or full-snapshot reference.
-- Model output is an ID-selection contract. The deterministic renderer accepts only eligible fact IDs, approved statement variant IDs, and approved non-factual response kinds. Unknown/ineligible/duplicate selections fail closed; arbitrary model text is not a renderable field.
-- Projection copies eligible collections so later mutation of snapshot collections cannot alter an already projected model context.
+- The AI acts as the interlocutor for scored role-play; the server remains authoritative for case facts.
+- Seven explicit interlocutor role classes are supported: Patient, RelativeOrCarer, AnimalOwner, Client, Colleague, Examiner, and Interviewer. Missing or unknown roles fail closed.
+- Server facts are classified as AlwaysEligible, Conditional, or NeverDisclose.
+- Conditional disclosure is evaluated server-side before provider invocation.
+- NeverDisclose facts are never copied into the model-safe disclosure projection.
+- The provider receives only the normalized `roleClass`, safe disclosure projection, and learner transcript needed for reply planning. Raw authored role text, scenario title, and setting are not sent to the provider.
+- Model output is an ID-selection contract: eligible fact IDs plus exact server-approved statement variant IDs, or an approved non-factual response kind. Arbitrary provider-authored spoken text is not renderable.
+- Unknown, withheld, duplicate, or mismatched selections fail closed.
+- The server renders the final spoken text, sanitizes it, and only that server-rendered text is passed to `ConversationTtsRequest`.
+- Defensive copies prevent later snapshot mutation from changing an already projected safe context.
 
-## Tests authored, not executed locally
+## Candidate-first behavior
 
-Focused xUnit tests cover all seven roles; NeverDisclose precedence; conditional before/after explicit server state; incomplete conditional policy; duplicate/malformed fact IDs; hidden-metadata absence from serialized model DTO; withheld/unknown renderer selections; exact-statement rendering; duplicate selection rejection; and rejection of arbitrary freeform text in the model response contract.
+- Scored role-play uses `InterlocutorTurnPlanner`; warm-up remains on the existing generic conversation path.
+- The silence-prompt path now checks for an actual candidate `roleplay` segment before the interlocutor can emit a silence prompt.
+- Patient/interlocutor-only or warm-up history therefore cannot cause the AI to speak first in the scored consultation.
 
-Per repository policy, no build/test/lint/typecheck/generation command was run locally. CI evidence is still required before any tested/accepted claim.
+## Hidden-fact relevance hardening
 
-## Authoritative amendments carried forward, not claimed implemented here
+The `.direct_relevant` disclosure path no longer unlocks a hidden sentence from a single generic overlapping token. Direct relevance now requires either:
 
-- Latency amendment: **1.5 s / 250 ms final**.
-- Provider amendment: **3 independent provider stacks, configurable, with benchmark default selection**.
-- Retention amendment: **scoped 30-day audio retention, separate from other retention policy**.
-- Scoring amendment: **numeric scoring remains disabled until both human-validation and expert-validation gates are satisfied**, independent of owner/release booleans.
-- Specification amendment: **the Universal 480 specification is authoritative but currently unavailable to this implementation task**. No canonical 480 requirement IDs are invented here.
+- at least two overlapping content tokens; or
+- one distinctive overlapping content token of at least eight characters.
 
-Provider-stack, latency, retention, hub-integration, factual-validation-after-generation, speech-output, and numeric-scoring gate behavior are therefore pending future implementation and evidence.
+The broader `.relevant` behavior is unchanged. This keeps intentionally broad elicitation behavior separate from direct hidden-fact unlocking.
 
-## Temporary numeric lock added in second patch
+## Numeric scoring lock
 
-**TEMPORARY NUMERIC LOCK — NOT CALIBRATION-GATE COMPLETE / NOT TESTED / NOT ACCEPTED.**
+Numeric OET practice scoring remains fail-closed until authoritative human/expert calibration is implemented and validated.
 
-`SpeakingSimulationV11AssessmentService` now fails closed for v1.1 AI numeric scoring until the authoritative human-calibration and expert-validation evidence contract exists and has been implemented. This is an intentional code hold, not a configurable release/owner boolean and not evidence that calibration has been completed.
+- New v1.1 numeric assessment generation returns the validation-required conflict before provider scoring work.
+- Existing persisted numeric assessment rows are blocked from learner-facing projection.
+- Combined scoring stops before release/report aggregation and numeric writes.
+- Technical/no-score review envelopes may still project when they contain no numeric fields or report payload.
+- No owner/release boolean or current configuration flag can unlock the temporary hold.
 
-- New v1.1 numeric assessment generation is stopped before release-gate evaluation, scoring computation, or provider work.
-- Previously persisted card assessments are blocked by the central response projection whenever numeric fields or report JSON are present.
-- Previously persisted combined assessment reports are blocked by the same projection boundary.
-- A blocked response never substitutes `0` for an unavailable score and does not expose score ranges, confidence numerics, nested criterion scores/bands, or the persisted report object.
-- Existing technical/no-score envelopes remain able to project when they contain no numeric/report payload.
-- Existing session/card/profession validation and the unrelated LiveTutor human-examiner path remain ahead of the new lock. Endpoint authentication/ownership code was not changed by this patch and must remain enforced by its existing entry points.
-- No release approval, owner flag, profession approval, or other existing configuration can unlock this temporary hold. A real unlock pathway must wait for the missing authoritative validation contract; this patch deliberately does not invent one.
+This is a safety lock, not evidence that calibration has been completed.
 
-Five focused xUnit tests were authored for the hard lock, cached projection, combined persisted report suppression, absence of configurable unlock inputs, and preservation of pre-lock session-id validation. They have not been executed locally because repository policy requires compute verification in GitHub Actions.
+## Regression coverage authored
 
-The disclosure boundary remains a separate new unit boundary and is still **not hub-integrated**. Full Universal 480 compliance remains blocked because the authoritative 480 specification is still unavailable to this task.
+Focused tests cover the disclosure policy, renderer fail-closed behavior, safe projection, planner behavior, raw-scenario-metadata exclusion, hidden-fact direct relevance, candidate-first silence prompting, and the numeric scoring lock. In particular:
+
+- `Planner_never_sends_raw_scenario_metadata_to_the_model`
+- `Hidden_fact_does_not_unlock_from_one_generic_overlap_token`
+- `SilencePromptGuard_BlocksPatientPromptUntilCandidateHasSpokenInRoleplay`
+- numeric-lock tests using forbidden provider/gateway doubles to prove the lock occurs before AI/provider work
+
+These tests were not executed locally because project policy requires compute-heavy verification to run in GitHub Actions.
+
+## Verification evidence
+
+Local non-heavy checks:
+
+- `git diff --cached --check` passed before commit.
+- `git diff --check origin/main...HEAD` passed after the PR branch was created.
+- GitHub reports PR #235 as `MERGEABLE`; `mergeStateStatus` is `UNSTABLE` because checks are failing before runner start.
+- The only `origin/main` overlap among the four intervening commits is `Program.cs`; main adds TypeSafe/JeV registrations while this change adds the interlocutor planner registration at a separate location. No textual merge conflict is reported.
+
+Remote verification attempt on PR #235:
+
+- Speaking Module CI: run `35483774826`
+- QA Smoke: run `35483774811`
+- Rulebook Conformance: run `35483774885`
+- SBOM and SCA: run `35483774808`
+
+All failed jobs show zero executed workflow steps and the same GitHub annotation:
+
+> The job was not started because recent account payments have failed or your spending limit needs to be increased.
+
+Therefore no CI result currently validates or invalidates the implementation itself. The required next action is to restore GitHub Actions billing/spending availability and rerun the failed checks; no local heavy-compute fallback is permitted by project policy.
+
+## Release boundary
+
+- No deployment was performed.
+- No merge was performed.
+- Numeric scoring remains locked.
+- Private consented learner replay retention remains targeted at 30 days; this patch does not claim new retention-policy acceptance evidence.
+- Post-session feedback remains a required product behavior and must not be represented as accepted solely from this interlocutor-boundary work.
+
+Acceptance remains blocked until fresh remote verification actually runs and passes.
