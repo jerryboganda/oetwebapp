@@ -872,7 +872,11 @@ export async function bootstrapBrowserSessionForRole(
 
   try {
     const signInResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/sign-in`, {
-      headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: defaultAppOrigin,
+        [deviceIdHeaderName]: e2eDeviceId,
+      },
       data: {
         email: account.email,
         password: account.password,
@@ -910,7 +914,11 @@ export async function bootstrapBrowserSessionForRole(
     let lastError: unknown = null;
     for (const code of generateTotpCandidates(bootstrapState.secretKey)) {
       const challengeResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/mfa/challenge`, {
-        headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: defaultAppOrigin,
+          [deviceIdHeaderName]: e2eDeviceId,
+        },
         data: {
           email: account.email,
           code,
