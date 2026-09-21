@@ -61,4 +61,26 @@ describe('GetAppPage download badges', () => {
     expect(ios).toHaveAttribute('aria-disabled', 'true');
     expect(screen.queryByRole('link', { name: IOS_BADGE_NAME })).toBeNull();
   });
+
+  it('disables the Mac download and points candidates at the Web App while the handover kill-switch is armed', () => {
+    process.env.NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED = '1';
+    try {
+      render(<GetAppPage />);
+
+      // No Mac link anywhere: the badge renders inert with the redirect note.
+      expect(screen.queryByRole('link', { name: 'Download the OET app for Mac' })).toBeNull();
+      const mac = screen.getByLabelText(/Download the OET app for Mac — Use Web App/);
+      expect(mac.tagName).toBe('SPAN');
+      expect(mac).toHaveAttribute('aria-disabled', 'true');
+      expect(screen.getAllByText(/Temporarily unavailable/).length).toBeGreaterThan(0);
+
+      // Other platforms stay untouched.
+      expect(screen.getByRole('link', { name: 'Download the OET app for Windows' })).toHaveAttribute(
+        'href',
+        WINDOWS_DOWNLOAD_URL,
+      );
+    } finally {
+      delete process.env.NEXT_PUBLIC_MAC_DOWNLOAD_DISABLED;
+    }
+  });
 });

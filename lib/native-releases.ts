@@ -1,5 +1,8 @@
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
+import { isMacDownloadDisabled } from '@/lib/app-downloads';
+
+export { isMacDownloadDisabled };
 
 export const DEFAULT_RELEASES_ROOT = '/var/opt/oet-learner/releases';
 export const DEFAULT_PUBLIC_BASE_URL = 'https://app.oetwithdrhesham.co.uk';
@@ -113,6 +116,10 @@ export function resolveDownloadUrl(platform: DownloadPlatform): string | null {
     const release = readMobileRelease(platform);
     return release && isTrustedReleaseUrl(release.downloadUrl) ? release.downloadUrl : null;
   }
+
+  // Mac kill-switch: refuse before any feed lookup so neither downloads.mac
+  // nor a legacy platform dmg can leak through while the flag is armed.
+  if (platform === 'mac' && isMacDownloadDisabled()) return null;
 
   const feed = readDesktopFeed();
   const download = feed?.downloads?.[platform];

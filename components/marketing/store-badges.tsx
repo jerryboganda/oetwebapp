@@ -67,10 +67,14 @@ export function PlatformGlyph({ platform, className }: PlatformGlyphProps) {
 
 export interface PlatformDownloadBadgeProps {
   platform: PlatformKey;
-  /** Destination URL. `null` renders a non-interactive "coming soon" badge —
+  /** Destination URL. `null` renders a non-interactive disabled badge —
    * used for iOS until an Apple-approved link (App Store / TestFlight) exists,
+   * and for macOS while the handover kill-switch keeps its download disabled,
    * so candidates are never offered a download that cannot install. */
   href: string | null;
+  /** Short note shown next to the label on the disabled badge
+   * (e.g. "Soon" for iOS, "Use Web App" for the disabled mac download). */
+  disabledNote?: string;
   compact?: boolean;
   className?: string;
 }
@@ -79,7 +83,7 @@ const badgeBaseClassName = 'inline-flex w-full items-center justify-center round
 
 const badgeDisabledClassName = 'inline-flex w-full cursor-not-allowed items-center justify-center rounded-2xl border border-dashed border-border bg-surface text-muted shadow-none';
 
-export function PlatformDownloadBadge({ platform, href, compact = false, className }: PlatformDownloadBadgeProps) {
+export function PlatformDownloadBadge({ platform, href, disabledNote = 'Soon', compact = false, className }: PlatformDownloadBadgeProps) {
   const label = PLATFORM_LABELS[platform];
   const ariaLabel = PLATFORM_ARIA_LABELS[platform];
   const sizeClassName = compact ? 'h-16 gap-3 px-5' : 'h-14 gap-3 px-4 sm:h-20 sm:gap-4 sm:px-6';
@@ -92,7 +96,7 @@ export function PlatformDownloadBadge({ platform, href, compact = false, classNa
     return (
       <span
         aria-disabled="true"
-        aria-label={`${ariaLabel} — coming soon`}
+        aria-label={`${ariaLabel} — ${disabledNote}`}
         className={cn(badgeDisabledClassName, sizeClassName, className)}
       >
         <PlatformGlyph
@@ -102,7 +106,7 @@ export function PlatformDownloadBadge({ platform, href, compact = false, classNa
         <span className={cn(labelClassName, 'text-muted')}>
           {label}
           <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide opacity-80">
-            Soon
+            {disabledNote}
           </span>
         </span>
       </span>
@@ -128,15 +132,23 @@ export type AppDownloadLinks = Record<PlatformKey, string | null>;
 
 interface AppDownloadGridProps {
   links: AppDownloadLinks;
+  /** Per-platform note for disabled (null-link) badges — see disabledNote. */
+  disabledNotes?: Partial<Record<PlatformKey, string>>;
   compact?: boolean;
   className?: string;
 }
 
-export function AppDownloadGrid({ links, compact = false, className }: AppDownloadGridProps) {
+export function AppDownloadGrid({ links, disabledNotes, compact = false, className }: AppDownloadGridProps) {
   return (
     <div className={cn('grid w-full grid-cols-1 gap-3 min-[520px]:grid-cols-2', className)}>
       {PLATFORM_ORDER.map((platform) => (
-        <PlatformDownloadBadge key={platform} platform={platform} href={links[platform]} compact={compact} />
+        <PlatformDownloadBadge
+          key={platform}
+          platform={platform}
+          href={links[platform]}
+          disabledNote={disabledNotes?.[platform]}
+          compact={compact}
+        />
       ))}
     </div>
   );

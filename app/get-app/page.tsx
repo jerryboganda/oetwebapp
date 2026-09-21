@@ -16,6 +16,7 @@ import {
   detectVisitorOs,
   IOS_DOWNLOAD_CHANNEL,
   IOS_DOWNLOAD_URL,
+  isMacDownloadDisabled,
   MAC_DOWNLOAD_URL,
   WINDOWS_DOWNLOAD_URL,
   type DesktopOsKind,
@@ -30,6 +31,8 @@ const GET_APP_URL = 'https://app.oetwithdrhesham.co.uk/get-app';
 
 const OS_CTA: Partial<Record<DesktopOsKind, { platform: PlatformKey; href: string | null }>> = {
   windows: { platform: 'windows', href: WINDOWS_DOWNLOAD_URL },
+  // mac href is null while the handover kill-switch is armed (17 Sep 2026):
+  // the badge renders disabled and Mac candidates are pointed at the Web App.
   mac: { platform: 'mac', href: MAC_DOWNLOAD_URL },
   android: { platform: 'android', href: ANDROID_INSTALL_URL },
   ios: { platform: 'ios', href: IOS_DOWNLOAD_URL },
@@ -45,6 +48,10 @@ const FEATURES = [
 export default function GetAppPage() {
   const [visitorOs, setVisitorOs] = useState<DesktopOsKind>('unknown');
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  // Render-time kill-switch check (17 Sep 2026 handover): null sends the Mac
+  // badge to its disabled state pointing Mac candidates at the Web App.
+  const macDisabled = isMacDownloadDisabled();
+  const macHref = macDisabled ? null : MAC_DOWNLOAD_URL;
 
   useEffect(() => {
     setVisitorOs(detectVisitorOs());
@@ -66,7 +73,15 @@ export default function GetAppPage() {
     };
   }, []);
 
-  const heroCta = useMemo(() => OS_CTA[visitorOs] ?? null, [visitorOs]);
+  const heroCta = useMemo(
+    () => {
+      const cta = OS_CTA[visitorOs] ?? null;
+      if (!cta) return null;
+      // The mac kill-switch applies wherever a Mac visitor lands (hero or card).
+      return cta.platform === 'mac' ? { ...cta, href: macHref } : cta;
+    },
+    [visitorOs, macHref],
+  );
 
   return (
     <main className="min-h-screen bg-background-light">
@@ -89,6 +104,7 @@ export default function GetAppPage() {
             <PlatformDownloadBadge
               platform={heroCta.platform}
               href={heroCta.href}
+              disabledNote={heroCta.platform === 'mac' && macDisabled ? 'Use Web App' : undefined}
               className="mx-auto mt-6 max-w-[240px]"
             />
           )}
@@ -108,9 +124,18 @@ export default function GetAppPage() {
             <PlatformGlyph platform="mac" className="h-8 w-8 text-primary shrink-0 transition-transform duration-200 group-hover:scale-105" />
             <div className="my-3 flex flex-1 flex-col items-center justify-start w-full min-h-[64px] sm:min-h-[76px]">
               <h2 className="text-sm sm:text-base font-bold text-navy">macOS</h2>
-              <p className="mt-1 text-xs text-muted leading-relaxed">Universal .dmg — Intel & Apple Silicon (M1/M2/M3/M4) — auto-updates</p>
+              <p className="mt-1 text-xs text-muted leading-relaxed">
+                {macDisabled
+                  ? 'Temporarily unavailable — please use the Web App in the meantime'
+                  : 'Universal .dmg — Intel & Apple Silicon (M1/M2/M3/M4) — auto-updates'}
+              </p>
             </div>
-            <PlatformDownloadBadge platform="mac" href={MAC_DOWNLOAD_URL} className="w-full max-w-[220px] mt-auto justify-center" />
+            <PlatformDownloadBadge
+              platform="mac"
+              href={macHref}
+              disabledNote={macDisabled ? 'Use Web App' : undefined}
+              className="w-full max-w-[220px] mt-auto justify-center"
+            />
           </div>
 
           <div className="group flex h-full flex-col items-center rounded-2xl border border-border bg-surface p-5 sm:p-6 text-center shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-primary hover:shadow-md hoverable:-translate-y-0.5">
