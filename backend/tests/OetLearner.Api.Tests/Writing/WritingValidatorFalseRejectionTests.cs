@@ -102,9 +102,12 @@ public sealed class WritingValidatorFalseRejectionTests
     public void DischargePlan_NoInstructions_StillFiresWithoutADose()
     {
         const string notes = "Advised preservative-free lubricants as required.";
-        var findings = Lint(Letter("Mrs Helen Morris, DOB: 27 April 1956",
-            "I am writing about Mrs Morris, whose bilateral cataract surgery was uncomplicated."),
-            "discharge", notes, ExamProfession.Optometry);
+        // The template's contact line ("Should there be any queries...") reads as an instruction, so drop it:
+        // this letter must carry no post-discharge instruction at all.
+        var letter = Letter("Mrs Helen Morris, DOB: 27 April 1956",
+                "I am writing about Mrs Morris, whose bilateral cataract surgery was uncomplicated.")
+            .Replace("Should there be any queries, kindly do not hesitate to contact me.", "Thank you for your help.");
+        var findings = Lint(letter, "discharge", notes, ExamProfession.Optometry);
         Assert.True(Fires(findings, DischargeCheck));
     }
 }
