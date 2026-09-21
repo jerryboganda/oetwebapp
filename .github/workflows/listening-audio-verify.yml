@@ -33,7 +33,7 @@ jobs:
         with:
           node-version: 22
       - name: Unit tests (semantic checks)
-        run: node --test scripts/listening/lib/
+        run: node --test scripts/listening/lib/semantic.test.mjs
       - name: Fetch and open evidence
         run: |
           T=scripts/listening/verify-run-trigger.txt
