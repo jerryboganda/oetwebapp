@@ -316,7 +316,14 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     /// </summary>
     private static readonly System.Text.Json.JsonElement DefaultLatinParams =
         System.Text.Json.JsonDocument.Parse(
-            """{"map":{"od":"once a day","om":"once a day","bd":"twice a day","bid":"twice a day","tds":"three times a day","tid":"three times a day","qds":"four times a day","qid":"four times a day","stat":"immediately","prn":"as needed","nocte":"at night","mane":"in the morning"}}""").RootElement;
+            // Owner list (18 Sep 2026), plus the dotted spellings the case notes actually use
+            // ("p.r.n.", "b.d."). q4h/q6h/q8h/q12h are matched by shape in LatinEveryNHoursRe
+            // rather than listed here, since the hour count is open-ended.
+            // "od" (omni die) is genuinely both a frequency abbreviation AND optometry's oculus
+            // dexter, so it stays in the map and stands down for optometry only. "os" (oculus
+            // sinister) and "ou" (oculus uterque) are ONLY eye terms — never a dosing frequency —
+            // so they are not frequency violations in any profession and are deliberately absent.
+            """{"map":{"od":"once a day","om":"once a day","bd":"twice daily","b.d":"twice daily","bid":"twice daily","b.i.d":"twice daily","tds":"three times daily","t.d.s":"three times daily","tid":"three times daily","t.i.d":"three times daily","qds":"four times daily","q.d.s":"four times daily","qid":"four times daily","q.i.d":"four times daily","stat":"immediately","prn":"as needed","p.r.n":"as needed","nocte":"at night","mane":"in the morning"}}""").RootElement;
 
     public IReadOnlyList<LintFinding> Lint(WritingLintInput input)
     {
@@ -652,7 +659,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "respiratory_rate_unit_style" => DetectRespiratoryRateUnitStyle,
         "illogical_quantity_range" => DetectIllogicalQuantityRange,
         "vague_clinical_object" => DetectVagueClinicalObject,
-        "letter_date_unsupported" => Compose(DetectLetterDateUnsupported, DetectSaG6LetterDateUnsupported),
+        "letter_date_unsupported" => Compose(DetectLetterDateUnsupported, DetectSaG6LetterDateUnsupported, DetectLetterDateUnverifiable),
         "recipient_name_mismatch" => DetectRecipientNameMismatch,
         "patient_name_spelling" => DetectPatientNameSpelling,
         "re_line_dob_priority" => Compose(DetectReLineDobPriority, DetectSaG3ReLineDobBornOn),
@@ -808,8 +815,13 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 
     private static IEnumerable<LintFinding> DetectStructureOrder(OetRule rule, WritingLintInput input, LetterStructure s)
     {
+        // Owner decision (19 Sep 2026): where the SOURCE gives no day-level date the letter date is
+        // optional, for a candidate as much as for a Model Answer — a candidate is never penalised for
+        // omitting a date the task cannot support. Only an explicit MonthOnly/None classification
+        // relaxes this; Unknown (a caller that did not classify) keeps the date required.
+        var dateOptional = DateLineOptional(input.DateAnchor) && s.DateIndex is null;
         var missing = new List<string>();
-        if (s.DateIndex is null) missing.Add("Date");
+        if (s.DateIndex is null && !dateOptional) missing.Add("Date");
         if (s.SalutationIndex is null) missing.Add("Salutation (Dear ...)");
         if (s.ReLineIndex is null) missing.Add("Re: line");
         if (s.YoursIndex is null) missing.Add("Yours sincerely/faithfully");
@@ -818,7 +830,9 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
             yield return new LintFinding(rule.Id, rule.Severity, $"Letter structure is missing: {string.Join(", ", missing)}.");
             yield break;
         }
-        int[] ord = { s.DateIndex!.Value, s.SalutationIndex!.Value, s.ReLineIndex!.Value, s.YoursIndex!.Value };
+        int[] ord = dateOptional
+            ? new[] { s.SalutationIndex!.Value, s.ReLineIndex!.Value, s.YoursIndex!.Value }
+            : new[] { s.DateIndex!.Value, s.SalutationIndex!.Value, s.ReLineIndex!.Value, s.YoursIndex!.Value };
         for (int i = 1; i < ord.Length; i++)
             if (ord[i] <= ord[i - 1])
             {
@@ -1233,7 +1247,12 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         if (!headerMatch.Success) yield break;
         var headerDateText = headerMatch.Value.Trim();
 
-        var m = Regex.Match(s.Body, Regex.Escape(headerDateText), RegexOptions.IgnoreCase);
+        // Cross-profession repair (18 Sep 2026): the header date was matched as a bare substring,
+        // so a letter dated "5 May 2017" was flagged for the body's "his discharge on 15 May 2017"
+        // — the header date sits inside "1|5 May 2017". Mr Joe Black's letter could only pass by
+        // dropping the year off a different, legitimate date. A digit may not precede the day.
+        var m = Regex.Match(s.Body, @"(?<![\d/.\-])" + Regex.Escape(headerDateText) + @"(?![\d/.\-])",
+            RegexOptions.IgnoreCase);
         if (m.Success)
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Never repeat today's date (the letter's own header date) in the body. Replace the WHOLE date phrase with 'today' ('presented on 13 June 2020' -> 'presented today'), never leave a preposition before it ('on today', 'at review on today'), and keep an EARLIER visit's own source date.",
@@ -1345,20 +1364,60 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     // deterministically. So this stays advisory-only: downgraded to
     // RuleSeverity.Minor regardless of rule.Severity, matching the established
     // DetectBodyLength advisory pattern above.
+    // Owner hard rule (18 Sep 2026): a medication-frequency abbreviation must be written in plain
+    // English in a candidate-facing Model Answer, and an answer carrying one must not reach
+    // READY/PUBLISHED. Previously this detector emitted RuleSeverity.Minor with "Consider
+    // translating ... unless you are confident the recipient's convention supports it" — advisory,
+    // so "PRN" could publish despite the check being registered Critical. For a Model Answer the
+    // finding now carries the rule's real severity; a CANDIDATE letter keeps the advisory Minor,
+    // because a candidate writing "BD" is a style note to feed back, not a publication gate.
+    //
+    // Accepted clinical abbreviations (MRI, CT, IV, ...) are deliberately NOT in the map: the rule
+    // expands frequency shorthand only.
     private static IEnumerable<LintFinding> DetectLatinAbbreviations(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (!rule.Params.HasValue || !rule.Params.Value.TryGetProperty("map", out var mapEl)) yield break;
+        var severity = input.IsModelAnswer ? ModeSeverity(input, rule.Severity) : RuleSeverity.Minor;
+        var verb = input.IsModelAnswer ? "Translate" : "Consider translating";
         foreach (var prop in mapEl.EnumerateObject())
         {
-            var re = new Regex($@"\b{Regex.Escape(prop.Name)}\b", RegexOptions.IgnoreCase);
+            // Optometry writes OD / OS / OU for the right eye, left eye and both eyes. Reading
+            // those as "once a day" would fail a correct optometry letter, so the eye abbreviations
+            // stand down for that profession — the frequency tokens (prn, bd, tds, ...) still apply.
+            if (IsEyeLateralityToken(prop.Name) && input.Profession == ExamProfession.Optometry) continue;
+            var re = new Regex($@"(?<![A-Za-z]){Regex.Escape(prop.Name)}(?![A-Za-z])", RegexOptions.IgnoreCase);
             var m = re.Match(s.Body);
             if (m.Success)
-                yield return new LintFinding(rule.Id, RuleSeverity.Minor,
-                    $"Consider translating Latin abbreviation \"{prop.Name}\" to plain English (\"{prop.Value.GetString()}\") unless you are confident the recipient's convention supports it.",
+                yield return new LintFinding(rule.Id, severity,
+                    $"{verb} the prescription abbreviation \"{prop.Name}\" into plain English (\"{prop.Value.GetString()}\").",
                     Quote: m.Value, Start: m.Index, End: m.Index + m.Length,
                     FixSuggestion: prop.Value.GetString());
         }
+        // "q6h" / "q 8 h" style shorthand is not a fixed token list, so it is matched by shape.
+        foreach (Match m in LatinEveryNHoursRe.Matches(s.Body))
+        {
+            var hours = m.Groups["h"].Value;
+            yield return new LintFinding(rule.Id, severity,
+                $"{verb} the prescription abbreviation \"{m.Value.Trim()}\" into plain English (\"every {SpellSmallNumber(hours)} hours\").",
+                Quote: m.Value.Trim(), Start: m.Index, End: m.Index + m.Length,
+                FixSuggestion: $"every {SpellSmallNumber(hours)} hours");
+        }
     }
+
+    private static readonly Regex LatinEveryNHoursRe =
+        new(@"(?<![A-Za-z])q\.?\s?(?<h>\d{1,2})\s?h(?:rs?)?(?![A-Za-z])", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // Only "od" is ambiguous: omni die (once a day) in a prescription, oculus dexter (right eye) in
+    // optometry. "os"/"ou" are eye terms only and are not in the frequency map at all.
+    private static bool IsEyeLateralityToken(string token) =>
+        token.Equals("od", StringComparison.OrdinalIgnoreCase);
+
+    private static string SpellSmallNumber(string digits) => digits switch
+    {
+        "1" => "one", "2" => "two", "3" => "three", "4" => "four", "6" => "six",
+        "8" => "eight", "12" => "twelve", "24" => "twenty-four",
+        _ => digits,
+    };
 
     // R12.1 — an isolated contraction is a Genre/Style note, not a catastrophic
     // grammar failure (rulebook DH-W-044 / G-W-117, FINAL MASTER 2026-08-31).
@@ -1633,8 +1692,14 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     private static IEnumerable<LintFinding> DetectClosureConsent(OetRule rule, WritingLintInput input, LetterStructure s)
     {
         if (input.CaseNotesMarkers?.ConsentDocumented != true) yield break;
+        // Cross-profession repair (18 Sep 2026): only the SINGULAR "has consented" counted, so
+        // Kevin Brown's notes — "Parents consented to referral to the family doctor" — could be
+        // stated faithfully only as "his parents have consented", which failed. The passing text
+        // the stored answer had used instead was an invented sentence ("Kevin has been informed of
+        // the diagnosis and management plan"). Plural consent, and consent recorded as obtained,
+        // now count.
         if (!Regex.IsMatch(input.LetterText,
-            @"\b(fully informed|has consented|has been informed|aware of (his|her) (diagnosis|management))\b",
+            @"\b(fully informed|ha(?:s|ve) consented|consent was obtained|ha(?:s|ve) been informed|aware of (his|her|their) (diagnosis|management))\b",
             RegexOptions.IgnoreCase))
             yield return new LintFinding(rule.Id, rule.Severity,
                 "Consent was documented in case notes — include the consent statement in closure.");
