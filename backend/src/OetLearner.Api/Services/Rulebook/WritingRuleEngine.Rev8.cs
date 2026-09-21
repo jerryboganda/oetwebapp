@@ -46,7 +46,7 @@ public sealed partial class WritingRuleEngine
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.owner-clarifications-4.2026-09-17.1";
+    public const string ValidatorVersion = "writing-rules.owner-clarifications-4.2026-09-21.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -2215,7 +2215,7 @@ private static string? ReLineSurname(string reLine)
 
     // OA4-04 — Detect malformed "today" phrasing (e.g. "on today", "at review on today", "pathology on today")
     private static readonly Regex MalformedTodayRe = new(
-        @"\b(?:on\s+today|at\s+review\s+on\s+today|pathology\s+on\s+today|confirmed\s+on\s+today|reviewed\s+alone\s+on\s+today|presented\s+on\s+today)\b",
+        @"\b(?:on\s+today|at\s+review\s+on\s+today|pathology\s+on\s+today|confirmed\s+on\s+today|reviewed\s+alone\s+on\s+today|presented\s+on\s+today)\b(?!['’]s\b)",
         RegexOptions.IgnoreCase);
 
     private static IEnumerable<LintFinding> DetectMalformedTodayPhrasing(OetRule rule, WritingLintInput input, LetterStructure s)

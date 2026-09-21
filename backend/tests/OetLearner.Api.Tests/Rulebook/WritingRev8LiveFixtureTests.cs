@@ -428,7 +428,7 @@ Physiotherapist
     [Fact]
     public void Validator_Version_Is_Stamped_And_RulePack_Fingerprint_Is_Stable()
     {
-        Assert.Equal("writing-rules.owner-clarifications-4.2026-09-17.1", WritingRuleEngine.ValidatorVersion);
+        Assert.Equal("writing-rules.owner-clarifications-4.2026-09-21.1", WritingRuleEngine.ValidatorVersion);
         var a = _engine.RulePackFingerprint(ExamProfession.Medicine);
         var b = _engine.RulePackFingerprint(ExamProfession.Medicine);
         Assert.StartsWith("rp-", a);

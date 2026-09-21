@@ -316,9 +316,13 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
     [InlineData("Today, Mr Taylor presented")]
     [InlineData("At review today, Mr Taylor presented")]
     [InlineData("On 13 June 2020, Mr Taylor presented")]
+    [InlineData("On today's review, Mr Taylor presented")]
+    [InlineData("On today’s review, Mr Taylor presented")]
     public void OA4_04_Natural_Today_Forms_Pass(string opening)
     {
-        var letter = Inject(Taylor, "Today, Mr Taylor presented", opening);
+        var letter = opening == "Today, Mr Taylor presented"
+            ? Taylor
+            : Inject(Taylor, "Today, Mr Taylor presented", opening);
         AssertRuleDoesNotFire(Lint(letter, "LT-UR"), "malformed_today_phrasing");
         AssertRuleDoesNotFire(Lint(letter, "LT-UR", isModelAnswer: false), "malformed_today_phrasing");
     }
