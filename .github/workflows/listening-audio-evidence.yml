@@ -44,7 +44,8 @@ jobs:
         run: |
           EXTRA=$(grep -E '^extra:' scripts/listening/asr-run-trigger.txt | head -1 | cut -d: -f2 | tr -d ' ' || true)
           ONLY=""; grep -qE '^only-extra' scripts/listening/asr-run-trigger.txt && ONLY="--only-extra" || true
-          node scripts/listening/evidence.mjs plan --shards 12 --out plan.json --token-out token.json --extra "$EXTRA" $ONLY
+          SHARDS=$(grep -E '^shards:' scripts/listening/asr-run-trigger.txt | head -1 | cut -d: -f2 | tr -d ' ' || true)
+          node scripts/listening/evidence.mjs plan --shards "${SHARDS:-12}" --out plan.json --token-out token.json --extra "$EXTRA" $ONLY
           # One sign-in for the whole run (a new sign-in revokes every earlier token): share it, sealed, with the shards.
           node scripts/listening/seal.mjs seal token.json token.sealed
       - uses: actions/upload-artifact@v4

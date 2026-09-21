@@ -79,6 +79,7 @@ async function plan() {
   let shards = Number(arg('--shards', 12));
   const extra = (arg('--extra', '') || '').split(',').map((s) => s.trim()).filter(Boolean); // candidate media assets (uploaded, not yet attached)
   const onlyExtra = has('--only-extra');
+  if (arg('--token-out')) await signIn(); // one session for the whole run, shared (sealed) with the shards
   const papers = [];
   for (let page = 1; !onlyExtra; page++) {
     const batch = await getJson(`/v1/admin/papers?subtest=listening&page=${page}&pageSize=100`);
