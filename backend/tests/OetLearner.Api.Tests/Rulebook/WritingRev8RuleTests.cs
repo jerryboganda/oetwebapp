@@ -831,11 +831,11 @@ public sealed class WritingRev8RuleTests
     {
         var minorRe = "Re: Sally Webster, DOB: 10 November 2003";
         var badLetter = Letter(minorRe, "I am writing to refer Ms Webster, aged 16.", "Ms Webster presented with weight loss.", TaylorClosure);
-        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral", patientIsMinor: true),
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral", minor: true),
             f => f.RuleId == "BUILTIN.minor_naming_convention");
 
         var goodLetter = Letter(minorRe, "I am writing to refer Sally, a 16-year-old high school student.", "Sally presented with weight loss.", TaylorClosure);
-        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral", patientIsMinor: true),
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral", minor: true),
             f => f.RuleId == "BUILTIN.minor_naming_convention");
     }
 
