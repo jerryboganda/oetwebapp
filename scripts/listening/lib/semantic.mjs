@@ -25,14 +25,20 @@ export function containment(a, b, n = 4) {
 }
 
 // ── cues ─────────────────────────────────────────────────────────────────────
+// ASR sometimes hears "Extract" as "Act" or "Track", so the question range ("questions 13 to 24") is an equal cue.
+// Some sources (Atlas 12-15) never say "Extract Two": the second extract is introduced as
+// "You will hear part of a consultation between ..." (still followed by its preparation pause).
 export const CUE = {
-  extractTwo: /\bextract\s+(two|2|to|too|tu)\b/i,
-  extractOne: /\bextract\s+(one|1|won)\b/i,
+  extractTwo: /\b(?:extract|act|track|extra)\s+(?:two|2|to|too|tu)\b/i,
+  questionsA2: /\bquestions?\s+13\s*(?:to|-|–|through)\s*24\b/i,
+  questionsC2: /\bquestions?\s+37\s*(?:to|-|–|through)\s*42\b/i,
+  intro: /\byou (?:will )?hear (?:part of )?(?:a|an) (?:consultation|talk|interview|presentation|discussion|lecture|conversation)\b/i,
   endOfPartA: /\bend of part a\b/i,
 };
 export function findCue(segs, re, from = 0, to = Infinity) {
   return segs.find((s) => s.end > from && s.start < to && re.test(s.text)) ?? null;
 }
+const anyCue = (section) => new RegExp([CUE.extractTwo, section === 'C2' ? CUE.questionsC2 : CUE.questionsA2, CUE.intro].map((r) => r.source).join('|'), 'i');
 
 // ── silence map helpers ──────────────────────────────────────────────────────
 export function leadingSilence(silences) {
@@ -59,24 +65,25 @@ const res = (id, level, detail) => ({ id, level, detail });
 /** Destination section head (A2/C2): starts at the Extract Two cue and keeps the full preparation window. */
 export function checkDestinationHead(section, segs, silences) {
   const prepPass = section === 'C2' ? 75 : 24;   // nominal 90 s / 30 s
-  const prepFail = section === 'C2' ? 45 : 15;
+  const prepFail = section === 'C2' ? 60 : 20;
   const out = [];
-  const cue = findCue(segs, CUE.extractTwo, 0, 75);
+  const cue = findCue(segs, anyCue(section), 0, 75);
   if (!cue) {
-    out.push(res('head_cue', 'fail', `no "Extract Two" cue in the first 75 s (leading silence ${leadingSilence(silences).toFixed(1)} s)`));
+    out.push(res('head_cue', 'fail', `no second-extract introduction in the first 75 s (leading silence ${leadingSilence(silences).toFixed(1)} s)`));
     return out;
   }
-  out.push(res('head_cue', cue.start <= 12 ? 'pass' : 'review', `Extract Two cue at ${cue.start.toFixed(1)} s`));
+  out.push(res('head_cue', cue.start <= 12 ? 'pass' : 'review', `second-extract introduction at ${cue.start.toFixed(1)} s`));
   const prep = longestSilence(silences, cue.start, cue.start + (section === 'C2' ? 150 : 90));
   out.push(res('prep_window', prep >= prepPass ? 'pass' : prep >= prepFail ? 'review' : 'fail', `longest silence after the cue ${prep.toFixed(1)} s (nominal ${section === 'C2' ? 90 : 30} s)`));
   return out;
 }
 
 /** Source section tail (A1/C1): must not still carry the next section's Extract Two introduction. */
-export function checkSourceTail(segs, dur) {
-  const cue = findCue(segs, CUE.extractTwo, Math.max(0, dur - 120));
+export function checkSourceTail(segs, dur, section = 'A1') {
+  const re = new RegExp([CUE.extractTwo, section === 'C1' ? CUE.questionsC2 : CUE.questionsA2, CUE.intro].map((r) => r.source).join('|'), 'i');
+  const cue = findCue(segs, re, Math.max(0, dur - 120));
   return [cue
-    ? res('next_intro_in_tail', 'fail', `Extract Two introduction still inside this section at ${cue.start.toFixed(1)} s`)
+    ? res('next_intro_in_tail', 'fail', `next extract's introduction still inside this section at ${cue.start.toFixed(1)} s`)
     : res('next_intro_in_tail', 'pass', 'no next-section introduction in the last 120 s')];
 }
 

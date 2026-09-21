@@ -171,13 +171,13 @@
   "title": "Atlas Practice Series — Listening Sample Test 9 (Q37–42 unavailable)",
   "admin": {
    "A1": 596,
-   "A2": 279,
+   "A2": 315,
    "B": 492,
    "C1": 415
   },
   "learner": {
    "A1": 596,
-   "A2": 279,
+   "A2": 315,
    "B": 492,
    "C1": 415
   },
@@ -367,17 +367,17 @@
   "title": "Atlas Practice Series — Listening Sample Test 8",
   "admin": {
    "A1": 408,
-   "A2": 253,
-   "B": 278,
-   "C1": 307,
-   "C2": 469
+   "A2": 295,
+   "B": 526,
+   "C1": 490,
+   "C2": 593
   },
   "learner": {
-   "C2": 469,
+   "C2": 593,
    "A1": 408,
-   "A2": 253,
-   "B": 278,
-   "C1": 307
+   "A2": 295,
+   "B": 526,
+   "C1": 490
   },
   "learnerSource": "relational"
  },

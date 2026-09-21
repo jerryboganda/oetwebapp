@@ -1,0 +1,4 @@
+verify run 1: fleet state after ST8/ST9 repair
+plan_run: 35662307434
+evidence_runs: 35662307434,35664076043
+

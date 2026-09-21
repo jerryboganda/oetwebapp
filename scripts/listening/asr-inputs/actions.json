@@ -1,0 +1,11 @@
+[
+  { "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0", "section": "A1", "action": "split from the shared parent file: new file = source Atlas 8 Part A FIXED.mp3 0-365.69 s (Extract 1 + 10 s transition); paper hidden since 2026-09-21 21:15 UTC pending learner-flow test and human listen", "newDuration": 365.7, "newTimer": "" },
+  { "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0", "section": "A2", "action": "split from the shared parent file: source Part A 365.69-644.76 s (Extract 2 intro, 30 s prep, dialogue, closing); timer raised 253 to 295 s (SQL)", "newDuration": 279.1, "newTimer": 295 },
+  { "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0", "section": "B", "action": "Part B timer raised 278 to 526 s (SQL; audio 510.3 s); audio unchanged", "newDuration": "", "newTimer": 526 },
+  { "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0", "section": "C1", "action": "split from the shared parent file: source Part C FIXED.mp3 0-474.02 s; timer raised 307 to 490 s (SQL)", "newDuration": 474.0, "newTimer": 490 },
+  { "paperId": "8625c6f593d440c1aeaf7a87ab34d4c0", "section": "C2", "action": "split from the shared parent file: source Part C 474.02-1051.58 s (intro, 90 s prep, talk, closing, intentional 120 s check-your-answers silence kept); timer raised 469 to 593 s (SQL)", "newDuration": 577.6, "newTimer": 593 },
+  { "paperId": "346bd9d66cbe4c8bb657cb674565925c", "section": "A1", "action": "recut from source part A 1.mp3 0-246.17 s (Extract 1 only; the glued duplicate Extract 2 removed); old file kept as non-primary for rollback", "newDuration": 246.2, "newTimer": "" },
+  { "paperId": "346bd9d66cbe4c8bb657cb674565925c", "section": "A2", "action": "recut from source part A 1.mp3 246.17-545.57 s (Extract 2 intro, 30 s prep, dialogue, closing line); timer raised 279 to 315 s (SQL); old file kept as non-primary for rollback", "newDuration": 299.4, "newTimer": 315 },
+  { "paperId": "4077206b041a48f6ae736130c00d16a4", "section": "A2", "action": "authored timer raised 313 s to 329 s (JSON-only paper: this is the learner timer)", "newDuration": "", "newTimer": 329 },
+  { "paperId": "4077206b041a48f6ae736130c00d16a4", "section": "C2", "action": "authored timer raised 389 s to 406 s (JSON-only paper: this is the learner timer)", "newDuration": "", "newTimer": 406 }
+]

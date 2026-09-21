@@ -1,0 +1,67 @@
+name: Listening Audio Verify
+
+# Runs the semantic unit tests and the fleet verifier over sealed evidence produced by "Listening Audio Evidence"
+# runs (owner-approved 2026-09-22). All analysis happens here; the report is sealed before upload.
+# Trigger: bump scripts/listening/verify-run-trigger.txt on this branch (lines "plan_run: <id>" and
+# "evidence_runs: <id>,<id>" name the evidence runs to read; later runs fill gaps left by earlier ones).
+
+on:
+  push:
+    branches: [fix/listening-audio-integrity-2026-09-22]
+    paths:
+      - scripts/listening/verify-run-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  EVIDENCE_KEY: ${{ secrets.EVIDENCE_KEY }}
+  GH_TOKEN: ${{ github.token }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/listening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Unit tests (semantic checks)
+        run: node --test scripts/listening/lib/
+      - name: Fetch and open evidence
+        run: |
+          T=scripts/listening/verify-run-trigger.txt
+          PLAN_RUN=$(grep -E '^plan_run:' "$T" | head -1 | cut -d: -f2 | tr -d ' ')
+          RUNS=$(grep -E '^evidence_runs:' "$T" | head -1 | cut -d: -f2 | tr -d ' ')
+          gh run download "$PLAN_RUN" -n plan -D work/plan
+          DIRS=""
+          for R in $(echo "$RUNS" | tr ',' ' '); do
+            mkdir -p "work/ev-$R/flat"
+            gh run download "$R" --pattern 'evidence-*' -D "work/ev-$R/raw" || true
+            for f in $(find "work/ev-$R/raw" -name 'evidence-*.sealed'); do
+              node scripts/listening/seal.mjs open "$f" "work/ev-$R/flat/$(basename "${f%.sealed}").json"
+            done
+            DIRS="$DIRS,work/ev-$R/flat"
+          done
+          echo "EVIDENCE_DIRS=${DIRS#,}" >> "$GITHUB_ENV"
+      - name: Verify fleet
+        run: |
+          node scripts/listening/verify-fleet.mjs --plan work/plan/plan.json --evidence "$EVIDENCE_DIRS" \
+            --timers scripts/listening/asr-inputs/timers.json --inventory scripts/listening/asr-inputs/source-inventory.json \
+            --actions scripts/listening/asr-inputs/actions.json --overrides scripts/listening/asr-inputs/plan-overrides.json --out report \
+            --run-note "Whisper small.en on GitHub Actions run(s) $(grep -E '^evidence_runs:' scripts/listening/verify-run-trigger.txt | cut -d: -f2 | tr -d ' ')"
+      - name: Seal report
+        run: |
+          mkdir -p report-sealed
+          for f in report/*; do node scripts/listening/seal.mjs seal "$f" "report-sealed/$(basename "$f").sealed"; done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fleet-report
+          path: report-sealed/*
+          retention-days: 14
