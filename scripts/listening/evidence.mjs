@@ -36,16 +36,18 @@ const writeJson = (f, d) => { mkdirSync(dirname(f), { recursive: true }); writeF
 const sh = (cmd, args, opts = {}) => spawnSync(cmd, args, { encoding: 'utf-8', maxBuffer: 1 << 27, ...opts });
 
 // ── API ──────────────────────────────────────────────────────────────────────
+// A new sign-in invalidates every earlier token of the account (single active session). So the plan job signs in
+// ONCE and shares the token (sealed) with the shards; shards only sign in again if that token was revoked.
 let token = '', tokenAt = 0;
 async function signIn() {
   const res = await fetch(`${API}/v1/auth/sign-in`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: process.env.OET_ADMIN_EMAIL, password: process.env.OET_ADMIN_PASSWORD, rememberMe: true }) });
   if (!res.ok) throw new Error(`sign-in failed: HTTP ${res.status}`);
   token = (await res.json()).accessToken; tokenAt = Date.now();
 }
-async function authed(path, retried = false) {
-  if (!token || Date.now() - tokenAt > 10 * 60_000) await signIn();
+async function authed(path, retried = 0) {
+  if (!token || Date.now() - tokenAt > 12 * 60_000) await signIn();
   const res = await fetch(`${API}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' } });
-  if (res.status === 401 && !retried) { token = ''; return authed(path, true); }
+  if (res.status === 401 && retried < 4) { token = ''; await sleep(1000 + Math.random() * 4000); return authed(path, retried + 1); }
   return res;
 }
 async function getJson(path) {
@@ -74,9 +76,11 @@ function resolver(assets) {
 }
 
 async function plan() {
-  const shards = Number(arg('--shards', 12));
+  let shards = Number(arg('--shards', 12));
+  const extra = (arg('--extra', '') || '').split(',').map((s) => s.trim()).filter(Boolean); // candidate media assets (uploaded, not yet attached)
+  const onlyExtra = has('--only-extra');
   const papers = [];
-  for (let page = 1; ; page++) {
+  for (let page = 1; !onlyExtra; page++) {
     const batch = await getJson(`/v1/admin/papers?subtest=listening&page=${page}&pageSize=100`);
     if (!Array.isArray(batch) || !batch.length) break;
     papers.push(...batch);
@@ -101,11 +105,16 @@ async function plan() {
     out.push({ paperId: p.id, title: p.title, series: seriesOf(p), status: full.status, candidateVisible: full.candidateVisible ?? null, sections });
     await sleep(100);
   }
+  for (const id of extra) {
+    if (!assets.has(id)) assets.set(id, { assetId: id, file: '(candidate)', dbDur: null, uses: [{ paperId: null, title: 'candidate', section: '?' }], mode: 'full' });
+  }
   const list = [...assets.values()].sort((a, b) => cost(b) - cost(a));
+  shards = Math.max(1, Math.min(shards, list.length));
   const load = Array(shards).fill(0);
   for (const a of list) { const s = load.indexOf(Math.min(...load)); a.shard = s; load[s] += cost(a); }
   const plan = { generatedAt: new Date().toISOString(), apiBase: API, shards, papers: out, assets: list };
   writeJson(arg('--out', 'plan.json'), plan);
+  if (arg('--token-out') && token) writeJson(arg('--token-out'), { token, at: tokenAt }); // sealed by the workflow before upload
   console.log(`papers ${out.length} | assets ${list.length} | full ${list.filter((a) => a.mode === 'full').length} | shard load (min) ${load.map((l) => Math.round(l / 60)).join(',')}`);
 }
 const cost = (a) => (a.mode === 'full' ? (a.dbDur ?? 600) : HEAD_SEC + TAIL_SEC);
@@ -137,6 +146,7 @@ async function run() {
   const limit = Number(arg('--limit', 0)) || Infinity;
   const work = join(outDir, 'work');
   mkdirSync(work, { recursive: true });
+  if (arg('--token-file')) { const t = readJson(arg('--token-file')); token = t.token; tokenAt = t.at; } // shared session from the plan job
   const mine = plan.assets.filter((a) => a.shard === shard).slice(0, limit);
   console.log(`shard ${shard}: ${mine.length} assets`);
 
