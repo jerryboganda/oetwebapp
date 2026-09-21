@@ -51,7 +51,7 @@ public static class WritingCandidateBehaviors
 /// </summary>
 public static class WritingRuleProvenance
 {
-    public const string Version = "owner-clarifications-3-2026-09-16";
+    public const string Version = "owner-clarifications-4-2026-09-17";
 
     public sealed record Provenance(string Tag, string CandidateBehavior);
 
@@ -137,6 +137,14 @@ public static class WritingRuleProvenance
             ["salutation_re_same_line"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.ScoreBearing),
             ["intro_adverbial_comma"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.AcceptAlternative),
             ["patient_title_mismatch"] = new(WritingProvenanceTags.SourceFactTask, WritingCandidateBehaviors.ScoreBearing),
+
+            // --- Owner Clarifications Addendum Four (17 Sep 2026) ---------
+            ["malformed_today_phrasing"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
+            ["missing_possessive_noun"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
+            ["note_style_query"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
+            ["missing_passive_auxiliary"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
+            ["grammar_sentence_fragments"] = new(WritingProvenanceTags.GeneralEnglishValidated, WritingCandidateBehaviors.ScoreBearing),
+            ["signoff_duplicate_designation"] = new(WritingProvenanceTags.OwnerModelAnswerCanonical, WritingCandidateBehaviors.ScoreBearing),
 
             // --- Owner Clarifications Addendum TWO (14 Sep 2026), OA2-01..OA2-20 ---
             // OA2-20 is the firewall: the strict canonical requirements in this

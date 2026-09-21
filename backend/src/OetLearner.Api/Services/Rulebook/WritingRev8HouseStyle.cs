@@ -4,12 +4,14 @@ namespace OetLearner.Api.Services.Rulebook;
 /// Single source of the owner's Writing rule wording — Writing Rule
 /// Enforcement Addendum Revisions 7-8 (11 Sep 2026), the Writing Master
 /// Specification "ULTIMATE FINAL" handoff (13 Sep 2026), the FINAL WRITING
-/// OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15) and
-/// ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20) — rendered into every
+/// OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15), ADDENDUM
+/// TWO (14 Sep 2026, rules OA2-01..OA2-20), ROUND 3 (15 Sep 2026, rules
+/// OA3-01..OA3-05) and ADDENDUM FOUR (17 Sep 2026, rules OA4-01..OA4-09) — rendered into every
 /// consumer so the Model Answer generator, the independent Model Answer
 /// validator and the candidate grader receive the SAME applicable rules, with
 /// only the strictness differing by lane.
-/// Registry rows OWN-W-001..OWN-W-038 + OA-01..OA-15 + OA2-01..OA2-20
+/// Registry rows OWN-W-001..OWN-W-038 + OA-01..OA-15 + OA2-01..OA2-20 +
+/// OA3-01..OA3-05 + OA4-01..OA4-09
 /// (docs/canonical-rules/OET_AI_Rules_Master.jsonl) carry the same content;
 /// <see cref="WritingRuleEngine"/> enforces every machine-checkable rule
 /// deterministically; <see cref="WritingRuleProvenance"/> carries each
@@ -17,7 +19,7 @@ namespace OetLearner.Api.Services.Rulebook;
 /// </summary>
 public static class WritingRev8HouseStyle
 {
-    public const string Version = "owner-clarifications-3-2026-09-16";
+    public const string Version = "owner-clarifications-4-2026-09-17";
 
     /// <summary>
     /// Stricter canonical house style for GENERATED Model Answers. Every item is
@@ -25,7 +27,7 @@ public static class WritingRev8HouseStyle
     /// violations.
     /// </summary>
     public const string ModelAnswerCanonicalRules = """
-        OWNER WRITING RULES — OWNER CLARIFICATIONS ADDENDUM TWO (14 Sep 2026, OA2-01..OA2-20) ON TOP OF ADDENDUM ONE (OA-01..OA-15) + ULTIMATE FINAL — MANDATORY FOR EVERY GENERATED MODEL ANSWER
+        OWNER WRITING RULES — OWNER CLARIFICATIONS ADDENDUM FOUR (17 Sep 2026, OA4-01..OA4-09) ON TOP OF ROUND 3 (OA3-01..OA3-05), ADDENDUM TWO (OA2-01..OA2-20), ADDENDUM ONE (OA-01..OA-15) + ULTIMATE FINAL — MANDATORY FOR EVERY GENERATED MODEL ANSWER
         Source fidelity outranks every stylistic rule
         0a. A catalogue code, template, validator regex or house preference NEVER invents admission, discharge, diagnosis, certainty, dates, treatment, requested action, patient identity or clinical interpretation (OA2 source-facts control). The exact canonical case notes + the exact Writing Task decide WHAT happened; these rules decide only HOW a supported fact is written. If the notes record no date of birth and no age, the Re: line carries the name alone — never an invented DOB.
         Letter-type classification (source fidelity)
@@ -33,7 +35,7 @@ public static class WritingRev8HouseStyle
         Layout and spacing
         1. Recipient name/address block copied from the task with EACH COMPONENT ON ITS OWN LINE (never slash- or comma-joined — convert source commas/slashes to line breaks and preserve exact content), one blank line, the date, one blank line, then "Dear ...," with the "Re:" line on the very next line (the salutation and Re must never share a physical line), one blank line, then the introduction. (OA-11: never "Elsternwick, Vic 3185" on one line, never improvised prose metadata), one blank line, the date, one blank line, then "Dear ...," with the "Re:" line on the very next line.
         2. Exactly one blank line after the Re: line, one blank line between every paragraph (each paragraph is one block, no line breaks inside it), one blank line before "Yours sincerely,"/"Yours faithfully," and one blank line before the professional designation.
-        3. "Yours sincerely," when the recipient is named. "Yours faithfully," when the recipient is genuinely unnamed — and a ROLE is not a name, so a letter addressed to "Dear Admissions Officer," still closes "Yours faithfully,". After the closing phrase write ONLY the professional designation (Doctor, Nurse, Registered Nurse, Pharmacist, Physiotherapist, Dentist, Dietitian, Occupational Therapist, Optometrist, Podiatrist, Radiographer, Speech Pathologist) unless the task supplies the exact writer name. Never add a hospital, department, address, phone or email beneath it.
+        3. "Yours sincerely," when the recipient is named. "Yours faithfully," when the recipient is genuinely unnamed — and a ROLE is not a name, so a letter addressed to "Dear Admissions Officer," still closes "Yours faithfully,". After the closing phrase write ONLY one professional designation (OA4-09: Doctor, Nurse, Registered Nurse, Pharmacist, Physiotherapist, Dentist, Dietitian, Occupational Therapist, Optometrist, Podiatrist, Radiographer, Speech Pathologist) unless the task supplies the exact writer name. Never add a hospital, department, address, phone or email beneath it.
         4. No round, square or curly brackets and no placeholders anywhere. No contractions.
         Salutation (OA2-17)
         4a. When the task gives a named ROLE but no person name, the salutation uses that exact role: "The Admissions Officer" -> "Dear Admissions Officer,". NEVER substitute a synonym ("Dear Admitting Officer,") and never fall back to "Dear Sir/Madam," when a usable role is supplied. Rule-book special salutations such as Emergency Registrar remain role-based. "Dear Sir/Madam," stays acceptable only when no usable name or role exists.
@@ -63,7 +65,7 @@ public static class WritingRev8HouseStyle
         20. No emotional or editorial words (suffer/suffered, unfortunately, regrettably, sadly). No judgmental labels or emotional observations ("appeared anxious"): write precise neutral findings; a clinically documented anxiety DIAGNOSIS may be stated factually. Restore quantities exactly: never "drinking over six to ten standard drinks daily" — "six to ten standard drinks daily". Never "has been overweight long term" — "has long been overweight"; do not label a person "a smoker" when the notes support "continues to smoke".
         21. Linkers: do NOT use but, so, hence, furthermore or moreover, and do not use "also" as a LINKING device (an adverbial "also" inside a clause — "kidney stones were also noted that year" — is correct English and is fine). Use however / therefore / thus / consequently / subsequently / in addition only where logically needed, with "However, ..." at a sentence start.
         21a. Sentence architecture (OA2-07): prefer ONE main clinical action per sentence, or two closely related clauses joined cleanly with "and" when the subject relationship is clear. When the subject or the action changes, start a new sentence. No comma splices. AVOID SEMICOLONS IN ORDINARY NARRATIVE PROSE ENTIRELY — a canonical Model Answer uses a full stop or a normal conjunction, never "...twice daily; dexamethasone was continued..." and never "...in 2010; kidney stones were noted that year." Medication-list separators (rule 19) are the one exception. Do not chain three or four separate clinical actions into one sentence to save words.
-        22. Voice and grammar (OA-09, OA2-09): complete passive forms — "dexamethasone was continued six-hourly", "treatment was changed to benzylpenicillin", never "dexamethasone continued ..." / "treatment changed to ...". "On examination, Ms Garcia was afebrile ...", never "Examination showed afebrile". "bruising on the left arm", not "bruising to her left arm". Positional wording is "when supine", "while supine", "when lying supine" or "in the supine position" — NEVER "on supine position" (OA2-10). A treatment clause never dangles on a specimen (OA3-05): "A catheter urine culture grew Staphylococcus saprophyticus, and Mr McDonald was treated with Keflex for five days.", never "..., treated with five days of Keflex".
+        22. Voice and grammar (OA-09, OA2-09): complete passive forms — "dexamethasone was continued six-hourly", "treatment was changed to benzylpenicillin", never "dexamethasone continued ..." / "treatment changed to ...". "On examination, Ms Garcia was afebrile ...", never "Examination showed afebrile". "bruising on the left arm", not "bruising to her left arm". Positional wording is "when supine", "while supine", "when lying supine" or "in the supine position" — NEVER "on supine position" (OA2-10). A treatment clause never dangles on a specimen (OA3-05): "A catheter urine culture grew Staphylococcus saprophyticus, and Mr McDonald was treated with Keflex for five days.", never "..., treated with five days of Keflex". Formal, complete clinical English is required (OA4-04..OA4-08): write "today" rather than "on today", use a possessive in "Mr Taylor's temperature", write "suspected pneumonia" rather than "query pneumonia", retain passive auxiliaries such as "was discussed", and avoid sentence fragments without a finite main clause.
         22a. Investigation and vital-sign grammar (OA2-08, OA2-11, OA3-04 LATEST): canonical Model Answers state result values with the owner's "at" construction on a COMPLETE result noun — "a white cell count at 1,000", "a reduced glucose level at 10 mg/dL", "an elevated protein level at 70 mg/dL", "the cholesterol level at 6.37 mmol/L", "the C-reactive protein level was/was recorded at 150". Headless values ("reduced glucose 10 mg/dL") and "of" forms ("a white cell count of 1000") are REJECTED, as are fragments like "1000 white cells" when the datum is a count. Never invent a unit the source does not supply. Coordinate two result clauses with "and" or split them into short sentences; never comma-splice them.
         23. Use only facts present in the case notes; preserve every clinical fact, laterality, anatomical site, dose, unit, date, trend and certainty level exactly (a prophylactic intention is never upgraded to a guarantee; a suspicion is never upgraded to a confirmed diagnosis). A relevant abnormal vital sign is reported as its RAW value and unit and is never labelled with a diagnosis the notes did not state — write "the blood pressure was 88/70 mmHg", not "hypotension" (OA2-14). Name vague objects exactly ("possible tophus removal", never bare "possible removal"). Copy the recipient's name EXACTLY as the task spells it — the task spelling controls in both directions.
         """;
@@ -76,8 +78,8 @@ public static class WritingRev8HouseStyle
     /// non-negotiable.
     /// </summary>
     public const string CandidateGradingRules = """
-        OWNER WRITING RULES — ADDENDUM TWO (14 Sep 2026) — CANDIDATE GRADING
-        Two lanes. Grade the candidate from the case notes + exact task + the six official criteria + validated English. The Model Answer's house style is NOT the candidate's standard: a house-style deviation is coaching feedback unless an independent OET criterion (clarity, accuracy, register, cohesion, safety, professionalism) is genuinely affected. OA2-20 is explicit — the strict canonical requirements added by Addendum Two (background paragraph position, narrative-semicolon avoidance, the exact contact template, "type two", the house medication separator, the preferred salutation) must be kept OUT of candidate scoring unless an actual official criterion impact exists.
+        OWNER WRITING RULES — ADDENDUM FOUR (17 Sep 2026, OA4-01..OA4-09) — CANDIDATE GRADING
+        Two lanes. Grade the candidate from the case notes + exact task + the six official criteria + validated English. The Model Answer's house style is NOT the candidate's standard: a house-style deviation is coaching feedback unless an independent OET criterion (clarity, accuracy, register, cohesion, safety, professionalism) is genuinely affected. OA2-20 is explicit — the strict canonical requirements added by Addendum Two (background paragraph position, narrative-semicolon avoidance, the exact contact template, "type two", the house medication separator, the preferred salutation) must be kept OUT of candidate scoring unless an actual official criterion impact exists. OA4-04..OA4-09 are score-bearing only when the candidate has a genuine grammar, register, clarity or identity error; Model Answer similarity contributes ZERO.
 
         Letter-type classification — derive the functional type from the case notes + exact task, never from a stored code alone. Do NOT force a discharge template when the notes do not support admission/discharge; do NOT invent "ready for discharge" facts. Suspected cancer alone is not automatic urgency — assess whether the task/notes actually support urgent action. A routine cancer-screening task is not urgent.
 

@@ -1,6 +1,6 @@
 # OET Writing Model Answer Rules — PERMANENT OWNER DIRECTIVES
 
-**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026) the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15) ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20) and OWNER CLARIFICATIONS ROUND 3 (15 Sep 2026, rules OA3-01..OA3-05; active validator `writing-rules.owner-clarifications-3.2026-09-15.1`). Latest owner clarification supersedes conflicting older internal wording.
+**Authority:** product owner (Dr Ahmed Hesham) — Writing Rule Enforcement Addendum Rev7-8 (11 Sep 2026), Writing Master Specification "ULTIMATE FINAL" (13 Sep 2026), the FINAL WRITING OWNER CLARIFICATIONS ADDENDUM (14 Sep 2026, rules OA-01..OA-15), ADDENDUM TWO (14 Sep 2026, rules OA2-01..OA2-20), OWNER CLARIFICATIONS ROUND 3 (15 Sep 2026, rules OA3-01..OA3-05) and ADDENDUM FOUR (17 Sep 2026, rules OA4-01..OA4-09; active validator `writing-rules.owner-clarifications-4.2026-09-17.1`). Latest owner clarification supersedes conflicting older internal wording.
 **Applies to:** every person or AI agent who generates, repairs, validates, imports, or assesses OET Writing Model Answers in this repository — regardless of which tool or agent is used.
 **Enforcement:** every language rule below is enforced by a named deterministic detector in the deployed validator (`WritingRuleEngine` / `WritingRuleEngine.Rev8`), registry rows `OA-01..OA-15` and `OA2-01..OA2-20` in `docs/canonical-rules/OET_AI_Rules_Master.jsonl`, provenance rows in `WritingRuleProvenance`, and pinned by regression tests (`WritingRev8RegressionFixtureTests.cs` — five clean-letter positives plus every injected defect — and `WritingOwnerAddendumTwoRegressionFixtureTests.cs` — regression classes R2-01..R2-18, each proving BOTH that the injected defect is caught and that the valid alternative passes). If a rule here and the validator ever disagree, BOTH are wrong — fix the validator and update this doc together. A stored Ready flag is valid only for the exact validator version it was verified under: any rule-pack change (bump of `WritingRuleEngine.ValidatorVersion`) invalidates affected answers until revalidated.
 
@@ -79,10 +79,16 @@ The 180–200-word body cap means selection is a tested skill: **do NOT copy eve
 | DOB has priority over age (OA3-03) | "Re: Mr David Taylor, aged 55", or no DOB, when the notes record "DOB 01/08/1965" | "Re: Mr David Taylor, DOB: 1 August 1965"; "aged X" is correct only when the source supplies no DOB |
 | Canonical "at" result wording (OA3-04, supersedes OA-10) | "a reduced glucose of 10 mg/dL" / headless "white cell count 14.0x10^9/L" | "a reduced glucose level at 10 mg/dL" / "the white cell count was 14.0x10^9/L" (Model Answer only; candidates keep every grammatical alternative) |
 | No dangling treatment modifier (OA3-05) | "A catheter urine culture grew Staphylococcus saprophyticus, treated with five days of Keflex." | "... grew Staphylococcus saprophyticus, and Mr McDonald was treated with Keflex for five days." |
+| Natural "today" phrasing (OA4-04) | "Mr Taylor presented on today." | "Mr Taylor presented today." / "At review today, Mr Taylor presented." |
+| Possessive patient references (OA4-05) | "Mr Taylor temperature was 37.8 °C." | "Mr Taylor's temperature was 37.8 °C." |
+| Formal diagnostic wording (OA4-06) | "query pneumonia" | "suspected pneumonia" / "possible pneumonia" |
+| Complete passive auxiliaries (OA4-07) | "family immunisation discussed" | "family immunisation was discussed" |
+| Complete clinical sentences (OA4-08) | "With poorly controlled diabetes." | "Poorly controlled diabetes required ongoing monitoring." |
+| Single sign-off designation (OA4-09) | "Yours sincerely, Doctor, Doctor" | "Yours sincerely, Doctor" |
 
 Grounding note: premium wording still grounds — "fatigue, stress and lethargy" maps to case notes saying "tired, stressed and sluggish" (proven in production). Grounding is sentence-level traceability, not verbatim copying.
 
-## 5. DETECTOR ↔ RULE MAP (as deployed 15 Sep 2026, Owner Clarifications Round 3)
+## 5. DETECTOR ↔ RULE MAP (as deployed 17 Sep 2026, Owner Clarifications Addendum Four)
 
 | Owner rule | Detector |
 |---|---|
@@ -133,6 +139,12 @@ Grounding note: premium wording still grounds — "fatigue, stress and lethargy"
 | OA3-03 DOB priority over age | `re_line_dob_priority` (needs canonical notes carrying a DOB) |
 | OA3-04 canonical "at" result wording | `result_at_wording` (Model Answer only) + `result_noun_fragment` (of -> at repair) |
 | OA3-05 no dangling treatment modifier | `dangling_treatment_modifier` (both modes) |
+| OA4-04 natural today phrasing | `malformed_today_phrasing` (both modes) |
+| OA4-05 possessive patient references | `missing_possessive_noun` (both modes) |
+| OA4-06 formal query wording | `note_style_query` (both modes) |
+| OA4-07 complete passive auxiliaries | `missing_passive_auxiliary` (both modes) |
+| OA4-08 complete clinical sentences | `grammar_sentence_fragments` (both modes) |
+| OA4-09 single sign-off designation | `signoff_duplicate_designation` (both modes) |
 
 Every check id carries provenance (authority tag + score-bearing/coaching-only/accept-alternative) in `WritingRuleProvenance.cs` and an OET criterion mapping in `WritingAssessmentV11RuleEngine.CheckIdCriteria`; the completeness contract is test-enforced.
 

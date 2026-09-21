@@ -39,23 +39,24 @@ const LEGACY_PROFESSIONS: ExamProfession[] = [
 /**
  * Per-profession active rule count, from the vendored canonical registry
  * (v1.0 count + the 38 owner Rev8 rows OWN-W-001..038 + the 40 globally scoped
- * owner-addendum rows OA-01..OA-15, OA2-01..OA2-20 and OA3-01..OA3-05).
+ * owner-addendum rows OA-01..OA-15, OA2-01..OA2-20, OA3-01..OA3-05 and
+ * OA4-01..OA4-09).
  *
- * Every pack carries the same 40 globally scoped owner rows (Medicine is their
+ * Every pack carries the same 49 globally scoped owner rows (Medicine is their
  * registry home profession);
  * because Addendum Two §14 requires those rules to be "active globally — not
  * sample-only edits" (see isGlobalOwnerRule in the rulebook build script).
  */
 const CANONICAL_PROFESSION_COUNTS: Partial<Record<ExamProfession, number>> = {
-  medicine: 311,
-  nursing: 318,
-  dentistry: 318,
-  pharmacy: 321,
-  physiotherapy: 321,
-  radiography: 318,
+  medicine: 317,
+  nursing: 324,
+  dentistry: 324,
+  pharmacy: 327,
+  physiotherapy: 327,
+  radiography: 324,
 };
 
-const CANONICAL_VERSION = '2.3.1-owner-clarifications-3';
+const CANONICAL_VERSION = '2.3.2-owner-clarifications-4';
 const LEGACY_VERSION = '1.1.0-rev8';
 
 /**

@@ -33,10 +33,12 @@ describe('rulebook check-id registry', () => {
     // + brand_generic_duplication (OA2 Taylor defect / R2-18) = 107, + 4 from
     // the OWNER CLARIFICATIONS ROUND 3 (2026-09-15, OA3-01..OA3-05:
     // patient_name_spelling, re_line_dob_priority, result_at_wording,
-    // dangling_treatment_modifier) = 111.
+    // dangling_treatment_modifier) = 111, + 4 from the final layout/punctuation
+    // patch (2026-09-16, OA4-01..OA4-03) = 115, + 6 from OWNER CLARIFICATIONS
+    // ADDENDUM FOUR (2026-09-17, OA4-04..OA4-09) = 121.
     // Keep this in lockstep with WritingRuleEngine.SupportedCheckIdSet (C#) —
     // see that file's own header comment.
-    expect(WRITING_CHECK_IDS.size).toBe(115);
+    expect(WRITING_CHECK_IDS.size).toBe(121);
     expect(WRITING_CHECK_IDS.has('letter_body_length')).toBe(true);
     expect(WRITING_CHECK_IDS.has('no_contractions')).toBe(true);
     expect(WRITING_CHECK_IDS.has('urgent_intro_contains_urgent')).toBe(true);
@@ -98,6 +100,18 @@ describe('rulebook check-id registry', () => {
   it('includes every OWNER CLARIFICATIONS ROUND 3 (2026-09-15, OA3) detector check-id', () => {
     const oa3 = ['patient_name_spelling', 're_line_dob_priority', 'result_at_wording', 'dangling_treatment_modifier'];
     expect(oa3.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
+  });
+
+  it('includes every OWNER CLARIFICATIONS ADDENDUM FOUR (2026-09-17, OA4-04..OA4-09) detector check-id', () => {
+    const oa4 = [
+      'malformed_today_phrasing',
+      'missing_possessive_noun',
+      'note_style_query',
+      'missing_passive_auxiliary',
+      'grammar_sentence_fragments',
+      'signoff_duplicate_designation',
+    ];
+    expect(oa4.filter((id) => !WRITING_CHECK_IDS.has(id))).toEqual([]);
   });
 
   it('includes every ULTIMATE FINAL (2026-09-13) detector check-id', () => {

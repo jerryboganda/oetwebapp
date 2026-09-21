@@ -24,7 +24,7 @@ const CHECK_ONLY = process.argv.includes("--check");
 // hash went stale silently after the 10 Sep 2026 G-W-116 amendment). After
 // editing the registry: update this constant, the version fields in
 // buildRulebook() and docs/canonical-rules/README.md, then rebuild.
-const REGISTRY_SHA256 = "07c95437a6365a2d69f4ec9360c7edc4fa8bfe56e101621d3533a7942ac97123";
+const REGISTRY_SHA256 = "2aca1c180a3364682c3978e755f9f108e2aa52188e6e820b8afe8112ca35cc6c";
 
 // Registry `profession` value -> repo folder name. Only these six have live
 // Writing tasks today; every other registry profession is intentionally
@@ -38,8 +38,8 @@ const SUPPORTED_PROFESSIONS = {
   Radiography: "radiography",
 };
 
-// The owner clarification addenda (OA-01..OA-15, 14 Sep 2026; OA2-01..OA2-20,
-// ADDENDUM TWO, same day) each declare "Scope: Global Model Answer" — they are
+// The owner clarification addenda (OA-01..OA-15, OA2-01..OA2-20, OA3-01..OA3-05
+// and OA4-01..OA4-09) each declare "Scope: Global Model Answer" — they are
 // letter-type scoped, never profession scoped. They are carried in the registry
 // under a single `profession: "Medicine"` row rather than duplicated six times,
 // so a plain profession filter shipped them to the Medicine pack alone while
@@ -47,8 +47,8 @@ const SUPPORTED_PROFESSIONS = {
 // that a stop-gate item: "Background placement, request placement, sentence
 // control, number style, medication-list punctuation and role-based salutation
 // rules are active globally — not sample-only edits." Matching on the id keeps
-// the registry untouched (so REGISTRY_SHA256 stays valid) and means a future
-// OA3- addendum is global by construction.
+// the registry untouched (so REGISTRY_SHA256 stays valid) and means future OA
+// addenda are global by construction.
 const isGlobalOwnerRule = (rule) => /^OA\d*-\d+$/.test(rule.id);
 
 // Owner Rev8 (11 Sep 2026) classifications: "Owner Override" is critical;
@@ -148,13 +148,13 @@ function buildRulebook(profession, folder, rules, existing) {
   });
 
   return {
-    version: "2.3.1-owner-clarifications-3",
+    version: "2.3.2-owner-clarifications-4",
     kind: "writing",
     profession: folder,
-    publishedAt: "2026-09-14T00:00:00Z",
+    publishedAt: "2026-09-17T00:00:00Z",
     authoritySource:
-      "OET AI Rules Master — Canonical Registry v1.2-addendum-two (2026-09-14: v1.1-rev8 + owner " +
-      "clarifications OA-01..OA-15 and OA2-01..OA2-20), " +
+      "OET AI Rules Master — Canonical Registry v1.3-owner-clarifications-four (2026-09-17: v1.1-rev8 + owner " +
+      "clarifications OA-01..OA-15, OA2-01..OA2-20, OA3-01..OA3-05 and OA4-01..OA4-09), " +
       `sha256:${REGISTRY_SHA256}`,
     sections,
     rules: mappedRules,

@@ -302,6 +302,105 @@ public sealed class WritingOwnerClarificationsThreeRegressionFixtureTests
     public void OA4_03_Consistent_Title_Passes()
         => AssertRuleDoesNotFire(Lint(Weston, "LT-NM"), "patient_title_mismatch");
 
+    // ─── OA4-04..OA4-09 — language and sign-off coverage ────
+
+    [Fact]
+    public void OA4_04_Malformed_Today_Phrasing_Is_Flagged_For_Model_Answers_And_Candidates()
+    {
+        var letter = Inject(Taylor, "Today, Mr Taylor presented", "Mr Taylor presented on today");
+        AssertRuleFires(Lint(letter, "LT-UR"), "malformed_today_phrasing");
+        AssertRuleFires(Lint(letter, "LT-UR", isModelAnswer: false), "malformed_today_phrasing");
+    }
+
+    [Theory]
+    [InlineData("Today, Mr Taylor presented")]
+    [InlineData("At review today, Mr Taylor presented")]
+    [InlineData("On 13 June 2020, Mr Taylor presented")]
+    public void OA4_04_Natural_Today_Forms_Pass(string opening)
+    {
+        var letter = Inject(Taylor, "Today, Mr Taylor presented", opening);
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR"), "malformed_today_phrasing");
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR", isModelAnswer: false), "malformed_today_phrasing");
+    }
+
+    [Fact]
+    public void OA4_05_Missing_Patient_Possessive_Is_Flagged_For_Model_Answers_And_Candidates()
+    {
+        var letter = Inject(Taylor, "Observations recorded a temperature", "Mr Taylor temperature was 37.8 °C. Observations recorded a temperature");
+        AssertRuleFires(Lint(letter, "LT-UR"), "missing_possessive_noun");
+        AssertRuleFires(Lint(letter, "LT-UR", isModelAnswer: false), "missing_possessive_noun");
+    }
+
+    [Fact]
+    public void OA4_05_Possessive_Patient_Reference_Passes()
+    {
+        var letter = Inject(Taylor, "Observations recorded a temperature", "Mr Taylor's temperature was 37.8 °C. Observations recorded a temperature");
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR"), "missing_possessive_noun");
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR", isModelAnswer: false), "missing_possessive_noun");
+    }
+
+    [Fact]
+    public void OA4_06_Note_Style_Query_Is_Flagged_For_Model_Answers_And_Candidates()
+    {
+        var letter = Inject(Taylor, "He reported shortness of breath.", "He reported shortness of breath, and query pneumonia was recorded.");
+        AssertRuleFires(Lint(letter, "LT-UR"), "note_style_query");
+        AssertRuleFires(Lint(letter, "LT-UR", isModelAnswer: false), "note_style_query");
+    }
+
+    [Fact]
+    public void OA4_06_Formal_Query_Alternative_Passes()
+    {
+        var letter = Inject(Taylor, "He reported shortness of breath.", "He reported shortness of breath, and pneumonia was suspected.");
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR"), "note_style_query");
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR", isModelAnswer: false), "note_style_query");
+    }
+
+    [Fact]
+    public void OA4_07_Missing_Passive_Auxiliary_Is_Flagged_For_Model_Answers_And_Candidates()
+    {
+        var letter = Inject(Garcia, "family immunisation was discussed", "family immunisation discussed");
+        AssertRuleFires(Lint(letter, "LT-DG"), "missing_passive_auxiliary");
+        AssertRuleFires(Lint(letter, "LT-DG", isModelAnswer: false), "missing_passive_auxiliary");
+    }
+
+    [Fact]
+    public void OA4_07_Complete_Passive_Auxiliary_Passes()
+    {
+        AssertRuleDoesNotFire(Lint(Garcia, "LT-DG"), "missing_passive_auxiliary");
+        AssertRuleDoesNotFire(Lint(Garcia, "LT-DG", isModelAnswer: false), "missing_passive_auxiliary");
+    }
+
+    [Fact]
+    public void OA4_08_Known_Clinical_Sentence_Fragment_Is_Flagged_For_Model_Answers_And_Candidates()
+    {
+        var letter = Inject(Taylor, "He reported shortness of breath.", "With poorly controlled diabetes.");
+        AssertRuleFires(Lint(letter, "LT-UR"), "grammar_sentence_fragments");
+        AssertRuleFires(Lint(letter, "LT-UR", isModelAnswer: false), "grammar_sentence_fragments");
+    }
+
+    [Fact]
+    public void OA4_08_Complete_Clinical_Sentence_Control_Passes()
+    {
+        var letter = Inject(Taylor, "He reported shortness of breath.", "Poorly controlled diabetes required ongoing monitoring.");
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR"), "grammar_sentence_fragments");
+        AssertRuleDoesNotFire(Lint(letter, "LT-UR", isModelAnswer: false), "grammar_sentence_fragments");
+    }
+
+    [Fact]
+    public void OA4_09_Duplicate_Signoff_Designation_Is_Flagged_For_Model_Answers_And_Candidates()
+    {
+        var letter = Inject(Taylor, "Yours sincerely,\n\nDoctor", "Yours sincerely,\n\nDoctor\nDoctor");
+        AssertRuleFires(Lint(letter, "LT-UR"), "signoff_duplicate_designation");
+        AssertRuleFires(Lint(letter, "LT-UR", isModelAnswer: false), "signoff_duplicate_designation");
+    }
+
+    [Fact]
+    public void OA4_09_Single_Signoff_Designation_Passes()
+    {
+        AssertRuleDoesNotFire(Lint(Taylor, "LT-UR"), "signoff_duplicate_designation");
+        AssertRuleDoesNotFire(Lint(Taylor, "LT-UR", isModelAnswer: false), "signoff_duplicate_designation");
+    }
+
     // ─── R3-04 — canonical "at" result wording ────
 
     [Fact]
