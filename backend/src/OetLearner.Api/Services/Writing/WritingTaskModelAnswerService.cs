@@ -566,13 +566,17 @@ public sealed class WritingTaskModelAnswerService(
         var scenarios = await scenarioQuery.ToDictionaryAsync(s => s.Id, ct);
         var ids = scenarios.Keys.ToList();
 
-        var rowQuery = db.WritingTaskModelAnswers.Where(a => ids.Contains(a.ScenarioId) && a.ModelAnswerText != null);
+        var rowQuery = db.WritingTaskModelAnswers.Where(a => ids.Contains(a.ScenarioId));
         if (request.OnlyUnverified)
         {
             rowQuery = rowQuery.Where(a => a.ValidatorVersion != WritingRuleEngine.ValidatorVersion);
         }
-        var total = await rowQuery.CountAsync(ct);
-        var rows = (await rowQuery.ToListAsync(ct))
+        var eligibleRows = (await rowQuery.ToListAsync(ct))
+            .Where(a => !string.IsNullOrWhiteSpace(LastDraftFromValidationReport(a.ValidationReportJson))
+                || !string.IsNullOrWhiteSpace(a.ModelAnswerText))
+            .ToList();
+        var total = eligibleRows.Count;
+        var rows = eligibleRows
             .OrderBy(a => scenarios[a.ScenarioId].Profession, StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => scenarios[a.ScenarioId].Title, StringComparer.OrdinalIgnoreCase)
             .ThenBy(a => a.ScenarioId)
@@ -589,6 +593,7 @@ public sealed class WritingTaskModelAnswerService(
             var statusBefore = row.Status.ToString();
             var visibleBefore = row.IsCandidateVisible;
             var versionBefore = row.ValidatorVersion;
+            var sourceText = LastDraftFromValidationReport(row.ValidationReportJson) ?? row.ModelAnswerText;
             WritingModelAnswerValidationReport report;
             if (!RulebookProfessionParser.TryParse(scenario.Profession, out var profession))
             {
@@ -599,7 +604,9 @@ public sealed class WritingTaskModelAnswerService(
                 var sentences = await LoadSentencesAsync(row.ScenarioId, ct);
                 report = sentences.Count == 0
                     ? FailedReport(row.ScenarioId, "model_answer_case_notes_unavailable")
-                    : await RunGateAsync(scenario, sentences, profession, row.ModelAnswerText!, request.IncludeSemantic, adminUserId, ct);
+                    : string.IsNullOrWhiteSpace(sourceText)
+                        ? FailedReport(row.ScenarioId, "model_answer_unreadable")
+                        : await RunGateAsync(scenario, sentences, profession, sourceText, request.IncludeSemantic, adminUserId, ct);
             }
 
             if (report.Passed) passed++;
@@ -611,23 +618,23 @@ public sealed class WritingTaskModelAnswerService(
 
             if (!request.Apply) continue;
             var now = clock.GetUtcNow();
-            row.ValidationReportJson = SerializeReport(report, null);
+            row.ValidationReportJson = SerializeReport(report, report.Passed ? null : sourceText);
             row.BodyWordCount = report.BodyWordCount;
             row.UpdatedAt = now;
-            if (report.Passed && (request.IncludeSemantic || semanticValidator is null))
+            if (report.Passed)
             {
-                // Only a FULL pass (deterministic + semantic) re-verifies a row.
+                row.ModelAnswerText = sourceText;
                 row.ValidatorVersion = WritingRuleEngine.ValidatorVersion;
                 row.RulePackHash = report.RulePackHash;
                 row.ValidatedAt = now;
-                if (row.Status == WritingAssessmentModelAnswerStatus.HeldForReview
-                    && string.Equals(row.HoldReason, "model_answer_revalidation_failed", StringComparison.Ordinal))
+                if (row.Status == WritingAssessmentModelAnswerStatus.HeldForReview)
                 {
                     row.Status = WritingAssessmentModelAnswerStatus.Ready;
                     row.HoldReason = null;
                 }
             }
-            else if (!report.Passed && !IsTransientHold(report.HoldReason))
+            else if (!report.Passed && !IsTransientHold(report.HoldReason)
+                && row.Status != WritingAssessmentModelAnswerStatus.Rejected)
             {
                 // Never keep a failing answer candidate-visible (it already
                 // is not, by CandidateVisibleVerified — this makes the state
@@ -1348,6 +1355,29 @@ public sealed class WritingTaskModelAnswerService(
 
     private static string SerializeReport(WritingModelAnswerValidationReport report, string? lastDraft)
         => JsonSerializer.Serialize(new { report, lastDraft }, ReportJson);
+
+    private static string? LastDraftFromValidationReport(string? validationReportJson)
+    {
+        if (string.IsNullOrWhiteSpace(validationReportJson)) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(validationReportJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) return null;
+            foreach (var property in document.RootElement.EnumerateObject())
+            {
+                if (!string.Equals(property.Name, "lastDraft", StringComparison.OrdinalIgnoreCase)
+                    || property.Value.ValueKind != JsonValueKind.String)
+                    continue;
+                var draft = property.Value.GetString();
+                return string.IsNullOrWhiteSpace(draft) ? null : draft;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        return null;
+    }
 
     /// <summary>
     /// Stored text is normalised to LF line endings with the outer whitespace
