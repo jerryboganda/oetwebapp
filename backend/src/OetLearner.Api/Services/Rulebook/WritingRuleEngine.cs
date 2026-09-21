@@ -628,6 +628,12 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         "no_brackets_in_letter" => DetectNoBrackets,
         "dob_age_forbidden_phrase" => DetectDobAgeForbiddenPhrase,
         "signoff_no_invented_name" => DetectSignoffNoInventedName,
+        "malformed_today_phrasing" => DetectMalformedTodayPhrasing,
+        "missing_possessive_noun" => DetectMissingPossessiveNoun,
+        "note_style_query" => DetectNoteStyleQuery,
+        "missing_passive_auxiliary" => DetectMissingPassiveAuxiliary,
+        "grammar_sentence_fragments" => DetectGrammarSentenceFragments,
+        "signoff_duplicate_designation" => DetectSignoffDuplicateDesignation,
         _ => null,
     };
 
@@ -1067,9 +1073,26 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         if (!input.PatientIsMinor || s.ReLineIndex is null) yield break;
         var line = s.Lines[s.ReLineIndex.Value];
         if (Regex.IsMatch(line, @"^\s*Re\s*:\s*(Mr|Ms|Miss|Mrs|Dr|Master)\s", RegexOptions.IgnoreCase))
+        {
             yield return new LintFinding(rule.Id, rule.Severity,
                 "For minors (under 18), do NOT use a title in the Re: line. Write the full name only.",
                 Quote: line.Trim());
+        }
+
+        if (!string.IsNullOrEmpty(s.Body))
+        {
+            var surname = ReLineSurname(line);
+            if (!string.IsNullOrEmpty(surname))
+            {
+                var m = Regex.Match(s.Body, @"\b(?:Mr|Ms|Miss|Mrs)\.?\s+" + Regex.Escape(surname) + @"\b", RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    yield return new LintFinding(rule.Id, rule.Severity,
+                        "For minors (under 18), refer to the patient by their first name only in the body, not with an adult title.",
+                        Quote: m.Value);
+                }
+            }
+        }
     }
 
     private static IEnumerable<LintFinding> DetectSincerelyVsFaithfully(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -1888,7 +1911,10 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
         // The bare alternatives used to be unanchored, so the letter "g" inside
         // the KEYWORD itself satisfied the check: glucose, haemoglobin, weight
         // and height could never fire. Word boundaries make every keyword live.
-        var unitRe = new Regex(@"(mmol\/l|mg\/dl|g\/dl|g\/l|kg\/m|\bmg\b|\bkg\b|\bg\b|\bcm\b|\bmm\b|\bmL\b|mmHg|bpm|breaths\/min|\/min|\u00b0c|celsius|mmol|%|\d+\s*\/\s*\d+)", RegexOptions.IgnoreCase);
+        var unitPattern = input.IsModelAnswer
+            ? @"(mmol\/l|mg\/dl|g\/dl|g\/l|kg\/m²|\bmg\b|\bkg\b|\bg\b|\bcm\b|\bmm\b|\bmL\b|mmHg|bpm|breaths\/min|\u00b0c|celsius|mmol|%)"
+            : @"(mmol\/l|mg\/dl|g\/dl|g\/l|kg\/m|\bmg\b|\bkg\b|\bg\b|\bcm\b|\bmm\b|\bmL\b|mmHg|bpm|breaths\/min|\/min|\u00b0c|celsius|mmol|%|\d+\s*\/\s*\d+)";
+        var unitRe = new Regex(unitPattern, RegexOptions.IgnoreCase);
         var findings = 0;
         foreach (var keyword in keywords)
         {

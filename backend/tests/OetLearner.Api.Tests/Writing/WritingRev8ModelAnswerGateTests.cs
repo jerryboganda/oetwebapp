@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
@@ -152,6 +153,38 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal(WritingAssessmentModelAnswerStatus.HeldForReview, badRow.Status);
         Assert.False(badRow.IsCandidateVisible);
         Assert.Equal("model_answer_revalidation_failed", badRow.HoldReason);
+    }
+
+    [Fact]
+    public async Task Revalidate_Prefers_The_Latest_Stored_Draft_And_Promotes_It_When_It_Passes()
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var latestDraft = WritingModelAnswerBatchTests.ExemplarText();
+        db.WritingTaskModelAnswers.Add(new WritingTaskModelAnswer
+        {
+            Id = Guid.NewGuid(),
+            ScenarioId = scenarioId,
+            Status = WritingAssessmentModelAnswerStatus.HeldForReview,
+            ModelAnswerText = MajorOnlyDefect(),
+            ValidationReportJson = JsonSerializer.Serialize(new { lastDraft = latestDraft }),
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var semantic = new FixedSemantic(new WritingModelAnswerSemanticResult(
+            Passed: true, Unavailable: false, Violations: [], Model: "test", RulebookVersion: null, Error: null));
+        var svc = Service(db, new ScriptedGateway(), semantic);
+
+        var result = await svc.RevalidateAsync(new WritingModelAnswerRevalidationRequest(
+            Apply: true, IncludeSemantic: false, Profession: null, Offset: 0, Limit: 50, OnlyUnverified: false), "admin-1");
+
+        Assert.Equal(1, result.Passed);
+        var row = await db.WritingTaskModelAnswers.AsNoTracking().SingleAsync(a => a.ScenarioId == scenarioId);
+        Assert.Equal(WritingAssessmentModelAnswerStatus.Ready, row.Status);
+        Assert.Equal(latestDraft, row.ModelAnswerText);
+        Assert.Null(row.HoldReason);
+        Assert.Equal(0, semantic.Calls);
     }
 
     [Fact]

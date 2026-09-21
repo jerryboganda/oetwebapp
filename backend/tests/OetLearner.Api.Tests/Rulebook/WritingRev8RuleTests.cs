@@ -749,4 +749,117 @@ public sealed class WritingRev8RuleTests
             .GetMethod("RunDetectorSafely", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static) is not null,
             "WritingRuleEngine.RunDetectorSafely must exist and wrap every detector call in Lint().");
     }
+
+    // ---------------------------------------------------------------------
+    // Owner Clarifications Addendum FOUR (OA4) Regression Tests
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public void MalformedTodayPhrasing_Fires_On_OnToday_And_Passes_On_Valid_Date()
+    {
+        var badLetter = Letter(TaylorRe, TaylorIntro, "Mr Taylor presented on today with severe knee pain.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.malformed_today_phrasing");
+
+        var goodLetter = Letter(TaylorRe, TaylorIntro, "Mr Taylor presented today with severe knee pain.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.malformed_today_phrasing");
+    }
+
+    [Fact]
+    public void MissingPossessiveNoun_Fires_On_MissingPossessive_And_Passes_On_Possessive()
+    {
+        var badLetter = Letter(TaylorRe, TaylorIntro, "Mrs Clarke temperature was elevated to 38 degrees Celsius.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.missing_possessive_noun");
+
+        var goodLetter = Letter(TaylorRe, TaylorIntro, "Mrs Clarke's temperature was elevated to 38 degrees Celsius.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.missing_possessive_noun");
+    }
+
+    [Fact]
+    public void NoteStyleQuery_Fires_On_QueryPneumonia_And_Passes_On_SuspectedPneumonia()
+    {
+        var badLetter = Letter(TaylorRe, TaylorIntro, "The assessment is acute asthma with query pneumonia.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.note_style_query");
+
+        var goodLetter = Letter(TaylorRe, TaylorIntro, "The assessment is acute asthma with suspected pneumonia.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.note_style_query");
+    }
+
+    [Fact]
+    public void MissingPassiveAuxiliary_Fires_On_OmittedWas_And_Passes_On_WasAdded()
+    {
+        var badLetter = Letter(TaylorRe, TaylorIntro, "The family immunisation discussed during today's visit.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.missing_passive_auxiliary");
+
+        var goodLetter = Letter(TaylorRe, TaylorIntro, "Family immunisation was discussed during today's visit.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.missing_passive_auxiliary");
+    }
+
+    [Fact]
+    public void GrammarSentenceFragments_Fires_On_WithFragment_And_Passes_On_FullSentence()
+    {
+        var badLetter = Letter(TaylorRe, TaylorIntro, "With poorly controlled diabetes and hypertension, his glucose was high.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.grammar_sentence_fragments");
+
+        var goodLetter = Letter(TaylorRe, TaylorIntro, "He has poorly controlled diabetes and hypertension, and his glucose was high.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.grammar_sentence_fragments");
+    }
+
+    [Fact]
+    public void SignoffDuplicateDesignation_Fires_On_DoubleDoctor_And_Passes_On_Single()
+    {
+        var badText = "Dear Dr Brown,\n\nRe: Mr David Taylor\n\nI am writing to refer Mr Taylor.\n\nYours sincerely, Doctor\nDoctor";
+        Assert.Contains(Lint(badText, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.signoff_duplicate_designation");
+
+        var goodText = "Dear Dr Brown,\n\nRe: Mr David Taylor\n\nI am writing to refer Mr Taylor.\n\nYours sincerely,\nDoctor";
+        Assert.DoesNotContain(Lint(goodText, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.signoff_duplicate_designation");
+    }
+
+    [Fact]
+    public void MinorNaming_Fires_On_AdultTitleInBody_ForMinor()
+    {
+        var minorRe = "Re: Sally Webster, DOB: 10 November 2003";
+        var badLetter = Letter(minorRe, "I am writing to refer Ms Webster, aged 16.", "Ms Webster presented with weight loss.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral", patientIsMinor: true),
+            f => f.RuleId == "BUILTIN.minor_naming_convention");
+
+        var goodLetter = Letter(minorRe, "I am writing to refer Sally, a 16-year-old high school student.", "Sally presented with weight loss.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral", patientIsMinor: true),
+            f => f.RuleId == "BUILTIN.minor_naming_convention");
+    }
+
+    [Fact]
+    public void IntroAdverbialComma_Fires_On_MissingComma_AfterIntroductoryPhrase()
+    {
+        var badLetter = Letter(TaylorRe, TaylorIntro, "On admission Mr Taylor presented with chest pain.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.intro_adverbial_comma");
+
+        var goodLetter = Letter(TaylorRe, TaylorIntro, "On admission, Mr Taylor presented with chest pain.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.intro_adverbial_comma");
+    }
+
+    [Fact]
+    public void NumericalValuesHaveUnits_ModelAnswer_Fires_On_Unitless_BloodPressure()
+    {
+        var badLetter = Letter(TaylorRe, TaylorIntro, "His blood pressure was 148/98 without units.", TaylorClosure);
+        Assert.Contains(Lint(badLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.numerical_values_have_units");
+
+        var goodLetter = Letter(TaylorRe, TaylorIntro, "His blood pressure was 148/98 mmHg with proper units.", TaylorClosure);
+        Assert.DoesNotContain(Lint(goodLetter, model: true, letterType: "routine_referral"),
+            f => f.RuleId == "BUILTIN.numerical_values_have_units");
+    }
 }

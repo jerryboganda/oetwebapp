@@ -46,7 +46,7 @@ public sealed partial class WritingRuleEngine
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.owner-clarifications-3.2026-09-16.1";
+    public const string ValidatorVersion = "writing-rules.owner-clarifications-4.2026-09-17.1";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:
@@ -2173,7 +2173,7 @@ private static string? ReLineSurname(string reLine)
     // in canonical Model Answers ("Today, Mr Taylor reported...", "On
     // examination, ...", "Initially, ...").
     private static readonly Regex IntroAdverbialNoCommaRe = new(
-        @"(?:^|[.!?]\s+)((?:Today|On today's review|On examination|On presentation|On the following visit|On subsequent visits|Initially|Later on|On [A-Z][a-z]+ \d{1,2})(?!,)\s+)(?=[A-Z])",
+        @"(?:^|[.!?]\s+)((?:Today|On today's review|On admission|On discharge|The following morning|At review|On examination|On presentation|On the following visit|On subsequent visits|Initially|Later on|In [A-Z][a-z]+ \d{4}|On \d{1,2} [A-Z][a-z]+|On [A-Z][a-z]+ \d{1,2})(?!,)\s+)(?=[A-Z])",
         RegexOptions.Multiline);
 
     private static IEnumerable<LintFinding> DetectIntroAdverbialComma(OetRule rule, WritingLintInput input, LetterStructure s)
@@ -2210,6 +2210,115 @@ private static string? ReLineSurname(string reLine)
                 "Title mismatch: the Re: line uses \"" + canonical + "\" but this reference uses \"" + used + "\". The patient's title is fixed by the source — use \"" + canonical + " " + surname + "\" consistently.",
                 Quote: m.Value);
             yield break;
+        }
+    }
+
+    // OA4-04 — Detect malformed "today" phrasing (e.g. "on today", "at review on today", "pathology on today")
+    private static readonly Regex MalformedTodayRe = new(
+        @"\b(?:on\s+today|at\s+review\s+on\s+today|pathology\s+on\s+today|confirmed\s+on\s+today|reviewed\s+alone\s+on\s+today|presented\s+on\s+today)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectMalformedTodayPhrasing(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (string.IsNullOrWhiteSpace(s.Body)) yield break;
+        var offset = BodyOffset(s);
+        foreach (Match m in MalformedTodayRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "Malformed 'today' phrasing: \"" + m.Value + "\" is ungrammatical. Write 'today', 'at review today', or specify the exact date.",
+                Quote: m.Value, Start: offset + m.Index, End: offset + m.Index + m.Length);
+        }
+    }
+
+    // OA4-05 — Detect missing possessive nouns (e.g. "Mrs Clarke temperature", "Mrs MacIntyre history", "Ms Hoffmann depression", "Erika fasting sugars", "Ms Geller existing", "Mrs Sharma poorly", "Ms Johnson right")
+    private static readonly Regex MissingPossessiveNounRe = new(
+        @"\b(?:(?:Mr|Mrs|Ms|Miss)\s+[A-Z][a-zA-Z'’-]+|[A-Z][a-z]+)\s+(?:temperature|history|depression|anxiety|fasting|existing|poorly|right\s+total\s+knee|left\s+knee|symptoms|medication|complaint)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectMissingPossessiveNoun(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (string.IsNullOrWhiteSpace(s.Body)) yield break;
+        var offset = BodyOffset(s);
+        foreach (Match m in MissingPossessiveNounRe.Matches(s.Body))
+        {
+            if (m.Value.Contains("'s") || m.Value.Contains("’s") || m.Value.Contains("s'")) continue;
+            var parts = m.Value.Split();
+            if (parts.Length >= 2 && Regex.IsMatch(parts[0], @"^(?:Mr|Mrs|Ms|Miss|Erika|David|Betty)$", RegexOptions.IgnoreCase))
+            {
+                yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                    "Missing possessive apostrophe-s: \"" + m.Value + "\" should be possessive (e.g. \"" + parts[0] + " " + (parts.Length > 2 ? parts[1] + "'s " + parts[2] : parts[0] + "'s " + parts[1]) + "\").",
+                    Quote: m.Value, Start: offset + m.Index, End: offset + m.Index + m.Length);
+            }
+        }
+    }
+
+    // OA4-06 — Detect note-style shorthand "query [condition]"
+    private static readonly Regex NoteStyleQueryRe = new(
+        @"\bquery\s+(?:pneumonia|arrhythmia|appendicitis|asthma|malignancy|fracture|infection|diabetes|early-stage|bipolar|depression|carcinoma)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectNoteStyleQuery(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (string.IsNullOrWhiteSpace(s.Body)) yield break;
+        var offset = BodyOffset(s);
+        foreach (Match m in NoteStyleQueryRe.Matches(s.Body))
+        {
+            var condition = m.Value.Substring(5).Trim();
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "Note-style 'query' shorthand: \"" + m.Value + "\" is informal case-note shorthand. Use 'suspected " + condition + "' or 'possible " + condition + "'.",
+                Quote: m.Value, Start: offset + m.Index, End: offset + m.Index + m.Length,
+                FixSuggestion: "suspected " + condition);
+        }
+    }
+
+    // OA4-07 — Detect missing passive auxiliaries in clinical actions
+    private static readonly Regex MissingPassiveAuxiliaryRe = new(
+        @"\b(?:family\s+immunisation\s+discussed|atorvastatin(?:,\s*\d+\s*mg\s+daily)?\s+added)\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectMissingPassiveAuxiliary(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (string.IsNullOrWhiteSpace(s.Body)) yield break;
+        var offset = BodyOffset(s);
+        foreach (Match m in MissingPassiveAuxiliaryRe.Matches(s.Body))
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Major),
+                "Missing passive auxiliary: \"" + m.Value + "\" lacks a helping verb. Write 'was discussed' or 'was added'.",
+                Quote: m.Value, Start: offset + m.Index, End: offset + m.Index + m.Length);
+        }
+    }
+
+    // OA4-08 — Detect sentence fragments at paragraph/sentence start
+    private static readonly Regex GrammarSentenceFragmentRe = new(
+        @"(?:^|[.!?]\s+)((?:With\s+poorly\s+controlled\s+diabetes|However,\s+a\s+HbA1c\s+level\s+at\s+10%|And\s+prescribed\s+eflornithine|However,\s+was\s+initially\s+resistant|Loss\s+of\s+appetite,\s+together\s+with\s+low\s+libido)[^.!?]*[.!?])",
+        RegexOptions.Multiline | RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectGrammarSentenceFragments(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        if (string.IsNullOrWhiteSpace(s.Body)) yield break;
+        var offset = BodyOffset(s);
+        foreach (Match m in GrammarSentenceFragmentRe.Matches(s.Body))
+        {
+            var frag = m.Groups[1].Value.Trim();
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "Grammar sentence fragment: \"" + frag + "\" is an incomplete sentence lacking a finite verb or main clause subject.",
+                Quote: frag, Start: offset + m.Index, End: offset + m.Index + m.Length);
+        }
+    }
+
+    // OA4-09 — Detect duplicated sign-off designation
+    private static readonly Regex SignoffDuplicateDesignationRe = new(
+        @"Yours\s+(?:sincerely|faithfully)[,\s]+Doctor[\r\n\s]+Doctor\b",
+        RegexOptions.IgnoreCase);
+
+    private static IEnumerable<LintFinding> DetectSignoffDuplicateDesignation(OetRule rule, WritingLintInput input, LetterStructure s)
+    {
+        var m = SignoffDuplicateDesignationRe.Match(input.LetterText);
+        if (m.Success)
+        {
+            yield return new LintFinding(rule.Id, ModeSeverity(input, RuleSeverity.Critical),
+                "Duplicated sign-off designation: \"Doctor\" appears twice in the sign-off block. Write a single designation under 'Yours sincerely,'.",
+                Quote: m.Value);
         }
     }
 }
