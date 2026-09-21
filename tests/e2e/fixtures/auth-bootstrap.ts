@@ -710,18 +710,37 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
   );
 }
 
+type RecoverBrowserSessionOptions = {
+  freshSession?: boolean;
+};
+
 export async function recoverBrowserSession(
   page: Page,
   request: APIRequestContext,
   role: SeededRole,
   targetPath: string,
+  options: RecoverBrowserSessionOptions = {},
 ) {
-  const session = await bootstrapSessionForRole(request, role, undefined, {
-    useDiskCache: false,
-    isolateSession: true,
-  });
-  const frontendCookies = await captureFrontendAuthCookies(request, role);
-  const cookies = [buildAuthIndicatorCookie(session), ...frontendCookies];
+  let session: AuthSessionResponse;
+  let cookies: StorageStateCookie[];
+
+  if (options.freshSession) {
+    const fresh = await bootstrapBrowserSessionForRole(request, role);
+    session = fresh.session;
+    cookies = [buildAuthIndicatorCookie(session), ...fresh.cookies];
+  } else {
+    const persisted = await readJsonFile<StorageStateBlob>(authStatePaths[role]);
+    const origin = persisted?.origins.find((entry) => entry.origin === defaultAppOrigin);
+    const sessionEntry = origin?.localStorage.find((entry) => entry.name === localSessionKey);
+    if (!persisted || !sessionEntry) {
+      throw new Error(`Missing persisted browser auth state for ${role}. Run the Playwright auth setup project first.`);
+    }
+
+    session = JSON.parse(sessionEntry.value) as AuthSessionResponse;
+    cookies = persisted.cookies.filter((cookie) =>
+      cookie.name === authIndicatorCookieName || FRONTEND_AUTH_COOKIE_NAMES.has(cookie.name));
+  }
+
   await page.context().clearCookies({ name: /^(oet_auth|oet_rt|oet_csrf)$/ });
   await page.context().addCookies(cookies);
   const currentOrigin = (() => {
@@ -842,10 +861,10 @@ type StorageStateBlob = {
  * first-load refresh has nothing to send and the privileged page redirects
  * back to `/sign-in` (or hangs in `/mfa/setup`).
  */
-async function captureFrontendAuthCookies(
+export async function bootstrapBrowserSessionForRole(
   request: APIRequestContext,
   role: SeededRole,
-): Promise<StorageStateCookie[]> {
+): Promise<{ session: AuthSessionResponse; cookies: StorageStateCookie[] }> {
   const account = seededAccounts[role];
   const frontendHost = new URL(defaultAppOrigin).hostname;
 
@@ -858,9 +877,20 @@ async function captureFrontendAuthCookies(
     ) as StorageStateCookie[];
   };
 
+  if (role !== 'learner') {
+    await bootstrapSessionForRole(request, role, undefined, {
+      useDiskCache: false,
+      isolateSession: true,
+    });
+  }
+
   try {
     const signInResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/sign-in`, {
-      headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: defaultAppOrigin,
+        [deviceIdHeaderName]: e2eDeviceId,
+      },
       data: {
         email: account.email,
         password: account.password,
@@ -870,7 +900,11 @@ async function captureFrontendAuthCookies(
     });
 
     if (role === 'learner') {
-      return extractFrontendCookies();
+      const session = await expectJsonOk<AuthSessionResponse>(
+        signInResponse,
+        'Expected learner browser sign-in to succeed.',
+      );
+      return { session, cookies: await extractFrontendCookies() };
     }
 
     // Privileged roles (expert/admin): the proxy sign-in returns 403 with an
@@ -878,29 +912,27 @@ async function captureFrontendAuthCookies(
     // backend's Set-Cookie for `oet_rt`/`oet_csrf` lands on the frontend
     // origin (rewritten by the proxy).
     if (signInResponse.status() !== 403) {
-      // Either an unexpected success (no MFA enrolled — should not happen
-      // after `bootstrapSessionForRole`) or a hard failure. Fall back to
-      // whatever cookies are present so the caller still gets the indicator
-      // cookie + localStorage path.
-      return extractFrontendCookies();
+      const body = await readResponseBody(signInResponse);
+      throw new Error(
+        `Expected MFA challenge for ${role} browser sign-in.\nStatus: ${signInResponse.status()}\nBody: ${body}`,
+      );
     }
 
-    let challenge: MfaChallengePayload;
-    try {
-      challenge = await signInResponse.json() as MfaChallengePayload;
-    } catch {
-      return extractFrontendCookies();
-    }
+    const challenge = await signInResponse.json() as MfaChallengePayload;
 
     const bootstrapState = await readMfaBootstrapState(role as Extract<SeededRole, 'expert' | 'admin'>);
     if (!bootstrapState?.secretKey) {
-      return extractFrontendCookies();
+      throw new Error(`Missing stored TOTP secret for ${role} browser sign-in.`);
     }
 
     let lastError: unknown = null;
     for (const code of generateTotpCandidates(bootstrapState.secretKey)) {
       const challengeResponse = await request.post(`${defaultAppOrigin}/api/backend/v1/auth/mfa/challenge`, {
-        headers: { 'Content-Type': 'application/json', [deviceIdHeaderName]: e2eDeviceId },
+        headers: {
+          'Content-Type': 'application/json',
+          Origin: defaultAppOrigin,
+          [deviceIdHeaderName]: e2eDeviceId,
+        },
         data: {
           email: account.email,
           code,
@@ -911,7 +943,8 @@ async function captureFrontendAuthCookies(
       });
 
       if (challengeResponse.ok()) {
-        return extractFrontendCookies();
+        const session = await challengeResponse.json() as AuthSessionResponse;
+        return { session, cookies: await extractFrontendCookies() };
       }
 
       lastError = await readResponseBody(challengeResponse);
@@ -920,32 +953,30 @@ async function captureFrontendAuthCookies(
       }
     }
 
-    return extractFrontendCookies();
-  } catch {
-    // Best-effort. If the frontend isn't reachable in this scenario, we still
-    // return whatever cookies are present and let the caller fall back to the
-    // indicator-only storage state.
-    return extractFrontendCookies().catch(() => []);
+    throw new Error(
+      `Expected MFA browser challenge completion to succeed for ${role}.\nBody: ${String(lastError)}`,
+    );
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`Unable to create browser auth session for ${role}.`);
   }
 }
 
 export async function persistSessionToStorageState(
   session: AuthSessionResponse,
   storageStatePath: string,
-  request?: APIRequestContext,
-  role?: SeededRole,
+  frontendCookies: StorageStateCookie[] = [],
 ) {
   const base = buildStorageState(session) as StorageStateBlob;
 
-  if (request && role) {
-    const captured = await captureFrontendAuthCookies(request, role);
-    if (captured.length > 0) {
-      const seen = new Set(base.cookies.map((c) => c.name));
-      for (const cookie of captured) {
-        if (!seen.has(cookie.name)) {
-          base.cookies.push(cookie);
-          seen.add(cookie.name);
-        }
+  if (frontendCookies.length > 0) {
+    const seen = new Set(base.cookies.map((c) => c.name));
+    for (const cookie of frontendCookies) {
+      if (!seen.has(cookie.name)) {
+        base.cookies.push(cookie);
+        seen.add(cookie.name);
       }
     }
   }

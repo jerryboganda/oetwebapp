@@ -21,6 +21,8 @@ jobs:
       # ran. Override with the secret if a real staging env ever exists.
       PLAYWRIGHT_BASE_URL: ${{ inputs.base_url != '' && inputs.base_url || secrets.STAGING_BASE_URL || 'http://localhost:3000' }}
       NEXT_PUBLIC_API_BASE_URL: ${{ secrets.STAGING_API_URL || 'http://127.0.0.1:5198' }}
+      SPEAKING_VERIFY_EMAIL: ${{ secrets.SPEAKING_VERIFY_EMAIL }}
+      SPEAKING_VERIFY_PASSWORD: ${{ secrets.SPEAKING_VERIFY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4

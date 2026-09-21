@@ -29,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TabPanel, Tabs } from '@/components/ui/tabs';
 import { DualAssessmentLayout } from '@/components/domain/speaking/DualAssessmentLayout';
 import { SpeakingSimulationV11ReportView } from '@/components/domain/speaking/SpeakingSimulationV11ReportView';
+import { SpeakingSimulationV11FeedbackCard } from '@/components/domain/speaking/SpeakingSimulationV11FeedbackCard';
 import { TranscriptPlayerWithComments, type TranscriptPayload } from '@/components/domain/speaking/TranscriptPlayerWithComments';
 import { ApiError } from '@/lib/api';
 import {
@@ -296,6 +297,7 @@ export default function SpeakingSessionResultsPage() {
             transcript={showTranscript ? transcript : null}
             tutorOverride={v11TutorOverride}
           />
+          <SpeakingSimulationV11FeedbackCard sessionId={sessionId} />
         </div>
       </LearnerDashboardShell>
     );

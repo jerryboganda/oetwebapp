@@ -29,12 +29,21 @@ public static class SpeakingSimulationV11Endpoints
         sessions.MapGet("/{id}/v1.1-assessment", GetSessionAssessmentAsync)
             .WithSummary("Get the latest v1.1 card report, including source-linked evidence.")
             .Produces<SpeakingSimulationV11AssessmentResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         sessions.MapGet("/{id}/v1.1-audio/{recordingId}", GetLearnerAudioAsync)
             .WithSummary("Stream one authenticated original learner-audio turn for report playback.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status404NotFound);
+
+        sessions.MapPost("/{id}/v1.1-feedback", SubmitFeedbackAsync)
+            .WithSummary("Submit or update learner feedback after a completed v1.1 speaking session.")
+            .Produces<SpeakingSimulationV11FeedbackResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         var exams = app.MapGroup("/v1/speaking/exams")
             .RequireAuthorization("LearnerOnly")
@@ -43,12 +52,14 @@ public static class SpeakingSimulationV11Endpoints
         exams.MapPost("/{id}/v1.1-combined-assess", AssessCombinedAsync)
             .WithSummary("Derive the combined v1.1 report only when both card reports are valid.")
             .Produces<SpeakingSimulationV11AssessmentResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         exams.MapGet("/{id}/v1.1-combined-report", GetCombinedAsync)
             .WithSummary("Get the latest combined v1.1 practice report.")
             .Produces<SpeakingSimulationV11AssessmentResponse>(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status404NotFound);
+            .Produces(StatusCodes.Status404NotFound)
+            .Produces(StatusCodes.Status409Conflict);
 
         return app;
     }
@@ -154,6 +165,17 @@ public static class SpeakingSimulationV11Endpoints
                 message = "No combined v1.1 report exists for this exam yet.",
             })
             : Results.Ok(report);
+    }
+
+    private static async Task<IResult> SubmitFeedbackAsync(
+        HttpContext http,
+        string id,
+        SpeakingSimulationV11FeedbackRequest request,
+        SpeakingSimulationV11FeedbackService feedback,
+        CancellationToken ct)
+    {
+        var userId = ResolveUserId(http);
+        return Results.Ok(await feedback.SubmitAsync(userId, id, request, ct));
     }
 
     private static string ResolveUserId(HttpContext http)

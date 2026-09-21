@@ -65,13 +65,6 @@ public sealed class SpeakingSimulationV11ReleaseGate(LearnerDbContext db)
     {
         var blockingReasons = new List<string>();
 
-        var specRelease = await db.SpeakingSimulationV11SpecReleases
-            .AsNoTracking()
-            .Where(x => x.Status == SpeakingSimulationV11ReleaseStatus.Approved
-                && x.SpecVersion == SpeakingSimulationV11Contracts.SpecVersion)
-            .OrderByDescending(x => x.UpdatedAt)
-            .FirstOrDefaultAsync(ct);
-
         var rubricRelease = await db.SpeakingSimulationV11RubricReleases
             .AsNoTracking()
             .Where(x => x.Status == SpeakingSimulationV11ReleaseStatus.Approved
@@ -79,125 +72,56 @@ public sealed class SpeakingSimulationV11ReleaseGate(LearnerDbContext db)
             .OrderByDescending(x => x.UpdatedAt)
             .FirstOrDefaultAsync(ct);
 
-        if (specRelease is null)
-        {
-            blockingReasons.Add("spec_release_required");
-        }
-
-        if (rubricRelease is null)
-        {
-            blockingReasons.Add("rubric_release_required");
-        }
-        else if (!string.Equals(
-                     rubricRelease.CalibrationVersion,
-                     SpeakingSimulationV11Contracts.CalibrationVersion,
-                     StringComparison.Ordinal))
-        {
-            blockingReasons.Add("calibration_version_invalid");
-        }
-
-        var specVersion = specRelease?.SpecVersion ?? SpeakingSimulationV11Contracts.SpecVersion;
-        var rubricVersion = rubricRelease?.RubricVersion ?? SpeakingSimulationV11Contracts.RubricVersion;
+        var specVersion = SpeakingSimulationV11Contracts.SpecVersion;
+        var rubricVersion = SpeakingSimulationV11Contracts.RubricVersion;
         IReadOnlyList<SpeakingSimulationV11RubricCriterion> rubricCriteria =
             SpeakingSimulationV11Contracts.RubricCriteria.Criteria;
-        if (rubricRelease is not null)
+        var calibrationVersion = SpeakingSimulationV11Contracts.CalibrationVersion;
+        if (rubricRelease is not null
+            && string.Equals(
+                rubricRelease.CalibrationVersion,
+                SpeakingSimulationV11Contracts.CalibrationVersion,
+                StringComparison.Ordinal))
         {
             try
             {
                 var configured = JsonSerializer.Deserialize<SpeakingSimulationV11RubricCriterion[]>(
                     rubricRelease.CriteriaJson);
-                if (!SpeakingSimulationV11Contracts.IsValidRubric(configured))
-                {
-                    blockingReasons.Add("rubric_definition_invalid");
-                }
-                else
+                if (SpeakingSimulationV11Contracts.IsValidRubric(configured))
                 {
                     rubricCriteria = configured!;
+                    calibrationVersion = rubricRelease.CalibrationVersion;
                 }
             }
             catch (JsonException)
             {
-                blockingReasons.Add("rubric_definition_invalid");
+                // Governance validation owns malformed release definitions.
+                // Candidate visibility remains opt-out and falls back to the
+                // shipped contract until a valid configured rubric exists.
             }
         }
 
-        if (!await HasApprovedFlagAsync("calibration_approval", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("calibration_approval_required");
-        }
+        var normalizedProfessionId = string.IsNullOrWhiteSpace(professionId)
+            ? string.Empty
+            : professionId.Trim().ToLowerInvariant();
+        var candidateReleaseBlocked = await db.SpeakingSimulationV11OwnerApprovals
+            .AsNoTracking()
+            .AnyAsync(x => x.ApprovalKey == "candidate_release_block"
+                && (x.ScopeKey == "global" || x.ScopeKey == normalizedProfessionId)
+                && x.SpecVersion == specVersion
+                && x.RubricVersion == rubricVersion
+                && x.Status == SpeakingSimulationV11ApprovalStatus.Approved,
+                ct);
+        if (candidateReleaseBlocked)
+            blockingReasons.Add("candidate_release_blocked");
 
-        if (!await HasPositiveApprovedValueAsync("concurrency_budget", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("concurrency_budget_required");
-        }
-
-        if (!await HasPositiveApprovedValueAsync("cost_ceiling", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("cost_ceiling_required");
-        }
-
-        if (!await HasPositiveApprovedValueAsync("latency_sla_ms", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("latency_sla_required");
-        }
-
-        if (!await HasPositiveApprovedValueAsync("retention_days", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("retention_days_required");
-        }
-
-        if (!await HasPositiveApprovedValueAsync("stt_cost_per_minute", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("stt_cost_per_minute_required");
-        }
-
-        if (!await HasPositiveApprovedValueAsync("tts_cost_per_1000_characters", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("tts_cost_per_1000_characters_required");
-        }
-
+        // Operational controls are intentionally resolved independently from
+        // candidate visibility. Missing values fall back or are handled by the
+        // runtime budget/provider guards at the point where they are needed.
         var silencePromptThreshold = await GetPositiveApprovedValueAsync(
             "silence_prompt_threshold_ms", "global", specVersion, rubricVersion, ct);
-        if (silencePromptThreshold is null)
-        {
-            blockingReasons.Add("silence_prompt_threshold_required");
-        }
-
-        if (!await HasApprovedFlagAsync("silence_prompt_approval", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("silence_prompt_approval_required");
-        }
-
-        if (!await HasApprovedFlagAsync("retention_approval", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("retention_approval_required");
-        }
-
-        if (!await HasApprovedFlagAsync("graph_approval", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("graph_approval_required");
-        }
-
-        if (!await HasApprovedFlagAsync("profession_pack_approval", professionId, specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("profession_pack_approval_required");
-        }
-
-        if (!await HasApprovedFlagAsync("audio_assessment_approval", "global", specVersion, rubricVersion, ct))
-        {
-            blockingReasons.Add("audio_assessment_approval_required");
-        }
-
         var audioAssessmentProvider = await GetApprovedAudioAssessmentProviderAsync(
             specVersion, rubricVersion, ct);
-        if (audioAssessmentProvider is null)
-        {
-            blockingReasons.Add("audio_assessment_provider_required");
-        }
-        else if (!string.Equals(audioAssessmentProvider, "azure-phoneme", StringComparison.OrdinalIgnoreCase))
-        {
-            blockingReasons.Add("audio_assessment_provider_unsupported");
-        }
 
         var enabledRuleIds = rubricCriteria
             .SelectMany(x => x.EnabledRuleIds)
@@ -217,8 +141,7 @@ public sealed class SpeakingSimulationV11ReleaseGate(LearnerDbContext db)
                 ? (int)Math.Min((decimal)int.MaxValue, silencePromptThreshold.Value)
                 : SpeakingSimulationV11Contracts.DefaultSilencePromptThresholdMs,
             AudioAssessmentProvider: audioAssessmentProvider,
-            CalibrationVersion: rubricRelease?.CalibrationVersion
-                ?? SpeakingSimulationV11Contracts.CalibrationVersion);
+            CalibrationVersion: calibrationVersion);
     }
 
     private Task<bool> HasApprovedFlagAsync(

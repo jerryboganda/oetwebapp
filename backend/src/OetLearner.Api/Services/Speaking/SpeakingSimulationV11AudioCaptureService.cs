@@ -23,6 +23,8 @@ public sealed class SpeakingSimulationV11AudioCaptureService(
     IOptions<SpeakingComplianceOptions> complianceOptions,
     ILogger<SpeakingSimulationV11AudioCaptureService> logger)
 {
+    private const int DefaultPrivateReplayRetentionDays = 30;
+
     public async Task<SpeakingSimulationV11AudioCaptureResult> CaptureTurnAsync(
         SpeakingSession session,
         byte[] audio,
@@ -50,15 +52,24 @@ public sealed class SpeakingSimulationV11AudioCaptureService(
                 SpeakingComplianceConsentTypes.AiProcessing,
                 SpeakingComplianceConsentTypes.Retention,
             };
-        var activeConsentTypes = await db.SpeakingComplianceConsents
+        var activeConsents = await db.SpeakingComplianceConsents
             .AsNoTracking()
             .Where(x => x.UserId == session.UserId
                 && x.RevokedAt == null
                 && requiredConsentTypes.Contains(x.ConsentType))
-            .Select(x => x.ConsentType)
-            .Distinct()
+            .Select(x => new { x.ConsentType, x.ConsentVersion })
             .ToListAsync(ct);
-        if (requiredConsentTypes.Any(type => !activeConsentTypes.Contains(type, StringComparer.OrdinalIgnoreCase)))
+        var currentGeneralConsentVersion = complianceOptions.Value.CurrentConsentVersion;
+        var currentLiveVideoConsentVersion = complianceOptions.Value.CurrentLiveVideoConsentVersion;
+        var hasCurrentRequiredConsents = requiredConsentTypes.All(type => activeConsents.Any(consent =>
+            string.Equals(consent.ConsentType, type, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(
+                consent.ConsentVersion,
+                string.Equals(type, SpeakingComplianceConsentTypes.LiveVideoWithTutor, StringComparison.OrdinalIgnoreCase)
+                    ? currentLiveVideoConsentVersion
+                    : currentGeneralConsentVersion,
+                StringComparison.Ordinal)));
+        if (!hasCurrentRequiredConsents)
         {
             throw ApiException.Forbidden(
                 "SPEAKING_CONSENT_REQUIRED",
@@ -108,9 +119,12 @@ public sealed class SpeakingSimulationV11AudioCaptureService(
         var approvedRetentionDays = approvedRetentionValue is > 0
             ? (int?)Math.Min((decimal)int.MaxValue, approvedRetentionValue.Value)
             : null;
+        var defaultRetentionDays = session.Mode == SpeakingSessionMode.LiveTutor
+            ? complianceOptions.Value.RetentionDaysWhenTutorReviewed
+            : DefaultPrivateReplayRetentionDays;
         var retentionDays = Math.Max(
             1,
-            approvedRetentionDays ?? complianceOptions.Value.RetentionDaysDefault);
+            approvedRetentionDays ?? defaultRetentionDays);
 
         try
         {

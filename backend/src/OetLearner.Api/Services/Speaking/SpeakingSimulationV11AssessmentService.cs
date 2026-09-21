@@ -22,6 +22,9 @@ public sealed class SpeakingSimulationV11AssessmentService(
     private const string PromptTemplateId = "speaking.simulation.v1.1.assessment";
     private const string CardKind = "card";
     private const string CombinedKind = "combined";
+    private const string NumericScoringValidationCode = "numeric_scoring_validation_required";
+    private const string NumericScoringValidationMessage =
+        "Numeric OET Speaking scoring is temporarily unavailable until the authoritative human-calibration and expert-validation contract is implemented and accepted.";
 
     private const string AssessmentPrompt = """
 You are the calibrated assessor for an OET Speaking AI simulation.
@@ -104,7 +107,9 @@ Rules:
             .OrderByDescending(x => x.GeneratedAt)
             .FirstOrDefaultAsync(ct);
         if (existing is not null)
-            return Project(existing, ReadReport(existing.ReportJson));
+            return Project(existing);
+
+        ThrowNumericScoringValidationRequired();
 
         var gate = await releaseGate.EvaluateAsync(card.ProfessionId, ct);
         if (!gate.IsReleased)
@@ -146,7 +151,7 @@ Rules:
             .OrderBy(x => x.GeneratedAt)
             .FirstOrDefaultAsync(ct);
         if (existingByIdentity is not null)
-            return Project(existingByIdentity, ReadReport(existingByIdentity.ReportJson));
+            return Project(existingByIdentity);
         var turnQuery = db.SpeakingSimulationV11TurnEvidenceRows.AsNoTracking()
             .Where(x => x.SpeakingSessionId == sessionId);
         if (sourceTranscript is not null)
@@ -514,11 +519,11 @@ Rules:
             var raced = await db.SpeakingSimulationV11Assessments.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.IdentityHash == identityHash, ct);
             if (raced is not null)
-                return Project(raced, ReadReport(raced.ReportJson));
+                return Project(raced);
             throw;
         }
         await evidenceCapture.AttachAssessmentAsync(sessionId, assessmentId, ct);
-        return Project(row, report);
+        return Project(row);
     }
 
     public async Task<SpeakingSimulationV11AssessmentResponse?> GetLatestAsync(
@@ -527,7 +532,7 @@ Rules:
         var row = await db.SpeakingSimulationV11Assessments.AsNoTracking()
             .Where(x => x.SpeakingSessionId == sessionId && x.AssessmentKind == CardKind)
             .OrderByDescending(x => x.GeneratedAt).FirstOrDefaultAsync(ct);
-        return row is null ? null : Project(row, ReadReport(row.ReportJson));
+        return row is null ? null : Project(row);
     }
 
     public async Task<SpeakingSimulationV11AssessmentResponse> RunCombinedAssessmentAsync(
@@ -550,7 +555,7 @@ Rules:
             .OrderByDescending(x => x.GeneratedAt)
             .FirstOrDefaultAsync(ct);
         if (existingCombined is not null)
-            return Project(existingCombined, ReadReport(existingCombined.ReportJson));
+            return Project(existingCombined);
 
         var sessionIds = new[] { exam.SessionAId, exam.SessionBId }
             .Where(x => !string.IsNullOrWhiteSpace(x)).Cast<string>().ToArray();
@@ -573,6 +578,9 @@ Rules:
         {
             return CombinedTechnical("profession_mismatch");
         }
+
+        // Stop before release flags, report parsing, aggregation, or persisted score writes.
+        ThrowNumericScoringValidationRequired();
 
         var gate = await releaseGate.EvaluateAsync(exam.ProfessionId, ct);
         if (!gate.IsReleased)
@@ -683,7 +691,7 @@ Rules:
                 ScoreBand = criterion.ScoreBand, Rationale = criterion.Rationale, CreatedAt = now,
             });
         await db.SaveChangesAsync(ct);
-        return Project(row, report);
+        return Project(row);
     }
 
     public async Task<SpeakingSimulationV11AssessmentResponse?> GetLatestCombinedAsync(
@@ -692,7 +700,7 @@ Rules:
         var row = await db.SpeakingSimulationV11Assessments.AsNoTracking()
             .Where(x => x.ExamSessionId == examSessionId && x.AssessmentKind == CombinedKind)
             .OrderByDescending(x => x.GeneratedAt).FirstOrDefaultAsync(ct);
-        return row is null ? null : Project(row, ReadReport(row.ReportJson));
+        return row is null ? null : Project(row);
     }
 
     private async Task<SpeakingSimulationV11AssessmentResponse> TechnicalAsync(
@@ -719,7 +727,7 @@ Rules:
         };
         db.SpeakingSimulationV11Assessments.Add(row);
         await db.SaveChangesAsync(ct);
-        return Project(row, null);
+        return Project(row);
     }
 
     private static SpeakingSimulationV11AssessmentResponse CombinedTechnical(string code)
@@ -728,12 +736,28 @@ Rules:
             SpeakingSimulationV11Contracts.GraphDisclaimer, "low", null, null, code,
             DateTimeOffset.UtcNow);
 
-    private static SpeakingSimulationV11AssessmentResponse Project(
-        SpeakingSimulationV11Assessment row, SpeakingSimulationV11AssessmentReport? report)
-        => new(row.Id, row.Status.ToString(), row.AssessmentKind, row.CardSlot,
-            row.EstimatedPracticeScore, row.ScoreRangeLow, row.ScoreRangeHigh,
-            row.GraphDisclaimer, row.ConfidenceLabel ?? "low", row.ConfidenceScore,
-            report, row.TechnicalReviewCode, row.GeneratedAt);
+    private static SpeakingSimulationV11AssessmentResponse Project(SpeakingSimulationV11Assessment row)
+    {
+        // Only explicit technical envelopes may be returned during the numeric hold.
+        // Their server-side diagnostic JSON is neither parsed nor exposed to the learner.
+        if (row.Status != SpeakingSimulationV11AssessmentStatus.TechnicalReview
+            || row.EstimatedPracticeScore is not null
+            || row.ScoreRangeLow is not null
+            || row.ScoreRangeHigh is not null
+            || row.ConfidenceScore is not null)
+        {
+            ThrowNumericScoringValidationRequired();
+        }
+
+        return new SpeakingSimulationV11AssessmentResponse(
+            row.Id, row.Status.ToString(), row.AssessmentKind, row.CardSlot,
+            null, null, null,
+            row.GraphDisclaimer, row.ConfidenceLabel ?? "low", null,
+            null, row.TechnicalReviewCode, row.GeneratedAt);
+    }
+
+    private static void ThrowNumericScoringValidationRequired()
+        => throw ApiException.Conflict(NumericScoringValidationCode, NumericScoringValidationMessage);
 
     private static SpeakingSimulationV11AssessmentReport? ReadReport(string? json)
     {

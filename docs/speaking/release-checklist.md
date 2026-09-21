@@ -28,10 +28,13 @@ Every gate below must be green before flipping `Features__SpeakingV2 = true` for
 ## D. Compliance
 
 - [ ] `SpeakingComplianceConsent` records flowing for every session
+- [ ] v1.1 capture rejects stale consent versions for all required consent types (implemented; CI pending)
+- [ ] v1.1 private learner replay defaults to 30 days without a governed override (implemented; CI pending)
 - [ ] Recording deletion writes `AuditEvent`
 - [ ] Retention worker honors tutor-reviewed vs default windows
 - [ ] `ScoreDisclaimer` rendered prominently on every results surface
 - [ ] GDPR erasure pre-flight endpoint returns expected inventory
+- [ ] v1.1 post-session learner feedback enforces session ownership and idempotent resubmission (implemented; CI pending)
 
 ## E. Documentation
 

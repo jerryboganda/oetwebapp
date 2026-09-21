@@ -160,7 +160,8 @@ public sealed class SpeakingSimulationV11PersonaService(LearnerDbContext db)
                 : script.EmotionalState,
             CommunicationGoal = card.CommunicationGoal,
             ClinicalTopic = card.ClinicalTopic,
-            PersonaRole = "patient",
+            PersonaRole = InterlocutorRoleClassifier.ToCode(
+                InterlocutorRoleClassifier.Resolve(card.InterlocutorRole)),
             AllowedFactsJson = JsonSerializer.Serialize(GetAllowedFactKeys()),
             ApprovedCarryFactKeysJson = followUpEligible
                 ? NormalizeFactKeyJson(script.SecondVisitCarryFactsJson)
