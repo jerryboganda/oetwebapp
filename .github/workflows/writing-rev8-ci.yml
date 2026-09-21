@@ -16,6 +16,11 @@ on:
       - 'fix/writing-rev8-rule-enforcement'
   workflow_dispatch:
     inputs:
+      jev_only:
+        description: "Run only the live Jev repair judgment"
+        required: false
+        default: false
+        type: boolean
       dotnet_filter:
         description: "dotnet test --filter expression (blank = Writing/Rulebook default scope)"
         required: false
@@ -35,7 +40,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  jev:
+    if: inputs.jev_only == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --prefix "$RUNNER_TEMP/jev" ai@7.0.107
+      - name: Judge proposed Writing repair
+        env:
+          AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
+        working-directory: ${{ runner.temp }}/jev
+        run: |
+          node --input-type=module <<'NODE'
+          import { experimental_evaluate as evaluate } from 'ai';
+          const state = {
+            evidence: "The malformed-today regex ends in today\\b and matches the prefix of On today's review. This valid wording occurs in shared clean Weir fixtures. Model-answer tests expect Ready but receive HeldForReview. The natural-today theory also calls an injection helper with identical old/new strings; that helper asserts they differ.",
+            proposedRepair: "Exclude straight and curly apostrophe-s possessives from the malformed-today detector; retain bare on today rejection. Add positive and negative tests in candidate and model modes. Handle unchanged baseline separately without removing the injection helper safeguard. Bump validator version and matching pins. Do not change valid letters, gate policy, stored answers or production.",
+            limits: "Other CI failures need independent evidence; do not assume this repair resolves them."
+          };
+          const { answers } = await evaluate({
+            model: 'typesafe-ai/jev', state,
+            questions: { repair: { type: 'choice', instructions: 'Which next action is supported by the evidence and proposed repair?', criteria: {
+              repair_detector: 'Proceed with the narrowly scoped detector and fixture repair, then validate in CI.',
+              change_letters: 'Rewrite the valid shared letters instead of correcting the detector.',
+              investigate_more: 'Evidence is insufficient or the proposed repair is unsafe; pause for more investigation.'
+            } } }, maxRetries: 1, abortSignal: AbortSignal.timeout(30000)
+          });
+          const answer = answers.repair;
+          const options = ['repair_detector', 'change_letters', 'investigate_more'];
+          if (!answer || answer.type !== 'choice' || !options.includes(answer.choice)) throw new Error('Invalid choice answer');
+          const probabilities = options.map(option => answer.probabilities?.[option]);
+          if (probabilities.some(value => !Number.isFinite(value) || value < 0 || value > 1)) throw new Error('Invalid probabilities');
+          if (Math.abs(probabilities.reduce((sum, value) => sum + value, 0) - 1) > 0.02) throw new Error('Invalid distribution');
+          console.log(JSON.stringify(answer));
+          const selected = answer.probabilities[answer.choice];
+          const runnerUp = Math.max(...options.filter(option => option !== answer.choice).map(option => answer.probabilities[option]));
+          if (answer.choice !== 'repair_detector' || selected < 0.7 || selected - runnerUp < 0.3) throw new Error('Repair judgment paused');
+          NODE
+
   rulebooks:
+    if: inputs.jev_only != true
     name: Canonical Writing rulebooks (build + --check)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -60,6 +107,7 @@ jobs:
           retention-days: 7
 
   backend:
+    if: inputs.jev_only != true
     name: Backend Writing/Rulebook tests (.NET)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -110,6 +158,7 @@ jobs:
           retention-days: 7
 
   backend-build:
+    if: inputs.jev_only != true
     name: Backend compile gate (whole solution)
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -122,6 +171,7 @@ jobs:
         run: dotnet build backend/OetLearner.sln -c Release -p:RunAnalyzers=false --nologo
 
   frontend:
+    if: inputs.jev_only != true
     name: Frontend (tsc + scoped vitest + changed-file lint)
     runs-on: ubuntu-latest
     timeout-minutes: 25
