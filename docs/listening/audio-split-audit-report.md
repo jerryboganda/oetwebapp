@@ -1,5 +1,11 @@
 # OET Listening Audio Segmentation Audit Report
 
+> **SUPERSEDED (2026-09-22).** The "Verified" / "OK" labels below are structural only: the generator wrote them as literals
+> (a segment was "OK" when ffmpeg produced more than 1000 bytes) and no spoken content was checked. Boundaries here come
+> from silence-detect fallbacks and disagree with `scripts/materials/test_audio_boundaries_computed.json` on several
+> sources, so neither dataset is authoritative. The content-level audit (ASR cue, preparation window against the original
+> source, duplicate speech, timers) is `docs/listening/fleet-audit-2026-09-22.md` / `.csv`.
+
 **Generated**: 2026-08-28
 **Rule**: Spoken semantic transition cues (A1 -> A2 announcer intro -> "Now look at Part B" -> "Now look at Part C" -> "Now look at Extract 2")
 **Total Tests Processed**: 20
