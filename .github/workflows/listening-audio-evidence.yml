@@ -1,0 +1,90 @@
+name: Listening Audio Evidence
+
+# Fleet audit of Atlas/Nova Listening audio (owner-approved 2026-09-22). All compute (download, ffmpeg, Whisper,
+# analysis) runs here, never on the dev PC or the VPS. Transcripts of licensed audio are sealed (AES-256-GCM)
+# before upload because artifacts of a public repo are public. Trigger: bump scripts/listening/asr-run-trigger.txt
+# on this branch, or run manually.
+
+on:
+  push:
+    branches: [fix/listening-audio-integrity-2026-09-22]
+    paths:
+      - scripts/listening/asr-run-trigger.txt
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: listening-audio-evidence
+  cancel-in-progress: false
+
+env:
+  OET_ADMIN_EMAIL: ${{ secrets.OET_ADMIN_EMAIL }}
+  OET_ADMIN_PASSWORD: ${{ secrets.OET_ADMIN_PASSWORD }}
+  EVIDENCE_KEY: ${{ secrets.EVIDENCE_KEY }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/listening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/listening/evidence.mjs plan --shards 12 --out plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan
+          path: plan.json
+          retention-days: 7
+
+  evidence:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 170
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            scripts/listening
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Tools
+        run: |
+          command -v ffmpeg >/dev/null || (sudo apt-get update -y && sudo apt-get install -y ffmpeg)
+          pip install --quiet faster-whisper==1.2.1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-faster-whisper-small-en-v1
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+      - name: Collect evidence (download, silence map, speech-to-text)
+        run: node scripts/listening/evidence.mjs run --plan plan.json --shard ${{ matrix.shard }} --out evidence-out --model small.en
+      - name: Seal
+        if: always()
+        run: |
+          if [ -f evidence-out/evidence-${{ matrix.shard }}.json ]; then
+            node scripts/listening/seal.mjs seal evidence-out/evidence-${{ matrix.shard }}.json evidence-${{ matrix.shard }}.sealed
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: evidence-${{ matrix.shard }}
+          path: evidence-${{ matrix.shard }}.sealed
+          if-no-files-found: warn
+          retention-days: 7
