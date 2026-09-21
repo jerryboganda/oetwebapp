@@ -132,7 +132,7 @@ async function api(method, urlPath, { json, body, form, isWrite = false, extraHe
   if (res.status === 401 && retryOn401) {
     accessToken = ''; accessTokenExpiresAt = 0;
     await signIn();
-    return api(method, urlPath, { json, body, isWrite, extraHeaders, retryOn401: false });
+    return api(method, urlPath, { json, body, form, isWrite, extraHeaders, retryOn401: false });
   }
   const text = await res.text();
   if (!res.ok) {
@@ -380,7 +380,20 @@ async function phaseTranscribe() {
       if (!existsSync(windowPath)) { console.error(`  [FAIL] ${paperId}/${w}: window file missing — rerun prepare`); continue; }
       process.stdout.write(`  ${paperId}/${w}...`);
       try {
-        const result = await transcribeWindowFile(windowPath);
+        // 503 "mock active" is an intermittent per-instance cache behind the
+        // load balancer — same request succeeds on retry. Back off and retry
+        // rather than waiting for the next whole pass.
+        let result = null;
+        for (let attempt = 1; attempt <= 5; attempt++) {
+          try {
+            result = await transcribeWindowFile(windowPath);
+            break;
+          } catch (err) {
+            const retryable = err instanceof HttpError && (err.status === 503 || err.status === 429 || err.status >= 500);
+            if (!retryable || attempt === 5) throw err;
+            await sleep(4000 * attempt);
+          }
+        }
         writeFileSync(outJson, JSON.stringify(result, null, 2));
         console.log(` ${result.wordCount ?? '?'} words via ${result.provider ?? '?'}`);
       } catch (err) {
