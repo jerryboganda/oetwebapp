@@ -46,7 +46,7 @@ public sealed partial class WritingRuleEngine
     /// Every stored answer affected by this rule-pack change must be
     /// revalidated before it can remain Ready.
     /// </summary>
-    public const string ValidatorVersion = "writing-rules.owner-clarifications-4.2026-09-21.1";
+    public const string ValidatorVersion = "writing-rules.owner-clarifications-4.2026-09-21.2";
 
     /// <summary>
     /// Everything that blocks a Model Answer from being stored/published:

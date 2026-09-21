@@ -1093,7 +1093,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
 
         if (!string.IsNullOrEmpty(s.Body))
         {
-            var surname = ReLineSurname(line);
+            var surname = ResolvePatientName(input, s)?.Last;
             if (!string.IsNullOrEmpty(surname))
             {
                 var m = Regex.Match(s.Body, @"\b(?:Mr|Ms|Miss|Mrs)\.?\s+" + Regex.Escape(surname) + @"\b", RegexOptions.IgnoreCase);
