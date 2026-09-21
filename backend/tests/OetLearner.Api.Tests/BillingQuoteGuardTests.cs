@@ -1037,9 +1037,6 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
 
         using (var admin = _factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, ApplicationUserRoles.Admin))
         {
-            var stepUpSecret = await _factory.EnrolAuthenticatorAsync(SeedData.AdminAuthAccountId);
-            var stepUpToken = await TestWebApplicationFactory.IssueStepUpTokenAsync(admin, stepUpSecret, "billing.mark_paid");
-            admin.DefaultRequestHeaders.Add("X-OET-Step-Up", stepUpToken);
             using var fulfilResponse = await admin.PostAsJsonAsync(
                 $"/v1/admin/billing/fulfilment/subscriptions/{purchasedSubscriptionId}/mark-fulfilled",
                 new { notes = "Snapshot payment verified." });
