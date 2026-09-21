@@ -57,9 +57,9 @@ jobs:
           node --input-type=module <<'NODE'
           import { experimental_evaluate as evaluate } from 'ai';
           const state = {
-            evidence: "The malformed-today regex ends in today\\b and matches the prefix of On today's review. This valid wording occurs in shared clean Weir fixtures. Model-answer tests expect Ready but receive HeldForReview. The natural-today theory also calls an injection helper with identical old/new strings; that helper asserts they differ.",
-            proposedRepair: "Exclude straight and curly apostrophe-s possessives from the malformed-today detector; retain bare on today rejection. Add positive and negative tests in candidate and model modes. Handle unchanged baseline separately without removing the injection helper safeguard. Bump validator version and matching pins. Do not change valid letters, gate policy, stored answers or production.",
-            limits: "Other CI failures need independent evidence; do not assume this repair resolves them."
+            evidence: "CI passes 936 backend Writing tests; the sole failure is MinorNaming_Fires_On_AdultTitleInBody_ForMinor. DetectMinorNaming receives PatientIsMinor=true and an untitled Re: Sally Webster, DOB line. It calls ReLineSurname, which returns null unless ReTitledNameRe matches a title. Thus adult titles Ms Webster in the body are missed. Existing ResolvePatientName(input, structure) already supports both titled and untitled Re lines and exposes Last. No age normalization occurs in Lint. The fixture also inconsistently uses DOB 2003 with age 16 in a September 2026 letter.",
+            proposedRepair: "Use ResolvePatientName(input, structure)?.Last in DetectMinorNaming instead of the titled-only surname helper; leave other callers unchanged. Test both model and candidate modes, bad adult-title body and good first-name body. Correct this synthetic fixture DOB to November 2009, age 16 at the fixed letter date. Preserve an adult-mode control. Bump validator version and pins/docs. Do not change good letters, stored answers, or production.",
+            limits: "The fixture DOB mismatch alone does not explain the failed detector because PatientIsMinor is supplied directly. Reusing the existing parser limits the change to this detector."
           };
           const { answers } = await evaluate({
             model: 'typesafe-ai/jev', state,
