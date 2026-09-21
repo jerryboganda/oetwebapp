@@ -27,6 +27,19 @@ test('destination head: a short prep window is flagged (half prep = fail, two th
   assert.equal(level(checkDestinationHead('C2', segs, [{ start: 9, end: 99 }]), 'prep_window'), 'pass');
 });
 
+test('prep window is judged against the original recording; click-split pauses are merged', () => {
+  const segs = [seg(0.2, 8, 'Extract two questions 13 to 24')];
+  // a pause split by 10 ms clicks (Nova 12 source): 29.25 s in total, not 7.9 s
+  const split = [{ start: 9, end: 16.9 }, { start: 16.91, end: 22.5 }, { start: 22.51, end: 29.2 }, { start: 29.2, end: 38.3 }];
+  assert.equal(level(checkDestinationHead('A2', segs, split, null), 'prep_window'), 'pass');
+  // the source itself only has a 60.5 s pause (Nova 20): 60.5 s is faithful, 45 s is a truncation
+  const c = [seg(0.1, 6, 'Now look at Extract 2. Questions 37 to 42')];
+  assert.equal(level(checkDestinationHead('C2', c, [{ start: 8, end: 68.5 }], 60.5), 'prep_window'), 'pass');
+  assert.equal(level(checkDestinationHead('C2', c, [{ start: 8, end: 44 }], 60.5), 'prep_window'), 'fail');
+  // source 30 s but only 15.4 s left (Atlas 6/7): fail
+  assert.equal(level(checkDestinationHead('A2', segs, [{ start: 9, end: 24.4 }], 30.2), 'prep_window'), 'fail');
+});
+
 test('destination head: ASR mishearing "Extract" as "Act"/"Track" still finds the cue via the question range', () => {
   assert.equal(level(checkDestinationHead('A2', [seg(0, 6, 'Track 2, questions 13 to 24.')], [{ start: 8, end: 40 }]), 'head_cue'), 'pass');
   assert.equal(level(checkDestinationHead('A2', [seg(0, 6, 'Act 2, Questions 13-24.')], [{ start: 8, end: 40 }]), 'head_cue'), 'pass');
@@ -60,7 +73,10 @@ test('pair: genuinely different consultations pass', () => {
 
 test('tail and timer', () => {
   assert.equal(level(checkTail([{ start: 500, end: 620 }], 620, -90), 'tail_silence'), 'review');
-  assert.equal(level(checkTail([], 300, -12), 'abrupt_end'), 'review');
+  assert.equal(level(checkTail([], 300, -12), 'abrupt_end'), 'review'); // loud end and no transcript
+  assert.equal(level(checkTail([], 300, -12, [seg(290, 299.8, 'See you next time.')]), 'abrupt_end'), 'pass'); // complete sentence
+  assert.equal(level(checkTail([], 300, -12, [seg(290, 299.8, 'Now turn over and look at the')]), 'abrupt_end'), 'review'); // cut mid-sentence
+  assert.equal(level(checkTail([], 300, -12, [seg(290, 299, 'Well, that is all.'), seg(299, 300, 'You')]), 'abrupt_end'), 'pass'); // trailing hallucination ignored
   assert.equal(level(checkTimer(253, 645), 'timer_vs_audio'), 'fail');
   assert.equal(level(checkTimer(650, 645), 'timer_vs_audio'), 'pass');
   assert.equal(level(checkTimer(646, 645), 'timer_vs_audio'), 'review');

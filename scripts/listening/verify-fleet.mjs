@@ -27,6 +27,8 @@ for (const o of arg('--overrides') ? readJson(arg('--overrides')) : []) {
   if (p) p.sections[o.section] = { assetId: o.assetId, dbDur: o.dbDur, file: o.file, viaKey: o.section };
 }
 const timers = readJson(arg('--timers', 'timers.json'));
+// measured on the owner's original source audio (scan of the second extract's preparation pause); optional
+const srcPrep = arg('--source-prep') ? readJson(arg('--source-prep')) : {};
 const inv = readJson(arg('--inventory', 'source-inventory.json'));
 const actions = arg('--actions') ? readJson(arg('--actions')) : [];
 const runNote = arg('--run-note', 'Whisper small.en');
@@ -73,12 +75,12 @@ for (const p of plan.papers) {
     if (!s) { checks[c].push(res('present', intentionallyMissing && c === 'C2' ? 'pass' : 'fail', intentionallyMissing && c === 'C2' ? 'not published; the paper title states Q37-42 are unavailable (intentional)' : 'no audio published for this section')); continue; }
     if (s.error || !s.hasAsr) { checks[c].push(res('asr_evidence', 'review', s.error ? `no evidence (${s.error})` : 'no speech-to-text evidence')); continue; }
     checks[c].push(res('asr_evidence', 'pass', 'transcript and silence map collected'));
-    checks[c].push(...checkTimer(learner[c] ?? null, s.dur), ...checkTail(s.silences, s.dur, s.tailMaxDb));
+    checks[c].push(...checkTimer(learner[c] ?? null, s.dur), ...checkTail(s.silences, s.dur, s.tailMaxDb, s.tailSegs));
   }
   for (const [src, dst] of [['A1', 'A2'], ['C1', 'C2']]) {
     const a = S[src], b = S[dst];
     if (a?.hasAsr) checks[src].push(...checkSourceTail(a.segs, a.dur, src));
-    if (b?.hasAsr) checks[dst].push(...checkDestinationHead(dst, b.segs, b.silences));
+    if (b?.hasAsr) checks[dst].push(...checkDestinationHead(dst, b.segs, b.silences, srcPrep[p.paperId]?.[src === 'A1' ? 'A' : 'C']?.prepLen ?? null));
     if (a?.hasAsr && b?.hasAsr) {
       const pc = checkPair({ assetId: a.assetId, dur: a.dur, segs: a.segs }, { assetId: b.assetId, dur: b.dur, segs: b.segs });
       checks[dst].push(...pc);

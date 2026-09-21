@@ -54,7 +54,7 @@ jobs:
         run: |
           node scripts/listening/verify-fleet.mjs --plan work/plan/plan.json --evidence "$EVIDENCE_DIRS" \
             --timers scripts/listening/asr-inputs/timers.json --inventory scripts/listening/asr-inputs/source-inventory.json \
-            --actions scripts/listening/asr-inputs/actions.json --overrides scripts/listening/asr-inputs/plan-overrides.json --out report \
+            --actions scripts/listening/asr-inputs/actions.json --overrides scripts/listening/asr-inputs/plan-overrides.json --source-prep scripts/listening/asr-inputs/source-prep.json --out report \
             --run-note "Whisper small.en on GitHub Actions run(s) $(grep -E '^evidence_runs:' scripts/listening/verify-run-trigger.txt | cut -d: -f2 | tr -d ' ')"
       - name: Seal report
         run: |
@@ -65,3 +65,4 @@ jobs:
           name: fleet-report
           path: report-sealed/*
           retention-days: 14
+

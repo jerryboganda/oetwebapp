@@ -1,4 +1,4 @@
-verify run 2: fleet state after ST8/ST9 repair (test path fix)
+verify run 3: source-aware prep window, merged click-split pauses, complete-sentence endings
 plan_run: 35662307434
 evidence_runs: 35662307434,35664076043
 

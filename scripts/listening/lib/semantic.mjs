@@ -41,18 +41,29 @@ export function findCue(segs, re, from = 0, to = Infinity) {
 const anyCue = (section) => new RegExp([CUE.extractTwo, section === 'C2' ? CUE.questionsC2 : CUE.questionsA2, CUE.intro].map((r) => r.source).join('|'), 'i');
 
 // ── silence map helpers ──────────────────────────────────────────────────────
+/** Merge silences separated by a click-sized gap (<= maxGap s): one preparation pause is often split by a tiny blip. */
+export function mergeSilences(silences, maxGap = 0.3) {
+  const out = [];
+  for (const s of silences) {
+    const last = out[out.length - 1];
+    if (last && s.start - last.end <= maxGap) last.end = Math.max(last.end, s.end);
+    else out.push({ start: s.start, end: s.end });
+  }
+  return out;
+}
 export function leadingSilence(silences) {
-  const s = silences[0];
+  const s = mergeSilences(silences)[0];
   return s && s.start <= 0.3 ? s.end : 0;
 }
 export function trailingSilence(silences, dur) {
-  const s = silences[silences.length - 1];
+  const m = mergeSilences(silences);
+  const s = m[m.length - 1];
   return s && s.end >= dur - 0.3 ? +(dur - s.start).toFixed(2) : 0;
 }
 /** Longest silence overlapping [from, to] (clipped to the window). */
 export function longestSilence(silences, from, to) {
   let best = 0;
-  for (const s of silences) {
+  for (const s of mergeSilences(silences)) {
     const len = Math.min(s.end, to) - Math.max(s.start, from);
     if (len > best) best = len;
   }
@@ -63,9 +74,12 @@ export function longestSilence(silences, from, to) {
 const res = (id, level, detail) => ({ id, level, detail });
 
 /** Destination section head (A2/C2): starts at the Extract Two cue and keeps the full preparation window. */
-export function checkDestinationHead(section, segs, silences) {
-  const prepPass = section === 'C2' ? 75 : 24;   // nominal 90 s / 30 s
-  const prepFail = section === 'C2' ? 60 : 20;
+export function checkDestinationHead(section, segs, silences, sourcePrep = null) {
+  // Judge against the ORIGINAL recording's own prep pause when known (a few sources are shorter than the nominal 30 s / 90 s);
+  // otherwise against the nominal window.
+  const nominal = section === 'C2' ? 90 : 30;
+  const prepPass = sourcePrep != null ? sourcePrep - 2.5 : section === 'C2' ? 75 : 24;
+  const prepFail = sourcePrep != null ? sourcePrep * 0.75 : section === 'C2' ? 60 : 20;
   const out = [];
   const cue = findCue(segs, anyCue(section), 0, 75);
   if (!cue) {
@@ -74,7 +88,7 @@ export function checkDestinationHead(section, segs, silences) {
   }
   out.push(res('head_cue', cue.start <= 12 ? 'pass' : 'review', `second-extract introduction at ${cue.start.toFixed(1)} s`));
   const prep = longestSilence(silences, cue.start, cue.start + (section === 'C2' ? 150 : 90));
-  out.push(res('prep_window', prep >= prepPass ? 'pass' : prep >= prepFail ? 'review' : 'fail', `longest silence after the cue ${prep.toFixed(1)} s (nominal ${section === 'C2' ? 90 : 30} s)`));
+  out.push(res('prep_window', prep >= prepPass ? 'pass' : prep >= prepFail ? 'review' : 'fail', `longest silence after the cue ${prep.toFixed(1)} s (${sourcePrep != null ? `original recording ${sourcePrep} s` : `nominal ${nominal} s`})`));
   return out;
 }
 
@@ -103,13 +117,23 @@ export function checkPair(src, dst) {
   return out;
 }
 
-/** Trailing silence / abrupt end (clipping suspicion). */
-export function checkTail(silences, dur, tailMaxDb) {
+const HALLUCINATION = /^(you|thank you\.?|thanks\.?|bye\.?|\.+)$/i; // Whisper invents these over silence
+
+/**
+ * Trailing silence / abrupt end (clipping suspicion). Sources often end right after the last spoken word (no fade),
+ * so a loud last 0.4 s only needs a human ear when the final transcribed sentence is incomplete.
+ */
+export function checkTail(silences, dur, tailMaxDb, segs = []) {
   const ts = trailingSilence(silences, dur);
   const out = [];
   if (ts > 12.5) out.push(res('tail_silence', 'review', `${ts.toFixed(1)} s of trailing silence (confirm it is intentional timing)`));
   else out.push(res('tail_silence', 'pass', `${ts.toFixed(1)} s trailing silence`));
-  if (ts < 0.15 && tailMaxDb != null && tailMaxDb > -35) out.push(res('abrupt_end', 'review', `ends abruptly (last 0.4 s peaks at ${tailMaxDb} dB); confirm against the source that nothing is clipped`));
+  if (ts < 0.15 && tailMaxDb != null && tailMaxDb > -35) {
+    const last = [...segs].reverse().find((s) => s.text && !HALLUCINATION.test(s.text.trim()));
+    const text = last?.text.trim() ?? '';
+    if (last && /[.?!]['")]*$/.test(text)) out.push(res('abrupt_end', 'pass', `ends right after a complete sentence (last 0.4 s peaks at ${tailMaxDb} dB)`));
+    else out.push(res('abrupt_end', 'review', `ends abruptly and the last transcribed words are not a complete sentence (…"${text.slice(-45)}"); confirm against the source that nothing is clipped`));
+  }
   return out;
 }
 
