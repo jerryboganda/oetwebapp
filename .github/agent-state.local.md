@@ -1,3 +1,29 @@
+## Production recovery release - 2026-09-21
+
+- Owner explicitly authorized continuation with full authority, including deployment and revalidation, in this thread.
+- IMPORTANT: old task branch diverges from main and lacks newer senior/cross-model audits and Jev integrations. Do not deploy or merge it wholesale. Its 938/511 test evidence does not describe current production.
+- Isolated release checkout: `../oet-writing-release-0921`, detached HEAD `84a2a64fe7428717f7a627c9429af2c8e3ba2c33`, pushed to main. Based on `3239c95e0`; preserves all newer audit rules, TodayDate checks, parent/minor disambiguation and current validator `writing-rules.cross-model-audit.2026-09-17.1`.
+- Live Jev integration judgment `35623501304` approved scoped recovery on current main (`repair_detector=1.0`).
+- Shipped only saved-draft recovery in RevalidateAsync: latest lastDraft preferred, draft-only rows included, deterministic-only passes stamped even with semantic service registered, failed drafts retained, rejected state preserved, no automatic visibility enablement. Four regression cases added. No letter regeneration.
+- Deployment `35624343033` succeeded for `84a2a64f`: pre-build gate 26/26 tests; all images and migration gate passed; deployment job `106421539116` switched green -> blue; API/web/worker/gateway, routers and public `/api/health` + `/health/ready` gates passed. Previous green slot retained for rollback.
+- Integrated Writing CI `35625406005`: backend job `106418443761` 1555/1555, frontend job `106418444017` 512/512; TypeScript, lint, canonical generation/check and whole-solution compile passed.
+- Initial deployment `35623786629` stopped before builds on missing System.Text.Json in tests; import fixed in `84a2a64f`, then gate passed.
+- BLOCKED: production stored-answer revalidation not attempted. GitHub secrets have only learner credentials (WRITING_REV8_QA_* explicitly disposable learner; OET_CI_LEARNER_*). No admin secret exists. Browser MCP service unavailable (localhost:8000 connection refused). Do not promote learner accounts, extract server signing keys, or fabricate admin tokens.
+- Next: securely configure an authorized admin credential/session without pasting secrets into chat; run supported admin POST `/v1/admin/writing/model-answers/revalidate?apply=false&includeSemantic=false&onlyUnverified=false&offset=0&limit=500`; inspect report before apply. Recovered answers remain hidden until separate actual review/approval. No stored-answer mutation has occurred in this continuation.
+
+## Writing OA4 repairs - verified 2026-09-21, not deployed
+
+- Branch: `fix/checkout-expiry-payment-flow`; verified source SHA `5ca48f1a8`.
+- Jev live judgments: `35620409502` (possessive today) and `35622243428` (untitled minor names), both `repair_detector=1.0`, typed validation passed. Gateway secret exists; never request or print its value.
+- Repairs: `today\b` now excludes straight/curly possessive suffixes; minor naming reuses `ResolvePatientName` instead of titled-only `ReLineSurname`. Both modes have regressions; shared good letters were not edited.
+- OA4 metadata aligned: 84 sections, 122 critical rules, OA4 namespace. Validator version: `writing-rules.owner-clarifications-4.2026-09-21.2`.
+- Final Writing Rev8 CI `35622370814` passed: backend job `106408317344` Test 938/938; frontend job `106408317491` Vitest 511/511, tsc and lint pass (4 warnings); compile job `106408317175` and canonical job `106408317447` pass. No skipped backend tests reported in this selected scope. This workflow has no Postgres service; no claim of full database coverage.
+- Earlier broad QA Smoke `35614566706` completed failed, including browser jobs. Unrelated failures were not repaired under the Writing scope.
+- No deployment, stored-answer mutation, revalidation, publication, or invented Veterinary/Other Allied Health tasks. Separate production authorization remains required.
+- Historical read-only audit: 223 published tasks across 11 professions, each with nonempty task-model-answer text; current-validator candidate visibility was Medicine 55/55 only. Other counts: nursing 87, pharmacy 29, physiotherapy 12, dietetics 10, dentistry/occupational-therapy/optometry/podiatry/radiography/speech-pathology 5 each. These are historical observations, not refreshed live evidence.
+- Worktrees: main checkout plus locked/dirty `oet-transplant-tmpB`; leave the latter and unrelated untracked files untouched.
+- Next authorized production phase, only after fresh approval: deploy the verified source, revalidate existing stored text against the deployed version without rewriting compliant letters, then assess held/hidden answers before any publication. Do not infer authorization from this handoff.
+
 ## Current task — 15/16 Sep owner briefs ×4 (Whop P0, Listening, OTP, Remaining Work) — SHIPPED + LIVE (746d0c42a)
 
 - **Whop P0 ROOT CAUSE — not a missed webhook.** Traced `pay_noPiuzIx9aRUx8` via the admin API
