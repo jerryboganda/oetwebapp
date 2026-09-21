@@ -493,6 +493,99 @@ public class ListeningRelationalRuntimeTests
     }
 
     [Fact]
+    public async Task GetSessionAsync_SectionTimer_IsNeverShorterThanItsAudioPlusFiveSeconds()
+    {
+        var (db, svc) = Build();
+        var now = DateTimeOffset.UtcNow;
+        var user = new LearnerUser
+        {
+            Id = "learner-timer",
+            AuthAccountId = "auth-timer",
+            DisplayName = "Timer Learner",
+            Email = "timer@example.test",
+            Role = ApplicationUserRoles.Learner,
+            CreatedAt = now,
+            LastActiveAt = now,
+            AccountStatus = "active",
+        };
+        MediaAsset Media(string id, int seconds) => new()
+        {
+            Id = id,
+            OriginalFilename = $"{id}.mp3",
+            MimeType = "audio/mpeg",
+            Format = "mp3",
+            SizeBytes = 2048,
+            DurationSeconds = seconds,
+            StoragePath = $"content/{id}.mp3",
+            Status = MediaAssetStatus.Ready,
+            MediaKind = "audio",
+            UploadedAt = now,
+        };
+        var mediaA1 = Media("media-t-a1", 300);
+        var mediaA2 = Media("media-t-a2", 330);
+        ContentPaperAsset Audio(string id, string part, MediaAsset media, int order) => new()
+        {
+            Id = id,
+            PaperId = "paper-timer",
+            Role = PaperAssetRole.Audio,
+            Part = part,
+            MediaAssetId = media.Id,
+            MediaAsset = media,
+            DisplayOrder = order,
+            IsPrimary = true,
+        };
+        var paper = new ContentPaper
+        {
+            Id = "paper-timer",
+            SubtestCode = "listening",
+            Title = "Timer Paper",
+            Slug = "timer-paper",
+            Status = ContentStatus.Published,
+            Difficulty = "standard",
+            AppliesToAllProfessions = true,
+            EstimatedDurationMinutes = 45,
+            CreatedAt = now,
+            UpdatedAt = now,
+            PublishedAt = now,
+            // A1 already longer than its audio; A2's authored 307 s is shorter than its 330 s recording.
+            ExtractedTextJson = "{\"listeningExtracts\":[{\"partCode\":\"A1\",\"displayOrder\":1,\"kind\":\"consultation\",\"title\":\"A1\",\"timeLimitSeconds\":1000},{\"partCode\":\"A2\",\"displayOrder\":2,\"kind\":\"consultation\",\"title\":\"A2\",\"timeLimitSeconds\":307}]}",
+            Assets = [Audio("asset-t-a1", "A1", mediaA1, 1), Audio("asset-t-a2", "A2", mediaA2, 2)],
+        };
+        var part = new ListeningPart { Id = "pt-a1", PaperId = paper.Id, PartCode = ListeningPartCode.A1, MaxRawScore = 1, CreatedAt = now, UpdatedAt = now };
+        var question = new OetLearner.Api.Domain.ListeningQuestion
+        {
+            Id = "qt-1",
+            PaperId = paper.Id,
+            ListeningPartId = part.Id,
+            QuestionNumber = 1,
+            DisplayOrder = 1,
+            Points = 1,
+            QuestionType = ListeningQuestionType.ShortAnswer,
+            Stem = "Dose: ____",
+            CorrectAnswerJson = "\"five\"",
+            AcceptedSynonymsJson = "[]",
+            CaseSensitive = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.Users.Add(user);
+        db.MediaAssets.AddRange(mediaA1, mediaA2);
+        db.ContentPapers.Add(paper);
+        db.ListeningParts.Add(part);
+        db.ListeningQuestions.Add(question);
+        db.ListeningPolicies.Add(new ListeningPolicy { Id = "global", FullPaperTimerMinutes = 45, GracePeriodSeconds = 10 });
+        await db.SaveChangesAsync();
+
+        var session = await svc.GetSessionAsync(user.Id, paper.Id, "practice", attemptId: null, default);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(session));
+        var limits = doc.RootElement.GetProperty("paper").GetProperty("extracts").EnumerateArray()
+            .ToDictionary(e => e.GetProperty("partCode").GetString()!, e => e.GetProperty("timeLimitSeconds").GetInt32());
+
+        Assert.Equal(1000, limits["A1"]); // longer than its 300 s audio: untouched
+        Assert.Equal(335, limits["A2"]);  // 307 s authored < 330 s audio: raised to audio + 5 s
+    }
+
+    [Fact]
     public async Task Review_HidesHumanOverrideAuditReasonFromLearnerPayload()
     {
         var (db, svc) = Build();

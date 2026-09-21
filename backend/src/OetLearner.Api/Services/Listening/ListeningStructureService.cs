@@ -54,7 +54,7 @@ public sealed record ListeningValidationCounts(
 
 public sealed class ListeningStructureService(LearnerDbContext db) : IListeningStructureService
 {
-    private sealed record UploadedAudioAsset(string? Part, int? DurationSeconds);
+    private sealed record UploadedAudioAsset(string? Part, int? DurationSeconds, string? MediaAssetId = null);
 
     /// <summary>Canonical OET Listening shape. Non-configurable invariant.</summary>
     public const int CanonicalPartACount = 24;
@@ -123,7 +123,7 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
             .Include(a => a.MediaAsset)
             .ToListAsync(ct);
         var uploadedAudioTimings = uploadedAudioAssets
-            .Select(a => new UploadedAudioAsset(a.Part, a.MediaAsset?.DurationSeconds))
+            .Select(a => new UploadedAudioAsset(a.Part, a.MediaAsset?.DurationSeconds, a.MediaAssetId))
             .ToList();
         var missingAudioDurations = uploadedAudioTimings.Count(audio => audio.DurationSeconds is not > 0);
         if (missingAudioDurations > 0)
@@ -132,6 +132,22 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
                 Code: "listening_audio_duration",
                 Severity: "error",
                 Message: $"Every primary Listening audio asset requires a positive processed duration; {missingAudioDurations} asset(s) are missing duration metadata."));
+        }
+
+        // Sibling extracts (A1/A2, C1/C2) must not resolve to one media file: the exam player starts a section's file at
+        // 0:00 and ignores cue windows, so A2 would replay A1 (Atlas Sample Test 8). Resolution mirrors the learner audio
+        // resolver: exact section key, else the parent A/C row.
+        // ponytail: once the exam player honours cue windows, allow a shared parent file with verified distinct windows.
+        foreach (var (first, second) in new[] { ("A1", "A2"), ("C1", "C2") })
+        {
+            var one = ResolveSectionAudioId(uploadedAudioTimings, first);
+            if (one is not null && one == ResolveSectionAudioId(uploadedAudioTimings, second))
+            {
+                issues.Add(new(
+                    Code: "listening_audio_shared_across_sections",
+                    Severity: "error",
+                    Message: $"{first} and {second} play the same audio file; each extract needs its own recording because the exam player plays a section's file from the start."));
+            }
         }
 
         // Prefer the relational ListeningQuestion table when authoring has
@@ -201,6 +217,13 @@ public sealed class ListeningStructureService(LearnerDbContext db) : IListeningS
         {
             Source = source,
         };
+    }
+
+    private static string? ResolveSectionAudioId(IReadOnlyList<UploadedAudioAsset> assets, string code)
+    {
+        string? Find(string key) => assets
+            .FirstOrDefault(a => string.Equals(a.Part?.Trim(), key, StringComparison.OrdinalIgnoreCase))?.MediaAssetId;
+        return Find(code) ?? Find(code[..1]);
     }
 
     /// <summary>Tally items per part directly from the relational
