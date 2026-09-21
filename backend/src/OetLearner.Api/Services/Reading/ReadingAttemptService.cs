@@ -363,7 +363,12 @@ public sealed class ReadingAttemptService(
         // Skipped for mock sections (billObjectivePractice == false), which are
         // billed once via the mock credit instead.
         string? feedbackMessage = null;
-        if (billObjectivePractice && aiPackageCreditService is not null)
+        if (billObjectivePractice && ContentEntitlementService.IsFreeSample(paper.TagsCsv))
+        {
+            // Owner "Free Mocks": the tagged free-sample paper never debits.
+            feedbackMessage = ContentEntitlementService.FreeSampleFeedback;
+        }
+        else if (billObjectivePractice && aiPackageCreditService is not null)
         {
             var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
                 userId, "reading",

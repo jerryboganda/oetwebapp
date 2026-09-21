@@ -1,9 +1,11 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Assessment;
+using OetLearner.Api.Services.Billing;
 using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Listening;
 
@@ -649,6 +651,112 @@ public class ListeningRelationalRuntimeTests
         Assert.Contains(questionId, attempt.ScopeJson);
         Assert.Equal(1, attempt.MaxRawScore);
         Assert.NotNull(attempt.DeadlineAt);
+    }
+
+    // ── Free Mocks: the `free-sample` paper tag skips the per-paper debit ──────
+
+    private static (LearnerDbContext db, AiPackageCreditService credit, ListeningLearnerService svc) BuildWithCredits()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var db = new LearnerDbContext(options);
+        var credit = new AiPackageCreditService(db, NullLogger<AiPackageCreditService>.Instance);
+        return (db, credit, new ListeningLearnerService(db, new AllowAllContentEntitlementService(), aiPackageCreditService: credit));
+    }
+
+    private static Task GrantListeningTestsAsync(AiPackageCreditService credit, string userId, int tests)
+        => credit.GrantPackageAsync(
+            userId,
+            new BillingAddOn
+            {
+                Id = "addon-listening-free-sample",
+                Code = "pkg_listening_free_sample",
+                Name = "Listening pack",
+                Price = 1m,
+                Currency = "GBP",
+                Interval = "one_time",
+                Status = BillingAddOnStatus.Active,
+                DurationDays = 30,
+                GrantCredits = 0,
+                GrantEntitlementsJson = $$"""{"package_type":"listening","listening_tests":{{tests}}}""",
+                AddonKind = "ai_package",
+                AppliesToAllPlans = true,
+                IsStackable = true,
+                QuantityStep = 1,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            },
+            1,
+            "cs-listening-free-sample",
+            null,
+            CancellationToken.None);
+
+    private static async Task TagPaperAsync(LearnerDbContext db, string paperId, string tagsCsv)
+    {
+        var paper = await db.ContentPapers.SingleAsync(p => p.Id == paperId);
+        paper.TagsCsv = tagsCsv;
+        await db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task FreeSamplePaper_PartPractice_DoesNotDebitListeningCredit()
+    {
+        var (db, credit, svc) = BuildWithCredits();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+        await TagPaperAsync(db, paperId, "listening,atlas-practice-series,free-sample");
+        await GrantListeningTestsAsync(credit, userId, 1);
+
+        var started = await svc.StartPartPracticeAttemptAsync(userId, paperId, "A", default);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(started));
+
+        Assert.Equal(ContentEntitlementService.FreeSampleFeedback, doc.RootElement.GetProperty("feedbackMessage").GetString());
+        var snapshot = await credit.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(1, snapshot.ListeningTestsRemaining);
+    }
+
+    [Fact]
+    public async Task UntaggedPaper_PartPractice_StillDebitsOneListeningCredit()
+    {
+        var (db, credit, svc) = BuildWithCredits();
+        var (userId, paperId, _) = await SeedRelationalPaperAsync(db);
+        await TagPaperAsync(db, paperId, "listening,atlas-practice-series,access:free");
+        await GrantListeningTestsAsync(credit, userId, 1);
+
+        await svc.StartPartPracticeAttemptAsync(userId, paperId, "A", default);
+
+        var snapshot = await credit.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(0, snapshot.ListeningTestsRemaining);
+    }
+
+    [Fact]
+    public async Task FreeSamplePaper_JsonBackedExamStart_DoesNotDebitListeningCredit()
+    {
+        var (db, credit, svc) = BuildWithCredits();
+        var (userId, paperId) = await SeedJsonFallbackPaperAsync(db);
+        await TagPaperAsync(db, paperId, "listening,free-sample");
+        await GrantListeningTestsAsync(credit, userId, 1);
+
+        var started = await svc.StartAttemptAsync(userId, paperId, "home", default);
+        using var doc = JsonDocument.Parse(JsonSerializer.Serialize(started));
+
+        Assert.Equal(ContentEntitlementService.FreeSampleFeedback, doc.RootElement.GetProperty("feedbackMessage").GetString());
+        var snapshot = await credit.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(1, snapshot.ListeningTestsRemaining);
+    }
+
+    [Fact]
+    public async Task UntaggedPaper_JsonBackedExamStart_StillDebitsOneListeningCredit()
+    {
+        var (db, credit, svc) = BuildWithCredits();
+        var (userId, paperId) = await SeedJsonFallbackPaperAsync(db);
+        await TagPaperAsync(db, paperId, "listening,access:free");
+        await GrantListeningTestsAsync(credit, userId, 1);
+
+        await svc.StartAttemptAsync(userId, paperId, "home", default);
+
+        var snapshot = await credit.GetSnapshotAsync(userId, 20, default);
+        Assert.Equal(0, snapshot.ListeningTestsRemaining);
     }
 
     [Fact]

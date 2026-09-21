@@ -717,7 +717,12 @@ public sealed class ListeningLearnerService(
         // marking-policy and score-conversion gates, so an unavailable
         // governance record can never consume a learner credit.
         string? feedbackMessage = null;
-        if (billObjectivePractice && aiPackageCreditService is not null)
+        if (billObjectivePractice && await IsFreeSamplePaperAsync(source.Id, ct))
+        {
+            // Owner "Free Mocks": the tagged free-sample paper never debits.
+            feedbackMessage = ContentEntitlementService.FreeSampleFeedback;
+        }
+        else if (billObjectivePractice && aiPackageCreditService is not null)
         {
             var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
                 userId, "listening",
@@ -1886,7 +1891,13 @@ public sealed class ListeningLearnerService(
         // this debit: failed owner-controlled marking or conversion gates do
         // not create an attempt and therefore must not consume a credit.
         string? feedbackMessage = null;
-        if (billObjectivePractice && aiPackageCreditService is not null)
+        if (billObjectivePractice && await IsFreeSamplePaperAsync(source.Id, ct))
+        {
+            // Owner "Free Mocks": the tagged free-sample paper never debits —
+            // covers the exam start and Part practice, which both land here.
+            feedbackMessage = ContentEntitlementService.FreeSampleFeedback;
+        }
+        else if (billObjectivePractice && aiPackageCreditService is not null)
         {
             var creditResult = await aiPackageCreditService.DeductObjectivePracticeAsync(
                 userId, "listening",
@@ -2695,6 +2706,15 @@ public sealed class ListeningLearnerService(
         }
 
         await entitlements.RequireAccessAsync(userId, paper, ct);
+    }
+
+    private async Task<bool> IsFreeSamplePaperAsync(string paperId, CancellationToken ct)
+    {
+        var tagsCsv = await db.ContentPapers.AsNoTracking()
+            .Where(p => p.Id == paperId && p.SubtestCode == Subtest)
+            .Select(p => p.TagsCsv)
+            .FirstOrDefaultAsync(ct);
+        return ContentEntitlementService.IsFreeSample(tagsCsv);
     }
 
     private async Task<bool> CanLearnerSeePaperAsync(string userId, ContentPaper paper, CancellationToken ct)
@@ -4507,7 +4527,7 @@ public sealed class ListeningLearnerService(
     /// <summary>
     /// Resolve the learner-facing access tier from a paper's <c>TagsCsv</c>.
     /// Tokens recognised (case-insensitive):
-    ///   <c>access:free</c> → <c>"free"</c>,
+    ///   <c>access:free</c> or <c>free-sample</c> → <c>"free"</c>,
     ///   <c>access:preview</c> or <c>access:preview-first-extract</c> → <c>"preview"</c>,
     ///   anything else (including null/empty) → <c>"premium"</c>.
     /// This is independent of <see cref="IContentEntitlementService"/>: it
@@ -4520,7 +4540,7 @@ public sealed class ListeningLearnerService(
         foreach (var rawToken in tagsCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var token = rawToken.ToLowerInvariant();
-            if (token == "access:free") return "free";
+            if (token == "access:free" || token == ContentEntitlementService.FreeSampleTag) return "free";
             if (token == "access:preview" || token == "access:preview-first-extract") return "preview";
         }
         return "premium";

@@ -29,12 +29,17 @@ import {
 import { listMyReadingAssignments, type ReadingAssignmentDto } from '@/lib/reading-tutor-api';
 import { readErrorMessage } from '@/lib/read-error-message';
 import { CreditsGuideButton, CreditUsageInfoCard, LearnerPageHero } from '@/components/domain';
+import { FreeSampleCard } from '@/components/domain/free-sample-card';
+import { findFreeSamplePaper } from '@/lib/free-sample';
 import { LearnerSkillSwitcher } from '@/components/domain/learner-skill-switcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import { useReadingProfile } from '@/hooks/useReadingProfile';
 
 // The primary decision surface stays aligned with the OET sample-test pattern:
-// three Practice-by-Part cards plus one Full Reading Exam card. Operational
+// three Practice-by-Part cards plus one Full Reading Exam card. The only
+// addition is the out-of-grid FREE SAMPLE card above them (Free Mocks,
+// 2026-09-22) — not a fifth grid entry, and hidden unless a paper carries the
+// `free-sample` tag. Operational
 // context such as assigned work, available papers, and recent results appears
 // below that grid so learners can resume and review without diluting the first
 // choice they need to make.
@@ -144,6 +149,13 @@ export default function ReadingHome() {
   }, [authLoading, isAuthenticated, retryCount]);
 
   const activeAttempts = useMemo(() => home?.activeAttempts ?? [], [home]);
+  // The free-sample paper stays in the library too; this only finds it for the
+  // card. Resume-aware: an open attempt on it wins over a fresh start.
+  const freeSample = useMemo(() => findFreeSamplePaper(home?.papers ?? []), [home]);
+  const freeSampleHref = freeSample
+    ? (activeAttempts.find((attempt) => attempt.paperId === freeSample.id && attempt.canResume)?.route
+      ?? freeSample.route)
+    : null;
   const latestResult = home?.recentResults?.[0] ?? null;
   const totalPapers = home?.papers?.length ?? 0;
 
@@ -225,6 +237,18 @@ export default function ReadingHome() {
           </div>
 
           <CreditUsageInfoCard module="reading" className="mb-4" />
+
+          {freeSampleHref ? (
+            <FreeSampleCard
+              testId="reading-free-mock-card"
+              icon={BookOpen}
+              title="Free Reading Mock"
+              description="Try one complete OET Reading mock for free."
+              href={freeSampleHref}
+              onClick={() => analytics.track('free_sample_click', { module: 'reading' })}
+              className="mb-4"
+            />
+          ) : null}
 
           {loading ? (
             <LearnerSkeleton variant="card-grid" />

@@ -245,6 +245,94 @@ describe('Reading hub', () => {
     );
   });
 
+  describe('FREE SAMPLE card (Free Mocks)', () => {
+    const FREE_SAMPLE_LINK = /free reading mock/i;
+
+    function freeSamplePaper(tagsCsv: string | null = 'reading,atlas-practice-series,free-sample') {
+      return {
+        id: 'atlas-02',
+        title: 'Atlas Practice Series 02 — Paracetamol overdose',
+        slug: 'atlas-practice-series-02-paracetamol-overdose',
+        tagsCsv,
+        difficulty: 'standard',
+        estimatedDurationMinutes: 60,
+        publishedAt: '2026-08-18T00:00:00Z',
+        route: '/reading/paper/atlas-02',
+        partACount: 20,
+        partBCount: 6,
+        partCCount: 16,
+        totalPoints: 42,
+        partATimerMinutes: 15,
+        partBCTimerMinutes: 45,
+        lastAttempt: null,
+      };
+    }
+
+    it('shows the card above the four practice cards, linking to the tagged paper', async () => {
+      mockGetReadingHome.mockResolvedValueOnce({ ...READING_HOME_FIXTURE, papers: [freeSamplePaper()] });
+      render(<ReadingPage />);
+
+      const card = await screen.findByTestId('reading-free-mock-card');
+      expect(card).toHaveAttribute('href', '/reading/paper/atlas-02');
+      expect(card).toHaveTextContent(/free sample/i);
+      expect(card).toHaveTextContent('Try one complete OET Reading mock for free.');
+      expect(screen.getByRole('link', { name: FREE_SAMPLE_LINK })).toBe(card);
+
+      const grid = await screen.findByTestId('reading-hub-cards');
+      expect(card.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('is not a fifth grid entry — the four-card directive still holds', async () => {
+      mockGetReadingHome.mockResolvedValueOnce({ ...READING_HOME_FIXTURE, papers: [freeSamplePaper()] });
+      render(<ReadingPage />);
+
+      await screen.findByTestId('reading-free-mock-card');
+      const grid = await screen.findByTestId('reading-hub-cards');
+      expect(within(grid).getAllByRole('link')).toHaveLength(4);
+      expect(within(grid).queryByTestId('reading-free-mock-card')).not.toBeInTheDocument();
+    });
+
+    it('is hidden when no paper carries the free-sample tag', async () => {
+      mockGetReadingHome.mockResolvedValueOnce({
+        ...READING_HOME_FIXTURE,
+        papers: [freeSamplePaper('reading,atlas-practice-series,official-key')],
+      });
+      render(<ReadingPage />);
+
+      await screen.findByTestId('reading-hub-cards');
+      expect(screen.queryByTestId('reading-free-mock-card')).not.toBeInTheDocument();
+    });
+
+    it('resumes an open attempt on the free sample instead of starting fresh', async () => {
+      mockGetReadingHome.mockResolvedValueOnce({
+        ...READING_HOME_FIXTURE,
+        papers: [freeSamplePaper()],
+        activeAttempts: [
+          {
+            attemptId: 'attempt-7',
+            paperId: 'atlas-02',
+            paperTitle: 'Atlas Practice Series 02 — Paracetamol overdose',
+            status: 'InProgress',
+            startedAt: '2026-09-22T10:00:00Z',
+            deadlineAt: '2026-09-22T11:00:00Z',
+            partADeadlineAt: '2026-09-22T10:15:00Z',
+            partBCDeadlineAt: '2026-09-22T11:00:00Z',
+            answeredCount: 4,
+            totalQuestions: 42,
+            canResume: true,
+            route: '/reading/paper/atlas-02/player?attemptId=attempt-7',
+          },
+        ],
+      });
+      render(<ReadingPage />);
+
+      expect(await screen.findByTestId('reading-free-mock-card')).toHaveAttribute(
+        'href',
+        '/reading/paper/atlas-02/player?attemptId=attempt-7',
+      );
+    });
+  });
+
   it('hides the Resume banner when no active attempts are resumable', async () => {
     mockGetReadingHome.mockResolvedValueOnce({
       ...READING_HOME_FIXTURE,

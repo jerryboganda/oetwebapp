@@ -20,6 +20,8 @@ namespace OetLearner.Api.Services.Content;
 //
 //   Paper-level access tier comes from ContentPaper.TagsCsv:
 //     • Tag "access:free"     → free preview, anyone authenticated may attempt
+//     • Tag "free-sample"     → as access:free AND the per-paper credit debit
+//                               is skipped (see FreeSampleTag)
 //     • Tag "access:premium"  → requires premium entitlement (default if no tag)
 //
 //   Plan-level entitlement comes from BillingPlan.EntitlementsJson under a new
@@ -85,6 +87,20 @@ public sealed class ContentEntitlementService(
     private const string AccessFreeTag = "access:free";
     private const string AccessPremiumTag = "access:premium";
 
+    /// <summary>Paper tag that marks THE free-sample paper of a subtest (owner
+    /// "Free Mocks" 2026-09-22). Deliberately NOT <c>access:</c>-prefixed: admin
+    /// tooling rewrites every <c>access:*</c> token. Unlike <c>access:free</c>
+    /// (content gate only, credits still debited) this also skips the
+    /// per-paper credit debit — the server derives it from the loaded paper,
+    /// never from a client flag.</summary>
+    public const string FreeSampleTag = "free-sample";
+
+    /// <summary>Attempt-start feedback for a free-sample start. The frontend
+    /// matches this exact string to suppress the stale "credit used" toast.</summary>
+    public const string FreeSampleFeedback = "Free sample — no credits used.";
+
+    public static bool IsFreeSample(string? tagsCsv) => HasTag(tagsCsv, FreeSampleTag);
+
     public bool IsAdmin(System.Security.Claims.ClaimsPrincipal? principal)
     {
         if (principal is null) return false;
@@ -96,8 +112,8 @@ public sealed class ContentEntitlementService(
     {
         if (paper is null) throw new ArgumentNullException(nameof(paper));
 
-        // 1. Paper-level free preview.
-        if (HasTag(paper.TagsCsv, AccessFreeTag))
+        // 1. Paper-level free preview / free sample.
+        if (HasTag(paper.TagsCsv, AccessFreeTag) || HasTag(paper.TagsCsv, FreeSampleTag))
         {
             return new ContentEntitlementResult(
                 Allowed: true, Reason: "free_paper",
