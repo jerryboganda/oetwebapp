@@ -43,10 +43,15 @@ public sealed class DbBackedRulebookLoader : IRulebookLoader
     }
 
     public static string CacheKey(RuleKind kind, ExamProfession profession)
-        => $"rulebook:db:{kind.ToString().ToLowerInvariant()}:{profession.ToString().ToLowerInvariant()}";
+        => CacheKey(kind.ToString().ToLowerInvariant(), RulebookProfessionParser.ToCanonicalId(profession));
 
     public static string CacheKey(string kindLower, string professionLower)
-        => $"rulebook:db:{kindLower}:{professionLower}";
+    {
+        var professionId = RulebookProfessionParser.TryParse(professionLower, out var profession)
+            ? RulebookProfessionParser.ToCanonicalId(profession)
+            : professionLower.Trim().ToLowerInvariant();
+        return $"rulebook:db:{kindLower}:{professionId}";
+    }
 
     /// <summary>Drops a cached rulebook so the next read rebuilds from DB.</summary>
     public static void InvalidateCacheKey(IMemoryCache cache, string kindLower, string professionLower)
@@ -86,7 +91,7 @@ public sealed class DbBackedRulebookLoader : IRulebookLoader
         foreach (var r in dbRows)
         {
             if (!Enum.TryParse<RuleKind>(r.Kind, ignoreCase: true, out var kind)) continue;
-            if (!Enum.TryParse<ExamProfession>(r.Profession, ignoreCase: true, out var prof)) continue;
+            if (!RulebookProfessionParser.TryParse(r.Profession, out var prof)) continue;
             var book = TryBuildFromDb(kind, prof);
             if (book is null) continue;
             dbBooks[$"{kind}:{prof}".ToLowerInvariant()] = book;
@@ -114,7 +119,7 @@ public sealed class DbBackedRulebookLoader : IRulebookLoader
     private OetRulebook? TryBuildFromDb(RuleKind kind, ExamProfession profession)
     {
         var kindStr = kind.ToString().ToLowerInvariant();
-        var profStr = profession.ToString().ToLowerInvariant();
+        var profStr = RulebookProfessionParser.ToCanonicalId(profession);
 
         var version = _db.RulebookVersions.AsNoTracking()
             .FirstOrDefault(v => v.Kind == kindStr && v.Profession == profStr && v.Status == RulebookStatus.Published);

@@ -25,11 +25,11 @@ const PROFESSIONS: { value: string; label: string }[] = [
   { value: 'veterinary', label: 'Veterinary' },
   { value: 'optometry', label: 'Optometry' },
   { value: 'radiography', label: 'Radiography' },
-  { value: 'occupationaltherapy', label: 'Occupational therapy' },
-  { value: 'speechpathology', label: 'Speech pathology' },
+  { value: 'occupational-therapy', label: 'Occupational therapy' },
+  { value: 'speech-pathology', label: 'Speech pathology' },
   { value: 'podiatry', label: 'Podiatry' },
   { value: 'dietetics', label: 'Dietetics' },
-  { value: 'otheralliedhealth', label: 'Other allied health' },
+  { value: 'other-allied-health', label: 'Other allied health' },
 ];
 
 const LETTER_TYPES: { value: string; label: string }[] = [

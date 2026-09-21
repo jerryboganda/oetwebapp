@@ -49,11 +49,8 @@ public sealed class RulebookAdminService
         "writing", "speaking", "grammar", "pronunciation", "vocabulary", "conversation",
     };
 
-    public static readonly IReadOnlyList<string> ValidProfessions = new[]
-    {
-        "medicine", "nursing", "dentistry", "pharmacy", "physiotherapy", "veterinary",
-        "optometry", "radiography", "occupationaltherapy", "speechpathology", "podiatry", "dietetics",
-    };
+    public static readonly IReadOnlyList<string> ValidProfessions =
+        Enum.GetValues<ExamProfession>().Select(RulebookProfessionParser.ToCanonicalId).ToArray();
 
     public static readonly IReadOnlyList<string> ValidSeverities = new[]
     {
@@ -78,19 +75,20 @@ public sealed class RulebookAdminService
 
     private static string NormalizeProfession(string? raw)
     {
-        var v = (raw ?? "").Trim().ToLowerInvariant().Replace("-", "").Replace("_", "").Replace(" ", "");
-        if (!ValidProfessions.Contains(v))
+        if (!RulebookProfessionParser.TryParse(raw, out var profession))
             throw ApiException.Validation("invalid_profession", $"Invalid profession '{raw}'. Must be one of: {string.Join(", ", ValidProfessions)}.");
-        return v;
+        return RulebookProfessionParser.ToCanonicalId(profession);
     }
 
     // Read.
 
     public async Task<IReadOnlyList<RulebookSummaryDto>> ListAsync(string? kind, string? profession, CancellationToken ct)
     {
+        var normalizedKind = string.IsNullOrWhiteSpace(kind) ? null : NormalizeKind(kind);
+        var normalizedProfession = string.IsNullOrWhiteSpace(profession) ? null : NormalizeProfession(profession);
         var q = _db.RulebookVersions.AsNoTracking().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(kind)) q = q.Where(v => v.Kind == kind!.ToLower());
-        if (!string.IsNullOrWhiteSpace(profession)) q = q.Where(v => v.Profession == profession!.ToLower());
+        if (normalizedKind is not null) q = q.Where(v => v.Kind == normalizedKind);
+        if (normalizedProfession is not null) q = q.Where(v => v.Profession == normalizedProfession);
 
         var versions = await q.OrderBy(v => v.Kind).ThenBy(v => v.Profession).ThenBy(v => v.Version).ToListAsync(ct);
         if (versions.Count == 0) return Array.Empty<RulebookSummaryDto>();
