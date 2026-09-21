@@ -69,14 +69,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 4 disjoint shards. There is a single test project
+        # 6 disjoint shards (PlacementEndpointsTests + AuthFlowsTests alone are ~45 min of registrations). There is a single test project
         # (OetLearner.Api.Tests) with a mostly-flat namespace, so we shard by
         # round-robining distinct test CLASSES (not methods — keeps the
         # --filter compact) into N buckets via a stable, deterministic
         # partition computed at runtime from `dotnet test --list-tests`.
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     env:
-      TOTAL_SHARDS: 4
+      TOTAL_SHARDS: 6
       OET_TEST_POSTGRES_CONNECTION: Host=127.0.0.1;Port=5432;Database=oet_provider_tests;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v4
