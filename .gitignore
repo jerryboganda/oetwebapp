@@ -282,3 +282,10 @@ scripts/materials/.cache/
 .mcp.json
 ruvector.db
 
+# --- added 2026-09-21: per-machine tool state - never commit ---
+# .freebuff/project-id is a local tool identifier; .tools-state/ is captured
+# worker argv/result payloads from the Antigravity bridge. Both are machine
+# state, not repo content.
+.freebuff/
+.tools-state/
+
