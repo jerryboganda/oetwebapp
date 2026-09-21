@@ -159,7 +159,10 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
         Assert.Equal("medicine", claim.Profession);
         Assert.Equal(medCard, claim.ContentId);
         Assert.Equal(attemptId, claim.AttemptId);
-        Assert.Contains(ContentEntitlementService.FreeSampleFeedback, JsonSerializer.Serialize(result));
+        // Compare the PARSED value: the serializer escapes the em dash as — on the wire,
+        // which the client decodes back to the exact FREE_SAMPLE_FEEDBACK string.
+        using var payload = JsonDocument.Parse(JsonSerializer.Serialize(result));
+        Assert.Equal(ContentEntitlementService.FreeSampleFeedback, payload.RootElement.GetProperty("feedbackMessage").GetString());
         // The learner's ACCOUNT profession is never touched.
         Assert.Equal("nursing", (await _db.Users.SingleAsync(u => u.Id == learner)).ActiveProfessionId);
     }
