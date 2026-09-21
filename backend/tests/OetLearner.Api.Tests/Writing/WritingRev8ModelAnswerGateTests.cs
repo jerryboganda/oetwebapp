@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
@@ -152,6 +153,80 @@ public sealed class WritingRev8ModelAnswerGateTests
         Assert.Equal(WritingAssessmentModelAnswerStatus.HeldForReview, badRow.Status);
         Assert.False(badRow.IsCandidateVisible);
         Assert.Equal("model_answer_revalidation_failed", badRow.HoldReason);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Revalidate_Recovers_Latest_Draft_Without_Automatic_Publication(bool draftOnly)
+    {
+        await using var db = NewDb();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        var latestDraft = WritingModelAnswerBatchTests.ExemplarText();
+        db.WritingTaskModelAnswers.Add(new WritingTaskModelAnswer
+        {
+            Id = Guid.NewGuid(), ScenarioId = scenarioId,
+            Status = WritingAssessmentModelAnswerStatus.HeldForReview,
+            HoldReason = "model_answer_rule_violations",
+            ModelAnswerText = draftOnly ? null : MajorOnlyDefect(),
+            ValidationReportJson = JsonSerializer.Serialize(new { lastDraft = latestDraft }),
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var semantic = new FixedSemantic(new WritingModelAnswerSemanticResult(
+            Passed: true, Unavailable: false, Violations: [], Model: "test", RulebookVersion: null, Error: null));
+        var svc = Service(db, new ScriptedGateway(), semantic);
+        var request = new WritingModelAnswerRevalidationRequest(
+            Apply: false, IncludeSemantic: false, Profession: null, Offset: 0, Limit: 50, OnlyUnverified: false);
+
+        var preview = await svc.RevalidateAsync(request, "admin-1");
+        Assert.Equal(1, preview.Passed);
+        var before = await db.WritingTaskModelAnswers.AsNoTracking().SingleAsync();
+        Assert.Equal(WritingAssessmentModelAnswerStatus.HeldForReview, before.Status);
+        Assert.Equal(draftOnly ? null : MajorOnlyDefect(), before.ModelAnswerText);
+
+        var applied = await svc.RevalidateAsync(request with { Apply = true }, "admin-1");
+        Assert.Equal(1, applied.Passed);
+        var row = await db.WritingTaskModelAnswers.AsNoTracking().SingleAsync();
+        Assert.Equal(WritingAssessmentModelAnswerStatus.Ready, row.Status);
+        Assert.Equal(latestDraft, row.ModelAnswerText);
+        Assert.Equal(WritingRuleEngine.ValidatorVersion, row.ValidatorVersion);
+        Assert.Null(row.HoldReason);
+        Assert.False(row.IsCandidateVisible);
+        Assert.Null(row.ApprovedAt);
+        Assert.Equal(0, semantic.Calls);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Revalidate_Preserves_Rejected_Status_And_Failed_Draft(bool passing)
+    {
+        await using var db = NewDb();
+        var draft = passing ? WritingModelAnswerBatchTests.ExemplarText() : MajorOnlyDefect();
+        var scenarioId = await WritingModelAnswerBatchTests.SeedPublishedTaskAsync(db, "Refer Mr Weir.");
+        db.WritingTaskModelAnswers.Add(new WritingTaskModelAnswer
+        {
+            Id = Guid.NewGuid(), ScenarioId = scenarioId,
+            Status = WritingAssessmentModelAnswerStatus.Rejected,
+            HoldReason = "admin_rejected",
+            ValidationReportJson = JsonSerializer.Serialize(new { lastDraft = draft }),
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var svc = Service(db, new ScriptedGateway());
+        var result = await svc.RevalidateAsync(new WritingModelAnswerRevalidationRequest(
+            Apply: true, IncludeSemantic: false, Profession: null, Offset: 0, Limit: 50, OnlyUnverified: false), "admin-1");
+        Assert.Equal(passing ? 1 : 0, result.Passed);
+        var row = await db.WritingTaskModelAnswers.AsNoTracking().SingleAsync();
+        Assert.Equal(WritingAssessmentModelAnswerStatus.Rejected, row.Status);
+        Assert.Equal("admin_rejected", row.HoldReason);
+        Assert.False(row.IsCandidateVisible);
+        if (!passing)
+        {
+            using var report = JsonDocument.Parse(row.ValidationReportJson!);
+            Assert.Equal(draft, report.RootElement.GetProperty("lastDraft").GetString());
+        }
     }
 
     [Fact]

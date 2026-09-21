@@ -81,8 +81,6 @@ export async function fetchAdminRefunds(params?: { status?: string; page?: numbe
   return { items: result.items ?? [], total: result.total ?? (result.items ?? []).length };
 }
 
-export const ADMIN_REFUND_STEP_UP_SCOPE = 'billing.refund';
-
 export async function postAdminRefundAction(payload: { refundId: string; action: 'approve' | 'deny' | 'issue'; notes?: string | null; amount?: number | null }): Promise<AdminRefundRequest> {
   return apiRequest<AdminRefundRequest>('/v1/admin/refunds', {
     method: 'POST',
@@ -92,7 +90,7 @@ export async function postAdminRefundAction(payload: { refundId: string; action:
       notes: payload.notes ?? null,
       amount: payload.amount ?? null,
     }),
-  }, { stepUpScope: ADMIN_REFUND_STEP_UP_SCOPE });
+  });
 }
 
 export interface AdminBillingAnalyticsSeriesPoint {

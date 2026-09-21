@@ -8072,7 +8072,10 @@
     "primaryLetterTypes": [
       "referral",
       "transfer",
-      "discharge"
+      "discharge",
+      "urgent_referral",
+      "non_medical_referral",
+      "other"
     ],
     "notes": "Letters are typically nurse-to-nurse handovers, transfers, or referrals to GP. Handover detail and care plan continuity are weighted heavily."
   }

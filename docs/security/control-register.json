@@ -49,7 +49,8 @@
     { "id": "PAY-15" }, { "id": "PAY-16" },
     { "id": "PAY-17", "status": "implemented_pending_ci", "implementation_refs": ["backend/src/OetLearner.Api/Services/LearnerService.cs (EnsureCheckoutGatewayAsync comment block + intent creation pins quoteEntity.TotalAmount/Currency)", "backend/src/OetLearner.Api/Services/LearnerService.Billing.cs (settlement re-validation)"], "status_reason": "Amount pinned at intent creation from the server-calculated quote; settlement re-validated on webhook + capture paths. Residual: per-gateway PV-15 live exercise. CI pending." },
     { "id": "PAY-18" },
-    { "id": "PAY-19" }, { "id": "PAY-20", "status": "implemented_pending_ci", "implementation_refs": ["backend/src/OetLearner.Api/Services/StepUp/StepUpService.cs", "backend/src/OetLearner.Api/Endpoints/AdminRouteBuilderExtensions.cs (WithStepUp filter)", "backend/src/OetLearner.Api/Endpoints/BillingExpansionEndpoints.cs (billing.mark_paid)", "backend/src/OetLearner.Api/Endpoints/AdminBillingEndpoints.cs (billing.refund)", "backend/src/OetLearner.Api/Program.cs (AdminBillingMarkPaidWrite/RefundWrite narrowed to granular permission only)"], "status_reason": "Step-up + policy narrowing applied in working tree; SystemAdmin keeps access via AdminPermissions.All. CI pending." },
+    { "id": "PAY-19" },
+    { "id": "PAY-20", "status": "waived_by_owner", "implementation_refs": [], "status_reason": "Step-up (per-action TOTP re-authentication) on admin mark-paid/refund was removed at owner direction (2026-09-22): platform admins confirm money-moving actions once at login via authenticator MFA (only when the authenticator is configured), never per action. The dedicated AdminBillingMarkPaidWrite/RefundWrite permission narrowing (separation of duties) remains in force and is the surviving control." },
     { "id": "PAY-21" }, { "id": "PAY-22" }, { "id": "PAY-23" },
     { "id": "IAM-01", "status": "implemented_pending_ci", "implementation_refs": ["backend/src/OetLearner.Api/Security/PasswordHasherPolicy.cs", "backend/src/OetLearner.Api/Security/Pbkdf2Sha512PasswordHasher.cs", "backend/src/OetLearner.Api/Program.cs (DI binding)", "backend/src/OetLearner.Api/Services/AuthService.cs (SuccessRehashNeeded migration on sign-in)", "backend/src/OetLearner.Api/Services/SeedData.cs", "backend/tests/OetLearner.Api.Tests/Auth/PasswordHasherPolicyTests.cs"], "status_reason": "PBKDF2-HMAC-SHA512 >= 220k via custom IPasswordHasher in Identity v3 blob format (stock hasher has no PRF selector — verified against .NET 10 API docs); rehash-on-login migration implemented. CI pending." },
     { "id": "IAM-02" }, { "id": "IAM-03" }, { "id": "IAM-04" },
@@ -125,7 +126,7 @@
       { "ref": "PAY-19, MON-07", "claim": "APPLIED (docs) — BillingReconciliationWorker.cs registered in Program.cs", "ci_verified": false },
       { "ref": "PAY-04/08/11", "claim": "Migration 20261231090000_AddPerProviderPaymentIdempotencyIndexes.cs authored (hand-written, snapshot untouched); not yet applied to any database", "ci_verified": false },
       { "ref": "PAY-05/06 (normalized proof contract)", "claim": "PaymentConfirmation.cs exists: bool Paid + decimal Amount + currency + provider txn id + raw status. Plan requires integer minor units and merchant-account binding — gap.", "ci_verified": false },
-      { "ref": "PAY-20", "claim": "PARTIAL (docs) — billing:mark_paid_write permission split applied; step-up re-authentication outstanding", "ci_verified": false }
+      { "ref": "PAY-20", "claim": "WAIVED (owner directive 2026-09-22) — per-action step-up removed; separation-of-duties permission split retained", "ci_verified": false }
     ]
   }
 }

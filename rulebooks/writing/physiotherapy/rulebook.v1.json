@@ -8130,7 +8130,11 @@
     ],
     "primaryLetterTypes": [
       "referral",
-      "discharge"
+      "discharge",
+      "urgent_referral",
+      "transfer",
+      "non_medical_referral",
+      "other"
     ],
     "notes": "Functional status, ROM, pain, and adherence to home exercise programme drive content selection."
   }

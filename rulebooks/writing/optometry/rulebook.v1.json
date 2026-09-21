@@ -2934,7 +2934,10 @@
     ],
     "primaryLetterTypes": [
       "referral",
-      "urgent_referral"
+      "urgent_referral",
+      "discharge",
+      "transfer",
+      "other"
     ],
     "notes": "Visual acuity, intraocular pressure, refraction, and history of systemic disease (diabetes, hypertension) drive content."
   }

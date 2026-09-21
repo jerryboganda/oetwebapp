@@ -34,6 +34,9 @@ public sealed class WritingModelAnswerBatchTests
             Profession = "medicine",
             LetterType = "LT-RR",
             TaskPromptMarkdown = taskPrompt,
+            // A real dated task carries its own date. Without it the Model Answer gate (owner decision, 19 Sep 2026)
+            // reads the source as giving no day-level date and will not let the letter state one.
+            TodayDate = LetterDateLine(exemplar ?? ExemplarText()),
             Status = "published",
             AuthorId = "admin-1",
             CreatedAt = now,
@@ -56,6 +59,13 @@ public sealed class WritingModelAnswerBatchTests
         }
         await db.SaveChangesAsync();
         return id;
+    }
+
+    private static string? LetterDateLine(string letter)
+    {
+        var m = System.Text.RegularExpressions.Regex.Match(
+            letter, @"^\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})\s*$", System.Text.RegularExpressions.RegexOptions.Multiline);
+        return m.Success ? m.Groups[1].Value : null;
     }
 
     internal static IEnumerable<string> CaseNoteSentencesFor(string letter)

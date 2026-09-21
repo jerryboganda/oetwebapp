@@ -139,8 +139,13 @@ public sealed partial class WritingRuleEngine
         @"\b(?:Mr|Mrs|Ms|Miss|Dr)\s+[A-Z][A-Za-z\-]*(?:['’][A-Z][A-Za-z\-]*)?(?:\s+[A-Z][A-Za-z\-]*(?:['’][A-Z][A-Za-z\-]*)?)?\s+(?:[a-z]+ly\s+|(?:also|still|now|then|only|never|first|again|initially|subsequently|later|currently|previously|recently)\s+)?(?![a-z]+ing\b)(?!(?:and|or|with|to|at|in|on|of|for|by|from|as|within|during|after|before|who|which|that|since|until|about|over|under|into|despite|following|including|regarding|via|per)\b)[a-z]{2,}\b");
 
     // "Crestor blocks ...", "Analgesia comprises ...".
+    // Cross-profession repair (18 Sep 2026): only an "-ly" adverb could sit between the subject
+    // and its verb here, while SaG1TitledSubjectRe above already allowed "now", "still", "again"
+    // and the rest. So "Harry now cries and panics whenever his mother leaves his sight." was
+    // reported as having "no subject and finite verb" — deleting the single word "now" made the
+    // same sentence pass. Both branches now accept the same adverbs.
     private static readonly Regex SaG1InitialNounVerbRe = new(
-        @"^(?!(?:However|Therefore|Thus|With|Without|At|In|On|For|From|After|Before|Despite|Following|Given|Owing|And|But|Or|The|A|An)\b)[A-Z][a-z\-]+\s+(?:[a-z]+ly\s+)?[a-z]{2,}s(?<!ss)(?<!us)(?<!is)(?<!as)\b");
+        @"^(?!(?:However|Therefore|Thus|With|Without|At|In|On|For|From|After|Before|Despite|Following|Given|Owing|And|But|Or|The|A|An)\b)[A-Z][a-z\-]+\s+(?:[a-z]+ly\s+|(?:also|still|now|then|only|never|first|again|initially|subsequently|later|currently|previously|recently)\s+)?[a-z]{2,}s(?<!ss)(?<!us)(?<!is)(?<!as)\b");
 
     // "His family shares most meals.", "Mrs Whitfield's risk factors ...".
     private static readonly Regex SaG1DeterminerSubjectVerbRe = new(

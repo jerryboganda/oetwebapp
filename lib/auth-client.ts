@@ -12,7 +12,6 @@ import {
   updateStoredUser,
 } from './auth-storage';
 import { env } from './env';
-import { clearStepUpTokens } from './api/step-up';
 import { getDeviceIdForRequest } from './device-id';
 import type {
   AuthenticatorSetup,
@@ -659,7 +658,6 @@ export async function signOut(): Promise<void> {
   } finally {
     clearStoredSession();
     clearPendingMfaChallenge();
-    clearStepUpTokens();
   }
 }
 

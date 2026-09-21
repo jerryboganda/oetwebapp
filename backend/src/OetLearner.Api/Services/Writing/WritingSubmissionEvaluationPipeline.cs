@@ -831,7 +831,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
             PatientAge: patientAge,
             PatientIsMinor: patientAge is < 18,
             CaseNotesMarkers: WritingCaseNotesMarkerExtractor.Derive(preflight.CaseNotesSnapshot),
-            Profession: profession));
+            Profession: profession,
+            // Owner decision (19 Sep 2026): a candidate is not penalised for omitting the letter date
+            // when the task's source gives no day-level date to put in it.
+            DateAnchor: WritingRuleEngine.ClassifyDateAnchor(preflight.TodayDate, preflight.CaseNotesSnapshot, preflight.TaskSnapshot)));
         ruleFindings = ruleFindings
             .Concat(ToReportFindings(aiFindings, ruleFindings, submission.LetterContent ?? string.Empty))
             .ToList();
