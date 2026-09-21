@@ -1525,6 +1525,14 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     // discharge plan (physiotherapy example added after the same pattern
     // recurred for Mr Ryan Cooper's exercise-only discharge). Only the
     // post-discharge-instructions half of the check applies to them.
+    // A dose can only be demanded when the source records one. A discharge whose only medication is an
+    // undosed advisory product ("preservative-free lubricants up to four times daily as required") cannot
+    // state a dose without inventing it, which the owner's authority chain forbids (Helen Morris, optometry).
+    // With no notes supplied the original demand stands.
+    private static bool SourceRecordsDose(string? caseNotes)
+        => caseNotes is null
+           || Regex.IsMatch(caseNotes, @"\d+(?:\.\d+)?\s*(?:mg|mcg|micrograms?|ml|units?|IU|g)\b", RegexOptions.IgnoreCase);
+
     private static readonly HashSet<ExamProfession> NonPrescribingProfessions = new()
     {
         ExamProfession.Dietetics, ExamProfession.OccupationalTherapy, ExamProfession.SpeechPathology,
@@ -1535,7 +1543,7 @@ public sealed partial class WritingRuleEngine(IRulebookLoader loader)
     {
         if (!string.Equals(input.LetterType, "discharge", StringComparison.OrdinalIgnoreCase)) yield break;
         var hasInstr = Regex.IsMatch(s.Body, @"\b(follow[- ]up|review|advised|should|must|recommend)", RegexOptions.IgnoreCase);
-        if (NonPrescribingProfessions.Contains(input.Profession))
+        if (NonPrescribingProfessions.Contains(input.Profession) || !SourceRecordsDose(input.CaseNotesText))
         {
             if (!hasInstr)
                 yield return new LintFinding(rule.Id, rule.Severity,
