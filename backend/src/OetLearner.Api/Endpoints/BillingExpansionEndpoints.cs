@@ -31,8 +31,6 @@ public static class BillingExpansionEndpoints
     public static IEndpointRouteBuilder MapBillingExpansionEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/v1");
-        var markPaidStepUpRequired = app.ServiceProvider
-            .GetRequiredService<IOptions<StepUpOptions>>().Value.RequireForManualPaymentApproval;
 
         // ── Learner-facing ─────────────────────────────────────────
         var billing = v1.MapGroup("/billing").RequireAuthorization();
@@ -43,28 +41,16 @@ public static class BillingExpansionEndpoints
         var adminMp = v1.MapGroup("/admin/billing/manual-payments");
         adminMp.MapGet("/", ListManualPayments).RequireAuthorization("AdminBillingRead");
         adminMp.MapGet("/{id}/proof", GetManualPaymentProof).RequireAuthorization("AdminBillingRead");
-        var approveManualPayment = adminMp.MapPost("/{id}/approve", ApproveManualPayment).WithAdminWrite("AdminBillingMarkPaidWrite");
-        if (markPaidStepUpRequired)
-        {
-            approveManualPayment.WithStepUp("billing.mark_paid");
-        }
+        adminMp.MapPost("/{id}/approve", ApproveManualPayment).WithAdminWrite("AdminBillingMarkPaidWrite");
         adminMp.MapPost("/{id}/reject", RejectManualPayment).WithAdminWrite("AdminBillingRefundWrite");
         adminMp.MapPost("/{id}/status", SetManualPaymentStatus).WithAdminWrite("AdminBillingRefundWrite");
-        var waiveManualPaymentProof = adminMp.MapPost("/{id}/waive-proof", WaiveManualPaymentProof).WithAdminWrite("AdminBillingMarkPaidWrite");
-        if (markPaidStepUpRequired)
-        {
-            waiveManualPaymentProof.WithStepUp("billing.mark_paid");
-        }
+        adminMp.MapPost("/{id}/waive-proof", WaiveManualPaymentProof).WithAdminWrite("AdminBillingMarkPaidWrite");
         adminMp.MapPost("/{id}/reopen", ReopenManualPayment).WithAdminWrite("AdminBillingRefundWrite");
 
         // ── Admin: manual fulfilment queue ─────────────────────────
         var adminFul = v1.MapGroup("/admin/billing/fulfilment");
         adminFul.MapGet("/", ListPendingFulfilment).RequireAuthorization("AdminBillingRead");
-        var markSubscriptionFulfilled = adminFul.MapPost("/subscriptions/{id}/mark-fulfilled", MarkSubscriptionFulfilled).WithAdminWrite("AdminBillingMarkPaidWrite");
-        if (markPaidStepUpRequired)
-        {
-            markSubscriptionFulfilled.WithStepUp("billing.mark_paid");
-        }
+        adminFul.MapPost("/subscriptions/{id}/mark-fulfilled", MarkSubscriptionFulfilled).WithAdminWrite("AdminBillingMarkPaidWrite");
         adminFul.MapPost("/subscriptions/{id}/ensure-invoice", EnsureSubscriptionInvoice).RequireAuthorization("AdminBillingRead");
 
         // ── Admin: scholarships ────────────────────────────────────

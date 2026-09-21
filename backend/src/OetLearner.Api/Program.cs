@@ -23,7 +23,6 @@ using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Otp;
 using OetLearner.Api.Services.LiveClasses;
-using OetLearner.Api.Services.StepUp;
 using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -163,7 +162,6 @@ builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSecti
 builder.Services.Configure<OetLearner.Api.Configuration.DeviceAttestationOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.DeviceAttestationOptions.SectionName));
 builder.Services.Configure<SpeakingComplianceOptions>(builder.Configuration.GetSection("Speaking:Compliance"));
 builder.Services.Configure<OetLearner.Api.Configuration.LiveKitOptions>(builder.Configuration.GetSection(OetLearner.Api.Configuration.LiveKitOptions.SectionName));
-builder.Services.Configure<StepUpOptions>(builder.Configuration.GetSection(StepUpOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
 // No backplane (AddStackExchangeRedis/AddAzureSignalR) is configured — every
 // Clients.Group(...)/Clients.User(...) send only reaches connections held by THIS
@@ -255,8 +253,6 @@ builder.Services.AddScoped<IIpIntelligenceService, IpinfoIpIntelligenceService>(
 builder.Services.AddScoped<IAuthorizationHandler, EmailVerifiedRequirementHandler>();
 builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, EmailVerifiedAuthorizationResultHandler>();
 builder.Services.AddScoped<AuthService>();
-// PAY-16 / IAM-08: short-lived, single-scope step-up proof for money-moving admin actions.
-builder.Services.AddScoped<IStepUpService, StepUpService>();
 // HIBP breach-check client. User-Agent is required by the HIBP API; anything
 // identifying your app is acceptable. Timeout is short because breach-check
 // failure is fail-open (we do not want HIBP hiccups to block sign-ups).
@@ -919,8 +915,7 @@ builder.Services.AddAuthorization(options =>
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:refund_write", "system_admin")));
     // PAY-20 (audit §4.7): money-moving decisions must NOT be reachable through
     // the legacy billing:write superset — only the dedicated granular permission
-    // (granted to BillingAdmin) or system_admin. Step-up re-authentication is
-    // layered on top by WithStepUp, so the permission alone is not sufficient.
+    // (granted to BillingAdmin) or system_admin.
     options.AddPolicy("AdminBillingMarkPaidWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:mark_paid_write", "system_admin")));
@@ -2813,7 +2808,6 @@ app.MapGet("/health", async (LearnerDbContext db, CancellationToken ct) =>
 if (!oetRunModeIsWorker)
 {
 app.MapAuthEndpoints();
-app.MapStepUpEndpoints();
 app.MapDeviceAttestationEndpoints();
 app.MapProfessionCatalogEndpoints();
 app.MapPublicSupportEndpoints();

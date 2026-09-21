@@ -212,7 +212,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
     /// <summary>
     /// Ensures an auth account row exists for a dev-auth debug identity, so features
-    /// that resolve the account by id (step-up) can find it.
+    /// that resolve the account by id can find it.
     /// </summary>
     public async Task EnsureAuthAccountAsync(
         string accountId,
@@ -263,48 +263,6 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         await db.SaveChangesAsync();
     }
 
-    /// <summary>
-    /// Enrols authenticator TOTP on an existing auth account so step-up gated admin
-    /// actions can be exercised. Returns the TOTP secret so a caller can generate codes.
-    /// </summary>
-    public async Task<string> EnrolAuthenticatorAsync(string authAccountId)
-    {
-        using var scope = Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-        var protector = scope.ServiceProvider
-            .GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>()
-            .CreateProtector("AuthService.AuthenticatorSecret");
-
-        var account = await db.ApplicationUserAccounts.SingleAsync(x => x.Id == authAccountId);
-        var secret = AuthenticatorTotp.GenerateSecretKey();
-        account.ProtectedAuthenticatorSecret = System.Convert.ToBase64String(
-            protector.Protect(System.Text.Encoding.UTF8.GetBytes(secret)));
-        account.AuthenticatorEnabledAt = DateTimeOffset.UtcNow;
-        account.UpdatedAt = DateTimeOffset.UtcNow;
-        await db.SaveChangesAsync();
-        return secret;
-    }
-
-    /// <summary>
-    /// Issues a real step-up proof for a client via the public endpoint, so tests
-    /// exercise the same path the admin UI uses. The client must already be
-    /// authenticated as <paramref name="authAccountId"/>.
-    /// </summary>
-    public static async Task<string> IssueStepUpTokenAsync(HttpClient client, string secret, string scope)
-    {
-        var code = GenerateTotpCode(secret, DateTimeOffset.UtcNow);
-        var response = await client.PostAsJsonAsync("/v1/auth/step-up", new { code, scope });
-        var body = await response.Content.ReadAsStringAsync();
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new HttpRequestException(
-                $"Step-up issuance for scope '{scope}' failed with {(int)response.StatusCode}: {body}");
-        }
-
-        using var document = JsonDocument.Parse(body);
-        return document.RootElement.GetProperty("stepUpToken").GetString()!;
-    }
-
     /// <summary>RFC 6238 TOTP generator matching the server's 6-digit / 30s profile.</summary>
     public static string GenerateTotpCode(string secretKey, DateTimeOffset timestamp)
     {
@@ -332,7 +290,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
     /// textbook/RFC decoder: the server keeps the accumulator's leftover bits between
     /// characters instead of masking them off, so a "correct" decoder derives a
     /// different HMAC key and every generated code is rejected. Matching the verifier
-    /// is what matters here, and <see cref="StepUpTotpHelperTests"/> pins the pairing.
+    /// (<c>AuthenticatorTotp</c>) is what matters here.
     /// </summary>
     private static byte[] DecodeBase32(string value)
     {

@@ -49,8 +49,6 @@ import {
   type InvoiceEvidenceStatus,
   type InvoiceEvidenceTarget,
 } from '@/components/admin/billing/invoice-evidence-drawer';
-import { StepUpConfirmDialog } from '@/components/admin/step-up-confirm-dialog';
-import { useStepUpAction } from '@/components/admin/step-up/use-step-up-action';
 import { downloadAdminBillingInvoice, getAdminBillingInvoiceEvidenceData } from '@/lib/admin';
 import type { AdminBillingInvoiceEvidence } from '@/lib/types/admin';
 import {
@@ -61,7 +59,6 @@ import {
   waiveManualPaymentProof,
   reopenManualPayment,
   getManualPaymentProofBlob,
-  MANUAL_PAYMENT_STEP_UP_SCOPE,
   listPendingFulfilment,
   markSubscriptionFulfilled,
   ensureAdminBillingInvoiceForSubscription,
@@ -163,7 +160,6 @@ export default function AdminPaymentProofsPage() {
   const [decision, setDecision] = useState<Decision | null>(null);
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const stepUp = useStepUpAction(MANUAL_PAYMENT_STEP_UP_SCOPE);
   const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
   const [proofView, setProofView] = useState<ProofView | null>(null);
   const [fulfilmentDetails, setFulfilmentDetails] = useState<PendingFulfilmentDto | null>(null);
@@ -286,13 +282,9 @@ export default function AdminPaymentProofsPage() {
     const submittedNotes = notes;
     setSubmitting(true);
     try {
-      await stepUp.run(
-        () => performDecision(active, submittedNotes),
-        () => {
-          setDecision(null);
-          setNotes('');
-        },
-      );
+      await performDecision(active, submittedNotes);
+      setDecision(null);
+      setNotes('');
     } catch (err: any) {
       toast.error(err?.userMessage ?? err?.message ?? 'Action failed.');
     } finally {
@@ -1031,15 +1023,6 @@ export default function AdminPaymentProofsPage() {
           searchPlaceholder="Search the queue…"
         />
       )}
-
-      <StepUpConfirmDialog
-        open={stepUp.promptOpen}
-        scope={MANUAL_PAYMENT_STEP_UP_SCOPE}
-        loading={stepUp.pending}
-        error={stepUp.error}
-        onSubmit={stepUp.submitCode}
-        onCancel={stepUp.cancel}
-      />
 
       <Dialog
         open={decision !== null}
