@@ -1,6 +1,15 @@
 # PROGRESS - Active Agent Continuity
 
-Last updated: 2026-09-07
+Last updated: 2026-09-21
+
+## Writing OA4 Repair Checkpoint - 2026-09-21
+
+- Source repair verified at `5ca48f1a8` on `fix/checkout-expiry-payment-flow`; no deployment or production answer mutation.
+- Fixed possessive-today false positives and the minor-naming detector's use of a titled-only surname parser. Added straight/curly apostrophe controls and candidate/model minor-name controls; preserved good letters and approval gates.
+- Corrected OA4 metadata expectations (84 sections, 122 critical rules, OA4 namespace). Active validator: `writing-rules.owner-clarifications-4.2026-09-21.2`.
+- Writing Rev8 CI run `35622370814`: backend 938/938, frontend 511/511, TypeScript, whole-solution compile, canonical generation/check, and changed-file lint passed (lint: four warnings, zero errors).
+- Live Jev repair judgments passed in runs `35620409502` and `35622243428`; each selected `repair_detector` with probability 1.0.
+- Remaining boundaries: deployment and stored-answer revalidation/publication require separate authorization. Historical profession-visibility audit is not a fresh live check. Broad QA Smoke run `35614566706` remains failed; do not confuse its report upload with passed E2E tests. Preserve locked/dirty `oet-transplant-tmpB` and unrelated untracked files.
 
 ## Current Checkpoint - UBAG provider board: per-model full-pipeline test (2026-09-07)
 
