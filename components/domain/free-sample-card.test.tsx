@@ -43,4 +43,28 @@ describe('FreeSampleCard', () => {
     await userEvent.setup().click(card);
     expect(onClick).toHaveBeenCalledTimes(1);
   });
+
+  it('shows a translated badge and keeps a spent sample visible but inert', async () => {
+    const onClick = vi.fn();
+    render(
+      <FreeSampleCard
+        testId="fs-card"
+        icon={Headphones}
+        title="اختبار كتابة مجاني"
+        description="جرّب رسالة واحدة."
+        badgeLabel="عيّنة مجانية"
+        disabled
+        onClick={onClick}
+        footer={<span>تم الاستخدام</span>}
+      />,
+    );
+
+    const card = screen.getByTestId('fs-card');
+    expect(card).toBeDisabled();
+    expect(card).toHaveTextContent('عيّنة مجانية');
+    expect(card).not.toHaveTextContent('Free sample');
+    expect(card).toHaveTextContent('تم الاستخدام');
+    await userEvent.setup().click(card);
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });

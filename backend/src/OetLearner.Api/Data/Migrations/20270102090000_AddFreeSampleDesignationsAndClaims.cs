@@ -1,0 +1,56 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using OetLearner.Api.Data;
+
+#nullable disable
+
+namespace OetLearner.Api.Data.Migrations
+{
+    // HAND-AUTHORED (repo convention): contains ONLY the new objects; the model
+    // snapshot is left as-is. Raw idempotent SQL so a dev database that was
+    // created with EnsureCreated does not fail with "already exists".
+    // Free Mocks (owner 2026-09-22): per-profession free-sample designation and
+    // the per-learner once-only claim (UNIQUE(UserId, Subtest)).
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20270102090000_AddFreeSampleDesignationsAndClaims")]
+    public partial class AddFreeSampleDesignationsAndClaims : Migration
+    {
+        protected override void Up(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.Sql(
+                """
+                CREATE TABLE IF NOT EXISTS "FreeSampleDesignations" (
+                    "Id" character varying(64) NOT NULL,
+                    "Subtest" character varying(16) NOT NULL,
+                    "Profession" character varying(32) NOT NULL,
+                    "ContentId" character varying(64) NOT NULL,
+                    "UpdatedByAdminId" character varying(64) NULL,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_FreeSampleDesignations" PRIMARY KEY ("Id")
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_FreeSampleDesignations_Subtest_Profession"
+                    ON "FreeSampleDesignations" ("Subtest", "Profession");
+
+                CREATE TABLE IF NOT EXISTS "FreeSampleClaims" (
+                    "Id" character varying(64) NOT NULL,
+                    "UserId" character varying(64) NOT NULL,
+                    "Subtest" character varying(16) NOT NULL,
+                    "Profession" character varying(32) NOT NULL,
+                    "ContentId" character varying(64) NOT NULL,
+                    "AttemptId" character varying(64) NULL,
+                    "ClaimedAt" timestamp with time zone NOT NULL,
+                    "UpdatedAt" timestamp with time zone NOT NULL,
+                    CONSTRAINT "PK_FreeSampleClaims" PRIMARY KEY ("Id")
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS "IX_FreeSampleClaims_UserId_Subtest"
+                    ON "FreeSampleClaims" ("UserId", "Subtest");
+                """);
+        }
+
+        protected override void Down(MigrationBuilder migrationBuilder)
+        {
+            migrationBuilder.DropTable(name: "FreeSampleClaims");
+            migrationBuilder.DropTable(name: "FreeSampleDesignations");
+        }
+    }
+}

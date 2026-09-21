@@ -34,6 +34,21 @@ public interface IAiCreditReservationService
         string businessReference,
         CancellationToken ct);
 
+    /// <summary>
+    /// Free Mocks: a ZERO-unit "free_sample" hold for the learner's one free
+    /// AI-graded Writing sample. Never touches the credit ledger, so it works
+    /// for a brand-new zero-credit account. Only ever called after the server
+    /// derived the free grant (FreeSampleService claim) — never from a request.
+    /// Default = the paid path, so reservation fakes that predate free samples
+    /// keep their behaviour; the real service overrides it.
+    /// </summary>
+    Task<AiCreditReservationTicket> ReserveFreeSampleAsync(
+        string userId,
+        string operationId,
+        string businessReference,
+        CancellationToken ct)
+        => ReserveWritingAsync(userId, operationId, businessReference, ct);
+
     Task CommitAsync(string reservationId, CancellationToken ct);
 
     Task CommitByBusinessReferenceAsync(string businessReference, CancellationToken ct);
@@ -117,6 +132,32 @@ public sealed class AiCreditReservationService(
 
         await EnsureOperationAsync(operationId, userId, businessReference, ct);
         return await InsertForSubtestAsync(userId, operationId, businessReference, "writing", ct);
+    }
+
+    public async Task<AiCreditReservationTicket> ReserveFreeSampleAsync(
+        string userId,
+        string operationId,
+        string businessReference,
+        CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(userId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(operationId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(businessReference);
+
+        // Idempotent on the business reference (retry-grade re-enters here).
+        var existing = await db.AiCreditReservations
+            .FirstOrDefaultAsync(x => x.BusinessReference == businessReference, ct);
+        if (existing is not null)
+        {
+            return new AiCreditReservationTicket(
+                existing.Id, existing.OperationId, existing.BucketKind, existing.Units, existing.State,
+                AlreadyExisted: true);
+        }
+
+        // FK to AiOperations is Restrict — the operation row must exist first.
+        await EnsureOperationAsync(operationId, userId, businessReference, ct);
+        return await InsertRowAsync(
+            userId, operationId, businessReference, bucketKind: "free_sample", units: 0, ct);
     }
 
     public async Task<AiCreditReservationTicket> ReserveSpeakingAsync(

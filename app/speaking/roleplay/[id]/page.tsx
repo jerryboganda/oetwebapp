@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   FileText, Play, MessageCircle, User, ShieldCheck, AlertTriangle,
@@ -25,6 +25,9 @@ export default function RoleCardPreview() {
   const router = useRouter();
   const rawId = params?.id;
   const id = Array.isArray(rawId) ? rawId[0] ?? '' : rawId ?? '';
+  // Display-only hint set by the Free Speaking Mock entry (copy + the AI-patient
+  // button). Never sent to the server — the server decides what is free.
+  const isFreeSample = useSearchParams()?.get('free') === '1';
 
   const [card, setCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +59,7 @@ export default function RoleCardPreview() {
 
   const handleStartTask = () => {
     analytics.track('task_started', { taskId: id, subtest: 'speaking', mode: selectedMode });
-    router.push(`/speaking/task/${id}?mode=${selectedMode}`);
+    router.push(`/speaking/task/${id}?mode=${selectedMode}${isFreeSample ? '&free=1' : ''}`);
   };
 
   if (loading) {
@@ -260,7 +263,7 @@ export default function RoleCardPreview() {
                 <Play className="w-5 h-5 fill-current" /> Start Speaking Task
               </Button>
               <p className="text-center text-xs font-semibold text-muted" data-testid="speaking-card-credit-cost">
-                Uses 2 AI credits · Browsing is free
+                {isFreeSample ? 'Free sample · no credits used' : 'Uses 2 AI credits · Browsing is free'}
               </p>
             </Card>
 

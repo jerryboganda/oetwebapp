@@ -31,6 +31,22 @@ public interface IAiQuotaService
         CancellationToken ct);
 
     /// <summary>
+    /// Free Mocks: as <see cref="TryReserveAsync(string?, string, AiKeySource, CancellationToken)"/>
+    /// but with <paramref name="freeSampleGrant"/> set by server code that verified the
+    /// learner's free-sample claim. Only the grading features of the sample
+    /// (writing.grade / speaking.grade) skip the plan feature list and token caps;
+    /// the kill list, kill switch, global budget and per-user disable still apply.
+    /// Default = the metered path, so quota fakes that predate free samples are unaffected.
+    /// </summary>
+    Task<AiQuotaDecision> TryReserveAsync(
+        string? userId,
+        string featureCode,
+        AiKeySource prospectiveKeySource,
+        bool freeSampleGrant,
+        CancellationToken ct)
+        => TryReserveAsync(userId, featureCode, prospectiveKeySource, ct);
+
+    /// <summary>
     /// After a successful provider call, commit the actual tokens used. Safe
     /// to call with 0 tokens (no-op) on failure paths.
     /// </summary>
@@ -107,10 +123,18 @@ public sealed class AiQuotaService(
     /// </summary>
     public const decimal ConservativeDefaultMonthlyBudgetUsd = 10m;
 
+    public Task<AiQuotaDecision> TryReserveAsync(
+        string? userId,
+        string featureCode,
+        AiKeySource prospectiveKeySource,
+        CancellationToken ct)
+        => TryReserveAsync(userId, featureCode, prospectiveKeySource, freeSampleGrant: false, ct);
+
     public async Task<AiQuotaDecision> TryReserveAsync(
         string? userId,
         string featureCode,
         AiKeySource prospectiveKeySource,
+        bool freeSampleGrant,
         CancellationToken ct)
     {
         var global = await GetGlobalPolicyAsync(ct);
@@ -224,6 +248,23 @@ public sealed class AiQuotaService(
                 PolicyTrace: "override.user_disabled",
                 GlobalPolicy: global, Plan: null, Override: userOverride,
                 TokensUsedThisPeriod: 0, TokensCapThisPeriod: 0);
+        }
+
+        // ── Free Mocks: the learner's one free AI-graded sample ──────────────
+        // Placed AFTER the admin emergency controls above (per-feature kill
+        // list, kill switch, global budget, per-user disable) so they still
+        // win. The grant is server-derived (verified FreeSampleClaim) and only
+        // covers the sample's grading features — never conversation etc.
+        if (freeSampleGrant
+            && (string.Equals(featureCode, AiFeatureCodes.WritingGrade, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(featureCode, AiFeatureCodes.SpeakingGrade, StringComparison.OrdinalIgnoreCase)))
+        {
+            return new AiQuotaDecision(
+                Allowed: true,
+                ErrorCode: null, ErrorMessage: null,
+                PolicyTrace: "free_sample.unmetered",
+                GlobalPolicy: global, Plan: null, Override: userOverride,
+                TokensUsedThisPeriod: 0, TokensCapThisPeriod: int.MaxValue);
         }
 
         // ── Resolve plan ─────────────────────────────────────────────────────

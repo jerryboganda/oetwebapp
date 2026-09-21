@@ -12,6 +12,7 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchSpeakingHome, type SpeakingHome } from '@/lib/api';
 import { useEntitlementSnapshot } from '@/lib/query/hooks';
 import { CreditsGuideButton, LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { FreeSampleLauncher } from '@/components/domain/free-sample-launcher';
 import { LearnerSkeleton } from '@/components/domain/learner-skeletons';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import {
@@ -215,6 +216,22 @@ export default function SpeakingHome() {
               }} />
             </MotionSection>
           ) : null}
+
+          {/* Free Mocks: ONE free AI-graded role-play card per learner, chosen by
+              profession (the account profession is never changed). Renders nothing
+              unless the server offers a sample. */}
+          <FreeSampleLauncher
+            subtest="speaking"
+            icon={Mic}
+            testId="speaking-free-mock-card"
+            title="Free Speaking Mock"
+            description="Try one AI-graded role play for free."
+            modalTitle="Choose your profession"
+            modalDescription="We will open the free role-play card for your profession. Your account profession will not change."
+            startLabel="Start free sample"
+            usedLabel="Free sample already used"
+            className=""
+          />
 
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <MotionSection>

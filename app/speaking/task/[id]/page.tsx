@@ -933,7 +933,9 @@ function LiveSpeakingTaskContent() {
           {/* Wave 5: deep-link into the AI-patient Conversation module
               for unlimited self-practice. Hidden in exam mode where
               learners must complete the timed simulation. */}
-          {mode === 'self' && id && (
+          {/* The AI-patient practice debits credits at start, so it is not offered on
+              the free sample (display-only hint from the Free Speaking Mock entry). */}
+          {mode === 'self' && id && searchParams?.get('free') !== '1' && (
             <>
               <div className="w-px h-6 bg-border/60 mx-1" />
               <SpeakingSelfPracticeButton taskId={id} label="AI patient" />

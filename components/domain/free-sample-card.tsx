@@ -26,6 +26,10 @@ export interface FreeSampleCardProps {
   /** Link target. Omit (and pass `onClick`) to render a button instead. */
   href?: string;
   onClick?: () => void;
+  /** Badge text (defaults to English; pass the translated string where the page is localised). */
+  badgeLabel?: string;
+  /** Button variant only: a spent sample stays visible but inert. */
+  disabled?: boolean;
   /** Extra content under the sentence (e.g. a "Used" hint). */
   footer?: ReactNode;
   className?: string;
@@ -38,6 +42,8 @@ export function FreeSampleCard({
   testId,
   href,
   onClick,
+  badgeLabel = 'Free sample',
+  disabled = false,
   footer,
   className = '',
 }: FreeSampleCardProps) {
@@ -53,7 +59,7 @@ export function FreeSampleCard({
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-bold text-navy">{title}</span>
           <Badge variant="violet" size="sm" className="uppercase tracking-wide">
-            Free sample
+            {badgeLabel}
           </Badge>
         </span>
         <span className="mt-0.5 block text-xs text-muted sm:text-sm">{description}</span>
@@ -74,7 +80,13 @@ export function FreeSampleCard({
     );
   }
   return (
-    <button type="button" data-testid={testId} onClick={onClick} className={`${CARD_CLASS} ${className}`}>
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${CARD_CLASS} ${disabled ? 'cursor-not-allowed opacity-70' : ''} ${className}`}
+    >
       {body}
     </button>
   );

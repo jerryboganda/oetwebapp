@@ -1004,6 +1004,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
         CancellationToken ct)
     {
         string? reservationId = null;
+        var freeSample = false;
         var businessReference = $"writing-grade:{submission.Id:N}";
         var operationId = submission.GradeOperationId ?? Guid.NewGuid().ToString("N");
         try
@@ -1011,8 +1012,23 @@ public sealed class WritingSubmissionEvaluationPipeline(
             if (creditReservations is not null
                 && !string.Equals(submission.Mode, "mock", StringComparison.OrdinalIgnoreCase))
             {
-                var ticket = await creditReservations.ReserveWritingAsync(
-                    submission.UserId, operationId, businessReference, ct);
+                // Free Mocks: the learner's ONE free AI-graded sample. The server
+                // decides — designated scenario, once per learner (the claim is
+                // bound to THIS submission id, so retry-grade re-enters
+                // idempotently and a failed grade leaves it re-usable). Revisions
+                // are always paid.
+                freeSample = !submission.IsRevision
+                    && await new FreeSamples.FreeSampleService(db).TryClaimAsync(
+                        submission.UserId,
+                        FreeSamples.FreeSampleService.Writing,
+                        submission.ScenarioId.ToString("D"),
+                        submission.Id.ToString("N"),
+                        ct);
+                var ticket = freeSample
+                    ? await creditReservations.ReserveFreeSampleAsync(
+                        submission.UserId, operationId, businessReference, ct)
+                    : await creditReservations.ReserveWritingAsync(
+                        submission.UserId, operationId, businessReference, ct);
                 reservationId = ticket.ReservationId;
                 submission.GradeOperationId = ticket.OperationId;
             }
@@ -1022,7 +1038,7 @@ public sealed class WritingSubmissionEvaluationPipeline(
                 return (persisted, reservationId);
             }
 
-            var rubric = await CallRubricAsync(submission, scenario, caseNotesSnapshot, reservationId, resourceVersion, ct);
+            var rubric = await CallRubricAsync(submission, scenario, caseNotesSnapshot, reservationId, resourceVersion, ct, freeSample);
             submission.ProviderResultJson = JsonSerializer.Serialize(new PersistedProviderResult(
                 rubric.C1, rubric.C2, rubric.C3, rubric.C4, rubric.C5, rubric.C6,
                 rubric.EstimatedBand, rubric.EstimatedScaledScore,
@@ -1306,7 +1322,8 @@ public sealed class WritingSubmissionEvaluationPipeline(
         string caseNotesSnapshot,
         string? creditReservationId,
         int? resourceVersion,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool freeSampleGrant = false)
     {
         // Fail closed on missing scenario metadata: ParseProfession throws a
         // controlled error for unresolvable professions instead of silently
@@ -1356,6 +1373,10 @@ public sealed class WritingSubmissionEvaluationPipeline(
                     ? AiAssessmentContext.Mock
                     : AiAssessmentContext.Practice,
                 CreditReservationId = creditReservationId,
+                // Server-derived (claim bound to this submission) — lets the
+                // gateway skip the plan feature list / token caps for the
+                // learner's one free sample only.
+                FreeSampleGrant = freeSampleGrant,
                 ResourceId = submission.Id.ToString("N"),
                 ResourceType = "writing_submission",
             }, ct);

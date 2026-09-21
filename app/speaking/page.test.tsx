@@ -8,6 +8,8 @@ const {
   mockLearnerListSpeakingSharedResources,
   mockTrack,
   mockUseEntitlementSnapshot,
+  mockListFreeSamples,
+  mockPush,
   mockLearnerDashboardShell,
 } = vi.hoisted(() => ({
   mockFetchSpeakingHome: vi.fn(),
@@ -16,6 +18,8 @@ const {
   mockLearnerListSpeakingSharedResources: vi.fn(),
   mockTrack: vi.fn(),
   mockUseEntitlementSnapshot: vi.fn(),
+  mockListFreeSamples: vi.fn(),
+  mockPush: vi.fn(),
   mockLearnerDashboardShell: vi.fn(({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => (
     <div data-testid="learner-dashboard-shell" data-require-auth={String(Boolean(props.requireAuth))}>{children}</div>
   )),
@@ -28,7 +32,7 @@ vi.mock('next/link', () => ({
 vi.mock('next/navigation', () => ({
   usePathname: () => '/speaking',
   useRouter: () => ({
-    push: vi.fn(),
+    push: mockPush,
     replace: vi.fn(),
     prefetch: vi.fn(),
     refresh: vi.fn(),
@@ -66,6 +70,9 @@ vi.mock('@/lib/query/hooks', () => ({
   useEntitlementSnapshot: (...args: unknown[]) => mockUseEntitlementSnapshot(...args),
 }));
 
+// '@/lib/api' is mocked below without `apiClient`, so the free-sample lookup must be mocked too.
+vi.mock('@/lib/api/free-samples', () => ({ listFreeSamples: mockListFreeSamples }));
+
 vi.mock('@/lib/api', () => ({
   fetchSpeakingHome: mockFetchSpeakingHome,
   fetchSubmissions: mockFetchSubmissions,
@@ -83,6 +90,8 @@ describe('Speaking page', () => {
     vi.clearAllMocks();
     // Unknown entitlement (loading/failed) must fail OPEN: Book a Tutor stays a live link.
     mockUseEntitlementSnapshot.mockReturnValue({ data: undefined });
+    // No free sample on offer by default: the launcher renders nothing.
+    mockListFreeSamples.mockResolvedValue([]);
 
     mockFetchSpeakingHome.mockResolvedValue({
       recommendedRolePlay: {
@@ -237,6 +246,50 @@ describe('Speaking page', () => {
     expect(follows(intro, library)).toBe(true);
     expect(follows(library, exam)).toBe(true);
     expect(follows(exam, tutor)).toBe(true);
+  });
+
+  describe('Free Speaking Mock (Free Mocks)', () => {
+    const OFFERS = [
+      { professionId: 'medicine', contentId: 'rpc-med', state: 'available', route: '/speaking/roleplay/rpc-med?free=1' },
+      { professionId: 'nursing', contentId: 'rpc-nur', state: 'available', route: '/speaking/roleplay/rpc-nur?free=1' },
+    ];
+
+    it('sits after the Open Practice Library link and before the Full AI Speaking Mock and Book a Tutor', async () => {
+      mockListFreeSamples.mockResolvedValue(OFFERS);
+      render(<SpeakingPage />);
+
+      const free = await screen.findByTestId('speaking-free-mock-card');
+      const library = screen.getByRole('link', { name: 'Open Practice Library' });
+      const exam = screen.getByText('Start Speaking Exam');
+      const tutor = screen.getByText('Book a Tutor');
+      const follows = (a: Element, b: Element) =>
+        Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows(library, free)).toBe(true);
+      expect(follows(free, exam)).toBe(true);
+      expect(follows(free, tutor)).toBe(true);
+      expect(free).toHaveTextContent('Free Speaking Mock');
+      expect(free).toHaveTextContent(/free sample/i);
+    });
+
+    it('asks for the profession, then opens that profession\'s card without touching the account profession', async () => {
+      mockListFreeSamples.mockResolvedValue(OFFERS);
+      const user = (await import('@testing-library/user-event')).default.setup();
+      render(<SpeakingPage />);
+
+      await user.click(await screen.findByTestId('speaking-free-mock-card'));
+      expect(mockPush).not.toHaveBeenCalled();
+      await user.click(await screen.findByRole('radio', { name: 'Nursing' }));
+      await user.click(screen.getByTestId('speaking-free-mock-card-start'));
+
+      expect(mockPush).toHaveBeenCalledWith('/speaking/roleplay/rpc-nur?free=1');
+    });
+
+    it('is hidden when the server offers no sample', async () => {
+      render(<SpeakingPage />);
+
+      await screen.findByText('Start Speaking Exam');
+      expect(screen.queryByTestId('speaking-free-mock-card')).not.toBeInTheDocument();
+    });
   });
 
   it('links Book a Tutor to the private-speaking booking page', async () => {
