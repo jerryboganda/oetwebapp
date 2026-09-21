@@ -2949,7 +2949,10 @@
     ],
     "primaryLetterTypes": [
       "referral",
-      "advice"
+      "advice",
+      "urgent_referral",
+      "discharge",
+      "transfer"
     ],
     "notes": "Anthropometry, dietary recall, biochemistry (HbA1c, lipids), and adherence to dietary plan drive content."
   }

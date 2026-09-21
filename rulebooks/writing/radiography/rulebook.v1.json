@@ -8057,7 +8057,8 @@
     ],
     "primaryLetterTypes": [
       "advice",
-      "referral"
+      "referral",
+      "urgent_referral"
     ],
     "notes": "Most common: report or follow-up advice to the referring doctor. Imaging modality, region, findings, and recommended follow-up are mandatory."
   }

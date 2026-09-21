@@ -87,11 +87,9 @@ const PROFESSIONS = [
     recipients: ['GP', 'Specialist OT', 'Care Facility Manager', 'Social Worker'],
     primaryLetterTypes: ['referral', 'discharge', 'advice'],
     notes: 'Functional capacity, activities of daily living (ADLs), home environment and equipment needs drive content.',
-    overrides: {
-      // Per R03.4, smoking/drinking is excluded when writing TO an OT, not FROM.
-      // OT-authored letters still include smoking/drinking when relevant to the recipient.
-      smokingDrinkingRequired: true,
-    },
+    // Owner decision (19 Sep 2026): the smokingDrinkingRequired flag is removed until a real check
+    // reads it. Nothing in the engine or the grader prompt consumed it, so it enforced nothing.
+    // overrides: { smokingDrinkingRequired: true },
   },
   {
     slug: 'speech-pathology',
