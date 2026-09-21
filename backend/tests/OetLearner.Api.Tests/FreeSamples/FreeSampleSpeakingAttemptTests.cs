@@ -113,7 +113,7 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
 
         if (exhaustedCredits)
         {
-            // A learner who once bought a single Speaking credit and spent it: NOT a
+            // A learner who once bought ONE Speaking card (2 credits) and spent it: NOT a
             // never-purchased legacy account, so the credit pre-check really refuses.
             await _credit.GrantPackageAsync(
                 userId,
@@ -128,7 +128,7 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
                     Status = BillingAddOnStatus.Active,
                     DurationDays = 30,
                     GrantCredits = 1,
-                    GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":1}""",
+                    GrantEntitlementsJson = """{"package_type":"speaking","speaking_only_credits":2}""",
                     AddonKind = "ai_package",
                     AppliesToAllPlans = true,
                     IsStackable = true,
@@ -137,7 +137,8 @@ public sealed class FreeSampleSpeakingAttemptTests : IAsyncLifetime
                     UpdatedAt = now,
                 },
                 1, $"cs-{userId}", null, CancellationToken.None);
-            var spent = await _credit.DeductGradingCreditAsync(userId, "speaking", $"spent:{userId}", CancellationToken.None);
+            var spent = await _credit.DeductGradingCreditAsync(
+                userId, "speaking", $"spent:{userId}", AiGradingCreditCost.SpeakingCard, CancellationToken.None);
             Assert.True(spent.Debited);
         }
         return userId;
