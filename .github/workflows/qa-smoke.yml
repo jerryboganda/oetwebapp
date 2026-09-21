@@ -63,8 +63,9 @@ jobs:
     # shared Postgres/Respawn state across classes). Because xunit will not
     # parallelize within a single process, parallelism comes from this matrix:
     # each shard is its own `dotnet test` process running a DISJOINT subset of
-    # test CLASSES, so each finishes well under the cap.
-    timeout-minutes: 40
+    # test CLASSES, so each finishes well under the cap. Shard 2 alone runs
+    # ~38 min on main, so 40 left no headroom for any new test class.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
