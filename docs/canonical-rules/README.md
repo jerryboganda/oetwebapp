@@ -42,7 +42,7 @@ addendum's precedence rule (§7) the latest owner rule wins over older conflicti
 | `OET_AI_Rules_Master.jsonl` SHA-256 | `2aca1c180a3364682c3978e755f9f108e2aa52188e6e820b8afe8112ca35cc6c` (2549 lines, LF) |
 | Canonical rulebook version (6 built packs) | `2.3.2-owner-clarifications-4`, `publishedAt` `2026-09-17T00:00:00Z` |
 | Legacy rulebook version (7 hand-maintained packs) | `1.1.0-rev8` |
-| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.owner-clarifications-4.2026-09-17.1` (121 check-ids) |
+| Deterministic validator | `WritingRuleEngine.ValidatorVersion` = `writing-rules.owner-clarifications-4.2026-09-21.1` (121 check-ids) |
 
 The v1.0 hashes in the table at the top of this file stay as original-release provenance only.
 `HANDOFF_SHA256SUMS.txt`, `OET_AI_DEPLOYMENT_CONTRACT.json` and `OET_AI_Source_Manifest.json` are

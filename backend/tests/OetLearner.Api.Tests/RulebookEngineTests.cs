@@ -20,7 +20,7 @@ public class RulebookLoaderTests
         Assert.Equal("2.3.2-owner-clarifications-4", book.Version);
         // Sections grew as the global owner rows (OWN-W + OA/OA2/OA3) joined
         // the canonical pack; the 43 from the pre-OA2 pack is long stale.
-        Assert.Equal(82, book.Sections.Count);
+        Assert.Equal(84, book.Sections.Count);
         Assert.True(book.Rules.Count >= 90);
     }
 
