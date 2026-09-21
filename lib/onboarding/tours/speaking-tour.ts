@@ -22,7 +22,7 @@ export const speakingTour: TourDefinition = {
     {
       target: 'speaking-hub',
       title: 'Start a role play',
-      body: 'Pick a recommended role play or a drill here. You can choose guided AI practice, a strict exam-style run, or book a live tutor session, depending on what your course supports.',
+      body: 'Open the practice library, try the free sample, or take the full two-card AI Speaking mock here. You can also book a live tutor session, depending on what your course supports.',
       side: 'top',
     },
     {

@@ -7,6 +7,7 @@ const {
   mockFetchMockReports,
   mockLearnerListSpeakingSharedResources,
   mockTrack,
+  mockUseEntitlementSnapshot,
   mockLearnerDashboardShell,
 } = vi.hoisted(() => ({
   mockFetchSpeakingHome: vi.fn(),
@@ -14,6 +15,7 @@ const {
   mockFetchMockReports: vi.fn(),
   mockLearnerListSpeakingSharedResources: vi.fn(),
   mockTrack: vi.fn(),
+  mockUseEntitlementSnapshot: vi.fn(),
   mockLearnerDashboardShell: vi.fn(({ children, ...props }: { children: React.ReactNode; [key: string]: unknown }) => (
     <div data-testid="learner-dashboard-shell" data-require-auth={String(Boolean(props.requireAuth))}>{children}</div>
   )),
@@ -53,10 +55,15 @@ vi.mock('@/contexts/auth-context', () => ({
   useAuth: () => ({
     loading: false,
     user: {
+      userId: 'learner-1',
       role: 'learner',
       activeProfessionId: 'medicine',
     },
   }),
+}));
+
+vi.mock('@/lib/query/hooks', () => ({
+  useEntitlementSnapshot: (...args: unknown[]) => mockUseEntitlementSnapshot(...args),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -74,6 +81,8 @@ import SpeakingIntroQuestionsPage from './intro-questions/page';
 describe('Speaking page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Unknown entitlement (loading/failed) must fail OPEN: Book a Tutor stays a live link.
+    mockUseEntitlementSnapshot.mockReturnValue({ data: undefined });
 
     mockFetchSpeakingHome.mockResolvedValue({
       recommendedRolePlay: {
@@ -174,9 +183,12 @@ describe('Speaking page', () => {
     expect(screen.queryByText('42 points')).not.toBeInTheDocument();
     expect(screen.queryByText('11 questions')).not.toBeInTheDocument();
     expect(screen.getByText('Start Speaking Exam')).toBeInTheDocument();
+    expect(screen.getByText('Full AI Speaking Mock')).toBeInTheDocument();
     expect(screen.getByText('Book a Tutor')).toBeInTheDocument();
-    expect(screen.getByText('Practise any speaking card on the platform')).toBeInTheDocument();
-    expect(screen.getByText('Patient Handover - Post-Op Recovery')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Open Practice Library' })).toHaveAttribute('href', '/speaking/selection');
+    // The library is a text link now — its cards are no longer inlined on the hub.
+    expect(screen.queryByText('Practise any speaking card on the platform')).not.toBeInTheDocument();
+    expect(screen.queryByText('Patient Handover - Post-Op Recovery')).not.toBeInTheDocument();
 
     expect(screen.queryByText('Recent Speaking Evidence')).not.toBeInTheDocument();
     expect(screen.queryByText('Recent Mock Reports')).not.toBeInTheDocument();
@@ -199,26 +211,32 @@ describe('Speaking page', () => {
 
     expect(await screen.findByText('Open Assessment Criteria')).toBeInTheDocument();
     expect(screen.getByText('Open Intro Questions')).toBeInTheDocument();
-    expect(screen.getByText('No practice cards yet')).toBeInTheDocument();
+    // The library link and the exam stay reachable when the library is empty.
+    expect(screen.getByRole('link', { name: 'Open Practice Library' })).toBeInTheDocument();
+    expect(screen.getByText('Start Speaking Exam')).toBeInTheDocument();
   });
 
-  it('shows the full exam as 4 AI credits with 2 AI credits per practice card', async () => {
+  it('shows the full exam as 4 AI credits and no per-card credit price on the hub', async () => {
     render(<SpeakingPage />);
 
     expect(await screen.findByText('4 AI credits')).toBeInTheDocument();
-    expect(screen.getAllByText('2 AI credits').length).toBeGreaterThan(0);
+    expect(screen.queryByText('2 AI credits')).not.toBeInTheDocument();
   });
 
-  it('lists the practice library above the full exam and tutor booking', async () => {
+  it('orders the hub: criteria, intro, Open Practice Library link, full AI mock, then Book a Tutor', async () => {
     render(<SpeakingPage />);
 
-    const library = await screen.findByText('Practise any speaking card on the platform');
+    const criteria = await screen.findByText('Speaking Assessment Criteria');
+    const intro = screen.getByText('Speaking Intro Questions');
+    const library = screen.getByRole('link', { name: 'Open Practice Library' });
     const exam = screen.getByText('Start Speaking Exam');
     const tutor = screen.getByText('Book a Tutor');
-    // eslint-disable-next-line no-bitwise
-    expect(library.compareDocumentPosition(exam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // eslint-disable-next-line no-bitwise
-    expect(library.compareDocumentPosition(tutor) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(criteria, intro)).toBe(true);
+    expect(follows(intro, library)).toBe(true);
+    expect(follows(library, exam)).toBe(true);
+    expect(follows(exam, tutor)).toBe(true);
   });
 
   it('links Book a Tutor to the private-speaking booking page', async () => {
@@ -226,6 +244,26 @@ describe('Speaking page', () => {
 
     const tutorLink = (await screen.findByText('Book a Tutor')).closest('a');
     expect(tutorLink).toHaveAttribute('href', '/private-speaking');
+  });
+
+  it('keeps Book a Tutor visible but gated for learners on ineligible packages', async () => {
+    mockUseEntitlementSnapshot.mockReturnValue({ data: { speakingAddonsEnabled: false } });
+    render(<SpeakingPage />);
+
+    expect(await screen.findByText('Book a tutor as your patient')).toBeInTheDocument();
+    expect(screen.getByText('Eligible packages only')).toBeInTheDocument();
+    expect(screen.queryByText('Book a Tutor')).not.toBeInTheDocument();
+    expect(screen.getByText('View eligible courses').closest('a')).toHaveAttribute('href', '/catalog');
+    // Existing bookings stay reachable.
+    expect(screen.getByText('My bookings').closest('a')).toHaveAttribute('href', '/private-speaking');
+  });
+
+  it('opens Book a Tutor when the entitlement grants live-tutor add-ons', async () => {
+    mockUseEntitlementSnapshot.mockReturnValue({ data: { speakingAddonsEnabled: true } });
+    render(<SpeakingPage />);
+
+    expect((await screen.findByText('Book a Tutor')).closest('a')).toHaveAttribute('href', '/private-speaking');
+    expect(screen.queryByText('Eligible packages only')).not.toBeInTheDocument();
   });
 
   it('keeps the public speaking reference pages outside the learner auth gate', () => {
