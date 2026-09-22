@@ -2,7 +2,13 @@
 
 import type { ReactNode } from 'react';
 import { Mic, MicOff, PhoneOff, Video, VideoOff } from 'lucide-react';
-import { LiveKitRoom, RoomAudioRenderer, VideoTrack, useLocalParticipant, useTracks } from '@livekit/components-react';
+import {
+  LiveKitRoom,
+  RoomAudioRenderer,
+  VideoTrack,
+  useLocalParticipant,
+  useTracks,
+} from '@livekit/components-react';
 import { Track } from 'livekit-client';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -51,10 +57,7 @@ export function LiveTutorRoomShell({
 }
 
 function TutorRoomInterior({ onEnd }: { onEnd: () => void }) {
-  const tracks = useTracks([
-    { source: Track.Source.Camera, withPlaceholder: false },
-    { source: Track.Source.Microphone, withPlaceholder: false },
-  ]);
+  const tracks = useTracks([Track.Source.Camera, Track.Source.Microphone]);
   const { localParticipant } = useLocalParticipant();
   const remoteCamera = tracks.find((track) => !track.participant.isLocal && track.source === Track.Source.Camera);
   const localCamera = tracks.find((track) => track.participant.isLocal && track.source === Track.Source.Camera);
