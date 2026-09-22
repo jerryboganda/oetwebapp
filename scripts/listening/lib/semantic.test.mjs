@@ -56,6 +56,10 @@ test('destination head: Part C speaker-led intro ("you hear a NAME called X, ROL
   assert.equal(level(checkDestinationHead('C2', c1, [{ start: 8, end: 98 }], 90), 'head_cue'), 'pass');
   const c2 = [seg(0, 5, 'You hear a specialist in health and nutrition called Dr. Gregor McGregor discussing the ideal healthy diet for humans.')];
   assert.equal(level(checkDestinationHead('C2', c2, [{ start: 7, end: 68 }], 60.6), 'head_cue'), 'pass');
+  // Part A favours "named" over "called" (found on Atlas ST15/ST14 A2: the boundary had clipped this clause,
+  // and "called" alone did not recognize the "named" variant when the clip was fixed)
+  const a2 = [seg(0, 5, 'You hear a urologist talking to a patient named Mark Jenkins.')];
+  assert.equal(level(checkDestinationHead('A2', a2, [{ start: 6, end: 36 }], 30.4), 'head_cue'), 'pass');
 });
 
 test('destination head: ASR mishearing "Extract" as "Act"/"Track" still finds the cue via the question range', () => {
