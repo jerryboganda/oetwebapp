@@ -194,9 +194,9 @@ describe('Speaking page', () => {
     expect(screen.getByText('Start Speaking Exam')).toBeInTheDocument();
     expect(screen.getByText('Full AI Speaking Mock')).toBeInTheDocument();
     expect(screen.getByText('Book a Tutor')).toBeInTheDocument();
+    expect(screen.getByText('Practice Library')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Practice Library' })).toHaveAttribute('href', '/speaking/selection');
-    // The library is a text link now — its cards are no longer inlined on the hub.
-    expect(screen.queryByText('Practise any speaking card on the platform')).not.toBeInTheDocument();
+    // The library card links out — individual task cards are not inlined on the hub.
     expect(screen.queryByText('Patient Handover - Post-Op Recovery')).not.toBeInTheDocument();
 
     expect(screen.queryByText('Recent Speaking Evidence')).not.toBeInTheDocument();
@@ -232,7 +232,7 @@ describe('Speaking page', () => {
     expect(screen.queryByText('2 AI credits')).not.toBeInTheDocument();
   });
 
-  it('orders the hub: criteria, intro, Open Practice Library link, full AI mock, then Book a Tutor', async () => {
+  it('orders the hub: criteria, intro, Open Practice Library, full AI mock, then Book a Tutor (no free sample offered)', async () => {
     render(<SpeakingPage />);
 
     const criteria = await screen.findByText('Speaking Assessment Criteria');
@@ -249,13 +249,15 @@ describe('Speaking page', () => {
   });
 
   describe('Free Speaking Mock (Free Mocks)', () => {
-    const OFFERS = [
+    // 22 Sep 2026 handoff (item 2, CRITICAL SECURITY): the server offers at
+    // most ONE row now — the caller's own profession — never a list to pick
+    // from.
+    const OWN_PROFESSION_OFFER = [
       { professionId: 'medicine', contentId: 'rpc-med', state: 'available', route: '/speaking/roleplay/rpc-med?free=1' },
-      { professionId: 'nursing', contentId: 'rpc-nur', state: 'available', route: '/speaking/roleplay/rpc-nur?free=1' },
     ];
 
-    it('sits after the Open Practice Library link and before the Full AI Speaking Mock and Book a Tutor', async () => {
-      mockListFreeSamples.mockResolvedValue(OFFERS);
+    it('sits BEFORE the Open Practice Library card, Full AI Speaking Mock, and Book a Tutor (item 3 hub order)', async () => {
+      mockListFreeSamples.mockResolvedValue(OWN_PROFESSION_OFFER);
       render(<SpeakingPage />);
 
       const free = await screen.findByTestId('speaking-free-mock-card');
@@ -264,24 +266,22 @@ describe('Speaking page', () => {
       const tutor = screen.getByText('Book a Tutor');
       const follows = (a: Element, b: Element) =>
         Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      expect(follows(library, free)).toBe(true);
-      expect(follows(free, exam)).toBe(true);
-      expect(follows(free, tutor)).toBe(true);
+      expect(follows(free, library)).toBe(true);
+      expect(follows(library, exam)).toBe(true);
+      expect(follows(exam, tutor)).toBe(true);
       expect(free).toHaveTextContent('Free Speaking Mock');
       expect(free).toHaveTextContent(/free sample/i);
     });
 
-    it('asks for the profession, then opens that profession\'s card without touching the account profession', async () => {
-      mockListFreeSamples.mockResolvedValue(OFFERS);
-      const user = (await import('@testing-library/user-event')).default.setup();
+    it('links straight to the offered card — no cross-profession picker', async () => {
+      mockListFreeSamples.mockResolvedValue(OWN_PROFESSION_OFFER);
       render(<SpeakingPage />);
 
-      await user.click(await screen.findByTestId('speaking-free-mock-card'));
-      expect(mockPush).not.toHaveBeenCalled();
-      await user.click(await screen.findByRole('radio', { name: 'Nursing' }));
-      await user.click(screen.getByTestId('speaking-free-mock-card-start'));
-
-      expect(mockPush).toHaveBeenCalledWith('/speaking/roleplay/rpc-nur?free=1');
+      const free = await screen.findByTestId('speaking-free-mock-card');
+      expect(free).toHaveAttribute('href', '/speaking/roleplay/rpc-med?free=1');
+      // No profession-choice UI exists anymore.
+      expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
     it('is hidden when the server offers no sample', async () => {

@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
-import Link from 'next/link';
+import { BookOpen, ClipboardList, Clock, MessageCircleQuestion, Mic, RefreshCw, Star, Users, Video } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { LearnerDashboardShell } from '@/components/layout';
 import { trackSpeaking } from '@/lib/analytics/speaking-events';
@@ -72,6 +71,23 @@ export default function SpeakingHome() {
     const state = attempt?.state?.toLowerCase() ?? '';
     return state === 'in_progress' || state === 'in-progress' || state === 'draft';
   }) ?? null;
+
+  // 22 Sep 2026 handoff (item 3): Practice Library is now a full card, not a
+  // text link, so it reads consistently alongside the other hub entries.
+  const libraryCard: LearnerSurfaceCardModel = {
+    kind: 'navigation',
+    sourceType: 'frontend_navigation',
+    accent: 'purple',
+    eyebrow: 'Browse',
+    eyebrowIcon: BookOpen,
+    title: 'Practice Library',
+    description: 'Browse every role-play card on the platform, filtered to your profession. Practice individually with native realtime voice, no exam timing.',
+    metaItems: [
+      { icon: Mic, label: practiceCardCount > 0 ? `${practiceCardCount} cards` : 'Browse library' },
+      { icon: ClipboardList, label: 'By category' },
+    ],
+    primaryAction: { label: 'Open Practice Library', href: '/speaking/selection' },
+  };
 
   const examCard: LearnerSurfaceCardModel = {
     kind: 'task',
@@ -175,28 +191,21 @@ export default function SpeakingHome() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        {/* Start Speaking (Free Mocks proposal, 2026-09): the practice library is
-            a lightweight text link, then the free sample, then the SEPARATE full
-            two-card AI mock, then the gated tutor booking. The library is not
-            inlined here and never absorbs the full AI mock. */}
+        {/* Start Speaking (22 Sep 2026 handoff, item 3): fixed order — Free
+            Speaking Mock, then Practice Library (a full card, not a text
+            link), then the SEPARATE full two-card AI mock, then the gated
+            tutor booking. The library is not inlined here and never absorbs
+            the full AI mock. */}
         <section aria-label="Start Speaking" data-tour="speaking-hub" className="space-y-4">
           <LearnerSurfaceSectionHeader
             eyebrow="AI Assessment"
             title="Start Speaking"
-            description="Browse every role-play card in the library, or take the full AI mock below."
-            action={
-              <Link
-                href="/speaking/selection"
-                data-testid="speaking-open-library"
-                className="text-sm font-bold text-primary hover:underline"
-              >
-                Open Practice Library
-              </Link>
-            }
+            description="Try a free sample, browse the library, take the full AI mock, or book a tutor."
           />
 
           {/* Resume in-progress role play — necessary for progress; backend
-              surfaces pastAttempts[].state='in_progress'. */}
+              surfaces pastAttempts[].state='in_progress'. Shown first: picking
+              up saved work outranks starting something new. */}
           {resumeAttempt ? (
             <MotionSection>
               <LearnerSurfaceCard card={{
@@ -217,27 +226,27 @@ export default function SpeakingHome() {
             </MotionSection>
           ) : null}
 
-          {/* Free Mocks: ONE free AI-graded role-play card per learner, chosen by
-              profession (the account profession is never changed). Renders nothing
-              unless the server offers a sample. */}
+          {/* Free Mocks: ONE free AI-graded role-play card per learner, for the
+              learner's own profession (22 Sep 2026 handoff: no cross-profession
+              picker). Renders nothing unless the server offers a sample. */}
           <FreeSampleLauncher
             subtest="speaking"
             icon={Mic}
             testId="speaking-free-mock-card"
             title="Free Speaking Mock"
             description="Try one AI-graded role play for free."
-            modalTitle="Choose your profession"
-            modalDescription="We will open the free role-play card for your profession. Your account profession will not change."
-            startLabel="Start free sample"
             usedLabel="Free sample already used"
             className=""
           />
 
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <MotionSection>
-              <LearnerSurfaceCard card={examCard} />
+              <LearnerSurfaceCard card={libraryCard} />
             </MotionSection>
             <MotionSection delayIndex={1}>
+              <LearnerSurfaceCard card={examCard} />
+            </MotionSection>
+            <MotionSection delayIndex={2}>
               <LearnerSurfaceCard card={tutorCard} />
             </MotionSection>
           </section>

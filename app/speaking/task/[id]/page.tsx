@@ -6,7 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Mic, Square, RotateCcw, CheckCircle2, AlertCircle,
-  FileText, Edit3, ChevronUp, ChevronDown,
+  FileText, ChevronUp, ChevronDown,
   User, ShieldCheck, Loader2, Play, Pause,
   Scissors,
 } from 'lucide-react';
@@ -24,7 +24,6 @@ import {
   tryResumeNativeSpeakingRecorder,
   type CapturedSpeakingRecording,
 } from '@/lib/mobile/speaking-recorder';
-import { SpeakingSelfPracticeButton } from '@/components/domain/speaking-self-practice-button';
 import { getRealtimeValueTransition, getRecordingPulseTransition, prefersReducedMotion } from '@/lib/motion';
 import type { RoleCard } from '@/lib/mock-data';
 import { deriveDeliveryMode, deliveryModeLabel } from '@/lib/mocks/delivery-mode';
@@ -114,7 +113,6 @@ function LiveSpeakingTaskContent() {
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const recordingStateRef = useRef<RecordingState>('idle');
   const [showRoleCard, setShowRoleCard] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -127,7 +125,6 @@ function LiveSpeakingTaskContent() {
   const paperRuleRequired = mode === 'exam';
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [prepNotes, setPrepNotes] = useState('');
 
   useEffect(() => {
     fetchSpeakingCompliance()
@@ -159,14 +156,6 @@ function LiveSpeakingTaskContent() {
   const resultNavigationTimerRef = useRef<number | null>(null);
   const isNativeRecorder = Capacitor.isNativePlatform();
   const nativePauseSupported = isNativeRecorder && nativeSpeakingPauseSupported();
-
-  useEffect(() => {
-    setPrepNotes(window.localStorage.getItem(`speaking-prep:${id}:notes`) ?? '');
-  }, [id]);
-
-  useEffect(() => {
-    window.localStorage.setItem(`speaking-prep:${id}:notes`, prepNotes);
-  }, [id, prepNotes]);
 
   // --- Timer ---
   useEffect(() => {
@@ -828,15 +817,18 @@ function LiveSpeakingTaskContent() {
       </header>
 
       {/* Main Content Area */}
-      {/* pb-56/pb-64: the "Role Card / Notes / AI patient" dock (fixed
-          bottom-24 sm:bottom-32) and the submit footer both float over this
-          flex-centered content. With long consent copy the actual "Start
-          recording" mic button (the last thing in this flow) can end up
-          rendered underneath the dock, receiving no clicks — confirmed live:
-          at a standard 1366x900 desktop viewport it's completely unusable
-          via mouse/keyboard. overflow-y-auto is the safety net for content
-          taller than any fixed clearance covers. */}
-      <main className="relative flex flex-1 flex-col items-center justify-center overflow-y-auto bg-background-light p-6 pb-56 sm:pb-64">
+      {/* 22 Sep 2026 handoff (item 6): this used to be justify-center, which
+          vertically centers the whole block — including the "Start
+          recording" mic button, the LAST thing in it. With long consent
+          copy the centered block could grow taller than the fixed pb-56/64
+          clearance below it, pushing the mic button underneath the fixed
+          Role Card dock (bottom-24 sm:bottom-32) where it received no
+          clicks — confirmed live: completely unusable via mouse/keyboard at
+          a standard 1366x900 desktop viewport. justify-start lets content
+          flow top-down instead of being squeezed between two fixed layers;
+          pb-56/64 + overflow-y-auto still guarantee clearance at whatever
+          height the content ends up, by scrolling rather than compressing. */}
+      <main className="relative flex flex-1 flex-col items-center justify-start overflow-y-auto bg-background-light p-6 pt-10 pb-56 sm:pb-64">
 
         {/* Visualizer / AI State */}
         <div className="relative z-10 mb-24 flex flex-col items-center gap-10">
@@ -965,39 +957,18 @@ function LiveSpeakingTaskContent() {
           </div>
         </div>
 
-        {/* Role Card & Notes Toggles (Glassmorphic Dock) */}
+        {/* Role Card Toggle (22 Sep 2026 handoff: Notes and AI-patient dock buttons removed as clutter) */}
         <div className="fixed bottom-24 sm:bottom-32 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 bg-surface/80 backdrop-blur-xl border border-border/50 rounded-full shadow-[0_8px_30px_rgba(0,0,0,0.06)] z-20 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 hover:shadow-[0_8px_40px_rgba(0,0,0,0.08)]">
-          <button 
+          <button
             onClick={() => setShowRoleCard(!showRoleCard)}
             className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-              showRoleCard 
-                ? 'bg-navy text-white shadow-md' 
+              showRoleCard
+                ? 'bg-navy text-white shadow-md'
                 : 'bg-transparent text-navy/80 hover:bg-primary/5 hover:text-primary'
             }`}
           >
             <FileText className="w-4 h-4" /> Role Card {showRoleCard ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronUp className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />}
           </button>
-          
-          <div className="w-px h-6 bg-border/60 mx-1" />
-          
-          <button 
-            onClick={() => setShowNotes(!showNotes)}
-            className={`px-5 py-2.5 min-h-[44px] rounded-full text-xs font-bold tracking-wide flex items-center gap-2 transition-[color,background-color,border-color,box-shadow,transform,opacity,filter] duration-200 ${
-              showNotes 
-                ? 'bg-navy text-white shadow-md' 
-                : 'bg-transparent text-navy/80 hover:bg-primary/5 hover:text-primary'
-            }`}
-          >
-            <Edit3 className="w-4 h-4" /> Notes {showNotes ? <ChevronDown className="w-3.5 h-3.5 opacity-70" /> : <ChevronUp className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />}
-          </button>
-          
-          {/* The designated free card is recorder-only. */}
-          {mode === 'self' && id && !requestedFree && (
-            <>
-              <div className="w-px h-6 bg-border/60 mx-1" />
-              <SpeakingSelfPracticeButton taskId={id} label="AI patient" />
-            </>
-          )}
         </div>
 
         {/* Overlays */}
@@ -1027,13 +998,6 @@ function LiveSpeakingTaskContent() {
                 {card?.background && (
                   <p className="text-sm text-navy/80 leading-relaxed whitespace-pre-line">{card.background}</p>
                 )}
-                {(card?.patientEmotion || card?.communicationGoal || card?.clinicalTopic) && (
-                  <div className="grid gap-2 rounded-2xl bg-background-light p-3 text-xs text-muted sm:grid-cols-3">
-                    {card?.patientEmotion && <p><span className="font-bold text-navy">Emotion:</span> {card.patientEmotion}</p>}
-                    {card?.communicationGoal && <p><span className="font-bold text-navy">Goal:</span> {card.communicationGoal}</p>}
-                    {card?.clinicalTopic && <p><span className="font-bold text-navy">Topic:</span> {card.clinicalTopic}</p>}
-                  </div>
-                )}
                 <ul className="space-y-2">
                   {card?.tasks.map((t, i) => (
                     <li key={i} className="text-sm text-muted flex gap-3">
@@ -1047,31 +1011,11 @@ function LiveSpeakingTaskContent() {
               </div>
             </motion.div>
           )}
-
-          {showNotes && (
-            <motion.div 
-              initial={{ opacity: 0, y: 100 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 100 }}
-              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-border rounded-3xl p-6 shadow-2xl z-30 h-[40vh] flex flex-col"
-            >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Your Notes</h3>
-                <button onClick={() => setShowNotes(false)} aria-label="Close notes" className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" aria-hidden /></button>
-              </div>
-              <textarea 
-                placeholder="Type your notes here..."
-                value={prepNotes}
-                onChange={(e) => setPrepNotes(e.target.value)}
-                className="flex-1 resize-none rounded-2xl border border-border bg-background-light p-4 text-sm leading-relaxed text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </motion.div>
-          )}
         </AnimatePresence>
       </main>
 
       {/* Bottom Controls */}
-      <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/40 bg-surface/80 px-4 sm:px-8 py-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
+      <footer className="fixed bottom-0 left-0 right-0 z-40 border-t border-border/40 bg-surface/80 px-4 sm:px-8 py-5 pb-[calc(1.25rem+var(--safe-area-inset-bottom))] backdrop-blur-2xl shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
         <div className="max-w-5xl mx-auto flex items-center justify-between relative">
           <button 
             onClick={handleStop}
@@ -1136,7 +1080,7 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-stop-dialog-title"
-              className="relative max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
+              className="relative max-h-[calc(100dvh-2rem-var(--safe-area-inset-top)-var(--safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
             >
               <AlertCircle className="w-8 h-8 text-danger mb-4" aria-hidden />
               <h3 id="speaking-stop-dialog-title" className="text-2xl font-black mb-2">Stop Practice?</h3>
@@ -1172,7 +1116,7 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-submit-dialog-title"
-              className="relative max-h-[calc(100dvh-2rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
+              className="relative max-h-[calc(100dvh-2rem-var(--safe-area-inset-top)-var(--safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-border bg-surface p-8 shadow-2xl"
             >
               <CheckCircle2 className="w-8 h-8 text-success mb-4" aria-hidden />
               <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>
