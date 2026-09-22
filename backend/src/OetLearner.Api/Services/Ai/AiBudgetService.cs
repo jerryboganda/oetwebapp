@@ -51,7 +51,9 @@ namespace OetLearner.Api.Services.Ai;
 /// <b>Scope.</b> <see cref="ReserveAsync"/> still meters a single monthly
 /// period (today always <c>"global"</c>). <see cref="ReserveForCallAsync"/>
 /// additionally meters the UTC day cap and the per-class day/month ceilings,
-/// with scoring-only borrow of unused Interactive then Admin headroom.
+/// with scoring-only borrow of unused Interactive then Admin headroom —
+/// except for budget-exempt AdminBatch calls, which reserve the global month
+/// only (owner directive 2026-09-23: no budget caps on admin-side AI).
 /// </para>
 /// </summary>
 public interface IAiBudgetService
@@ -69,16 +71,19 @@ public interface IAiBudgetService
     /// <summary>
     /// Reserves the platform monthly + daily ceilings AND the feature's class
     /// day/month buckets. Scoring may borrow unused Interactive then Admin
-    /// headroom. Coordinator paths must NOT call this — the gateway already
+    /// headroom. AdminBatch (budget-exempt) reserves the global month only.
+    /// Coordinator paths must NOT call this — the gateway already
     /// reserved on the coordinated path.
     /// </summary>
     Task<AiBudgetReservation> ReserveForOperationAsync(string? featureCode, decimal estimatedUsd, CancellationToken ct);
 
     /// <summary>
     /// Reserves global month + global day + class month/day for
-    /// <paramref name="operationClass"/>. Scoring may borrow unused Interactive
-    /// then Admin when its own class is exhausted. Any required denial releases
-    /// already-granted holds.
+    /// <paramref name="operationClass"/>, except for budget-exempt classes
+    /// (<see cref="AiBudgetClasses.IsBudgetExempt"/> — AdminBatch), which
+    /// reserve the global month only. Scoring may borrow unused Interactive
+    /// then Admin when its own class is exhausted. Any required denial
+    /// releases already-granted holds.
     /// </summary>
     Task<AiBudgetReservation> ReserveForCallAsync(AiOperationClass operationClass, decimal estimatedUsd, CancellationToken ct);
 
@@ -241,6 +246,22 @@ public sealed class AiBudgetService(
 
             grantedIds.Add(globalMonth.PeriodId!);
 
+            // Owner directive 2026-09-23: admin-side AI (AdminBatch — content
+            // authoring, extraction, indexing, the class-recording pipeline,
+            // the admin/expert assistants) carries no day or month ceilings.
+            // Only the global month reserve above still gates it; the global
+            // day and class day/month reservers below are skipped entirely.
+            // Every call remains fully recorded in AiUsageRecord.
+            if (AiBudgetClasses.IsBudgetExempt(operationClass))
+            {
+                return new AiBudgetReservation(
+                    true,
+                    null,
+                    globalMonth.PeriodId,
+                    AiBudgetClasses.GlobalScope,
+                    amount);
+            }
+
             var globalDayLimit = AiBudgetClasses.PlatformDailyCapUsd
                 + await ExtraHeadroomAsync(AiBudgetClasses.GlobalScope, ct);
             var globalDay = await TryReservePeriodAsync(
@@ -273,8 +294,8 @@ public sealed class AiBudgetService(
                     var borrow = await TryReserveClassAsync(db, donor, amount, monthKey, dayKey, ct);
                     if (!borrow.Ok) continue;
 
-                    grantedIds.Add(borrow.MonthPeriodId!);
-                    grantedIds.Add(borrow.DayPeriodId!);
+                    if (borrow.MonthPeriodId is not null) grantedIds.Add(borrow.MonthPeriodId);
+                    if (borrow.DayPeriodId is not null) grantedIds.Add(borrow.DayPeriodId);
                     borrowPeriodId = borrow.MonthPeriodId;
                     borrowed = true;
                     logger.LogInformation(
@@ -427,6 +448,15 @@ public sealed class AiBudgetService(
         string dayKey,
         CancellationToken ct)
     {
+        // Borrow path only: an exempt donor class (AdminBatch) grants
+        // headroom without holding any period. Own-class exempt calls never
+        // reach this method — ReserveForCallAsync returns right after the
+        // global month reserve.
+        if (AiBudgetClasses.IsBudgetExempt(operationClass))
+        {
+            return (true, null, null);
+        }
+
         var scope = AiBudgetClasses.ScopeFor(operationClass);
         var extra = await ExtraHeadroomAsync(scope, ct);
 
