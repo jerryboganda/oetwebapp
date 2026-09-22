@@ -74,8 +74,20 @@ public sealed class SpeakingEvaluationPipeline(
         var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
 
+        // A pre-existing typed SpeakingSession (live-tutor or AI) carries its
+        // own real transcript in SpeakingTranscripts, keyed by
+        // SpeakingSessionId — see SpeakingAiAssessmentService.RunAssessmentAsync,
+        // which reads it directly and never touches attempt.TranscriptJson.
+        // Resolve it BEFORE the attempt-level transcript/ASR gate below so a
+        // linked session's routing/grading never depends on
+        // attemptTranscriptionProvider being configured, which it
+        // legitimately isn't for that path (only the session-less
+        // Attempt→Session bridge further down needs ASR).
+        var linkedSession = await db.SpeakingSessions.AsNoTracking()
+            .FirstOrDefaultAsync(s => s.AttemptId == attempt.Id, cancellationToken);
+
         var transcript = JsonSupport.Deserialize<List<SpeakingTranscriptLine>>(attempt.TranscriptJson, []);
-        if (transcript.Count == 0 || IsMockTranscript(attempt, transcript))
+        if (linkedSession is null && (transcript.Count == 0 || IsMockTranscript(attempt, transcript)))
         {
             try
             {
@@ -99,8 +111,6 @@ public sealed class SpeakingEvaluationPipeline(
         // In that case park the evaluation as "awaiting human review"; the
         // finished session is in the tutor marking queue and the tutor's
         // SpeakingTutorAssessment becomes the released band.
-        var linkedSession = await db.SpeakingSessions.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.AttemptId == attempt.Id, cancellationToken);
         if (linkedSession is not null && linkedSession.Mode == SpeakingSessionMode.LiveTutor)
         {
             attempt.TranscriptJson = JsonSupport.Serialize(transcript);
